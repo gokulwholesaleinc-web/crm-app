@@ -1,0 +1,443 @@
+/**
+ * Company detail page with contacts list
+ */
+
+import { useState } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { format } from 'date-fns';
+import clsx from 'clsx';
+import {
+  ArrowLeftIcon,
+  BuildingOffice2Icon,
+  GlobeAltIcon,
+  EnvelopeIcon,
+  PhoneIcon,
+  MapPinIcon,
+  UsersIcon,
+  LinkIcon,
+} from '@heroicons/react/24/outline';
+import { Button } from '../../components/ui/Button';
+import { Spinner } from '../../components/ui/Spinner';
+import { CompanyForm } from './components/CompanyForm';
+import { useCompany, useUpdateCompany, useDeleteCompany } from '../../hooks/useCompanies';
+import { useContacts } from '../../hooks/useContacts';
+import type { CompanyUpdate, Contact } from '../../types';
+
+const defaultCompanyStatusColor = { bg: 'bg-blue-100', text: 'text-blue-700', dot: 'bg-blue-400' };
+
+const statusColors: Record<string, { bg: string; text: string; dot: string }> = {
+  prospect: defaultCompanyStatusColor,
+  customer: { bg: 'bg-green-100', text: 'text-green-700', dot: 'bg-green-400' },
+  churned: { bg: 'bg-gray-100', text: 'text-gray-700', dot: 'bg-gray-400' },
+};
+
+function formatCurrency(amount: number | null | undefined): string {
+  if (amount === null || amount === undefined) return '-';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
+function formatDate(date: string | null | undefined): string {
+  if (!date) return '-';
+  try {
+    return format(new Date(date), 'MMM d, yyyy');
+  } catch {
+    return date;
+  }
+}
+
+function DetailItem({
+  icon: Icon,
+  label,
+  value,
+  link,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string | null | undefined;
+  link?: string;
+}) {
+  if (!value) return null;
+
+  const content = (
+    <div className="flex items-start gap-3 py-2">
+      <Icon className="h-5 w-5 text-gray-400 mt-0.5" />
+      <div>
+        <p className="text-xs text-gray-500">{label}</p>
+        <p className={clsx('text-sm text-gray-900', link && 'hover:text-primary-600')}>{value}</p>
+      </div>
+    </div>
+  );
+
+  if (link) {
+    return (
+      <a href={link} target="_blank" rel="noopener noreferrer">
+        {content}
+      </a>
+    );
+  }
+
+  return content;
+}
+
+function ContactRow({ contact }: { contact: Contact }) {
+  return (
+    <Link
+      to={`/contacts/${contact.id}`}
+      className="flex items-center gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors"
+    >
+      {contact.avatar_url ? (
+        <img
+          src={contact.avatar_url}
+          alt={contact.full_name}
+          className="h-10 w-10 rounded-full object-cover"
+        />
+      ) : (
+        <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
+          <span className="text-sm font-medium text-gray-600">
+            {contact.first_name[0]}
+            {contact.last_name[0]}
+          </span>
+        </div>
+      )}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-gray-900 truncate">{contact.full_name}</p>
+        <p className="text-xs text-gray-500 truncate">
+          {contact.job_title || 'No title'}
+          {contact.department && ` - ${contact.department}`}
+        </p>
+      </div>
+      <div className="text-right text-xs text-gray-500">
+        {contact.email && (
+          <p className="truncate max-w-[150px]">{contact.email}</p>
+        )}
+        {contact.phone && <p>{contact.phone}</p>}
+      </div>
+    </Link>
+  );
+}
+
+export function CompanyDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const companyId = id ? parseInt(id, 10) : undefined;
+
+  const [showEditForm, setShowEditForm] = useState(false);
+
+  // Fetch company data
+  const { data: company, isLoading: isLoadingCompany } = useCompany(companyId);
+
+  // Fetch contacts for this company
+  const { data: contactsData, isLoading: isLoadingContacts } = useContacts({
+    company_id: companyId,
+    page_size: 50,
+  });
+
+  // Mutations
+  const updateCompany = useUpdateCompany();
+  const deleteCompany = useDeleteCompany();
+
+  const handleDelete = async () => {
+    if (!companyId) return;
+    if (!window.confirm('Are you sure you want to delete this company?')) return;
+    try {
+      await deleteCompany.mutateAsync(companyId);
+      navigate('/companies');
+    } catch (error) {
+      console.error('Failed to delete company:', error);
+    }
+  };
+
+  const handleFormSubmit = async (data: CompanyUpdate) => {
+    if (!companyId) return;
+    try {
+      await updateCompany.mutateAsync({ id: companyId, data });
+      setShowEditForm(false);
+    } catch (error) {
+      console.error('Failed to update company:', error);
+    }
+  };
+
+  if (isLoadingCompany) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Spinner size="lg" />
+      </div>
+    );
+  }
+
+  if (!company) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-gray-500">Company not found</p>
+        <Button variant="secondary" className="mt-4" onClick={() => navigate('/companies')}>
+          Back to Companies
+        </Button>
+      </div>
+    );
+  }
+
+  const statusStyle = statusColors[company.status] ?? defaultCompanyStatusColor;
+  const contacts = contactsData?.items || [];
+
+  const fullAddress = [
+    company.address_line1,
+    company.address_line2,
+    [company.city, company.state].filter(Boolean).join(', '),
+    company.postal_code,
+    company.country,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center gap-4">
+        <button
+          onClick={() => navigate('/companies')}
+          className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+        >
+          <ArrowLeftIcon className="h-5 w-5 text-gray-500" />
+        </button>
+        <div className="flex items-center gap-4 flex-1">
+          {company.logo_url ? (
+            <img
+              src={company.logo_url}
+              alt={company.name}
+              className="h-16 w-16 rounded-lg object-cover"
+            />
+          ) : (
+            <div className="h-16 w-16 rounded-lg bg-gray-100 flex items-center justify-center">
+              <BuildingOffice2Icon className="h-8 w-8 text-gray-400" />
+            </div>
+          )}
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">{company.name}</h1>
+            <div className="flex items-center gap-3 mt-1">
+              <span
+                className={clsx(
+                  'inline-flex items-center gap-1 text-sm font-medium px-2.5 py-0.5 rounded-full',
+                  statusStyle.bg,
+                  statusStyle.text
+                )}
+              >
+                <span className={clsx('h-1.5 w-1.5 rounded-full', statusStyle.dot)} />
+                {company.status.charAt(0).toUpperCase() + company.status.slice(1)}
+              </span>
+              {company.industry && (
+                <span className="text-sm text-gray-500 capitalize">{company.industry}</span>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={() => setShowEditForm(true)}>
+            Edit
+          </Button>
+          <Button variant="danger" onClick={handleDelete}>
+            Delete
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Main Info */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Description */}
+          {company.description && (
+            <div className="bg-white rounded-lg shadow-sm border p-6">
+              <h3 className="text-sm font-medium text-gray-900 mb-2">About</h3>
+              <p className="text-sm text-gray-600 whitespace-pre-wrap">{company.description}</p>
+            </div>
+          )}
+
+          {/* Contacts */}
+          <div className="bg-white rounded-lg shadow-sm border">
+            <div className="px-6 py-4 border-b flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Contacts ({contacts.length})
+              </h3>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => navigate(`/contacts/new?company_id=${companyId}`)}
+              >
+                Add Contact
+              </Button>
+            </div>
+            {isLoadingContacts ? (
+              <div className="flex items-center justify-center py-8">
+                <Spinner />
+              </div>
+            ) : contacts.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <UsersIcon className="mx-auto h-8 w-8 text-gray-400 mb-2" />
+                <p>No contacts associated with this company</p>
+              </div>
+            ) : (
+              <div className="divide-y">
+                {contacts.map((contact) => (
+                  <ContactRow key={contact.id} contact={contact} />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Sidebar */}
+        <div className="space-y-6">
+          {/* Contact Info */}
+          <div className="bg-white rounded-lg shadow-sm border p-6">
+            <h3 className="text-sm font-medium text-gray-900 mb-4">Contact Information</h3>
+            <div className="space-y-1">
+              <DetailItem
+                icon={GlobeAltIcon}
+                label="Website"
+                value={company.website?.replace(/^https?:\/\//, '')}
+                link={company.website || undefined}
+              />
+              <DetailItem
+                icon={EnvelopeIcon}
+                label="Email"
+                value={company.email}
+                link={company.email ? `mailto:${company.email}` : undefined}
+              />
+              <DetailItem
+                icon={PhoneIcon}
+                label="Phone"
+                value={company.phone}
+                link={company.phone ? `tel:${company.phone}` : undefined}
+              />
+              {fullAddress && (
+                <DetailItem icon={MapPinIcon} label="Address" value={fullAddress} />
+              )}
+            </div>
+          </div>
+
+          {/* Business Info */}
+          <div className="bg-white rounded-lg shadow-sm border p-6">
+            <h3 className="text-sm font-medium text-gray-900 mb-4">Business Details</h3>
+            <div className="space-y-3">
+              {company.annual_revenue && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-500">Annual Revenue</span>
+                  <span className="text-sm font-medium text-gray-900">
+                    {formatCurrency(company.annual_revenue)}
+                  </span>
+                </div>
+              )}
+              {company.employee_count && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-500">Employees</span>
+                  <span className="text-sm font-medium text-gray-900">
+                    {company.employee_count.toLocaleString()}
+                  </span>
+                </div>
+              )}
+              {company.company_size && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-500">Company Size</span>
+                  <span className="text-sm font-medium text-gray-900">{company.company_size}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Social Links */}
+          {(company.linkedin_url || company.twitter_handle) && (
+            <div className="bg-white rounded-lg shadow-sm border p-6">
+              <h3 className="text-sm font-medium text-gray-900 mb-4">Social Links</h3>
+              <div className="space-y-2">
+                {company.linkedin_url && (
+                  <a
+                    href={company.linkedin_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600"
+                  >
+                    <LinkIcon className="h-4 w-4" />
+                    LinkedIn
+                  </a>
+                )}
+                {company.twitter_handle && (
+                  <a
+                    href={`https://twitter.com/${company.twitter_handle.replace('@', '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600"
+                  >
+                    <LinkIcon className="h-4 w-4" />
+                    {company.twitter_handle}
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Tags */}
+          {company.tags && company.tags.length > 0 && (
+            <div className="bg-white rounded-lg shadow-sm border p-6">
+              <h3 className="text-sm font-medium text-gray-900 mb-4">Tags</h3>
+              <div className="flex flex-wrap gap-2">
+                {company.tags.map((tag) => (
+                  <span
+                    key={tag.id}
+                    className="text-xs px-2.5 py-1 rounded-full bg-gray-100 text-gray-600"
+                    style={
+                      tag.color ? { backgroundColor: `${tag.color}20`, color: tag.color } : undefined
+                    }
+                  >
+                    {tag.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Timestamps */}
+          <div className="bg-white rounded-lg shadow-sm border p-6">
+            <h3 className="text-sm font-medium text-gray-900 mb-4">Record Info</h3>
+            <div className="space-y-2 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-500">Created</span>
+                <span className="text-gray-900">{formatDate(company.created_at)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-500">Last Updated</span>
+                <span className="text-gray-900">{formatDate(company.updated_at)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Edit Form Modal */}
+      {showEditForm && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-screen items-center justify-center p-4">
+            <div
+              className="fixed inset-0 bg-black bg-opacity-25"
+              onClick={() => setShowEditForm(false)}
+            />
+            <div className="relative bg-white rounded-lg shadow-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Edit Company</h2>
+              <CompanyForm
+                company={company}
+                onSubmit={handleFormSubmit}
+                onCancel={() => setShowEditForm(false)}
+                isLoading={updateCompany.isPending}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default CompanyDetailPage;
