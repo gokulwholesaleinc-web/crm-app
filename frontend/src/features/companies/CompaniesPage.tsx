@@ -285,21 +285,25 @@ export function CompaniesPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Companies</h1>
           <p className="text-sm text-gray-500 mt-1">
             Manage your accounts and track business relationships
           </p>
         </div>
-        <Button leftIcon={<PlusIcon className="h-5 w-5" />} onClick={() => setShowForm(true)}>
+        <Button
+          leftIcon={<PlusIcon className="h-5 w-5" />}
+          onClick={() => setShowForm(true)}
+          className="w-full sm:w-auto"
+        >
           Add Company
         </Button>
       </div>
 
       {/* Search and Filters */}
-      <div className="flex items-center gap-4 flex-wrap">
-        <form onSubmit={handleSearch} className="flex-1 max-w-md">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+        <form onSubmit={handleSearch} className="flex-1 sm:max-w-md">
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -307,26 +311,28 @@ export function CompaniesPage() {
             leftIcon={<MagnifyingGlassIcon className="h-5 w-5" />}
           />
         </form>
-        <Button
-          variant="ghost"
-          size="sm"
-          leftIcon={<FunnelIcon className="h-4 w-4" />}
-          onClick={() => setShowFilters(!showFilters)}
-        >
-          Filters
-        </Button>
+        <div className="flex items-center justify-between gap-3 sm:gap-4">
+          <Button
+            variant="ghost"
+            size="sm"
+            leftIcon={<FunnelIcon className="h-4 w-4" />}
+            onClick={() => setShowFilters(!showFilters)}
+          >
+            Filters
+          </Button>
 
-        {companiesData && (
-          <div className="text-sm text-gray-500">
-            Showing {companies.length} of {companiesData.total} companies
-          </div>
-        )}
+          {companiesData && (
+            <div className="text-sm text-gray-500">
+              {companies.length} of {companiesData.total}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Filters Panel */}
       {showFilters && (
         <div className="bg-gray-50 rounded-lg p-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
             <Select
               label="Status"
               options={statusOptions}
@@ -349,14 +355,14 @@ export function CompaniesPage() {
           <Spinner size="lg" />
         </div>
       ) : companies.length === 0 ? (
-        <div className="text-center py-12">
+        <div className="text-center py-12 px-4">
           <BuildingOffice2Icon className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900">No companies</h3>
           <p className="mt-1 text-sm text-gray-500">
             Get started by adding a new company.
           </p>
           <div className="mt-6">
-            <Button onClick={() => setShowForm(true)}>
+            <Button onClick={() => setShowForm(true)} className="w-full sm:w-auto">
               <PlusIcon className="h-5 w-5 mr-2" />
               Add Company
             </Button>
@@ -378,26 +384,30 @@ export function CompaniesPage() {
 
           {/* Pagination */}
           {companiesData && companiesData.pages > 1 && (
-            <div className="flex items-center justify-center gap-2 pt-4">
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={filters.page === 1}
-                onClick={() => updateFilter('page', String((filters.page || 1) - 1))}
-              >
-                Previous
-              </Button>
-              <span className="text-sm text-gray-600">
-                Page {filters.page} of {companiesData.pages}
-              </span>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={filters.page === companiesData.pages}
-                onClick={() => updateFilter('page', String((filters.page || 1) + 1))}
-              >
-                Next
-              </Button>
+            <div className="flex flex-col gap-3 pt-4 sm:flex-row sm:items-center sm:justify-center sm:gap-4">
+              <div className="flex items-center justify-between gap-2 sm:gap-4">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={filters.page === 1}
+                  onClick={() => updateFilter('page', String((filters.page || 1) - 1))}
+                  className="flex-1 sm:flex-none"
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-gray-600 whitespace-nowrap">
+                  Page {filters.page} of {companiesData.pages}
+                </span>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={filters.page === companiesData.pages}
+                  onClick={() => updateFilter('page', String((filters.page || 1) + 1))}
+                  className="flex-1 sm:flex-none"
+                >
+                  Next
+                </Button>
+              </div>
             </div>
           )}
         </>

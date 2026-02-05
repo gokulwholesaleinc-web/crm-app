@@ -21,6 +21,9 @@ class NumberCardGenerator:
         """Get all KPI data for number cards."""
         kpis = [
             await self.get_total_contacts(),
+            await self.get_total_leads(),
+            await self.get_open_opportunities(),
+            await self.get_total_revenue(),
             await self.get_total_companies(),
             await self.get_open_leads(),
             await self.get_pipeline_value(),
@@ -38,13 +41,132 @@ class NumberCardGenerator:
         )
         count = result.scalar() or 0
 
+        # Get last month for comparison
+        month_ago = date.today() - timedelta(days=30)
+        last_month_result = await self.db.execute(
+            select(func.count(Contact.id)).where(
+                and_(
+                    Contact.status == "active",
+                    Contact.created_at < datetime.combine(month_ago, datetime.min.time()),
+                )
+            )
+        )
+        last_month_count = last_month_result.scalar() or 0
+        change = self._calculate_change(count, last_month_count)
+
         return {
             "id": "total_contacts",
             "label": "Total Contacts",
             "value": count,
             "icon": "users",
             "color": "#3b82f6",
+            "change": change,
         }
+
+    async def get_total_leads(self) -> Dict[str, Any]:
+        """Get total leads count (all statuses)."""
+        result = await self.db.execute(select(func.count(Lead.id)))
+        count = result.scalar() or 0
+
+        # Get last month for comparison
+        month_ago = date.today() - timedelta(days=30)
+        last_month_result = await self.db.execute(
+            select(func.count(Lead.id)).where(
+                Lead.created_at < datetime.combine(month_ago, datetime.min.time())
+            )
+        )
+        last_month_count = last_month_result.scalar() or 0
+        change = self._calculate_change(count, last_month_count)
+
+        return {
+            "id": "total_leads",
+            "label": "Total Leads",
+            "value": count,
+            "icon": "target",
+            "color": "#22c55e",
+            "change": change,
+        }
+
+    async def get_open_opportunities(self) -> Dict[str, Any]:
+        """Get count of open opportunities."""
+        result = await self.db.execute(
+            select(func.count(Opportunity.id))
+            .join(PipelineStage)
+            .where(
+                and_(
+                    PipelineStage.is_won == False,
+                    PipelineStage.is_lost == False,
+                )
+            )
+        )
+        count = result.scalar() or 0
+
+        # Get last month for comparison
+        month_ago = date.today() - timedelta(days=30)
+        last_month_result = await self.db.execute(
+            select(func.count(Opportunity.id))
+            .join(PipelineStage)
+            .where(
+                and_(
+                    PipelineStage.is_won == False,
+                    PipelineStage.is_lost == False,
+                    Opportunity.created_at < datetime.combine(month_ago, datetime.min.time()),
+                )
+            )
+        )
+        last_month_count = last_month_result.scalar() or 0
+        change = self._calculate_change(count, last_month_count)
+
+        return {
+            "id": "open_opportunities",
+            "label": "Open Opportunities",
+            "value": count,
+            "icon": "briefcase",
+            "color": "#8b5cf6",
+            "change": change,
+        }
+
+    async def get_total_revenue(self) -> Dict[str, Any]:
+        """Get total revenue from won opportunities."""
+        result = await self.db.execute(
+            select(func.sum(Opportunity.amount))
+            .join(PipelineStage)
+            .where(PipelineStage.is_won == True)
+        )
+        value = result.scalar() or 0
+
+        # Get last month for comparison
+        month_ago = date.today() - timedelta(days=30)
+        last_month_result = await self.db.execute(
+            select(func.sum(Opportunity.amount))
+            .join(PipelineStage)
+            .where(
+                and_(
+                    PipelineStage.is_won == True,
+                    Opportunity.actual_close_date < month_ago,
+                )
+            )
+        )
+        last_month_value = last_month_result.scalar() or 0
+        change = self._calculate_change(float(value), float(last_month_value))
+
+        return {
+            "id": "total_revenue",
+            "label": "Total Revenue",
+            "value": float(value),
+            "format": "currency",
+            "icon": "dollar-sign",
+            "color": "#10b981",
+            "change": change,
+        }
+
+    def _calculate_change(self, current: float, previous: float) -> Optional[float]:
+        """Calculate percentage change between current and previous values."""
+        if previous > 0:
+            return round(((current - previous) / previous) * 100, 1)
+        elif current > 0:
+            return 100.0  # New items from zero baseline
+        return None
 
     async def get_total_companies(self) -> Dict[str, Any]:
         """Get total companies count."""
@@ -182,11 +304,7 @@ class NumberCardGenerator:
             )
         )
         last_week_count = last_week_result.scalar() or 0
-
-        # Calculate percentage change
-        change = None
-        if last_week_count > 0:
-            change = round(((count - last_week_count) / last_week_count) * 100, 1)
+        change = self._calculate_change(count, last_week_count)
 
         return {
             "id": "new_leads_week",

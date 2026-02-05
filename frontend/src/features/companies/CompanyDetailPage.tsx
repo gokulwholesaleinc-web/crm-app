@@ -61,32 +61,34 @@ function ContactRow({ contact }: { contact: Contact }) {
   return (
     <Link
       to={`/contacts/${contact.id}`}
-      className="flex items-center gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors"
+      className="flex flex-col gap-2 p-3 rounded-lg hover:bg-gray-50 transition-colors sm:flex-row sm:items-center sm:gap-4"
     >
-      {contact.avatar_url ? (
-        <img
-          src={contact.avatar_url}
-          alt={contact.full_name}
-          className="h-10 w-10 rounded-full object-cover"
-        />
-      ) : (
-        <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
-          <span className="text-sm font-medium text-gray-600">
-            {contact.first_name[0]}
-            {contact.last_name[0]}
-          </span>
+      <div className="flex items-center gap-3 sm:gap-4">
+        {contact.avatar_url ? (
+          <img
+            src={contact.avatar_url}
+            alt={contact.full_name}
+            className="h-10 w-10 rounded-full object-cover flex-shrink-0"
+          />
+        ) : (
+          <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+            <span className="text-sm font-medium text-gray-600">
+              {contact.first_name[0]}
+              {contact.last_name[0]}
+            </span>
+          </div>
+        )}
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-gray-900 truncate">{contact.full_name}</p>
+          <p className="text-xs text-gray-500 truncate">
+            {contact.job_title || 'No title'}
+            {contact.department && ` - ${contact.department}`}
+          </p>
         </div>
-      )}
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-gray-900 truncate">{contact.full_name}</p>
-        <p className="text-xs text-gray-500 truncate">
-          {contact.job_title || 'No title'}
-          {contact.department && ` - ${contact.department}`}
-        </p>
       </div>
-      <div className="text-right text-xs text-gray-500">
+      <div className="text-xs text-gray-500 pl-13 sm:pl-0 sm:ml-auto sm:text-right">
         {contact.email && (
-          <p className="truncate max-w-[150px]">{contact.email}</p>
+          <p className="truncate">{contact.email}</p>
         )}
         {contact.phone && <p>{contact.phone}</p>}
       </div>
@@ -170,56 +172,58 @@ export function CompanyDetailPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <button
-          onClick={() => navigate('/companies')}
-          className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-        >
-          <ArrowLeftIcon className="h-5 w-5 text-gray-500" />
-        </button>
-        <div className="flex items-center gap-4 flex-1">
-          {company.logo_url ? (
-            <img
-              src={company.logo_url}
-              alt={company.name}
-              className="h-16 w-16 rounded-lg object-cover"
-            />
-          ) : (
-            <div className="h-16 w-16 rounded-lg bg-gray-100 flex items-center justify-center">
-              <BuildingOffice2Icon className="h-8 w-8 text-gray-400" />
-            </div>
-          )}
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">{company.name}</h1>
-            <div className="flex items-center gap-3 mt-1">
-              <span
-                className={clsx(
-                  'inline-flex items-center gap-1 text-sm font-medium px-2.5 py-0.5 rounded-full',
-                  statusStyle.bg,
-                  statusStyle.text
+      <div className="flex flex-col gap-4">
+        <div className="flex items-start gap-3 sm:gap-4">
+          <button
+            onClick={() => navigate('/companies')}
+            className="p-2 rounded-lg hover:bg-gray-100 transition-colors flex-shrink-0"
+          >
+            <ArrowLeftIcon className="h-5 w-5 text-gray-500" />
+          </button>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4 flex-1 min-w-0">
+            {company.logo_url ? (
+              <img
+                src={company.logo_url}
+                alt={company.name}
+                className="h-12 w-12 sm:h-16 sm:w-16 rounded-lg object-cover flex-shrink-0"
+              />
+            ) : (
+              <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                <BuildingOffice2Icon className="h-6 w-6 sm:h-8 sm:w-8 text-gray-400" />
+              </div>
+            )}
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{company.name}</h1>
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1">
+                <span
+                  className={clsx(
+                    'inline-flex items-center gap-1 text-sm font-medium px-2.5 py-0.5 rounded-full',
+                    statusStyle.bg,
+                    statusStyle.text
+                  )}
+                >
+                  {formatStatusLabel(company.status)}
+                </span>
+                {company.industry && (
+                  <span className="text-sm text-gray-500 capitalize">{company.industry}</span>
                 )}
-              >
-                {formatStatusLabel(company.status)}
-              </span>
-              {company.industry && (
-                <span className="text-sm text-gray-500 capitalize">{company.industry}</span>
-              )}
+              </div>
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={() => setShowEditForm(true)}>
+        <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
+          <Button variant="secondary" onClick={() => setShowEditForm(true)} className="flex-1 sm:flex-none">
             Edit
           </Button>
-          <Button variant="danger" onClick={() => setShowDeleteConfirm(true)}>
+          <Button variant="danger" onClick={() => setShowDeleteConfirm(true)} className="flex-1 sm:flex-none">
             Delete
           </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Main Info */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-6 lg:col-span-2">
           {/* Description */}
           {company.description && (
             <div className="bg-white rounded-lg shadow-sm border p-6">
@@ -230,7 +234,7 @@ export function CompanyDetailPage() {
 
           {/* Contacts */}
           <div className="bg-white rounded-lg shadow-sm border">
-            <div className="px-6 py-4 border-b flex items-center justify-between">
+            <div className="px-4 py-4 border-b flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
               <h3 className="text-lg font-semibold text-gray-900">
                 Contacts ({contacts.length})
               </h3>
@@ -238,6 +242,7 @@ export function CompanyDetailPage() {
                 size="sm"
                 variant="secondary"
                 onClick={() => navigate(`/contacts?company_id=${companyId}&action=new`)}
+                className="w-full sm:w-auto"
               >
                 Add Contact
               </Button>

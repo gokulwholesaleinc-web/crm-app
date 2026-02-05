@@ -107,15 +107,16 @@ function ReportsPage() {
       case 'pipeline':
         return (
           <div className="space-y-4">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-medium text-gray-900">Pipeline by Stage</h3>
-              <Button variant="secondary" size="sm">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-4 sm:mb-6">
+              <h3 className="text-base sm:text-lg font-medium text-gray-900">Pipeline by Stage</h3>
+              <Button variant="secondary" size="sm" className="self-start sm:self-auto">
                 <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
                 Export CSV
               </Button>
             </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
+            {/* Table with horizontal scroll on mobile */}
+            <div className="overflow-x-auto -mx-3 sm:mx-0">
+              <table className="min-w-full divide-y divide-gray-200" style={{ minWidth: '500px' }}>
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -188,15 +189,16 @@ function ReportsPage() {
       case 'leads':
         return (
           <div className="space-y-4">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-medium text-gray-900">Leads by Source</h3>
-              <Button variant="secondary" size="sm">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-4 sm:mb-6">
+              <h3 className="text-base sm:text-lg font-medium text-gray-900">Leads by Source</h3>
+              <Button variant="secondary" size="sm" className="self-start sm:self-auto">
                 <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
                 Export CSV
               </Button>
             </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
+            {/* Table with horizontal scroll on mobile */}
+            <div className="overflow-x-auto -mx-3 sm:mx-0">
+              <table className="min-w-full divide-y divide-gray-200" style={{ minWidth: '400px' }}>
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -241,20 +243,21 @@ function ReportsPage() {
       case 'conversion':
         return (
           <div className="space-y-4">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-medium text-gray-900">Conversion Rates</h3>
-              <Button variant="secondary" size="sm">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-4 sm:mb-6">
+              <h3 className="text-base sm:text-lg font-medium text-gray-900">Conversion Rates</h3>
+              <Button variant="secondary" size="sm" className="self-start sm:self-auto">
                 <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
                 Export CSV
               </Button>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Cards - full width on mobile, 3 columns on desktop */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-6">
               {(conversionData?.data || []).map((item: any, idx: number) => (
                 <Card key={idx}>
-                  <CardBody>
+                  <CardBody className="p-4 sm:p-6">
                     <div className="text-center">
-                      <p className="text-sm text-gray-500">{item.label || `Metric ${idx + 1}`}</p>
-                      <p className="text-3xl font-bold text-primary-600 mt-2">
+                      <p className="text-xs sm:text-sm text-gray-500">{item.label || `Metric ${idx + 1}`}</p>
+                      <p className="text-2xl sm:text-3xl font-bold text-primary-600 mt-2">
                         {typeof item.value === 'number' ? `${item.value.toFixed(1)}%` : item.value}
                       </p>
                     </div>
@@ -262,9 +265,9 @@ function ReportsPage() {
                 </Card>
               ))}
               {(!conversionData?.data || conversionData.data.length === 0) && (
-                <Card className="col-span-3">
+                <Card className="col-span-1 sm:col-span-2 md:col-span-3">
                   <CardBody>
-                    <p className="text-center text-gray-500">No conversion data available yet</p>
+                    <p className="text-center text-gray-500 text-sm">No conversion data available yet</p>
                   </CardBody>
                 </Card>
               )}
@@ -281,41 +284,43 @@ function ReportsPage() {
 
         return (
           <div className="space-y-4">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-medium text-gray-900">Revenue Summary</h3>
-              <Button variant="secondary" size="sm">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-4 sm:mb-6">
+              <h3 className="text-base sm:text-lg font-medium text-gray-900">Revenue Summary</h3>
+              <Button variant="secondary" size="sm" className="self-start sm:self-auto">
                 <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
                 Export CSV
               </Button>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Revenue cards - full width on mobile */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6">
               <Card>
-                <CardBody>
-                  <div className="text-center py-4">
-                    <CurrencyDollarIcon className="h-12 w-12 text-green-500 mx-auto mb-3" />
-                    <p className="text-sm text-gray-500">Total Revenue (Won)</p>
-                    <p className="text-3xl font-bold text-gray-900 mt-2">
+                <CardBody className="p-4 sm:p-6">
+                  <div className="text-center py-2 sm:py-4">
+                    <CurrencyDollarIcon className="h-10 w-10 sm:h-12 sm:w-12 text-green-500 mx-auto mb-2 sm:mb-3" />
+                    <p className="text-xs sm:text-sm text-gray-500">Total Revenue (Won)</p>
+                    <p className="text-2xl sm:text-3xl font-bold text-gray-900 mt-2">
                       {formatCurrency(totalRevenue)}
                     </p>
                   </div>
                 </CardBody>
               </Card>
               <Card>
-                <CardBody>
-                  <div className="text-center py-4">
-                    <FunnelIcon className="h-12 w-12 text-primary-500 mx-auto mb-3" />
-                    <p className="text-sm text-gray-500">Open Opportunities</p>
-                    <p className="text-3xl font-bold text-gray-900 mt-2">
+                <CardBody className="p-4 sm:p-6">
+                  <div className="text-center py-2 sm:py-4">
+                    <FunnelIcon className="h-10 w-10 sm:h-12 sm:w-12 text-primary-500 mx-auto mb-2 sm:mb-3" />
+                    <p className="text-xs sm:text-sm text-gray-500">Open Opportunities</p>
+                    <p className="text-2xl sm:text-3xl font-bold text-gray-900 mt-2">
                       {openOpportunities}
                     </p>
                   </div>
                 </CardBody>
               </Card>
             </div>
+            {/* Pipeline chart - full width on mobile */}
             <Card>
               <CardHeader title="Pipeline Value by Stage" />
-              <CardBody>
-                <div className="space-y-3">
+              <CardBody className="p-3 sm:p-6">
+                <div className="space-y-2 sm:space-y-3">
                   {(pipelineData?.data || []).map((item: any, idx: number) => {
                     const maxValue = Math.max(
                       ...(pipelineData?.data || []).map((i: any) => i.value || 0)
@@ -323,20 +328,22 @@ function ReportsPage() {
                     const value = item.value || 0;
                     const width = maxValue > 0 ? (value / maxValue) * 100 : 0;
                     return (
-                      <div key={idx} className="flex items-center gap-4">
-                        <div className="w-32 text-sm text-gray-600">
+                      <div key={idx} className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
+                        <div className="w-full sm:w-32 text-xs sm:text-sm text-gray-600 truncate">
                           {item.stage || item.label || `Stage ${idx + 1}`}
                         </div>
-                        <div className="flex-1">
-                          <div className="h-4 bg-gray-100 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-primary-500 rounded-full"
-                              style={{ width: `${width}%` }}
-                            />
+                        <div className="flex items-center gap-2 sm:gap-4 flex-1">
+                          <div className="flex-1">
+                            <div className="h-3 sm:h-4 bg-gray-100 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-primary-500 rounded-full"
+                                style={{ width: `${width}%` }}
+                              />
+                            </div>
                           </div>
-                        </div>
-                        <div className="w-24 text-sm text-gray-900 text-right font-medium">
-                          {formatCurrency(value)}
+                          <div className="w-20 sm:w-24 text-xs sm:text-sm text-gray-900 text-right font-medium">
+                            {formatCurrency(value)}
+                          </div>
                         </div>
                       </div>
                     );
@@ -353,39 +360,63 @@ function ReportsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Reports</h1>
+          <p className="mt-1 text-xs sm:text-sm text-gray-500">
             Analyze your CRM data with detailed reports
           </p>
         </div>
-        <div className="flex items-center gap-2 text-sm text-gray-500">
-          <ChartBarIcon className="h-5 w-5" />
+        <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-500">
+          <ChartBarIcon className="h-4 w-4 sm:h-5 sm:w-5" />
           <span>Last updated: {formatDate(new Date().toISOString())}</span>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Report Selection */}
-        <div className="lg:col-span-1 space-y-3">
-          {reports.map((report) => (
-            <ReportCard
-              key={report.type}
-              title={report.title}
-              description={report.description}
-              icon={report.icon}
-              isActive={activeReport === report.type}
-              onClick={() => setActiveReport(report.type)}
-            />
-          ))}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-6">
+        {/* Report Selection - horizontal scroll on mobile, vertical on desktop */}
+        <div className="lg:col-span-1">
+          {/* Mobile: horizontal scrollable selector */}
+          <div className="flex lg:hidden gap-2 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-hide">
+            {reports.map((report) => (
+              <button
+                key={report.type}
+                onClick={() => setActiveReport(report.type)}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-colors whitespace-nowrap flex-shrink-0 ${
+                  activeReport === report.type
+                    ? 'border-primary-500 bg-primary-50'
+                    : 'border-gray-200 hover:border-gray-300 bg-white'
+                }`}
+              >
+                <div className={`p-1.5 rounded-lg ${activeReport === report.type ? 'bg-primary-100 text-primary-600' : 'bg-gray-100 text-gray-600'}`}>
+                  {report.icon}
+                </div>
+                <span className={`text-sm font-medium ${activeReport === report.type ? 'text-primary-700' : 'text-gray-900'}`}>
+                  {report.title}
+                </span>
+              </button>
+            ))}
+          </div>
+          {/* Desktop: vertical cards */}
+          <div className="hidden lg:block space-y-3">
+            {reports.map((report) => (
+              <ReportCard
+                key={report.type}
+                title={report.title}
+                description={report.description}
+                icon={report.icon}
+                isActive={activeReport === report.type}
+                onClick={() => setActiveReport(report.type)}
+              />
+            ))}
+          </div>
         </div>
 
-        {/* Report Content */}
+        {/* Report Content - full width on mobile */}
         <div className="lg:col-span-3">
           <Card>
-            <CardBody>{renderReportContent()}</CardBody>
+            <CardBody className="p-3 sm:p-6">{renderReportContent()}</CardBody>
           </Card>
         </div>
       </div>

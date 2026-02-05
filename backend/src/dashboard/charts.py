@@ -38,10 +38,9 @@ class ChartDataGenerator:
         data = []
         for row in result.all():
             data.append({
-                "stage": row.name,
+                "label": row.name,
+                "value": row.count or 0,
                 "color": row.color,
-                "count": row.count or 0,
-                "amount": float(row.total_amount or 0),
             })
 
         return {

@@ -35,10 +35,10 @@ export const FormInput = forwardRef<HTMLInputElement, FormInputProps>(
       <div className="w-full">
         <label
           htmlFor={inputId}
-          className="block text-sm font-medium text-gray-700"
+          className="block text-sm font-medium text-gray-700 mb-1.5 sm:mb-1"
         >
           {label}
-          {required && ' *'}
+          {required && <span className="text-red-500 ml-0.5">*</span>}
         </label>
         <input
           ref={ref}
@@ -48,8 +48,9 @@ export const FormInput = forwardRef<HTMLInputElement, FormInputProps>(
           placeholder={placeholder}
           disabled={disabled}
           className={clsx(
-            'mt-1 block w-full rounded-md shadow-sm sm:text-sm',
-            'focus:outline-none focus:ring-1',
+            'block w-full rounded-md shadow-sm text-base sm:text-sm',
+            'py-2.5 sm:py-2 px-3', // Better touch targets on mobile
+            'focus:outline-none focus:ring-2 sm:focus:ring-1',
             'disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed',
             hasError
               ? 'border-red-300 text-red-900 focus:border-red-500 focus:ring-red-500'
@@ -66,14 +67,14 @@ export const FormInput = forwardRef<HTMLInputElement, FormInputProps>(
         {error && (
           <p
             id={`${inputId}-error`}
-            className="mt-1 text-sm text-red-600"
+            className="mt-1.5 sm:mt-1 text-sm text-red-600 font-medium"
             role="alert"
           >
             {error}
           </p>
         )}
         {!error && helperText && (
-          <p id={`${inputId}-helper`} className="mt-1 text-sm text-gray-500">
+          <p id={`${inputId}-helper`} className="mt-1.5 sm:mt-1 text-sm text-gray-500">
             {helperText}
           </p>
         )}

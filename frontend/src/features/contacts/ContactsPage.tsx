@@ -136,7 +136,7 @@ function ContactsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Contacts</h1>
           <p className="mt-1 text-sm text-gray-500">
@@ -146,6 +146,7 @@ function ContactsPage() {
         <Button
           leftIcon={<PlusIcon className="h-5 w-5" />}
           onClick={() => setShowForm(true)}
+          className="w-full sm:w-auto"
         >
           Add Contact
         </Button>
@@ -153,7 +154,7 @@ function ContactsPage() {
 
       {/* Search and Filters */}
       <div className="bg-white shadow rounded-lg p-4">
-        <form onSubmit={handleSearch} className="flex gap-4">
+        <form onSubmit={handleSearch} className="flex flex-col gap-3 sm:flex-row sm:gap-4">
           <div className="flex-1">
             <label htmlFor="search" className="sr-only">
               Search contacts
@@ -179,12 +180,12 @@ function ContactsPage() {
                 id="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 text-sm"
                 placeholder="Search by name, email, or company..."
               />
             </div>
           </div>
-          <Button type="submit" variant="secondary">
+          <Button type="submit" variant="secondary" className="w-full sm:w-auto">
             Search
           </Button>
         </form>
@@ -247,109 +248,163 @@ function ContactsPage() {
           </div>
         ) : (
           <>
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Name
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Email
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Company
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Phone
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Created
-                  </th>
-                  <th scope="col" className="relative px-6 py-3">
-                    <span className="sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {contacts.map((contact: Contact) => (
-                  <tr key={contact.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <Link
-                        to={`/contacts/${contact.id}`}
-                        className="text-sm font-medium text-primary-600 hover:text-primary-900"
-                      >
+            {/* Mobile Card View */}
+            <div className="block md:hidden divide-y divide-gray-200">
+              {contacts.map((contact: Contact) => (
+                <div key={contact.id} className="p-4 hover:bg-gray-50">
+                  <div className="flex items-start justify-between">
+                    <Link
+                      to={`/contacts/${contact.id}`}
+                      className="flex-1 min-w-0"
+                    >
+                      <p className="text-sm font-medium text-primary-600 hover:text-primary-900 truncate">
                         {contact.first_name} {contact.last_name}
-                      </Link>
+                      </p>
                       {contact.job_title && (
-                        <p className="text-sm text-gray-500">{contact.job_title}</p>
+                        <p className="text-sm text-gray-500 truncate">{contact.job_title}</p>
                       )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {contact.email || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {contact.company?.name || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatPhoneNumber(contact.phone)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatDate(contact.created_at)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    </Link>
+                    <div className="flex items-center gap-2 ml-2 flex-shrink-0">
                       <button
                         onClick={() => handleEdit(contact)}
-                        className="text-primary-600 hover:text-primary-900 mr-4"
+                        className="p-2 text-primary-600 hover:text-primary-900 hover:bg-gray-100 rounded-md"
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => handleDeleteClick(contact)}
-                        className="text-red-600 hover:text-red-900"
+                        className="p-2 text-red-600 hover:text-red-900 hover:bg-gray-100 rounded-md"
                         disabled={deleteContactMutation.isPending}
                       >
                         Delete
                       </button>
-                    </td>
+                    </div>
+                  </div>
+                  <div className="mt-2 space-y-1 text-sm text-gray-500">
+                    {contact.email && <p className="truncate">{contact.email}</p>}
+                    {contact.company?.name && <p className="truncate">Company: {contact.company.name}</p>}
+                    {contact.phone && <p>{formatPhoneNumber(contact.phone)}</p>}
+                    <p className="text-xs text-gray-400">Created: {formatDate(contact.created_at)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      Name
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      Email
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      Company
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      Phone
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      Created
+                    </th>
+                    <th scope="col" className="relative px-6 py-3">
+                      <span className="sr-only">Actions</span>
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {contacts.map((contact: Contact) => (
+                    <tr key={contact.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <Link
+                          to={`/contacts/${contact.id}`}
+                          className="text-sm font-medium text-primary-600 hover:text-primary-900"
+                        >
+                          {contact.first_name} {contact.last_name}
+                        </Link>
+                        {contact.job_title && (
+                          <p className="text-sm text-gray-500">{contact.job_title}</p>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {contact.email || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {contact.company?.name || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatPhoneNumber(contact.phone)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatDate(contact.created_at)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <button
+                          onClick={() => handleEdit(contact)}
+                          className="text-primary-600 hover:text-primary-900 mr-4"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteClick(contact)}
+                          className="text-red-600 hover:text-red-900"
+                          disabled={deleteContactMutation.isPending}
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
             {/* Pagination */}
-            <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
-              <div className="flex-1 flex justify-between sm:hidden">
-                <Button
-                  variant="secondary"
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                >
-                  Previous
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                >
-                  Next
-                </Button>
+            <div className="bg-white px-4 py-3 border-t border-gray-200 sm:px-6">
+              {/* Mobile Pagination */}
+              <div className="flex flex-col gap-3 sm:hidden">
+                <p className="text-sm text-gray-700 text-center">
+                  Page {currentPage} of {totalPages} ({total} results)
+                </p>
+                <div className="flex justify-between gap-3">
+                  <Button
+                    variant="secondary"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="flex-1"
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="flex-1"
+                  >
+                    Next
+                  </Button>
+                </div>
               </div>
-              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+              {/* Desktop Pagination */}
+              <div className="hidden sm:flex sm:items-center sm:justify-between">
                 <div>
                   <p className="text-sm text-gray-700">
                     Showing{' '}

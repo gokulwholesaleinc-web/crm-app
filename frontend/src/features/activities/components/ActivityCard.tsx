@@ -109,38 +109,38 @@ export function ActivityCard({
     return (
       <div
         className={clsx(
-          'flex items-start gap-3 p-3 rounded-lg border transition-colors',
+          'flex items-start gap-2 sm:gap-3 p-2.5 sm:p-3 rounded-lg border transition-colors',
           colors.border,
           activity.is_completed ? 'bg-gray-50 opacity-75' : colors.bg
         )}
       >
-        <div className={clsx('p-1.5 rounded-full', colors.bg)}>
-          <Icon className={clsx('h-4 w-4', colors.text)} />
+        <div className={clsx('p-1 sm:p-1.5 rounded-full flex-shrink-0', colors.bg)}>
+          <Icon className={clsx('h-3.5 w-3.5 sm:h-4 sm:w-4', colors.text)} />
         </div>
         <div className="flex-1 min-w-0">
           <p
             className={clsx(
-              'text-sm font-medium truncate',
+              'text-xs sm:text-sm font-medium truncate',
               activity.is_completed && 'line-through text-gray-500'
             )}
           >
             {activity.subject}
           </p>
-          <p className="text-xs text-gray-500 mt-0.5">
+          <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5">
             {activity.created_at && getRelativeTime(activity.created_at)}
           </p>
         </div>
         {!activity.is_completed && onComplete && (
           <button
             onClick={() => onComplete(activity.id)}
-            className="p-1 rounded hover:bg-gray-200 transition-colors"
+            className="p-1.5 sm:p-1 rounded hover:bg-gray-200 transition-colors flex-shrink-0 min-h-[36px] min-w-[36px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
             title="Mark as complete"
           >
             <CheckCircleIcon className="h-5 w-5 text-gray-400 hover:text-green-500" />
           </button>
         )}
         {activity.is_completed && (
-          <CheckCircleSolidIcon className="h-5 w-5 text-green-500" />
+          <CheckCircleSolidIcon className="h-5 w-5 text-green-500 flex-shrink-0" />
         )}
       </div>
     );
@@ -149,54 +149,55 @@ export function ActivityCard({
   return (
     <div
       className={clsx(
-        'bg-white rounded-lg shadow-sm border p-4 transition-all hover:shadow-md',
+        'bg-white rounded-lg shadow-sm border p-3 sm:p-4 transition-all hover:shadow-md',
         activity.is_completed && 'opacity-75'
       )}
     >
-      <div className="flex items-start gap-4">
-        <div className={clsx('p-2 rounded-lg', colors.bg)}>
-          <Icon className={clsx('h-5 w-5', colors.text)} />
+      <div className="flex items-start gap-3 sm:gap-4">
+        <div className={clsx('p-1.5 sm:p-2 rounded-lg flex-shrink-0', colors.bg)}>
+          <Icon className={clsx('h-4 w-4 sm:h-5 sm:w-5', colors.text)} />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2">
+          {/* Header row - stacks on very small screens */}
+          <div className="flex flex-col xs:flex-row xs:items-center xs:justify-between gap-1 xs:gap-2">
             <h4
               className={clsx(
-                'font-medium text-gray-900 truncate',
+                'text-sm sm:text-base font-medium text-gray-900 truncate',
                 activity.is_completed && 'line-through text-gray-500'
               )}
             >
               {activity.subject}
             </h4>
-            <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
               {activity.priority && activity.priority !== 'normal' && (
-                <span className={clsx('text-xs font-medium', priorityColors[activity.priority])}>
+                <span className={clsx('text-[10px] sm:text-xs font-medium', priorityColors[activity.priority])}>
                   {activity.priority.toUpperCase()}
                 </span>
               )}
               {isOverdue && (
-                <span className="flex items-center gap-1 text-xs text-red-600">
-                  <ExclamationTriangleIcon className="h-4 w-4" />
-                  Overdue
+                <span className="flex items-center gap-0.5 sm:gap-1 text-[10px] sm:text-xs text-red-600">
+                  <ExclamationTriangleIcon className="h-3 w-3 sm:h-4 sm:w-4" />
+                  <span className="hidden xs:inline">Overdue</span>
                 </span>
               )}
             </div>
           </div>
 
           {activity.description && (
-            <p className="text-sm text-gray-600 mt-1 line-clamp-2">{activity.description}</p>
+            <p className="text-xs sm:text-sm text-gray-600 mt-1 line-clamp-2">{activity.description}</p>
           )}
 
-          <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-gray-500">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-2 text-[10px] sm:text-xs text-gray-500">
             {activity.scheduled_at && (
-              <span className="flex items-center gap-1">
-                <ClockIcon className="h-3.5 w-3.5" />
-                {formatDate(activity.scheduled_at)}
+              <span className="flex items-center gap-0.5 sm:gap-1">
+                <ClockIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                <span className="truncate max-w-[100px] sm:max-w-none">{formatDate(activity.scheduled_at)}</span>
               </span>
             )}
             {activity.due_date && (
-              <span className={clsx('flex items-center gap-1', isOverdue && 'text-red-600')}>
-                <CalendarIcon className="h-3.5 w-3.5" />
-                Due: {formatDate(activity.due_date)}
+              <span className={clsx('flex items-center gap-0.5 sm:gap-1', isOverdue && 'text-red-600')}>
+                <CalendarIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                <span className="truncate max-w-[100px] sm:max-w-none">Due: {formatDate(activity.due_date)}</span>
               </span>
             )}
             {renderCallDetails()}
@@ -204,30 +205,33 @@ export function ActivityCard({
           </div>
 
           {activity.completed_at && (
-            <p className="text-xs text-green-600 mt-2 flex items-center gap-1">
-              <CheckCircleSolidIcon className="h-3.5 w-3.5" />
+            <p className="text-[10px] sm:text-xs text-green-600 mt-2 flex items-center gap-0.5 sm:gap-1">
+              <CheckCircleSolidIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
               Completed {formatDate(activity.completed_at)}
             </p>
           )}
         </div>
 
-        <div className="flex items-center gap-1">
+        {/* Action buttons - use larger touch targets on mobile */}
+        <div className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1 flex-shrink-0">
           {!activity.is_completed && onComplete && (
             <button
               onClick={() => onComplete(activity.id)}
-              className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+              className="p-2 sm:p-1.5 rounded-lg hover:bg-gray-100 transition-colors min-h-[40px] min-w-[40px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
               title="Mark as complete"
             >
               <CheckCircleIcon className="h-5 w-5 text-gray-400 hover:text-green-500" />
             </button>
           )}
           {activity.is_completed && (
-            <CheckCircleSolidIcon className="h-5 w-5 text-green-500" />
+            <div className="p-2 sm:p-1.5">
+              <CheckCircleSolidIcon className="h-5 w-5 text-green-500" />
+            </div>
           )}
           {onEdit && (
             <button
               onClick={() => onEdit(activity)}
-              className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600"
+              className="p-2 sm:p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600 min-h-[40px] min-w-[40px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
               title="Edit"
             >
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -243,7 +247,7 @@ export function ActivityCard({
           {onDelete && (
             <button
               onClick={() => onDelete(activity.id)}
-              className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-red-500"
+              className="p-2 sm:p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-red-500 min-h-[40px] min-w-[40px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
               title="Delete"
             >
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

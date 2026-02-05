@@ -85,30 +85,30 @@ export function AddMembersModal({
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex min-h-screen items-center justify-center p-4">
+      <div className="flex min-h-screen items-center justify-center p-0 sm:p-4">
         <div
           className="fixed inset-0 bg-black bg-opacity-25"
           onClick={onClose}
         />
-        <div className="relative bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] flex flex-col">
+        <div className="relative bg-white sm:rounded-lg shadow-xl w-full sm:max-w-2xl h-full sm:h-auto sm:max-h-[80vh] flex flex-col">
           {/* Header */}
-          <div className="px-6 py-4 border-b flex items-center justify-between flex-shrink-0">
-            <h2 className="text-lg font-semibold text-gray-900">Add Campaign Members</h2>
+          <div className="px-4 sm:px-6 py-4 border-b flex items-center justify-between flex-shrink-0">
+            <h2 className="text-base sm:text-lg font-semibold text-gray-900">Add Campaign Members</h2>
             <button
               onClick={onClose}
-              className="p-1 rounded-lg hover:bg-gray-100 transition-colors"
+              className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
             >
               <XMarkIcon className="h-5 w-5 text-gray-500" />
             </button>
           </div>
 
           {/* Member Type Tabs */}
-          <div className="px-6 py-3 border-b flex-shrink-0">
-            <div className="flex space-x-4">
+          <div className="px-4 sm:px-6 py-3 border-b flex-shrink-0">
+            <div className="flex space-x-2 sm:space-x-4">
               <button
                 onClick={() => handleTypeChange('contact')}
                 className={clsx(
-                  'px-4 py-2 text-sm font-medium rounded-lg transition-colors',
+                  'flex-1 sm:flex-none px-3 sm:px-4 py-2 text-sm font-medium rounded-lg transition-colors',
                   memberType === 'contact'
                     ? 'bg-primary-100 text-primary-700'
                     : 'text-gray-500 hover:bg-gray-100'
@@ -119,7 +119,7 @@ export function AddMembersModal({
               <button
                 onClick={() => handleTypeChange('lead')}
                 className={clsx(
-                  'px-4 py-2 text-sm font-medium rounded-lg transition-colors',
+                  'flex-1 sm:flex-none px-3 sm:px-4 py-2 text-sm font-medium rounded-lg transition-colors',
                   memberType === 'lead'
                     ? 'bg-primary-100 text-primary-700'
                     : 'text-gray-500 hover:bg-gray-100'
@@ -131,7 +131,7 @@ export function AddMembersModal({
           </div>
 
           {/* Search */}
-          <div className="px-6 py-3 border-b flex-shrink-0">
+          <div className="px-4 sm:px-6 py-3 border-b flex-shrink-0">
             <div className="relative">
               <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
               <input
@@ -139,13 +139,13 @@ export function AddMembersModal({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={`Search ${memberType}s...`}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="w-full pl-10 pr-4 py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               />
             </div>
           </div>
 
           {/* Selection Actions */}
-          <div className="px-6 py-2 border-b flex items-center justify-between text-sm flex-shrink-0">
+          <div className="px-4 sm:px-6 py-2 border-b flex items-center justify-between text-sm flex-shrink-0">
             <span className="text-gray-600">
               {selectedIds.length} selected
             </span>
@@ -169,7 +169,7 @@ export function AddMembersModal({
           </div>
 
           {/* List */}
-          <div className="flex-1 overflow-y-auto px-6 py-3">
+          <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-3">
             {isLoadingItems ? (
               <div className="flex items-center justify-center py-12">
                 <Spinner />
@@ -219,7 +219,7 @@ export function AddMembersModal({
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-gray-900 truncate">{name}</p>
-                        <p className="text-sm text-gray-500 truncate">
+                        <p className="text-xs sm:text-sm text-gray-500 truncate">
                           {email}
                           {extra && ` - ${extra}`}
                         </p>
@@ -232,14 +232,15 @@ export function AddMembersModal({
           </div>
 
           {/* Footer */}
-          <div className="px-6 py-4 border-t flex items-center justify-end gap-3 flex-shrink-0">
-            <Button variant="secondary" onClick={onClose} disabled={isLoading}>
+          <div className="px-4 sm:px-6 py-4 border-t flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3 flex-shrink-0">
+            <Button variant="secondary" onClick={onClose} disabled={isLoading} className="w-full sm:w-auto">
               Cancel
             </Button>
             <Button
               onClick={handleSubmit}
               isLoading={isLoading}
               disabled={selectedIds.length === 0}
+              className="w-full sm:w-auto"
             >
               Add {selectedIds.length} {memberType}
               {selectedIds.length !== 1 ? 's' : ''}

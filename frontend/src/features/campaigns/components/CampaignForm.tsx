@@ -148,7 +148,7 @@ export function CampaignForm({
         register={register('description')}
       />
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Controller
           name="campaign_type"
           control={control}
@@ -172,7 +172,7 @@ export function CampaignForm({
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Input
           {...register('start_date')}
           type="date"
@@ -189,7 +189,7 @@ export function CampaignForm({
 
       <div className="border-t pt-4 mt-4">
         <h4 className="text-sm font-medium text-gray-700 mb-3">Budget & Goals</h4>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input
             {...register('budget_amount')}
             type="number"
@@ -206,7 +206,7 @@ export function CampaignForm({
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4 mt-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
           <Input
             {...register('expected_revenue')}
             type="number"
@@ -231,11 +231,11 @@ export function CampaignForm({
         register={register('target_audience')}
       />
 
-      <div className="flex justify-end gap-3 pt-4 border-t">
-        <Button type="button" variant="secondary" onClick={onCancel}>
+      <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-4 border-t">
+        <Button type="button" variant="secondary" onClick={onCancel} className="w-full sm:w-auto">
           Cancel
         </Button>
-        <Button type="submit" isLoading={isLoading}>
+        <Button type="submit" isLoading={isLoading} className="w-full sm:w-auto">
           {isEditing ? 'Update Campaign' : 'Create Campaign'}
         </Button>
       </div>

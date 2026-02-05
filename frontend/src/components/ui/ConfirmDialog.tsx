@@ -76,21 +76,23 @@ export function ConfirmDialog({
           </div>
         </div>
       </div>
-      <div className="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse gap-3">
+      <div className="mt-5 sm:mt-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
+        <Button
+          variant="secondary"
+          onClick={onClose}
+          disabled={isLoading}
+          className="w-full sm:w-auto min-h-[44px] sm:min-h-0"
+        >
+          {cancelLabel}
+        </Button>
         <Button
           variant={styles.button}
           onClick={handleConfirm}
           isLoading={isLoading}
           disabled={isLoading}
+          className="w-full sm:w-auto min-h-[44px] sm:min-h-0"
         >
           {confirmLabel}
-        </Button>
-        <Button
-          variant="secondary"
-          onClick={onClose}
-          disabled={isLoading}
-        >
-          {cancelLabel}
         </Button>
       </div>
     </Modal>

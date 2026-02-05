@@ -164,23 +164,27 @@ export function ActivitiesPage() {
   const timelineItems = timelineData?.items || [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Activities</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Activities</h1>
+          <p className="text-xs sm:text-sm text-gray-500 mt-1">
             Track and manage all your activities in one place
           </p>
         </div>
-        <Button leftIcon={<PlusIcon className="h-5 w-5" />} onClick={() => setShowForm(true)}>
+        <Button
+          leftIcon={<PlusIcon className="h-4 w-4 sm:h-5 sm:w-5" />}
+          onClick={() => setShowForm(true)}
+          className="w-full sm:w-auto"
+        >
           New Activity
         </Button>
       </div>
 
       {/* Activity Type Tabs */}
-      <div className="border-b border-gray-200">
-        <nav className="flex -mb-px space-x-6" aria-label="Activity types">
+      <div className="border-b border-gray-200 -mx-4 px-4 sm:mx-0 sm:px-0 overflow-x-auto">
+        <nav className="flex -mb-px space-x-3 sm:space-x-6 min-w-max" aria-label="Activity types">
           {activityTypeFilters.map((type) => {
             const Icon = type.icon;
             const isActive =
@@ -191,14 +195,15 @@ export function ActivitiesPage() {
                 key={type.value}
                 onClick={() => updateFilter('activity_type', type.value)}
                 className={clsx(
-                  'flex items-center gap-2 py-3 px-1 border-b-2 text-sm font-medium transition-colors',
+                  'flex items-center gap-1.5 sm:gap-2 py-2.5 sm:py-3 px-1 border-b-2 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap',
                   isActive
                     ? 'border-primary-500 text-primary-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 )}
               >
-                {Icon && <Icon className="h-4 w-4" />}
-                {type.label}
+                {Icon && <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
+                <span className="hidden xs:inline sm:inline">{type.label}</span>
+                <span className="xs:hidden sm:hidden">{type.label.slice(0, 4)}</span>
               </button>
             );
           })}
@@ -206,44 +211,48 @@ export function ActivitiesPage() {
       </div>
 
       {/* Toolbar */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setViewMode('list')}
-            className={clsx(
-              'p-2 rounded-lg transition-colors',
-              viewMode === 'list'
-                ? 'bg-primary-100 text-primary-600'
-                : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
-            )}
-            title="List view"
-          >
-            <ListBulletIcon className="h-5 w-5" />
-          </button>
-          <button
-            onClick={() => setViewMode('timeline')}
-            className={clsx(
-              'p-2 rounded-lg transition-colors',
-              viewMode === 'timeline'
-                ? 'bg-primary-100 text-primary-600'
-                : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
-            )}
-            title="Timeline view"
-          >
-            <ClockIcon className="h-5 w-5" />
-          </button>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center justify-between sm:justify-start gap-2">
+          <div className="flex items-center gap-1 sm:gap-2">
+            <button
+              onClick={() => setViewMode('list')}
+              className={clsx(
+                'p-2 sm:p-2 rounded-lg transition-colors',
+                viewMode === 'list'
+                  ? 'bg-primary-100 text-primary-600'
+                  : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
+              )}
+              title="List view"
+            >
+              <ListBulletIcon className="h-5 w-5" />
+            </button>
+            <button
+              onClick={() => setViewMode('timeline')}
+              className={clsx(
+                'p-2 sm:p-2 rounded-lg transition-colors',
+                viewMode === 'timeline'
+                  ? 'bg-primary-100 text-primary-600'
+                  : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
+              )}
+              title="Timeline view"
+            >
+              <ClockIcon className="h-5 w-5" />
+            </button>
+          </div>
           <Button
             variant="ghost"
             size="sm"
             leftIcon={<FunnelIcon className="h-4 w-4" />}
             onClick={() => setShowFilters(!showFilters)}
+            className="ml-1 sm:ml-2"
           >
-            Filters
+            <span className="hidden sm:inline">Filters</span>
+            <span className="sm:hidden">Filter</span>
           </Button>
         </div>
 
         {viewMode === 'list' && activitiesData && (
-          <div className="text-sm text-gray-500">
+          <div className="text-xs sm:text-sm text-gray-500 text-center sm:text-right">
             Showing {activities.length} of {activitiesData.total} activities
           </div>
         )}
@@ -251,8 +260,8 @@ export function ActivitiesPage() {
 
       {/* Filters Panel */}
       {showFilters && (
-        <div className="bg-gray-50 rounded-lg p-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
             <Select
               label="Priority"
               options={priorityOptions}
@@ -277,21 +286,21 @@ export function ActivitiesPage() {
 
       {/* Content */}
       {isLoading ? (
-        <div className="flex items-center justify-center py-12">
+        <div className="flex items-center justify-center py-8 sm:py-12">
           <Spinner size="lg" />
         </div>
       ) : viewMode === 'list' ? (
-        <div className="space-y-4">
+        <div className="space-y-3 sm:space-y-4">
           {activities.length === 0 ? (
-            <div className="text-center py-12">
-              <DocumentTextIcon className="mx-auto h-12 w-12 text-gray-400" />
+            <div className="text-center py-8 sm:py-12">
+              <DocumentTextIcon className="mx-auto h-10 w-10 sm:h-12 sm:w-12 text-gray-400" />
               <h3 className="mt-2 text-sm font-medium text-gray-900">No activities</h3>
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-xs sm:text-sm text-gray-500">
                 Get started by creating a new activity.
               </p>
-              <div className="mt-6">
-                <Button onClick={() => setShowForm(true)}>
-                  <PlusIcon className="h-5 w-5 mr-2" />
+              <div className="mt-4 sm:mt-6">
+                <Button onClick={() => setShowForm(true)} className="w-full sm:w-auto">
+                  <PlusIcon className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
                   New Activity
                 </Button>
               </div>
@@ -313,26 +322,30 @@ export function ActivitiesPage() {
 
           {/* Pagination */}
           {activitiesData && activitiesData.pages > 1 && (
-            <div className="flex items-center justify-center gap-2 pt-4">
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={filters.page === 1}
-                onClick={() => updateFilter('page', String((filters.page || 1) - 1))}
-              >
-                Previous
-              </Button>
-              <span className="text-sm text-gray-600">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3 pt-4">
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={filters.page === 1}
+                  onClick={() => updateFilter('page', String((filters.page || 1) - 1))}
+                  className="flex-1 sm:flex-none"
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={filters.page === activitiesData.pages}
+                  onClick={() => updateFilter('page', String((filters.page || 1) + 1))}
+                  className="flex-1 sm:flex-none"
+                >
+                  Next
+                </Button>
+              </div>
+              <span className="text-xs sm:text-sm text-gray-600 order-first sm:order-none">
                 Page {filters.page} of {activitiesData.pages}
               </span>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={filters.page === activitiesData.pages}
-                onClick={() => updateFilter('page', String((filters.page || 1) + 1))}
-              >
-                Next
-              </Button>
             </div>
           )}
         </div>
@@ -344,12 +357,13 @@ export function ActivitiesPage() {
         />
       )}
 
-      {/* Form Modal */}
+      {/* Form Modal - fullscreen on mobile */}
       <Modal
         isOpen={showForm}
         onClose={handleFormCancel}
         title={editingActivity ? 'Edit Activity' : 'New Activity'}
         size="lg"
+        fullScreenOnMobile
       >
         <ActivityForm
           activity={editingActivity || undefined}

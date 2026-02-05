@@ -50,15 +50,15 @@ function StatCard({
   subValue?: string;
 }) {
   return (
-    <div className="bg-white rounded-lg shadow-sm border p-4">
-      <div className="flex items-center gap-3">
-        <div className="p-2 bg-gray-100 rounded-lg">
-          <Icon className="h-5 w-5 text-gray-600" />
+    <div className="bg-white rounded-lg shadow-sm border p-3 sm:p-4">
+      <div className="flex items-center gap-2 sm:gap-3">
+        <div className="p-1.5 sm:p-2 bg-gray-100 rounded-lg flex-shrink-0">
+          <Icon className="h-4 w-4 sm:h-5 sm:w-5 text-gray-600" />
         </div>
-        <div>
-          <p className="text-sm text-gray-500">{label}</p>
-          <p className="text-xl font-semibold text-gray-900">{value}</p>
-          {subValue && <p className="text-xs text-gray-500">{subValue}</p>}
+        <div className="min-w-0">
+          <p className="text-xs sm:text-sm text-gray-500 truncate">{label}</p>
+          <p className="text-lg sm:text-xl font-semibold text-gray-900">{value}</p>
+          {subValue && <p className="text-xs text-gray-500 truncate">{subValue}</p>}
         </div>
       </div>
     </div>
@@ -76,13 +76,13 @@ function MemberRow({
 
   return (
     <tr className="hover:bg-gray-50">
-      <td className="px-4 py-3 text-sm text-gray-900">
+      <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
         {member.member_type === 'contact' ? 'Contact' : 'Lead'} #{member.member_id}
       </td>
       <td className="px-4 py-3">
         <span
           className={clsx(
-            'text-xs font-medium px-2 py-0.5 rounded-full',
+            'text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap',
             statusStyle.bg,
             statusStyle.text
           )}
@@ -90,9 +90,9 @@ function MemberRow({
           {member.status.charAt(0).toUpperCase() + member.status.slice(1)}
         </span>
       </td>
-      <td className="px-4 py-3 text-sm text-gray-500">{formatDate(member.sent_at, 'short')}</td>
-      <td className="px-4 py-3 text-sm text-gray-500">{formatDate(member.responded_at, 'short')}</td>
-      <td className="px-4 py-3 text-sm text-gray-500">{formatDate(member.converted_at, 'short')}</td>
+      <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{formatDate(member.sent_at, 'short')}</td>
+      <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{formatDate(member.responded_at, 'short')}</td>
+      <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{formatDate(member.converted_at, 'short')}</td>
       <td className="px-4 py-3 text-right">
         <button
           onClick={onRemove}
@@ -103,6 +103,58 @@ function MemberRow({
         </button>
       </td>
     </tr>
+  );
+}
+
+function MemberCard({
+  member,
+  onRemove,
+}: {
+  member: CampaignMember;
+  onRemove: () => void;
+}) {
+  const statusStyle = memberStatusColors[member.status] ?? defaultMemberStatusColor;
+
+  return (
+    <div className="bg-white border rounded-lg p-4">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <p className="font-medium text-gray-900 truncate">
+            {member.member_type === 'contact' ? 'Contact' : 'Lead'} #{member.member_id}
+          </p>
+          <span
+            className={clsx(
+              'inline-block text-xs font-medium px-2 py-0.5 rounded-full mt-1',
+              statusStyle.bg,
+              statusStyle.text
+            )}
+          >
+            {member.status.charAt(0).toUpperCase() + member.status.slice(1)}
+          </span>
+        </div>
+        <button
+          onClick={onRemove}
+          className="p-1.5 text-gray-400 hover:text-red-500 transition-colors flex-shrink-0"
+          title="Remove member"
+        >
+          <TrashIcon className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+        <div>
+          <p className="text-gray-500">Sent</p>
+          <p className="text-gray-900">{formatDate(member.sent_at, 'short') || '-'}</p>
+        </div>
+        <div>
+          <p className="text-gray-500">Responded</p>
+          <p className="text-gray-900">{formatDate(member.responded_at, 'short') || '-'}</p>
+        </div>
+        <div>
+          <p className="text-gray-500">Converted</p>
+          <p className="text-gray-900">{formatDate(member.converted_at, 'short') || '-'}</p>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -222,19 +274,19 @@ export function CampaignDetailPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-start gap-4">
         <button
           onClick={() => navigate('/campaigns')}
-          className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+          className="p-2 rounded-lg hover:bg-gray-100 transition-colors self-start"
         >
           <ArrowLeftIcon className="h-5 w-5 text-gray-500" />
         </button>
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-gray-900">{campaign.name}</h1>
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 break-words">{campaign.name}</h1>
             <span
               className={clsx(
-                'text-sm font-medium px-3 py-1 rounded-full',
+                'text-xs sm:text-sm font-medium px-2 sm:px-3 py-0.5 sm:py-1 rounded-full whitespace-nowrap',
                 statusStyle.bg,
                 statusStyle.text
               )}
@@ -243,43 +295,43 @@ export function CampaignDetailPage() {
             </span>
           </div>
           {campaign.description && (
-            <p className="text-gray-600 mt-1">{campaign.description}</p>
+            <p className="text-sm sm:text-base text-gray-600 mt-1">{campaign.description}</p>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={() => setShowEditForm(true)}>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <Button variant="secondary" onClick={() => setShowEditForm(true)} className="flex-1 sm:flex-none">
             Edit
           </Button>
-          <Button variant="danger" onClick={() => setShowDeleteConfirm(true)}>
+          <Button variant="danger" onClick={() => setShowDeleteConfirm(true)} className="flex-1 sm:flex-none">
             Delete
           </Button>
         </div>
       </div>
 
       {/* Campaign Details */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg shadow-sm border p-4">
-          <p className="text-sm text-gray-500">Campaign Type</p>
-          <p className="text-lg font-medium text-gray-900 capitalize">{campaign.campaign_type}</p>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="bg-white rounded-lg shadow-sm border p-3 sm:p-4">
+          <p className="text-xs sm:text-sm text-gray-500">Campaign Type</p>
+          <p className="text-base sm:text-lg font-medium text-gray-900 capitalize">{campaign.campaign_type}</p>
         </div>
-        <div className="bg-white rounded-lg shadow-sm border p-4">
-          <p className="text-sm text-gray-500">Start Date</p>
-          <p className="text-lg font-medium text-gray-900">{formatDate(campaign.start_date, 'long')}</p>
+        <div className="bg-white rounded-lg shadow-sm border p-3 sm:p-4">
+          <p className="text-xs sm:text-sm text-gray-500">Start Date</p>
+          <p className="text-base sm:text-lg font-medium text-gray-900">{formatDate(campaign.start_date, 'long')}</p>
         </div>
-        <div className="bg-white rounded-lg shadow-sm border p-4">
-          <p className="text-sm text-gray-500">End Date</p>
-          <p className="text-lg font-medium text-gray-900">{formatDate(campaign.end_date, 'long')}</p>
+        <div className="bg-white rounded-lg shadow-sm border p-3 sm:p-4">
+          <p className="text-xs sm:text-sm text-gray-500">End Date</p>
+          <p className="text-base sm:text-lg font-medium text-gray-900">{formatDate(campaign.end_date, 'long')}</p>
         </div>
-        <div className="bg-white rounded-lg shadow-sm border p-4">
-          <p className="text-sm text-gray-500">Budget</p>
-          <p className="text-lg font-medium text-gray-900">
+        <div className="bg-white rounded-lg shadow-sm border p-3 sm:p-4">
+          <p className="text-xs sm:text-sm text-gray-500">Budget</p>
+          <p className="text-base sm:text-lg font-medium text-gray-900">
             {formatCurrency(campaign.budget_amount, campaign.budget_currency)}
           </p>
         </div>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatCard
           icon={UsersIcon}
           label="Total Members"
@@ -307,9 +359,10 @@ export function CampaignDetailPage() {
 
       {/* Funnel Stats */}
       {stats && (
-        <div className="bg-white rounded-lg shadow-sm border p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Campaign Funnel</h3>
-          <div className="flex items-center justify-between">
+        <div className="bg-white rounded-lg shadow-sm border p-4 sm:p-6">
+          <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Campaign Funnel</h3>
+          {/* Desktop: horizontal funnel */}
+          <div className="hidden sm:flex items-center justify-between">
             {[
               { label: 'Pending', value: stats.pending, color: 'bg-gray-200' },
               { label: 'Sent', value: stats.sent, color: 'bg-blue-200' },
@@ -335,17 +388,32 @@ export function CampaignDetailPage() {
               </div>
             ))}
           </div>
+          {/* Mobile: vertical grid */}
+          <div className="grid grid-cols-2 gap-3 sm:hidden">
+            {[
+              { label: 'Pending', value: stats.pending, color: 'bg-gray-200' },
+              { label: 'Sent', value: stats.sent, color: 'bg-blue-200' },
+              { label: 'Responded', value: stats.responded, color: 'bg-green-200' },
+              { label: 'Converted', value: stats.converted, color: 'bg-purple-200' },
+            ].map((stage) => (
+              <div key={stage.label} className={clsx('rounded-lg p-3 text-center', stage.color)}>
+                <span className="text-lg font-bold text-gray-800 block">{stage.value}</span>
+                <span className="text-xs text-gray-600">{stage.label}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
       {/* Members */}
       <div className="bg-white rounded-lg shadow-sm border">
-        <div className="px-6 py-4 border-b flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-900">Campaign Members</h3>
+        <div className="px-4 sm:px-6 py-4 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <h3 className="text-base sm:text-lg font-semibold text-gray-900">Campaign Members</h3>
           <Button
             size="sm"
             leftIcon={<PlusIcon className="h-4 w-4" />}
             onClick={() => setShowAddMembersModal(true)}
+            className="w-full sm:w-auto"
           >
             Add Members
           </Button>
@@ -360,39 +428,52 @@ export function CampaignDetailPage() {
             <p>No members in this campaign yet</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Member
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Status
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Sent
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Responded
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Converted
-                  </th>
-                  <th className="px-4 py-3"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {members.map((member) => (
-                  <MemberRow
-                    key={member.id}
-                    member={member}
-                    onRemove={() => handleRemoveMemberClick(member.id)}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <>
+            {/* Mobile: Card view */}
+            <div className="sm:hidden p-4 space-y-3">
+              {members.map((member) => (
+                <MemberCard
+                  key={member.id}
+                  member={member}
+                  onRemove={() => handleRemoveMemberClick(member.id)}
+                />
+              ))}
+            </div>
+            {/* Desktop: Table view */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Member
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Status
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Sent
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Responded
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Converted
+                    </th>
+                    <th className="px-4 py-3"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {members.map((member) => (
+                    <MemberRow
+                      key={member.id}
+                      member={member}
+                      onRemove={() => handleRemoveMemberClick(member.id)}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 

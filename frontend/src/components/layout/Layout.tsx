@@ -29,7 +29,7 @@ export function Layout({
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
-      {/* Desktop Sidebar */}
+      {/* Desktop Sidebar - hidden on mobile/tablet, visible on lg+ */}
       <div className="hidden lg:flex lg:flex-shrink-0">
         <Sidebar
           collapsed={sidebarCollapsed}
@@ -37,14 +37,14 @@ export function Layout({
         />
       </div>
 
-      {/* Mobile Sidebar */}
+      {/* Mobile Sidebar Overlay - only renders on mobile/tablet */}
       <MobileSidebar
         isOpen={mobileMenuOpen}
         onClose={() => setMobileMenuOpen(false)}
       />
 
-      {/* Main Content */}
-      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+      {/* Main Content Area - takes full width on mobile */}
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden w-full">
         <Header
           user={user}
           onMenuClick={() => setMobileMenuOpen(true)}
@@ -53,15 +53,17 @@ export function Layout({
           notifications={notifications}
         />
 
-        {/* Page Content */}
+        {/* Page Content - responsive padding */}
         <main
           className={clsx(
             'flex-1 overflow-y-auto focus:outline-none',
+            '-webkit-overflow-scrolling: touch', // Smooth scrolling on iOS
             className
           )}
         >
-          <div className="py-6">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="py-4 sm:py-6">
+            {/* Full width on mobile, constrained with responsive padding on larger screens */}
+            <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
               {children}
             </div>
           </div>
@@ -116,16 +118,20 @@ export function PageHeader({
         </nav>
       )}
 
-      {/* Title and Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
+      {/* Title and Actions - stacks on mobile, inline on larger screens */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">
+            {title}
+          </h1>
           {description && (
-            <p className="mt-1 text-sm text-gray-500">{description}</p>
+            <p className="mt-1 text-sm text-gray-500 line-clamp-2 sm:line-clamp-1">
+              {description}
+            </p>
           )}
         </div>
         {actions && (
-          <div className="mt-4 sm:mt-0 flex items-center space-x-3">
+          <div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
             {actions}
           </div>
         )}

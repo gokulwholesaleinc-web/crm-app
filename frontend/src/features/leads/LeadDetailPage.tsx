@@ -153,9 +153,9 @@ function LeadDetailPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <Link to="/leads" className="text-gray-400 hover:text-gray-500">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center space-x-3 sm:space-x-4">
+          <Link to="/leads" className="text-gray-400 hover:text-gray-500 p-1 -ml-1">
             <svg
               className="h-6 w-6"
               fill="none"
@@ -170,22 +170,22 @@ function LeadDetailPage() {
               />
             </svg>
           </Link>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">
               {lead.first_name} {lead.last_name}
             </h1>
             {lead.job_title && lead.company_name && (
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-gray-500 truncate">
                 {lead.job_title} at {lead.company_name}
               </p>
             )}
           </div>
         </div>
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {lead.status === 'qualified' && (
-            <Button onClick={() => setShowConvertModal(true)}>
+            <Button onClick={() => setShowConvertModal(true)} className="flex-1 sm:flex-none">
               <svg
-                className="h-5 w-5 mr-2"
+                className="h-5 w-5 mr-1 sm:mr-2"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -197,44 +197,51 @@ function LeadDetailPage() {
                   d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
                 />
               </svg>
-              Convert Lead
+              <span className="hidden sm:inline">Convert Lead</span>
+              <span className="sm:hidden">Convert</span>
             </Button>
           )}
           <Button
             variant="secondary"
             onClick={() => setShowEditForm(true)}
+            className="flex-1 sm:flex-none"
           >
             Edit
           </Button>
-          <Button variant="danger" onClick={() => setShowDeleteConfirm(true)} isLoading={deleteLeadMutation.isPending}>
+          <Button
+            variant="danger"
+            onClick={() => setShowDeleteConfirm(true)}
+            isLoading={deleteLeadMutation.isPending}
+            className="flex-1 sm:flex-none"
+          >
             Delete
           </Button>
         </div>
       </div>
 
       {/* Lead Score Card */}
-      <div className="bg-white shadow rounded-lg p-6">
-        <div className="flex items-center justify-between">
+      <div className="bg-white shadow rounded-lg p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h3 className="text-lg font-medium text-gray-900">Lead Score</h3>
             <p className="text-sm text-gray-500">
               Based on engagement and fit criteria
             </p>
           </div>
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center justify-center sm:justify-end gap-4 sm:space-x-4">
             <div className="text-center">
               <div
                 className={clsx(
-                  'text-4xl font-bold',
+                  'text-3xl sm:text-4xl font-bold',
                   getScoreColor(lead.score)
                 )}
               >
                 {lead.score}
               </div>
-              <div className="text-sm text-gray-500">out of 100</div>
+              <div className="text-xs sm:text-sm text-gray-500">out of 100</div>
             </div>
-            <div className="w-32 h-32 relative">
-              <svg className="w-full h-full transform -rotate-90">
+            <div className="w-24 h-24 sm:w-32 sm:h-32 relative flex-shrink-0">
+              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 128 128">
                 <circle
                   cx="64"
                   cy="64"
@@ -271,10 +278,10 @@ function LeadDetailPage() {
           <h3 className="text-lg font-medium text-gray-900 mb-4">
             Lead Details
           </h3>
-          <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
+          <dl className="grid grid-cols-1 gap-4 sm:gap-x-4 sm:gap-y-6 sm:grid-cols-2">
             <div>
               <dt className="text-sm font-medium text-gray-500">Email</dt>
-              <dd className="mt-1 text-sm text-gray-900">
+              <dd className="mt-1 text-sm text-gray-900 break-all">
                 <a
                   href={`mailto:${lead.email}`}
                   className="text-primary-600 hover:text-primary-500"
@@ -302,14 +309,14 @@ function LeadDetailPage() {
 
             <div>
               <dt className="text-sm font-medium text-gray-500">Company</dt>
-              <dd className="mt-1 text-sm text-gray-900">
+              <dd className="mt-1 text-sm text-gray-900 break-words">
                 {lead.company_name || '-'}
               </dd>
             </div>
 
             <div>
               <dt className="text-sm font-medium text-gray-500">Job Title</dt>
-              <dd className="mt-1 text-sm text-gray-900">
+              <dd className="mt-1 text-sm text-gray-900 break-words">
                 {lead.job_title || '-'}
               </dd>
             </div>
@@ -332,7 +339,7 @@ function LeadDetailPage() {
 
             <div className="sm:col-span-2">
               <dt className="text-sm font-medium text-gray-500">Description</dt>
-              <dd className="mt-1 text-sm text-gray-900">
+              <dd className="mt-1 text-sm text-gray-900 break-words">
                 {lead.description || 'No description'}
               </dd>
             </div>
@@ -369,6 +376,7 @@ function LeadDetailPage() {
         onClose={() => setShowEditForm(false)}
         title="Edit Lead"
         size="lg"
+        fullScreenOnMobile
       >
         <LeadForm
           initialData={getInitialFormData()}

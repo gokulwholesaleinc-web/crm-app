@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import clsx from 'clsx';
 import {
@@ -11,6 +12,7 @@ import {
   ChartBarIcon,
   SparklesIcon,
   Cog6ToothIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
 
 export interface NavItem {
@@ -147,28 +149,162 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
   );
 }
 
-// Mobile Sidebar Overlay
+// Shared navigation items for DRY principle - used by both Sidebar and MobileSidebar
+export const getNavigation = () => ({
+  main: mainNavigation,
+  secondary: secondaryNavigation,
+});
+
+// Mobile Sidebar Overlay with proper animations and touch support
 export interface MobileSidebarProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
 export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
-  if (!isOpen) return null;
+  const location = useLocation();
+
+  // Close sidebar on route change
+  useEffect(() => {
+    if (isOpen) {
+      onClose();
+    }
+    // Only run when location changes, not when isOpen changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
+
+  // Handle escape key press
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [isOpen, onClose]);
+
+  // Prevent body scroll when mobile menu is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
+  const isActive = (href: string) => {
+    if (href === '/') {
+      return location.pathname === '/';
+    }
+    return location.pathname.startsWith(href);
+  };
+
+  const renderMobileNavItem = (item: NavItem) => (
+    <NavLink
+      key={item.name}
+      to={item.href}
+      onClick={onClose}
+      className={clsx(
+        'group flex items-center px-3 py-3 rounded-lg transition-colors duration-200',
+        'touch-manipulation', // Better touch handling
+        isActive(item.href)
+          ? 'bg-primary-50 text-primary-600'
+          : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900 active:bg-gray-200'
+      )}
+    >
+      <item.icon
+        className={clsx(
+          'flex-shrink-0 h-6 w-6 mr-3',
+          isActive(item.href)
+            ? 'text-primary-500'
+            : 'text-gray-400 group-hover:text-gray-500'
+        )}
+        aria-hidden="true"
+      />
+      <span className="flex-1 text-base font-medium">{item.name}</span>
+      {item.badge && (
+        <span
+          className={clsx(
+            'ml-2 inline-flex items-center justify-center px-2.5 py-1 text-xs font-medium rounded-full',
+            isActive(item.href)
+              ? 'bg-primary-100 text-primary-700'
+              : 'bg-gray-100 text-gray-600'
+          )}
+        >
+          {item.badge}
+        </span>
+      )}
+    </NavLink>
+  );
 
   return (
-    <div className="fixed inset-0 z-40 lg:hidden">
-      {/* Backdrop */}
+    <>
+      {/* Backdrop with fade animation */}
       <div
-        className="fixed inset-0 bg-gray-600 bg-opacity-75 transition-opacity"
+        className={clsx(
+          'fixed inset-0 z-40 bg-gray-600 transition-opacity duration-300 ease-in-out lg:hidden',
+          isOpen ? 'opacity-75' : 'opacity-0 pointer-events-none'
+        )}
         onClick={onClose}
         aria-hidden="true"
       />
 
-      {/* Sidebar */}
-      <div className="fixed inset-y-0 left-0 flex flex-col w-64 bg-white shadow-xl">
-        <Sidebar />
+      {/* Sidebar panel with slide animation */}
+      <div
+        className={clsx(
+          'fixed inset-y-0 left-0 z-50 flex flex-col w-72 max-w-[85vw] bg-white shadow-xl',
+          'transform transition-transform duration-300 ease-in-out lg:hidden',
+          isOpen ? 'translate-x-0' : '-translate-x-full'
+        )}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Mobile navigation"
+      >
+        {/* Header with close button */}
+        <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200">
+          <div className="flex items-center">
+            <div className="h-8 w-8 bg-primary-500 rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold text-lg">C</span>
+            </div>
+            <span className="ml-2 text-xl font-bold text-gray-900">CRM</span>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 -mr-2 rounded-lg text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
+            aria-label="Close sidebar"
+          >
+            <XMarkIcon className="h-6 w-6" aria-hidden="true" />
+          </button>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto overscroll-contain">
+          <div className="space-y-1">
+            {mainNavigation.map(renderMobileNavItem)}
+          </div>
+
+          {/* Divider */}
+          <div className="my-4 border-t border-gray-200" />
+
+          {/* Secondary Navigation */}
+          <div className="space-y-1">
+            {secondaryNavigation.map(renderMobileNavItem)}
+          </div>
+        </nav>
+
+        {/* Footer */}
+        <div className="px-4 py-4 border-t border-gray-200 safe-area-inset-bottom">
+          <div className="text-xs text-gray-500">
+            <p>CRM Application v1.0</p>
+          </div>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

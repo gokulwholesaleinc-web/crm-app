@@ -14,15 +14,20 @@ export interface ModalProps {
   size?: ModalSize;
   showCloseButton?: boolean;
   closeOnOverlayClick?: boolean;
+  fullScreenOnMobile?: boolean;
 }
 
+// Mobile: full-width/height by default; Desktop: constrained by max-width
 const sizeStyles: Record<ModalSize, string> = {
-  sm: 'max-w-sm',
-  md: 'max-w-md',
-  lg: 'max-w-lg',
-  xl: 'max-w-xl',
-  full: 'max-w-4xl',
+  sm: 'w-full h-full sm:h-auto sm:max-w-sm',
+  md: 'w-full h-full sm:h-auto sm:max-w-md',
+  lg: 'w-full h-full sm:h-auto sm:max-w-lg',
+  xl: 'w-full h-full sm:h-auto sm:max-w-xl',
+  full: 'w-full h-full sm:h-auto sm:max-w-4xl',
 };
+
+// Mobile fullscreen base styles
+const mobileFullScreenStyles = 'rounded-none sm:rounded-2xl max-h-full sm:max-h-[90vh]';
 
 export function Modal({
   isOpen,
@@ -33,6 +38,7 @@ export function Modal({
   size = 'md',
   showCloseButton = true,
   closeOnOverlayClick = true,
+  fullScreenOnMobile = false,
 }: ModalProps) {
   return (
     <Transition appear show={isOpen} as={Fragment}>
@@ -53,8 +59,13 @@ export function Modal({
           <div className="fixed inset-0 bg-black/25 backdrop-blur-sm" />
         </Transition.Child>
 
-        <div className="fixed inset-0 overflow-y-auto">
-          <div className="flex min-h-full items-center justify-center p-4 text-center">
+        <div className="fixed inset-0 overflow-y-auto overscroll-contain">
+          <div className={clsx(
+              'flex min-h-full text-center',
+              fullScreenOnMobile
+                ? 'items-end sm:items-center justify-center p-0 sm:p-4'
+                : 'items-center justify-center p-4'
+            )}>
             <Transition.Child
               as={Fragment}
               enter="ease-out duration-300"
@@ -66,8 +77,10 @@ export function Modal({
             >
               <Dialog.Panel
                 className={clsx(
-                  'w-full transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all',
-                  sizeStyles[size]
+                  'w-full transform bg-white p-4 sm:p-6 text-left align-middle shadow-xl transition-all',
+                  'overflow-y-auto', // Proper scroll behavior
+                  sizeStyles[size],
+                  fullScreenOnMobile ? mobileFullScreenStyles : 'rounded-2xl'
                 )}
               >
                 {(title || showCloseButton) && (
@@ -90,11 +103,11 @@ export function Modal({
                     {showCloseButton && (
                       <button
                         type="button"
-                        className="rounded-lg p-1 text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        className="rounded-lg p-2 sm:p-1 text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 -mr-1 sm:mr-0 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
                         onClick={onClose}
                       >
                         <span className="sr-only">Close</span>
-                        <XMarkIcon className="h-5 w-5" aria-hidden="true" />
+                        <XMarkIcon className="h-6 w-6 sm:h-5 sm:w-5" aria-hidden="true" />
                       </button>
                     )}
                   </div>
@@ -118,7 +131,7 @@ export function ModalFooter({ children, className }: ModalFooterProps) {
   return (
     <div
       className={clsx(
-        'mt-6 flex items-center justify-end gap-3',
+        'mt-4 sm:mt-6 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3',
         className
       )}
     >

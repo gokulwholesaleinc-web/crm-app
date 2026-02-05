@@ -194,8 +194,9 @@ export function ActivityForm({
   };
 
   return (
-    <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
+    <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-3 sm:space-y-4">
+      {/* Activity Type & Priority - stack on mobile */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
         <Controller
           name="activity_type"
           control={control}
@@ -235,7 +236,8 @@ export function ActivityForm({
         register={register('description')}
       />
 
-      <div className="grid grid-cols-2 gap-4">
+      {/* Scheduled At & Due Date - stack on mobile */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
         <Input
           {...register('scheduled_at')}
           type="datetime-local"
@@ -253,9 +255,9 @@ export function ActivityForm({
 
       {/* Call-specific fields */}
       {activityType === 'call' && (
-        <div className="border-t pt-4 mt-4">
-          <h4 className="text-sm font-medium text-gray-700 mb-3">Call Details</h4>
-          <div className="grid grid-cols-2 gap-4">
+        <div className="border-t pt-3 sm:pt-4 mt-3 sm:mt-4">
+          <h4 className="text-xs sm:text-sm font-medium text-gray-700 mb-2 sm:mb-3">Call Details</h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <Input
               {...register('call_duration_minutes')}
               type="number"
@@ -275,9 +277,9 @@ export function ActivityForm({
 
       {/* Email-specific fields */}
       {activityType === 'email' && (
-        <div className="border-t pt-4 mt-4">
-          <h4 className="text-sm font-medium text-gray-700 mb-3">Email Details</h4>
-          <div className="grid grid-cols-2 gap-4">
+        <div className="border-t pt-3 sm:pt-4 mt-3 sm:mt-4">
+          <h4 className="text-xs sm:text-sm font-medium text-gray-700 mb-2 sm:mb-3">Email Details</h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <Input
               {...register('email_to')}
               type="email"
@@ -296,14 +298,14 @@ export function ActivityForm({
 
       {/* Meeting-specific fields */}
       {activityType === 'meeting' && (
-        <div className="border-t pt-4 mt-4">
-          <h4 className="text-sm font-medium text-gray-700 mb-3">Meeting Details</h4>
+        <div className="border-t pt-3 sm:pt-4 mt-3 sm:mt-4">
+          <h4 className="text-xs sm:text-sm font-medium text-gray-700 mb-2 sm:mb-3">Meeting Details</h4>
           <Input
             {...register('meeting_location')}
             label="Location"
             placeholder="Enter meeting location or link"
           />
-          <div className="mt-4">
+          <div className="mt-3 sm:mt-4">
             <FormTextarea
               label="Attendees"
               name="meeting_attendees"
@@ -317,8 +319,8 @@ export function ActivityForm({
 
       {/* Task-specific fields */}
       {activityType === 'task' && (
-        <div className="border-t pt-4 mt-4">
-          <h4 className="text-sm font-medium text-gray-700 mb-3">Task Details</h4>
+        <div className="border-t pt-3 sm:pt-4 mt-3 sm:mt-4">
+          <h4 className="text-xs sm:text-sm font-medium text-gray-700 mb-2 sm:mb-3">Task Details</h4>
           <Input
             {...register('task_reminder_at')}
             type="datetime-local"
@@ -327,11 +329,12 @@ export function ActivityForm({
         </div>
       )}
 
-      <div className="flex justify-end gap-3 pt-4 border-t">
-        <Button type="button" variant="secondary" onClick={onCancel}>
+      {/* Form actions - full width buttons on mobile */}
+      <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3 pt-3 sm:pt-4 border-t">
+        <Button type="button" variant="secondary" onClick={onCancel} className="w-full sm:w-auto">
           Cancel
         </Button>
-        <Button type="submit" isLoading={isLoading}>
+        <Button type="submit" isLoading={isLoading} className="w-full sm:w-auto">
           {isEditing ? 'Update Activity' : 'Create Activity'}
         </Button>
       </div>

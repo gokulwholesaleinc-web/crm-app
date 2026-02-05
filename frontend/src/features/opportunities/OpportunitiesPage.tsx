@@ -197,25 +197,26 @@ function OpportunitiesPage() {
     .reduce((sum, o) => sum + o.value * (o.probability / 100), 0);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Opportunities</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Opportunities</h1>
           <p className="mt-1 text-sm text-gray-500">
             Manage your sales pipeline
           </p>
         </div>
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center justify-between sm:justify-end gap-3">
           {/* View Toggle */}
           <div className="flex items-center bg-gray-100 rounded-lg p-1">
             <button
               onClick={() => setViewMode('kanban')}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+              className={`px-2 sm:px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                 viewMode === 'kanban'
                   ? 'bg-white text-gray-900 shadow-sm'
                   : 'text-gray-500 hover:text-gray-700'
               }`}
+              aria-label="Kanban view"
             >
               <svg
                 className="h-5 w-5"
@@ -233,11 +234,12 @@ function OpportunitiesPage() {
             </button>
             <button
               onClick={() => setViewMode('list')}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+              className={`px-2 sm:px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                 viewMode === 'list'
                   ? 'bg-white text-gray-900 shadow-sm'
                   : 'text-gray-500 hover:text-gray-700'
               }`}
+              aria-label="List view"
             >
               <svg
                 className="h-5 w-5"
@@ -259,19 +261,20 @@ function OpportunitiesPage() {
             leftIcon={<PlusIcon className="h-5 w-5" />}
             onClick={() => setShowForm(true)}
           >
-            Add Opportunity
+            <span className="hidden sm:inline">Add Opportunity</span>
+            <span className="sm:hidden">Add</span>
           </Button>
         </div>
       </div>
 
       {/* Pipeline Summary */}
-      <div className="bg-white shadow rounded-lg p-6">
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+      <div className="bg-white shadow rounded-lg p-4 sm:p-6">
+        <div className="grid grid-cols-1 gap-4 sm:gap-6 sm:grid-cols-3">
           <div>
             <p className="text-sm font-medium text-gray-500">
               Total Pipeline Value
             </p>
-            <p className="mt-2 text-3xl font-semibold text-gray-900">
+            <p className="mt-1 sm:mt-2 text-2xl sm:text-3xl font-semibold text-gray-900">
               {formatCurrency(totalPipelineValue)}
             </p>
           </div>
@@ -279,7 +282,7 @@ function OpportunitiesPage() {
             <p className="text-sm font-medium text-gray-500">
               Weighted Pipeline Value
             </p>
-            <p className="mt-2 text-3xl font-semibold text-gray-900">
+            <p className="mt-1 sm:mt-2 text-2xl sm:text-3xl font-semibold text-gray-900">
               {formatCurrency(weightedPipelineValue)}
             </p>
           </div>
@@ -287,7 +290,7 @@ function OpportunitiesPage() {
             <p className="text-sm font-medium text-gray-500">
               Open Opportunities
             </p>
-            <p className="mt-2 text-3xl font-semibold text-gray-900">
+            <p className="mt-1 sm:mt-2 text-2xl sm:text-3xl font-semibold text-gray-900">
               {
                 opportunities.filter(
                   (o) => !['closed_won', 'closed_lost'].includes(o.stage)
@@ -317,19 +320,21 @@ function OpportunitiesPage() {
           <Spinner size="lg" />
         </div>
       ) : viewMode === 'kanban' ? (
-        <div className="overflow-x-auto">
-          <KanbanBoard
-            stages={stages}
-            opportunities={opportunities}
-            onOpportunityMove={handleOpportunityMove}
-            onOpportunityClick={handleOpportunityClick}
-          />
+        <div className="-mx-4 sm:mx-0 overflow-x-auto">
+          <div className="px-4 sm:px-0">
+            <KanbanBoard
+              stages={stages}
+              opportunities={opportunities}
+              onOpportunityMove={handleOpportunityMove}
+              onOpportunityClick={handleOpportunityClick}
+            />
+          </div>
         </div>
       ) : (
         /* List View */
         <div className="bg-white shadow rounded-lg overflow-hidden">
           {opportunities.length === 0 ? (
-            <div className="text-center py-12">
+            <div className="text-center py-12 px-4">
               <svg
                 className="mx-auto h-12 w-12 text-gray-400"
                 fill="none"
@@ -356,96 +361,98 @@ function OpportunitiesPage() {
               </div>
             </div>
           ) : (
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Opportunity
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Value
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Stage
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Probability
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Close Date
-                  </th>
-                  <th scope="col" className="relative px-6 py-3">
-                    <span className="sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {opportunities.map((opportunity) => (
-                  <tr
-                    key={opportunity.id}
-                    className="hover:bg-gray-50 cursor-pointer"
-                    onClick={() => handleOpportunityClick(opportunity)}
-                  >
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        {opportunity.name}
-                      </div>
-                      {opportunity.companyName && (
-                        <div className="text-sm text-gray-500">
-                          {opportunity.companyName}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {formatCurrency(opportunity.value)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={getStatusBadgeClasses(opportunity.stage, 'opportunity')}>
-                        {stages.find((s) => s.id === opportunity.stage)
-                          ?.title || opportunity.stage}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatPercentage(opportunity.probability)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatDate(opportunity.expectedCloseDate)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const fullOpportunity = opportunitiesData?.items?.find(
-                            (item) => String(item.id) === opportunity.id
-                          );
-                          if (fullOpportunity) {
-                            handleEdit(fullOpportunity);
-                          }
-                        }}
-                        className="text-primary-600 hover:text-primary-900"
-                      >
-                        Edit
-                      </button>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th
+                      scope="col"
+                      className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      Opportunity
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      Value
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      Stage
+                    </th>
+                    <th
+                      scope="col"
+                      className="hidden sm:table-cell px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      Probability
+                    </th>
+                    <th
+                      scope="col"
+                      className="hidden md:table-cell px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      Close Date
+                    </th>
+                    <th scope="col" className="relative px-4 sm:px-6 py-3">
+                      <span className="sr-only">Actions</span>
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {opportunities.map((opportunity) => (
+                    <tr
+                      key={opportunity.id}
+                      className="hover:bg-gray-50 cursor-pointer"
+                      onClick={() => handleOpportunityClick(opportunity)}
+                    >
+                      <td className="px-4 sm:px-6 py-4">
+                        <div className="text-sm font-medium text-gray-900 truncate max-w-[150px] sm:max-w-none">
+                          {opportunity.name}
+                        </div>
+                        {opportunity.companyName && (
+                          <div className="text-sm text-gray-500 truncate max-w-[150px] sm:max-w-none">
+                            {opportunity.companyName}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {formatCurrency(opportunity.value)}
+                      </td>
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
+                        <span className={getStatusBadgeClasses(opportunity.stage, 'opportunity')}>
+                          {stages.find((s) => s.id === opportunity.stage)
+                            ?.title || opportunity.stage}
+                        </span>
+                      </td>
+                      <td className="hidden sm:table-cell px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatPercentage(opportunity.probability)}
+                      </td>
+                      <td className="hidden md:table-cell px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatDate(opportunity.expectedCloseDate)}
+                      </td>
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const fullOpportunity = opportunitiesData?.items?.find(
+                              (item) => String(item.id) === opportunity.id
+                            );
+                            if (fullOpportunity) {
+                              handleEdit(fullOpportunity);
+                            }
+                          }}
+                          className="text-primary-600 hover:text-primary-900"
+                        >
+                          Edit
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       )}
@@ -456,6 +463,7 @@ function OpportunitiesPage() {
         onClose={handleFormCancel}
         title={editingOpportunity ? 'Edit Opportunity' : 'Add Opportunity'}
         size="full"
+        fullScreenOnMobile
       >
         <OpportunityForm
           initialData={getInitialFormData()}

@@ -171,9 +171,9 @@ function LeadsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Leads</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Leads</h1>
           <p className="mt-1 text-sm text-gray-500">
             Track and manage your sales leads
           </p>
@@ -181,6 +181,7 @@ function LeadsPage() {
         <Button
           leftIcon={<PlusIcon className="h-5 w-5" />}
           onClick={() => setShowForm(true)}
+          className="w-full sm:w-auto"
         >
           Add Lead
         </Button>
@@ -188,7 +189,7 @@ function LeadsPage() {
 
       {/* Search and Filters */}
       <div className="bg-white shadow rounded-lg p-4">
-        <form onSubmit={handleSearch} className="flex gap-4">
+        <form onSubmit={handleSearch} className="flex flex-col gap-3 sm:flex-row sm:gap-4">
           <div className="flex-1">
             <label htmlFor="search" className="sr-only">
               Search leads
@@ -214,30 +215,32 @@ function LeadsPage() {
                 id="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                className="block w-full pl-10 pr-3 py-2.5 sm:py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 text-base sm:text-sm"
                 placeholder="Search by name, email, or company..."
               />
             </div>
           </div>
-          <div className="w-48">
-            <select
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-            >
-              {statusOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+          <div className="flex gap-3 sm:gap-4">
+            <div className="flex-1 sm:flex-none sm:w-48">
+              <select
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 py-2.5 sm:py-2 text-base sm:text-sm"
+              >
+                {statusOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Button type="submit" variant="secondary" className="px-4 sm:px-3">
+              Search
+            </Button>
           </div>
-          <Button type="submit" variant="secondary">
-            Search
-          </Button>
         </form>
       </div>
 
@@ -274,7 +277,7 @@ function LeadsPage() {
             <Spinner size="lg" />
           </div>
         ) : leads.length === 0 ? (
-          <div className="text-center py-12">
+          <div className="text-center py-12 px-4">
             <svg
               className="mx-auto h-12 w-12 text-gray-400"
               fill="none"
@@ -293,103 +296,155 @@ function LeadsPage() {
               Get started by creating a new lead.
             </p>
             <div className="mt-6">
-              <Button onClick={() => setShowForm(true)}>Add Lead</Button>
+              <Button onClick={() => setShowForm(true)} className="w-full sm:w-auto">Add Lead</Button>
             </div>
           </div>
         ) : (
           <>
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Name
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Company
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Status
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Score
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Source
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Created
-                  </th>
-                  <th scope="col" className="relative px-6 py-3">
-                    <span className="sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {leads.map((lead: Lead) => (
-                  <tr key={lead.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
+            {/* Mobile Card View */}
+            <div className="sm:hidden divide-y divide-gray-200">
+              {leads.map((lead: Lead) => (
+                <div key={lead.id} className="p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
                       <Link
                         to={`/leads/${lead.id}`}
-                        className="text-sm font-medium text-primary-600 hover:text-primary-900"
+                        className="text-sm font-medium text-primary-600 hover:text-primary-900 block truncate"
                       >
                         {lead.first_name} {lead.last_name}
                       </Link>
-                      <p className="text-sm text-gray-500">{lead.email || '-'}</p>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {lead.company_name || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={getStatusBadgeClasses(lead.status, 'lead')}>
-                        {formatStatusLabel(lead.status)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                      <p className="text-sm text-gray-500 truncate">{lead.email || '-'}</p>
+                      {lead.company_name && (
+                        <p className="text-sm text-gray-500 truncate">{lead.company_name}</p>
+                      )}
+                    </div>
+                    <span className={clsx(getStatusBadgeClasses(lead.status, 'lead'), 'flex-shrink-0')}>
+                      {formatStatusLabel(lead.status)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
                       <ScoreIndicator score={lead.score} />
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {lead.source?.name ? formatStatusLabel(lead.source.name) : '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatDate(lead.created_at)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button
-                        onClick={() => handleEdit(lead)}
-                        className="text-primary-600 hover:text-primary-900 mr-4"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDeleteClick(lead)}
-                        className="text-red-600 hover:text-red-900"
-                        disabled={deleteLeadMutation.isPending}
-                      >
-                        Delete
-                      </button>
-                    </td>
+                      <span className="text-xs text-gray-500">
+                        {lead.source?.name ? formatStatusLabel(lead.source.name) : '-'}
+                      </span>
+                    </div>
+                    <span className="text-xs text-gray-500">{formatDate(lead.created_at)}</span>
+                  </div>
+                  <div className="flex gap-4 pt-2 border-t border-gray-100">
+                    <button
+                      onClick={() => handleEdit(lead)}
+                      className="flex-1 text-center py-2 text-sm font-medium text-primary-600 hover:text-primary-900 hover:bg-primary-50 rounded-md transition-colors"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeleteClick(lead)}
+                      className="flex-1 text-center py-2 text-sm font-medium text-red-600 hover:text-red-900 hover:bg-red-50 rounded-md transition-colors"
+                      disabled={deleteLeadMutation.isPending}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      Name
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      Company
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      Status
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      Score
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      Source
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      Created
+                    </th>
+                    <th scope="col" className="relative px-6 py-3">
+                      <span className="sr-only">Actions</span>
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {leads.map((lead: Lead) => (
+                    <tr key={lead.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <Link
+                          to={`/leads/${lead.id}`}
+                          className="text-sm font-medium text-primary-600 hover:text-primary-900"
+                        >
+                          {lead.first_name} {lead.last_name}
+                        </Link>
+                        <p className="text-sm text-gray-500">{lead.email || '-'}</p>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {lead.company_name || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={getStatusBadgeClasses(lead.status, 'lead')}>
+                          {formatStatusLabel(lead.status)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <ScoreIndicator score={lead.score} />
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {lead.source?.name ? formatStatusLabel(lead.source.name) : '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatDate(lead.created_at)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <button
+                          onClick={() => handleEdit(lead)}
+                          className="text-primary-600 hover:text-primary-900 mr-4"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteClick(lead)}
+                          className="text-red-600 hover:text-red-900"
+                          disabled={deleteLeadMutation.isPending}
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
             {/* Pagination */}
             <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
@@ -483,6 +538,7 @@ function LeadsPage() {
         onClose={handleFormCancel}
         title={editingLead ? 'Edit Lead' : 'Add Lead'}
         size="lg"
+        fullScreenOnMobile
       >
         <LeadForm
           initialData={getInitialFormData()}

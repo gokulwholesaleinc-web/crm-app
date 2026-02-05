@@ -7,6 +7,7 @@ import {
   DragOverEvent,
   closestCorners,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
@@ -55,6 +56,12 @@ export function KanbanBoard({
     useSensor(PointerSensor, {
       activationConstraint: {
         distance: 8,
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 200,
+        tolerance: 5,
       },
     })
   );
@@ -185,7 +192,7 @@ export function KanbanBoard({
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
-      <div className="flex gap-4 overflow-x-auto pb-4">
+      <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-4 -mx-1 px-1 snap-x snap-mandatory sm:snap-none scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
         {stages.map((stage) => (
           <KanbanColumn
             key={stage.id}

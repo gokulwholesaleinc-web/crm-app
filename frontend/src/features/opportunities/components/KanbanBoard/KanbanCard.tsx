@@ -52,41 +52,41 @@ export function KanbanCard({ opportunity, onClick }: KanbanCardProps) {
       {...listeners}
       onClick={onClick}
       className={clsx(
-        'bg-white rounded-lg shadow-sm border border-gray-200 p-4 cursor-grab active:cursor-grabbing',
+        'bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4 cursor-grab active:cursor-grabbing touch-manipulation',
         'hover:shadow-md transition-shadow duration-200',
         isDragging && 'opacity-50 shadow-lg'
       )}
     >
-      <div className="space-y-3">
+      <div className="space-y-2 sm:space-y-3">
         {/* Opportunity Name */}
         <div>
           <h4 className="text-sm font-medium text-gray-900 line-clamp-2">
             {opportunity.name}
           </h4>
           {opportunity.companyName && (
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="text-xs text-gray-500 mt-0.5 truncate">
               {opportunity.companyName}
             </p>
           )}
         </div>
 
         {/* Value */}
-        <div className="flex items-center justify-between">
-          <span className="text-lg font-semibold text-gray-900">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-base sm:text-lg font-semibold text-gray-900">
             {formatCurrency(opportunity.value)}
           </span>
-          <span className="text-xs text-gray-500">
-            {opportunity.probability}% probability
+          <span className="text-xs text-gray-500 shrink-0">
+            {opportunity.probability}%
           </span>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+        <div className="flex items-center justify-between gap-2 pt-2 border-t border-gray-100">
           {/* Contact */}
           {opportunity.contactName && (
-            <div className="flex items-center space-x-1">
+            <div className="flex items-center gap-1 min-w-0">
               <svg
-                className="h-4 w-4 text-gray-400"
+                className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-400 shrink-0"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -98,7 +98,7 @@ export function KanbanCard({ opportunity, onClick }: KanbanCardProps) {
                   d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
                 />
               </svg>
-              <span className="text-xs text-gray-500 truncate max-w-20">
+              <span className="text-xs text-gray-500 truncate">
                 {opportunity.contactName}
               </span>
             </div>
@@ -108,12 +108,12 @@ export function KanbanCard({ opportunity, onClick }: KanbanCardProps) {
           {opportunity.expectedCloseDate && (
             <div
               className={clsx(
-                'flex items-center space-x-1',
+                'flex items-center gap-1 shrink-0',
                 isOverdue ? 'text-red-600' : 'text-gray-500'
               )}
             >
               <svg
-                className="h-4 w-4"
+                className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"

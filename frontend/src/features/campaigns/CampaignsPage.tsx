@@ -133,7 +133,7 @@ function CampaignCard({
       </div>
 
       {/* Dates */}
-      <div className="flex items-center gap-4 mt-4 text-xs text-gray-500">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 mt-4 text-xs text-gray-500">
         {campaign.start_date && (
           <span>Start: {formatDate(campaign.start_date, 'long')}</span>
         )}
@@ -143,7 +143,7 @@ function CampaignCard({
       </div>
 
       {/* Metrics */}
-      <div className="grid grid-cols-4 gap-4 mt-4 pt-4 border-t">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mt-4 pt-4 border-t">
         <div className="text-center">
           <div className="flex items-center justify-center gap-1 text-gray-400 mb-1">
             <UsersIcon className="h-4 w-4" />
@@ -272,31 +272,36 @@ export function CampaignsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Campaigns</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Campaigns</h1>
           <p className="text-sm text-gray-500 mt-1">
             Manage marketing campaigns and track their performance
           </p>
         </div>
-        <Button leftIcon={<PlusIcon className="h-5 w-5" />} onClick={() => setShowForm(true)}>
+        <Button
+          leftIcon={<PlusIcon className="h-5 w-5" />}
+          onClick={() => setShowForm(true)}
+          className="w-full sm:w-auto"
+        >
           New Campaign
         </Button>
       </div>
 
       {/* Toolbar */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <Button
           variant="ghost"
           size="sm"
           leftIcon={<FunnelIcon className="h-4 w-4" />}
           onClick={() => setShowFilters(!showFilters)}
+          className="w-full sm:w-auto justify-center sm:justify-start"
         >
           Filters
         </Button>
 
         {campaignsData && (
-          <div className="text-sm text-gray-500">
+          <div className="text-sm text-gray-500 text-center sm:text-right">
             Showing {campaigns.length} of {campaignsData.total} campaigns
           </div>
         )}
@@ -304,8 +309,8 @@ export function CampaignsPage() {
 
       {/* Filters Panel */}
       {showFilters && (
-        <div className="bg-gray-50 rounded-lg p-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
             <Select
               label="Status"
               options={statusOptions}
@@ -343,7 +348,7 @@ export function CampaignsPage() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {campaigns.map((campaign) => (
               <CampaignCard
                 key={campaign.id}
@@ -357,26 +362,30 @@ export function CampaignsPage() {
 
           {/* Pagination */}
           {campaignsData && campaignsData.pages > 1 && (
-            <div className="flex items-center justify-center gap-2 pt-4">
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={filters.page === 1}
-                onClick={() => updateFilter('page', String((filters.page || 1) - 1))}
-              >
-                Previous
-              </Button>
-              <span className="text-sm text-gray-600">
-                Page {filters.page} of {campaignsData.pages}
-              </span>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={filters.page === campaignsData.pages}
-                onClick={() => updateFilter('page', String((filters.page || 1) + 1))}
-              >
-                Next
-              </Button>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-4">
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={filters.page === 1}
+                  onClick={() => updateFilter('page', String((filters.page || 1) - 1))}
+                  className="flex-1 sm:flex-none"
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-gray-600 whitespace-nowrap">
+                  Page {filters.page} of {campaignsData.pages}
+                </span>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={filters.page === campaignsData.pages}
+                  onClick={() => updateFilter('page', String((filters.page || 1) + 1))}
+                  className="flex-1 sm:flex-none"
+                >
+                  Next
+                </Button>
+              </div>
             </div>
           )}
         </>

@@ -125,11 +125,11 @@ function ContactDetailPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center space-x-4">
           <Link
             to="/contacts"
-            className="text-gray-400 hover:text-gray-500"
+            className="text-gray-400 hover:text-gray-500 flex-shrink-0"
           >
             <svg
               className="h-6 w-6"
@@ -145,39 +145,45 @@ function ContactDetailPage() {
               />
             </svg>
           </Link>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">
               {contact.first_name} {contact.last_name}
             </h1>
             {contact.job_title && contact.company?.name && (
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-gray-500 truncate">
                 {contact.job_title} at {contact.company.name}
               </p>
             )}
           </div>
         </div>
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center gap-3 w-full sm:w-auto">
           <Button
             variant="secondary"
             onClick={() => setShowEditForm(true)}
+            className="flex-1 sm:flex-none"
           >
             Edit
           </Button>
-          <Button variant="danger" onClick={() => setShowDeleteConfirm(true)} isLoading={deleteContactMutation.isPending}>
+          <Button
+            variant="danger"
+            onClick={() => setShowDeleteConfirm(true)}
+            isLoading={deleteContactMutation.isPending}
+            className="flex-1 sm:flex-none"
+          >
             Delete
           </Button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8">
+      <div className="border-b border-gray-200 overflow-x-auto">
+        <nav className="-mb-px flex space-x-4 sm:space-x-8 min-w-max px-1">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={clsx(
-                'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm',
+                'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex-shrink-0',
                 activeTab === tab.id
                   ? 'border-primary-500 text-primary-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -192,8 +198,8 @@ function ContactDetailPage() {
       {/* Tab Content */}
       {activeTab === 'details' && (
         <div className="bg-white shadow rounded-lg">
-          <div className="px-4 py-5 sm:p-6">
-            <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
+          <div className="p-4 sm:p-6">
+            <dl className="grid grid-cols-1 gap-4 sm:gap-x-4 sm:gap-y-6 sm:grid-cols-2">
               <div>
                 <dt className="text-sm font-medium text-gray-500">Email</dt>
                 <dd className="mt-1 text-sm text-gray-900">
@@ -342,21 +348,18 @@ function ContactDetailPage() {
         <div className="space-y-4">
           {/* Add Note Form */}
           <div className="bg-white shadow rounded-lg p-4">
-            <div className="flex space-x-3">
-              <div className="flex-1">
-                <textarea
-                  rows={3}
-                  value={newNote}
-                  onChange={(e) => setNewNote(e.target.value)}
-                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                  placeholder="Add a note..."
-                />
-              </div>
-            </div>
+            <textarea
+              rows={3}
+              value={newNote}
+              onChange={(e) => setNewNote(e.target.value)}
+              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
+              placeholder="Add a note..."
+            />
             <div className="mt-3 flex justify-end">
               <Button
                 disabled={!newNote.trim()}
                 onClick={handleAddNote}
+                className="w-full sm:w-auto"
               >
                 Add Note
               </Button>
