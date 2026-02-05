@@ -1,9 +1,12 @@
 """FastAPI CRM Application - Main Entry Point."""
 
+import os
+from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -103,20 +106,35 @@ app.include_router(whitelabel_router)
 app.include_router(import_export_router)
 
 
-@app.get("/")
-async def root():
-    """Root endpoint."""
-    return {
-        "name": "CRM API",
-        "version": "1.0.0",
-        "status": "running",
-    }
-
+# Static files for production - serve frontend if dist exists
+FRONTEND_DIST = Path(__file__).parent.parent.parent / "frontend" / "dist"
 
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
     return {"status": "healthy"}
+
+
+# Serve frontend in production (after API routes so they take precedence)
+if FRONTEND_DIST.exists():
+    app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
+    
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        """Serve SPA for all non-API routes."""
+        file_path = FRONTEND_DIST / full_path
+        if file_path.exists() and file_path.is_file():
+            return FileResponse(file_path)
+        return FileResponse(FRONTEND_DIST / "index.html")
+else:
+    @app.get("/")
+    async def root():
+        """Root endpoint."""
+        return {
+            "name": "CRM API",
+            "version": "1.0.0",
+            "status": "running",
+        }
 
 
 @app.get("/api/tags")
