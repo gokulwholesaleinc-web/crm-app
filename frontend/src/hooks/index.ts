@@ -120,6 +120,17 @@ export {
   dashboardKeys,
 } from './useDashboard';
 
+// Notes hooks
+export {
+  useNotes,
+  useNote,
+  useEntityNotes,
+  useCreateNote,
+  useUpdateNote,
+  useDeleteNote,
+  noteKeys,
+} from './useNotes';
+
 // AI hooks
 export {
   useChat,

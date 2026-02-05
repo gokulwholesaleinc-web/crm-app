@@ -106,6 +106,7 @@ class EntityNames:
     LEAD_SOURCE = "Lead source"
     TAG = "Tag"
     USER = "User"
+    NOTE = "Note"
     TENANT = "Tenant"
     TENANT_SETTINGS = "Tenant settings"
     TENANT_USER = "Tenant user"

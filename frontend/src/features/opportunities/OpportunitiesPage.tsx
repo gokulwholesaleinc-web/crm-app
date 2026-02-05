@@ -7,6 +7,7 @@ import {
 } from './components/KanbanBoard/KanbanBoard';
 import { Opportunity as KanbanOpportunity } from './components/KanbanBoard/KanbanCard';
 import { OpportunityForm, OpportunityFormData } from './components/OpportunityForm';
+import { AIInsightsCard, NextBestActionCard } from '../../components/ai';
 import {
   useOpportunities,
   useMoveOpportunity,
@@ -465,17 +466,38 @@ function OpportunitiesPage() {
         size="full"
         fullScreenOnMobile
       >
-        <OpportunityForm
-          initialData={getInitialFormData()}
-          onSubmit={handleFormSubmit}
-          onCancel={handleFormCancel}
-          isLoading={
-            createOpportunityMutation.isPending || updateOpportunityMutation.isPending
-          }
-          submitLabel={editingOpportunity ? 'Update Opportunity' : 'Create Opportunity'}
-          contacts={contactsList}
-          companies={companiesList}
-        />
+        <div className="space-y-6">
+          {/* AI Insights Section - Only show when editing an existing opportunity */}
+          {editingOpportunity && (
+            <div className="space-y-4">
+              {/* Next Best Action */}
+              <NextBestActionCard
+                entityType="opportunity"
+                entityId={editingOpportunity.id}
+              />
+
+              {/* AI Insights Card */}
+              <AIInsightsCard
+                entityType="opportunity"
+                entityId={editingOpportunity.id}
+                entityName={editingOpportunity.name}
+                variant="inline"
+              />
+            </div>
+          )}
+
+          <OpportunityForm
+            initialData={getInitialFormData()}
+            onSubmit={handleFormSubmit}
+            onCancel={handleFormCancel}
+            isLoading={
+              createOpportunityMutation.isPending || updateOpportunityMutation.isPending
+            }
+            submitLabel={editingOpportunity ? 'Update Opportunity' : 'Create Opportunity'}
+            contacts={contactsList}
+            companies={companiesList}
+          />
+        </div>
       </Modal>
     </div>
   );

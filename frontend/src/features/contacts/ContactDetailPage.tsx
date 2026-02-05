@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
+import { NotesList } from '../../components/shared';
 import { ContactForm, ContactFormData } from './components/ContactForm';
+import { NextBestActionCard } from '../../components/ai';
 import { useContact, useDeleteContact, useUpdateContact } from '../../hooks';
 import { useTimeline } from '../../hooks/useActivities';
 import { formatDate, formatPhoneNumber } from '../../utils/formatters';
 import type { ContactUpdate } from '../../types';
-import { useUIStore } from '../../store/uiStore';
 import clsx from 'clsx';
 
 type TabType = 'details' | 'activities' | 'notes';
@@ -16,10 +17,8 @@ function ContactDetailPage() {
   const navigate = useNavigate();
   const contactId = id ? parseInt(id, 10) : undefined;
   const [activeTab, setActiveTab] = useState<TabType>('details');
-  const [newNote, setNewNote] = useState('');
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const addToast = useUIStore((state) => state.addToast);
 
   // Use hooks for data fetching
   const { data: contact, isLoading, error } = useContact(contactId);
@@ -76,15 +75,6 @@ function ContactDetailPage() {
     } catch {
       // Error is handled by the mutation
     }
-  };
-
-  const handleAddNote = () => {
-    addToast({
-      type: 'info',
-      title: 'Coming Soon',
-      message: 'Notes feature is coming soon. Stay tuned!',
-    });
-    setNewNote('');
   };
 
   if (isLoading) {
@@ -174,6 +164,9 @@ function ContactDetailPage() {
           </Button>
         </div>
       </div>
+
+      {/* Next Best Action Suggestion */}
+      <NextBestActionCard entityType="contact" entityId={contact.id} />
 
       {/* Tabs */}
       <div className="border-b border-gray-200 overflow-x-auto">
@@ -344,37 +337,8 @@ function ContactDetailPage() {
         </div>
       )}
 
-      {activeTab === 'notes' && (
-        <div className="space-y-4">
-          {/* Add Note Form */}
-          <div className="bg-white shadow rounded-lg p-4">
-            <textarea
-              rows={3}
-              value={newNote}
-              onChange={(e) => setNewNote(e.target.value)}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
-              placeholder="Add a note..."
-            />
-            <div className="mt-3 flex justify-end">
-              <Button
-                disabled={!newNote.trim()}
-                onClick={handleAddNote}
-                className="w-full sm:w-auto"
-              >
-                Add Note
-              </Button>
-            </div>
-          </div>
-
-          {/* Notes List */}
-          <div className="bg-white shadow rounded-lg">
-            <div className="px-4 py-5 sm:p-6">
-              <p className="text-sm text-gray-500 text-center py-4">
-                Notes feature coming soon. You can add notes in the contact description field for now.
-              </p>
-            </div>
-          </div>
-        </div>
+      {activeTab === 'notes' && contactId && (
+        <NotesList entityType="contact" entityId={contactId} />
       )}
 
       {/* Edit Form Modal */}

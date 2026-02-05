@@ -91,9 +91,31 @@ export interface ContactBrief {
 export interface Note {
   id: number;
   content: string;
+  entity_type: string;
+  entity_id: number;
   created_at: string;
   updated_at: string;
-  created_by_id: number;
+  created_by_id: number | null;
+  author_name?: string | null;
+}
+
+export interface NoteCreate {
+  content: string;
+  entity_type: string;
+  entity_id: number;
+}
+
+export interface NoteUpdate {
+  content?: string | null;
+}
+
+export type NoteListResponse = PaginatedResponse<Note>;
+
+export interface NoteFilters {
+  page?: number;
+  page_size?: number;
+  entity_type?: string;
+  entity_id?: number;
 }
 
 // =============================================================================
@@ -822,3 +844,21 @@ export interface TagCreate {
   color?: string | null;
   entity_type: string;
 }
+
+// =============================================================================
+// Import/Export Types
+// =============================================================================
+
+/**
+ * Result of an import operation
+ */
+export interface ImportResult {
+  success: boolean;
+  imported_count: number;
+  errors: string[];
+}
+
+/**
+ * Entity types available for import/export
+ */
+export type ImportExportEntityType = 'contacts' | 'companies' | 'leads';

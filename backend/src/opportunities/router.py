@@ -34,6 +34,11 @@ from src.opportunities.schemas import (
 from src.opportunities.service import OpportunityService, PipelineStageService
 from src.opportunities.pipeline import PipelineManager
 from src.opportunities.forecasting import RevenueForecast
+from src.ai.embedding_hooks import (
+    store_entity_embedding,
+    delete_entity_embedding,
+    build_opportunity_embedding_content,
+)
 
 router = APIRouter(prefix="/api/opportunities", tags=["opportunities"])
 
@@ -233,6 +238,11 @@ async def create_opportunity(
     """Create a new opportunity."""
     service = OpportunityService(db)
     opportunity = await service.create(opp_data, current_user.id)
+
+    # Generate embedding for semantic search
+    content = build_opportunity_embedding_content(opportunity)
+    await store_entity_embedding(db, "opportunity", opportunity.id, content)
+
     return await _build_opportunity_response(service, opportunity)
 
 
@@ -264,6 +274,11 @@ async def update_opportunity(
     )
     check_ownership(opportunity, current_user, EntityNames.OPPORTUNITY)
     updated_opp = await service.update(opportunity, opp_data, current_user.id)
+
+    # Update embedding for semantic search
+    content = build_opportunity_embedding_content(updated_opp)
+    await store_entity_embedding(db, "opportunity", updated_opp.id, content)
+
     return await _build_opportunity_response(service, updated_opp)
 
 
@@ -279,4 +294,8 @@ async def delete_opportunity(
         service, opportunity_id, EntityNames.OPPORTUNITY
     )
     check_ownership(opportunity, current_user, EntityNames.OPPORTUNITY)
+
+    # Delete embedding before deleting entity
+    await delete_entity_embedding(db, "opportunity", opportunity.id)
+
     await service.delete(opportunity)

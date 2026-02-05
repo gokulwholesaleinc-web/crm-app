@@ -19,6 +19,11 @@ from src.companies.schemas import (
     TagBrief,
 )
 from src.companies.service import CompanyService
+from src.ai.embedding_hooks import (
+    store_entity_embedding,
+    delete_entity_embedding,
+    build_company_embedding_content,
+)
 
 router = APIRouter(prefix="/api/companies", tags=["companies"])
 
@@ -82,6 +87,11 @@ async def create_company(
     """Create a new company."""
     service = CompanyService(db)
     company = await service.create(company_data, current_user.id)
+
+    # Generate embedding for semantic search
+    content = build_company_embedding_content(company)
+    await store_entity_embedding(db, "company", company.id, content)
+
     # New company has no contacts, so pass include_contact_count=False to avoid query
     # and manually set contact_count to 0
     response = await _build_company_response(service, company, include_contact_count=False)
@@ -114,6 +124,11 @@ async def update_company(
     company = await get_entity_or_404(service, company_id, EntityNames.COMPANY)
     check_ownership(company, current_user, EntityNames.COMPANY)
     updated_company = await service.update(company, company_data, current_user.id)
+
+    # Update embedding for semantic search
+    content = build_company_embedding_content(updated_company)
+    await store_entity_embedding(db, "company", updated_company.id, content)
+
     return await _build_company_response(service, updated_company)
 
 
@@ -127,4 +142,8 @@ async def delete_company(
     service = CompanyService(db)
     company = await get_entity_or_404(service, company_id, EntityNames.COMPANY)
     check_ownership(company, current_user, EntityNames.COMPANY)
+
+    # Delete embedding before deleting entity
+    await delete_entity_embedding(db, "company", company.id)
+
     await service.delete(company)

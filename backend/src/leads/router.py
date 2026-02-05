@@ -32,6 +32,11 @@ from src.leads.schemas import (
 )
 from src.leads.service import LeadService
 from src.leads.conversion import LeadConverter
+from src.ai.embedding_hooks import (
+    store_entity_embedding,
+    delete_entity_embedding,
+    build_lead_embedding_content,
+)
 
 router = APIRouter(prefix="/api/leads", tags=["leads"])
 
@@ -91,6 +96,11 @@ async def create_lead(
     """Create a new lead."""
     service = LeadService(db)
     lead = await service.create(lead_data, current_user.id)
+
+    # Generate embedding for semantic search
+    content = build_lead_embedding_content(lead)
+    await store_entity_embedding(db, "lead", lead.id, content)
+
     return await _build_lead_response(service, lead)
 
 
@@ -118,6 +128,11 @@ async def update_lead(
     lead = await get_entity_or_404(service, lead_id, EntityNames.LEAD)
     check_ownership(lead, current_user, EntityNames.LEAD)
     updated_lead = await service.update(lead, lead_data, current_user.id)
+
+    # Update embedding for semantic search
+    content = build_lead_embedding_content(updated_lead)
+    await store_entity_embedding(db, "lead", updated_lead.id, content)
+
     return await _build_lead_response(service, updated_lead)
 
 
@@ -131,6 +146,10 @@ async def delete_lead(
     service = LeadService(db)
     lead = await get_entity_or_404(service, lead_id, EntityNames.LEAD)
     check_ownership(lead, current_user, EntityNames.LEAD)
+
+    # Delete embedding before deleting entity
+    await delete_entity_embedding(db, "lead", lead.id)
+
     await service.delete(lead)
 
 

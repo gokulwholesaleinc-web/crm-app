@@ -31,6 +31,7 @@ from src.dashboard.router import router as dashboard_router
 from src.ai.router import router as ai_router
 from src.whitelabel.router import router as whitelabel_router
 from src.import_export.router import router as import_export_router
+from src.notes.router import router as notes_router
 
 
 @asynccontextmanager
@@ -104,6 +105,7 @@ app.include_router(dashboard_router)
 app.include_router(ai_router)
 app.include_router(whitelabel_router)
 app.include_router(import_export_router)
+app.include_router(notes_router)
 
 
 # Static files for production - serve frontend if dist exists

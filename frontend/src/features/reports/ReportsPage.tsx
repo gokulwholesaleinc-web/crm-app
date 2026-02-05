@@ -14,6 +14,13 @@ import {
   useConversionRatesChart,
 } from '../../hooks';
 import {
+  exportContacts,
+  exportCompanies,
+  exportLeads,
+  downloadBlob,
+  generateExportFilename,
+} from '../../api';
+import {
   ChartBarIcon,
   ArrowDownTrayIcon,
   FunnelIcon,
@@ -57,8 +64,12 @@ function ReportCard({ title, description, icon, isActive, onClick }: ReportCardP
   );
 }
 
+type ExportType = 'contacts' | 'companies' | 'leads' | 'opportunities';
+
 function ReportsPage() {
   const [activeReport, setActiveReport] = useState<ReportType>('pipeline');
+  const [exportLoading, setExportLoading] = useState<ExportType | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const { data: dashboardData, isLoading: dashboardLoading } = useDashboard();
   const { data: pipelineData, isLoading: pipelineLoading } = usePipelineFunnelChart();
@@ -66,6 +77,46 @@ function ReportsPage() {
   const { data: conversionData, isLoading: conversionLoading } = useConversionRatesChart();
 
   const isLoading = dashboardLoading || pipelineLoading || leadsLoading || conversionLoading;
+
+  /**
+   * Handle export for different entity types
+   */
+  const handleExport = async (type: ExportType) => {
+    setExportLoading(type);
+    setExportError(null);
+
+    try {
+      let blob: Blob;
+
+      switch (type) {
+        case 'contacts':
+          blob = await exportContacts();
+          break;
+        case 'companies':
+          blob = await exportCompanies();
+          break;
+        case 'leads':
+          blob = await exportLeads();
+          break;
+        case 'opportunities':
+          // For opportunities, we export the pipeline data (which includes opportunities)
+          // Currently there's no separate opportunities export, so we'll use leads
+          blob = await exportLeads();
+          break;
+        default:
+          throw new Error(`Unknown export type: ${type}`);
+      }
+
+      const filename = generateExportFilename(type);
+      downloadBlob(blob, filename);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Export failed. Please try again.';
+      setExportError(errorMessage);
+      console.error(`Export ${type} failed:`, error);
+    } finally {
+      setExportLoading(null);
+    }
+  };
 
   const reports = [
     {
@@ -109,9 +160,19 @@ function ReportsPage() {
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-4 sm:mb-6">
               <h3 className="text-base sm:text-lg font-medium text-gray-900">Pipeline by Stage</h3>
-              <Button variant="secondary" size="sm" className="self-start sm:self-auto">
-                <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
-                Export CSV
+              <Button
+                variant="secondary"
+                size="sm"
+                className="self-start sm:self-auto"
+                onClick={() => handleExport('opportunities')}
+                disabled={exportLoading === 'opportunities'}
+              >
+                {exportLoading === 'opportunities' ? (
+                  <Spinner size="sm" className="mr-2" />
+                ) : (
+                  <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+                )}
+                {exportLoading === 'opportunities' ? 'Exporting...' : 'Export CSV'}
               </Button>
             </div>
             {/* Table with horizontal scroll on mobile */}
@@ -191,9 +252,19 @@ function ReportsPage() {
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-4 sm:mb-6">
               <h3 className="text-base sm:text-lg font-medium text-gray-900">Leads by Source</h3>
-              <Button variant="secondary" size="sm" className="self-start sm:self-auto">
-                <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
-                Export CSV
+              <Button
+                variant="secondary"
+                size="sm"
+                className="self-start sm:self-auto"
+                onClick={() => handleExport('leads')}
+                disabled={exportLoading === 'leads'}
+              >
+                {exportLoading === 'leads' ? (
+                  <Spinner size="sm" className="mr-2" />
+                ) : (
+                  <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+                )}
+                {exportLoading === 'leads' ? 'Exporting...' : 'Export CSV'}
               </Button>
             </div>
             {/* Table with horizontal scroll on mobile */}
@@ -245,9 +316,19 @@ function ReportsPage() {
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-4 sm:mb-6">
               <h3 className="text-base sm:text-lg font-medium text-gray-900">Conversion Rates</h3>
-              <Button variant="secondary" size="sm" className="self-start sm:self-auto">
-                <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
-                Export CSV
+              <Button
+                variant="secondary"
+                size="sm"
+                className="self-start sm:self-auto"
+                onClick={() => handleExport('contacts')}
+                disabled={exportLoading === 'contacts'}
+              >
+                {exportLoading === 'contacts' ? (
+                  <Spinner size="sm" className="mr-2" />
+                ) : (
+                  <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+                )}
+                {exportLoading === 'contacts' ? 'Exporting...' : 'Export CSV'}
               </Button>
             </div>
             {/* Cards - full width on mobile, 3 columns on desktop */}
@@ -286,9 +367,19 @@ function ReportsPage() {
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-4 sm:mb-6">
               <h3 className="text-base sm:text-lg font-medium text-gray-900">Revenue Summary</h3>
-              <Button variant="secondary" size="sm" className="self-start sm:self-auto">
-                <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
-                Export CSV
+              <Button
+                variant="secondary"
+                size="sm"
+                className="self-start sm:self-auto"
+                onClick={() => handleExport('companies')}
+                disabled={exportLoading === 'companies'}
+              >
+                {exportLoading === 'companies' ? (
+                  <Spinner size="sm" className="mr-2" />
+                ) : (
+                  <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+                )}
+                {exportLoading === 'companies' ? 'Exporting...' : 'Export CSV'}
               </Button>
             </div>
             {/* Revenue cards - full width on mobile */}
@@ -373,6 +464,19 @@ function ReportsPage() {
           <span>Last updated: {formatDate(new Date().toISOString())}</span>
         </div>
       </div>
+
+      {/* Export error message */}
+      {exportError && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center justify-between">
+          <span className="text-sm">{exportError}</span>
+          <button
+            onClick={() => setExportError(null)}
+            className="text-red-500 hover:text-red-700 font-medium text-sm"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-6">
         {/* Report Selection - horizontal scroll on mobile, vertical on desktop */}

@@ -2,19 +2,198 @@
  * Settings page with user profile and account settings sections.
  */
 
+import { useState, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
 import { useAuthStore } from '../../store/authStore';
+import { useUpdateProfile } from '../../hooks/useAuth';
 import { Card, CardHeader, CardBody } from '../../components/ui/Card';
 import { Avatar } from '../../components/ui/Avatar';
 import { Spinner } from '../../components/ui/Spinner';
+import { Button } from '../../components/ui/Button';
+import { Modal, ModalFooter } from '../../components/ui/Modal';
+import { FormInput } from '../../components/forms';
 import {
   UserCircleIcon,
   Cog6ToothIcon,
   BellIcon,
   ShieldCheckIcon,
+  PencilSquareIcon,
 } from '@heroicons/react/24/outline';
+import type { UserUpdate } from '../../types';
+
+// Profile edit form data
+interface ProfileFormData {
+  full_name: string;
+  phone: string;
+  job_title: string;
+}
+
+// Edit Profile Modal Component
+interface EditProfileModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  initialData: {
+    full_name: string;
+    email: string;
+    phone: string;
+    job_title: string;
+  };
+}
+
+function EditProfileModal({ isOpen, onClose, initialData }: EditProfileModalProps) {
+  const updateProfileMutation = useUpdateProfile();
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    reset,
+  } = useForm<ProfileFormData>({
+    defaultValues: {
+      full_name: initialData.full_name || '',
+      phone: initialData.phone || '',
+      job_title: initialData.job_title || '',
+    },
+  });
+
+  // Reset form values when modal opens or initialData changes
+  useEffect(() => {
+    if (isOpen) {
+      reset({
+        full_name: initialData.full_name || '',
+        phone: initialData.phone || '',
+        job_title: initialData.job_title || '',
+      });
+      setError(null);
+      setSuccess(false);
+    }
+  }, [isOpen, initialData.full_name, initialData.phone, initialData.job_title, reset]);
+
+  const onSubmit = async (data: ProfileFormData) => {
+    setError(null);
+    setSuccess(false);
+
+    try {
+      const updateData: UserUpdate = {
+        full_name: data.full_name,
+        phone: data.phone || null,
+        job_title: data.job_title || null,
+      };
+
+      await updateProfileMutation.mutateAsync(updateData);
+      setSuccess(true);
+
+      // Close modal after a brief delay to show success message
+      setTimeout(() => {
+        onClose();
+        setSuccess(false);
+      }, 1000);
+    } catch (err: unknown) {
+      const errorMessage =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'object' && err !== null && 'response' in err
+          ? ((err as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Failed to update profile')
+          : 'An error occurred';
+      setError(errorMessage);
+    }
+  };
+
+  const handleClose = () => {
+    reset();
+    setError(null);
+    setSuccess(false);
+    onClose();
+  };
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
+      title="Edit Profile"
+      description="Update your personal information"
+      size="md"
+    >
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        {error && (
+          <div className="rounded-md bg-red-50 p-3">
+            <p className="text-sm text-red-800">{error}</p>
+          </div>
+        )}
+
+        {success && (
+          <div className="rounded-md bg-green-50 p-3">
+            <p className="text-sm text-green-800">Profile updated successfully!</p>
+          </div>
+        )}
+
+        <FormInput
+          label="Full Name"
+          name="full_name"
+          required
+          register={register('full_name', {
+            required: 'Full name is required',
+            minLength: {
+              value: 2,
+              message: 'Full name must be at least 2 characters',
+            },
+          })}
+          error={errors.full_name?.message}
+        />
+
+        <FormInput
+          label="Email"
+          name="email"
+          type="email"
+          value={initialData.email}
+          disabled
+          helperText="Email cannot be changed"
+        />
+
+        <FormInput
+          label="Phone"
+          name="phone"
+          type="tel"
+          placeholder="+1 (555) 123-4567"
+          register={register('phone')}
+          error={errors.phone?.message}
+        />
+
+        <FormInput
+          label="Job Title"
+          name="job_title"
+          placeholder="e.g., Sales Manager"
+          register={register('job_title')}
+          error={errors.job_title?.message}
+        />
+
+        <ModalFooter>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={handleClose}
+            disabled={updateProfileMutation.isPending}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            isLoading={updateProfileMutation.isPending}
+            disabled={success}
+          >
+            Save Changes
+          </Button>
+        </ModalFooter>
+      </form>
+    </Modal>
+  );
+}
 
 function SettingsPage() {
   const { user, isLoading } = useAuthStore();
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   if (isLoading) {
     return (
@@ -39,6 +218,16 @@ function SettingsPage() {
         <CardHeader
           title="Profile"
           description="Your personal information"
+          action={
+            <Button
+              variant="secondary"
+              size="sm"
+              leftIcon={<PencilSquareIcon className="h-4 w-4" />}
+              onClick={() => setIsEditModalOpen(true)}
+            >
+              Edit
+            </Button>
+          }
         />
         <CardBody className="p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row sm:items-start gap-4 sm:space-x-6">
@@ -103,6 +292,20 @@ function SettingsPage() {
           </div>
         </CardBody>
       </Card>
+
+      {/* Edit Profile Modal */}
+      {user && (
+        <EditProfileModal
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          initialData={{
+            full_name: user.full_name || '',
+            email: user.email || '',
+            phone: user.phone || '',
+            job_title: user.job_title || '',
+          }}
+        />
+      )}
 
       {/* Account Settings Section - single column cards on mobile */}
       <Card>
@@ -173,7 +376,11 @@ function SettingsPage() {
             </div>
 
             {/* Profile Settings */}
-            <div className="py-3 sm:py-4 first:pt-0 last:pb-0">
+            <button
+              type="button"
+              className="w-full py-3 sm:py-4 first:pt-0 last:pb-0 text-left hover:bg-gray-50 -mx-4 sm:-mx-6 px-4 sm:px-6 transition-colors"
+              onClick={() => setIsEditModalOpen(true)}
+            >
               <div className="flex items-start sm:items-center gap-3 sm:space-x-4">
                 <div className="flex-shrink-0">
                   <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-lg bg-orange-100 flex items-center justify-center">
@@ -188,9 +395,11 @@ function SettingsPage() {
                     Update your personal information and avatar
                   </p>
                 </div>
-                <div className="text-xs sm:text-sm text-gray-400 flex-shrink-0">Coming soon</div>
+                <div className="text-xs sm:text-sm text-primary-600 font-medium flex-shrink-0">
+                  Edit
+                </div>
               </div>
-            </div>
+            </button>
           </div>
         </CardBody>
       </Card>

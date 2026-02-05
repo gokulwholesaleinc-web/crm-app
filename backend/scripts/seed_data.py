@@ -81,7 +81,7 @@ async def seed_database():
 
             # Create main test user with known credentials
             test_user = User(
-                email="demo@example.com",
+                email="demo@demo.com",
                 hashed_password=get_password_hash("demo123"),
                 full_name=fake.name(),
                 phone=fake.phone_number()[:20],
@@ -449,7 +449,7 @@ async def seed_database():
         print(f"  - Campaigns: {len(campaigns)}")
         print(f"  - Notes: {note_count}")
         print(f"\nLogin credentials:")
-        print(f"  1. Email: demo@example.com  |  Password: demo123  (Admin)")
+        print(f"  1. Email: demo@demo.com     |  Password: demo123  (Admin)")
         print(f"  2. Email: test@test.com     |  Password: test1    (User)")
 
 

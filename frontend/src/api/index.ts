@@ -117,6 +117,17 @@ export {
   getConversionRatesChart,
 } from './dashboard';
 
+// Notes API
+export { notesApi } from './notes';
+export {
+  listNotes,
+  getNote,
+  createNote,
+  updateNote,
+  deleteNote,
+  getEntityNotes,
+} from './notes';
+
 // AI API
 export { aiApi } from './ai';
 export {
@@ -129,6 +140,20 @@ export {
   semanticSearch,
 } from './ai';
 
+// Import/Export API
+export { importExportApi } from './importExport';
+export {
+  exportContacts,
+  exportCompanies,
+  exportLeads,
+  importContacts,
+  importCompanies,
+  importLeads,
+  getTemplate,
+  downloadBlob,
+  generateExportFilename,
+} from './importExport';
+
 // Aggregated API object for convenience
 import { authApi as _authApi } from './auth';
 import { contactsApi as _contactsApi } from './contacts';
@@ -139,6 +164,8 @@ import { activitiesApi as _activitiesApi } from './activities';
 import { campaignsApi as _campaignsApi } from './campaigns';
 import { dashboardApi as _dashboardApi } from './dashboard';
 import { aiApi as _aiApi } from './ai';
+import { importExportApi as _importExportApi } from './importExport';
+import { notesApi as _notesApi } from './notes';
 
 export const api = {
   auth: _authApi,
@@ -150,6 +177,8 @@ export const api = {
   campaigns: _campaignsApi,
   dashboard: _dashboardApi,
   ai: _aiApi,
+  importExport: _importExportApi,
+  notes: _notesApi,
 };
 
 export default api;

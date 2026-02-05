@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { ConvertLeadModal } from './components/ConvertLeadModal';
 import { LeadForm, LeadFormData } from './components/LeadForm';
+import { AIInsightsCard, NextBestActionCard } from '../../components/ai';
 import { getStatusBadgeClasses, formatStatusLabel } from '../../utils';
 import { formatDate, formatPhoneNumber } from '../../utils/formatters';
 import { useLead, useDeleteLead, useConvertLead, useUpdateLead } from '../../hooks';
@@ -182,6 +183,11 @@ function LeadDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2 sm:gap-3">
+          <AIInsightsCard
+            entityType="lead"
+            entityId={lead.id}
+            entityName={`${lead.first_name} ${lead.last_name}`}
+          />
           {lead.status === 'qualified' && (
             <Button onClick={() => setShowConvertModal(true)} className="flex-1 sm:flex-none">
               <svg
@@ -218,6 +224,9 @@ function LeadDetailPage() {
           </Button>
         </div>
       </div>
+
+      {/* Next Best Action Suggestion */}
+      <NextBestActionCard entityType="lead" entityId={lead.id} />
 
       {/* Lead Score Card */}
       <div className="bg-white shadow rounded-lg p-4 sm:p-6">

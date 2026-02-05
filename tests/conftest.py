@@ -323,3 +323,18 @@ async def test_tag(db_session: AsyncSession) -> Tag:
     await db_session.commit()
     await db_session.refresh(tag)
     return tag
+
+
+@pytest_asyncio.fixture(scope="function")
+async def test_note(db_session: AsyncSession, test_user: User, test_contact: Contact) -> Note:
+    """Create a test note."""
+    note = Note(
+        content="This is a test note",
+        entity_type="contact",
+        entity_id=test_contact.id,
+        created_by_id=test_user.id,
+    )
+    db_session.add(note)
+    await db_session.commit()
+    await db_session.refresh(note)
+    return note

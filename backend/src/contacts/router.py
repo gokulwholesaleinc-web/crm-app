@@ -19,6 +19,11 @@ from src.contacts.schemas import (
     TagBrief,
 )
 from src.contacts.service import ContactService
+from src.ai.embedding_hooks import (
+    store_entity_embedding,
+    delete_entity_embedding,
+    build_contact_embedding_content,
+)
 
 router = APIRouter(prefix="/api/contacts", tags=["contacts"])
 
@@ -78,6 +83,12 @@ async def create_contact(
     """Create a new contact."""
     service = ContactService(db)
     contact = await service.create(contact_data, current_user.id)
+
+    # Generate embedding for semantic search
+    company_name = contact.company.name if contact.company else None
+    content = build_contact_embedding_content(contact, company_name)
+    await store_entity_embedding(db, "contact", contact.id, content)
+
     return await _build_contact_response(service, contact)
 
 
@@ -105,6 +116,12 @@ async def update_contact(
     contact = await get_entity_or_404(service, contact_id, EntityNames.CONTACT)
     check_ownership(contact, current_user, EntityNames.CONTACT)
     updated_contact = await service.update(contact, contact_data, current_user.id)
+
+    # Update embedding for semantic search
+    company_name = updated_contact.company.name if updated_contact.company else None
+    content = build_contact_embedding_content(updated_contact, company_name)
+    await store_entity_embedding(db, "contact", updated_contact.id, content)
+
     return await _build_contact_response(service, updated_contact)
 
 
@@ -118,4 +135,8 @@ async def delete_contact(
     service = ContactService(db)
     contact = await get_entity_or_404(service, contact_id, EntityNames.CONTACT)
     check_ownership(contact, current_user, EntityNames.CONTACT)
+
+    # Delete embedding before deleting entity
+    await delete_entity_embedding(db, "contact", contact.id)
+
     await service.delete(contact)
