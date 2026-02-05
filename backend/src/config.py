@@ -1,14 +1,15 @@
 from pydantic_settings import BaseSettings
 from typing import List
 import json
+import os
 
 
 class Settings(BaseSettings):
-    # Database
-    DATABASE_URL: str = "postgresql+asyncpg://crm_user:crm_password@db:5432/crm_db"
+    # Database - construct from PG env vars if DATABASE_URL not set
+    DATABASE_URL: str = ""
 
     # JWT Authentication
-    SECRET_KEY: str  # Required - must be set via environment variable
+    SECRET_KEY: str = "dev-secret-key-change-in-production"  # Default for development
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
@@ -16,12 +17,35 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
 
     # Application
-    DEBUG: bool = False
-    BACKEND_CORS_ORIGINS: str = '["http://localhost:3000","http://localhost:5173"]'
+    DEBUG: bool = True
+    BACKEND_CORS_ORIGINS: str = '["*"]'
 
     @property
     def cors_origins(self) -> List[str]:
-        return json.loads(self.BACKEND_CORS_ORIGINS)
+        origins = json.loads(self.BACKEND_CORS_ORIGINS)
+        if "*" in origins:
+            return ["*"]
+        return origins
+
+    @property
+    def db_url(self) -> str:
+        """Get database URL with asyncpg driver."""
+        if self.DATABASE_URL:
+            url = self.DATABASE_URL
+            # Convert postgresql:// to postgresql+asyncpg://
+            if url.startswith("postgresql://") and "+asyncpg" not in url:
+                url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            # Remove sslmode parameter if present (not supported by asyncpg)
+            if "?sslmode=" in url:
+                url = url.split("?sslmode=")[0]
+            return url
+        # Fallback to constructing from individual PG vars
+        host = os.getenv("PGHOST", "localhost")
+        port = os.getenv("PGPORT", "5432")
+        user = os.getenv("PGUSER", "postgres")
+        password = os.getenv("PGPASSWORD", "")
+        database = os.getenv("PGDATABASE", "crm_db")
+        return f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{database}"
 
     class Config:
         env_file = ".env"
