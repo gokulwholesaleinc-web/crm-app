@@ -1,11 +1,8 @@
 """Dashboard API routes."""
 
-from typing import Annotated, List
-from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
-from src.database import get_db
-from src.auth.models import User
-from src.auth.dependencies import get_current_active_user
+from typing import List
+from fastapi import APIRouter
+from src.core.router_utils import DBSession, CurrentUser
 from src.dashboard.schemas import (
     NumberCardData,
     ChartData,
@@ -20,8 +17,8 @@ router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
 @router.get("", response_model=DashboardResponse)
 async def get_dashboard(
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Get full dashboard data including KPIs and charts."""
     # Get KPIs
@@ -58,8 +55,8 @@ async def get_dashboard(
 
 @router.get("/kpis", response_model=List[NumberCardData])
 async def get_kpis(
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Get KPI number cards only."""
     generator = NumberCardGenerator(db)
@@ -69,8 +66,8 @@ async def get_kpis(
 
 @router.get("/charts/pipeline-funnel", response_model=ChartData)
 async def get_pipeline_funnel_chart(
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Get pipeline funnel chart data."""
     generator = ChartDataGenerator(db)
@@ -84,8 +81,8 @@ async def get_pipeline_funnel_chart(
 
 @router.get("/charts/leads-by-status", response_model=ChartData)
 async def get_leads_by_status_chart(
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Get leads by status chart data."""
     generator = ChartDataGenerator(db)
@@ -99,8 +96,8 @@ async def get_leads_by_status_chart(
 
 @router.get("/charts/leads-by-source", response_model=ChartData)
 async def get_leads_by_source_chart(
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Get leads by source chart data."""
     generator = ChartDataGenerator(db)
@@ -114,8 +111,8 @@ async def get_leads_by_source_chart(
 
 @router.get("/charts/revenue-trend", response_model=ChartData)
 async def get_revenue_trend_chart(
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
     months: int = 6,
 ):
     """Get monthly revenue trend chart data."""
@@ -130,8 +127,8 @@ async def get_revenue_trend_chart(
 
 @router.get("/charts/activities", response_model=ChartData)
 async def get_activities_chart(
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
     days: int = 30,
 ):
     """Get activities by type chart data."""
@@ -146,8 +143,8 @@ async def get_activities_chart(
 
 @router.get("/charts/new-leads-trend", response_model=ChartData)
 async def get_new_leads_trend_chart(
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
     weeks: int = 8,
 ):
     """Get new leads trend chart data."""
@@ -162,8 +159,8 @@ async def get_new_leads_trend_chart(
 
 @router.get("/charts/conversion-rates", response_model=ChartData)
 async def get_conversion_rates_chart(
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Get conversion rates chart data."""
     generator = ChartDataGenerator(db)

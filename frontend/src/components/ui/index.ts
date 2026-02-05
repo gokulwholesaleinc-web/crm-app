@@ -14,6 +14,10 @@ export type { SelectProps, SelectOption } from './Select';
 export { Modal, ModalFooter } from './Modal';
 export type { ModalProps, ModalFooterProps, ModalSize } from './Modal';
 
+// ConfirmDialog
+export { ConfirmDialog } from './ConfirmDialog';
+export type { ConfirmDialogProps } from './ConfirmDialog';
+
 // Table
 export { Table, Pagination } from './Table';
 export type { TableProps, PaginationProps, Column, SortDirection } from './Table';

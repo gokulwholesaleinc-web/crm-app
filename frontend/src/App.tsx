@@ -2,14 +2,14 @@
  * Main App component with routing, query client, and toast notifications.
  */
 
-import { Suspense } from 'react';
+import { Suspense, useEffect } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { Toaster } from 'react-hot-toast';
 
 import AppRoutes from './routes';
 import { Spinner } from './components/ui/Spinner';
+import { useAuthStore } from './store/authStore';
 
 // Configure QueryClient with sensible defaults
 const queryClient = new QueryClient({
@@ -35,10 +35,34 @@ function PageLoader() {
   );
 }
 
+// Component to handle auth events (401 responses)
+function AuthEventHandler() {
+  const logout = useAuthStore((state) => state.logout);
+
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      logout();
+    };
+
+    window.addEventListener('auth:unauthorized', handleUnauthorized);
+    return () => {
+      window.removeEventListener('auth:unauthorized', handleUnauthorized);
+    };
+  }, [logout]);
+
+  return null;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+      <AuthEventHandler />
+      <BrowserRouter
+        future={{
+          v7_startTransition: true,
+          v7_relativeSplatPath: true,
+        }}
+      >
         <Suspense fallback={<PageLoader />}>
           <AppRoutes />
         </Suspense>
@@ -65,7 +89,6 @@ function App() {
           }}
         />
       </BrowserRouter>
-      <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>
   );
 }

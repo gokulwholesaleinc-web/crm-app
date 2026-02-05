@@ -7,6 +7,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
 import { Select } from '../../../components/ui/Select';
+import { FormTextarea } from '../../../components/forms';
 import type { Campaign, CampaignCreate, CampaignUpdate } from '../../../types';
 
 interface CampaignFormProps {
@@ -139,15 +140,13 @@ export function CampaignForm({
         error={errors.name?.message}
       />
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-        <textarea
-          {...register('description')}
-          rows={3}
-          className="block w-full rounded-lg border border-gray-300 shadow-sm py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-          placeholder="Describe the campaign objectives and strategy"
-        />
-      </div>
+      <FormTextarea
+        label="Description"
+        name="description"
+        rows={3}
+        placeholder="Describe the campaign objectives and strategy"
+        register={register('description')}
+      />
 
       <div className="grid grid-cols-2 gap-4">
         <Controller
@@ -224,15 +223,13 @@ export function CampaignForm({
         </div>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Target Audience</label>
-        <textarea
-          {...register('target_audience')}
-          rows={2}
-          className="block w-full rounded-lg border border-gray-300 shadow-sm py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-          placeholder="Describe the target audience for this campaign"
-        />
-      </div>
+      <FormTextarea
+        label="Target Audience"
+        name="target_audience"
+        rows={2}
+        placeholder="Describe the target audience for this campaign"
+        register={register('target_audience')}
+      />
 
       <div className="flex justify-end gap-3 pt-4 border-t">
         <Button type="button" variant="secondary" onClick={onCancel}>

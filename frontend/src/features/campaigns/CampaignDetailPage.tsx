@@ -2,9 +2,8 @@
  * Campaign detail page with members and stats
  */
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { format } from 'date-fns';
 import clsx from 'clsx';
 import {
   ArrowLeftIcon,
@@ -14,9 +13,9 @@ import {
   CurrencyDollarIcon,
   TrashIcon,
 } from '@heroicons/react/24/outline';
-import { Button } from '../../components/ui/Button';
-import { Spinner } from '../../components/ui/Spinner';
+import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { CampaignForm } from './components/CampaignForm';
+import { AddMembersModal } from './components/AddMembersModal';
 import {
   useCampaign,
   useCampaignStats,
@@ -24,45 +23,20 @@ import {
   useUpdateCampaign,
   useDeleteCampaign,
   useRemoveCampaignMember,
+  useAddCampaignMembers,
 } from '../../hooks/useCampaigns';
+import { getStatusColor, formatStatusLabel } from '../../utils/statusColors';
+import { formatCurrency, formatDate } from '../../utils/formatters';
 import type { CampaignUpdate, CampaignMember } from '../../types';
 
-const defaultStatusColor = { bg: 'bg-gray-100', text: 'text-gray-700' };
-
-const statusColors: Record<string, { bg: string; text: string }> = {
-  planned: defaultStatusColor,
-  active: { bg: 'bg-green-100', text: 'text-green-700' },
-  paused: { bg: 'bg-yellow-100', text: 'text-yellow-700' },
-  completed: { bg: 'bg-blue-100', text: 'text-blue-700' },
-};
-
+// Member status colors (specific to campaign members, not part of centralized status colors)
 const defaultMemberStatusColor = { bg: 'bg-gray-100', text: 'text-gray-700' };
-
 const memberStatusColors: Record<string, { bg: string; text: string }> = {
   pending: defaultMemberStatusColor,
   sent: { bg: 'bg-blue-100', text: 'text-blue-700' },
   responded: { bg: 'bg-green-100', text: 'text-green-700' },
   converted: { bg: 'bg-purple-100', text: 'text-purple-700' },
 };
-
-function formatCurrency(amount: number | null | undefined, currency = 'USD'): string {
-  if (amount === null || amount === undefined) return '-';
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
-
-function formatDate(date: string | null | undefined): string {
-  if (!date) return '-';
-  try {
-    return format(new Date(date), 'MMM d, yyyy');
-  } catch {
-    return date;
-  }
-}
 
 function StatCard({
   icon: Icon,
@@ -116,9 +90,9 @@ function MemberRow({
           {member.status.charAt(0).toUpperCase() + member.status.slice(1)}
         </span>
       </td>
-      <td className="px-4 py-3 text-sm text-gray-500">{formatDate(member.sent_at)}</td>
-      <td className="px-4 py-3 text-sm text-gray-500">{formatDate(member.responded_at)}</td>
-      <td className="px-4 py-3 text-sm text-gray-500">{formatDate(member.converted_at)}</td>
+      <td className="px-4 py-3 text-sm text-gray-500">{formatDate(member.sent_at, 'short')}</td>
+      <td className="px-4 py-3 text-sm text-gray-500">{formatDate(member.responded_at, 'short')}</td>
+      <td className="px-4 py-3 text-sm text-gray-500">{formatDate(member.converted_at, 'short')}</td>
       <td className="px-4 py-3 text-right">
         <button
           onClick={onRemove}
@@ -138,6 +112,12 @@ export function CampaignDetailPage() {
   const campaignId = id ? parseInt(id, 10) : undefined;
 
   const [showEditForm, setShowEditForm] = useState(false);
+  const [showAddMembersModal, setShowAddMembersModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [removeMemberConfirm, setRemoveMemberConfirm] = useState<{ isOpen: boolean; memberId: number | null }>({
+    isOpen: false,
+    memberId: null,
+  });
 
   // Fetch campaign data
   const { data: campaign, isLoading: isLoadingCampaign } = useCampaign(campaignId);
@@ -148,10 +128,26 @@ export function CampaignDetailPage() {
   const updateCampaign = useUpdateCampaign();
   const deleteCampaign = useDeleteCampaign();
   const removeMember = useRemoveCampaignMember();
+  const addMembers = useAddCampaignMembers();
 
-  const handleDelete = async () => {
+  // Compute existing member IDs to filter them out in the modal
+  const existingMemberIds = useMemo(() => {
+    const contacts: number[] = [];
+    const leads: number[] = [];
+    if (members) {
+      members.forEach((m) => {
+        if (m.member_type === 'contact') {
+          contacts.push(m.member_id);
+        } else if (m.member_type === 'lead') {
+          leads.push(m.member_id);
+        }
+      });
+    }
+    return { contacts, leads };
+  }, [members]);
+
+  const handleDeleteConfirm = async () => {
     if (!campaignId) return;
-    if (!window.confirm('Are you sure you want to delete this campaign?')) return;
     try {
       await deleteCampaign.mutateAsync(campaignId);
       navigate('/campaigns');
@@ -170,13 +166,33 @@ export function CampaignDetailPage() {
     }
   };
 
-  const handleRemoveMember = async (memberId: number) => {
-    if (!campaignId) return;
-    if (!window.confirm('Remove this member from the campaign?')) return;
+  const handleRemoveMemberClick = (memberId: number) => {
+    setRemoveMemberConfirm({ isOpen: true, memberId });
+  };
+
+  const handleRemoveMemberConfirm = async () => {
+    if (!campaignId || !removeMemberConfirm.memberId) return;
     try {
-      await removeMember.mutateAsync({ campaignId, memberId });
+      await removeMember.mutateAsync({ campaignId, memberId: removeMemberConfirm.memberId });
+      setRemoveMemberConfirm({ isOpen: false, memberId: null });
     } catch (error) {
       console.error('Failed to remove member:', error);
+    }
+  };
+
+  const handleAddMembers = async (memberType: 'contact' | 'lead', memberIds: number[]) => {
+    if (!campaignId) return;
+    try {
+      await addMembers.mutateAsync({
+        campaignId,
+        data: {
+          member_type: memberType,
+          member_ids: memberIds,
+        },
+      });
+      setShowAddMembersModal(false);
+    } catch (error) {
+      console.error('Failed to add members:', error);
     }
   };
 
@@ -201,7 +217,7 @@ export function CampaignDetailPage() {
     );
   }
 
-  const statusStyle = statusColors[campaign.status] ?? defaultStatusColor;
+  const statusStyle = getStatusColor(campaign.status, 'campaign');
 
   return (
     <div className="space-y-6">
@@ -223,7 +239,7 @@ export function CampaignDetailPage() {
                 statusStyle.text
               )}
             >
-              {campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
+              {formatStatusLabel(campaign.status)}
             </span>
           </div>
           {campaign.description && (
@@ -234,7 +250,7 @@ export function CampaignDetailPage() {
           <Button variant="secondary" onClick={() => setShowEditForm(true)}>
             Edit
           </Button>
-          <Button variant="danger" onClick={handleDelete}>
+          <Button variant="danger" onClick={() => setShowDeleteConfirm(true)}>
             Delete
           </Button>
         </div>
@@ -248,11 +264,11 @@ export function CampaignDetailPage() {
         </div>
         <div className="bg-white rounded-lg shadow-sm border p-4">
           <p className="text-sm text-gray-500">Start Date</p>
-          <p className="text-lg font-medium text-gray-900">{formatDate(campaign.start_date)}</p>
+          <p className="text-lg font-medium text-gray-900">{formatDate(campaign.start_date, 'long')}</p>
         </div>
         <div className="bg-white rounded-lg shadow-sm border p-4">
           <p className="text-sm text-gray-500">End Date</p>
-          <p className="text-lg font-medium text-gray-900">{formatDate(campaign.end_date)}</p>
+          <p className="text-lg font-medium text-gray-900">{formatDate(campaign.end_date, 'long')}</p>
         </div>
         <div className="bg-white rounded-lg shadow-sm border p-4">
           <p className="text-sm text-gray-500">Budget</p>
@@ -326,7 +342,11 @@ export function CampaignDetailPage() {
       <div className="bg-white rounded-lg shadow-sm border">
         <div className="px-6 py-4 border-b flex items-center justify-between">
           <h3 className="text-lg font-semibold text-gray-900">Campaign Members</h3>
-          <Button size="sm" leftIcon={<PlusIcon className="h-4 w-4" />}>
+          <Button
+            size="sm"
+            leftIcon={<PlusIcon className="h-4 w-4" />}
+            onClick={() => setShowAddMembersModal(true)}
+          >
             Add Members
           </Button>
         </div>
@@ -367,7 +387,7 @@ export function CampaignDetailPage() {
                   <MemberRow
                     key={member.id}
                     member={member}
-                    onRemove={() => handleRemoveMember(member.id)}
+                    onRemove={() => handleRemoveMemberClick(member.id)}
                   />
                 ))}
               </tbody>
@@ -377,24 +397,55 @@ export function CampaignDetailPage() {
       </div>
 
       {/* Edit Form Modal */}
-      {showEditForm && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex min-h-screen items-center justify-center p-4">
-            <div
-              className="fixed inset-0 bg-black bg-opacity-25"
-              onClick={() => setShowEditForm(false)}
-            />
-            <div className="relative bg-white rounded-lg shadow-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Edit Campaign</h2>
-              <CampaignForm
-                campaign={campaign}
-                onSubmit={handleFormSubmit}
-                onCancel={() => setShowEditForm(false)}
-                isLoading={updateCampaign.isPending}
-              />
-            </div>
-          </div>
-        </div>
+      <Modal
+        isOpen={showEditForm}
+        onClose={() => setShowEditForm(false)}
+        title="Edit Campaign"
+        size="lg"
+      >
+        <CampaignForm
+          campaign={campaign}
+          onSubmit={handleFormSubmit}
+          onCancel={() => setShowEditForm(false)}
+          isLoading={updateCampaign.isPending}
+        />
+      </Modal>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Campaign"
+        message={`Are you sure you want to delete "${campaign.name}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+        isLoading={deleteCampaign.isPending}
+      />
+
+      {/* Remove Member Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={removeMemberConfirm.isOpen}
+        onClose={() => setRemoveMemberConfirm({ isOpen: false, memberId: null })}
+        onConfirm={handleRemoveMemberConfirm}
+        title="Remove Member"
+        message="Are you sure you want to remove this member from the campaign?"
+        confirmLabel="Remove"
+        cancelLabel="Cancel"
+        variant="warning"
+        isLoading={removeMember.isPending}
+      />
+
+      {/* Add Members Modal */}
+      {showAddMembersModal && campaignId && (
+        <AddMembersModal
+          campaignId={campaignId}
+          existingMemberIds={existingMemberIds}
+          onClose={() => setShowAddMembersModal(false)}
+          onAdd={handleAddMembers}
+          isLoading={addMembers.isPending}
+        />
       )}
     </div>
   );

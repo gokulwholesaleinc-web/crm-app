@@ -4,7 +4,8 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { dashboardApi } from '../api/dashboard';
-import type { DashboardResponse, NumberCardData, ChartData } from '../types';
+import { useAuthStore } from '../store/authStore';
+import type { ChartData } from '../types';
 
 // Query keys
 export const dashboardKeys = {
@@ -20,10 +21,12 @@ export const dashboardKeys = {
  * Hook to fetch the full dashboard data (KPIs + charts)
  */
 export function useDashboard() {
+  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
   return useQuery({
     queryKey: dashboardKeys.full(),
     queryFn: () => dashboardApi.getDashboard(),
     staleTime: 60 * 1000, // 1 minute - dashboard data should refresh periodically
+    enabled: isAuthenticated && !authLoading,
   });
 }
 
@@ -31,10 +34,12 @@ export function useDashboard() {
  * Hook to fetch only KPIs
  */
 export function useKPIs() {
+  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
   return useQuery({
     queryKey: dashboardKeys.kpis(),
     queryFn: () => dashboardApi.getKpis(),
     staleTime: 60 * 1000,
+    enabled: isAuthenticated && !authLoading,
   });
 }
 
@@ -42,9 +47,11 @@ export function useKPIs() {
  * Hook to fetch pipeline funnel chart
  */
 export function usePipelineFunnelChart() {
+  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
   return useQuery({
     queryKey: dashboardKeys.chart('pipeline-funnel'),
     queryFn: () => dashboardApi.getPipelineFunnelChart(),
+    enabled: isAuthenticated && !authLoading,
   });
 }
 
@@ -52,9 +59,11 @@ export function usePipelineFunnelChart() {
  * Hook to fetch leads by status chart
  */
 export function useLeadsByStatusChart() {
+  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
   return useQuery({
     queryKey: dashboardKeys.chart('leads-by-status'),
     queryFn: () => dashboardApi.getLeadsByStatusChart(),
+    enabled: isAuthenticated && !authLoading,
   });
 }
 
@@ -62,9 +71,11 @@ export function useLeadsByStatusChart() {
  * Hook to fetch leads by source chart
  */
 export function useLeadsBySourceChart() {
+  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
   return useQuery({
     queryKey: dashboardKeys.chart('leads-by-source'),
     queryFn: () => dashboardApi.getLeadsBySourceChart(),
+    enabled: isAuthenticated && !authLoading,
   });
 }
 
@@ -72,9 +83,11 @@ export function useLeadsBySourceChart() {
  * Hook to fetch revenue trend chart
  */
 export function useRevenueTrendChart(months = 6) {
+  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
   return useQuery({
     queryKey: dashboardKeys.chart('revenue-trend', { months }),
     queryFn: () => dashboardApi.getRevenueTrendChart(months),
+    enabled: isAuthenticated && !authLoading,
   });
 }
 
@@ -82,9 +95,11 @@ export function useRevenueTrendChart(months = 6) {
  * Hook to fetch activities by type chart
  */
 export function useActivitiesChart(days = 30) {
+  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
   return useQuery({
     queryKey: dashboardKeys.chart('activities', { days }),
     queryFn: () => dashboardApi.getActivitiesChart(days),
+    enabled: isAuthenticated && !authLoading,
   });
 }
 
@@ -92,9 +107,11 @@ export function useActivitiesChart(days = 30) {
  * Hook to fetch new leads trend chart
  */
 export function useNewLeadsTrendChart(weeks = 8) {
+  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
   return useQuery({
     queryKey: dashboardKeys.chart('new-leads-trend', { weeks }),
     queryFn: () => dashboardApi.getNewLeadsTrendChart(weeks),
+    enabled: isAuthenticated && !authLoading,
   });
 }
 
@@ -102,9 +119,11 @@ export function useNewLeadsTrendChart(weeks = 8) {
  * Hook to fetch conversion rates chart
  */
 export function useConversionRatesChart() {
+  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
   return useQuery({
     queryKey: dashboardKeys.chart('conversion-rates'),
     queryFn: () => dashboardApi.getConversionRatesChart(),
+    enabled: isAuthenticated && !authLoading,
   });
 }
 

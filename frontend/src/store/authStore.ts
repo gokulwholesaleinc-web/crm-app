@@ -9,13 +9,13 @@ export interface User {
   id: number;
   email: string;
   full_name: string;
-  phone?: string;
-  job_title?: string;
+  phone?: string | null;
+  job_title?: string | null;
   is_active: boolean;
   is_superuser: boolean;
-  avatar_url?: string;
+  avatar_url?: string | null;
   created_at: string;
-  last_login?: string;
+  last_login?: string | null;
 }
 
 interface AuthState {
@@ -84,6 +84,12 @@ export const useAuthStore = create<AuthState>()(
         token: state.token,
         isAuthenticated: state.isAuthenticated,
       }),
+      onRehydrateStorage: () => (state) => {
+        // Set isLoading to false after rehydration completes
+        if (state) {
+          state.setLoading(false);
+        }
+      },
     }
   )
 );

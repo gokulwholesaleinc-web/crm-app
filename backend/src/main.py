@@ -1,12 +1,20 @@
 """FastAPI CRM Application - Main Entry Point."""
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from src.config import settings
 from src.database import engine, init_db
+from src.core.router_utils import CurrentUser
+
+# Initialize rate limiter
+limiter = Limiter(key_func=get_remote_address)
 
 # Import routers
 from src.auth.router import router as auth_router
@@ -68,6 +76,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Configure rate limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
@@ -77,7 +89,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers
+# Include routers - they already have /api prefix in their definitions
 app.include_router(auth_router)
 app.include_router(contacts_router)
 app.include_router(companies_router)
@@ -108,27 +120,34 @@ async def health_check():
 
 
 @app.get("/api/tags")
-async def list_tags():
-    """List all tags (placeholder - implement with proper service)."""
+async def list_tags(current_user: CurrentUser):
+    """List all tags (cached for 5 minutes)."""
     from sqlalchemy import select
     from src.database import async_session_maker
     from src.core.models import Tag
+    from src.core.cache import cached_fetch, CACHE_TAGS
 
-    async with async_session_maker() as session:
-        result = await session.execute(select(Tag).order_by(Tag.name))
-        tags = result.scalars().all()
-        return [{"id": t.id, "name": t.name, "color": t.color} for t in tags]
+    async def fetch_tags():
+        async with async_session_maker() as session:
+            result = await session.execute(select(Tag).order_by(Tag.name))
+            tags = result.scalars().all()
+            return [{"id": t.id, "name": t.name, "color": t.color} for t in tags]
+
+    return await cached_fetch(CACHE_TAGS, "all_tags", fetch_tags)
 
 
 @app.post("/api/tags")
-async def create_tag(name: str, color: str = "#6366f1"):
-    """Create a new tag (placeholder - implement with proper service)."""
+async def create_tag(current_user: CurrentUser, name: str, color: str = "#6366f1"):
+    """Create a new tag."""
     from src.database import async_session_maker
     from src.core.models import Tag
+    from src.core.cache import invalidate_tags_cache
 
     async with async_session_maker() as session:
         tag = Tag(name=name, color=color)
         session.add(tag)
         await session.commit()
         await session.refresh(tag)
+        # Invalidate cache since we added a new tag
+        invalidate_tags_cache()
         return {"id": tag.id, "name": tag.name, "color": tag.color}

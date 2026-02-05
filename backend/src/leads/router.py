@@ -1,12 +1,22 @@
 """Lead API routes."""
 
-from typing import Annotated, Optional, List
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from src.database import get_db
-from src.auth.models import User
-from src.auth.dependencies import get_current_active_user
-from src.leads.models import Lead
+from typing import Optional, List
+from fastapi import APIRouter, Query
+from src.core.constants import HTTPStatus, EntityNames, ErrorMessages
+from src.core.router_utils import (
+    DBSession,
+    CurrentUser,
+    parse_tag_ids,
+    get_entity_or_404,
+    calculate_pages,
+    raise_bad_request,
+    check_ownership,
+)
+from src.core.cache import (
+    cached_fetch,
+    CACHE_LEAD_SOURCES,
+    invalidate_lead_sources_cache,
+)
 from src.leads.schemas import (
     LeadCreate,
     LeadUpdate,
@@ -26,10 +36,18 @@ from src.leads.conversion import LeadConverter
 router = APIRouter(prefix="/api/leads", tags=["leads"])
 
 
+async def _build_lead_response(service: LeadService, lead) -> LeadResponse:
+    """Build a LeadResponse with tags."""
+    tags = await service.get_lead_tags(lead.id)
+    response_dict = LeadResponse.model_validate(lead).model_dump()
+    response_dict["tags"] = [TagBrief.model_validate(t) for t in tags]
+    return LeadResponse(**response_dict)
+
+
 @router.get("", response_model=LeadListResponse)
 async def list_leads(
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     search: Optional[str] = None,
@@ -42,10 +60,6 @@ async def list_leads(
     """List leads with pagination and filters."""
     service = LeadService(db)
 
-    parsed_tag_ids = None
-    if tag_ids:
-        parsed_tag_ids = [int(x) for x in tag_ids.split(",")]
-
     leads, total = await service.get_list(
         page=page,
         page_size=page_size,
@@ -54,112 +68,69 @@ async def list_leads(
         source_id=source_id,
         owner_id=owner_id,
         min_score=min_score,
-        tag_ids=parsed_tag_ids,
+        tag_ids=parse_tag_ids(tag_ids),
     )
 
-    lead_responses = []
-    for lead in leads:
-        tags = await service.get_lead_tags(lead.id)
-        lead_dict = LeadResponse.model_validate(lead).model_dump()
-        lead_dict["tags"] = [TagBrief.model_validate(t) for t in tags]
-        lead_responses.append(LeadResponse(**lead_dict))
-
-    pages = (total + page_size - 1) // page_size
+    lead_responses = [await _build_lead_response(service, lead) for lead in leads]
 
     return LeadListResponse(
         items=lead_responses,
         total=total,
         page=page,
         page_size=page_size,
-        pages=pages,
+        pages=calculate_pages(total, page_size),
     )
 
 
-@router.post("", response_model=LeadResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=LeadResponse, status_code=HTTPStatus.CREATED)
 async def create_lead(
     lead_data: LeadCreate,
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Create a new lead."""
     service = LeadService(db)
     lead = await service.create(lead_data, current_user.id)
-
-    tags = await service.get_lead_tags(lead.id)
-    response = LeadResponse.model_validate(lead)
-    response_dict = response.model_dump()
-    response_dict["tags"] = [TagBrief.model_validate(t) for t in tags]
-
-    return LeadResponse(**response_dict)
+    return await _build_lead_response(service, lead)
 
 
 @router.get("/{lead_id}", response_model=LeadResponse)
 async def get_lead(
     lead_id: int,
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Get a lead by ID."""
     service = LeadService(db)
-    lead = await service.get_by_id(lead_id)
-
-    if not lead:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Lead not found",
-        )
-
-    tags = await service.get_lead_tags(lead.id)
-    response = LeadResponse.model_validate(lead)
-    response_dict = response.model_dump()
-    response_dict["tags"] = [TagBrief.model_validate(t) for t in tags]
-
-    return LeadResponse(**response_dict)
+    lead = await get_entity_or_404(service, lead_id, EntityNames.LEAD)
+    return await _build_lead_response(service, lead)
 
 
 @router.patch("/{lead_id}", response_model=LeadResponse)
 async def update_lead(
     lead_id: int,
     lead_data: LeadUpdate,
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Update a lead."""
     service = LeadService(db)
-    lead = await service.get_by_id(lead_id)
-
-    if not lead:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Lead not found",
-        )
-
+    lead = await get_entity_or_404(service, lead_id, EntityNames.LEAD)
+    check_ownership(lead, current_user, EntityNames.LEAD)
     updated_lead = await service.update(lead, lead_data, current_user.id)
-
-    tags = await service.get_lead_tags(updated_lead.id)
-    response = LeadResponse.model_validate(updated_lead)
-    response_dict = response.model_dump()
-    response_dict["tags"] = [TagBrief.model_validate(t) for t in tags]
-
-    return LeadResponse(**response_dict)
+    return await _build_lead_response(service, updated_lead)
 
 
-@router.delete("/{lead_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{lead_id}", status_code=HTTPStatus.NO_CONTENT)
 async def delete_lead(
     lead_id: int,
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Delete a lead."""
     service = LeadService(db)
-    lead = await service.get_by_id(lead_id)
-
-    if not lead:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Lead not found",
-        )
-
+    lead = await get_entity_or_404(service, lead_id, EntityNames.LEAD)
+    check_ownership(lead, current_user, EntityNames.LEAD)
     await service.delete(lead)
 
 
@@ -168,24 +139,15 @@ async def delete_lead(
 async def convert_to_contact(
     lead_id: int,
     request: LeadConvertToContactRequest,
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Convert a lead to a contact."""
     service = LeadService(db)
-    lead = await service.get_by_id(lead_id)
-
-    if not lead:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Lead not found",
-        )
+    lead = await get_entity_or_404(service, lead_id, EntityNames.LEAD)
 
     if lead.converted_contact_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Lead already converted to contact",
-        )
+        raise_bad_request(ErrorMessages.already_converted_to(EntityNames.LEAD, "contact"))
 
     converter = LeadConverter(db)
     contact, company = await converter.convert_to_contact(
@@ -207,23 +169,16 @@ async def convert_to_contact(
 async def convert_to_opportunity(
     lead_id: int,
     request: LeadConvertToOpportunityRequest,
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Convert a lead to an opportunity."""
     service = LeadService(db)
-    lead = await service.get_by_id(lead_id)
-
-    if not lead:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Lead not found",
-        )
+    lead = await get_entity_or_404(service, lead_id, EntityNames.LEAD)
 
     if lead.converted_opportunity_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Lead already converted to opportunity",
+        raise_bad_request(
+            ErrorMessages.already_converted_to(EntityNames.LEAD, "opportunity")
         )
 
     converter = LeadConverter(db)
@@ -246,24 +201,15 @@ async def convert_to_opportunity(
 async def full_conversion(
     lead_id: int,
     request: LeadFullConversionRequest,
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
-    """Full lead conversion: Lead → Contact + Company + Opportunity."""
+    """Full lead conversion: Lead -> Contact + Company + Opportunity."""
     service = LeadService(db)
-    lead = await service.get_by_id(lead_id)
-
-    if not lead:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Lead not found",
-        )
+    lead = await get_entity_or_404(service, lead_id, EntityNames.LEAD)
 
     if lead.converted_contact_id or lead.converted_opportunity_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Lead already converted",
-        )
+        raise_bad_request(ErrorMessages.already_converted(EntityNames.LEAD))
 
     converter = LeadConverter(db)
     contact, company, opportunity = await converter.full_conversion(
@@ -285,23 +231,37 @@ async def full_conversion(
 # Lead Sources endpoints
 @router.get("/sources/", response_model=List[LeadSourceResponse])
 async def list_sources(
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
     active_only: bool = True,
 ):
-    """List all lead sources."""
+    """List all lead sources (cached for 5 minutes)."""
     service = LeadService(db)
-    sources = await service.get_all_sources(active_only=active_only)
-    return sources
+
+    async def fetch_sources():
+        sources = await service.get_all_sources(active_only=active_only)
+        # Convert to dicts for caching (ORM objects can't be cached across sessions)
+        return [LeadSourceResponse.model_validate(s).model_dump() for s in sources]
+
+    cached_sources = await cached_fetch(
+        CACHE_LEAD_SOURCES,
+        f"sources:{active_only}",
+        fetch_sources,
+    )
+    return cached_sources
 
 
-@router.post("/sources/", response_model=LeadSourceResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/sources/", response_model=LeadSourceResponse, status_code=HTTPStatus.CREATED
+)
 async def create_source(
     source_data: LeadSourceCreate,
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Create a new lead source."""
     service = LeadService(db)
     source = await service.create_source(source_data)
+    # Invalidate cache since we added a new source
+    invalidate_lead_sources_cache()
     return source

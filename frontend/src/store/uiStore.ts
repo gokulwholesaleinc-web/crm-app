@@ -103,12 +103,17 @@ export const useUIStore = create<UIState>()(
         })),
 
       closeModal: (modalId) =>
-        set((state) => ({
-          modals: {
-            ...state.modals,
-            [modalId]: { ...state.modals[modalId], isOpen: false },
-          },
-        })),
+        set((state) => {
+          const existingModal = state.modals[modalId];
+          return {
+            modals: {
+              ...state.modals,
+              [modalId]: existingModal
+                ? { ...existingModal, isOpen: false }
+                : { isOpen: false, type: null },
+            },
+          };
+        }),
 
       closeAllModals: () =>
         set((state) => ({

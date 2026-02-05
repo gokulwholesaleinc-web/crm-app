@@ -2,51 +2,48 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
+import { authApi } from '../../api/auth';
+import { useAuthStore } from '../../store/authStore';
+import type { LoginRequest } from '../../types';
 
-interface LoginFormData {
-  email: string;
-  password: string;
-}
-
-export function LoginPage() {
+function LoginPage() {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { login: storeLogin } = useAuthStore();
 
   const {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<LoginFormData>({
+  } = useForm<LoginRequest>({
     defaultValues: {
       email: '',
       password: '',
     },
   });
 
-  const onSubmit = async (data: LoginFormData) => {
+  const onSubmit = async (data: LoginRequest) => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      });
+      // Use the auth API module which calls /api/auth/login/json
+      const tokenResult = await authApi.login(data);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Login failed');
-      }
+      // Get user profile after successful login
+      const user = await authApi.getMe();
 
-      const result = await response.json();
-      localStorage.setItem('access_token', result.access_token);
-      navigate('/dashboard');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      // Update auth store with user and token
+      storeLogin(user, tokenResult.access_token);
+
+      navigate('/');
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message :
+        (typeof err === 'object' && err !== null && 'detail' in err)
+          ? String((err as { detail: unknown }).detail)
+          : 'An error occurred';
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -114,10 +111,6 @@ export function LoginPage() {
                 autoComplete="current-password"
                 {...register('password', {
                   required: 'Password is required',
-                  minLength: {
-                    value: 6,
-                    message: 'Password must be at least 6 characters',
-                  },
                 })}
                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm"
                 placeholder="Password"
@@ -142,9 +135,9 @@ export function LoginPage() {
             </div>
 
             <div className="text-sm">
-              <a href="#" className="font-medium text-primary-600 hover:text-primary-500">
+              <Link to="/forgot-password" className="font-medium text-primary-600 hover:text-primary-500">
                 Forgot your password?
-              </a>
+              </Link>
             </div>
           </div>
 
@@ -158,3 +151,5 @@ export function LoginPage() {
     </div>
   );
 }
+
+export default LoginPage;

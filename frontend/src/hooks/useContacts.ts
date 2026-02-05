@@ -1,85 +1,72 @@
 /**
- * Contacts hooks using TanStack Query
+ * Contacts hooks using the entity CRUD factory pattern.
+ * Uses TanStack Query for data fetching and caching.
  */
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
+import { createEntityHooks, createQueryKeys } from './useEntityCRUD';
 import { contactsApi } from '../api/contacts';
-import type { ContactCreate, ContactUpdate, ContactFilters } from '../types';
+import type { Contact, ContactCreate, ContactUpdate, ContactFilters } from '../types';
 
-// Query keys
-export const contactKeys = {
-  all: ['contacts'] as const,
-  lists: () => [...contactKeys.all, 'list'] as const,
-  list: (filters?: ContactFilters) => [...contactKeys.lists(), filters] as const,
-  details: () => [...contactKeys.all, 'detail'] as const,
-  detail: (id: number) => [...contactKeys.details(), id] as const,
-};
+// =============================================================================
+// Query Keys
+// =============================================================================
+
+export const contactKeys = createQueryKeys('contacts');
+
+// =============================================================================
+// Entity CRUD Hooks using Factory Pattern
+// =============================================================================
+
+const contactEntityHooks = createEntityHooks<
+  Contact,
+  ContactCreate,
+  ContactUpdate,
+  ContactFilters
+>({
+  entityName: 'contacts',
+  baseUrl: '/api/contacts',
+  queryKey: 'contacts',
+});
 
 /**
  * Hook to fetch a paginated list of contacts
  */
 export function useContacts(filters?: ContactFilters) {
-  return useQuery({
-    queryKey: contactKeys.list(filters),
-    queryFn: () => contactsApi.list(filters),
-  });
+  return contactEntityHooks.useList(filters);
 }
 
 /**
  * Hook to fetch a single contact by ID
  */
 export function useContact(id: number | undefined) {
-  return useQuery({
-    queryKey: contactKeys.detail(id!),
-    queryFn: () => contactsApi.get(id!),
-    enabled: !!id,
-  });
+  return contactEntityHooks.useOne(id);
 }
 
 /**
  * Hook to create a new contact
  */
 export function useCreateContact() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (data: ContactCreate) => contactsApi.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: contactKeys.lists() });
-    },
-  });
+  return contactEntityHooks.useCreate();
 }
 
 /**
  * Hook to update a contact
  */
 export function useUpdateContact() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({ id, data }: { id: number; data: ContactUpdate }) =>
-      contactsApi.update(id, data),
-    onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: contactKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: contactKeys.detail(id) });
-    },
-  });
+  return contactEntityHooks.useUpdate();
 }
 
 /**
  * Hook to delete a contact
  */
 export function useDeleteContact() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (id: number) => contactsApi.delete(id),
-    onSuccess: (_, id) => {
-      queryClient.invalidateQueries({ queryKey: contactKeys.lists() });
-      queryClient.removeQueries({ queryKey: contactKeys.detail(id) });
-    },
-  });
+  return contactEntityHooks.useDelete();
 }
+
+// =============================================================================
+// Additional Specialized Hooks
+// =============================================================================
 
 /**
  * Hook to search contacts by name or email

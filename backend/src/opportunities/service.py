@@ -1,8 +1,7 @@
 """Opportunity service layer."""
 
 from typing import Optional, List, Tuple
-from sqlalchemy import select, func, or_
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from src.opportunities.models import Opportunity, PipelineStage
 from src.opportunities.schemas import (
@@ -11,30 +10,32 @@ from src.opportunities.schemas import (
     PipelineStageCreate,
     PipelineStageUpdate,
 )
-from src.core.models import Tag, EntityTag
+from src.core.base_service import CRUDService, BaseService, TaggableServiceMixin
+from src.core.models import Tag
+from src.core.constants import ENTITY_TYPE_OPPORTUNITIES, DEFAULT_PAGE_SIZE
 
 
-class OpportunityService:
-    def __init__(self, db: AsyncSession):
-        self.db = db
+class OpportunityService(
+    CRUDService[Opportunity, OpportunityCreate, OpportunityUpdate],
+    TaggableServiceMixin,
+):
+    """Service for Opportunity CRUD operations with tag support."""
 
-    async def get_by_id(self, opportunity_id: int) -> Optional[Opportunity]:
-        """Get opportunity by ID with related data."""
-        result = await self.db.execute(
-            select(Opportunity)
-            .where(Opportunity.id == opportunity_id)
-            .options(
-                selectinload(Opportunity.pipeline_stage),
-                selectinload(Opportunity.contact),
-                selectinload(Opportunity.company),
-            )
-        )
-        return result.scalar_one_or_none()
+    model = Opportunity
+    entity_type = ENTITY_TYPE_OPPORTUNITIES
+
+    def _get_eager_load_options(self):
+        """Load pipeline stage, contact, and company relations."""
+        return [
+            selectinload(Opportunity.pipeline_stage),
+            selectinload(Opportunity.contact),
+            selectinload(Opportunity.company),
+        ]
 
     async def get_list(
         self,
         page: int = 1,
-        page_size: int = 20,
+        page_size: int = DEFAULT_PAGE_SIZE,
         search: Optional[str] = None,
         pipeline_stage_id: Optional[int] = None,
         contact_id: Optional[int] = None,
@@ -68,14 +69,7 @@ class OpportunityService:
             query = query.where(Opportunity.owner_id == owner_id)
 
         if tag_ids:
-            tag_subquery = (
-                select(EntityTag.entity_id)
-                .where(EntityTag.entity_type == "opportunities")
-                .where(EntityTag.tag_id.in_(tag_ids))
-                .group_by(EntityTag.entity_id)
-                .having(func.count(EntityTag.tag_id) == len(tag_ids))
-            )
-            query = query.where(Opportunity.id.in_(tag_subquery))
+            query = await self._filter_by_tags(query, tag_ids)
 
         count_query = select(func.count()).select_from(query.subquery())
         total_result = await self.db.execute(count_query)
@@ -91,81 +85,38 @@ class OpportunityService:
 
     async def create(self, data: OpportunityCreate, user_id: int) -> Opportunity:
         """Create a new opportunity."""
-        opp_data = data.model_dump(exclude={"tag_ids"})
-        opportunity = Opportunity(**opp_data, created_by_id=user_id)
-        self.db.add(opportunity)
-        await self.db.flush()
+        opportunity = await super().create(data, user_id)
 
         if data.tag_ids:
-            await self._update_tags(opportunity.id, data.tag_ids)
+            await self.update_tags(opportunity.id, data.tag_ids)
+            await self.db.refresh(opportunity)
 
-        await self.db.refresh(opportunity)
         return opportunity
 
     async def update(self, opportunity: Opportunity, data: OpportunityUpdate, user_id: int) -> Opportunity:
         """Update an opportunity."""
-        update_data = data.model_dump(exclude={"tag_ids"}, exclude_unset=True)
-        for field, value in update_data.items():
-            setattr(opportunity, field, value)
-        opportunity.updated_by_id = user_id
-        await self.db.flush()
+        opportunity = await super().update(opportunity, data, user_id)
 
         if data.tag_ids is not None:
-            await self._update_tags(opportunity.id, data.tag_ids)
+            await self.update_tags(opportunity.id, data.tag_ids)
+            await self.db.refresh(opportunity)
 
-        await self.db.refresh(opportunity)
         return opportunity
 
     async def delete(self, opportunity: Opportunity) -> None:
         """Delete an opportunity."""
-        await self.db.execute(
-            EntityTag.__table__.delete().where(
-                EntityTag.entity_type == "opportunities",
-                EntityTag.entity_id == opportunity.id,
-            )
-        )
-        await self.db.delete(opportunity)
-        await self.db.flush()
-
-    async def _update_tags(self, opportunity_id: int, tag_ids: List[int]) -> None:
-        """Update tags for an opportunity."""
-        await self.db.execute(
-            EntityTag.__table__.delete().where(
-                EntityTag.entity_type == "opportunities",
-                EntityTag.entity_id == opportunity_id,
-            )
-        )
-
-        for tag_id in tag_ids:
-            entity_tag = EntityTag(
-                entity_type="opportunities",
-                entity_id=opportunity_id,
-                tag_id=tag_id,
-            )
-            self.db.add(entity_tag)
-        await self.db.flush()
+        await self.clear_tags(opportunity.id)
+        await super().delete(opportunity)
 
     async def get_opportunity_tags(self, opportunity_id: int) -> List[Tag]:
         """Get tags for an opportunity."""
-        result = await self.db.execute(
-            select(Tag)
-            .join(EntityTag)
-            .where(EntityTag.entity_type == "opportunities")
-            .where(EntityTag.entity_id == opportunity_id)
-        )
-        return list(result.scalars().all())
+        return await self.get_tags(opportunity_id)
 
 
-class PipelineStageService:
-    def __init__(self, db: AsyncSession):
-        self.db = db
+class PipelineStageService(BaseService[PipelineStage]):
+    """Service for PipelineStage operations."""
 
-    async def get_by_id(self, stage_id: int) -> Optional[PipelineStage]:
-        """Get pipeline stage by ID."""
-        result = await self.db.execute(
-            select(PipelineStage).where(PipelineStage.id == stage_id)
-        )
-        return result.scalar_one_or_none()
+    model = PipelineStage
 
     async def get_all(self, active_only: bool = True) -> List[PipelineStage]:
         """Get all pipeline stages ordered by order field."""

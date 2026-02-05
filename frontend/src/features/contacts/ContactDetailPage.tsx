@@ -1,173 +1,90 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Button } from '../../components/ui/Button';
-import { Spinner } from '../../components/ui/Spinner';
+import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
+import { ContactForm, ContactFormData } from './components/ContactForm';
+import { useContact, useDeleteContact, useUpdateContact } from '../../hooks';
+import { useTimeline } from '../../hooks/useActivities';
+import { formatDate, formatPhoneNumber } from '../../utils/formatters';
+import type { ContactUpdate } from '../../types';
+import { useUIStore } from '../../store/uiStore';
 import clsx from 'clsx';
-
-interface Contact {
-  id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone?: string;
-  company?: string;
-  jobTitle?: string;
-  address?: string;
-  city?: string;
-  state?: string;
-  zipCode?: string;
-  country?: string;
-  notes?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface Activity {
-  id: string;
-  type: string;
-  description: string;
-  timestamp: string;
-  user: {
-    firstName: string;
-    lastName: string;
-  };
-}
-
-interface Note {
-  id: string;
-  content: string;
-  createdAt: string;
-  user: {
-    firstName: string;
-    lastName: string;
-  };
-}
 
 type TabType = 'details' | 'activities' | 'notes';
 
-export function ContactDetailPage() {
+function ContactDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [contact, setContact] = useState<Contact | null>(null);
-  const [activities, setActivities] = useState<Activity[]>([]);
-  const [notes, setNotes] = useState<Note[]>([]);
+  const contactId = id ? parseInt(id, 10) : undefined;
   const [activeTab, setActiveTab] = useState<TabType>('details');
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [newNote, setNewNote] = useState('');
-  const [isAddingNote, setIsAddingNote] = useState(false);
+  const [showEditForm, setShowEditForm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const addToast = useUIStore((state) => state.addToast);
 
-  useEffect(() => {
-    const fetchContact = async () => {
-      try {
-        const response = await fetch(`/api/contacts/${id}`, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-          },
-        });
+  // Use hooks for data fetching
+  const { data: contact, isLoading, error } = useContact(contactId);
+  const deleteContactMutation = useDeleteContact();
+  const updateContactMutation = useUpdateContact();
 
-        if (!response.ok) {
-          throw new Error('Failed to fetch contact');
-        }
+  // Fetch timeline/activities for the contact - only fetch when on activities tab
+  const shouldFetchActivities = activeTab === 'activities' && !!contactId;
+  const { data: timelineData, isLoading: isLoadingActivities } = useTimeline(
+    shouldFetchActivities ? 'contact' : '',
+    shouldFetchActivities ? contactId! : 0
+  );
 
-        const data = await response.json();
-        setContact(data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'An error occurred');
-      } finally {
-        setIsLoading(false);
-      }
+  const activities = timelineData?.items || [];
+
+  const handleEditSubmit = async (data: ContactFormData) => {
+    if (!contactId) return;
+    try {
+      const updateData: ContactUpdate = {
+        first_name: data.firstName,
+        last_name: data.lastName,
+        email: data.email,
+        phone: data.phone,
+        job_title: data.jobTitle,
+      };
+      await updateContactMutation.mutateAsync({
+        id: contactId,
+        data: updateData,
+      });
+      setShowEditForm(false);
+    } catch (err) {
+      console.error('Failed to update contact:', err);
+    }
+  };
+
+  const getInitialFormData = (): Partial<ContactFormData> | undefined => {
+    if (!contact) return undefined;
+    return {
+      firstName: contact.first_name,
+      lastName: contact.last_name,
+      email: contact.email || '',
+      phone: contact.phone || '',
+      jobTitle: contact.job_title || '',
+      company: contact.company?.name || '',
     };
+  };
 
-    fetchContact();
-  }, [id]);
+  const handleDeleteConfirm = async () => {
+    if (!contactId) return;
 
-  useEffect(() => {
-    if (activeTab === 'activities') {
-      fetchActivities();
-    } else if (activeTab === 'notes') {
-      fetchNotes();
-    }
-  }, [activeTab, id]);
-
-  const fetchActivities = async () => {
     try {
-      const response = await fetch(`/api/contacts/${id}/activities`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setActivities(data);
-      }
+      await deleteContactMutation.mutateAsync(contactId);
+      navigate('/contacts');
     } catch {
-      // Silent fail for activities
+      // Error is handled by the mutation
     }
   };
 
-  const fetchNotes = async () => {
-    try {
-      const response = await fetch(`/api/contacts/${id}/notes`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setNotes(data);
-      }
-    } catch {
-      // Silent fail for notes
-    }
-  };
-
-  const handleAddNote = async () => {
-    if (!newNote.trim()) return;
-
-    setIsAddingNote(true);
-    try {
-      const response = await fetch(`/api/contacts/${id}/notes`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-        },
-        body: JSON.stringify({ content: newNote }),
-      });
-
-      if (response.ok) {
-        setNewNote('');
-        fetchNotes();
-      }
-    } catch {
-      // Handle error
-    } finally {
-      setIsAddingNote(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!confirm('Are you sure you want to delete this contact?')) {
-      return;
-    }
-
-    try {
-      const response = await fetch(`/api/contacts/${id}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-        },
-      });
-
-      if (response.ok) {
-        navigate('/contacts');
-      }
-    } catch {
-      setError('Failed to delete contact');
-    }
+  const handleAddNote = () => {
+    addToast({
+      type: 'info',
+      title: 'Coming Soon',
+      message: 'Notes feature is coming soon. Stay tuned!',
+    });
+    setNewNote('');
   };
 
   if (isLoading) {
@@ -178,13 +95,15 @@ export function ContactDetailPage() {
     );
   }
 
-  if (error || !contact) {
+  const errorMessage = error instanceof Error ? error.message : error ? String(error) : null;
+
+  if (errorMessage || !contact) {
     return (
       <div className="rounded-md bg-red-50 p-4">
         <div className="flex">
           <div className="ml-3">
             <h3 className="text-sm font-medium text-red-800">
-              {error || 'Contact not found'}
+              {errorMessage || 'Contact not found'}
             </h3>
             <div className="mt-4">
               <Link to="/contacts" className="text-red-600 hover:text-red-500">
@@ -228,11 +147,11 @@ export function ContactDetailPage() {
           </Link>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
-              {contact.firstName} {contact.lastName}
+              {contact.first_name} {contact.last_name}
             </h1>
-            {contact.jobTitle && contact.company && (
+            {contact.job_title && contact.company?.name && (
               <p className="text-sm text-gray-500">
-                {contact.jobTitle} at {contact.company}
+                {contact.job_title} at {contact.company.name}
               </p>
             )}
           </div>
@@ -240,11 +159,11 @@ export function ContactDetailPage() {
         <div className="flex items-center space-x-3">
           <Button
             variant="secondary"
-            onClick={() => navigate(`/contacts/${id}/edit`)}
+            onClick={() => setShowEditForm(true)}
           >
             Edit
           </Button>
-          <Button variant="danger" onClick={handleDelete}>
+          <Button variant="danger" onClick={() => setShowDeleteConfirm(true)} isLoading={deleteContactMutation.isPending}>
             Delete
           </Button>
         </div>
@@ -295,7 +214,7 @@ export function ContactDetailPage() {
                       href={`tel:${contact.phone}`}
                       className="text-primary-600 hover:text-primary-500"
                     >
-                      {contact.phone}
+                      {formatPhoneNumber(contact.phone)}
                     </a>
                   ) : (
                     '-'
@@ -306,25 +225,26 @@ export function ContactDetailPage() {
               <div>
                 <dt className="text-sm font-medium text-gray-500">Company</dt>
                 <dd className="mt-1 text-sm text-gray-900">
-                  {contact.company || '-'}
+                  {contact.company?.name || '-'}
                 </dd>
               </div>
 
               <div>
                 <dt className="text-sm font-medium text-gray-500">Job Title</dt>
                 <dd className="mt-1 text-sm text-gray-900">
-                  {contact.jobTitle || '-'}
+                  {contact.job_title || '-'}
                 </dd>
               </div>
 
               <div className="sm:col-span-2">
                 <dt className="text-sm font-medium text-gray-500">Address</dt>
                 <dd className="mt-1 text-sm text-gray-900">
-                  {contact.address ? (
+                  {contact.address_line1 ? (
                     <>
-                      {contact.address}
+                      {contact.address_line1}
+                      {contact.address_line2 && <><br />{contact.address_line2}</>}
                       <br />
-                      {[contact.city, contact.state, contact.zipCode]
+                      {[contact.city, contact.state, contact.postal_code]
                         .filter(Boolean)
                         .join(', ')}
                       {contact.country && (
@@ -343,14 +263,14 @@ export function ContactDetailPage() {
               <div className="sm:col-span-2">
                 <dt className="text-sm font-medium text-gray-500">Notes</dt>
                 <dd className="mt-1 text-sm text-gray-900">
-                  {contact.notes || 'No notes'}
+                  {contact.description || 'No notes'}
                 </dd>
               </div>
 
               <div>
                 <dt className="text-sm font-medium text-gray-500">Created</dt>
                 <dd className="mt-1 text-sm text-gray-900">
-                  {new Date(contact.createdAt).toLocaleDateString()}
+                  {formatDate(contact.created_at)}
                 </dd>
               </div>
 
@@ -359,7 +279,7 @@ export function ContactDetailPage() {
                   Last Updated
                 </dt>
                 <dd className="mt-1 text-sm text-gray-900">
-                  {new Date(contact.updatedAt).toLocaleDateString()}
+                  {formatDate(contact.updated_at)}
                 </dd>
               </div>
             </dl>
@@ -370,7 +290,11 @@ export function ContactDetailPage() {
       {activeTab === 'activities' && (
         <div className="bg-white shadow rounded-lg">
           <div className="px-4 py-5 sm:p-6">
-            {activities.length === 0 ? (
+            {isLoadingActivities ? (
+              <div className="flex items-center justify-center py-4">
+                <Spinner />
+              </div>
+            ) : activities.length === 0 ? (
               <p className="text-sm text-gray-500 text-center py-4">
                 No activities recorded yet.
               </p>
@@ -400,11 +324,10 @@ export function ContactDetailPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-gray-900">
-                        {activity.description}
+                        {activity.subject}
                       </p>
                       <p className="text-xs text-gray-500 mt-1">
-                        {activity.user.firstName} {activity.user.lastName} -{' '}
-                        {new Date(activity.timestamp).toLocaleString()}
+                        {formatDate(activity.created_at)}
                       </p>
                     </div>
                   </li>
@@ -432,9 +355,8 @@ export function ContactDetailPage() {
             </div>
             <div className="mt-3 flex justify-end">
               <Button
-                onClick={handleAddNote}
-                isLoading={isAddingNote}
                 disabled={!newNote.trim()}
+                onClick={handleAddNote}
               >
                 Add Note
               </Button>
@@ -444,32 +366,44 @@ export function ContactDetailPage() {
           {/* Notes List */}
           <div className="bg-white shadow rounded-lg">
             <div className="px-4 py-5 sm:p-6">
-              {notes.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-4">
-                  No notes yet. Add one above.
-                </p>
-              ) : (
-                <ul className="space-y-4">
-                  {notes.map((note) => (
-                    <li
-                      key={note.id}
-                      className="pb-4 border-b border-gray-100 last:border-0"
-                    >
-                      <p className="text-sm text-gray-900 whitespace-pre-wrap">
-                        {note.content}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-2">
-                        {note.user.firstName} {note.user.lastName} -{' '}
-                        {new Date(note.createdAt).toLocaleString()}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <p className="text-sm text-gray-500 text-center py-4">
+                Notes feature coming soon. You can add notes in the contact description field for now.
+              </p>
             </div>
           </div>
         </div>
       )}
+
+      {/* Edit Form Modal */}
+      <Modal
+        isOpen={showEditForm}
+        onClose={() => setShowEditForm(false)}
+        title="Edit Contact"
+        size="lg"
+      >
+        <ContactForm
+          initialData={getInitialFormData()}
+          onSubmit={handleEditSubmit}
+          onCancel={() => setShowEditForm(false)}
+          isLoading={updateContactMutation.isPending}
+          submitLabel="Update Contact"
+        />
+      </Modal>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Contact"
+        message={`Are you sure you want to delete ${contact.first_name} ${contact.last_name}? This action cannot be undone.`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+        isLoading={deleteContactMutation.isPending}
+      />
     </div>
   );
 }
+
+export default ContactDetailPage;

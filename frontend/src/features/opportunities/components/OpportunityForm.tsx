@@ -1,5 +1,6 @@
 import { useForm } from 'react-hook-form';
 import { Button } from '../../../components/ui/Button';
+import { FormInput, FormSelect, FormTextarea } from '../../../components/forms';
 
 export interface OpportunityFormData {
   name: string;
@@ -82,67 +83,37 @@ export function OpportunityForm({
         </h3>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
           <div className="sm:col-span-2">
-            <label
-              htmlFor="name"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Opportunity Name *
-            </label>
-            <input
-              type="text"
-              id="name"
-              {...register('name', {
+            <FormInput
+              label="Opportunity Name"
+              name="name"
+              required
+              placeholder="e.g., Acme Corp - Enterprise License"
+              register={register('name', {
                 required: 'Opportunity name is required',
               })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-              placeholder="e.g., Acme Corp - Enterprise License"
-            />
-            {errors.name && (
-              <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>
-            )}
-          </div>
-
-          <div>
-            <label
-              htmlFor="value"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Value *
-            </label>
-            <div className="mt-1 relative rounded-md shadow-sm">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <span className="text-gray-500 sm:text-sm">$</span>
-              </div>
-              <input
-                type="number"
-                id="value"
-                {...register('value', {
-                  required: 'Value is required',
-                  min: { value: 0, message: 'Value must be positive' },
-                })}
-                className="pl-7 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                placeholder="0.00"
-              />
-            </div>
-            {errors.value && (
-              <p className="mt-1 text-sm text-red-600">{errors.value.message}</p>
-            )}
-          </div>
-
-          <div>
-            <label
-              htmlFor="expectedCloseDate"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Expected Close Date
-            </label>
-            <input
-              type="date"
-              id="expectedCloseDate"
-              {...register('expectedCloseDate')}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+              error={errors.name?.message}
             />
           </div>
+
+          <FormInput
+            label="Value"
+            name="value"
+            type="number"
+            required
+            placeholder="0.00"
+            register={register('value', {
+              required: 'Value is required',
+              min: { value: 0, message: 'Value must be positive' },
+            })}
+            error={errors.value?.message}
+          />
+
+          <FormInput
+            label="Expected Close Date"
+            name="expectedCloseDate"
+            type="date"
+            register={register('expectedCloseDate')}
+          />
         </div>
       </div>
 
@@ -150,59 +121,30 @@ export function OpportunityForm({
       <div className="bg-white shadow rounded-lg p-6">
         <h3 className="text-lg font-medium text-gray-900 mb-4">Pipeline Stage</h3>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-          <div>
-            <label
-              htmlFor="stage"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Stage *
-            </label>
-            <select
-              id="stage"
-              {...register('stage', {
-                required: 'Stage is required',
-              })}
-              onChange={(e) => {
-                register('stage').onChange(e);
-                handleStageChange(e);
-              }}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-            >
-              {opportunityStages.map((stage) => (
-                <option key={stage.value} value={stage.value}>
-                  {stage.label}
-                </option>
-              ))}
-            </select>
-            {errors.stage && (
-              <p className="mt-1 text-sm text-red-600">{errors.stage.message}</p>
-            )}
-          </div>
+          <FormSelect
+            label="Stage"
+            name="stage"
+            required
+            options={opportunityStages.map(s => ({ value: s.value, label: s.label }))}
+            register={register('stage', {
+              required: 'Stage is required',
+              onChange: handleStageChange,
+            })}
+            error={errors.stage?.message}
+          />
 
-          <div>
-            <label
-              htmlFor="probability"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Win Probability (%)
-            </label>
-            <input
-              type="number"
-              id="probability"
-              min="0"
-              max="100"
-              {...register('probability', {
-                min: { value: 0, message: 'Probability must be at least 0' },
-                max: { value: 100, message: 'Probability cannot exceed 100' },
-              })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-            />
-            {errors.probability && (
-              <p className="mt-1 text-sm text-red-600">
-                {errors.probability.message}
-              </p>
-            )}
-          </div>
+          <FormInput
+            label="Win Probability (%)"
+            name="probability"
+            type="number"
+            min={0}
+            max={100}
+            register={register('probability', {
+              min: { value: 0, message: 'Probability must be at least 0' },
+              max: { value: 100, message: 'Probability cannot exceed 100' },
+            })}
+            error={errors.probability?.message}
+          />
         </div>
 
         {/* Visual Stage Indicator */}
@@ -241,47 +183,21 @@ export function OpportunityForm({
           Related Records
         </h3>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-          <div>
-            <label
-              htmlFor="contactId"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Primary Contact
-            </label>
-            <select
-              id="contactId"
-              {...register('contactId')}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-            >
-              <option value="">Select a contact</option>
-              {contacts.map((contact) => (
-                <option key={contact.id} value={contact.id}>
-                  {contact.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <FormSelect
+            label="Primary Contact"
+            name="contactId"
+            placeholder="Select a contact"
+            options={contacts.map((contact) => ({ value: contact.id, label: contact.name }))}
+            register={register('contactId')}
+          />
 
-          <div>
-            <label
-              htmlFor="companyId"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Company
-            </label>
-            <select
-              id="companyId"
-              {...register('companyId')}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-            >
-              <option value="">Select a company</option>
-              {companies.map((company) => (
-                <option key={company.id} value={company.id}>
-                  {company.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <FormSelect
+            label="Company"
+            name="companyId"
+            placeholder="Select a company"
+            options={companies.map((company) => ({ value: company.id, label: company.name }))}
+            register={register('companyId')}
+          />
         </div>
       </div>
 
@@ -291,37 +207,21 @@ export function OpportunityForm({
           Description & Notes
         </h3>
         <div className="space-y-4">
-          <div>
-            <label
-              htmlFor="description"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Description
-            </label>
-            <textarea
-              id="description"
-              rows={3}
-              {...register('description')}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-              placeholder="Describe the opportunity..."
-            />
-          </div>
+          <FormTextarea
+            label="Description"
+            name="description"
+            rows={3}
+            placeholder="Describe the opportunity..."
+            register={register('description')}
+          />
 
-          <div>
-            <label
-              htmlFor="notes"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Internal Notes
-            </label>
-            <textarea
-              id="notes"
-              rows={3}
-              {...register('notes')}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-              placeholder="Add any internal notes..."
-            />
-          </div>
+          <FormTextarea
+            label="Internal Notes"
+            name="notes"
+            rows={3}
+            placeholder="Add any internal notes..."
+            register={register('notes')}
+          />
         </div>
       </div>
 

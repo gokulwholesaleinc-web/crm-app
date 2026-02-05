@@ -3,6 +3,7 @@
 from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel, EmailStr, ConfigDict
+from src.core.schemas import TagBrief
 
 
 class LeadSourceBase(BaseModel):
@@ -76,14 +77,6 @@ class LeadUpdate(BaseModel):
     budget_currency: Optional[str] = None
     owner_id: Optional[int] = None
     tag_ids: Optional[List[int]] = None
-
-
-class TagBrief(BaseModel):
-    id: int
-    name: str
-    color: Optional[str] = None
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 class LeadResponse(LeadBase):

@@ -4,6 +4,7 @@ from typing import Dict, Any, List
 from datetime import datetime, timedelta
 from sqlalchemy import select, func, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
+from src.core.constants import ErrorMessages, EntityNames
 from src.leads.models import Lead
 from src.opportunities.models import Opportunity, PipelineStage
 from src.activities.models import Activity
@@ -204,7 +205,7 @@ class RecommendationEngine:
         lead = result.scalar_one_or_none()
 
         if not lead:
-            return {"error": "Lead not found"}
+            return {"error": ErrorMessages.not_found(EntityNames.LEAD)}
 
         # Check last activity
         last_activity = await self.db.execute(
@@ -255,7 +256,7 @@ class RecommendationEngine:
         opp = result.scalar_one_or_none()
 
         if not opp:
-            return {"error": "Opportunity not found"}
+            return {"error": ErrorMessages.not_found(EntityNames.OPPORTUNITY)}
 
         stage = opp.pipeline_stage
 

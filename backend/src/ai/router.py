@@ -1,11 +1,9 @@
 """AI Assistant API routes."""
 
-from typing import Annotated, Optional, List
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from src.database import get_db
-from src.auth.models import User
-from src.auth.dependencies import get_current_active_user
+from typing import Optional
+from fastapi import APIRouter, Query
+from src.core.constants import HTTPStatus
+from src.core.router_utils import DBSession, CurrentUser, raise_not_found
 from src.ai.schemas import (
     ChatRequest,
     ChatResponse,
@@ -28,8 +26,8 @@ router = APIRouter(prefix="/api/ai", tags=["ai"])
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     request: ChatRequest,
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Chat with the AI assistant using natural language."""
     processor = QueryProcessor(db)
@@ -46,18 +44,15 @@ async def chat(
 @router.get("/insights/lead/{lead_id}", response_model=InsightResponse)
 async def get_lead_insights(
     lead_id: int,
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Get AI-powered insights for a lead."""
     generator = InsightsGenerator(db)
     result = await generator.get_lead_insights(lead_id)
 
     if "error" in result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=result["error"],
-        )
+        raise_not_found(result["error"])
 
     return InsightResponse(
         lead_data=result.get("lead_data"),
@@ -68,18 +63,15 @@ async def get_lead_insights(
 @router.get("/insights/opportunity/{opportunity_id}", response_model=InsightResponse)
 async def get_opportunity_insights(
     opportunity_id: int,
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Get AI-powered insights for an opportunity."""
     generator = InsightsGenerator(db)
     result = await generator.get_opportunity_insights(opportunity_id)
 
     if "error" in result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=result["error"],
-        )
+        raise_not_found(result["error"])
 
     return InsightResponse(
         opportunity_data=result.get("opportunity_data"),
@@ -89,8 +81,8 @@ async def get_opportunity_insights(
 
 @router.get("/summary/daily", response_model=DailySummaryResponse)
 async def get_daily_summary(
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Get AI-generated daily summary."""
     generator = InsightsGenerator(db)
@@ -104,8 +96,8 @@ async def get_daily_summary(
 
 @router.get("/recommendations", response_model=RecommendationsResponse)
 async def get_recommendations(
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Get prioritized action recommendations."""
     engine = RecommendationEngine(db)
@@ -120,18 +112,15 @@ async def get_recommendations(
 async def get_next_best_action(
     entity_type: str,
     entity_id: int,
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Get the recommended next action for an entity."""
     engine = RecommendationEngine(db)
     result = await engine.get_next_best_action(entity_type, entity_id)
 
     if "error" in result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=result["error"],
-        )
+        raise_not_found(result["error"])
 
     return NextBestAction(**result)
 
@@ -139,8 +128,8 @@ async def get_next_best_action(
 @router.get("/search", response_model=SearchResponse)
 async def semantic_search(
     query: str,
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
     entity_types: Optional[str] = None,
     limit: int = Query(5, ge=1, le=20),
 ):

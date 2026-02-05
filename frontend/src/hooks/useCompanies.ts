@@ -1,85 +1,72 @@
 /**
- * Companies hooks using TanStack Query
+ * Companies hooks using the entity CRUD factory pattern.
+ * Uses TanStack Query for data fetching and caching.
  */
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
+import { createEntityHooks, createQueryKeys } from './useEntityCRUD';
 import { companiesApi } from '../api/companies';
-import type { CompanyCreate, CompanyUpdate, CompanyFilters } from '../types';
+import type { Company, CompanyCreate, CompanyUpdate, CompanyFilters } from '../types';
 
-// Query keys
-export const companyKeys = {
-  all: ['companies'] as const,
-  lists: () => [...companyKeys.all, 'list'] as const,
-  list: (filters?: CompanyFilters) => [...companyKeys.lists(), filters] as const,
-  details: () => [...companyKeys.all, 'detail'] as const,
-  detail: (id: number) => [...companyKeys.details(), id] as const,
-};
+// =============================================================================
+// Query Keys
+// =============================================================================
+
+export const companyKeys = createQueryKeys('companies');
+
+// =============================================================================
+// Entity CRUD Hooks using Factory Pattern
+// =============================================================================
+
+const companyEntityHooks = createEntityHooks<
+  Company,
+  CompanyCreate,
+  CompanyUpdate,
+  CompanyFilters
+>({
+  entityName: 'companies',
+  baseUrl: '/api/companies',
+  queryKey: 'companies',
+});
 
 /**
  * Hook to fetch a paginated list of companies
  */
 export function useCompanies(filters?: CompanyFilters) {
-  return useQuery({
-    queryKey: companyKeys.list(filters),
-    queryFn: () => companiesApi.list(filters),
-  });
+  return companyEntityHooks.useList(filters);
 }
 
 /**
  * Hook to fetch a single company by ID
  */
 export function useCompany(id: number | undefined) {
-  return useQuery({
-    queryKey: companyKeys.detail(id!),
-    queryFn: () => companiesApi.get(id!),
-    enabled: !!id,
-  });
+  return companyEntityHooks.useOne(id);
 }
 
 /**
  * Hook to create a new company
  */
 export function useCreateCompany() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (data: CompanyCreate) => companiesApi.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: companyKeys.lists() });
-    },
-  });
+  return companyEntityHooks.useCreate();
 }
 
 /**
  * Hook to update a company
  */
 export function useUpdateCompany() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({ id, data }: { id: number; data: CompanyUpdate }) =>
-      companiesApi.update(id, data),
-    onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: companyKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: companyKeys.detail(id) });
-    },
-  });
+  return companyEntityHooks.useUpdate();
 }
 
 /**
  * Hook to delete a company
  */
 export function useDeleteCompany() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (id: number) => companiesApi.delete(id),
-    onSuccess: (_, id) => {
-      queryClient.invalidateQueries({ queryKey: companyKeys.lists() });
-      queryClient.removeQueries({ queryKey: companyKeys.detail(id) });
-    },
-  });
+  return companyEntityHooks.useDelete();
 }
+
+// =============================================================================
+// Additional Specialized Hooks
+// =============================================================================
 
 /**
  * Hook to search companies by name

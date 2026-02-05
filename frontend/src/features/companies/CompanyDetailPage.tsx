@@ -4,7 +4,6 @@
 
 import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { format } from 'date-fns';
 import clsx from 'clsx';
 import {
   ArrowLeftIcon,
@@ -16,39 +15,13 @@ import {
   UsersIcon,
   LinkIcon,
 } from '@heroicons/react/24/outline';
-import { Button } from '../../components/ui/Button';
-import { Spinner } from '../../components/ui/Spinner';
+import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { CompanyForm } from './components/CompanyForm';
 import { useCompany, useUpdateCompany, useDeleteCompany } from '../../hooks/useCompanies';
 import { useContacts } from '../../hooks/useContacts';
+import { getStatusColor, formatStatusLabel } from '../../utils/statusColors';
+import { formatCurrency, formatDate } from '../../utils/formatters';
 import type { CompanyUpdate, Contact } from '../../types';
-
-const defaultCompanyStatusColor = { bg: 'bg-blue-100', text: 'text-blue-700', dot: 'bg-blue-400' };
-
-const statusColors: Record<string, { bg: string; text: string; dot: string }> = {
-  prospect: defaultCompanyStatusColor,
-  customer: { bg: 'bg-green-100', text: 'text-green-700', dot: 'bg-green-400' },
-  churned: { bg: 'bg-gray-100', text: 'text-gray-700', dot: 'bg-gray-400' },
-};
-
-function formatCurrency(amount: number | null | undefined): string {
-  if (amount === null || amount === undefined) return '-';
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
-
-function formatDate(date: string | null | undefined): string {
-  if (!date) return '-';
-  try {
-    return format(new Date(date), 'MMM d, yyyy');
-  } catch {
-    return date;
-  }
-}
 
 function DetailItem({
   icon: Icon,
@@ -127,6 +100,7 @@ export function CompanyDetailPage() {
   const companyId = id ? parseInt(id, 10) : undefined;
 
   const [showEditForm, setShowEditForm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Fetch company data
   const { data: company, isLoading: isLoadingCompany } = useCompany(companyId);
@@ -141,9 +115,8 @@ export function CompanyDetailPage() {
   const updateCompany = useUpdateCompany();
   const deleteCompany = useDeleteCompany();
 
-  const handleDelete = async () => {
+  const handleDeleteConfirm = async () => {
     if (!companyId) return;
-    if (!window.confirm('Are you sure you want to delete this company?')) return;
     try {
       await deleteCompany.mutateAsync(companyId);
       navigate('/companies');
@@ -181,7 +154,7 @@ export function CompanyDetailPage() {
     );
   }
 
-  const statusStyle = statusColors[company.status] ?? defaultCompanyStatusColor;
+  const statusStyle = getStatusColor(company.status, 'company');
   const contacts = contactsData?.items || [];
 
   const fullAddress = [
@@ -226,8 +199,7 @@ export function CompanyDetailPage() {
                   statusStyle.text
                 )}
               >
-                <span className={clsx('h-1.5 w-1.5 rounded-full', statusStyle.dot)} />
-                {company.status.charAt(0).toUpperCase() + company.status.slice(1)}
+                {formatStatusLabel(company.status)}
               </span>
               {company.industry && (
                 <span className="text-sm text-gray-500 capitalize">{company.industry}</span>
@@ -239,7 +211,7 @@ export function CompanyDetailPage() {
           <Button variant="secondary" onClick={() => setShowEditForm(true)}>
             Edit
           </Button>
-          <Button variant="danger" onClick={handleDelete}>
+          <Button variant="danger" onClick={() => setShowDeleteConfirm(true)}>
             Delete
           </Button>
         </div>
@@ -265,7 +237,7 @@ export function CompanyDetailPage() {
               <Button
                 size="sm"
                 variant="secondary"
-                onClick={() => navigate(`/contacts/new?company_id=${companyId}`)}
+                onClick={() => navigate(`/contacts?company_id=${companyId}&action=new`)}
               >
                 Add Contact
               </Button>
@@ -405,11 +377,11 @@ export function CompanyDetailPage() {
             <div className="space-y-2 text-sm">
               <div className="flex items-center justify-between">
                 <span className="text-gray-500">Created</span>
-                <span className="text-gray-900">{formatDate(company.created_at)}</span>
+                <span className="text-gray-900">{formatDate(company.created_at, 'long')}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-500">Last Updated</span>
-                <span className="text-gray-900">{formatDate(company.updated_at)}</span>
+                <span className="text-gray-900">{formatDate(company.updated_at, 'long')}</span>
               </div>
             </div>
           </div>
@@ -417,25 +389,32 @@ export function CompanyDetailPage() {
       </div>
 
       {/* Edit Form Modal */}
-      {showEditForm && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex min-h-screen items-center justify-center p-4">
-            <div
-              className="fixed inset-0 bg-black bg-opacity-25"
-              onClick={() => setShowEditForm(false)}
-            />
-            <div className="relative bg-white rounded-lg shadow-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Edit Company</h2>
-              <CompanyForm
-                company={company}
-                onSubmit={handleFormSubmit}
-                onCancel={() => setShowEditForm(false)}
-                isLoading={updateCompany.isPending}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal
+        isOpen={showEditForm}
+        onClose={() => setShowEditForm(false)}
+        title="Edit Company"
+        size="lg"
+      >
+        <CompanyForm
+          company={company}
+          onSubmit={handleFormSubmit}
+          onCancel={() => setShowEditForm(false)}
+          isLoading={updateCompany.isPending}
+        />
+      </Modal>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Company"
+        message={`Are you sure you want to delete ${company.name}? This action cannot be undone.`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+        isLoading={deleteCompany.isPending}
+      />
     </div>
   );
 }

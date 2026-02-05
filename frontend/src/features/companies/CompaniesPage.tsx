@@ -13,10 +13,7 @@ import {
   GlobeAltIcon,
   UsersIcon,
 } from '@heroicons/react/24/outline';
-import { Button } from '../../components/ui/Button';
-import { Input } from '../../components/ui/Input';
-import { Select } from '../../components/ui/Select';
-import { Spinner } from '../../components/ui/Spinner';
+import { Button, Input, Select, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { CompanyForm } from './components/CompanyForm';
 import {
   useCompanies,
@@ -24,15 +21,9 @@ import {
   useUpdateCompany,
   useDeleteCompany,
 } from '../../hooks/useCompanies';
+import { getStatusColor, formatStatusLabel } from '../../utils/statusColors';
+import { formatCurrency } from '../../utils/formatters';
 import type { Company, CompanyCreate, CompanyUpdate, CompanyFilters } from '../../types';
-
-const defaultCompanyStatusColor = { bg: 'bg-blue-100', text: 'text-blue-700', dot: 'bg-blue-400' };
-
-const statusColors: Record<string, { bg: string; text: string; dot: string }> = {
-  prospect: defaultCompanyStatusColor,
-  customer: { bg: 'bg-green-100', text: 'text-green-700', dot: 'bg-green-400' },
-  churned: { bg: 'bg-gray-100', text: 'text-gray-700', dot: 'bg-gray-400' },
-};
 
 const statusOptions = [
   { value: '', label: 'All Status' },
@@ -55,17 +46,6 @@ const industryOptions = [
   { value: 'other', label: 'Other' },
 ];
 
-function formatCurrency(amount: number | null | undefined): string {
-  if (amount === null || amount === undefined) return '-';
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-    notation: 'compact',
-  }).format(amount);
-}
-
 function CompanyCard({
   company,
   onClick,
@@ -77,7 +57,7 @@ function CompanyCard({
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const statusStyle = statusColors[company.status] ?? defaultCompanyStatusColor;
+  const statusStyle = getStatusColor(company.status, 'company');
 
   return (
     <div
@@ -147,8 +127,7 @@ function CompanyCard({
                 statusStyle.text
               )}
             >
-              <span className={clsx('h-1.5 w-1.5 rounded-full', statusStyle.dot)} />
-              {company.status.charAt(0).toUpperCase() + company.status.slice(1)}
+              {formatStatusLabel(company.status)}
             </span>
             {company.industry && (
               <span className="text-xs text-gray-500 capitalize">{company.industry}</span>
@@ -216,6 +195,10 @@ export function CompaniesPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
+  const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; company: Company | null }>({
+    isOpen: false,
+    company: null,
+  });
 
   // Get filter values from URL params
   const filters: CompanyFilters = useMemo(
@@ -255,13 +238,22 @@ export function CompaniesPage() {
     updateFilter('search', searchQuery);
   };
 
-  const handleDelete = async (id: number) => {
-    if (!window.confirm('Are you sure you want to delete this company?')) return;
+  const handleDeleteClick = (company: Company) => {
+    setDeleteConfirm({ isOpen: true, company });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirm.company) return;
     try {
-      await deleteCompany.mutateAsync(id);
+      await deleteCompany.mutateAsync(deleteConfirm.company.id);
+      setDeleteConfirm({ isOpen: false, company: null });
     } catch (error) {
       console.error('Failed to delete company:', error);
     }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteConfirm({ isOpen: false, company: null });
   };
 
   const handleEdit = (company: Company) => {
@@ -379,7 +371,7 @@ export function CompaniesPage() {
                 company={company}
                 onClick={() => navigate(`/companies/${company.id}`)}
                 onEdit={() => handleEdit(company)}
-                onDelete={() => handleDelete(company.id)}
+                onDelete={() => handleDeleteClick(company)}
               />
             ))}
           </div>
@@ -412,27 +404,32 @@ export function CompaniesPage() {
       )}
 
       {/* Form Modal */}
-      {showForm && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex min-h-screen items-center justify-center p-4">
-            <div
-              className="fixed inset-0 bg-black bg-opacity-25"
-              onClick={handleFormCancel}
-            />
-            <div className="relative bg-white rounded-lg shadow-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                {editingCompany ? 'Edit Company' : 'Add Company'}
-              </h2>
-              <CompanyForm
-                company={editingCompany || undefined}
-                onSubmit={handleFormSubmit}
-                onCancel={handleFormCancel}
-                isLoading={createCompany.isPending || updateCompany.isPending}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal
+        isOpen={showForm}
+        onClose={handleFormCancel}
+        title={editingCompany ? 'Edit Company' : 'Add Company'}
+        size="lg"
+      >
+        <CompanyForm
+          company={editingCompany || undefined}
+          onSubmit={handleFormSubmit}
+          onCancel={handleFormCancel}
+          isLoading={createCompany.isPending || updateCompany.isPending}
+        />
+      </Modal>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteConfirm.isOpen}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Company"
+        message={`Are you sure you want to delete ${deleteConfirm.company?.name}? This action cannot be undone.`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+        isLoading={deleteCompany.isPending}
+      />
     </div>
   );
 }

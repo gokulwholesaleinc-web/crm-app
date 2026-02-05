@@ -1,86 +1,64 @@
 /**
- * Campaigns hooks using TanStack Query
+ * Campaigns hooks using the entity CRUD factory pattern.
+ * Uses TanStack Query for data fetching and caching.
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { createEntityHooks, createQueryKeys } from './useEntityCRUD';
 import { campaignsApi } from '../api/campaigns';
 import type {
+  Campaign,
   CampaignCreate,
   CampaignUpdate,
   CampaignFilters,
   AddMembersRequest,
 } from '../types';
 
-// Query keys
+// =============================================================================
+// Query Keys
+// =============================================================================
+
 export const campaignKeys = {
-  all: ['campaigns'] as const,
-  lists: () => [...campaignKeys.all, 'list'] as const,
-  list: (filters?: CampaignFilters) => [...campaignKeys.lists(), filters] as const,
-  details: () => [...campaignKeys.all, 'detail'] as const,
-  detail: (id: number) => [...campaignKeys.details(), id] as const,
-  stats: (id: number) => [...campaignKeys.all, 'stats', id] as const,
+  ...createQueryKeys('campaigns'),
+  stats: (id: number) => ['campaigns', 'stats', id] as const,
   members: (id: number, params?: { page?: number; page_size?: number; status?: string }) =>
-    [...campaignKeys.all, 'members', id, params] as const,
+    ['campaigns', 'members', id, params] as const,
 };
+
+// =============================================================================
+// Entity CRUD Hooks using Factory Pattern
+// =============================================================================
+
+const campaignEntityHooks = createEntityHooks<
+  Campaign,
+  CampaignCreate,
+  CampaignUpdate,
+  CampaignFilters
+>({
+  entityName: 'campaigns',
+  baseUrl: '/api/campaigns',
+  queryKey: 'campaigns',
+});
 
 /**
  * Hook to fetch a paginated list of campaigns
  */
 export function useCampaigns(filters?: CampaignFilters) {
-  return useQuery({
-    queryKey: campaignKeys.list(filters),
-    queryFn: () => campaignsApi.list(filters),
-  });
+  return campaignEntityHooks.useList(filters);
 }
 
 /**
  * Hook to fetch a single campaign by ID
  */
 export function useCampaign(id: number | undefined) {
-  return useQuery({
-    queryKey: campaignKeys.detail(id!),
-    queryFn: () => campaignsApi.get(id!),
-    enabled: !!id,
-  });
-}
-
-/**
- * Hook to fetch campaign stats
- */
-export function useCampaignStats(id: number | undefined) {
-  return useQuery({
-    queryKey: campaignKeys.stats(id!),
-    queryFn: () => campaignsApi.getStats(id!),
-    enabled: !!id,
-  });
-}
-
-/**
- * Hook to fetch campaign members
- */
-export function useCampaignMembers(
-  id: number | undefined,
-  params?: { page?: number; page_size?: number; status?: string }
-) {
-  return useQuery({
-    queryKey: campaignKeys.members(id!, params),
-    queryFn: () => campaignsApi.getMembers(id!, params),
-    enabled: !!id,
-  });
+  return campaignEntityHooks.useOne(id);
 }
 
 /**
  * Hook to create a new campaign
  */
 export function useCreateCampaign() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (data: CampaignCreate) => campaignsApi.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: campaignKeys.lists() });
-    },
-  });
+  return campaignEntityHooks.useCreate();
 }
 
 /**
@@ -104,13 +82,35 @@ export function useUpdateCampaign() {
  * Hook to delete a campaign
  */
 export function useDeleteCampaign() {
-  const queryClient = useQueryClient();
+  return campaignEntityHooks.useDelete();
+}
 
-  return useMutation({
-    mutationFn: (id: number) => campaignsApi.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: campaignKeys.lists() });
-    },
+// =============================================================================
+// Campaign Stats and Members Hooks
+// =============================================================================
+
+/**
+ * Hook to fetch campaign stats
+ */
+export function useCampaignStats(id: number | undefined) {
+  return useQuery({
+    queryKey: campaignKeys.stats(id!),
+    queryFn: () => campaignsApi.getStats(id!),
+    enabled: !!id,
+  });
+}
+
+/**
+ * Hook to fetch campaign members
+ */
+export function useCampaignMembers(
+  id: number | undefined,
+  params?: { page?: number; page_size?: number; status?: string }
+) {
+  return useQuery({
+    queryKey: campaignKeys.members(id!, params),
+    queryFn: () => campaignsApi.getMembers(id!, params),
+    enabled: !!id,
   });
 }
 

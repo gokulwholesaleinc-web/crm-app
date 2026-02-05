@@ -1,20 +1,23 @@
 /**
  * Private route wrapper component.
  * Checks authentication status and redirects to login if not authenticated.
+ * Wraps content in Layout component for consistent navigation.
  */
 
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 
 import { useAuthStore } from '../store/authStore';
 import { Spinner } from '../components/ui/Spinner';
+import { Layout } from '../components/layout/Layout';
 
 interface PrivateRouteProps {
   children: React.ReactNode;
 }
 
 export function PrivateRoute({ children }: PrivateRouteProps) {
-  const { isAuthenticated, isLoading } = useAuthStore();
+  const { isAuthenticated, isLoading, user, logout } = useAuthStore();
   const location = useLocation();
+  const navigate = useNavigate();
 
   // Show loading spinner while checking auth state
   if (isLoading) {
@@ -31,7 +34,27 @@ export function PrivateRoute({ children }: PrivateRouteProps) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  return <>{children}</>;
+  // Handle logout
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
+  // Transform user data for Layout component
+  const layoutUser = user
+    ? {
+        id: String(user.id),
+        name: user.full_name,
+        email: user.email,
+        avatar: user.avatar_url,
+      }
+    : undefined;
+
+  return (
+    <Layout user={layoutUser} onLogout={handleLogout}>
+      {children}
+    </Layout>
+  );
 }
 
 export default PrivateRoute;

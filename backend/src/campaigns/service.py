@@ -1,8 +1,7 @@
 """Campaign service layer."""
 
 from typing import Optional, List, Tuple, Dict
-from sqlalchemy import select, func, or_
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
 from src.campaigns.models import Campaign, CampaignMember
 from src.campaigns.schemas import (
     CampaignCreate,
@@ -10,23 +9,22 @@ from src.campaigns.schemas import (
     CampaignMemberCreate,
     CampaignMemberUpdate,
 )
+from src.core.base_service import CRUDService, BaseService
+from src.core.constants import DEFAULT_PAGE_SIZE
 
 
-class CampaignService:
-    def __init__(self, db: AsyncSession):
-        self.db = db
+class CampaignService(CRUDService[Campaign, CampaignCreate, CampaignUpdate]):
+    """Service for Campaign CRUD operations."""
 
-    async def get_by_id(self, campaign_id: int) -> Optional[Campaign]:
-        """Get campaign by ID."""
-        result = await self.db.execute(
-            select(Campaign).where(Campaign.id == campaign_id)
-        )
-        return result.scalar_one_or_none()
+    model = Campaign
+    # Campaigns don't have tag_ids in their schemas
+    create_exclude_fields: set = set()
+    update_exclude_fields: set = set()
 
     async def get_list(
         self,
         page: int = 1,
-        page_size: int = 20,
+        page_size: int = DEFAULT_PAGE_SIZE,
         search: Optional[str] = None,
         campaign_type: Optional[str] = None,
         status: Optional[str] = None,
@@ -58,29 +56,6 @@ class CampaignService:
         campaigns = list(result.scalars().all())
 
         return campaigns, total
-
-    async def create(self, data: CampaignCreate, user_id: int) -> Campaign:
-        """Create a new campaign."""
-        campaign = Campaign(**data.model_dump(), created_by_id=user_id)
-        self.db.add(campaign)
-        await self.db.flush()
-        await self.db.refresh(campaign)
-        return campaign
-
-    async def update(self, campaign: Campaign, data: CampaignUpdate, user_id: int) -> Campaign:
-        """Update a campaign."""
-        update_data = data.model_dump(exclude_unset=True)
-        for field, value in update_data.items():
-            setattr(campaign, field, value)
-        campaign.updated_by_id = user_id
-        await self.db.flush()
-        await self.db.refresh(campaign)
-        return campaign
-
-    async def delete(self, campaign: Campaign) -> None:
-        """Delete a campaign and its members."""
-        await self.db.delete(campaign)
-        await self.db.flush()
 
     async def get_campaign_stats(self, campaign_id: int) -> Dict:
         """Get campaign statistics."""
@@ -120,16 +95,10 @@ class CampaignService:
         }
 
 
-class CampaignMemberService:
-    def __init__(self, db: AsyncSession):
-        self.db = db
+class CampaignMemberService(BaseService[CampaignMember]):
+    """Service for CampaignMember operations."""
 
-    async def get_by_id(self, member_id: int) -> Optional[CampaignMember]:
-        """Get campaign member by ID."""
-        result = await self.db.execute(
-            select(CampaignMember).where(CampaignMember.id == member_id)
-        )
-        return result.scalar_one_or_none()
+    model = CampaignMember
 
     async def get_campaign_members(
         self,

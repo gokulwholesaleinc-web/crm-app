@@ -1,33 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Button } from '../../components/ui/Button';
-import { Spinner } from '../../components/ui/Spinner';
+import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { ConvertLeadModal } from './components/ConvertLeadModal';
+import { LeadForm, LeadFormData } from './components/LeadForm';
+import { getStatusBadgeClasses, formatStatusLabel } from '../../utils';
+import { formatDate, formatPhoneNumber } from '../../utils/formatters';
+import { useLead, useDeleteLead, useConvertLead, useUpdateLead } from '../../hooks';
+import type { LeadUpdate } from '../../types';
 import clsx from 'clsx';
-
-interface Lead {
-  id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone?: string;
-  company?: string;
-  jobTitle?: string;
-  source: string;
-  status: string;
-  score: number;
-  notes?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-const statusColors: Record<string, string> = {
-  new: 'bg-blue-100 text-blue-800',
-  contacted: 'bg-yellow-100 text-yellow-800',
-  qualified: 'bg-green-100 text-green-800',
-  unqualified: 'bg-red-100 text-red-800',
-  nurturing: 'bg-purple-100 text-purple-800',
-};
 
 function getScoreColor(score: number): string {
   if (score >= 80) return 'text-green-600';
@@ -36,57 +16,65 @@ function getScoreColor(score: number): string {
   return 'text-red-600';
 }
 
-export function LeadDetailPage() {
+function LeadDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [lead, setLead] = useState<Lead | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const leadId = id ? parseInt(id, 10) : undefined;
   const [showConvertModal, setShowConvertModal] = useState(false);
+  const [showEditForm, setShowEditForm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  useEffect(() => {
-    const fetchLead = async () => {
-      try {
-        const response = await fetch(`/api/leads/${id}`, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-          },
-        });
+  // Use hooks for data fetching
+  const { data: lead, isLoading, error } = useLead(leadId);
+  const deleteLeadMutation = useDeleteLead();
+  const convertLeadMutation = useConvertLead();
+  const updateLeadMutation = useUpdateLead();
 
-        if (!response.ok) {
-          throw new Error('Failed to fetch lead');
-        }
-
-        const data = await response.json();
-        setLead(data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'An error occurred');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchLead();
-  }, [id]);
-
-  const handleDelete = async () => {
-    if (!confirm('Are you sure you want to delete this lead?')) {
-      return;
+  const handleEditSubmit = async (data: LeadFormData) => {
+    if (!leadId) return;
+    try {
+      const updateData: LeadUpdate = {
+        first_name: data.firstName,
+        last_name: data.lastName,
+        email: data.email,
+        phone: data.phone || undefined,
+        company_name: data.company || undefined,
+        job_title: data.jobTitle || undefined,
+        status: data.status,
+      };
+      await updateLeadMutation.mutateAsync({
+        id: leadId,
+        data: updateData,
+      });
+      setShowEditForm(false);
+    } catch (err) {
+      console.error('Failed to update lead:', err);
     }
+  };
+
+  const getInitialFormData = (): Partial<LeadFormData> | undefined => {
+    if (!lead) return undefined;
+    return {
+      firstName: lead.first_name,
+      lastName: lead.last_name,
+      email: lead.email || '',
+      phone: lead.phone || '',
+      company: lead.company_name || '',
+      jobTitle: lead.job_title || '',
+      status: lead.status,
+      source: lead.source?.name || '',
+      notes: lead.description || '',
+    };
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!leadId) return;
 
     try {
-      const response = await fetch(`/api/leads/${id}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-        },
-      });
-
-      if (response.ok) {
-        navigate('/leads');
-      }
+      await deleteLeadMutation.mutateAsync(leadId);
+      navigate('/leads');
     } catch {
-      setError('Failed to delete lead');
+      // Error handled by mutation
     }
   };
 
@@ -97,27 +85,27 @@ export function LeadDetailPage() {
     opportunityValue?: number;
     opportunityStage?: string;
   }) => {
+    if (!leadId) return;
+
     try {
-      const response = await fetch(`/api/leads/${id}/convert`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
+      // Map stage string to stage ID (using default stage 1 for now)
+      // In a production app, you'd fetch pipeline stages and map properly
+      const stageMapping: Record<string, number> = {
+        qualification: 1,
+        proposal: 2,
+        negotiation: 3,
+        closed_won: 4,
+        closed_lost: 5,
+      };
+      const stageId = data.opportunityStage ? (stageMapping[data.opportunityStage] || 1) : 1;
+
+      const result = await convertLeadMutation.mutateAsync({
+        leadId: leadId,
+        data: {
+          pipeline_stage_id: stageId,
+          create_company: data.createContact,
         },
-        body: JSON.stringify({
-          create_contact: data.createContact,
-          create_opportunity: data.createOpportunity,
-          opportunity_name: data.opportunityName,
-          opportunity_value: data.opportunityValue,
-          opportunity_stage: data.opportunityStage,
-        }),
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to convert lead');
-      }
-
-      const result = await response.json();
 
       // Navigate to the appropriate page based on what was created
       if (result.contact_id) {
@@ -127,9 +115,9 @@ export function LeadDetailPage() {
       } else {
         navigate('/leads');
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to convert lead');
-      throw err;
+    } catch {
+      // Error handled by mutation
+      throw new Error('Failed to convert lead');
     }
   };
 
@@ -141,13 +129,15 @@ export function LeadDetailPage() {
     );
   }
 
-  if (error || !lead) {
+  const errorMessage = error instanceof Error ? error.message : error ? String(error) : null;
+
+  if (errorMessage || !lead) {
     return (
       <div className="rounded-md bg-red-50 p-4">
         <div className="flex">
           <div className="ml-3">
             <h3 className="text-sm font-medium text-red-800">
-              {error || 'Lead not found'}
+              {errorMessage || 'Lead not found'}
             </h3>
             <div className="mt-4">
               <Link to="/leads" className="text-red-600 hover:text-red-500">
@@ -182,11 +172,11 @@ export function LeadDetailPage() {
           </Link>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
-              {lead.firstName} {lead.lastName}
+              {lead.first_name} {lead.last_name}
             </h1>
-            {lead.jobTitle && lead.company && (
+            {lead.job_title && lead.company_name && (
               <p className="text-sm text-gray-500">
-                {lead.jobTitle} at {lead.company}
+                {lead.job_title} at {lead.company_name}
               </p>
             )}
           </div>
@@ -212,11 +202,11 @@ export function LeadDetailPage() {
           )}
           <Button
             variant="secondary"
-            onClick={() => navigate(`/leads/${id}/edit`)}
+            onClick={() => setShowEditForm(true)}
           >
             Edit
           </Button>
-          <Button variant="danger" onClick={handleDelete}>
+          <Button variant="danger" onClick={() => setShowDeleteConfirm(true)} isLoading={deleteLeadMutation.isPending}>
             Delete
           </Button>
         </div>
@@ -302,7 +292,7 @@ export function LeadDetailPage() {
                     href={`tel:${lead.phone}`}
                     className="text-primary-600 hover:text-primary-500"
                   >
-                    {lead.phone}
+                    {formatPhoneNumber(lead.phone)}
                   </a>
                 ) : (
                   '-'
@@ -313,28 +303,22 @@ export function LeadDetailPage() {
             <div>
               <dt className="text-sm font-medium text-gray-500">Company</dt>
               <dd className="mt-1 text-sm text-gray-900">
-                {lead.company || '-'}
+                {lead.company_name || '-'}
               </dd>
             </div>
 
             <div>
               <dt className="text-sm font-medium text-gray-500">Job Title</dt>
               <dd className="mt-1 text-sm text-gray-900">
-                {lead.jobTitle || '-'}
+                {lead.job_title || '-'}
               </dd>
             </div>
 
             <div>
               <dt className="text-sm font-medium text-gray-500">Status</dt>
               <dd className="mt-1">
-                <span
-                  className={clsx(
-                    'px-2 inline-flex text-xs leading-5 font-semibold rounded-full',
-                    statusColors[lead.status] || 'bg-gray-100 text-gray-800'
-                  )}
-                >
-                  {lead.status.charAt(0).toUpperCase() +
-                    lead.status.slice(1).replace('_', ' ')}
+                <span className={getStatusBadgeClasses(lead.status, 'lead')}>
+                  {formatStatusLabel(lead.status)}
                 </span>
               </dd>
             </div>
@@ -342,29 +326,28 @@ export function LeadDetailPage() {
             <div>
               <dt className="text-sm font-medium text-gray-500">Source</dt>
               <dd className="mt-1 text-sm text-gray-900">
-                {lead.source.charAt(0).toUpperCase() +
-                  lead.source.slice(1).replace('_', ' ')}
+                {lead.source?.name ? formatStatusLabel(lead.source.name) : '-'}
               </dd>
             </div>
 
             <div className="sm:col-span-2">
-              <dt className="text-sm font-medium text-gray-500">Notes</dt>
+              <dt className="text-sm font-medium text-gray-500">Description</dt>
               <dd className="mt-1 text-sm text-gray-900">
-                {lead.notes || 'No notes'}
+                {lead.description || 'No description'}
               </dd>
             </div>
 
             <div>
               <dt className="text-sm font-medium text-gray-500">Created</dt>
               <dd className="mt-1 text-sm text-gray-900">
-                {new Date(lead.createdAt).toLocaleDateString()}
+                {formatDate(lead.created_at)}
               </dd>
             </div>
 
             <div>
               <dt className="text-sm font-medium text-gray-500">Last Updated</dt>
               <dd className="mt-1 text-sm text-gray-900">
-                {new Date(lead.updatedAt).toLocaleDateString()}
+                {formatDate(lead.updated_at)}
               </dd>
             </div>
           </dl>
@@ -372,14 +355,44 @@ export function LeadDetailPage() {
       </div>
 
       {/* Convert Lead Modal */}
-      {showConvertModal && (
-        <ConvertLeadModal
-          leadId={lead.id}
-          leadName={`${lead.firstName} ${lead.lastName}`}
-          onClose={() => setShowConvertModal(false)}
-          onConvert={handleConvert}
+      <ConvertLeadModal
+        isOpen={showConvertModal}
+        leadId={String(lead.id)}
+        leadName={`${lead.first_name} ${lead.last_name}`}
+        onClose={() => setShowConvertModal(false)}
+        onConvert={handleConvert}
+      />
+
+      {/* Edit Form Modal */}
+      <Modal
+        isOpen={showEditForm}
+        onClose={() => setShowEditForm(false)}
+        title="Edit Lead"
+        size="lg"
+      >
+        <LeadForm
+          initialData={getInitialFormData()}
+          onSubmit={handleEditSubmit}
+          onCancel={() => setShowEditForm(false)}
+          isLoading={updateLeadMutation.isPending}
+          submitLabel="Update Lead"
         />
-      )}
+      </Modal>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Lead"
+        message={`Are you sure you want to delete ${lead.first_name} ${lead.last_name}? This action cannot be undone.`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+        isLoading={deleteLeadMutation.isPending}
+      />
     </div>
   );
 }
+
+export default LeadDetailPage;

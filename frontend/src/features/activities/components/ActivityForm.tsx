@@ -7,6 +7,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
 import { Select } from '../../../components/ui/Select';
+import { FormTextarea } from '../../../components/forms';
 import type { Activity, ActivityCreate, ActivityUpdate } from '../../../types';
 
 interface ActivityFormProps {
@@ -226,15 +227,13 @@ export function ActivityForm({
         error={errors.subject?.message}
       />
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-        <textarea
-          {...register('description')}
-          rows={3}
-          className="block w-full rounded-lg border border-gray-300 shadow-sm py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-          placeholder="Enter activity description (optional)"
-        />
-      </div>
+      <FormTextarea
+        label="Description"
+        name="description"
+        rows={3}
+        placeholder="Enter activity description (optional)"
+        register={register('description')}
+      />
 
       <div className="grid grid-cols-2 gap-4">
         <Input
@@ -305,12 +304,12 @@ export function ActivityForm({
             placeholder="Enter meeting location or link"
           />
           <div className="mt-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Attendees</label>
-            <textarea
-              {...register('meeting_attendees')}
+            <FormTextarea
+              label="Attendees"
+              name="meeting_attendees"
               rows={2}
-              className="block w-full rounded-lg border border-gray-300 shadow-sm py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               placeholder="Enter attendee names or emails (one per line)"
+              register={register('meeting_attendees')}
             />
           </div>
         </div>

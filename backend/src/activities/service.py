@@ -2,27 +2,25 @@
 
 from datetime import datetime, timezone
 from typing import Optional, List, Tuple
-from sqlalchemy import select, func, or_, and_
-from sqlalchemy.ext.asyncio import AsyncSession
-from src.activities.models import Activity
+from sqlalchemy import select, func, or_
+from src.activities.models import Activity, ActivityType
 from src.activities.schemas import ActivityCreate, ActivityUpdate
+from src.core.base_service import CRUDService
+from src.core.constants import DEFAULT_PAGE_SIZE
 
 
-class ActivityService:
-    def __init__(self, db: AsyncSession):
-        self.db = db
+class ActivityService(CRUDService[Activity, ActivityCreate, ActivityUpdate]):
+    """Service for Activity CRUD operations."""
 
-    async def get_by_id(self, activity_id: int) -> Optional[Activity]:
-        """Get activity by ID."""
-        result = await self.db.execute(
-            select(Activity).where(Activity.id == activity_id)
-        )
-        return result.scalar_one_or_none()
+    model = Activity
+    # Activities don't have tag_ids in their schemas
+    create_exclude_fields: set = set()
+    update_exclude_fields: set = set()
 
     async def get_list(
         self,
         page: int = 1,
-        page_size: int = 20,
+        page_size: int = DEFAULT_PAGE_SIZE,
         entity_type: Optional[str] = None,
         entity_id: Optional[int] = None,
         activity_type: Optional[str] = None,
@@ -81,13 +79,7 @@ class ActivityService:
 
     async def update(self, activity: Activity, data: ActivityUpdate, user_id: int) -> Activity:
         """Update an activity."""
-        update_data = data.model_dump(exclude_unset=True)
-        for field, value in update_data.items():
-            setattr(activity, field, value)
-        activity.updated_by_id = user_id
-        await self.db.flush()
-        await self.db.refresh(activity)
-        return activity
+        return await super().update(activity, data, user_id)
 
     async def complete(self, activity: Activity, user_id: int, notes: Optional[str] = None) -> Activity:
         """Mark an activity as completed."""
@@ -102,11 +94,6 @@ class ActivityService:
         await self.db.flush()
         await self.db.refresh(activity)
         return activity
-
-    async def delete(self, activity: Activity) -> None:
-        """Delete an activity."""
-        await self.db.delete(activity)
-        await self.db.flush()
 
     async def get_entity_activities(
         self,
@@ -133,7 +120,7 @@ class ActivityService:
         """Get tasks assigned to or owned by user."""
         query = (
             select(Activity)
-            .where(Activity.activity_type == "task")
+            .where(Activity.activity_type == ActivityType.TASK.value)
             .where(
                 or_(
                     Activity.owner_id == user_id,

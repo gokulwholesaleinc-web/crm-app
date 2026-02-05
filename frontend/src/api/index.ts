@@ -130,16 +130,26 @@ export {
 } from './ai';
 
 // Aggregated API object for convenience
+import { authApi as _authApi } from './auth';
+import { contactsApi as _contactsApi } from './contacts';
+import { companiesApi as _companiesApi } from './companies';
+import { leadsApi as _leadsApi } from './leads';
+import { opportunitiesApi as _opportunitiesApi } from './opportunities';
+import { activitiesApi as _activitiesApi } from './activities';
+import { campaignsApi as _campaignsApi } from './campaigns';
+import { dashboardApi as _dashboardApi } from './dashboard';
+import { aiApi as _aiApi } from './ai';
+
 export const api = {
-  auth: authApi,
-  contacts: contactsApi,
-  companies: companiesApi,
-  leads: leadsApi,
-  opportunities: opportunitiesApi,
-  activities: activitiesApi,
-  campaigns: campaignsApi,
-  dashboard: dashboardApi,
-  ai: aiApi,
+  auth: _authApi,
+  contacts: _contactsApi,
+  companies: _companiesApi,
+  leads: _leadsApi,
+  opportunities: _opportunitiesApi,
+  activities: _activitiesApi,
+  campaigns: _campaignsApi,
+  dashboard: _dashboardApi,
+  ai: _aiApi,
 };
 
 export default api;

@@ -16,9 +16,7 @@ import {
   ClipboardDocumentCheckIcon,
   DocumentTextIcon,
 } from '@heroicons/react/24/outline';
-import { Button } from '../../components/ui/Button';
-import { Select } from '../../components/ui/Select';
-import { Spinner } from '../../components/ui/Spinner';
+import { Button, Select, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { ActivityCard } from './components/ActivityCard';
 import { ActivityTimeline } from './components/ActivityTimeline';
 import { ActivityForm } from './components/ActivityForm';
@@ -63,6 +61,10 @@ export function ActivitiesPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; activity: Activity | null }>({
+    isOpen: false,
+    activity: null,
+  });
 
   // Get filter values from URL params
   const filters: ActivityFilters = useMemo(
@@ -115,13 +117,22 @@ export function ActivitiesPage() {
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!window.confirm('Are you sure you want to delete this activity?')) return;
+  const handleDeleteClick = (activity: Activity) => {
+    setDeleteConfirm({ isOpen: true, activity });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirm.activity) return;
     try {
-      await deleteActivity.mutateAsync(id);
+      await deleteActivity.mutateAsync(deleteConfirm.activity.id);
+      setDeleteConfirm({ isOpen: false, activity: null });
     } catch (error) {
       console.error('Failed to delete activity:', error);
     }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteConfirm({ isOpen: false, activity: null });
   };
 
   const handleEdit = (activity: Activity) => {
@@ -292,7 +303,10 @@ export function ActivitiesPage() {
                 activity={activity}
                 onComplete={handleComplete}
                 onEdit={() => handleEdit(activity)}
-                onDelete={handleDelete}
+                onDelete={(id) => {
+                  const activity = activities.find((a) => a.id === id);
+                  if (activity) handleDeleteClick(activity);
+                }}
               />
             ))
           )}
@@ -331,29 +345,34 @@ export function ActivitiesPage() {
       )}
 
       {/* Form Modal */}
-      {showForm && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex min-h-screen items-center justify-center p-4">
-            <div
-              className="fixed inset-0 bg-black bg-opacity-25"
-              onClick={handleFormCancel}
-            />
-            <div className="relative bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                {editingActivity ? 'Edit Activity' : 'New Activity'}
-              </h2>
-              <ActivityForm
-                activity={editingActivity || undefined}
-                entityType="user"
-                entityId={0}
-                onSubmit={handleFormSubmit}
-                onCancel={handleFormCancel}
-                isLoading={createActivity.isPending || updateActivity.isPending}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal
+        isOpen={showForm}
+        onClose={handleFormCancel}
+        title={editingActivity ? 'Edit Activity' : 'New Activity'}
+        size="lg"
+      >
+        <ActivityForm
+          activity={editingActivity || undefined}
+          entityType="user"
+          entityId={0}
+          onSubmit={handleFormSubmit}
+          onCancel={handleFormCancel}
+          isLoading={createActivity.isPending || updateActivity.isPending}
+        />
+      </Modal>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteConfirm.isOpen}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Activity"
+        message={`Are you sure you want to delete "${deleteConfirm.activity?.subject}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+        isLoading={deleteActivity.isPending}
+      />
     </div>
   );
 }

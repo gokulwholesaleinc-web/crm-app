@@ -1,12 +1,16 @@
 """Activity API routes."""
 
-from typing import Annotated, Optional, List
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from src.database import get_db
-from src.auth.models import User
-from src.auth.dependencies import get_current_active_user
-from src.activities.models import Activity
+from typing import Optional, List
+from fastapi import APIRouter, Query
+from src.core.constants import HTTPStatus, EntityNames
+from src.core.router_utils import (
+    DBSession,
+    CurrentUser,
+    parse_comma_separated,
+    get_entity_or_404,
+    calculate_pages,
+    check_ownership,
+)
 from src.activities.schemas import (
     ActivityCreate,
     ActivityUpdate,
@@ -24,8 +28,8 @@ router = APIRouter(prefix="/api/activities", tags=["activities"])
 
 @router.get("", response_model=ActivityListResponse)
 async def list_activities(
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     entity_type: Optional[str] = None,
@@ -51,22 +55,20 @@ async def list_activities(
         priority=priority,
     )
 
-    pages = (total + page_size - 1) // page_size
-
     return ActivityListResponse(
         items=[ActivityResponse.model_validate(a) for a in activities],
         total=total,
         page=page,
         page_size=page_size,
-        pages=pages,
+        pages=calculate_pages(total, page_size),
     )
 
 
-@router.post("", response_model=ActivityResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ActivityResponse, status_code=HTTPStatus.CREATED)
 async def create_activity(
     activity_data: ActivityCreate,
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Create a new activity."""
     service = ActivityService(db)
@@ -76,8 +78,8 @@ async def create_activity(
 
 @router.get("/my-tasks", response_model=List[ActivityResponse])
 async def get_my_tasks(
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
     include_completed: bool = False,
     limit: int = Query(50, ge=1, le=100),
 ):
@@ -95,23 +97,19 @@ async def get_my_tasks(
 async def get_entity_timeline(
     entity_type: str,
     entity_id: int,
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
     limit: int = Query(50, ge=1, le=100),
     activity_types: Optional[str] = None,
 ):
     """Get activity timeline for an entity."""
     timeline = ActivityTimeline(db)
 
-    parsed_types = None
-    if activity_types:
-        parsed_types = activity_types.split(",")
-
     items = await timeline.get_entity_timeline(
         entity_type=entity_type,
         entity_id=entity_id,
         limit=limit,
-        activity_types=parsed_types,
+        activity_types=parse_comma_separated(activity_types),
     )
 
     return TimelineResponse(items=[TimelineItem(**item) for item in items])
@@ -119,8 +117,8 @@ async def get_entity_timeline(
 
 @router.get("/timeline/user", response_model=TimelineResponse)
 async def get_user_timeline(
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
     limit: int = Query(50, ge=1, le=100),
     include_assigned: bool = True,
     activity_types: Optional[str] = None,
@@ -128,15 +126,11 @@ async def get_user_timeline(
     """Get activity timeline for current user."""
     timeline = ActivityTimeline(db)
 
-    parsed_types = None
-    if activity_types:
-        parsed_types = activity_types.split(",")
-
     items = await timeline.get_user_timeline(
         user_id=current_user.id,
         limit=limit,
         include_assigned=include_assigned,
-        activity_types=parsed_types,
+        activity_types=parse_comma_separated(activity_types),
     )
 
     return TimelineResponse(items=[TimelineItem(**item) for item in items])
@@ -144,8 +138,8 @@ async def get_user_timeline(
 
 @router.get("/upcoming", response_model=TimelineResponse)
 async def get_upcoming_activities(
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
     days_ahead: int = Query(7, ge=1, le=30),
     limit: int = Query(20, ge=1, le=100),
 ):
@@ -161,8 +155,8 @@ async def get_upcoming_activities(
 
 @router.get("/overdue", response_model=TimelineResponse)
 async def get_overdue_activities(
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
     limit: int = Query(20, ge=1, le=100),
 ):
     """Get overdue tasks."""
@@ -177,19 +171,12 @@ async def get_overdue_activities(
 @router.get("/{activity_id}", response_model=ActivityResponse)
 async def get_activity(
     activity_id: int,
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Get an activity by ID."""
     service = ActivityService(db)
-    activity = await service.get_by_id(activity_id)
-
-    if not activity:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Activity not found",
-        )
-
+    activity = await get_entity_or_404(service, activity_id, EntityNames.ACTIVITY)
     return ActivityResponse.model_validate(activity)
 
 
@@ -197,19 +184,13 @@ async def get_activity(
 async def update_activity(
     activity_id: int,
     activity_data: ActivityUpdate,
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Update an activity."""
     service = ActivityService(db)
-    activity = await service.get_by_id(activity_id)
-
-    if not activity:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Activity not found",
-        )
-
+    activity = await get_entity_or_404(service, activity_id, EntityNames.ACTIVITY)
+    check_ownership(activity, current_user, EntityNames.ACTIVITY)
     updated_activity = await service.update(activity, activity_data, current_user.id)
     return ActivityResponse.model_validate(updated_activity)
 
@@ -218,37 +199,24 @@ async def update_activity(
 async def complete_activity(
     activity_id: int,
     request: CompleteActivityRequest,
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Mark an activity as completed."""
     service = ActivityService(db)
-    activity = await service.get_by_id(activity_id)
-
-    if not activity:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Activity not found",
-        )
-
+    activity = await get_entity_or_404(service, activity_id, EntityNames.ACTIVITY)
     completed_activity = await service.complete(activity, current_user.id, request.notes)
     return ActivityResponse.model_validate(completed_activity)
 
 
-@router.delete("/{activity_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{activity_id}", status_code=HTTPStatus.NO_CONTENT)
 async def delete_activity(
     activity_id: int,
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Delete an activity."""
     service = ActivityService(db)
-    activity = await service.get_by_id(activity_id)
-
-    if not activity:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Activity not found",
-        )
-
+    activity = await get_entity_or_404(service, activity_id, EntityNames.ACTIVITY)
+    check_ownership(activity, current_user, EntityNames.ACTIVITY)
     await service.delete(activity)

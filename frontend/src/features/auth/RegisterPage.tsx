@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
+import { authApi } from '../../api/auth';
 
 interface RegisterFormData {
   firstName: string;
@@ -11,7 +12,7 @@ interface RegisterFormData {
   confirmPassword: string;
 }
 
-export function RegisterPage() {
+function RegisterPage() {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,29 +39,24 @@ export function RegisterPage() {
     setError(null);
 
     try {
-      const response = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          first_name: data.firstName,
-          last_name: data.lastName,
-          email: data.email,
-          password: data.password,
-        }),
+      await authApi.register({
+        email: data.email,
+        password: data.password,
+        full_name: `${data.firstName} ${data.lastName}`.trim(),
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Registration failed');
-      }
 
       navigate('/login', {
         state: { message: 'Registration successful. Please sign in.' },
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      if (err instanceof Error) {
+        setError(err.message);
+      } else if (typeof err === 'object' && err !== null && 'response' in err) {
+        const axiosError = err as { response?: { data?: { detail?: string } } };
+        setError(axiosError.response?.data?.detail || 'Registration failed');
+      } else {
+        setError('An error occurred');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -169,14 +165,6 @@ export function RegisterPage() {
                 autoComplete="new-password"
                 {...register('password', {
                   required: 'Password is required',
-                  minLength: {
-                    value: 8,
-                    message: 'Password must be at least 8 characters',
-                  },
-                  pattern: {
-                    value: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
-                    message: 'Password must contain uppercase, lowercase, and number',
-                  },
                 })}
                 className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
                 placeholder="Create a password"
@@ -218,13 +206,13 @@ export function RegisterPage() {
             />
             <label htmlFor="terms" className="ml-2 block text-sm text-gray-900">
               I agree to the{' '}
-              <a href="#" className="text-primary-600 hover:text-primary-500">
+              <Link to="/terms" className="text-primary-600 hover:text-primary-500">
                 Terms of Service
-              </a>{' '}
+              </Link>{' '}
               and{' '}
-              <a href="#" className="text-primary-600 hover:text-primary-500">
+              <Link to="/privacy" className="text-primary-600 hover:text-primary-500">
                 Privacy Policy
-              </a>
+              </Link>
             </label>
           </div>
 
@@ -238,3 +226,5 @@ export function RegisterPage() {
     </div>
   );
 }
+
+export default RegisterPage;

@@ -245,8 +245,9 @@ export function Pagination({
                 return false;
               })
               .map((page, index, array) => {
+                const prevPage = array[index - 1];
                 const showEllipsis =
-                  index > 0 && page - array[index - 1] > 1;
+                  index > 0 && prevPage !== undefined && page - prevPage > 1;
 
                 return (
                   <Fragment key={page}>

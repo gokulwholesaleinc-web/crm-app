@@ -4,7 +4,6 @@
 
 import { useState, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { format } from 'date-fns';
 import clsx from 'clsx';
 import {
   PlusIcon,
@@ -14,9 +13,7 @@ import {
   UsersIcon,
   CurrencyDollarIcon,
 } from '@heroicons/react/24/outline';
-import { Button } from '../../components/ui/Button';
-import { Select } from '../../components/ui/Select';
-import { Spinner } from '../../components/ui/Spinner';
+import { Button, Select, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { CampaignForm } from './components/CampaignForm';
 import {
   useCampaigns,
@@ -24,16 +21,14 @@ import {
   useUpdateCampaign,
   useDeleteCampaign,
 } from '../../hooks/useCampaigns';
+import {
+  formatCurrency,
+  formatDate,
+  formatPercentage,
+  getStatusColor,
+  formatStatusLabel,
+} from '../../utils';
 import type { Campaign, CampaignCreate, CampaignUpdate, CampaignFilters } from '../../types';
-
-const defaultStatusColor = { bg: 'bg-gray-100', text: 'text-gray-700' };
-
-const statusColors: Record<string, { bg: string; text: string }> = {
-  planned: defaultStatusColor,
-  active: { bg: 'bg-green-100', text: 'text-green-700' },
-  paused: { bg: 'bg-yellow-100', text: 'text-yellow-700' },
-  completed: { bg: 'bg-blue-100', text: 'text-blue-700' },
-};
 
 const typeLabels: Record<string, string> = {
   email: 'Email',
@@ -62,25 +57,6 @@ const typeOptions = [
   { value: 'other', label: 'Other' },
 ];
 
-function formatCurrency(amount: number | null | undefined, currency = 'USD'): string {
-  if (amount === null || amount === undefined) return '-';
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
-
-function formatDate(date: string | null | undefined): string {
-  if (!date) return '-';
-  try {
-    return format(new Date(date), 'MMM d, yyyy');
-  } catch {
-    return date;
-  }
-}
-
 function CampaignCard({
   campaign,
   onClick,
@@ -92,7 +68,7 @@ function CampaignCard({
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const statusStyle = statusColors[campaign.status] ?? defaultStatusColor;
+  const statusStyle = getStatusColor(campaign.status, 'campaign');
 
   return (
     <div
@@ -109,7 +85,7 @@ function CampaignCard({
                 statusStyle.text
               )}
             >
-              {campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
+              {formatStatusLabel(campaign.status)}
             </span>
             <span className="text-xs text-gray-500">
               {typeLabels[campaign.campaign_type] || campaign.campaign_type}
@@ -159,10 +135,10 @@ function CampaignCard({
       {/* Dates */}
       <div className="flex items-center gap-4 mt-4 text-xs text-gray-500">
         {campaign.start_date && (
-          <span>Start: {formatDate(campaign.start_date)}</span>
+          <span>Start: {formatDate(campaign.start_date, 'long')}</span>
         )}
         {campaign.end_date && (
-          <span>End: {formatDate(campaign.end_date)}</span>
+          <span>End: {formatDate(campaign.end_date, 'long')}</span>
         )}
       </div>
 
@@ -187,7 +163,7 @@ function CampaignCard({
             <ChartBarIcon className="h-4 w-4" />
           </div>
           <div className="text-lg font-semibold text-gray-900">
-            {campaign.response_rate ? `${campaign.response_rate.toFixed(1)}%` : '-'}
+            {formatPercentage(campaign.response_rate, 1)}
           </div>
           <div className="text-xs text-gray-500">Response Rate</div>
         </div>
@@ -211,6 +187,10 @@ export function CampaignsPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; campaign: Campaign | null }>({
+    isOpen: false,
+    campaign: null,
+  });
 
   // Get filter values from URL params
   const filters: CampaignFilters = useMemo(
@@ -245,13 +225,22 @@ export function CampaignsPage() {
     setSearchParams(newParams);
   };
 
-  const handleDelete = async (id: number) => {
-    if (!window.confirm('Are you sure you want to delete this campaign?')) return;
+  const handleDeleteClick = (campaign: Campaign) => {
+    setDeleteConfirm({ isOpen: true, campaign });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirm.campaign) return;
     try {
-      await deleteCampaign.mutateAsync(id);
+      await deleteCampaign.mutateAsync(deleteConfirm.campaign.id);
+      setDeleteConfirm({ isOpen: false, campaign: null });
     } catch (error) {
       console.error('Failed to delete campaign:', error);
     }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteConfirm({ isOpen: false, campaign: null });
   };
 
   const handleEdit = (campaign: Campaign) => {
@@ -361,7 +350,7 @@ export function CampaignsPage() {
                 campaign={campaign}
                 onClick={() => navigate(`/campaigns/${campaign.id}`)}
                 onEdit={() => handleEdit(campaign)}
-                onDelete={() => handleDelete(campaign.id)}
+                onDelete={() => handleDeleteClick(campaign)}
               />
             ))}
           </div>
@@ -394,27 +383,32 @@ export function CampaignsPage() {
       )}
 
       {/* Form Modal */}
-      {showForm && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex min-h-screen items-center justify-center p-4">
-            <div
-              className="fixed inset-0 bg-black bg-opacity-25"
-              onClick={handleFormCancel}
-            />
-            <div className="relative bg-white rounded-lg shadow-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                {editingCampaign ? 'Edit Campaign' : 'New Campaign'}
-              </h2>
-              <CampaignForm
-                campaign={editingCampaign || undefined}
-                onSubmit={handleFormSubmit}
-                onCancel={handleFormCancel}
-                isLoading={createCampaign.isPending || updateCampaign.isPending}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal
+        isOpen={showForm}
+        onClose={handleFormCancel}
+        title={editingCampaign ? 'Edit Campaign' : 'New Campaign'}
+        size="lg"
+      >
+        <CampaignForm
+          campaign={editingCampaign || undefined}
+          onSubmit={handleFormSubmit}
+          onCancel={handleFormCancel}
+          isLoading={createCampaign.isPending || updateCampaign.isPending}
+        />
+      </Modal>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteConfirm.isOpen}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Campaign"
+        message={`Are you sure you want to delete "${deleteConfirm.campaign?.name}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+        isLoading={deleteCampaign.isPending}
+      />
     </div>
   );
 }

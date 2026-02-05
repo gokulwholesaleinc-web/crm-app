@@ -1,12 +1,28 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Button } from '../../components/ui/Button';
-import { Spinner } from '../../components/ui/Spinner';
+import { useState } from 'react';
+import { PlusIcon } from '@heroicons/react/24/outline';
+import { Button, Spinner, Modal } from '../../components/ui';
 import {
   KanbanBoard,
   KanbanStage,
 } from './components/KanbanBoard/KanbanBoard';
-import { Opportunity } from './components/KanbanBoard/KanbanCard';
+import { Opportunity as KanbanOpportunity } from './components/KanbanBoard/KanbanCard';
+import { OpportunityForm, OpportunityFormData } from './components/OpportunityForm';
+import {
+  useOpportunities,
+  useMoveOpportunity,
+  usePipelineStages,
+  useCreateOpportunity,
+  useUpdateOpportunity,
+  useContacts,
+  useCompanies,
+} from '../../hooks';
+import {
+  formatCurrency,
+  formatDate,
+  formatPercentage,
+  getStatusBadgeClasses,
+} from '../../utils';
+import type { Opportunity, OpportunityCreate, OpportunityUpdate } from '../../types';
 
 const defaultStages: KanbanStage[] = [
   { id: 'qualification', title: 'Qualification', color: 'blue' },
@@ -17,51 +33,46 @@ const defaultStages: KanbanStage[] = [
   { id: 'closed_lost', title: 'Closed Lost', color: 'red' },
 ];
 
-export function OpportunitiesPage() {
-  const navigate = useNavigate();
-  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+function OpportunitiesPage() {
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
+  const [showForm, setShowForm] = useState(false);
+  const [editingOpportunity, setEditingOpportunity] = useState<Opportunity | null>(null);
 
-  useEffect(() => {
-    fetchOpportunities();
-  }, []);
+  // Use the hooks for data fetching
+  const {
+    data: opportunitiesData,
+    isLoading,
+    error,
+  } = useOpportunities();
 
-  const fetchOpportunities = async () => {
-    setIsLoading(true);
-    setError(null);
+  const { data: pipelineStages } = usePipelineStages();
+  const { data: contactsData } = useContacts({ page_size: 100 });
+  const { data: companiesData } = useCompanies({ page_size: 100 });
 
-    try {
-      const response = await fetch('/api/opportunities', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-        },
-      });
+  const moveOpportunityMutation = useMoveOpportunity();
+  const createOpportunityMutation = useCreateOpportunity();
+  const updateOpportunityMutation = useUpdateOpportunity();
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch opportunities');
-      }
+  // Build stages from pipeline stages or use defaults
+  const stages: KanbanStage[] = pipelineStages
+    ? pipelineStages.map((stage) => ({
+        id: stage.name.toLowerCase().replace(/\s+/g, '_'),
+        title: stage.name,
+        color: stage.color as 'blue' | 'yellow' | 'purple' | 'orange' | 'green' | 'red',
+      }))
+    : defaultStages;
 
-      const data = await response.json();
-      setOpportunities(
-        data.items.map((item: Record<string, unknown>) => ({
-          id: item.id,
-          name: item.name,
-          value: item.value,
-          stage: item.stage,
-          probability: item.probability,
-          expectedCloseDate: item.expected_close_date,
-          contactName: item.contact_name,
-          companyName: item.company_name,
-        }))
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // Transform opportunities to Kanban format
+  const opportunities: KanbanOpportunity[] = (opportunitiesData?.items ?? []).map((item: Opportunity) => ({
+    id: String(item.id),
+    name: item.name,
+    value: item.amount ?? 0,
+    stage: item.pipeline_stage?.name?.toLowerCase().replace(/\s+/g, '_') ?? 'qualification',
+    probability: item.probability ?? 0,
+    expectedCloseDate: item.expected_close_date ?? undefined,
+    contactName: item.contact?.full_name ?? undefined,
+    companyName: item.company?.name ?? undefined,
+  }));
 
   const handleOpportunityMove = async (
     opportunityId: string,
@@ -69,34 +80,113 @@ export function OpportunitiesPage() {
     _newIndex: number
   ) => {
     try {
-      const response = await fetch(`/api/opportunities/${opportunityId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-        },
-        body: JSON.stringify({ stage: newStage }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update opportunity');
+      // Find the stage ID from the stage name
+      const stage = pipelineStages?.find(
+        (s) => s.name.toLowerCase().replace(/\s+/g, '_') === newStage
+      );
+      if (!stage) {
+        throw new Error('Pipeline stage not found');
       }
 
-      // Optimistically update local state
-      setOpportunities((prev) =>
-        prev.map((o) => (o.id === opportunityId ? { ...o, stage: newStage } : o))
-      );
+      await moveOpportunityMutation.mutateAsync({
+        opportunityId: parseInt(opportunityId, 10),
+        newStageId: stage.id,
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to move opportunity');
-      // Refresh to get correct state
-      fetchOpportunities();
+      console.error('Failed to move opportunity:', err);
       throw err;
     }
   };
 
-  const handleOpportunityClick = (opportunity: Opportunity) => {
-    navigate(`/opportunities/${opportunity.id}`);
+  const handleOpportunityClick = (opportunity: KanbanOpportunity) => {
+    // Find the full opportunity data to show details or edit
+    const fullOpportunity = opportunitiesData?.items?.find(
+      (item) => String(item.id) === opportunity.id
+    );
+    if (fullOpportunity) {
+      setEditingOpportunity(fullOpportunity);
+      setShowForm(true);
+    }
   };
+
+  const handleEdit = (opportunity: Opportunity) => {
+    setEditingOpportunity(opportunity);
+    setShowForm(true);
+  };
+
+  const handleFormSubmit = async (data: OpportunityFormData) => {
+    try {
+      // Find the stage ID from the stage name
+      const stage = pipelineStages?.find(
+        (s) => s.name.toLowerCase().replace(/\s+/g, '_') === data.stage
+      );
+
+      if (editingOpportunity) {
+        const updateData: OpportunityUpdate = {
+          name: data.name,
+          amount: data.value,
+          probability: data.probability,
+          expected_close_date: data.expectedCloseDate || undefined,
+          pipeline_stage_id: stage?.id,
+          contact_id: data.contactId ? parseInt(data.contactId, 10) : undefined,
+          company_id: data.companyId ? parseInt(data.companyId, 10) : undefined,
+          description: data.description,
+        };
+        await updateOpportunityMutation.mutateAsync({
+          id: editingOpportunity.id,
+          data: updateData,
+        });
+      } else {
+        const createData: OpportunityCreate = {
+          name: data.name,
+          amount: data.value,
+          currency: 'USD',
+          probability: data.probability,
+          expected_close_date: data.expectedCloseDate || undefined,
+          pipeline_stage_id: stage?.id || 1,
+          contact_id: data.contactId ? parseInt(data.contactId, 10) : undefined,
+          company_id: data.companyId ? parseInt(data.companyId, 10) : undefined,
+          description: data.description,
+        };
+        await createOpportunityMutation.mutateAsync(createData);
+      }
+      setShowForm(false);
+      setEditingOpportunity(null);
+    } catch (err) {
+      console.error('Failed to save opportunity:', err);
+    }
+  };
+
+  const handleFormCancel = () => {
+    setShowForm(false);
+    setEditingOpportunity(null);
+  };
+
+  const getInitialFormData = (): Partial<OpportunityFormData> | undefined => {
+    if (!editingOpportunity) return undefined;
+    return {
+      name: editingOpportunity.name,
+      value: editingOpportunity.amount ?? 0,
+      stage: editingOpportunity.pipeline_stage?.name?.toLowerCase().replace(/\s+/g, '_') ?? 'qualification',
+      probability: editingOpportunity.probability ?? 0,
+      expectedCloseDate: editingOpportunity.expected_close_date ?? '',
+      contactId: editingOpportunity.contact_id ? String(editingOpportunity.contact_id) : '',
+      companyId: editingOpportunity.company_id ? String(editingOpportunity.company_id) : '',
+      description: editingOpportunity.description ?? '',
+    };
+  };
+
+  // Build contacts list for form dropdown
+  const contactsList = (contactsData?.items ?? []).map((contact) => ({
+    id: String(contact.id),
+    name: `${contact.first_name} ${contact.last_name}`,
+  }));
+
+  // Build companies list for form dropdown
+  const companiesList = (companiesData?.items ?? []).map((company) => ({
+    id: String(company.id),
+    name: company.name,
+  }));
 
   const totalPipelineValue = opportunities
     .filter((o) => !['closed_won', 'closed_lost'].includes(o.stage))
@@ -105,15 +195,6 @@ export function OpportunitiesPage() {
   const weightedPipelineValue = opportunities
     .filter((o) => !['closed_won', 'closed_lost'].includes(o.stage))
     .reduce((sum, o) => sum + o.value * (o.probability / 100), 0);
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(value);
-  };
 
   return (
     <div className="space-y-6">
@@ -174,20 +255,10 @@ export function OpportunitiesPage() {
             </button>
           </div>
 
-          <Button onClick={() => navigate('/opportunities/new')}>
-            <svg
-              className="h-5 w-5 mr-2"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 4v16m8-8H4"
-              />
-            </svg>
+          <Button
+            leftIcon={<PlusIcon className="h-5 w-5" />}
+            onClick={() => setShowForm(true)}
+          >
             Add Opportunity
           </Button>
         </div>
@@ -232,7 +303,9 @@ export function OpportunitiesPage() {
         <div className="rounded-md bg-red-50 p-4">
           <div className="flex">
             <div className="ml-3">
-              <h3 className="text-sm font-medium text-red-800">{error}</h3>
+              <h3 className="text-sm font-medium text-red-800">
+                {error instanceof Error ? error.message : 'An error occurred'}
+              </h3>
             </div>
           </div>
         </div>
@@ -246,7 +319,7 @@ export function OpportunitiesPage() {
       ) : viewMode === 'kanban' ? (
         <div className="overflow-x-auto">
           <KanbanBoard
-            stages={defaultStages}
+            stages={stages}
             opportunities={opportunities}
             onOpportunityMove={handleOpportunityMove}
             onOpportunityClick={handleOpportunityClick}
@@ -277,7 +350,7 @@ export function OpportunitiesPage() {
                 Get started by creating a new opportunity.
               </p>
               <div className="mt-6">
-                <Button onClick={() => navigate('/opportunities/new')}>
+                <Button onClick={() => setShowForm(true)}>
                   Add Opportunity
                 </Button>
               </div>
@@ -342,26 +415,27 @@ export function OpportunitiesPage() {
                       {formatCurrency(opportunity.value)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                        {defaultStages.find((s) => s.id === opportunity.stage)
+                      <span className={getStatusBadgeClasses(opportunity.stage, 'opportunity')}>
+                        {stages.find((s) => s.id === opportunity.stage)
                           ?.title || opportunity.stage}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {opportunity.probability}%
+                      {formatPercentage(opportunity.probability)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {opportunity.expectedCloseDate
-                        ? new Date(
-                            opportunity.expectedCloseDate
-                          ).toLocaleDateString()
-                        : '-'}
+                      {formatDate(opportunity.expectedCloseDate)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          navigate(`/opportunities/${opportunity.id}/edit`);
+                          const fullOpportunity = opportunitiesData?.items?.find(
+                            (item) => String(item.id) === opportunity.id
+                          );
+                          if (fullOpportunity) {
+                            handleEdit(fullOpportunity);
+                          }
                         }}
                         className="text-primary-600 hover:text-primary-900"
                       >
@@ -375,6 +449,28 @@ export function OpportunitiesPage() {
           )}
         </div>
       )}
+
+      {/* Form Modal */}
+      <Modal
+        isOpen={showForm}
+        onClose={handleFormCancel}
+        title={editingOpportunity ? 'Edit Opportunity' : 'Add Opportunity'}
+        size="full"
+      >
+        <OpportunityForm
+          initialData={getInitialFormData()}
+          onSubmit={handleFormSubmit}
+          onCancel={handleFormCancel}
+          isLoading={
+            createOpportunityMutation.isPending || updateOpportunityMutation.isPending
+          }
+          submitLabel={editingOpportunity ? 'Update Opportunity' : 'Create Opportunity'}
+          contacts={contactsList}
+          companies={companiesList}
+        />
+      </Modal>
     </div>
   );
 }
+
+export default OpportunitiesPage;

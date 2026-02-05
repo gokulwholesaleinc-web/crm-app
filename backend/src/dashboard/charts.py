@@ -117,9 +117,10 @@ class ChartDataGenerator:
         today = date.today()
         start_date = date(today.year, today.month, 1) - timedelta(days=30 * (months - 1))
 
+        month_col = func.date_trunc("month", Opportunity.actual_close_date).label("month")
         result = await self.db.execute(
             select(
-                func.date_trunc("month", Opportunity.actual_close_date).label("month"),
+                month_col,
                 func.sum(Opportunity.amount).label("revenue"),
             )
             .join(PipelineStage)
@@ -129,8 +130,8 @@ class ChartDataGenerator:
                     Opportunity.actual_close_date >= start_date,
                 )
             )
-            .group_by(func.date_trunc("month", Opportunity.actual_close_date))
-            .order_by("month")
+            .group_by(month_col)
+            .order_by(month_col)
         )
 
         data = []
@@ -186,14 +187,15 @@ class ChartDataGenerator:
         """Get weekly new leads trend."""
         start_date = datetime.now() - timedelta(weeks=weeks)
 
+        week_col = func.date_trunc("week", Lead.created_at).label("week")
         result = await self.db.execute(
             select(
-                func.date_trunc("week", Lead.created_at).label("week"),
+                week_col,
                 func.count(Lead.id).label("count"),
             )
             .where(Lead.created_at >= start_date)
-            .group_by(func.date_trunc("week", Lead.created_at))
-            .order_by("week")
+            .group_by(week_col)
+            .order_by(week_col)
         )
 
         data = []

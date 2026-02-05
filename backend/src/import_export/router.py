@@ -1,13 +1,10 @@
 """Import/Export API routes."""
 
-from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, UploadFile, File
 from fastapi.responses import StreamingResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 import io
-from src.database import get_db
-from src.auth.models import User
-from src.auth.dependencies import get_current_active_user
+from src.core.constants import HTTPStatus
+from src.core.router_utils import DBSession, CurrentUser, raise_bad_request
 from src.import_export.csv_handler import CSVHandler
 
 router = APIRouter(prefix="/api/import-export", tags=["import-export"])
@@ -16,8 +13,8 @@ router = APIRouter(prefix="/api/import-export", tags=["import-export"])
 # Export endpoints
 @router.get("/export/contacts")
 async def export_contacts(
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Export all contacts as CSV."""
     handler = CSVHandler(db)
@@ -34,8 +31,8 @@ async def export_contacts(
 
 @router.get("/export/companies")
 async def export_companies(
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Export all companies as CSV."""
     handler = CSVHandler(db)
@@ -52,8 +49,8 @@ async def export_companies(
 
 @router.get("/export/leads")
 async def export_leads(
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Export all leads as CSV."""
     handler = CSVHandler(db)
@@ -71,17 +68,14 @@ async def export_leads(
 # Import endpoints
 @router.post("/import/contacts")
 async def import_contacts(
+    current_user: CurrentUser,
+    db: DBSession,
     file: UploadFile = File(...),
-    current_user: Annotated[User, Depends(get_current_active_user)] = None,
-    db: Annotated[AsyncSession, Depends(get_db)] = None,
     skip_errors: bool = True,
 ):
     """Import contacts from CSV file."""
     if not file.filename.endswith(".csv"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="File must be a CSV",
-        )
+        raise_bad_request("File must be a CSV")
 
     content = await file.read()
     csv_content = content.decode("utf-8")
@@ -98,17 +92,14 @@ async def import_contacts(
 
 @router.post("/import/companies")
 async def import_companies(
+    current_user: CurrentUser,
+    db: DBSession,
     file: UploadFile = File(...),
-    current_user: Annotated[User, Depends(get_current_active_user)] = None,
-    db: Annotated[AsyncSession, Depends(get_db)] = None,
     skip_errors: bool = True,
 ):
     """Import companies from CSV file."""
     if not file.filename.endswith(".csv"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="File must be a CSV",
-        )
+        raise_bad_request("File must be a CSV")
 
     content = await file.read()
     csv_content = content.decode("utf-8")
@@ -125,17 +116,14 @@ async def import_companies(
 
 @router.post("/import/leads")
 async def import_leads(
+    current_user: CurrentUser,
+    db: DBSession,
     file: UploadFile = File(...),
-    current_user: Annotated[User, Depends(get_current_active_user)] = None,
-    db: Annotated[AsyncSession, Depends(get_db)] = None,
     skip_errors: bool = True,
 ):
     """Import leads from CSV file."""
     if not file.filename.endswith(".csv"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="File must be a CSV",
-        )
+        raise_bad_request("File must be a CSV")
 
     content = await file.read()
     csv_content = content.decode("utf-8")
@@ -154,15 +142,12 @@ async def import_leads(
 @router.get("/template/{entity_type}")
 async def get_import_template(
     entity_type: str,
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Get CSV template for importing an entity type."""
     if entity_type not in ["contacts", "companies", "leads"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid entity type. Must be: contacts, companies, or leads",
-        )
+        raise_bad_request("Invalid entity type. Must be: contacts, companies, or leads")
 
     handler = CSVHandler(db)
     template = handler.get_template(entity_type)

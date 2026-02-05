@@ -4,8 +4,20 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { authApi } from '../api/auth';
-import { useAuthStore } from '../store';
+import { useAuthStore, User as StoreUser } from '../store/authStore';
 import type { User, UserCreate, UserUpdate, LoginRequest } from '../types';
+
+// Helper to convert types/index.ts User to store User type
+// The difference is phone field: types has string | null | undefined, store has string | undefined
+function toStoreUser(user: User): StoreUser {
+  return {
+    ...user,
+    phone: user.phone ?? undefined,
+    job_title: user.job_title ?? undefined,
+    avatar_url: user.avatar_url ?? undefined,
+    last_login: user.last_login ?? undefined,
+  };
+}
 
 // Query keys
 export const authKeys = {
@@ -18,20 +30,12 @@ export const authKeys = {
  * Hook to fetch current user profile
  */
 export function useUser() {
-  const { setUser, setLoading, token } = useAuthStore();
+  const { token } = useAuthStore();
 
   return useQuery({
     queryKey: authKeys.user(),
     queryFn: () => authApi.getMe(),
     enabled: !!token,
-    onSuccess: (data: User) => {
-      setUser(data);
-      setLoading(false);
-    },
-    onError: () => {
-      setUser(null);
-      setLoading(false);
-    },
     staleTime: 5 * 60 * 1000, // 5 minutes
     retry: false,
   });
@@ -52,7 +56,7 @@ export function useLogin() {
 
       // Fetch user profile
       const user = await authApi.getMe();
-      storeLogin(user, data.access_token);
+      storeLogin(toStoreUser(user), data.access_token);
 
       // Invalidate queries to refresh data with new auth
       queryClient.invalidateQueries();
@@ -85,7 +89,7 @@ export function useRegister() {
 
       // Fetch user profile
       const user = await authApi.getMe();
-      storeLogin(user, data.access_token);
+      storeLogin(toStoreUser(user), data.access_token);
 
       queryClient.invalidateQueries();
     },
@@ -121,7 +125,7 @@ export function useUpdateProfile() {
   return useMutation({
     mutationFn: (data: UserUpdate) => authApi.updateProfile(data),
     onSuccess: (data) => {
-      updateUser(data);
+      updateUser(toStoreUser(data));
       queryClient.setQueryData(authKeys.user(), data);
     },
   });

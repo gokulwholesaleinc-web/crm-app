@@ -4,14 +4,13 @@
  */
 
 import {
-  useQuery,
   useMutation,
   useQueryClient,
   UseQueryOptions,
-  UseMutationOptions,
   QueryKey,
 } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
+import { useAuthQuery } from './useAuthQuery';
 
 // Generic paginated response type
 export interface PaginatedResponse<T> {
@@ -31,7 +30,7 @@ export interface ListParams {
 }
 
 // Configuration for entity CRUD operations
-export interface EntityConfig<T, TCreate, TUpdate> {
+export interface EntityConfig<T> {
   entityName: string;
   baseUrl: string;
   queryKey: string;
@@ -42,22 +41,28 @@ export interface EntityConfig<T, TCreate, TUpdate> {
 
 /**
  * Creates a set of CRUD hooks for a given entity type.
+ * @template T - The entity type
+ * @template TCreate - The type for creating entities
+ * @template TUpdate - The type for updating entities
+ * @template TFilters - The type for filter parameters (defaults to ListParams)
  */
 export function createEntityHooks<
   T extends { id: number },
   TCreate = Omit<T, 'id' | 'created_at' | 'updated_at'>,
-  TUpdate = Partial<TCreate>
->(config: EntityConfig<T, TCreate, TUpdate>) {
-  const { entityName, baseUrl, queryKey, transformResponse, transformListResponse } = config;
+  TUpdate = Partial<TCreate>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  TFilters = any
+>(config: EntityConfig<T>) {
+  const { baseUrl, queryKey, transformResponse, transformListResponse } = config;
 
   /**
    * Hook to fetch a paginated list of entities
    */
   function useList(
-    params?: ListParams,
+    params?: TFilters,
     options?: Omit<UseQueryOptions<PaginatedResponse<T>>, 'queryKey' | 'queryFn'>
   ) {
-    return useQuery({
+    return useAuthQuery({
       queryKey: [queryKey, 'list', params] as QueryKey,
       queryFn: async () => {
         const response = await apiClient.get<PaginatedResponse<T>>(baseUrl, { params });
@@ -74,7 +79,7 @@ export function createEntityHooks<
     id: number | undefined,
     options?: Omit<UseQueryOptions<T>, 'queryKey' | 'queryFn'>
   ) {
-    return useQuery({
+    return useAuthQuery({
       queryKey: [queryKey, 'detail', id] as QueryKey,
       queryFn: async () => {
         const response = await apiClient.get<T>(`${baseUrl}/${id}`);
@@ -88,9 +93,7 @@ export function createEntityHooks<
   /**
    * Hook to create a new entity
    */
-  function useCreate(
-    options?: Omit<UseMutationOptions<T, Error, TCreate>, 'mutationFn'>
-  ) {
+  function useCreate() {
     const queryClient = useQueryClient();
 
     return useMutation({
@@ -98,21 +101,17 @@ export function createEntityHooks<
         const response = await apiClient.post<T>(baseUrl, data);
         return transformResponse ? transformResponse(response.data) : response.data;
       },
-      onSuccess: (data, variables, context) => {
+      onSuccess: () => {
         // Invalidate list queries
         queryClient.invalidateQueries({ queryKey: [queryKey, 'list'] });
-        options?.onSuccess?.(data, variables, context);
       },
-      ...options,
     });
   }
 
   /**
    * Hook to update an existing entity
    */
-  function useUpdate(
-    options?: Omit<UseMutationOptions<T, Error, { id: number; data: TUpdate }>, 'mutationFn'>
-  ) {
+  function useUpdate() {
     const queryClient = useQueryClient();
 
     return useMutation({
@@ -120,35 +119,29 @@ export function createEntityHooks<
         const response = await apiClient.patch<T>(`${baseUrl}/${id}`, data);
         return transformResponse ? transformResponse(response.data) : response.data;
       },
-      onSuccess: (data, variables, context) => {
+      onSuccess: (_data, variables) => {
         // Invalidate both list and detail queries
         queryClient.invalidateQueries({ queryKey: [queryKey, 'list'] });
         queryClient.invalidateQueries({ queryKey: [queryKey, 'detail', variables.id] });
-        options?.onSuccess?.(data, variables, context);
       },
-      ...options,
     });
   }
 
   /**
    * Hook to delete an entity
    */
-  function useDelete(
-    options?: Omit<UseMutationOptions<void, Error, number>, 'mutationFn'>
-  ) {
+  function useDelete() {
     const queryClient = useQueryClient();
 
     return useMutation({
       mutationFn: async (id: number) => {
         await apiClient.delete(`${baseUrl}/${id}`);
       },
-      onSuccess: (data, variables, context) => {
+      onSuccess: (_data, variables) => {
         // Invalidate list queries and remove detail from cache
         queryClient.invalidateQueries({ queryKey: [queryKey, 'list'] });
         queryClient.removeQueries({ queryKey: [queryKey, 'detail', variables] });
-        options?.onSuccess?.(data, variables, context);
       },
-      ...options,
     });
   }
 

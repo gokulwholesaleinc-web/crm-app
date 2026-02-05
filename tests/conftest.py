@@ -25,6 +25,7 @@ from src.companies.models import Company
 from src.leads.models import Lead, LeadSource
 from src.opportunities.models import Opportunity, PipelineStage
 from src.activities.models import Activity
+from src.campaigns.models import Campaign, CampaignMember
 from src.core.models import Note, Tag, EntityTag
 
 
@@ -110,7 +111,7 @@ async def test_superuser(db_session: AsyncSession) -> User:
 @pytest_asyncio.fixture(scope="function")
 async def auth_token(test_user: User) -> str:
     """Create authentication token for test user."""
-    return create_access_token(data={"sub": test_user.id})
+    return create_access_token(data={"sub": str(test_user.id)})
 
 
 @pytest_asyncio.fixture(scope="function")

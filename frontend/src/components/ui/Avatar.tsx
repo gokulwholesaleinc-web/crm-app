@@ -40,9 +40,14 @@ const colorPalette = [
 function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/);
   if (parts.length === 1) {
-    return parts[0].substring(0, 2).toUpperCase();
+    const firstPart = parts[0];
+    return firstPart ? firstPart.substring(0, 2).toUpperCase() : '??';
   }
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  const firstPart = parts[0];
+  const lastPart = parts[parts.length - 1];
+  const firstChar = firstPart?.[0] ?? '?';
+  const lastChar = lastPart?.[0] ?? '?';
+  return (firstChar + lastChar).toUpperCase();
 }
 
 function getColorFromName(name: string): string {
@@ -51,7 +56,7 @@ function getColorFromName(name: string): string {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
   }
   const index = Math.abs(hash) % colorPalette.length;
-  return colorPalette[index];
+  return colorPalette[index] ?? 'bg-gray-500';
 }
 
 export function Avatar({ src, name, size = 'md', className }: AvatarProps) {

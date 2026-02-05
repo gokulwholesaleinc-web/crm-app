@@ -2,28 +2,27 @@
 
 from typing import Optional, List, Tuple
 from sqlalchemy import select, func, or_
-from sqlalchemy.ext.asyncio import AsyncSession
 from src.companies.models import Company
 from src.companies.schemas import CompanyCreate, CompanyUpdate
-from src.core.models import Tag, EntityTag
 from src.contacts.models import Contact
+from src.core.base_service import CRUDService, TaggableServiceMixin
+from src.core.models import Tag
+from src.core.constants import ENTITY_TYPE_COMPANIES, DEFAULT_PAGE_SIZE
 
 
-class CompanyService:
-    def __init__(self, db: AsyncSession):
-        self.db = db
+class CompanyService(
+    CRUDService[Company, CompanyCreate, CompanyUpdate],
+    TaggableServiceMixin,
+):
+    """Service for Company CRUD operations with tag support."""
 
-    async def get_by_id(self, company_id: int) -> Optional[Company]:
-        """Get company by ID."""
-        result = await self.db.execute(
-            select(Company).where(Company.id == company_id)
-        )
-        return result.scalar_one_or_none()
+    model = Company
+    entity_type = ENTITY_TYPE_COMPANIES
 
     async def get_list(
         self,
         page: int = 1,
-        page_size: int = 20,
+        page_size: int = DEFAULT_PAGE_SIZE,
         search: Optional[str] = None,
         status: Optional[str] = None,
         industry: Optional[str] = None,
@@ -52,14 +51,7 @@ class CompanyService:
             query = query.where(Company.owner_id == owner_id)
 
         if tag_ids:
-            tag_subquery = (
-                select(EntityTag.entity_id)
-                .where(EntityTag.entity_type == "companies")
-                .where(EntityTag.tag_id.in_(tag_ids))
-                .group_by(EntityTag.entity_id)
-                .having(func.count(EntityTag.tag_id) == len(tag_ids))
-            )
-            query = query.where(Company.id.in_(tag_subquery))
+            query = await self._filter_by_tags(query, tag_ids)
 
         # Get total count
         count_query = select(func.count()).select_from(query.subquery())
@@ -77,69 +69,32 @@ class CompanyService:
 
     async def create(self, data: CompanyCreate, user_id: int) -> Company:
         """Create a new company."""
-        company_data = data.model_dump(exclude={"tag_ids"})
-        company = Company(**company_data, created_by_id=user_id)
-        self.db.add(company)
-        await self.db.flush()
+        company = await super().create(data, user_id)
 
         if data.tag_ids:
-            await self._update_tags(company.id, data.tag_ids)
+            await self.update_tags(company.id, data.tag_ids)
+            await self.db.refresh(company)
 
-        await self.db.refresh(company)
         return company
 
     async def update(self, company: Company, data: CompanyUpdate, user_id: int) -> Company:
         """Update a company."""
-        update_data = data.model_dump(exclude={"tag_ids"}, exclude_unset=True)
-        for field, value in update_data.items():
-            setattr(company, field, value)
-        company.updated_by_id = user_id
-        await self.db.flush()
+        company = await super().update(company, data, user_id)
 
         if data.tag_ids is not None:
-            await self._update_tags(company.id, data.tag_ids)
+            await self.update_tags(company.id, data.tag_ids)
+            await self.db.refresh(company)
 
-        await self.db.refresh(company)
         return company
 
     async def delete(self, company: Company) -> None:
         """Delete a company."""
-        await self.db.execute(
-            EntityTag.__table__.delete().where(
-                EntityTag.entity_type == "companies",
-                EntityTag.entity_id == company.id,
-            )
-        )
-        await self.db.delete(company)
-        await self.db.flush()
-
-    async def _update_tags(self, company_id: int, tag_ids: List[int]) -> None:
-        """Update tags for a company."""
-        await self.db.execute(
-            EntityTag.__table__.delete().where(
-                EntityTag.entity_type == "companies",
-                EntityTag.entity_id == company_id,
-            )
-        )
-
-        for tag_id in tag_ids:
-            entity_tag = EntityTag(
-                entity_type="companies",
-                entity_id=company_id,
-                tag_id=tag_id,
-            )
-            self.db.add(entity_tag)
-        await self.db.flush()
+        await self.clear_tags(company.id)
+        await super().delete(company)
 
     async def get_company_tags(self, company_id: int) -> List[Tag]:
         """Get tags for a company."""
-        result = await self.db.execute(
-            select(Tag)
-            .join(EntityTag)
-            .where(EntityTag.entity_type == "companies")
-            .where(EntityTag.entity_id == company_id)
-        )
-        return list(result.scalars().all())
+        return await self.get_tags(company_id)
 
     async def get_contact_count(self, company_id: int) -> int:
         """Get count of contacts for a company."""

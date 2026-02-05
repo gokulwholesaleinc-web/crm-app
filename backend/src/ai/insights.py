@@ -6,6 +6,7 @@ from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from openai import AsyncOpenAI
 from src.config import settings
+from src.core.constants import ErrorMessages, EntityNames
 from src.leads.models import Lead
 from src.opportunities.models import Opportunity, PipelineStage
 from src.activities.models import Activity
@@ -26,7 +27,7 @@ class InsightsGenerator:
         lead = result.scalar_one_or_none()
 
         if not lead:
-            return {"error": "Lead not found"}
+            return {"error": ErrorMessages.not_found(EntityNames.LEAD)}
 
         # Gather data about the lead
         activities = await self.db.execute(
@@ -90,7 +91,7 @@ class InsightsGenerator:
         opp = result.scalar_one_or_none()
 
         if not opp:
-            return {"error": "Opportunity not found"}
+            return {"error": ErrorMessages.not_found(EntityNames.OPPORTUNITY)}
 
         opp_data = {
             "name": opp.name,

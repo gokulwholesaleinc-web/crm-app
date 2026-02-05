@@ -5,6 +5,7 @@ import {
 } from '@dnd-kit/sortable';
 import clsx from 'clsx';
 import { KanbanCard, Opportunity } from './KanbanCard';
+import { formatCurrency } from '../../../../utils/formatters';
 
 interface KanbanColumnProps {
   id: string;
@@ -30,15 +31,6 @@ export function KanbanColumn({
       stage: id,
     },
   });
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(value);
-  };
 
   const colorClasses: Record<string, string> = {
     blue: 'bg-blue-500',

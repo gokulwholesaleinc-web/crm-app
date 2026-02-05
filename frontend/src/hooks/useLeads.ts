@@ -1,13 +1,16 @@
 /**
- * Leads hooks using TanStack Query
+ * Leads hooks using the entity CRUD factory pattern.
+ * Uses TanStack Query for data fetching and caching.
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { createEntityHooks, createQueryKeys } from './useEntityCRUD';
 import { leadsApi } from '../api/leads';
 import { contactKeys } from './useContacts';
 import { companyKeys } from './useCompanies';
 import { opportunityKeys } from './useOpportunities';
 import type {
+  Lead,
   LeadCreate,
   LeadUpdate,
   LeadFilters,
@@ -17,14 +20,11 @@ import type {
   LeadFullConversionRequest,
 } from '../types';
 
-// Query keys
-export const leadKeys = {
-  all: ['leads'] as const,
-  lists: () => [...leadKeys.all, 'list'] as const,
-  list: (filters?: LeadFilters) => [...leadKeys.lists(), filters] as const,
-  details: () => [...leadKeys.all, 'detail'] as const,
-  detail: (id: number) => [...leadKeys.details(), id] as const,
-};
+// =============================================================================
+// Query Keys
+// =============================================================================
+
+export const leadKeys = createQueryKeys('leads');
 
 export const leadSourceKeys = {
   all: ['lead-sources'] as const,
@@ -32,72 +32,53 @@ export const leadSourceKeys = {
 };
 
 // =============================================================================
-// Lead CRUD Hooks
+// Entity CRUD Hooks using Factory Pattern
 // =============================================================================
+
+const leadEntityHooks = createEntityHooks<
+  Lead,
+  LeadCreate,
+  LeadUpdate,
+  LeadFilters
+>({
+  entityName: 'leads',
+  baseUrl: '/api/leads',
+  queryKey: 'leads',
+});
 
 /**
  * Hook to fetch a paginated list of leads
  */
 export function useLeads(filters?: LeadFilters) {
-  return useQuery({
-    queryKey: leadKeys.list(filters),
-    queryFn: () => leadsApi.list(filters),
-  });
+  return leadEntityHooks.useList(filters);
 }
 
 /**
  * Hook to fetch a single lead by ID
  */
 export function useLead(id: number | undefined) {
-  return useQuery({
-    queryKey: leadKeys.detail(id!),
-    queryFn: () => leadsApi.get(id!),
-    enabled: !!id,
-  });
+  return leadEntityHooks.useOne(id);
 }
 
 /**
  * Hook to create a new lead
  */
 export function useCreateLead() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (data: LeadCreate) => leadsApi.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: leadKeys.lists() });
-    },
-  });
+  return leadEntityHooks.useCreate();
 }
 
 /**
  * Hook to update a lead
  */
 export function useUpdateLead() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({ id, data }: { id: number; data: LeadUpdate }) => leadsApi.update(id, data),
-    onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: leadKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: leadKeys.detail(id) });
-    },
-  });
+  return leadEntityHooks.useUpdate();
 }
 
 /**
  * Hook to delete a lead
  */
 export function useDeleteLead() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (id: number) => leadsApi.delete(id),
-    onSuccess: (_, id) => {
-      queryClient.invalidateQueries({ queryKey: leadKeys.lists() });
-      queryClient.removeQueries({ queryKey: leadKeys.detail(id) });
-    },
-  });
+  return leadEntityHooks.useDelete();
 }
 
 // =============================================================================

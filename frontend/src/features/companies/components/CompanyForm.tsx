@@ -7,6 +7,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
 import { Select } from '../../../components/ui/Select';
+import { FormTextarea } from '../../../components/forms';
 import type { Company, CompanyCreate, CompanyUpdate } from '../../../types';
 
 interface CompanyFormProps {
@@ -290,15 +291,13 @@ export function CompanyForm({
       </div>
 
       {/* Description */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-        <textarea
-          {...register('description')}
-          rows={3}
-          className="block w-full rounded-lg border border-gray-300 shadow-sm py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-          placeholder="Add notes about the company"
-        />
-      </div>
+      <FormTextarea
+        label="Description"
+        name="description"
+        rows={3}
+        placeholder="Add notes about the company"
+        register={register('description')}
+      />
 
       <div className="flex justify-end gap-3 pt-4 border-t">
         <Button type="button" variant="secondary" onClick={onCancel}>

@@ -142,3 +142,6 @@ export {
   type ListParams,
   type EntityConfig,
 } from './useEntityCRUD';
+
+// Auth-aware query helpers
+export { useAuthQuery, useAuthEnabled } from './useAuthQuery';

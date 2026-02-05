@@ -3,6 +3,7 @@
 from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel, EmailStr, ConfigDict
+from src.core.schemas import TagBrief
 
 
 class ContactBase(BaseModel):
@@ -57,14 +58,6 @@ class ContactUpdate(BaseModel):
 class CompanyBrief(BaseModel):
     id: int
     name: str
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class TagBrief(BaseModel):
-    id: int
-    name: str
-    color: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

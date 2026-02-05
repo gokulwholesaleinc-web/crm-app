@@ -1,63 +1,53 @@
-import { useState, useEffect } from 'react';
 import { NumberCard } from './components/NumberCard';
 import { ChartCard } from './components/ChartCard';
 import { Spinner } from '../../components/ui/Spinner';
+import { formatCurrency, formatDate } from '../../utils';
+import { useDashboard, usePipelineFunnelChart, useLeadsBySourceChart, useUserTimeline } from '../../hooks';
+import type { NumberCardData, ChartDataPoint } from '../../types';
 
-interface DashboardData {
-  totalContacts: number;
-  totalLeads: number;
-  totalOpportunities: number;
-  totalRevenue: number;
-  contactsTrend: number;
-  leadsTrend: number;
-  opportunitiesTrend: number;
-  revenueTrend: number;
-  recentActivities: Array<{
-    id: string;
-    type: string;
-    description: string;
-    timestamp: string;
-  }>;
-  pipelineData: Array<{
-    stage: string;
-    count: number;
-    value: number;
-  }>;
-  leadsBySource: Array<{
-    source: string;
-    count: number;
-  }>;
+// Helper to find number card by id
+function findCardValue(cards: NumberCardData[], id: string): number {
+  const card = cards.find(c => c.id === id);
+  return typeof card?.value === 'number' ? card.value : 0;
 }
 
-export function DashboardPage() {
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+function findCardChange(cards: NumberCardData[], id: string): number {
+  const card = cards.find(c => c.id === id);
+  return card?.change ?? 0;
+}
 
-  useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        const response = await fetch('/api/dashboard', {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-          },
-        });
+function DashboardPage() {
+  // Use hooks for data fetching
+  const { data: dashboardData, isLoading: isLoadingDashboard, error: dashboardError } = useDashboard();
+  const { data: pipelineData } = usePipelineFunnelChart();
+  const { data: leadsBySourceData } = useLeadsBySourceChart();
+  const { data: timelineData } = useUserTimeline();
 
-        if (!response.ok) {
-          throw new Error('Failed to fetch dashboard data');
-        }
+  const isLoading = isLoadingDashboard;
+  const error = dashboardError instanceof Error ? dashboardError.message : dashboardError ? String(dashboardError) : null;
 
-        const result = await response.json();
-        setData(result);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'An error occurred');
-      } finally {
-        setIsLoading(false);
-      }
-    };
+  // Extract number cards from dashboard response
+  const numberCards = dashboardData?.number_cards ?? [];
+  // Note: charts from dashboardData can be used for additional visualizations if needed
 
-    fetchDashboardData();
-  }, []);
+  // Map data to expected format using number cards
+  const data = dashboardData ? {
+    totalContacts: findCardValue(numberCards, 'total_contacts'),
+    totalLeads: findCardValue(numberCards, 'total_leads'),
+    totalOpportunities: findCardValue(numberCards, 'open_opportunities'),
+    totalRevenue: findCardValue(numberCards, 'total_revenue'),
+    contactsTrend: findCardChange(numberCards, 'total_contacts'),
+    leadsTrend: findCardChange(numberCards, 'total_leads'),
+    opportunitiesTrend: findCardChange(numberCards, 'open_opportunities'),
+    revenueTrend: findCardChange(numberCards, 'total_revenue'),
+    recentActivities: (timelineData?.items ?? []).slice(0, 10).map(item => ({
+      id: item.id,
+      description: item.subject || item.description || 'Activity',
+      timestamp: item.scheduled_at || item.completed_at || item.due_date || new Date().toISOString(),
+    })),
+    pipelineData: (pipelineData?.data ?? []) as (ChartDataPoint & { stage?: string; count?: number; value?: number })[],
+    leadsBySource: (leadsBySourceData?.data ?? []) as (ChartDataPoint & { source?: string; count?: number })[],
+  } : null;
 
   if (isLoading) {
     return (
@@ -79,15 +69,6 @@ export function DashboardPage() {
       </div>
     );
   }
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(value);
-  };
 
   return (
     <div className="space-y-6">
@@ -204,26 +185,32 @@ export function DashboardPage() {
           subtitle="Opportunities by stage"
         >
           <div className="space-y-4">
-            {data?.pipelineData?.map((item) => (
-              <div key={item.stage} className="flex items-center">
-                <div className="w-32 text-sm font-medium text-gray-600">
-                  {item.stage}
-                </div>
-                <div className="flex-1 ml-4">
-                  <div className="relative h-4 bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                      className="absolute h-full bg-primary-500 rounded-full"
-                      style={{
-                        width: `${Math.min((item.count / Math.max(...(data?.pipelineData?.map(p => p.count) || [1]))) * 100, 100)}%`,
-                      }}
-                    />
+            {data?.pipelineData?.map((item, index) => {
+              const label = item.stage || item.label || `Stage ${index + 1}`;
+              const count = item.count ?? (typeof item.value === 'number' ? item.value : 0);
+              const value = item.value ?? count;
+              const maxCount = Math.max(...(data?.pipelineData?.map(p => p.count ?? (typeof p.value === 'number' ? p.value : 0)) || [1]));
+              return (
+                <div key={label} className="flex items-center">
+                  <div className="w-32 text-sm font-medium text-gray-600">
+                    {label}
+                  </div>
+                  <div className="flex-1 ml-4">
+                    <div className="relative h-4 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className="absolute h-full bg-primary-500 rounded-full"
+                        style={{
+                          width: `${Math.min((count / maxCount) * 100, 100)}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div className="w-20 text-right text-sm font-medium text-gray-900 ml-4">
+                    {count} ({formatCurrency(typeof value === 'number' ? value : 0)})
                   </div>
                 </div>
-                <div className="w-20 text-right text-sm font-medium text-gray-900 ml-4">
-                  {item.count} ({formatCurrency(item.value)})
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </ChartCard>
 
@@ -232,26 +219,31 @@ export function DashboardPage() {
           subtitle="Where your leads come from"
         >
           <div className="space-y-4">
-            {data?.leadsBySource?.map((item) => (
-              <div key={item.source} className="flex items-center">
-                <div className="w-32 text-sm font-medium text-gray-600">
-                  {item.source}
-                </div>
-                <div className="flex-1 ml-4">
-                  <div className="relative h-4 bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                      className="absolute h-full bg-green-500 rounded-full"
-                      style={{
-                        width: `${Math.min((item.count / Math.max(...(data?.leadsBySource?.map(l => l.count) || [1]))) * 100, 100)}%`,
-                      }}
-                    />
+            {data?.leadsBySource?.map((item, index) => {
+              const label = item.source || item.label || `Source ${index + 1}`;
+              const count = item.count ?? (typeof item.value === 'number' ? item.value : 0);
+              const maxCount = Math.max(...(data?.leadsBySource?.map(l => l.count ?? (typeof l.value === 'number' ? l.value : 0)) || [1]));
+              return (
+                <div key={label} className="flex items-center">
+                  <div className="w-32 text-sm font-medium text-gray-600">
+                    {label}
+                  </div>
+                  <div className="flex-1 ml-4">
+                    <div className="relative h-4 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className="absolute h-full bg-green-500 rounded-full"
+                        style={{
+                          width: `${Math.min((count / maxCount) * 100, 100)}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div className="w-12 text-right text-sm font-medium text-gray-900 ml-4">
+                    {count}
                   </div>
                 </div>
-                <div className="w-12 text-right text-sm font-medium text-gray-900 ml-4">
-                  {item.count}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </ChartCard>
       </div>
@@ -263,50 +255,58 @@ export function DashboardPage() {
       >
         <div className="flow-root">
           <ul className="-mb-8">
-            {data?.recentActivities?.map((activity, idx) => (
-              <li key={activity.id}>
-                <div className="relative pb-8">
-                  {idx !== (data?.recentActivities?.length || 0) - 1 && (
-                    <span
-                      className="absolute top-4 left-4 -ml-px h-full w-0.5 bg-gray-200"
-                      aria-hidden="true"
-                    />
-                  )}
-                  <div className="relative flex space-x-3">
-                    <div>
-                      <span className="h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center ring-8 ring-white">
-                        <svg
-                          className="h-4 w-4 text-primary-600"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                          />
-                        </svg>
-                      </span>
-                    </div>
-                    <div className="min-w-0 flex-1 pt-1.5 flex justify-between space-x-4">
+            {data?.recentActivities && data.recentActivities.length > 0 ? (
+              data.recentActivities.map((activity: { id: number; description: string; timestamp: string }, idx: number) => (
+                <li key={activity.id}>
+                  <div className="relative pb-8">
+                    {idx !== (data?.recentActivities?.length || 0) - 1 && (
+                      <span
+                        className="absolute top-4 left-4 -ml-px h-full w-0.5 bg-gray-200"
+                        aria-hidden="true"
+                      />
+                    )}
+                    <div className="relative flex space-x-3">
                       <div>
-                        <p className="text-sm text-gray-500">
-                          {activity.description}
-                        </p>
+                        <span className="h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center ring-8 ring-white">
+                          <svg
+                            className="h-4 w-4 text-primary-600"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                            />
+                          </svg>
+                        </span>
                       </div>
-                      <div className="text-right text-sm whitespace-nowrap text-gray-500">
-                        {new Date(activity.timestamp).toLocaleDateString()}
+                      <div className="min-w-0 flex-1 pt-1.5 flex justify-between space-x-4">
+                        <div>
+                          <p className="text-sm text-gray-500">
+                            {activity.description}
+                          </p>
+                        </div>
+                        <div className="text-right text-sm whitespace-nowrap text-gray-500">
+                          {formatDate(activity.timestamp)}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
+                </li>
+              ))
+            ) : (
+              <li className="text-center py-4 text-sm text-gray-500">
+                No recent activities
               </li>
-            ))}
+            )}
           </ul>
         </div>
       </ChartCard>
     </div>
   );
 }
+
+export default DashboardPage;

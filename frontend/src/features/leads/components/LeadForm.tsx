@@ -1,5 +1,6 @@
 import { useForm } from 'react-hook-form';
 import { Button } from '../../../components/ui/Button';
+import { FormInput, FormSelect, FormTextarea } from '../../../components/forms';
 
 export interface LeadFormData {
   firstName: string;
@@ -75,88 +76,47 @@ export function LeadForm({
           Basic Information
         </h3>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-          <div>
-            <label
-              htmlFor="firstName"
-              className="block text-sm font-medium text-gray-700"
-            >
-              First Name *
-            </label>
-            <input
-              type="text"
-              id="firstName"
-              {...register('firstName', {
-                required: 'First name is required',
-              })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-            />
-            {errors.firstName && (
-              <p className="mt-1 text-sm text-red-600">
-                {errors.firstName.message}
-              </p>
-            )}
-          </div>
+          <FormInput
+            label="First Name"
+            name="firstName"
+            required
+            register={register('firstName', {
+              required: 'First name is required',
+            })}
+            error={errors.firstName?.message}
+          />
 
-          <div>
-            <label
-              htmlFor="lastName"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Last Name *
-            </label>
-            <input
-              type="text"
-              id="lastName"
-              {...register('lastName', {
-                required: 'Last name is required',
-              })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-            />
-            {errors.lastName && (
-              <p className="mt-1 text-sm text-red-600">
-                {errors.lastName.message}
-              </p>
-            )}
-          </div>
+          <FormInput
+            label="Last Name"
+            name="lastName"
+            required
+            register={register('lastName', {
+              required: 'Last name is required',
+            })}
+            error={errors.lastName?.message}
+          />
 
-          <div>
-            <label
-              htmlFor="email"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Email *
-            </label>
-            <input
-              type="email"
-              id="email"
-              {...register('email', {
-                required: 'Email is required',
-                pattern: {
-                  value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                  message: 'Invalid email address',
-                },
-              })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-            />
-            {errors.email && (
-              <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
-            )}
-          </div>
+          <FormInput
+            label="Email"
+            name="email"
+            type="email"
+            required
+            register={register('email', {
+              required: 'Email is required',
+              pattern: {
+                value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                message: 'Invalid email address',
+              },
+            })}
+            error={errors.email?.message}
+          />
 
-          <div>
-            <label
-              htmlFor="phone"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Phone
-            </label>
-            <input
-              type="tel"
-              id="phone"
-              {...register('phone')}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-            />
-          </div>
+          <FormInput
+            label="Phone"
+            name="phone"
+            type="tel"
+            register={register('phone')}
+          />
         </div>
       </div>
 
@@ -166,35 +126,17 @@ export function LeadForm({
           Work Information
         </h3>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-          <div>
-            <label
-              htmlFor="company"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Company
-            </label>
-            <input
-              type="text"
-              id="company"
-              {...register('company')}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-            />
-          </div>
+          <FormInput
+            label="Company"
+            name="company"
+            register={register('company')}
+          />
 
-          <div>
-            <label
-              htmlFor="jobTitle"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Job Title
-            </label>
-            <input
-              type="text"
-              id="jobTitle"
-              {...register('jobTitle')}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-            />
-          </div>
+          <FormInput
+            label="Job Title"
+            name="jobTitle"
+            register={register('jobTitle')}
+          />
         </div>
       </div>
 
@@ -204,93 +146,53 @@ export function LeadForm({
           Lead Information
         </h3>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-          <div>
-            <label
-              htmlFor="source"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Source *
-            </label>
-            <select
-              id="source"
-              {...register('source', {
-                required: 'Source is required',
-              })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-            >
-              {leadSources.map((source) => (
-                <option key={source.value} value={source.value}>
-                  {source.label}
-                </option>
-              ))}
-            </select>
-            {errors.source && (
-              <p className="mt-1 text-sm text-red-600">{errors.source.message}</p>
-            )}
-          </div>
+          <FormSelect
+            label="Source"
+            name="source"
+            options={leadSources}
+            required
+            register={register('source', {
+              required: 'Source is required',
+            })}
+            error={errors.source?.message}
+          />
 
-          <div>
-            <label
-              htmlFor="status"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Status *
-            </label>
-            <select
-              id="status"
-              {...register('status', {
-                required: 'Status is required',
-              })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-            >
-              {leadStatuses.map((status) => (
-                <option key={status.value} value={status.value}>
-                  {status.label}
-                </option>
-              ))}
-            </select>
-            {errors.status && (
-              <p className="mt-1 text-sm text-red-600">{errors.status.message}</p>
-            )}
-          </div>
+          <FormSelect
+            label="Status"
+            name="status"
+            options={leadStatuses}
+            required
+            register={register('status', {
+              required: 'Status is required',
+            })}
+            error={errors.status?.message}
+          />
 
-          <div>
-            <label
-              htmlFor="score"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Lead Score (0-100)
-            </label>
-            <input
-              type="number"
-              id="score"
-              min="0"
-              max="100"
-              {...register('score', {
-                min: { value: 0, message: 'Score must be at least 0' },
-                max: { value: 100, message: 'Score cannot exceed 100' },
-              })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-            />
-            {errors.score && (
-              <p className="mt-1 text-sm text-red-600">{errors.score.message}</p>
-            )}
-          </div>
+          <FormInput
+            label="Lead Score (0-100)"
+            name="score"
+            type="number"
+            min={0}
+            max={100}
+            register={register('score', {
+              min: { value: 0, message: 'Score must be at least 0' },
+              max: { value: 100, message: 'Score cannot exceed 100' },
+            })}
+            error={errors.score?.message}
+          />
         </div>
       </div>
 
       {/* Notes */}
       <div className="bg-white shadow rounded-lg p-6">
         <h3 className="text-lg font-medium text-gray-900 mb-4">Notes</h3>
-        <div>
-          <textarea
-            id="notes"
-            rows={4}
-            {...register('notes')}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-            placeholder="Add any additional notes about this lead..."
-          />
-        </div>
+        <FormTextarea
+          label="Notes"
+          name="notes"
+          rows={4}
+          placeholder="Add any additional notes about this lead..."
+          register={register('notes')}
+        />
       </div>
 
       {/* Form Actions */}

@@ -12,6 +12,9 @@ from sqlalchemy import select
 from src.auth.models import User
 from src.leads.models import Lead, LeadSource
 from src.leads.scoring import LeadScorer, calculate_lead_score
+from src.contacts.models import Contact
+from src.companies.models import Company
+from src.opportunities.models import PipelineStage
 
 
 class TestLeadsList:
@@ -765,3 +768,641 @@ class TestLeadsUnauthorized:
         """Test getting lead without auth fails."""
         response = await client.get(f"/api/leads/{test_lead.id}")
         assert response.status_code == 401
+
+
+class TestLeadConvertToContact:
+    """Tests for lead to contact conversion endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_convert_lead_to_contact_success(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """Test successful lead to contact conversion."""
+        # Create a lead to convert
+        lead = Lead(
+            first_name="Convert",
+            last_name="ToContact",
+            email="convert.contact@example.com",
+            phone="+1-555-0300",
+            job_title="Manager",
+            company_name="Convert Corp",
+            status="qualified",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(lead)
+        await db_session.commit()
+        await db_session.refresh(lead)
+
+        response = await client.post(
+            f"/api/leads/{lead.id}/convert/contact",
+            headers=auth_headers,
+            json={"create_company": False},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["lead_id"] == lead.id
+        assert data["contact_id"] is not None
+        assert data["company_id"] is None
+        assert "successfully converted to contact" in data["message"]
+
+        # Verify lead status updated
+        await db_session.refresh(lead)
+        assert lead.status == "converted"
+        assert lead.converted_contact_id == data["contact_id"]
+
+    @pytest.mark.asyncio
+    async def test_convert_lead_to_contact_with_company_creation(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """Test lead to contact conversion with company creation."""
+        lead = Lead(
+            first_name="Convert",
+            last_name="WithCompany",
+            email="convert.withcompany@example.com",
+            phone="+1-555-0301",
+            company_name="NewCompany Inc",
+            website="https://newcompany.com",
+            industry="Technology",
+            status="qualified",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(lead)
+        await db_session.commit()
+        await db_session.refresh(lead)
+
+        response = await client.post(
+            f"/api/leads/{lead.id}/convert/contact",
+            headers=auth_headers,
+            json={"create_company": True},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["lead_id"] == lead.id
+        assert data["contact_id"] is not None
+        assert data["company_id"] is not None
+
+        # Verify company was created with lead data
+        from src.companies.models import Company
+
+        result = await db_session.execute(
+            select(Company).where(Company.id == data["company_id"])
+        )
+        company = result.scalar_one()
+        assert company.name == "NewCompany Inc"
+        assert company.website == "https://newcompany.com"
+        assert company.industry == "Technology"
+
+    @pytest.mark.asyncio
+    async def test_convert_lead_to_contact_with_existing_company(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_company: Company,
+    ):
+        """Test lead to contact conversion linking to existing company."""
+        lead = Lead(
+            first_name="Convert",
+            last_name="ExistingCompany",
+            email="convert.existing@example.com",
+            status="qualified",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(lead)
+        await db_session.commit()
+        await db_session.refresh(lead)
+
+        response = await client.post(
+            f"/api/leads/{lead.id}/convert/contact",
+            headers=auth_headers,
+            json={"company_id": test_company.id, "create_company": False},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["contact_id"] is not None
+
+        # Verify contact is linked to existing company
+        from src.contacts.models import Contact
+
+        result = await db_session.execute(
+            select(Contact).where(Contact.id == data["contact_id"])
+        )
+        contact = result.scalar_one()
+        assert contact.company_id == test_company.id
+
+    @pytest.mark.asyncio
+    async def test_convert_lead_to_contact_already_converted(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """Test converting already converted lead fails."""
+        lead = Lead(
+            first_name="Already",
+            last_name="Converted",
+            email="already.converted@example.com",
+            status="converted",
+            converted_contact_id=1,  # Already converted
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(lead)
+        await db_session.commit()
+        await db_session.refresh(lead)
+
+        response = await client.post(
+            f"/api/leads/{lead.id}/convert/contact",
+            headers=auth_headers,
+            json={"create_company": False},
+        )
+
+        assert response.status_code == 400
+        assert "already converted" in response.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_convert_lead_to_contact_not_found(
+        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+    ):
+        """Test converting non-existent lead fails."""
+        response = await client.post(
+            "/api/leads/99999/convert/contact",
+            headers=auth_headers,
+            json={"create_company": False},
+        )
+
+        assert response.status_code == 404
+
+
+class TestLeadConvertToOpportunity:
+    """Tests for lead to opportunity conversion endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_convert_lead_to_opportunity_success(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_pipeline_stage: PipelineStage,
+    ):
+        """Test successful lead to opportunity conversion."""
+        lead = Lead(
+            first_name="Convert",
+            last_name="ToOpportunity",
+            email="convert.opp@example.com",
+            budget_amount=25000.0,
+            budget_currency="USD",
+            description="Potential deal",
+            status="qualified",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(lead)
+        await db_session.commit()
+        await db_session.refresh(lead)
+
+        response = await client.post(
+            f"/api/leads/{lead.id}/convert/opportunity",
+            headers=auth_headers,
+            json={"pipeline_stage_id": test_pipeline_stage.id},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["lead_id"] == lead.id
+        assert data["opportunity_id"] is not None
+        assert "successfully converted to opportunity" in data["message"]
+
+        # Verify lead status updated
+        await db_session.refresh(lead)
+        assert lead.status == "converted"
+        assert lead.converted_opportunity_id == data["opportunity_id"]
+
+        # Verify opportunity was created with lead data
+        from src.opportunities.models import Opportunity
+
+        result = await db_session.execute(
+            select(Opportunity).where(Opportunity.id == data["opportunity_id"])
+        )
+        opp = result.scalar_one()
+        assert opp.amount == 25000.0
+        assert opp.currency == "USD"
+        assert opp.pipeline_stage_id == test_pipeline_stage.id
+        assert f"Lead #{lead.id}" in opp.source
+
+    @pytest.mark.asyncio
+    async def test_convert_lead_to_opportunity_with_contact(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_pipeline_stage: PipelineStage,
+        test_contact: Contact,
+    ):
+        """Test lead to opportunity conversion with contact link."""
+        lead = Lead(
+            first_name="Convert",
+            last_name="WithContact",
+            email="convert.withcontact@example.com",
+            status="qualified",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(lead)
+        await db_session.commit()
+        await db_session.refresh(lead)
+
+        response = await client.post(
+            f"/api/leads/{lead.id}/convert/opportunity",
+            headers=auth_headers,
+            json={
+                "pipeline_stage_id": test_pipeline_stage.id,
+                "contact_id": test_contact.id,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Verify opportunity is linked to contact
+        from src.opportunities.models import Opportunity
+
+        result = await db_session.execute(
+            select(Opportunity).where(Opportunity.id == data["opportunity_id"])
+        )
+        opp = result.scalar_one()
+        assert opp.contact_id == test_contact.id
+
+    @pytest.mark.asyncio
+    async def test_convert_lead_to_opportunity_with_company(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_pipeline_stage: PipelineStage,
+        test_company: Company,
+    ):
+        """Test lead to opportunity conversion with company link."""
+        lead = Lead(
+            first_name="Convert",
+            last_name="WithCompanyOpp",
+            email="convert.withcompanyopp@example.com",
+            status="qualified",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(lead)
+        await db_session.commit()
+        await db_session.refresh(lead)
+
+        response = await client.post(
+            f"/api/leads/{lead.id}/convert/opportunity",
+            headers=auth_headers,
+            json={
+                "pipeline_stage_id": test_pipeline_stage.id,
+                "company_id": test_company.id,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Verify opportunity is linked to company
+        from src.opportunities.models import Opportunity
+
+        result = await db_session.execute(
+            select(Opportunity).where(Opportunity.id == data["opportunity_id"])
+        )
+        opp = result.scalar_one()
+        assert opp.company_id == test_company.id
+
+    @pytest.mark.asyncio
+    async def test_convert_lead_to_opportunity_already_converted(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_pipeline_stage: PipelineStage,
+    ):
+        """Test converting already converted lead fails."""
+        lead = Lead(
+            first_name="Already",
+            last_name="ConvertedOpp",
+            email="already.convertedopp@example.com",
+            status="converted",
+            converted_opportunity_id=1,  # Already converted
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(lead)
+        await db_session.commit()
+        await db_session.refresh(lead)
+
+        response = await client.post(
+            f"/api/leads/{lead.id}/convert/opportunity",
+            headers=auth_headers,
+            json={"pipeline_stage_id": test_pipeline_stage.id},
+        )
+
+        assert response.status_code == 400
+        assert "already converted" in response.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_convert_lead_to_opportunity_not_found(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_pipeline_stage: PipelineStage,
+    ):
+        """Test converting non-existent lead fails."""
+        response = await client.post(
+            "/api/leads/99999/convert/opportunity",
+            headers=auth_headers,
+            json={"pipeline_stage_id": test_pipeline_stage.id},
+        )
+
+        assert response.status_code == 404
+
+
+class TestLeadFullConversion:
+    """Tests for full lead conversion endpoint (Lead -> Contact + Company + Opportunity)."""
+
+    @pytest.mark.asyncio
+    async def test_full_conversion_success(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_pipeline_stage: PipelineStage,
+    ):
+        """Test successful full lead conversion."""
+        lead = Lead(
+            first_name="Full",
+            last_name="Conversion",
+            email="full.conversion@example.com",
+            phone="+1-555-0400",
+            company_name="Full Convert Corp",
+            website="https://fullconvert.com",
+            industry="Finance",
+            budget_amount=100000.0,
+            budget_currency="USD",
+            description="Big deal opportunity",
+            status="qualified",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(lead)
+        await db_session.commit()
+        await db_session.refresh(lead)
+
+        response = await client.post(
+            f"/api/leads/{lead.id}/convert/full",
+            headers=auth_headers,
+            json={
+                "pipeline_stage_id": test_pipeline_stage.id,
+                "create_company": True,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["lead_id"] == lead.id
+        assert data["contact_id"] is not None
+        assert data["company_id"] is not None
+        assert data["opportunity_id"] is not None
+        assert "successfully converted" in data["message"]
+
+        # Verify lead status updated
+        await db_session.refresh(lead)
+        assert lead.status == "converted"
+        assert lead.converted_contact_id == data["contact_id"]
+        assert lead.converted_opportunity_id == data["opportunity_id"]
+
+        # Verify contact created with lead data
+        from src.contacts.models import Contact
+
+        result = await db_session.execute(
+            select(Contact).where(Contact.id == data["contact_id"])
+        )
+        contact = result.scalar_one()
+        assert contact.first_name == "Full"
+        assert contact.last_name == "Conversion"
+        assert contact.email == "full.conversion@example.com"
+        assert contact.company_id == data["company_id"]
+
+        # Verify company created with lead data
+        from src.companies.models import Company
+
+        result = await db_session.execute(
+            select(Company).where(Company.id == data["company_id"])
+        )
+        company = result.scalar_one()
+        assert company.name == "Full Convert Corp"
+        assert company.website == "https://fullconvert.com"
+        assert company.industry == "Finance"
+
+        # Verify opportunity created with lead data and links
+        from src.opportunities.models import Opportunity
+
+        result = await db_session.execute(
+            select(Opportunity).where(Opportunity.id == data["opportunity_id"])
+        )
+        opp = result.scalar_one()
+        assert opp.amount == 100000.0
+        assert opp.currency == "USD"
+        assert opp.contact_id == data["contact_id"]
+        assert opp.company_id == data["company_id"]
+        assert opp.pipeline_stage_id == test_pipeline_stage.id
+
+    @pytest.mark.asyncio
+    async def test_full_conversion_without_company(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_pipeline_stage: PipelineStage,
+    ):
+        """Test full conversion without company creation."""
+        lead = Lead(
+            first_name="No",
+            last_name="Company",
+            email="no.company@example.com",
+            status="qualified",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(lead)
+        await db_session.commit()
+        await db_session.refresh(lead)
+
+        response = await client.post(
+            f"/api/leads/{lead.id}/convert/full",
+            headers=auth_headers,
+            json={
+                "pipeline_stage_id": test_pipeline_stage.id,
+                "create_company": False,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["contact_id"] is not None
+        assert data["company_id"] is None
+        assert data["opportunity_id"] is not None
+
+    @pytest.mark.asyncio
+    async def test_full_conversion_already_converted_to_contact(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_pipeline_stage: PipelineStage,
+    ):
+        """Test full conversion fails if already converted to contact."""
+        lead = Lead(
+            first_name="Already",
+            last_name="Contact",
+            email="already.contact@example.com",
+            status="converted",
+            converted_contact_id=1,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(lead)
+        await db_session.commit()
+        await db_session.refresh(lead)
+
+        response = await client.post(
+            f"/api/leads/{lead.id}/convert/full",
+            headers=auth_headers,
+            json={"pipeline_stage_id": test_pipeline_stage.id},
+        )
+
+        assert response.status_code == 400
+        assert "already converted" in response.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_full_conversion_already_converted_to_opportunity(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_pipeline_stage: PipelineStage,
+    ):
+        """Test full conversion fails if already converted to opportunity."""
+        lead = Lead(
+            first_name="Already",
+            last_name="Opportunity",
+            email="already.opportunity@example.com",
+            status="converted",
+            converted_opportunity_id=1,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(lead)
+        await db_session.commit()
+        await db_session.refresh(lead)
+
+        response = await client.post(
+            f"/api/leads/{lead.id}/convert/full",
+            headers=auth_headers,
+            json={"pipeline_stage_id": test_pipeline_stage.id},
+        )
+
+        assert response.status_code == 400
+        assert "already converted" in response.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_full_conversion_not_found(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_pipeline_stage: PipelineStage,
+    ):
+        """Test full conversion of non-existent lead fails."""
+        response = await client.post(
+            "/api/leads/99999/convert/full",
+            headers=auth_headers,
+            json={"pipeline_stage_id": test_pipeline_stage.id},
+        )
+
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_full_conversion_preserves_owner(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_pipeline_stage: PipelineStage,
+    ):
+        """Test full conversion preserves owner from lead."""
+        lead = Lead(
+            first_name="Owner",
+            last_name="Preserved",
+            email="owner.preserved@example.com",
+            company_name="Owner Corp",
+            status="qualified",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(lead)
+        await db_session.commit()
+        await db_session.refresh(lead)
+
+        response = await client.post(
+            f"/api/leads/{lead.id}/convert/full",
+            headers=auth_headers,
+            json={
+                "pipeline_stage_id": test_pipeline_stage.id,
+                "create_company": True,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Verify owner preserved on contact
+        from src.contacts.models import Contact
+
+        result = await db_session.execute(
+            select(Contact).where(Contact.id == data["contact_id"])
+        )
+        contact = result.scalar_one()
+        assert contact.owner_id == test_user.id
+
+        # Verify owner preserved on opportunity
+        from src.opportunities.models import Opportunity
+
+        result = await db_session.execute(
+            select(Opportunity).where(Opportunity.id == data["opportunity_id"])
+        )
+        opp = result.scalar_one()
+        assert opp.owner_id == test_user.id

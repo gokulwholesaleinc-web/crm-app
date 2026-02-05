@@ -3,6 +3,7 @@
 from typing import List, Dict, Any
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from src.core.constants import ErrorMessages, EntityNames
 from src.opportunities.models import Opportunity, PipelineStage
 
 
@@ -83,7 +84,7 @@ class PipelineManager:
         opportunity = result.scalar_one_or_none()
 
         if not opportunity:
-            raise ValueError(f"Opportunity {opportunity_id} not found")
+            raise ValueError(ErrorMessages.not_found_with_id(EntityNames.OPPORTUNITY, opportunity_id))
 
         # Verify stage exists
         stage_result = await self.db.execute(
@@ -92,7 +93,7 @@ class PipelineManager:
         stage = stage_result.scalar_one_or_none()
 
         if not stage:
-            raise ValueError(f"Pipeline stage {new_stage_id} not found")
+            raise ValueError(ErrorMessages.not_found_with_id(EntityNames.PIPELINE_STAGE, new_stage_id))
 
         opportunity.pipeline_stage_id = new_stage_id
 

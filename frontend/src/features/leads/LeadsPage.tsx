@@ -1,29 +1,18 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Button } from '../../components/ui/Button';
-import { Spinner } from '../../components/ui/Spinner';
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { PlusIcon } from '@heroicons/react/24/outline';
+import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
+import { LeadForm, LeadFormData } from './components/LeadForm';
+import {
+  useLeads,
+  useCreateLead,
+  useUpdateLead,
+  useDeleteLead,
+} from '../../hooks';
+import { getStatusBadgeClasses, formatStatusLabel } from '../../utils';
+import { formatDate } from '../../utils/formatters';
+import type { Lead, LeadCreate, LeadUpdate } from '../../types';
 import clsx from 'clsx';
-
-interface Lead {
-  id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone?: string;
-  company?: string;
-  source: string;
-  status: string;
-  score: number;
-  createdAt: string;
-}
-
-interface LeadsResponse {
-  items: Lead[];
-  total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
-}
 
 const statusOptions = [
   { value: '', label: 'All Statuses' },
@@ -33,14 +22,6 @@ const statusOptions = [
   { value: 'unqualified', label: 'Unqualified' },
   { value: 'nurturing', label: 'Nurturing' },
 ];
-
-const statusColors: Record<string, string> = {
-  new: 'bg-blue-100 text-blue-800',
-  contacted: 'bg-yellow-100 text-yellow-800',
-  qualified: 'bg-green-100 text-green-800',
-  unqualified: 'bg-red-100 text-red-800',
-  nurturing: 'bg-purple-100 text-purple-800',
-};
 
 function getScoreColor(score: number): string {
   if (score >= 80) return 'text-green-600';
@@ -71,88 +52,120 @@ function ScoreIndicator({ score }: { score: number }) {
   );
 }
 
-export function LeadsPage() {
-  const navigate = useNavigate();
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+function LeadsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [total, setTotal] = useState(0);
+  const [showForm, setShowForm] = useState(false);
+  const [editingLead, setEditingLead] = useState<Lead | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; lead: Lead | null }>({
+    isOpen: false,
+    lead: null,
+  });
   const pageSize = 10;
 
-  const fetchLeads = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+  // Use the hooks for data fetching
+  const {
+    data: leadsData,
+    isLoading,
+    error,
+  } = useLeads({
+    page: currentPage,
+    page_size: pageSize,
+    search: searchQuery || undefined,
+    status: statusFilter || undefined,
+  });
 
-    try {
-      const params = new URLSearchParams({
-        page: currentPage.toString(),
-        page_size: pageSize.toString(),
-      });
+  const createLeadMutation = useCreateLead();
+  const updateLeadMutation = useUpdateLead();
+  const deleteLeadMutation = useDeleteLead();
 
-      if (searchQuery) {
-        params.append('search', searchQuery);
-      }
-
-      if (statusFilter) {
-        params.append('status', statusFilter);
-      }
-
-      const response = await fetch(`/api/leads?${params.toString()}`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch leads');
-      }
-
-      const data: LeadsResponse = await response.json();
-      setLeads(data.items);
-      setTotalPages(data.totalPages);
-      setTotal(data.total);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [currentPage, searchQuery, statusFilter]);
-
-  useEffect(() => {
-    fetchLeads();
-  }, [fetchLeads]);
+  const leads = leadsData?.items ?? [];
+  const totalPages = leadsData?.pages ?? 1;
+  const total = leadsData?.total ?? 0;
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setCurrentPage(1);
-    fetchLeads();
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this lead?')) {
-      return;
-    }
+  const handleDeleteClick = (lead: Lead) => {
+    setDeleteConfirm({ isOpen: true, lead });
+  };
 
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirm.lead) return;
     try {
-      const response = await fetch(`/api/leads/${id}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete lead');
-      }
-
-      fetchLeads();
+      await deleteLeadMutation.mutateAsync(deleteConfirm.lead.id);
+      setDeleteConfirm({ isOpen: false, lead: null });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete lead');
+      console.error('Failed to delete lead:', err);
     }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteConfirm({ isOpen: false, lead: null });
+  };
+
+  const handleEdit = (lead: Lead) => {
+    setEditingLead(lead);
+    setShowForm(true);
+  };
+
+  const handleFormSubmit = async (data: LeadFormData) => {
+    try {
+      if (editingLead) {
+        const updateData: LeadUpdate = {
+          first_name: data.firstName,
+          last_name: data.lastName,
+          email: data.email,
+          phone: data.phone,
+          company_name: data.company,
+          job_title: data.jobTitle,
+          status: data.status,
+        };
+        await updateLeadMutation.mutateAsync({
+          id: editingLead.id,
+          data: updateData,
+        });
+      } else {
+        const createData: LeadCreate = {
+          first_name: data.firstName,
+          last_name: data.lastName,
+          email: data.email,
+          phone: data.phone,
+          company_name: data.company,
+          job_title: data.jobTitle,
+          status: data.status,
+          budget_currency: 'USD', // Required field
+        };
+        await createLeadMutation.mutateAsync(createData);
+      }
+      setShowForm(false);
+      setEditingLead(null);
+    } catch (err) {
+      console.error('Failed to save lead:', err);
+    }
+  };
+
+  const handleFormCancel = () => {
+    setShowForm(false);
+    setEditingLead(null);
+  };
+
+  const getInitialFormData = (): Partial<LeadFormData> | undefined => {
+    if (!editingLead) return undefined;
+    return {
+      firstName: editingLead.first_name,
+      lastName: editingLead.last_name,
+      email: editingLead.email || '',
+      phone: editingLead.phone || '',
+      company: editingLead.company_name || '',
+      jobTitle: editingLead.job_title || '',
+      source: editingLead.source?.name || 'website',
+      status: editingLead.status,
+      score: editingLead.score,
+    };
   };
 
   return (
@@ -165,20 +178,10 @@ export function LeadsPage() {
             Track and manage your sales leads
           </p>
         </div>
-        <Button onClick={() => navigate('/leads/new')}>
-          <svg
-            className="h-5 w-5 mr-2"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 4v16m8-8H4"
-            />
-          </svg>
+        <Button
+          leftIcon={<PlusIcon className="h-5 w-5" />}
+          onClick={() => setShowForm(true)}
+        >
           Add Lead
         </Button>
       </div>
@@ -243,7 +246,22 @@ export function LeadsPage() {
         <div className="rounded-md bg-red-50 p-4">
           <div className="flex">
             <div className="ml-3">
-              <h3 className="text-sm font-medium text-red-800">{error}</h3>
+              <h3 className="text-sm font-medium text-red-800">
+                {error instanceof Error ? error.message : 'An error occurred'}
+              </h3>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Error Message */}
+      {deleteLeadMutation.isError && (
+        <div className="rounded-md bg-red-50 p-4">
+          <div className="flex">
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-red-800">
+                Failed to delete lead
+              </h3>
             </div>
           </div>
         </div>
@@ -275,7 +293,7 @@ export function LeadsPage() {
               Get started by creating a new lead.
             </p>
             <div className="mt-6">
-              <Button onClick={() => navigate('/leads/new')}>Add Lead</Button>
+              <Button onClick={() => setShowForm(true)}>Add Lead</Button>
             </div>
           </div>
         ) : (
@@ -325,51 +343,45 @@ export function LeadsPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {leads.map((lead) => (
+                {leads.map((lead: Lead) => (
                   <tr key={lead.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <Link
                         to={`/leads/${lead.id}`}
                         className="text-sm font-medium text-primary-600 hover:text-primary-900"
                       >
-                        {lead.firstName} {lead.lastName}
+                        {lead.first_name} {lead.last_name}
                       </Link>
-                      <p className="text-sm text-gray-500">{lead.email}</p>
+                      <p className="text-sm text-gray-500">{lead.email || '-'}</p>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {lead.company || '-'}
+                      {lead.company_name || '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={clsx(
-                          'px-2 inline-flex text-xs leading-5 font-semibold rounded-full',
-                          statusColors[lead.status] || 'bg-gray-100 text-gray-800'
-                        )}
-                      >
-                        {lead.status.charAt(0).toUpperCase() +
-                          lead.status.slice(1).replace('_', ' ')}
+                      <span className={getStatusBadgeClasses(lead.status, 'lead')}>
+                        {formatStatusLabel(lead.status)}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <ScoreIndicator score={lead.score} />
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {lead.source.charAt(0).toUpperCase() +
-                        lead.source.slice(1).replace('_', ' ')}
+                      {lead.source?.name ? formatStatusLabel(lead.source.name) : '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(lead.createdAt).toLocaleDateString()}
+                      {formatDate(lead.created_at)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <button
-                        onClick={() => navigate(`/leads/${lead.id}/edit`)}
+                        onClick={() => handleEdit(lead)}
                         className="text-primary-600 hover:text-primary-900 mr-4"
                       >
                         Edit
                       </button>
                       <button
-                        onClick={() => handleDelete(lead.id)}
+                        onClick={() => handleDeleteClick(lead)}
                         className="text-red-600 hover:text-red-900"
+                        disabled={deleteLeadMutation.isPending}
                       >
                         Delete
                       </button>
@@ -464,6 +476,39 @@ export function LeadsPage() {
           </>
         )}
       </div>
+
+      {/* Form Modal */}
+      <Modal
+        isOpen={showForm}
+        onClose={handleFormCancel}
+        title={editingLead ? 'Edit Lead' : 'Add Lead'}
+        size="lg"
+      >
+        <LeadForm
+          initialData={getInitialFormData()}
+          onSubmit={handleFormSubmit}
+          onCancel={handleFormCancel}
+          isLoading={
+            createLeadMutation.isPending || updateLeadMutation.isPending
+          }
+          submitLabel={editingLead ? 'Update Lead' : 'Create Lead'}
+        />
+      </Modal>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteConfirm.isOpen}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Lead"
+        message={`Are you sure you want to delete ${deleteConfirm.lead?.first_name} ${deleteConfirm.lead?.last_name}? This action cannot be undone.`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+        isLoading={deleteLeadMutation.isPending}
+      />
     </div>
   );
 }
+
+export default LeadsPage;

@@ -1,12 +1,21 @@
 """Opportunity API routes."""
 
-from typing import Annotated, Optional, List
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from src.database import get_db
-from src.auth.models import User
-from src.auth.dependencies import get_current_active_user
-from src.opportunities.models import Opportunity, PipelineStage
+from typing import Optional, List
+from fastapi import APIRouter, HTTPException, Query
+from src.core.constants import HTTPStatus, EntityNames
+from src.core.router_utils import (
+    DBSession,
+    CurrentUser,
+    parse_tag_ids,
+    get_entity_or_404,
+    calculate_pages,
+    check_ownership,
+)
+from src.core.cache import (
+    cached_fetch,
+    CACHE_PIPELINE_STAGES,
+    invalidate_pipeline_stages_cache,
+)
 from src.opportunities.schemas import (
     OpportunityCreate,
     OpportunityUpdate,
@@ -29,28 +38,50 @@ from src.opportunities.forecasting import RevenueForecast
 router = APIRouter(prefix="/api/opportunities", tags=["opportunities"])
 
 
+async def _build_opportunity_response(
+    service: OpportunityService, opportunity
+) -> OpportunityResponse:
+    """Build an OpportunityResponse with tags."""
+    tags = await service.get_opportunity_tags(opportunity.id)
+    response_dict = OpportunityResponse.model_validate(opportunity).model_dump()
+    response_dict["tags"] = [TagBrief.model_validate(t) for t in tags]
+    return OpportunityResponse(**response_dict)
+
+
 # Pipeline Stages endpoints
 @router.get("/stages", response_model=List[PipelineStageResponse])
 async def list_stages(
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
     active_only: bool = True,
 ):
-    """List all pipeline stages."""
+    """List all pipeline stages (cached for 5 minutes)."""
     service = PipelineStageService(db)
-    stages = await service.get_all(active_only=active_only)
-    return stages
+
+    async def fetch_stages():
+        stages = await service.get_all(active_only=active_only)
+        # Convert to dicts for caching (ORM objects can't be cached across sessions)
+        return [PipelineStageResponse.model_validate(s).model_dump() for s in stages]
+
+    cached_stages = await cached_fetch(
+        CACHE_PIPELINE_STAGES,
+        f"stages:{active_only}",
+        fetch_stages,
+    )
+    return cached_stages
 
 
-@router.post("/stages", response_model=PipelineStageResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/stages", response_model=PipelineStageResponse, status_code=HTTPStatus.CREATED)
 async def create_stage(
     stage_data: PipelineStageCreate,
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Create a new pipeline stage."""
     service = PipelineStageService(db)
     stage = await service.create(stage_data)
+    # Invalidate cache since we added a new stage
+    invalidate_pipeline_stages_cache()
     return stage
 
 
@@ -58,57 +89,52 @@ async def create_stage(
 async def update_stage(
     stage_id: int,
     stage_data: PipelineStageUpdate,
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Update a pipeline stage."""
     service = PipelineStageService(db)
-    stage = await service.get_by_id(stage_id)
-
-    if not stage:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Pipeline stage not found",
-        )
-
+    stage = await get_entity_or_404(service, stage_id, EntityNames.PIPELINE_STAGE)
     updated_stage = await service.update(stage, stage_data)
+    # Invalidate cache since we updated a stage
+    invalidate_pipeline_stages_cache()
     return updated_stage
 
 
 @router.post("/stages/reorder", response_model=List[PipelineStageResponse])
 async def reorder_stages(
     stage_orders: List[dict],  # [{id: int, order: int}, ...]
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Reorder pipeline stages."""
     service = PipelineStageService(db)
     stages = await service.reorder(stage_orders)
+    # Invalidate cache since we reordered stages
+    invalidate_pipeline_stages_cache()
     return stages
 
 
 # Kanban/Pipeline view
 @router.get("/kanban", response_model=KanbanResponse)
 async def get_kanban_view(
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
     owner_id: Optional[int] = None,
 ):
     """Get Kanban board view of pipeline."""
     manager = PipelineManager(db)
     kanban_data = await manager.get_kanban_data(owner_id=owner_id)
 
-    return KanbanResponse(
-        stages=[KanbanStage(**stage) for stage in kanban_data]
-    )
+    return KanbanResponse(stages=[KanbanStage(**stage) for stage in kanban_data])
 
 
 @router.post("/{opportunity_id}/move", response_model=OpportunityResponse)
 async def move_opportunity(
     opportunity_id: int,
     request: MoveOpportunityRequest,
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Move an opportunity to a different pipeline stage."""
     manager = PipelineManager(db)
@@ -120,24 +146,19 @@ async def move_opportunity(
         )
     except ValueError as e:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=HTTPStatus.NOT_FOUND,
             detail=str(e),
         )
 
     opp_service = OpportunityService(db)
-    tags = await opp_service.get_opportunity_tags(opportunity.id)
-    response = OpportunityResponse.model_validate(opportunity)
-    response_dict = response.model_dump()
-    response_dict["tags"] = [TagBrief.model_validate(t) for t in tags]
-
-    return OpportunityResponse(**response_dict)
+    return await _build_opportunity_response(opp_service, opportunity)
 
 
 # Forecasting endpoints
 @router.get("/forecast", response_model=ForecastResponse)
 async def get_forecast(
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
     months_ahead: int = Query(6, ge=1, le=12),
     owner_id: Optional[int] = None,
 ):
@@ -152,8 +173,8 @@ async def get_forecast(
 
 @router.get("/pipeline-summary", response_model=PipelineSummaryResponse)
 async def get_pipeline_summary(
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
     owner_id: Optional[int] = None,
 ):
     """Get pipeline summary."""
@@ -165,8 +186,8 @@ async def get_pipeline_summary(
 # Opportunity CRUD endpoints
 @router.get("", response_model=OpportunityListResponse)
 async def list_opportunities(
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     search: Optional[str] = None,
@@ -179,10 +200,6 @@ async def list_opportunities(
     """List opportunities with pagination and filters."""
     service = OpportunityService(db)
 
-    parsed_tag_ids = None
-    if tag_ids:
-        parsed_tag_ids = [int(x) for x in tag_ids.split(",")]
-
     opportunities, total = await service.get_list(
         page=page,
         page_size=page_size,
@@ -191,110 +208,75 @@ async def list_opportunities(
         contact_id=contact_id,
         company_id=company_id,
         owner_id=owner_id,
-        tag_ids=parsed_tag_ids,
+        tag_ids=parse_tag_ids(tag_ids),
     )
 
-    opp_responses = []
-    for opp in opportunities:
-        tags = await service.get_opportunity_tags(opp.id)
-        opp_dict = OpportunityResponse.model_validate(opp).model_dump()
-        opp_dict["tags"] = [TagBrief.model_validate(t) for t in tags]
-        opp_responses.append(OpportunityResponse(**opp_dict))
-
-    pages = (total + page_size - 1) // page_size
+    opp_responses = [
+        await _build_opportunity_response(service, opp) for opp in opportunities
+    ]
 
     return OpportunityListResponse(
         items=opp_responses,
         total=total,
         page=page,
         page_size=page_size,
-        pages=pages,
+        pages=calculate_pages(total, page_size),
     )
 
 
-@router.post("", response_model=OpportunityResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=OpportunityResponse, status_code=HTTPStatus.CREATED)
 async def create_opportunity(
     opp_data: OpportunityCreate,
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Create a new opportunity."""
     service = OpportunityService(db)
     opportunity = await service.create(opp_data, current_user.id)
-
-    tags = await service.get_opportunity_tags(opportunity.id)
-    response = OpportunityResponse.model_validate(opportunity)
-    response_dict = response.model_dump()
-    response_dict["tags"] = [TagBrief.model_validate(t) for t in tags]
-
-    return OpportunityResponse(**response_dict)
+    return await _build_opportunity_response(service, opportunity)
 
 
 @router.get("/{opportunity_id}", response_model=OpportunityResponse)
 async def get_opportunity(
     opportunity_id: int,
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Get an opportunity by ID."""
     service = OpportunityService(db)
-    opportunity = await service.get_by_id(opportunity_id)
-
-    if not opportunity:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Opportunity not found",
-        )
-
-    tags = await service.get_opportunity_tags(opportunity.id)
-    response = OpportunityResponse.model_validate(opportunity)
-    response_dict = response.model_dump()
-    response_dict["tags"] = [TagBrief.model_validate(t) for t in tags]
-
-    return OpportunityResponse(**response_dict)
+    opportunity = await get_entity_or_404(
+        service, opportunity_id, EntityNames.OPPORTUNITY
+    )
+    return await _build_opportunity_response(service, opportunity)
 
 
 @router.patch("/{opportunity_id}", response_model=OpportunityResponse)
 async def update_opportunity(
     opportunity_id: int,
     opp_data: OpportunityUpdate,
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Update an opportunity."""
     service = OpportunityService(db)
-    opportunity = await service.get_by_id(opportunity_id)
-
-    if not opportunity:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Opportunity not found",
-        )
-
+    opportunity = await get_entity_or_404(
+        service, opportunity_id, EntityNames.OPPORTUNITY
+    )
+    check_ownership(opportunity, current_user, EntityNames.OPPORTUNITY)
     updated_opp = await service.update(opportunity, opp_data, current_user.id)
-
-    tags = await service.get_opportunity_tags(updated_opp.id)
-    response = OpportunityResponse.model_validate(updated_opp)
-    response_dict = response.model_dump()
-    response_dict["tags"] = [TagBrief.model_validate(t) for t in tags]
-
-    return OpportunityResponse(**response_dict)
+    return await _build_opportunity_response(service, updated_opp)
 
 
-@router.delete("/{opportunity_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{opportunity_id}", status_code=HTTPStatus.NO_CONTENT)
 async def delete_opportunity(
     opportunity_id: int,
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Delete an opportunity."""
     service = OpportunityService(db)
-    opportunity = await service.get_by_id(opportunity_id)
-
-    if not opportunity:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Opportunity not found",
-        )
-
+    opportunity = await get_entity_or_404(
+        service, opportunity_id, EntityNames.OPPORTUNITY
+    )
+    check_ownership(opportunity, current_user, EntityNames.OPPORTUNITY)
     await service.delete(opportunity)

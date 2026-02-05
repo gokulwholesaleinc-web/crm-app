@@ -1,4 +1,5 @@
 import { ReactNode, useState } from 'react';
+import { Link } from 'react-router-dom';
 import clsx from 'clsx';
 import { Sidebar, MobileSidebar } from './Sidebar';
 import { Header, User } from './Header';
@@ -98,12 +99,12 @@ export function PageHeader({
                   <span className="mx-2 text-gray-400">/</span>
                 )}
                 {crumb.href ? (
-                  <a
-                    href={crumb.href}
+                  <Link
+                    to={crumb.href}
                     className="text-gray-500 hover:text-gray-700"
                   >
                     {crumb.label}
-                  </a>
+                  </Link>
                 ) : (
                   <span className="text-gray-900 font-medium">
                     {crumb.label}

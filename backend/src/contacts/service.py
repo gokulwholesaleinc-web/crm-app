@@ -2,30 +2,31 @@
 
 from typing import Optional, List, Tuple
 from sqlalchemy import select, func, or_
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from src.contacts.models import Contact
 from src.contacts.schemas import ContactCreate, ContactUpdate
-from src.core.models import Tag, EntityTag
+from src.core.base_service import CRUDService, TaggableServiceMixin
+from src.core.models import Tag
+from src.core.constants import ENTITY_TYPE_CONTACTS, DEFAULT_PAGE_SIZE
 
 
-class ContactService:
-    def __init__(self, db: AsyncSession):
-        self.db = db
+class ContactService(
+    CRUDService[Contact, ContactCreate, ContactUpdate],
+    TaggableServiceMixin,
+):
+    """Service for Contact CRUD operations with tag support."""
 
-    async def get_by_id(self, contact_id: int) -> Optional[Contact]:
-        """Get contact by ID with related data."""
-        result = await self.db.execute(
-            select(Contact)
-            .where(Contact.id == contact_id)
-            .options(selectinload(Contact.company))
-        )
-        return result.scalar_one_or_none()
+    model = Contact
+    entity_type = ENTITY_TYPE_CONTACTS
+
+    def _get_eager_load_options(self):
+        """Load company relation."""
+        return [selectinload(Contact.company)]
 
     async def get_list(
         self,
         page: int = 1,
-        page_size: int = 20,
+        page_size: int = DEFAULT_PAGE_SIZE,
         search: Optional[str] = None,
         company_id: Optional[int] = None,
         status: Optional[str] = None,
@@ -54,15 +55,7 @@ class ContactService:
             query = query.where(Contact.owner_id == owner_id)
 
         if tag_ids:
-            # Filter by tags using subquery
-            tag_subquery = (
-                select(EntityTag.entity_id)
-                .where(EntityTag.entity_type == "contacts")
-                .where(EntityTag.tag_id.in_(tag_ids))
-                .group_by(EntityTag.entity_id)
-                .having(func.count(EntityTag.tag_id) == len(tag_ids))
-            )
-            query = query.where(Contact.id.in_(tag_subquery))
+            query = await self._filter_by_tags(query, tag_ids)
 
         # Get total count
         count_query = select(func.count()).select_from(query.subquery())
@@ -80,71 +73,32 @@ class ContactService:
 
     async def create(self, data: ContactCreate, user_id: int) -> Contact:
         """Create a new contact."""
-        contact_data = data.model_dump(exclude={"tag_ids"})
-        contact = Contact(**contact_data, created_by_id=user_id)
-        self.db.add(contact)
-        await self.db.flush()
+        contact = await super().create(data, user_id)
 
         # Add tags
         if data.tag_ids:
-            await self._update_tags(contact.id, data.tag_ids)
+            await self.update_tags(contact.id, data.tag_ids)
+            await self.db.refresh(contact)
 
-        await self.db.refresh(contact)
         return contact
 
     async def update(self, contact: Contact, data: ContactUpdate, user_id: int) -> Contact:
         """Update a contact."""
-        update_data = data.model_dump(exclude={"tag_ids"}, exclude_unset=True)
-        for field, value in update_data.items():
-            setattr(contact, field, value)
-        contact.updated_by_id = user_id
-        await self.db.flush()
+        contact = await super().update(contact, data, user_id)
 
         # Update tags if provided
         if data.tag_ids is not None:
-            await self._update_tags(contact.id, data.tag_ids)
+            await self.update_tags(contact.id, data.tag_ids)
+            await self.db.refresh(contact)
 
-        await self.db.refresh(contact)
         return contact
 
     async def delete(self, contact: Contact) -> None:
         """Delete a contact."""
         # Remove tag associations
-        await self.db.execute(
-            EntityTag.__table__.delete().where(
-                EntityTag.entity_type == "contacts",
-                EntityTag.entity_id == contact.id,
-            )
-        )
-        await self.db.delete(contact)
-        await self.db.flush()
-
-    async def _update_tags(self, contact_id: int, tag_ids: List[int]) -> None:
-        """Update tags for a contact."""
-        # Remove existing tags
-        await self.db.execute(
-            EntityTag.__table__.delete().where(
-                EntityTag.entity_type == "contacts",
-                EntityTag.entity_id == contact_id,
-            )
-        )
-
-        # Add new tags
-        for tag_id in tag_ids:
-            entity_tag = EntityTag(
-                entity_type="contacts",
-                entity_id=contact_id,
-                tag_id=tag_id,
-            )
-            self.db.add(entity_tag)
-        await self.db.flush()
+        await self.clear_tags(contact.id)
+        await super().delete(contact)
 
     async def get_contact_tags(self, contact_id: int) -> List[Tag]:
         """Get tags for a contact."""
-        result = await self.db.execute(
-            select(Tag)
-            .join(EntityTag)
-            .where(EntityTag.entity_type == "contacts")
-            .where(EntityTag.entity_id == contact_id)
-        )
-        return list(result.scalars().all())
+        return await self.get_tags(contact_id)

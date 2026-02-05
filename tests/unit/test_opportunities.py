@@ -842,3 +842,489 @@ class TestOpportunitiesUnauthorized:
         """Test getting opportunity without auth fails."""
         response = await client.get(f"/api/opportunities/{test_opportunity.id}")
         assert response.status_code == 401
+
+
+class TestReorderStages:
+    """Tests for reordering pipeline stages endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_reorder_stages_success(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+    ):
+        """Test successfully reordering pipeline stages."""
+        # Create multiple stages with initial order
+        stage1 = PipelineStage(
+            name="Stage A",
+            order=1,
+            probability=10,
+        )
+        stage2 = PipelineStage(
+            name="Stage B",
+            order=2,
+            probability=30,
+        )
+        stage3 = PipelineStage(
+            name="Stage C",
+            order=3,
+            probability=50,
+        )
+        db_session.add_all([stage1, stage2, stage3])
+        await db_session.commit()
+        await db_session.refresh(stage1)
+        await db_session.refresh(stage2)
+        await db_session.refresh(stage3)
+
+        # Reorder: swap stage1 and stage3
+        response = await client.post(
+            "/api/opportunities/stages/reorder",
+            headers=auth_headers,
+            json=[
+                {"id": stage1.id, "order": 3},
+                {"id": stage2.id, "order": 2},
+                {"id": stage3.id, "order": 1},
+            ],
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+
+        # Find the reordered stages in the response
+        stage1_response = next((s for s in data if s["id"] == stage1.id), None)
+        stage3_response = next((s for s in data if s["id"] == stage3.id), None)
+        assert stage1_response is not None
+        assert stage3_response is not None
+        assert stage1_response["order"] == 3
+        assert stage3_response["order"] == 1
+
+    @pytest.mark.asyncio
+    async def test_reorder_stages_partial(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_pipeline_stage: PipelineStage,
+    ):
+        """Test reordering only some stages."""
+        # Create another stage
+        another_stage = PipelineStage(
+            name="Another Stage",
+            order=5,
+            probability=40,
+        )
+        db_session.add(another_stage)
+        await db_session.commit()
+        await db_session.refresh(another_stage)
+
+        # Reorder only the new stage
+        response = await client.post(
+            "/api/opportunities/stages/reorder",
+            headers=auth_headers,
+            json=[
+                {"id": another_stage.id, "order": 10},
+            ],
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+        reordered = next((s for s in data if s["id"] == another_stage.id), None)
+        assert reordered is not None
+        assert reordered["order"] == 10
+
+    @pytest.mark.asyncio
+    async def test_reorder_stages_empty_list(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+    ):
+        """Test reordering with empty list."""
+        response = await client.post(
+            "/api/opportunities/stages/reorder",
+            headers=auth_headers,
+            json=[],
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+
+    @pytest.mark.asyncio
+    async def test_reorder_stages_unauthorized(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+    ):
+        """Test reordering stages without auth fails."""
+        response = await client.post(
+            "/api/opportunities/stages/reorder",
+            json=[{"id": 1, "order": 2}],
+        )
+        assert response.status_code == 401
+
+
+class TestForecast:
+    """Tests for revenue forecast endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_get_forecast_empty(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_pipeline_stage: PipelineStage,
+    ):
+        """Test getting forecast with no opportunities."""
+        response = await client.get(
+            "/api/opportunities/forecast",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "periods" in data
+        assert "totals" in data
+        assert "currency" in data
+        assert isinstance(data["periods"], list)
+
+    @pytest.mark.asyncio
+    async def test_get_forecast_with_opportunities(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_pipeline_stage: PipelineStage,
+    ):
+        """Test getting forecast with existing opportunities."""
+        # Create opportunities with different expected close dates
+        for i in range(3):
+            opp = Opportunity(
+                name=f"Forecast Test {i}",
+                pipeline_stage_id=test_pipeline_stage.id,
+                amount=50000.0 * (i + 1),
+                owner_id=test_user.id,
+                created_by_id=test_user.id,
+                expected_close_date=date.today() + timedelta(days=30 * (i + 1)),
+            )
+            db_session.add(opp)
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/opportunities/forecast",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "periods" in data
+        assert "totals" in data
+        assert "currency" in data
+        assert data["currency"] == "USD"
+        # Should have totals calculated
+        assert "best_case" in data["totals"]
+        assert "weighted" in data["totals"]
+        assert "commit" in data["totals"]
+
+    @pytest.mark.asyncio
+    async def test_get_forecast_custom_months(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_pipeline_stage: PipelineStage,
+    ):
+        """Test getting forecast with custom months_ahead parameter."""
+        response = await client.get(
+            "/api/opportunities/forecast",
+            headers=auth_headers,
+            params={"months_ahead": 3},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["periods"]) <= 3
+
+    @pytest.mark.asyncio
+    async def test_get_forecast_max_months(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_pipeline_stage: PipelineStage,
+    ):
+        """Test getting forecast with maximum months_ahead (12)."""
+        response = await client.get(
+            "/api/opportunities/forecast",
+            headers=auth_headers,
+            params={"months_ahead": 12},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["periods"]) <= 12
+
+    @pytest.mark.asyncio
+    async def test_get_forecast_filter_by_owner(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_pipeline_stage: PipelineStage,
+    ):
+        """Test getting forecast filtered by owner."""
+        # Create an opportunity for the test user
+        opp = Opportunity(
+            name="Owner Forecast Test",
+            pipeline_stage_id=test_pipeline_stage.id,
+            amount=100000.0,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+            expected_close_date=date.today() + timedelta(days=45),
+        )
+        db_session.add(opp)
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/opportunities/forecast",
+            headers=auth_headers,
+            params={"owner_id": test_user.id},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "periods" in data
+        assert "totals" in data
+
+    @pytest.mark.asyncio
+    async def test_get_forecast_invalid_months(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+    ):
+        """Test getting forecast with invalid months_ahead parameter."""
+        # months_ahead must be between 1 and 12
+        response = await client.get(
+            "/api/opportunities/forecast",
+            headers=auth_headers,
+            params={"months_ahead": 15},
+        )
+
+        assert response.status_code == 422  # Validation error
+
+    @pytest.mark.asyncio
+    async def test_get_forecast_unauthorized(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+    ):
+        """Test getting forecast without auth fails."""
+        response = await client.get("/api/opportunities/forecast")
+        assert response.status_code == 401
+
+
+class TestPipelineSummary:
+    """Tests for pipeline summary endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_get_pipeline_summary_empty(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_pipeline_stage: PipelineStage,
+    ):
+        """Test getting pipeline summary with no opportunities."""
+        response = await client.get(
+            "/api/opportunities/pipeline-summary",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "total_opportunities" in data
+        assert "total_value" in data
+        assert "weighted_value" in data
+        assert "currency" in data
+        assert "by_stage" in data
+        assert data["total_opportunities"] == 0
+        assert data["total_value"] == 0
+
+    @pytest.mark.asyncio
+    async def test_get_pipeline_summary_with_opportunities(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_pipeline_stage: PipelineStage,
+    ):
+        """Test getting pipeline summary with existing opportunities."""
+        # Create multiple opportunities
+        for i in range(5):
+            opp = Opportunity(
+                name=f"Summary Test {i}",
+                pipeline_stage_id=test_pipeline_stage.id,
+                amount=10000.0 * (i + 1),
+                owner_id=test_user.id,
+                created_by_id=test_user.id,
+            )
+            db_session.add(opp)
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/opportunities/pipeline-summary",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total_opportunities"] >= 5
+        assert data["total_value"] >= 150000.0  # Sum of 10k + 20k + 30k + 40k + 50k
+        assert "by_stage" in data
+        assert isinstance(data["by_stage"], dict)
+
+    @pytest.mark.asyncio
+    async def test_get_pipeline_summary_by_stage_breakdown(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """Test pipeline summary includes breakdown by stage."""
+        # Create two different stages
+        stage_a = PipelineStage(
+            name="Discovery",
+            order=1,
+            probability=20,
+        )
+        stage_b = PipelineStage(
+            name="Proposal",
+            order=2,
+            probability=50,
+        )
+        db_session.add_all([stage_a, stage_b])
+        await db_session.commit()
+        await db_session.refresh(stage_a)
+        await db_session.refresh(stage_b)
+
+        # Create opportunities in different stages
+        opp1 = Opportunity(
+            name="Discovery Opp",
+            pipeline_stage_id=stage_a.id,
+            amount=25000.0,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        opp2 = Opportunity(
+            name="Proposal Opp",
+            pipeline_stage_id=stage_b.id,
+            amount=75000.0,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add_all([opp1, opp2])
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/opportunities/pipeline-summary",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "by_stage" in data
+        by_stage = data["by_stage"]
+        # Check that stages are represented
+        assert len(by_stage) >= 2
+
+    @pytest.mark.asyncio
+    async def test_get_pipeline_summary_filter_by_owner(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_pipeline_stage: PipelineStage,
+    ):
+        """Test getting pipeline summary filtered by owner."""
+        # Create an opportunity for the test user
+        opp = Opportunity(
+            name="Owner Summary Test",
+            pipeline_stage_id=test_pipeline_stage.id,
+            amount=50000.0,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(opp)
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/opportunities/pipeline-summary",
+            headers=auth_headers,
+            params={"owner_id": test_user.id},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "total_opportunities" in data
+        assert "total_value" in data
+        assert data["total_opportunities"] >= 1
+        assert data["total_value"] >= 50000.0
+
+    @pytest.mark.asyncio
+    async def test_get_pipeline_summary_weighted_value(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """Test pipeline summary correctly calculates weighted values."""
+        # Create a stage with known probability
+        stage = PipelineStage(
+            name="Test Weighted Stage",
+            order=1,
+            probability=50,  # 50% probability
+        )
+        db_session.add(stage)
+        await db_session.commit()
+        await db_session.refresh(stage)
+
+        # Create opportunity with known amount
+        opp = Opportunity(
+            name="Weighted Summary Test",
+            pipeline_stage_id=stage.id,
+            amount=100000.0,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(opp)
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/opportunities/pipeline-summary",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        # Weighted value should reflect probability (50% of 100k = 50k)
+        assert data["weighted_value"] >= 50000.0
+
+    @pytest.mark.asyncio
+    async def test_get_pipeline_summary_unauthorized(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+    ):
+        """Test getting pipeline summary without auth fails."""
+        response = await client.get("/api/opportunities/pipeline-summary")
+        assert response.status_code == 401

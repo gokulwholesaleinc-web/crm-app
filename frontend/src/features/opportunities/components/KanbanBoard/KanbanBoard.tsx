@@ -127,10 +127,13 @@ export function KanbanBoard({
         const overIndex = prev.findIndex((o) => o.id === overId);
 
         const updatedOpportunities = [...prev];
-        updatedOpportunities[activeIndex] = {
-          ...updatedOpportunities[activeIndex],
-          stage: overOpportunity.stage,
-        };
+        const currentOpp = updatedOpportunities[activeIndex];
+        if (currentOpp) {
+          updatedOpportunities[activeIndex] = {
+            ...currentOpp,
+            stage: overOpportunity.stage,
+          };
+        }
 
         return arrayMove(updatedOpportunities, activeIndex, overIndex);
       });

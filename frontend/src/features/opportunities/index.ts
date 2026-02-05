@@ -1,4 +1,4 @@
-export { OpportunitiesPage } from './OpportunitiesPage';
+export { default as OpportunitiesPage } from './OpportunitiesPage';
 export { OpportunityForm } from './components/OpportunityForm';
 export { KanbanBoard } from './components/KanbanBoard/KanbanBoard';
 export { KanbanColumn } from './components/KanbanBoard/KanbanColumn';

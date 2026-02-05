@@ -1,104 +1,136 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Button } from '../../components/ui/Button';
-import { Spinner } from '../../components/ui/Spinner';
+import { useState, useEffect } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { PlusIcon } from '@heroicons/react/24/outline';
+import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
+import { ContactForm, ContactFormData } from './components/ContactForm';
+import {
+  useContacts,
+  useCreateContact,
+  useUpdateContact,
+  useDeleteContact,
+} from '../../hooks';
+import { formatDate, formatPhoneNumber } from '../../utils/formatters';
+import type { Contact, ContactCreate, ContactUpdate } from '../../types';
 
-interface Contact {
-  id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone?: string;
-  company?: string;
-  jobTitle?: string;
-  createdAt: string;
-}
-
-interface ContactsResponse {
-  items: Contact[];
-  total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
-}
-
-export function ContactsPage() {
-  const navigate = useNavigate();
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+function ContactsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [total, setTotal] = useState(0);
+  const [showForm, setShowForm] = useState(false);
+  const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; contact: Contact | null }>({
+    isOpen: false,
+    contact: null,
+  });
   const pageSize = 10;
 
-  const fetchContacts = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const params = new URLSearchParams({
-        page: currentPage.toString(),
-        page_size: pageSize.toString(),
-      });
-
-      if (searchQuery) {
-        params.append('search', searchQuery);
-      }
-
-      const response = await fetch(`/api/contacts?${params.toString()}`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch contacts');
-      }
-
-      const data: ContactsResponse = await response.json();
-      setContacts(data.items);
-      setTotalPages(data.totalPages);
-      setTotal(data.total);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [currentPage, searchQuery]);
-
+  // Handle URL query parameters for auto-opening form (e.g., from company detail page)
   useEffect(() => {
-    fetchContacts();
-  }, [fetchContacts]);
+    const action = searchParams.get('action');
+
+    if (action === 'new') {
+      setShowForm(true);
+      // Clear the action from URL to prevent re-opening on refresh
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete('action');
+      setSearchParams(newParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  // Use the hooks for data fetching
+  const {
+    data: contactsData,
+    isLoading,
+    error,
+  } = useContacts({
+    page: currentPage,
+    page_size: pageSize,
+    search: searchQuery || undefined,
+  });
+
+  const createContactMutation = useCreateContact();
+  const updateContactMutation = useUpdateContact();
+  const deleteContactMutation = useDeleteContact();
+
+  const contacts = contactsData?.items ?? [];
+  const totalPages = contactsData?.pages ?? 1;
+  const total = contactsData?.total ?? 0;
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setCurrentPage(1);
-    fetchContacts();
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this contact?')) {
-      return;
-    }
+  const handleDeleteClick = (contact: Contact) => {
+    setDeleteConfirm({ isOpen: true, contact });
+  };
 
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirm.contact) return;
     try {
-      const response = await fetch(`/api/contacts/${id}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete contact');
-      }
-
-      fetchContacts();
+      await deleteContactMutation.mutateAsync(deleteConfirm.contact.id);
+      setDeleteConfirm({ isOpen: false, contact: null });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete contact');
+      console.error('Failed to delete contact:', err);
     }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteConfirm({ isOpen: false, contact: null });
+  };
+
+  const handleEdit = (contact: Contact) => {
+    setEditingContact(contact);
+    setShowForm(true);
+  };
+
+  const handleFormSubmit = async (data: ContactFormData) => {
+    try {
+      if (editingContact) {
+        const updateData: ContactUpdate = {
+          first_name: data.firstName,
+          last_name: data.lastName,
+          email: data.email,
+          phone: data.phone,
+          job_title: data.jobTitle,
+        };
+        await updateContactMutation.mutateAsync({
+          id: editingContact.id,
+          data: updateData,
+        });
+      } else {
+        const createData: ContactCreate = {
+          first_name: data.firstName,
+          last_name: data.lastName,
+          email: data.email,
+          phone: data.phone,
+          job_title: data.jobTitle,
+          status: 'active', // Default status for new contacts
+        };
+        await createContactMutation.mutateAsync(createData);
+      }
+      setShowForm(false);
+      setEditingContact(null);
+    } catch (err) {
+      console.error('Failed to save contact:', err);
+    }
+  };
+
+  const handleFormCancel = () => {
+    setShowForm(false);
+    setEditingContact(null);
+  };
+
+  const getInitialFormData = (): Partial<ContactFormData> | undefined => {
+    if (!editingContact) return undefined;
+    return {
+      firstName: editingContact.first_name,
+      lastName: editingContact.last_name,
+      email: editingContact.email || '',
+      phone: editingContact.phone || '',
+      jobTitle: editingContact.job_title || '',
+      company: editingContact.company?.name || '',
+    };
   };
 
   return (
@@ -111,20 +143,10 @@ export function ContactsPage() {
             Manage your contacts and relationships
           </p>
         </div>
-        <Button onClick={() => navigate('/contacts/new')}>
-          <svg
-            className="h-5 w-5 mr-2"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 4v16m8-8H4"
-            />
-          </svg>
+        <Button
+          leftIcon={<PlusIcon className="h-5 w-5" />}
+          onClick={() => setShowForm(true)}
+        >
           Add Contact
         </Button>
       </div>
@@ -173,7 +195,22 @@ export function ContactsPage() {
         <div className="rounded-md bg-red-50 p-4">
           <div className="flex">
             <div className="ml-3">
-              <h3 className="text-sm font-medium text-red-800">{error}</h3>
+              <h3 className="text-sm font-medium text-red-800">
+                {error instanceof Error ? error.message : 'An error occurred'}
+              </h3>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Error Message */}
+      {deleteContactMutation.isError && (
+        <div className="rounded-md bg-red-50 p-4">
+          <div className="flex">
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-red-800">
+                Failed to delete contact
+              </h3>
             </div>
           </div>
         </div>
@@ -205,9 +242,7 @@ export function ContactsPage() {
               Get started by creating a new contact.
             </p>
             <div className="mt-6">
-              <Button onClick={() => navigate('/contacts/new')}>
-                Add Contact
-              </Button>
+              <Button onClick={() => setShowForm(true)}>Add Contact</Button>
             </div>
           </div>
         ) : (
@@ -251,41 +286,42 @@ export function ContactsPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {contacts.map((contact) => (
+                {contacts.map((contact: Contact) => (
                   <tr key={contact.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <Link
                         to={`/contacts/${contact.id}`}
                         className="text-sm font-medium text-primary-600 hover:text-primary-900"
                       >
-                        {contact.firstName} {contact.lastName}
+                        {contact.first_name} {contact.last_name}
                       </Link>
-                      {contact.jobTitle && (
-                        <p className="text-sm text-gray-500">{contact.jobTitle}</p>
+                      {contact.job_title && (
+                        <p className="text-sm text-gray-500">{contact.job_title}</p>
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {contact.email}
+                      {contact.email || '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {contact.company || '-'}
+                      {contact.company?.name || '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {contact.phone || '-'}
+                      {formatPhoneNumber(contact.phone)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(contact.createdAt).toLocaleDateString()}
+                      {formatDate(contact.created_at)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <button
-                        onClick={() => navigate(`/contacts/${contact.id}/edit`)}
+                        onClick={() => handleEdit(contact)}
                         className="text-primary-600 hover:text-primary-900 mr-4"
                       >
                         Edit
                       </button>
                       <button
-                        onClick={() => handleDelete(contact.id)}
+                        onClick={() => handleDeleteClick(contact)}
                         className="text-red-600 hover:text-red-900"
+                        disabled={deleteContactMutation.isPending}
                       >
                         Delete
                       </button>
@@ -380,6 +416,39 @@ export function ContactsPage() {
           </>
         )}
       </div>
+
+      {/* Form Modal */}
+      <Modal
+        isOpen={showForm}
+        onClose={handleFormCancel}
+        title={editingContact ? 'Edit Contact' : 'Add Contact'}
+        size="lg"
+      >
+        <ContactForm
+          initialData={getInitialFormData()}
+          onSubmit={handleFormSubmit}
+          onCancel={handleFormCancel}
+          isLoading={
+            createContactMutation.isPending || updateContactMutation.isPending
+          }
+          submitLabel={editingContact ? 'Update Contact' : 'Create Contact'}
+        />
+      </Modal>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteConfirm.isOpen}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Contact"
+        message={`Are you sure you want to delete ${deleteConfirm.contact?.first_name} ${deleteConfirm.contact?.last_name}? This action cannot be undone.`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+        isLoading={deleteContactMutation.isPending}
+      />
     </div>
   );
 }
+
+export default ContactsPage;

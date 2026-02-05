@@ -1,6 +1,7 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import clsx from 'clsx';
+import { formatCurrency, formatDate } from '../../../../utils/formatters';
 
 export interface Opportunity {
   id: string;
@@ -37,23 +38,6 @@ export function KanbanCard({ opportunity, onClick }: KanbanCardProps) {
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-  };
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(value);
-  };
-
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return null;
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-    });
   };
 
   const isOverdue =
@@ -142,7 +126,7 @@ export function KanbanCard({ opportunity, onClick }: KanbanCardProps) {
                 />
               </svg>
               <span className="text-xs">
-                {formatDate(opportunity.expectedCloseDate)}
+                {formatDate(opportunity.expectedCloseDate, 'short')}
               </span>
             </div>
           )}

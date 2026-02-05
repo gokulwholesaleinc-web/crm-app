@@ -1,4 +1,5 @@
 import { Fragment } from 'react';
+import { Link } from 'react-router-dom';
 import { Menu, Transition } from '@headlessui/react';
 import {
   Bars3Icon,
@@ -132,8 +133,8 @@ export function Header({
               )}
               <Menu.Item>
                 {({ active }) => (
-                  <a
-                    href="/profile"
+                  <Link
+                    to="/profile"
                     className={clsx(
                       'flex items-center px-4 py-2 text-sm',
                       active ? 'bg-gray-100 text-gray-900' : 'text-gray-700'
@@ -144,13 +145,13 @@ export function Header({
                       aria-hidden="true"
                     />
                     Your Profile
-                  </a>
+                  </Link>
                 )}
               </Menu.Item>
               <Menu.Item>
                 {({ active }) => (
-                  <a
-                    href="/settings"
+                  <Link
+                    to="/settings"
                     className={clsx(
                       'flex items-center px-4 py-2 text-sm',
                       active ? 'bg-gray-100 text-gray-900' : 'text-gray-700'
@@ -161,7 +162,7 @@ export function Header({
                       aria-hidden="true"
                     />
                     Settings
-                  </a>
+                  </Link>
                 )}
               </Menu.Item>
               <div className="border-t border-gray-100" />

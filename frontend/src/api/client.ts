@@ -11,7 +11,9 @@ import axios, {
 import type { ApiError } from '../types';
 
 // Get base URL from environment variable
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// Individual API modules include /api prefix, so base URL should be empty for proxy setup
+// or the backend root URL (e.g., http://localhost:8000) for direct access
+const BASE_URL = import.meta.env.VITE_API_URL || '';
 
 // Token storage key
 const TOKEN_KEY = 'crm_access_token';

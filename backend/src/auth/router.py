@@ -1,10 +1,12 @@
 """Authentication API routes."""
 
 from typing import Annotated, List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.ext.asyncio import AsyncSession
-from src.database import get_db
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from src.core.constants import HTTPStatus, ErrorMessages, EntityNames
+from src.core.router_utils import DBSession, CurrentUser, raise_bad_request
 from src.auth.models import User
 from src.auth.schemas import (
     UserCreate,
@@ -19,11 +21,16 @@ from src.auth.dependencies import get_current_active_user, get_current_superuser
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
+# Rate limiter for auth endpoints
+limiter = Limiter(key_func=get_remote_address)
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+
+@router.post("/register", response_model=UserResponse, status_code=HTTPStatus.CREATED)
+@limiter.limit("3/minute")
 async def register(
+    request: Request,
     user_data: UserCreate,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DBSession,
 ):
     """Register a new user."""
     service = AuthService(db)
@@ -31,19 +38,18 @@ async def register(
     # Check if user already exists
     existing_user = await service.get_user_by_email(user_data.email)
     if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered",
-        )
+        raise_bad_request("Email already registered")
 
     user = await service.create_user(user_data)
     return user
 
 
 @router.post("/login", response_model=Token)
+@limiter.limit("5/minute")
 async def login(
+    request: Request,
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DBSession,
 ):
     """Login and get access token."""
     service = AuthService(db)
@@ -51,19 +57,21 @@ async def login(
 
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=HTTPStatus.UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    access_token = create_access_token(data={"sub": user.id})
+    access_token = create_access_token(data={"sub": str(user.id)})
     return Token(access_token=access_token)
 
 
 @router.post("/login/json", response_model=Token)
+@limiter.limit("5/minute")
 async def login_json(
+    request: Request,
     login_data: LoginRequest,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DBSession,
 ):
     """Login with JSON body and get access token."""
     service = AuthService(db)
@@ -71,17 +79,17 @@ async def login_json(
 
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=HTTPStatus.UNAUTHORIZED,
             detail="Incorrect email or password",
         )
 
-    access_token = create_access_token(data={"sub": user.id})
+    access_token = create_access_token(data={"sub": str(user.id)})
     return Token(access_token=access_token)
 
 
 @router.get("/me", response_model=UserResponse)
 async def get_me(
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    current_user: CurrentUser,
 ):
     """Get current user profile."""
     return current_user
@@ -90,8 +98,8 @@ async def get_me(
 @router.patch("/me", response_model=UserResponse)
 async def update_me(
     user_data: UserUpdate,
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
 ):
     """Update current user profile."""
     service = AuthService(db)
@@ -101,8 +109,8 @@ async def update_me(
 
 @router.get("/users", response_model=List[UserResponse])
 async def list_users(
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: CurrentUser,
+    db: DBSession,
     skip: int = 0,
     limit: int = 100,
 ):

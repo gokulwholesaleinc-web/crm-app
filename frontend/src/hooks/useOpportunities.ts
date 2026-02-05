@@ -1,26 +1,25 @@
 /**
- * Opportunities hooks using TanStack Query
+ * Opportunities hooks using the entity CRUD factory pattern.
+ * Uses TanStack Query for data fetching and caching.
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { createEntityHooks, createQueryKeys } from './useEntityCRUD';
 import { opportunitiesApi } from '../api/opportunities';
 import type {
+  Opportunity,
   OpportunityCreate,
   OpportunityUpdate,
   OpportunityFilters,
   PipelineStageCreate,
   PipelineStageUpdate,
-  MoveOpportunityRequest,
 } from '../types';
 
-// Query keys
-export const opportunityKeys = {
-  all: ['opportunities'] as const,
-  lists: () => [...opportunityKeys.all, 'list'] as const,
-  list: (filters?: OpportunityFilters) => [...opportunityKeys.lists(), filters] as const,
-  details: () => [...opportunityKeys.all, 'detail'] as const,
-  detail: (id: number) => [...opportunityKeys.details(), id] as const,
-};
+// =============================================================================
+// Query Keys
+// =============================================================================
+
+export const opportunityKeys = createQueryKeys('opportunities');
 
 export const pipelineKeys = {
   all: ['pipeline'] as const,
@@ -32,28 +31,32 @@ export const pipelineKeys = {
 };
 
 // =============================================================================
-// Opportunity CRUD Hooks
+// Entity CRUD Hooks using Factory Pattern
 // =============================================================================
+
+const opportunityEntityHooks = createEntityHooks<
+  Opportunity,
+  OpportunityCreate,
+  OpportunityUpdate,
+  OpportunityFilters
+>({
+  entityName: 'opportunities',
+  baseUrl: '/api/opportunities',
+  queryKey: 'opportunities',
+});
 
 /**
  * Hook to fetch a paginated list of opportunities
  */
 export function useOpportunities(filters?: OpportunityFilters) {
-  return useQuery({
-    queryKey: opportunityKeys.list(filters),
-    queryFn: () => opportunitiesApi.list(filters),
-  });
+  return opportunityEntityHooks.useList(filters);
 }
 
 /**
  * Hook to fetch a single opportunity by ID
  */
 export function useOpportunity(id: number | undefined) {
-  return useQuery({
-    queryKey: opportunityKeys.detail(id!),
-    queryFn: () => opportunitiesApi.get(id!),
-    enabled: !!id,
-  });
+  return opportunityEntityHooks.useOne(id);
 }
 
 /**
