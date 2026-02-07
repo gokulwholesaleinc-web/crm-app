@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { PlusIcon } from '@heroicons/react/24/outline';
 import { Button, Spinner, Modal } from '../../components/ui';
 import {
@@ -35,6 +36,7 @@ const defaultStages: KanbanStage[] = [
 ];
 
 function OpportunitiesPage() {
+  const navigate = useNavigate();
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [showForm, setShowForm] = useState(false);
   const [editingOpportunity, setEditingOpportunity] = useState<Opportunity | null>(null);
@@ -100,14 +102,7 @@ function OpportunitiesPage() {
   };
 
   const handleOpportunityClick = (opportunity: KanbanOpportunity) => {
-    // Find the full opportunity data to show details or edit
-    const fullOpportunity = opportunitiesData?.items?.find(
-      (item) => String(item.id) === opportunity.id
-    );
-    if (fullOpportunity) {
-      setEditingOpportunity(fullOpportunity);
-      setShowForm(true);
-    }
+    navigate(`/opportunities/${opportunity.id}`);
   };
 
   const handleEdit = (opportunity: Opportunity) => {

@@ -29,6 +29,7 @@ const LeadDetailPage = lazy(() => import('../features/leads/LeadDetailPage'));
 
 // Opportunities
 const OpportunitiesPage = lazy(() => import('../features/opportunities/OpportunitiesPage'));
+const OpportunityDetailPage = lazy(() => import('../features/opportunities/OpportunityDetailPage'));
 
 // Activities
 const ActivitiesPage = lazy(() => import('../features/activities/ActivitiesPage'));
@@ -42,6 +43,12 @@ const AIAssistantPage = lazy(() => import('../features/ai-assistant/AIAssistantP
 
 // Reports
 const ReportsPage = lazy(() => import('../features/reports/ReportsPage'));
+
+// Workflows
+const WorkflowsPage = lazy(() => import('../features/workflows/WorkflowsPage'));
+
+// Import/Export
+const ImportExportPage = lazy(() => import('../features/import-export/ImportExportPage'));
 
 // Settings
 const SettingsPage = lazy(() => import('../features/settings/SettingsPage'));
@@ -126,6 +133,14 @@ function AppRoutes() {
           </PrivateRoute>
         }
       />
+      <Route
+        path="/opportunities/:id"
+        element={
+          <PrivateRoute>
+            <OpportunityDetailPage />
+          </PrivateRoute>
+        }
+      />
 
       {/* Activities */}
       <Route
@@ -171,6 +186,26 @@ function AppRoutes() {
         element={
           <PrivateRoute>
             <ReportsPage />
+          </PrivateRoute>
+        }
+      />
+
+      {/* Workflows */}
+      <Route
+        path="/workflows"
+        element={
+          <PrivateRoute>
+            <WorkflowsPage />
+          </PrivateRoute>
+        }
+      />
+
+      {/* Import/Export */}
+      <Route
+        path="/import-export"
+        element={
+          <PrivateRoute>
+            <ImportExportPage />
           </PrivateRoute>
         }
       />
