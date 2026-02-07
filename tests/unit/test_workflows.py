@@ -427,6 +427,722 @@ class TestWorkflowTest:
         assert response.status_code == 404
 
 
+class TestWorkflowRuleEvaluation:
+    """Integration tests for workflow rule condition evaluation and action firing."""
+
+    @pytest.mark.asyncio
+    async def test_score_gte_matching(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_lead: Lead,
+    ):
+        """Test >= operator: lead score 85 matches condition score >= 80, actions fire."""
+        rule = WorkflowRule(
+            name="High Score Rule",
+            is_active=True,
+            trigger_entity="lead",
+            trigger_event="score_changed",
+            conditions={"field": "score", "operator": ">=", "value": 80},
+            actions=[
+                {"type": "create_activity", "activity_type": "call", "subject": "Follow up high-score lead"},
+                {"type": "assign_owner", "value": 1},
+            ],
+            created_by_id=test_user.id,
+        )
+        db_session.add(rule)
+        await db_session.commit()
+        await db_session.refresh(rule)
+
+        test_lead.score = 85
+        await db_session.commit()
+
+        response = await client.post(
+            f"/api/workflows/{rule.id}/test",
+            headers=auth_headers,
+            json={"entity_type": "lead", "entity_id": test_lead.id},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["dry_run"] is True
+        assert len(data["results"]) == 1
+        result = data["results"][0]
+        assert result["status"] == "success"
+        assert result["result"]["conditions_met"] is True
+        assert len(result["result"]["matched_actions"]) == 2
+        action_types = [a["type"] for a in result["result"]["matched_actions"]]
+        assert "create_activity" in action_types
+        assert "assign_owner" in action_types
+
+    @pytest.mark.asyncio
+    async def test_score_gte_not_matching(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_lead: Lead,
+    ):
+        """Test >= operator: lead score 50 does NOT match condition score >= 80, result is skipped."""
+        rule = WorkflowRule(
+            name="High Score Rule",
+            is_active=True,
+            trigger_entity="lead",
+            trigger_event="score_changed",
+            conditions={"field": "score", "operator": ">=", "value": 80},
+            actions=[{"type": "create_activity", "subject": "Follow up"}],
+            created_by_id=test_user.id,
+        )
+        db_session.add(rule)
+        await db_session.commit()
+        await db_session.refresh(rule)
+
+        # test_lead has score=50, which is < 80
+        response = await client.post(
+            f"/api/workflows/{rule.id}/test",
+            headers=auth_headers,
+            json={"entity_type": "lead", "entity_id": test_lead.id},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["results"]) == 1
+        result = data["results"][0]
+        assert result["status"] == "skipped"
+        assert result["result"]["reason"] == "Conditions not met"
+
+    @pytest.mark.asyncio
+    async def test_score_gte_exact_boundary(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_lead: Lead,
+    ):
+        """Test >= operator at exact boundary: score 80 matches score >= 80."""
+        rule = WorkflowRule(
+            name="Boundary Rule",
+            is_active=True,
+            trigger_entity="lead",
+            trigger_event="score_changed",
+            conditions={"field": "score", "operator": ">=", "value": 80},
+            actions=[{"type": "send_notification", "message": "Boundary hit"}],
+            created_by_id=test_user.id,
+        )
+        db_session.add(rule)
+        await db_session.commit()
+        await db_session.refresh(rule)
+
+        test_lead.score = 80
+        await db_session.commit()
+
+        response = await client.post(
+            f"/api/workflows/{rule.id}/test",
+            headers=auth_headers,
+            json={"entity_type": "lead", "entity_id": test_lead.id},
+        )
+
+        assert response.status_code == 200
+        result = response.json()["results"][0]
+        assert result["status"] == "success"
+
+    @pytest.mark.asyncio
+    async def test_operator_eq(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_lead: Lead,
+    ):
+        """Test == operator: lead status 'new' matches condition status == 'new'."""
+        rule = WorkflowRule(
+            name="New Lead Rule",
+            is_active=True,
+            trigger_entity="lead",
+            trigger_event="created",
+            conditions={"field": "status", "operator": "==", "value": "new"},
+            actions=[{"type": "send_notification", "message": "New lead created"}],
+            created_by_id=test_user.id,
+        )
+        db_session.add(rule)
+        await db_session.commit()
+        await db_session.refresh(rule)
+
+        response = await client.post(
+            f"/api/workflows/{rule.id}/test",
+            headers=auth_headers,
+            json={"entity_type": "lead", "entity_id": test_lead.id},
+        )
+
+        assert response.status_code == 200
+        result = response.json()["results"][0]
+        assert result["status"] == "success"
+        assert result["result"]["conditions_met"] is True
+
+    @pytest.mark.asyncio
+    async def test_operator_eq_not_matching(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_lead: Lead,
+    ):
+        """Test == operator: lead status 'new' does NOT match condition status == 'qualified'."""
+        rule = WorkflowRule(
+            name="Qualified Lead Rule",
+            is_active=True,
+            trigger_entity="lead",
+            trigger_event="status_changed",
+            conditions={"field": "status", "operator": "==", "value": "qualified"},
+            actions=[{"type": "create_activity", "subject": "Qualify follow-up"}],
+            created_by_id=test_user.id,
+        )
+        db_session.add(rule)
+        await db_session.commit()
+        await db_session.refresh(rule)
+
+        response = await client.post(
+            f"/api/workflows/{rule.id}/test",
+            headers=auth_headers,
+            json={"entity_type": "lead", "entity_id": test_lead.id},
+        )
+
+        assert response.status_code == 200
+        result = response.json()["results"][0]
+        assert result["status"] == "skipped"
+
+    @pytest.mark.asyncio
+    async def test_operator_gt(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_lead: Lead,
+    ):
+        """Test > operator: lead score 90 matches condition score > 80."""
+        rule = WorkflowRule(
+            name="Score GT Rule",
+            is_active=True,
+            trigger_entity="lead",
+            trigger_event="score_changed",
+            conditions={"field": "score", "operator": ">", "value": 80},
+            actions=[{"type": "assign_owner", "value": 1}],
+            created_by_id=test_user.id,
+        )
+        db_session.add(rule)
+        await db_session.commit()
+        await db_session.refresh(rule)
+
+        test_lead.score = 90
+        await db_session.commit()
+
+        response = await client.post(
+            f"/api/workflows/{rule.id}/test",
+            headers=auth_headers,
+            json={"entity_type": "lead", "entity_id": test_lead.id},
+        )
+
+        assert response.status_code == 200
+        result = response.json()["results"][0]
+        assert result["status"] == "success"
+
+    @pytest.mark.asyncio
+    async def test_operator_gt_not_matching_at_boundary(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_lead: Lead,
+    ):
+        """Test > operator: lead score 80 does NOT match condition score > 80 (strict gt)."""
+        rule = WorkflowRule(
+            name="Score GT Strict Rule",
+            is_active=True,
+            trigger_entity="lead",
+            trigger_event="score_changed",
+            conditions={"field": "score", "operator": ">", "value": 80},
+            actions=[{"type": "assign_owner", "value": 1}],
+            created_by_id=test_user.id,
+        )
+        db_session.add(rule)
+        await db_session.commit()
+        await db_session.refresh(rule)
+
+        test_lead.score = 80
+        await db_session.commit()
+
+        response = await client.post(
+            f"/api/workflows/{rule.id}/test",
+            headers=auth_headers,
+            json={"entity_type": "lead", "entity_id": test_lead.id},
+        )
+
+        assert response.status_code == 200
+        result = response.json()["results"][0]
+        assert result["status"] == "skipped"
+
+    @pytest.mark.asyncio
+    async def test_operator_lt(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_lead: Lead,
+    ):
+        """Test < operator: lead score 50 matches condition score < 60."""
+        rule = WorkflowRule(
+            name="Low Score Rule",
+            is_active=True,
+            trigger_entity="lead",
+            trigger_event="score_changed",
+            conditions={"field": "score", "operator": "<", "value": 60},
+            actions=[{"type": "update_status", "value": "unqualified"}],
+            created_by_id=test_user.id,
+        )
+        db_session.add(rule)
+        await db_session.commit()
+        await db_session.refresh(rule)
+
+        response = await client.post(
+            f"/api/workflows/{rule.id}/test",
+            headers=auth_headers,
+            json={"entity_type": "lead", "entity_id": test_lead.id},
+        )
+
+        assert response.status_code == 200
+        result = response.json()["results"][0]
+        assert result["status"] == "success"
+        assert result["result"]["matched_actions"][0]["type"] == "update_status"
+
+    @pytest.mark.asyncio
+    async def test_operator_lt_not_matching(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_lead: Lead,
+    ):
+        """Test < operator: lead score 50 does NOT match condition score < 30."""
+        rule = WorkflowRule(
+            name="Very Low Score Rule",
+            is_active=True,
+            trigger_entity="lead",
+            trigger_event="score_changed",
+            conditions={"field": "score", "operator": "<", "value": 30},
+            actions=[{"type": "update_status", "value": "lost"}],
+            created_by_id=test_user.id,
+        )
+        db_session.add(rule)
+        await db_session.commit()
+        await db_session.refresh(rule)
+
+        response = await client.post(
+            f"/api/workflows/{rule.id}/test",
+            headers=auth_headers,
+            json={"entity_type": "lead", "entity_id": test_lead.id},
+        )
+
+        assert response.status_code == 200
+        result = response.json()["results"][0]
+        assert result["status"] == "skipped"
+
+    @pytest.mark.asyncio
+    async def test_operator_lte(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_lead: Lead,
+    ):
+        """Test <= operator: lead score 50 matches condition score <= 50."""
+        rule = WorkflowRule(
+            name="LTE Boundary Rule",
+            is_active=True,
+            trigger_entity="lead",
+            trigger_event="score_changed",
+            conditions={"field": "score", "operator": "<=", "value": 50},
+            actions=[{"type": "send_notification", "message": "Low-score lead"}],
+            created_by_id=test_user.id,
+        )
+        db_session.add(rule)
+        await db_session.commit()
+        await db_session.refresh(rule)
+
+        response = await client.post(
+            f"/api/workflows/{rule.id}/test",
+            headers=auth_headers,
+            json={"entity_type": "lead", "entity_id": test_lead.id},
+        )
+
+        assert response.status_code == 200
+        result = response.json()["results"][0]
+        assert result["status"] == "success"
+
+    @pytest.mark.asyncio
+    async def test_operator_lte_not_matching(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_lead: Lead,
+    ):
+        """Test <= operator: lead score 50 does NOT match condition score <= 40."""
+        rule = WorkflowRule(
+            name="LTE Miss Rule",
+            is_active=True,
+            trigger_entity="lead",
+            trigger_event="score_changed",
+            conditions={"field": "score", "operator": "<=", "value": 40},
+            actions=[{"type": "send_notification", "message": "Should not fire"}],
+            created_by_id=test_user.id,
+        )
+        db_session.add(rule)
+        await db_session.commit()
+        await db_session.refresh(rule)
+
+        response = await client.post(
+            f"/api/workflows/{rule.id}/test",
+            headers=auth_headers,
+            json={"entity_type": "lead", "entity_id": test_lead.id},
+        )
+
+        assert response.status_code == 200
+        result = response.json()["results"][0]
+        assert result["status"] == "skipped"
+
+    @pytest.mark.asyncio
+    async def test_operator_contains(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_lead: Lead,
+    ):
+        """Test contains operator: lead company_name 'Potential Client LLC' contains 'Client'."""
+        rule = WorkflowRule(
+            name="Company Contains Rule",
+            is_active=True,
+            trigger_entity="lead",
+            trigger_event="created",
+            conditions={"field": "company_name", "operator": "contains", "value": "Client"},
+            actions=[{"type": "create_activity", "subject": "Research company"}],
+            created_by_id=test_user.id,
+        )
+        db_session.add(rule)
+        await db_session.commit()
+        await db_session.refresh(rule)
+
+        response = await client.post(
+            f"/api/workflows/{rule.id}/test",
+            headers=auth_headers,
+            json={"entity_type": "lead", "entity_id": test_lead.id},
+        )
+
+        assert response.status_code == 200
+        result = response.json()["results"][0]
+        assert result["status"] == "success"
+
+    @pytest.mark.asyncio
+    async def test_operator_contains_not_matching(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_lead: Lead,
+    ):
+        """Test contains operator: lead company_name does NOT contain 'Acme'."""
+        rule = WorkflowRule(
+            name="Company Contains Miss",
+            is_active=True,
+            trigger_entity="lead",
+            trigger_event="created",
+            conditions={"field": "company_name", "operator": "contains", "value": "Acme"},
+            actions=[{"type": "create_activity", "subject": "Should not fire"}],
+            created_by_id=test_user.id,
+        )
+        db_session.add(rule)
+        await db_session.commit()
+        await db_session.refresh(rule)
+
+        response = await client.post(
+            f"/api/workflows/{rule.id}/test",
+            headers=auth_headers,
+            json={"entity_type": "lead", "entity_id": test_lead.id},
+        )
+
+        assert response.status_code == 200
+        result = response.json()["results"][0]
+        assert result["status"] == "skipped"
+
+    @pytest.mark.asyncio
+    async def test_operator_neq(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_lead: Lead,
+    ):
+        """Test != operator: lead status 'new' matches condition status != 'converted'."""
+        rule = WorkflowRule(
+            name="Not Converted Rule",
+            is_active=True,
+            trigger_entity="lead",
+            trigger_event="updated",
+            conditions={"field": "status", "operator": "!=", "value": "converted"},
+            actions=[{"type": "send_notification", "message": "Lead not yet converted"}],
+            created_by_id=test_user.id,
+        )
+        db_session.add(rule)
+        await db_session.commit()
+        await db_session.refresh(rule)
+
+        response = await client.post(
+            f"/api/workflows/{rule.id}/test",
+            headers=auth_headers,
+            json={"entity_type": "lead", "entity_id": test_lead.id},
+        )
+
+        assert response.status_code == 200
+        result = response.json()["results"][0]
+        assert result["status"] == "success"
+
+    @pytest.mark.asyncio
+    async def test_operator_neq_not_matching(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_lead: Lead,
+    ):
+        """Test != operator: lead status 'new' does NOT match condition status != 'new'."""
+        rule = WorkflowRule(
+            name="Not New Rule",
+            is_active=True,
+            trigger_entity="lead",
+            trigger_event="updated",
+            conditions={"field": "status", "operator": "!=", "value": "new"},
+            actions=[{"type": "send_notification", "message": "Should not fire"}],
+            created_by_id=test_user.id,
+        )
+        db_session.add(rule)
+        await db_session.commit()
+        await db_session.refresh(rule)
+
+        response = await client.post(
+            f"/api/workflows/{rule.id}/test",
+            headers=auth_headers,
+            json={"entity_type": "lead", "entity_id": test_lead.id},
+        )
+
+        assert response.status_code == 200
+        result = response.json()["results"][0]
+        assert result["status"] == "skipped"
+
+    @pytest.mark.asyncio
+    async def test_no_conditions_always_matches(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_lead: Lead,
+    ):
+        """Test that a rule with no conditions always matches (fires for any entity)."""
+        rule = WorkflowRule(
+            name="Always Fire Rule",
+            is_active=True,
+            trigger_entity="lead",
+            trigger_event="created",
+            conditions=None,
+            actions=[{"type": "send_notification", "message": "Universal trigger"}],
+            created_by_id=test_user.id,
+        )
+        db_session.add(rule)
+        await db_session.commit()
+        await db_session.refresh(rule)
+
+        response = await client.post(
+            f"/api/workflows/{rule.id}/test",
+            headers=auth_headers,
+            json={"entity_type": "lead", "entity_id": test_lead.id},
+        )
+
+        assert response.status_code == 200
+        result = response.json()["results"][0]
+        assert result["status"] == "success"
+        assert result["result"]["conditions_met"] is True
+
+    @pytest.mark.asyncio
+    async def test_condition_on_nonexistent_field_skips(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_lead: Lead,
+    ):
+        """Test that a condition on a field not present on the entity results in skip."""
+        rule = WorkflowRule(
+            name="Bad Field Rule",
+            is_active=True,
+            trigger_entity="lead",
+            trigger_event="updated",
+            conditions={"field": "nonexistent_field", "operator": "==", "value": "anything"},
+            actions=[{"type": "send_notification", "message": "Should not fire"}],
+            created_by_id=test_user.id,
+        )
+        db_session.add(rule)
+        await db_session.commit()
+        await db_session.refresh(rule)
+
+        response = await client.post(
+            f"/api/workflows/{rule.id}/test",
+            headers=auth_headers,
+            json={"entity_type": "lead", "entity_id": test_lead.id},
+        )
+
+        assert response.status_code == 200
+        result = response.json()["results"][0]
+        assert result["status"] == "skipped"
+
+    @pytest.mark.asyncio
+    async def test_dry_run_does_not_create_execution_record(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_lead: Lead,
+    ):
+        """Test that dry-run does NOT persist a WorkflowExecution record."""
+        rule = WorkflowRule(
+            name="Dry Run Check",
+            is_active=True,
+            trigger_entity="lead",
+            trigger_event="score_changed",
+            conditions={"field": "score", "operator": ">=", "value": 0},
+            actions=[{"type": "create_activity", "subject": "test"}],
+            created_by_id=test_user.id,
+        )
+        db_session.add(rule)
+        await db_session.commit()
+        await db_session.refresh(rule)
+
+        response = await client.post(
+            f"/api/workflows/{rule.id}/test",
+            headers=auth_headers,
+            json={"entity_type": "lead", "entity_id": test_lead.id},
+        )
+        assert response.status_code == 200
+        assert response.json()["results"][0]["status"] == "success"
+
+        # Verify no execution was persisted
+        exec_result = await db_session.execute(
+            select(WorkflowExecution).where(WorkflowExecution.rule_id == rule.id)
+        )
+        assert exec_result.scalar_one_or_none() is None
+
+    @pytest.mark.asyncio
+    async def test_actions_contain_full_payload(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_lead: Lead,
+    ):
+        """Test that matched_actions returns the complete action definitions from the rule."""
+        rule = WorkflowRule(
+            name="Full Action Payload Rule",
+            is_active=True,
+            trigger_entity="lead",
+            trigger_event="score_changed",
+            conditions={"field": "score", "operator": ">=", "value": 0},
+            actions=[
+                {"type": "create_activity", "activity_type": "call", "subject": "Follow up high-score lead"},
+                {"type": "assign_owner", "value": 42},
+                {"type": "update_status", "value": "qualified"},
+            ],
+            created_by_id=test_user.id,
+        )
+        db_session.add(rule)
+        await db_session.commit()
+        await db_session.refresh(rule)
+
+        response = await client.post(
+            f"/api/workflows/{rule.id}/test",
+            headers=auth_headers,
+            json={"entity_type": "lead", "entity_id": test_lead.id},
+        )
+
+        assert response.status_code == 200
+        result = response.json()["results"][0]
+        assert result["status"] == "success"
+        actions = result["result"]["matched_actions"]
+        assert len(actions) == 3
+
+        # Verify each action's full payload is preserved
+        create_action = next(a for a in actions if a["type"] == "create_activity")
+        assert create_action["activity_type"] == "call"
+        assert create_action["subject"] == "Follow up high-score lead"
+
+        assign_action = next(a for a in actions if a["type"] == "assign_owner")
+        assert assign_action["value"] == 42
+
+        status_action = next(a for a in actions if a["type"] == "update_status")
+        assert status_action["value"] == "qualified"
+
+    @pytest.mark.asyncio
+    async def test_inactive_rule_not_evaluated(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_lead: Lead,
+    ):
+        """Test that an inactive rule returns empty results (not evaluated)."""
+        rule = WorkflowRule(
+            name="Inactive Rule",
+            is_active=False,
+            trigger_entity="lead",
+            trigger_event="score_changed",
+            conditions={"field": "score", "operator": ">=", "value": 0},
+            actions=[{"type": "send_notification", "message": "Should not fire"}],
+            created_by_id=test_user.id,
+        )
+        db_session.add(rule)
+        await db_session.commit()
+        await db_session.refresh(rule)
+
+        response = await client.post(
+            f"/api/workflows/{rule.id}/test",
+            headers=auth_headers,
+            json={"entity_type": "lead", "entity_id": test_lead.id},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        # evaluate_rules filters by is_active, so inactive rule produces no results
+        assert data["results"] == []
+
+
 class TestWorkflowsUnauthorized:
     """Tests for unauthorized access to workflow endpoints."""
 
