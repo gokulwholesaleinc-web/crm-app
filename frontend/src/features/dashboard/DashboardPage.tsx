@@ -1,8 +1,10 @@
 import { NumberCard } from './components/NumberCard';
 import { ChartCard } from './components/ChartCard';
+import { SalesFunnelChart } from './components/SalesFunnelChart';
 import { Spinner } from '../../components/ui/Spinner';
+import { DashboardRecommendations } from '../../components/ai/DashboardRecommendations';
 import { formatCurrency, formatDate } from '../../utils';
-import { useDashboard, usePipelineFunnelChart, useLeadsBySourceChart, useUserTimeline } from '../../hooks';
+import { useDashboard, usePipelineFunnelChart, useLeadsBySourceChart, useUserTimeline, useSalesFunnel } from '../../hooks';
 import type { NumberCardData, ChartDataPoint } from '../../types';
 
 // Helper to find number card by id
@@ -22,6 +24,7 @@ function DashboardPage() {
   const { data: pipelineData } = usePipelineFunnelChart();
   const { data: leadsBySourceData } = useLeadsBySourceChart();
   const { data: timelineData } = useUserTimeline();
+  const { data: funnelData } = useSalesFunnel();
 
   const isLoading = isLoadingDashboard;
   const error = dashboardError instanceof Error ? dashboardError.message : dashboardError ? String(dashboardError) : null;
@@ -178,6 +181,9 @@ function DashboardPage() {
         />
       </div>
 
+      {/* AI Suggestions */}
+      <DashboardRecommendations maxItems={3} />
+
       {/* Charts Section */}
       <div className="grid grid-cols-1 gap-3 sm:gap-6 lg:grid-cols-2">
         <ChartCard
@@ -251,6 +257,16 @@ function DashboardPage() {
           </div>
         </ChartCard>
       </div>
+
+      {/* Sales Funnel */}
+      {funnelData && (
+        <ChartCard
+          title="Sales Funnel"
+          subtitle="Lead progression through stages"
+        >
+          <SalesFunnelChart data={funnelData} />
+        </ChartCard>
+      )}
 
       {/* Recent Activities */}
       <ChartCard

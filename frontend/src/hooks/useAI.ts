@@ -5,7 +5,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useCallback } from 'react';
 import { aiApi } from '../api/ai';
-import type { ChatMessage, ChatRequest } from '../types';
+import type { ChatMessage, ChatRequest, FeedbackRequest, ConfirmActionRequest, ChatResponse } from '../types';
 
 // Query keys
 export const aiKeys = {
@@ -96,18 +96,26 @@ export function useSemanticSearch(query: string, entityTypes?: string, limit = 5
 interface ChatMessageWithId extends ChatMessage {
   id: string;
   timestamp: string;
+  confirmationRequired?: boolean;
+  pendingAction?: Record<string, unknown> | null;
+  actionsTaken?: Array<Record<string, unknown>>;
+  query?: string;
 }
 
 /**
- * Hook for AI chat functionality
+ * Hook for AI chat functionality with confirmation flow support
  */
-export function useChat() {
+export function useChat(initialContext?: string) {
   const [messages, setMessages] = useState<ChatMessageWithId[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [pendingConfirmation, setPendingConfirmation] = useState<{
+    functionName: string;
+    arguments: Record<string, unknown>;
+  } | null>(null);
 
   const chatMutation = useMutation({
     mutationFn: (data: ChatRequest) => aiApi.chat(data),
-    onSuccess: (response) => {
+    onSuccess: (response: ChatResponse) => {
       // Add assistant message
       setMessages((prev) => [
         ...prev,
@@ -116,12 +124,39 @@ export function useChat() {
           role: 'assistant',
           content: response.response,
           timestamp: new Date().toISOString(),
+          confirmationRequired: response.confirmation_required,
+          pendingAction: response.pending_action,
+          actionsTaken: response.actions_taken,
         },
       ]);
       // Update session ID if provided
       if (response.session_id) {
         setSessionId(response.session_id);
       }
+      // Track pending confirmation
+      if (response.confirmation_required && response.pending_action) {
+        setPendingConfirmation({
+          functionName: response.pending_action.function_name as string,
+          arguments: response.pending_action.arguments as Record<string, unknown>,
+        });
+      }
+    },
+  });
+
+  const confirmMutation = useMutation({
+    mutationFn: (data: ConfirmActionRequest) => aiApi.confirmAction(data),
+    onSuccess: (response) => {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `assistant-${Date.now()}`,
+          role: 'assistant',
+          content: response.response,
+          timestamp: new Date().toISOString(),
+          actionsTaken: response.actions_taken,
+        },
+      ]);
+      setPendingConfirmation(null);
     },
   });
 
@@ -136,28 +171,70 @@ export function useChat() {
       };
       setMessages((prev) => [...prev, userMessage]);
 
+      // Prepend context if provided and this is the first message
+      const messageToSend = initialContext && messages.length === 0
+        ? `[Context: ${initialContext}] ${content}`
+        : content;
+
       // Send to API
       await chatMutation.mutateAsync({
-        message: content,
+        message: messageToSend,
         session_id: sessionId,
       });
     },
-    [chatMutation, sessionId]
+    [chatMutation, sessionId, initialContext, messages.length]
+  );
+
+  const confirmAction = useCallback(
+    async (confirmed: boolean) => {
+      if (!pendingConfirmation || !sessionId) return;
+
+      // Add user confirmation message
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `user-${Date.now()}`,
+          role: 'user',
+          content: confirmed ? 'Yes, proceed.' : 'No, cancel.',
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+
+      await confirmMutation.mutateAsync({
+        session_id: sessionId,
+        function_name: pendingConfirmation.functionName,
+        arguments: pendingConfirmation.arguments,
+        confirmed,
+      });
+    },
+    [confirmMutation, pendingConfirmation, sessionId]
   );
 
   const clearChat = useCallback(() => {
     setMessages([]);
     setSessionId(null);
+    setPendingConfirmation(null);
   }, []);
 
   return {
     messages,
     sendMessage,
     clearChat,
-    isLoading: chatMutation.isPending,
-    error: chatMutation.error,
+    confirmAction,
+    isLoading: chatMutation.isPending || confirmMutation.isPending,
+    error: chatMutation.error || confirmMutation.error,
     sessionId,
+    pendingConfirmation,
   };
+}
+
+/**
+ * Hook for submitting AI feedback
+ */
+export function useFeedback() {
+  return useMutation({
+    mutationFn: (data: FeedbackRequest) => aiApi.submitFeedback(data),
+  });
 }
 
 /**

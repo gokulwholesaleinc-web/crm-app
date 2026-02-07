@@ -23,6 +23,7 @@ import {
   useDailySummary,
   useRefreshAIData,
 } from '../../hooks/useAI';
+import { AIFeedbackButtons } from '../../components/ai/AIFeedbackButtons';
 
 const suggestedPrompts = [
   'What are my top priorities today?',
@@ -58,7 +59,7 @@ export function AIAssistantPage() {
   const [activeTab, setActiveTab] = useState<'chat' | 'recommendations' | 'summary'>('chat');
 
   // Chat state
-  const { messages, sendMessage, clearChat, isLoading: isChatLoading } = useChat();
+  const { messages, sendMessage, clearChat, confirmAction, isLoading: isChatLoading, pendingConfirmation, sessionId } = useChat();
 
   // Recommendations and summary
   const { data: recommendationsData, isLoading: isLoadingRecs } = useRecommendations();
@@ -195,9 +196,45 @@ export function AIAssistantPage() {
               ) : (
                 <>
                   {/* Message bubbles - appropriate width on mobile */}
-                  {messages.map((message) => (
-                    <div key={message.id || `${message.role}-${message.content.slice(0, 20)}`} className="max-w-full sm:max-w-[85%]">
-                      <ChatMessage message={message} />
+                  {messages.map((msg, idx) => (
+                    <div key={msg.id || `${msg.role}-${msg.content.slice(0, 20)}`} className="max-w-full sm:max-w-[85%]">
+                      <ChatMessage
+                        message={msg}
+                        feedbackSlot={
+                          msg.role === 'assistant' ? (
+                            <AIFeedbackButtons
+                              query={
+                                messages
+                                  .slice(0, idx)
+                                  .filter((m) => m.role === 'user')
+                                  .pop()?.content ?? ''
+                              }
+                              response={msg.content}
+                              sessionId={sessionId}
+                            />
+                          ) : undefined
+                        }
+                        confirmationSlot={
+                          msg.confirmationRequired && pendingConfirmation ? (
+                            <div className="flex items-center gap-2 mt-2">
+                              <button
+                                onClick={() => confirmAction(true)}
+                                disabled={isChatLoading}
+                                className="px-3 py-1.5 text-xs font-medium bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                              >
+                                Confirm
+                              </button>
+                              <button
+                                onClick={() => confirmAction(false)}
+                                disabled={isChatLoading}
+                                className="px-3 py-1.5 text-xs font-medium bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : undefined
+                        }
+                      />
                     </div>
                   ))}
                   {isChatLoading && (

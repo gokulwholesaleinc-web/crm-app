@@ -11,6 +11,10 @@ import type {
   RecommendationsResponse,
   NextBestAction,
   SearchResponse,
+  ConfirmActionRequest,
+  ConfirmActionResponse,
+  FeedbackRequest,
+  FeedbackResponse,
 } from '../types';
 
 const AI_BASE = '/api/ai';
@@ -114,6 +118,40 @@ export const semanticSearch = async (
   return response.data;
 };
 
+// =============================================================================
+// Confirm Action
+// =============================================================================
+
+/**
+ * Confirm and execute a high-risk AI action
+ */
+export const confirmAction = async (
+  request: ConfirmActionRequest
+): Promise<ConfirmActionResponse> => {
+  const response = await apiClient.post<ConfirmActionResponse>(
+    `${AI_BASE}/confirm-action`,
+    request
+  );
+  return response.data;
+};
+
+// =============================================================================
+// Feedback
+// =============================================================================
+
+/**
+ * Submit feedback on an AI response
+ */
+export const submitFeedback = async (
+  request: FeedbackRequest
+): Promise<FeedbackResponse> => {
+  const response = await apiClient.post<FeedbackResponse>(
+    `${AI_BASE}/feedback`,
+    request
+  );
+  return response.data;
+};
+
 // Export all AI functions
 export const aiApi = {
   chat,
@@ -127,6 +165,10 @@ export const aiApi = {
   getNextBestAction,
   // Search
   semanticSearch,
+  // Actions
+  confirmAction,
+  // Feedback
+  submitFeedback,
 };
 
 export default aiApi;

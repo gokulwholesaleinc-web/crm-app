@@ -9,6 +9,7 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { Spinner } from '../components/ui/Spinner';
 import { Layout } from '../components/layout/Layout';
+import { FloatingChatWidget } from '../components/ai/FloatingChatWidget';
 
 interface PrivateRouteProps {
   children: React.ReactNode;
@@ -53,6 +54,7 @@ export function PrivateRoute({ children }: PrivateRouteProps) {
   return (
     <Layout user={layoutUser} onLogout={handleLogout}>
       {children}
+      <FloatingChatWidget />
     </Layout>
   );
 }

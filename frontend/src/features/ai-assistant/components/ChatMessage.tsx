@@ -8,11 +8,18 @@ import { UserIcon, SparklesIcon } from '@heroicons/react/24/outline';
 import type { ChatMessage as ChatMessageType } from '../../../types';
 
 interface ChatMessageProps {
-  message: ChatMessageType & { id?: string; timestamp?: string };
+  message: ChatMessageType & {
+    id?: string;
+    timestamp?: string;
+    confirmationRequired?: boolean;
+    actionsTaken?: Array<Record<string, unknown>>;
+  };
   showTimestamp?: boolean;
+  feedbackSlot?: React.ReactNode;
+  confirmationSlot?: React.ReactNode;
 }
 
-export function ChatMessage({ message, showTimestamp = true }: ChatMessageProps) {
+export function ChatMessage({ message, showTimestamp = true, feedbackSlot, confirmationSlot }: ChatMessageProps) {
   const isUser = message.role === 'user';
 
   const formatTime = (timestamp: string | undefined) => {
@@ -60,11 +67,15 @@ export function ChatMessage({ message, showTimestamp = true }: ChatMessageProps)
           <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
         </div>
 
-        {showTimestamp && message.timestamp && (
-          <span className="text-xs text-gray-400 mt-1 px-1">
-            {formatTime(message.timestamp)}
-          </span>
-        )}
+        <div className="flex items-center gap-2 mt-1 px-1">
+          {showTimestamp && message.timestamp && (
+            <span className="text-xs text-gray-400">
+              {formatTime(message.timestamp)}
+            </span>
+          )}
+          {feedbackSlot}
+        </div>
+        {confirmationSlot}
       </div>
     </div>
   );
