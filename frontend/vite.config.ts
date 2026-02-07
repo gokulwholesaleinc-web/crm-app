@@ -17,12 +17,12 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5000,
+    port: 3000,
     host: '0.0.0.0',
     allowedHosts: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: process.env.VITE_BACKEND_URL || 'http://localhost:8000',
         changeOrigin: true,
         secure: false,
       },

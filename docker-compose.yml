@@ -52,6 +52,7 @@ services:
       - ./frontend/public:/app/public
     environment:
       - VITE_API_URL=
+      - VITE_BACKEND_URL=http://backend:8000
 
 volumes:
   postgres_data:
