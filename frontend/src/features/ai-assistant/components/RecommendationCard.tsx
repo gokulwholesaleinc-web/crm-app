@@ -20,6 +20,7 @@ import type { Recommendation } from '../../../types';
 interface RecommendationCardProps {
   recommendation: Recommendation;
   onAction?: (recommendation: Recommendation) => void;
+  feedbackSlot?: React.ReactNode;
 }
 
 const defaultPriorityColor = { bg: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-200' };
@@ -59,7 +60,7 @@ function getEntityLink(recommendation: Recommendation): string | null {
   return `${baseRoute}/${recommendation.entity_id}`;
 }
 
-export function RecommendationCard({ recommendation, onAction }: RecommendationCardProps) {
+export function RecommendationCard({ recommendation, onAction, feedbackSlot }: RecommendationCardProps) {
   const priorityStyle = priorityColors[recommendation.priority] ?? defaultPriorityColor;
   const Icon = typeIcons[recommendation.type] || LightBulbIcon;
   const entityLink = getEntityLink(recommendation);
@@ -117,6 +118,7 @@ export function RecommendationCard({ recommendation, onAction }: RecommendationC
               {recommendation.score && (
                 <span>Score: {recommendation.score}</span>
               )}
+              {feedbackSlot}
             </div>
             <span
               className={clsx(

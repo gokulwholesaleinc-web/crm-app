@@ -7,6 +7,7 @@ import { Link } from 'react-router-dom';
 import { SparklesIcon, ArrowRightIcon } from '@heroicons/react/24/outline';
 import { Spinner } from '../ui/Spinner';
 import { RecommendationCard } from '../../features/ai-assistant/components/RecommendationCard';
+import { AIFeedbackButtons } from './AIFeedbackButtons';
 import { useRecommendations } from '../../hooks/useAI';
 
 interface DashboardRecommendationsProps {
@@ -51,7 +52,17 @@ export function DashboardRecommendations({ maxItems = 3 }: DashboardRecommendati
         ) : (
           <div className="space-y-3">
             {recommendations.slice(0, maxItems).map((rec, index) => (
-              <RecommendationCard key={index} recommendation={rec} />
+              <RecommendationCard
+                key={index}
+                recommendation={rec}
+                feedbackSlot={
+                  <AIFeedbackButtons
+                    query={`Recommendation: ${rec.title}`}
+                    response={rec.description}
+                    size="sm"
+                  />
+                }
+              />
             ))}
           </div>
         )}

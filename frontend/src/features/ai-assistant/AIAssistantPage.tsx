@@ -309,7 +309,18 @@ export function AIAssistantPage() {
                   Prioritized actions based on your CRM data
                 </p>
                 {recommendations.map((rec, index) => (
-                  <RecommendationCard key={index} recommendation={rec} />
+                  <RecommendationCard
+                    key={index}
+                    recommendation={rec}
+                    feedbackSlot={
+                      <AIFeedbackButtons
+                        query={`Recommendation: ${rec.title}`}
+                        response={rec.description}
+                        sessionId={sessionId}
+                        size="sm"
+                      />
+                    }
+                  />
                 ))}
               </div>
             )}
