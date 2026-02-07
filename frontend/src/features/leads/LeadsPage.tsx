@@ -1,14 +1,19 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PlusIcon } from '@heroicons/react/24/outline';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { LeadForm, LeadFormData } from './components/LeadForm';
+import { BulkActionToolbar } from './components/BulkActionToolbar';
 import {
   useLeads,
   useCreateLead,
   useUpdateLead,
   useDeleteLead,
+  useUsers,
+  leadKeys,
 } from '../../hooks';
+import { bulkUpdate, bulkAssign } from '../../api/importExport';
 import { getStatusBadgeClasses, formatStatusLabel } from '../../utils';
 import { formatDate } from '../../utils/formatters';
 import type { Lead, LeadCreate, LeadUpdate } from '../../types';
@@ -62,6 +67,7 @@ function LeadsPage() {
     isOpen: false,
     lead: null,
   });
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const pageSize = 10;
 
   // Use the hooks for data fetching
@@ -79,6 +85,26 @@ function LeadsPage() {
   const createLeadMutation = useCreateLead();
   const updateLeadMutation = useUpdateLead();
   const deleteLeadMutation = useDeleteLead();
+  const { data: usersData } = useUsers();
+  const queryClient = useQueryClient();
+
+  const bulkUpdateMutation = useMutation({
+    mutationFn: (updates: Record<string, unknown>) =>
+      bulkUpdate({ entity_type: 'leads', entity_ids: selectedIds, updates }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: leadKeys.all });
+      setSelectedIds([]);
+    },
+  });
+
+  const bulkAssignMutation = useMutation({
+    mutationFn: (ownerId: number) =>
+      bulkAssign({ entity_type: 'leads', entity_ids: selectedIds, owner_id: ownerId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: leadKeys.all });
+      setSelectedIds([]);
+    },
+  });
 
   const leads = leadsData?.items ?? [];
   const totalPages = leadsData?.pages ?? 1;
@@ -151,6 +177,20 @@ function LeadsPage() {
   const handleFormCancel = () => {
     setShowForm(false);
     setEditingLead(null);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === leads.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(leads.map((l) => l.id));
+    }
+  };
+
+  const toggleSelectOne = (id: number) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
   };
 
   const getInitialFormData = (): Partial<LeadFormData> | undefined => {
@@ -304,19 +344,27 @@ function LeadsPage() {
             {/* Mobile Card View */}
             <div className="sm:hidden divide-y divide-gray-200">
               {leads.map((lead: Lead) => (
-                <div key={lead.id} className="p-4 space-y-3">
+                <div key={lead.id} className={clsx('p-4 space-y-3', selectedIds.includes(lead.id) && 'bg-primary-50')}>
                   <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <Link
-                        to={`/leads/${lead.id}`}
-                        className="text-sm font-medium text-primary-600 hover:text-primary-900 block truncate"
-                      >
-                        {lead.first_name} {lead.last_name}
-                      </Link>
-                      <p className="text-sm text-gray-500 truncate">{lead.email || '-'}</p>
-                      {lead.company_name && (
-                        <p className="text-sm text-gray-500 truncate">{lead.company_name}</p>
-                      )}
+                    <div className="flex items-start gap-3 min-w-0 flex-1">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(lead.id)}
+                        onChange={() => toggleSelectOne(lead.id)}
+                        className="mt-1 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <Link
+                          to={`/leads/${lead.id}`}
+                          className="text-sm font-medium text-primary-600 hover:text-primary-900 block truncate"
+                        >
+                          {lead.first_name} {lead.last_name}
+                        </Link>
+                        <p className="text-sm text-gray-500 truncate">{lead.email || '-'}</p>
+                        {lead.company_name && (
+                          <p className="text-sm text-gray-500 truncate">{lead.company_name}</p>
+                        )}
+                      </div>
                     </div>
                     <span className={clsx(getStatusBadgeClasses(lead.status, 'lead'), 'flex-shrink-0')}>
                       {formatStatusLabel(lead.status)}
@@ -355,6 +403,14 @@ function LeadsPage() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
+                    <th scope="col" className="px-4 py-3 w-10">
+                      <input
+                        type="checkbox"
+                        checked={leads.length > 0 && selectedIds.length === leads.length}
+                        onChange={toggleSelectAll}
+                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                      />
+                    </th>
                     <th
                       scope="col"
                       className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
@@ -398,7 +454,15 @@ function LeadsPage() {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {leads.map((lead: Lead) => (
-                    <tr key={lead.id} className="hover:bg-gray-50">
+                    <tr key={lead.id} className={clsx('hover:bg-gray-50', selectedIds.includes(lead.id) && 'bg-primary-50')}>
+                      <td className="px-4 py-4 w-10">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(lead.id)}
+                          onChange={() => toggleSelectOne(lead.id)}
+                          className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        />
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <Link
                           to={`/leads/${lead.id}`}
@@ -531,6 +595,18 @@ function LeadsPage() {
           </>
         )}
       </div>
+
+      {/* Bulk Action Toolbar */}
+      <BulkActionToolbar
+        selectedIds={selectedIds}
+        entityType="lead(s)"
+        onBulkUpdate={async (updates) => { await bulkUpdateMutation.mutateAsync(updates); }}
+        onBulkAssign={async (ownerId) => { await bulkAssignMutation.mutateAsync(ownerId); }}
+        onClearSelection={() => setSelectedIds([])}
+        isLoading={bulkUpdateMutation.isPending || bulkAssignMutation.isPending}
+        users={(usersData ?? []).map((u: { id: number; full_name: string }) => ({ id: u.id, full_name: u.full_name }))}
+        statusOptions={statusOptions.filter((o) => o.value !== '')}
+      />
 
       {/* Form Modal */}
       <Modal

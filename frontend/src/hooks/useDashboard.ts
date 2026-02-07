@@ -128,6 +128,18 @@ export function useConversionRatesChart() {
 }
 
 /**
+ * Hook to fetch sales funnel data
+ */
+export function useSalesFunnel() {
+  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+  return useQuery({
+    queryKey: dashboardKeys.chart('sales-funnel'),
+    queryFn: () => dashboardApi.getSalesFunnel(),
+    enabled: isAuthenticated && !authLoading,
+  });
+}
+
+/**
  * Combined hook to get all chart data
  */
 export function useCharts() {

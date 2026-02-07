@@ -2,7 +2,7 @@
  * Workflow rule builder - form with dropdowns for trigger entity, event, conditions, actions
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';

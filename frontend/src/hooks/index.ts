@@ -117,6 +117,7 @@ export {
   useActivitiesChart,
   useNewLeadsTrendChart,
   useConversionRatesChart,
+  useSalesFunnel,
   dashboardKeys,
 } from './useDashboard';
 

@@ -48,6 +48,7 @@ export function CampaignStepBuilder({
     if (index <= 0) return;
     const step = sortedSteps[index];
     const prevStep = sortedSteps[index - 1];
+    if (!step || !prevStep) return;
     await onUpdateStep(step.id, { step_order: prevStep.step_order });
     await onUpdateStep(prevStep.id, { step_order: step.step_order });
   };
@@ -56,6 +57,7 @@ export function CampaignStepBuilder({
     if (index >= sortedSteps.length - 1) return;
     const step = sortedSteps[index];
     const nextStep = sortedSteps[index + 1];
+    if (!step || !nextStep) return;
     await onUpdateStep(step.id, { step_order: nextStep.step_order });
     await onUpdateStep(nextStep.id, { step_order: step.step_order });
   };
