@@ -160,6 +160,8 @@ export {
   getRecommendations,
   getNextBestAction,
   semanticSearch,
+  getPreferences,
+  updatePreferences,
 } from './ai';
 
 // Import/Export API

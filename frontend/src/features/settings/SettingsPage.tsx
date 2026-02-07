@@ -1,34 +1,58 @@
 /**
- * Settings page with user profile and account settings sections.
+ * Settings page with user profile, AI preferences, pipeline stage management,
+ * lead source management, and account settings sections.
  */
 
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { useAuthStore } from '../../store/authStore';
 import { useUpdateProfile } from '../../hooks/useAuth';
+import {
+  useAIPreferences,
+  useUpdateAIPreferences,
+} from '../../hooks/useAI';
+import {
+  usePipelineStages,
+  useCreatePipelineStage,
+  useUpdatePipelineStage,
+} from '../../hooks/useOpportunities';
+import {
+  useLeadSources,
+  useCreateLeadSource,
+} from '../../hooks/useLeads';
 import { Card, CardHeader, CardBody } from '../../components/ui/Card';
 import { Avatar } from '../../components/ui/Avatar';
 import { Spinner } from '../../components/ui/Spinner';
 import { Button } from '../../components/ui/Button';
+import { Badge } from '../../components/ui/Badge';
 import { Modal, ModalFooter } from '../../components/ui/Modal';
-import { FormInput } from '../../components/forms';
+import { FormInput, FormSelect, FormTextarea } from '../../components/forms';
 import {
   UserCircleIcon,
   Cog6ToothIcon,
   BellIcon,
   ShieldCheckIcon,
   PencilSquareIcon,
+  PlusIcon,
 } from '@heroicons/react/24/outline';
-import type { UserUpdate } from '../../types';
+import type {
+  UserUpdate,
+  PipelineStage,
+  PipelineStageCreate,
+  PipelineStageUpdate,
+  LeadSourceCreate,
+} from '../../types';
 
-// Profile edit form data
+// ============================================================================
+// Profile Edit Modal
+// ============================================================================
+
 interface ProfileFormData {
   full_name: string;
   phone: string;
   job_title: string;
 }
 
-// Edit Profile Modal Component
 interface EditProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -58,7 +82,6 @@ function EditProfileModal({ isOpen, onClose, initialData }: EditProfileModalProp
     },
   });
 
-  // Reset form values when modal opens or initialData changes
   useEffect(() => {
     if (isOpen) {
       reset({
@@ -85,7 +108,6 @@ function EditProfileModal({ isOpen, onClose, initialData }: EditProfileModalProp
       await updateProfileMutation.mutateAsync(updateData);
       setSuccess(true);
 
-      // Close modal after a brief delay to show success message
       setTimeout(() => {
         onClose();
         setSuccess(false);
@@ -191,6 +213,587 @@ function EditProfileModal({ isOpen, onClose, initialData }: EditProfileModalProp
   );
 }
 
+// ============================================================================
+// AI Preferences Section
+// ============================================================================
+
+interface AIPreferencesFormData {
+  preferred_communication_style: string;
+  custom_instructions: string;
+}
+
+function AIPreferencesSection() {
+  const { data: preferences, isLoading } = useAIPreferences();
+  const updateMutation = useUpdateAIPreferences();
+  const [isEditing, setIsEditing] = useState(false);
+  const [success, setSuccess] = useState(false);
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+  } = useForm<AIPreferencesFormData>();
+
+  useEffect(() => {
+    if (isEditing && preferences) {
+      reset({
+        preferred_communication_style: preferences.preferred_communication_style || 'professional',
+        custom_instructions: preferences.custom_instructions || '',
+      });
+    }
+  }, [isEditing, preferences, reset]);
+
+  const onSubmit = async (data: AIPreferencesFormData) => {
+    try {
+      await updateMutation.mutateAsync({
+        preferred_communication_style: data.preferred_communication_style,
+        custom_instructions: data.custom_instructions || null,
+      });
+      setSuccess(true);
+      setTimeout(() => {
+        setIsEditing(false);
+        setSuccess(false);
+      }, 1000);
+    } catch {
+      // error handled by mutation state
+    }
+  };
+
+  const communicationStyles = [
+    { value: 'professional', label: 'Professional' },
+    { value: 'casual', label: 'Casual' },
+    { value: 'concise', label: 'Concise' },
+    { value: 'detailed', label: 'Detailed' },
+  ];
+
+  return (
+    <Card>
+      <CardHeader
+        title="AI Preferences"
+        description="Configure how the AI assistant communicates with you"
+        action={
+          !isEditing ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              leftIcon={<PencilSquareIcon className="h-4 w-4" />}
+              onClick={() => setIsEditing(true)}
+            >
+              Edit
+            </Button>
+          ) : undefined
+        }
+      />
+      <CardBody className="p-4 sm:p-6">
+        {isLoading ? (
+          <div className="flex justify-center py-4">
+            <Spinner size="md" />
+          </div>
+        ) : isEditing ? (
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            {success && (
+              <div className="rounded-md bg-green-50 p-3">
+                <p className="text-sm text-green-800">Preferences saved successfully!</p>
+              </div>
+            )}
+            {updateMutation.isError && (
+              <div className="rounded-md bg-red-50 p-3">
+                <p className="text-sm text-red-800">Failed to save preferences. Please try again.</p>
+              </div>
+            )}
+
+            <FormSelect
+              label="Communication Style"
+              name="preferred_communication_style"
+              options={communicationStyles}
+              register={register('preferred_communication_style')}
+              helperText="How should the AI assistant communicate with you?"
+            />
+
+            <FormTextarea
+              label="Custom Instructions"
+              name="custom_instructions"
+              rows={3}
+              placeholder="e.g., Always prioritize high-value deals, focus on enterprise clients..."
+              register={register('custom_instructions')}
+              helperText="Additional instructions for the AI assistant"
+            />
+
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => { setIsEditing(false); setSuccess(false); }}
+                disabled={updateMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                isLoading={updateMutation.isPending}
+                disabled={success}
+              >
+                Save Preferences
+              </Button>
+            </div>
+          </form>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2">
+              <div>
+                <label className="block text-xs sm:text-sm font-medium text-gray-500">
+                  Communication Style
+                </label>
+                <p className="mt-1 text-sm text-gray-900 capitalize">
+                  {preferences?.preferred_communication_style || 'Professional'}
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs sm:text-sm font-medium text-gray-500">
+                  Custom Instructions
+                </label>
+                <p className="mt-1 text-sm text-gray-900">
+                  {preferences?.custom_instructions || 'None set'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+      </CardBody>
+    </Card>
+  );
+}
+
+// ============================================================================
+// Pipeline Stages Section
+// ============================================================================
+
+interface StageFormData {
+  name: string;
+  description: string;
+  color: string;
+  probability: string;
+  is_won: boolean;
+  is_lost: boolean;
+}
+
+function PipelineStagesSection() {
+  const { data: stages, isLoading } = usePipelineStages(false);
+  const createMutation = useCreatePipelineStage();
+  const updateMutation = useUpdatePipelineStage();
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [editingStage, setEditingStage] = useState<PipelineStage | null>(null);
+
+  return (
+    <Card>
+      <CardHeader
+        title="Pipeline Stages"
+        description="Manage your opportunity pipeline stages"
+        action={
+          <Button
+            variant="secondary"
+            size="sm"
+            leftIcon={<PlusIcon className="h-4 w-4" />}
+            onClick={() => setIsAddModalOpen(true)}
+          >
+            Add Stage
+          </Button>
+        }
+      />
+      <CardBody className="p-4 sm:p-6">
+        {isLoading ? (
+          <div className="flex justify-center py-4">
+            <Spinner size="md" />
+          </div>
+        ) : !stages || stages.length === 0 ? (
+          <p className="text-sm text-gray-500 text-center py-4">No pipeline stages configured.</p>
+        ) : (
+          <div className="space-y-2">
+            {stages.map((stage) => (
+              <div
+                key={stage.id}
+                className="flex items-center justify-between p-3 rounded-lg border border-gray-200 hover:bg-gray-50"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    className="h-3 w-3 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: stage.color }}
+                  />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{stage.name}</p>
+                    {stage.description && (
+                      <p className="text-xs text-gray-500 truncate">{stage.description}</p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                  <Badge variant={stage.is_won ? 'green' : stage.is_lost ? 'red' : 'gray'} size="sm">
+                    {stage.probability}%
+                  </Badge>
+                  {!stage.is_active && (
+                    <Badge variant="yellow" size="sm">Inactive</Badge>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEditingStage(stage)}
+                  >
+                    Edit
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardBody>
+
+      {/* Add Stage Modal */}
+      <StageModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        title="Add Pipeline Stage"
+        onSubmit={async (data) => {
+          const stageData: PipelineStageCreate = {
+            name: data.name,
+            description: data.description || undefined,
+            color: data.color,
+            probability: parseInt(data.probability, 10),
+            is_won: data.is_won,
+            is_lost: data.is_lost,
+          };
+          await createMutation.mutateAsync(stageData);
+        }}
+        isPending={createMutation.isPending}
+        isError={createMutation.isError}
+      />
+
+      {/* Edit Stage Modal */}
+      {editingStage && (
+        <StageModal
+          isOpen={!!editingStage}
+          onClose={() => setEditingStage(null)}
+          title="Edit Pipeline Stage"
+          initialData={{
+            name: editingStage.name,
+            description: editingStage.description || '',
+            color: editingStage.color,
+            probability: String(editingStage.probability),
+            is_won: editingStage.is_won,
+            is_lost: editingStage.is_lost,
+          }}
+          onSubmit={async (data) => {
+            const stageData: PipelineStageUpdate = {
+              name: data.name,
+              description: data.description || undefined,
+              color: data.color,
+              probability: parseInt(data.probability, 10),
+              is_won: data.is_won,
+              is_lost: data.is_lost,
+            };
+            await updateMutation.mutateAsync({ id: editingStage.id, data: stageData });
+          }}
+          isPending={updateMutation.isPending}
+          isError={updateMutation.isError}
+        />
+      )}
+    </Card>
+  );
+}
+
+interface StageModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  title: string;
+  initialData?: StageFormData;
+  onSubmit: (data: StageFormData) => Promise<void>;
+  isPending: boolean;
+  isError: boolean;
+}
+
+function StageModal({ isOpen, onClose, title, initialData, onSubmit, isPending, isError }: StageModalProps) {
+  const [success, setSuccess] = useState(false);
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    reset,
+    watch,
+    setValue,
+  } = useForm<StageFormData>({
+    defaultValues: initialData || {
+      name: '',
+      description: '',
+      color: '#6366f1',
+      probability: '0',
+      is_won: false,
+      is_lost: false,
+    },
+  });
+
+  const isWon = watch('is_won');
+  const isLost = watch('is_lost');
+
+  useEffect(() => {
+    if (isOpen) {
+      reset(initialData || {
+        name: '',
+        description: '',
+        color: '#6366f1',
+        probability: '0',
+        is_won: false,
+        is_lost: false,
+      });
+      setSuccess(false);
+    }
+  }, [isOpen, initialData, reset]);
+
+  const handleFormSubmit = async (data: StageFormData) => {
+    try {
+      await onSubmit(data);
+      setSuccess(true);
+      setTimeout(() => {
+        onClose();
+        setSuccess(false);
+      }, 800);
+    } catch {
+      // error handled by parent
+    }
+  };
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={title} size="md">
+      <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
+        {isError && (
+          <div className="rounded-md bg-red-50 p-3">
+            <p className="text-sm text-red-800">Failed to save stage. Please try again.</p>
+          </div>
+        )}
+        {success && (
+          <div className="rounded-md bg-green-50 p-3">
+            <p className="text-sm text-green-800">Stage saved successfully!</p>
+          </div>
+        )}
+
+        <FormInput
+          label="Stage Name"
+          name="name"
+          required
+          register={register('name', { required: 'Stage name is required' })}
+          error={errors.name?.message}
+          placeholder="e.g., Qualification"
+        />
+
+        <FormInput
+          label="Description"
+          name="description"
+          register={register('description')}
+          placeholder="Optional description"
+        />
+
+        <div className="grid grid-cols-2 gap-4">
+          <FormInput
+            label="Color"
+            name="color"
+            type="color"
+            register={register('color')}
+          />
+
+          <FormInput
+            label="Win Probability (%)"
+            name="probability"
+            type="number"
+            register={register('probability', {
+              required: 'Probability is required',
+              min: { value: 0, message: 'Min 0' },
+              max: { value: 100, message: 'Max 100' },
+            })}
+            error={errors.probability?.message}
+          />
+        </div>
+
+        <div className="flex gap-4">
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              checked={isWon}
+              onChange={(e) => {
+                setValue('is_won', e.target.checked);
+                if (e.target.checked) setValue('is_lost', false);
+              }}
+            />
+            Won Stage
+          </label>
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              checked={isLost}
+              onChange={(e) => {
+                setValue('is_lost', e.target.checked);
+                if (e.target.checked) setValue('is_won', false);
+              }}
+            />
+            Lost Stage
+          </label>
+        </div>
+
+        <ModalFooter>
+          <Button type="button" variant="secondary" onClick={onClose} disabled={isPending}>
+            Cancel
+          </Button>
+          <Button type="submit" isLoading={isPending} disabled={success}>
+            Save
+          </Button>
+        </ModalFooter>
+      </form>
+    </Modal>
+  );
+}
+
+// ============================================================================
+// Lead Sources Section
+// ============================================================================
+
+interface LeadSourceFormData {
+  name: string;
+  description: string;
+}
+
+function LeadSourcesSection() {
+  const { data: sources, isLoading } = useLeadSources(false);
+  const createMutation = useCreateLeadSource();
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [success, setSuccess] = useState(false);
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    reset,
+  } = useForm<LeadSourceFormData>();
+
+  useEffect(() => {
+    if (isAddModalOpen) {
+      reset({ name: '', description: '' });
+      setSuccess(false);
+    }
+  }, [isAddModalOpen, reset]);
+
+  const onSubmit = async (data: LeadSourceFormData) => {
+    try {
+      const sourceData: LeadSourceCreate = {
+        name: data.name,
+        description: data.description || undefined,
+      };
+      await createMutation.mutateAsync(sourceData);
+      setSuccess(true);
+      setTimeout(() => {
+        setIsAddModalOpen(false);
+        setSuccess(false);
+      }, 800);
+    } catch {
+      // error handled by mutation state
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader
+        title="Lead Sources"
+        description="Manage where your leads come from"
+        action={
+          <Button
+            variant="secondary"
+            size="sm"
+            leftIcon={<PlusIcon className="h-4 w-4" />}
+            onClick={() => setIsAddModalOpen(true)}
+          >
+            Add Source
+          </Button>
+        }
+      />
+      <CardBody className="p-4 sm:p-6">
+        {isLoading ? (
+          <div className="flex justify-center py-4">
+            <Spinner size="md" />
+          </div>
+        ) : !sources || sources.length === 0 ? (
+          <p className="text-sm text-gray-500 text-center py-4">No lead sources configured.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {sources.map((source) => (
+              <Badge
+                key={source.id}
+                variant={source.is_active ? 'blue' : 'gray'}
+                size="lg"
+              >
+                {source.name}
+              </Badge>
+            ))}
+          </div>
+        )}
+      </CardBody>
+
+      {/* Add Source Modal */}
+      <Modal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        title="Add Lead Source"
+        size="md"
+      >
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          {createMutation.isError && (
+            <div className="rounded-md bg-red-50 p-3">
+              <p className="text-sm text-red-800">Failed to create lead source. Please try again.</p>
+            </div>
+          )}
+          {success && (
+            <div className="rounded-md bg-green-50 p-3">
+              <p className="text-sm text-green-800">Lead source created successfully!</p>
+            </div>
+          )}
+
+          <FormInput
+            label="Source Name"
+            name="name"
+            required
+            register={register('name', { required: 'Source name is required' })}
+            error={errors.name?.message}
+            placeholder="e.g., Website, Referral, Trade Show"
+          />
+
+          <FormInput
+            label="Description"
+            name="description"
+            register={register('description')}
+            placeholder="Optional description"
+          />
+
+          <ModalFooter>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setIsAddModalOpen(false)}
+              disabled={createMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" isLoading={createMutation.isPending} disabled={success}>
+              Add Source
+            </Button>
+          </ModalFooter>
+        </form>
+      </Modal>
+    </Card>
+  );
+}
+
+// ============================================================================
+// Main Settings Page
+// ============================================================================
+
 function SettingsPage() {
   const { user, isLoading } = useAuthStore();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -213,7 +816,7 @@ function SettingsPage() {
         </p>
       </div>
 
-      {/* User Profile Section - single column on mobile */}
+      {/* User Profile Section */}
       <Card>
         <CardHeader
           title="Profile"
@@ -239,7 +842,6 @@ function SettingsPage() {
               />
             </div>
             <div className="flex-1 space-y-4">
-              {/* Profile fields - single column on mobile */}
               <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2">
                 <div>
                   <label className="block text-xs sm:text-sm font-medium text-gray-500">
@@ -307,7 +909,16 @@ function SettingsPage() {
         />
       )}
 
-      {/* Account Settings Section - single column cards on mobile */}
+      {/* AI Preferences Section */}
+      <AIPreferencesSection />
+
+      {/* Pipeline Stages Section */}
+      <PipelineStagesSection />
+
+      {/* Lead Sources Section */}
+      <LeadSourcesSection />
+
+      {/* Account Settings Section */}
       <Card>
         <CardHeader
           title="Account Settings"
@@ -404,7 +1015,7 @@ function SettingsPage() {
         </CardBody>
       </Card>
 
-      {/* Account Status - single column on mobile */}
+      {/* Account Status */}
       <Card>
         <CardHeader
           title="Account Status"

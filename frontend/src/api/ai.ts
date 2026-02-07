@@ -15,6 +15,8 @@ import type {
   ConfirmActionResponse,
   FeedbackRequest,
   FeedbackResponse,
+  AIUserPreferences,
+  AIUserPreferencesUpdate,
 } from '../types';
 
 const AI_BASE = '/api/ai';
@@ -152,6 +154,28 @@ export const submitFeedback = async (
   return response.data;
 };
 
+// =============================================================================
+// User Preferences
+// =============================================================================
+
+/**
+ * Get user AI preferences
+ */
+export const getPreferences = async (): Promise<AIUserPreferences> => {
+  const response = await apiClient.get<AIUserPreferences>(`${AI_BASE}/preferences`);
+  return response.data;
+};
+
+/**
+ * Update user AI preferences
+ */
+export const updatePreferences = async (
+  data: AIUserPreferencesUpdate
+): Promise<AIUserPreferences> => {
+  const response = await apiClient.put<AIUserPreferences>(`${AI_BASE}/preferences`, data);
+  return response.data;
+};
+
 // Export all AI functions
 export const aiApi = {
   chat,
@@ -169,6 +193,9 @@ export const aiApi = {
   confirmAction,
   // Feedback
   submitFeedback,
+  // Preferences
+  getPreferences,
+  updatePreferences,
 };
 
 export default aiApi;

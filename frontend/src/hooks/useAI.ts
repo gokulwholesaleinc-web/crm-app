@@ -5,7 +5,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useCallback } from 'react';
 import { aiApi } from '../api/ai';
-import type { ChatMessage, ChatRequest, FeedbackRequest, ConfirmActionRequest, ChatResponse } from '../types';
+import type { ChatMessage, ChatRequest, FeedbackRequest, ConfirmActionRequest, ChatResponse, AIUserPreferencesUpdate } from '../types';
 
 // Query keys
 export const aiKeys = {
@@ -18,6 +18,7 @@ export const aiKeys = {
     [...aiKeys.all, 'next-action', entityType, entityId] as const,
   search: (query: string, entityTypes?: string) =>
     [...aiKeys.all, 'search', query, entityTypes] as const,
+  preferences: () => [...aiKeys.all, 'preferences'] as const,
 };
 
 /**
@@ -262,4 +263,29 @@ export function useInsights(entityType: 'lead' | 'opportunity', entityId: number
     return leadInsights;
   }
   return opportunityInsights;
+}
+
+/**
+ * Hook to fetch AI user preferences
+ */
+export function useAIPreferences() {
+  return useQuery({
+    queryKey: aiKeys.preferences(),
+    queryFn: () => aiApi.getPreferences(),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * Hook to update AI user preferences
+ */
+export function useUpdateAIPreferences() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: AIUserPreferencesUpdate) => aiApi.updatePreferences(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: aiKeys.preferences() });
+    },
+  });
 }

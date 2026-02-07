@@ -859,6 +859,20 @@ export interface SearchResponse {
   results: SimilarContentResult[];
 }
 
+export interface AIUserPreferences {
+  id: number;
+  user_id: number;
+  preferred_communication_style: string | null;
+  priority_entities: Record<string, unknown> | null;
+  custom_instructions: string | null;
+}
+
+export interface AIUserPreferencesUpdate {
+  preferred_communication_style?: string | null;
+  priority_entities?: Record<string, unknown> | null;
+  custom_instructions?: string | null;
+}
+
 // =============================================================================
 // Tag Types
 // =============================================================================

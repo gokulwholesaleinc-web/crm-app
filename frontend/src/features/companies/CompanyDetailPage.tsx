@@ -1,5 +1,5 @@
 /**
- * Company detail page with contacts list
+ * Company detail page with contacts list, activities, and notes tabs
  */
 
 import { useState } from 'react';
@@ -16,12 +16,16 @@ import {
   LinkIcon,
 } from '@heroicons/react/24/outline';
 import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
+import { NotesList } from '../../components/shared';
 import { CompanyForm } from './components/CompanyForm';
 import { useCompany, useUpdateCompany, useDeleteCompany } from '../../hooks/useCompanies';
 import { useContacts } from '../../hooks/useContacts';
+import { useTimeline } from '../../hooks/useActivities';
 import { getStatusColor, formatStatusLabel } from '../../utils/statusColors';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import type { CompanyUpdate, Contact } from '../../types';
+
+type TabType = 'overview' | 'activities' | 'notes';
 
 function DetailItem({
   icon: Icon,
@@ -101,6 +105,7 @@ export function CompanyDetailPage() {
   const navigate = useNavigate();
   const companyId = id ? parseInt(id, 10) : undefined;
 
+  const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -112,6 +117,15 @@ export function CompanyDetailPage() {
     company_id: companyId,
     page_size: 50,
   });
+
+  // Fetch timeline/activities - only when on activities tab
+  const shouldFetchActivities = activeTab === 'activities' && !!companyId;
+  const { data: timelineData, isLoading: isLoadingActivities } = useTimeline(
+    shouldFetchActivities ? 'company' : '',
+    shouldFetchActivities ? companyId! : 0
+  );
+
+  const activities = timelineData?.items || [];
 
   // Mutations
   const updateCompany = useUpdateCompany();
@@ -169,6 +183,12 @@ export function CompanyDetailPage() {
     .filter(Boolean)
     .join('\n');
 
+  const tabs: { id: TabType; name: string }[] = [
+    { id: 'overview', name: 'Overview' },
+    { id: 'activities', name: 'Activities' },
+    { id: 'notes', name: 'Notes' },
+  ];
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -221,177 +241,255 @@ export function CompanyDetailPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Main Info */}
-        <div className="space-y-6 lg:col-span-2">
-          {/* Description */}
-          {company.description && (
-            <div className="bg-white rounded-lg shadow-sm border p-6">
-              <h3 className="text-sm font-medium text-gray-900 mb-2">About</h3>
-              <p className="text-sm text-gray-600 whitespace-pre-wrap">{company.description}</p>
-            </div>
-          )}
+      {/* Tabs */}
+      <div className="border-b border-gray-200 overflow-x-auto">
+        <nav className="-mb-px flex space-x-4 sm:space-x-8 min-w-max px-1">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={clsx(
+                'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex-shrink-0',
+                activeTab === tab.id
+                  ? 'border-primary-500 text-primary-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              )}
+            >
+              {tab.name}
+            </button>
+          ))}
+        </nav>
+      </div>
 
-          {/* Contacts */}
-          <div className="bg-white rounded-lg shadow-sm border">
-            <div className="px-4 py-4 border-b flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-              <h3 className="text-lg font-semibold text-gray-900">
-                Contacts ({contacts.length})
-              </h3>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => navigate(`/contacts?company_id=${companyId}&action=new`)}
-                className="w-full sm:w-auto"
-              >
-                Add Contact
-              </Button>
+      {/* Tab Content */}
+      {activeTab === 'overview' && (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          {/* Main Info */}
+          <div className="space-y-6 lg:col-span-2">
+            {/* Description */}
+            {company.description && (
+              <div className="bg-white rounded-lg shadow-sm border p-6">
+                <h3 className="text-sm font-medium text-gray-900 mb-2">About</h3>
+                <p className="text-sm text-gray-600 whitespace-pre-wrap">{company.description}</p>
+              </div>
+            )}
+
+            {/* Contacts */}
+            <div className="bg-white rounded-lg shadow-sm border">
+              <div className="px-4 py-4 border-b flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Contacts ({contacts.length})
+                </h3>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => navigate(`/contacts?company_id=${companyId}&action=new`)}
+                  className="w-full sm:w-auto"
+                >
+                  Add Contact
+                </Button>
+              </div>
+              {isLoadingContacts ? (
+                <div className="flex items-center justify-center py-8">
+                  <Spinner />
+                </div>
+              ) : contacts.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <UsersIcon className="mx-auto h-8 w-8 text-gray-400 mb-2" />
+                  <p>No contacts associated with this company</p>
+                </div>
+              ) : (
+                <div className="divide-y">
+                  {contacts.map((contact) => (
+                    <ContactRow key={contact.id} contact={contact} />
+                  ))}
+                </div>
+              )}
             </div>
-            {isLoadingContacts ? (
-              <div className="flex items-center justify-center py-8">
+          </div>
+
+          {/* Sidebar */}
+          <div className="space-y-6">
+            {/* Contact Info */}
+            <div className="bg-white rounded-lg shadow-sm border p-6">
+              <h3 className="text-sm font-medium text-gray-900 mb-4">Contact Information</h3>
+              <div className="space-y-1">
+                <DetailItem
+                  icon={GlobeAltIcon}
+                  label="Website"
+                  value={company.website?.replace(/^https?:\/\//, '')}
+                  link={company.website || undefined}
+                />
+                <DetailItem
+                  icon={EnvelopeIcon}
+                  label="Email"
+                  value={company.email}
+                  link={company.email ? `mailto:${company.email}` : undefined}
+                />
+                <DetailItem
+                  icon={PhoneIcon}
+                  label="Phone"
+                  value={company.phone}
+                  link={company.phone ? `tel:${company.phone}` : undefined}
+                />
+                {fullAddress && (
+                  <DetailItem icon={MapPinIcon} label="Address" value={fullAddress} />
+                )}
+              </div>
+            </div>
+
+            {/* Business Info */}
+            <div className="bg-white rounded-lg shadow-sm border p-6">
+              <h3 className="text-sm font-medium text-gray-900 mb-4">Business Details</h3>
+              <div className="space-y-3">
+                {company.annual_revenue && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-500">Annual Revenue</span>
+                    <span className="text-sm font-medium text-gray-900">
+                      {formatCurrency(company.annual_revenue)}
+                    </span>
+                  </div>
+                )}
+                {company.employee_count && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-500">Employees</span>
+                    <span className="text-sm font-medium text-gray-900">
+                      {company.employee_count.toLocaleString()}
+                    </span>
+                  </div>
+                )}
+                {company.company_size && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-500">Company Size</span>
+                    <span className="text-sm font-medium text-gray-900">{company.company_size}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Social Links */}
+            {(company.linkedin_url || company.twitter_handle) && (
+              <div className="bg-white rounded-lg shadow-sm border p-6">
+                <h3 className="text-sm font-medium text-gray-900 mb-4">Social Links</h3>
+                <div className="space-y-2">
+                  {company.linkedin_url && (
+                    <a
+                      href={company.linkedin_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600"
+                    >
+                      <LinkIcon className="h-4 w-4" />
+                      LinkedIn
+                    </a>
+                  )}
+                  {company.twitter_handle && (
+                    <a
+                      href={`https://twitter.com/${company.twitter_handle.replace('@', '')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600"
+                    >
+                      <LinkIcon className="h-4 w-4" />
+                      {company.twitter_handle}
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Tags */}
+            {company.tags && company.tags.length > 0 && (
+              <div className="bg-white rounded-lg shadow-sm border p-6">
+                <h3 className="text-sm font-medium text-gray-900 mb-4">Tags</h3>
+                <div className="flex flex-wrap gap-2">
+                  {company.tags.map((tag) => (
+                    <span
+                      key={tag.id}
+                      className="text-xs px-2.5 py-1 rounded-full bg-gray-100 text-gray-600"
+                      style={
+                        tag.color ? { backgroundColor: `${tag.color}20`, color: tag.color } : undefined
+                      }
+                    >
+                      {tag.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Timestamps */}
+            <div className="bg-white rounded-lg shadow-sm border p-6">
+              <h3 className="text-sm font-medium text-gray-900 mb-4">Record Info</h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500">Created</span>
+                  <span className="text-gray-900">{formatDate(company.created_at, 'long')}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500">Last Updated</span>
+                  <span className="text-gray-900">{formatDate(company.updated_at, 'long')}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'activities' && (
+        <div className="bg-white shadow rounded-lg">
+          <div className="px-4 py-5 sm:p-6">
+            {isLoadingActivities ? (
+              <div className="flex items-center justify-center py-4">
                 <Spinner />
               </div>
-            ) : contacts.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <UsersIcon className="mx-auto h-8 w-8 text-gray-400 mb-2" />
-                <p>No contacts associated with this company</p>
-              </div>
+            ) : activities.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-4">
+                No activities recorded yet.
+              </p>
             ) : (
-              <div className="divide-y">
-                {contacts.map((contact) => (
-                  <ContactRow key={contact.id} contact={contact} />
+              <ul className="space-y-4">
+                {activities.map((activity) => (
+                  <li
+                    key={activity.id}
+                    className="flex items-start space-x-3 pb-4 border-b border-gray-100 last:border-0"
+                  >
+                    <div className="flex-shrink-0">
+                      <div className="h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center">
+                        <svg
+                          className="h-4 w-4 text-primary-600"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
+                        </svg>
+                      </div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-900">
+                        {activity.subject}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {formatDate(activity.created_at)}
+                      </p>
+                    </div>
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
           </div>
         </div>
+      )}
 
-        {/* Sidebar */}
-        <div className="space-y-6">
-          {/* Contact Info */}
-          <div className="bg-white rounded-lg shadow-sm border p-6">
-            <h3 className="text-sm font-medium text-gray-900 mb-4">Contact Information</h3>
-            <div className="space-y-1">
-              <DetailItem
-                icon={GlobeAltIcon}
-                label="Website"
-                value={company.website?.replace(/^https?:\/\//, '')}
-                link={company.website || undefined}
-              />
-              <DetailItem
-                icon={EnvelopeIcon}
-                label="Email"
-                value={company.email}
-                link={company.email ? `mailto:${company.email}` : undefined}
-              />
-              <DetailItem
-                icon={PhoneIcon}
-                label="Phone"
-                value={company.phone}
-                link={company.phone ? `tel:${company.phone}` : undefined}
-              />
-              {fullAddress && (
-                <DetailItem icon={MapPinIcon} label="Address" value={fullAddress} />
-              )}
-            </div>
-          </div>
-
-          {/* Business Info */}
-          <div className="bg-white rounded-lg shadow-sm border p-6">
-            <h3 className="text-sm font-medium text-gray-900 mb-4">Business Details</h3>
-            <div className="space-y-3">
-              {company.annual_revenue && (
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-500">Annual Revenue</span>
-                  <span className="text-sm font-medium text-gray-900">
-                    {formatCurrency(company.annual_revenue)}
-                  </span>
-                </div>
-              )}
-              {company.employee_count && (
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-500">Employees</span>
-                  <span className="text-sm font-medium text-gray-900">
-                    {company.employee_count.toLocaleString()}
-                  </span>
-                </div>
-              )}
-              {company.company_size && (
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-500">Company Size</span>
-                  <span className="text-sm font-medium text-gray-900">{company.company_size}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Social Links */}
-          {(company.linkedin_url || company.twitter_handle) && (
-            <div className="bg-white rounded-lg shadow-sm border p-6">
-              <h3 className="text-sm font-medium text-gray-900 mb-4">Social Links</h3>
-              <div className="space-y-2">
-                {company.linkedin_url && (
-                  <a
-                    href={company.linkedin_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600"
-                  >
-                    <LinkIcon className="h-4 w-4" />
-                    LinkedIn
-                  </a>
-                )}
-                {company.twitter_handle && (
-                  <a
-                    href={`https://twitter.com/${company.twitter_handle.replace('@', '')}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600"
-                  >
-                    <LinkIcon className="h-4 w-4" />
-                    {company.twitter_handle}
-                  </a>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Tags */}
-          {company.tags && company.tags.length > 0 && (
-            <div className="bg-white rounded-lg shadow-sm border p-6">
-              <h3 className="text-sm font-medium text-gray-900 mb-4">Tags</h3>
-              <div className="flex flex-wrap gap-2">
-                {company.tags.map((tag) => (
-                  <span
-                    key={tag.id}
-                    className="text-xs px-2.5 py-1 rounded-full bg-gray-100 text-gray-600"
-                    style={
-                      tag.color ? { backgroundColor: `${tag.color}20`, color: tag.color } : undefined
-                    }
-                  >
-                    {tag.name}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Timestamps */}
-          <div className="bg-white rounded-lg shadow-sm border p-6">
-            <h3 className="text-sm font-medium text-gray-900 mb-4">Record Info</h3>
-            <div className="space-y-2 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-gray-500">Created</span>
-                <span className="text-gray-900">{formatDate(company.created_at, 'long')}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-gray-500">Last Updated</span>
-                <span className="text-gray-900">{formatDate(company.updated_at, 'long')}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      {activeTab === 'notes' && companyId && (
+        <NotesList entityType="company" entityId={companyId} />
+      )}
 
       {/* Edit Form Modal */}
       <Modal

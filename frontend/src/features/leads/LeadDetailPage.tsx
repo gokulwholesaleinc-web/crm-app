@@ -1,14 +1,18 @@
 import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
+import { NotesList } from '../../components/shared';
 import { ConvertLeadModal } from './components/ConvertLeadModal';
 import { LeadForm, LeadFormData } from './components/LeadForm';
 import { AIInsightsCard, NextBestActionCard } from '../../components/ai';
 import { getStatusBadgeClasses, formatStatusLabel } from '../../utils';
 import { formatDate, formatPhoneNumber } from '../../utils/formatters';
 import { useLead, useDeleteLead, useConvertLead, useUpdateLead } from '../../hooks';
+import { useTimeline } from '../../hooks/useActivities';
 import type { LeadUpdate } from '../../types';
 import clsx from 'clsx';
+
+type TabType = 'details' | 'activities' | 'notes';
 
 function getScoreColor(score: number): string {
   if (score >= 80) return 'text-green-600';
@@ -21,6 +25,7 @@ function LeadDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const leadId = id ? parseInt(id, 10) : undefined;
+  const [activeTab, setActiveTab] = useState<TabType>('details');
   const [showConvertModal, setShowConvertModal] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -30,6 +35,15 @@ function LeadDetailPage() {
   const deleteLeadMutation = useDeleteLead();
   const convertLeadMutation = useConvertLead();
   const updateLeadMutation = useUpdateLead();
+
+  // Fetch timeline/activities - only when on activities tab
+  const shouldFetchActivities = activeTab === 'activities' && !!leadId;
+  const { data: timelineData, isLoading: isLoadingActivities } = useTimeline(
+    shouldFetchActivities ? 'lead' : '',
+    shouldFetchActivities ? leadId! : 0
+  );
+
+  const activities = timelineData?.items || [];
 
   const handleEditSubmit = async (data: LeadFormData) => {
     if (!leadId) return;
@@ -150,6 +164,12 @@ function LeadDetailPage() {
       </div>
     );
   }
+
+  const tabs: { id: TabType; name: string }[] = [
+    { id: 'details', name: 'Details' },
+    { id: 'activities', name: 'Activities' },
+    { id: 'notes', name: 'Notes' },
+  ];
 
   return (
     <div className="space-y-6">
@@ -281,94 +301,171 @@ function LeadDetailPage() {
         </div>
       </div>
 
-      {/* Lead Details */}
-      <div className="bg-white shadow rounded-lg">
-        <div className="px-4 py-5 sm:p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">
-            Lead Details
-          </h3>
-          <dl className="grid grid-cols-1 gap-4 sm:gap-x-4 sm:gap-y-6 sm:grid-cols-2">
-            <div>
-              <dt className="text-sm font-medium text-gray-500">Email</dt>
-              <dd className="mt-1 text-sm text-gray-900 break-all">
-                <a
-                  href={`mailto:${lead.email}`}
-                  className="text-primary-600 hover:text-primary-500"
-                >
-                  {lead.email}
-                </a>
-              </dd>
-            </div>
+      {/* Tabs */}
+      <div className="border-b border-gray-200 overflow-x-auto">
+        <nav className="-mb-px flex space-x-4 sm:space-x-8 min-w-max px-1">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={clsx(
+                'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex-shrink-0',
+                activeTab === tab.id
+                  ? 'border-primary-500 text-primary-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              )}
+            >
+              {tab.name}
+            </button>
+          ))}
+        </nav>
+      </div>
 
-            <div>
-              <dt className="text-sm font-medium text-gray-500">Phone</dt>
-              <dd className="mt-1 text-sm text-gray-900">
-                {lead.phone ? (
+      {/* Tab Content */}
+      {activeTab === 'details' && (
+        <div className="bg-white shadow rounded-lg">
+          <div className="px-4 py-5 sm:p-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">
+              Lead Details
+            </h3>
+            <dl className="grid grid-cols-1 gap-4 sm:gap-x-4 sm:gap-y-6 sm:grid-cols-2">
+              <div>
+                <dt className="text-sm font-medium text-gray-500">Email</dt>
+                <dd className="mt-1 text-sm text-gray-900 break-all">
                   <a
-                    href={`tel:${lead.phone}`}
+                    href={`mailto:${lead.email}`}
                     className="text-primary-600 hover:text-primary-500"
                   >
-                    {formatPhoneNumber(lead.phone)}
+                    {lead.email}
                   </a>
-                ) : (
-                  '-'
-                )}
-              </dd>
-            </div>
+                </dd>
+              </div>
 
-            <div>
-              <dt className="text-sm font-medium text-gray-500">Company</dt>
-              <dd className="mt-1 text-sm text-gray-900 break-words">
-                {lead.company_name || '-'}
-              </dd>
-            </div>
+              <div>
+                <dt className="text-sm font-medium text-gray-500">Phone</dt>
+                <dd className="mt-1 text-sm text-gray-900">
+                  {lead.phone ? (
+                    <a
+                      href={`tel:${lead.phone}`}
+                      className="text-primary-600 hover:text-primary-500"
+                    >
+                      {formatPhoneNumber(lead.phone)}
+                    </a>
+                  ) : (
+                    '-'
+                  )}
+                </dd>
+              </div>
 
-            <div>
-              <dt className="text-sm font-medium text-gray-500">Job Title</dt>
-              <dd className="mt-1 text-sm text-gray-900 break-words">
-                {lead.job_title || '-'}
-              </dd>
-            </div>
+              <div>
+                <dt className="text-sm font-medium text-gray-500">Company</dt>
+                <dd className="mt-1 text-sm text-gray-900 break-words">
+                  {lead.company_name || '-'}
+                </dd>
+              </div>
 
-            <div>
-              <dt className="text-sm font-medium text-gray-500">Status</dt>
-              <dd className="mt-1">
-                <span className={getStatusBadgeClasses(lead.status, 'lead')}>
-                  {formatStatusLabel(lead.status)}
-                </span>
-              </dd>
-            </div>
+              <div>
+                <dt className="text-sm font-medium text-gray-500">Job Title</dt>
+                <dd className="mt-1 text-sm text-gray-900 break-words">
+                  {lead.job_title || '-'}
+                </dd>
+              </div>
 
-            <div>
-              <dt className="text-sm font-medium text-gray-500">Source</dt>
-              <dd className="mt-1 text-sm text-gray-900">
-                {lead.source?.name ? formatStatusLabel(lead.source.name) : '-'}
-              </dd>
-            </div>
+              <div>
+                <dt className="text-sm font-medium text-gray-500">Status</dt>
+                <dd className="mt-1">
+                  <span className={getStatusBadgeClasses(lead.status, 'lead')}>
+                    {formatStatusLabel(lead.status)}
+                  </span>
+                </dd>
+              </div>
 
-            <div className="sm:col-span-2">
-              <dt className="text-sm font-medium text-gray-500">Description</dt>
-              <dd className="mt-1 text-sm text-gray-900 break-words">
-                {lead.description || 'No description'}
-              </dd>
-            </div>
+              <div>
+                <dt className="text-sm font-medium text-gray-500">Source</dt>
+                <dd className="mt-1 text-sm text-gray-900">
+                  {lead.source?.name ? formatStatusLabel(lead.source.name) : '-'}
+                </dd>
+              </div>
 
-            <div>
-              <dt className="text-sm font-medium text-gray-500">Created</dt>
-              <dd className="mt-1 text-sm text-gray-900">
-                {formatDate(lead.created_at)}
-              </dd>
-            </div>
+              <div className="sm:col-span-2">
+                <dt className="text-sm font-medium text-gray-500">Description</dt>
+                <dd className="mt-1 text-sm text-gray-900 break-words">
+                  {lead.description || 'No description'}
+                </dd>
+              </div>
 
-            <div>
-              <dt className="text-sm font-medium text-gray-500">Last Updated</dt>
-              <dd className="mt-1 text-sm text-gray-900">
-                {formatDate(lead.updated_at)}
-              </dd>
-            </div>
-          </dl>
+              <div>
+                <dt className="text-sm font-medium text-gray-500">Created</dt>
+                <dd className="mt-1 text-sm text-gray-900">
+                  {formatDate(lead.created_at)}
+                </dd>
+              </div>
+
+              <div>
+                <dt className="text-sm font-medium text-gray-500">Last Updated</dt>
+                <dd className="mt-1 text-sm text-gray-900">
+                  {formatDate(lead.updated_at)}
+                </dd>
+              </div>
+            </dl>
+          </div>
         </div>
-      </div>
+      )}
+
+      {activeTab === 'activities' && (
+        <div className="bg-white shadow rounded-lg">
+          <div className="px-4 py-5 sm:p-6">
+            {isLoadingActivities ? (
+              <div className="flex items-center justify-center py-4">
+                <Spinner />
+              </div>
+            ) : activities.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-4">
+                No activities recorded yet.
+              </p>
+            ) : (
+              <ul className="space-y-4">
+                {activities.map((activity) => (
+                  <li
+                    key={activity.id}
+                    className="flex items-start space-x-3 pb-4 border-b border-gray-100 last:border-0"
+                  >
+                    <div className="flex-shrink-0">
+                      <div className="h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center">
+                        <svg
+                          className="h-4 w-4 text-primary-600"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
+                        </svg>
+                      </div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-900">
+                        {activity.subject}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {formatDate(activity.created_at)}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'notes' && leadId && (
+        <NotesList entityType="lead" entityId={leadId} />
+      )}
 
       {/* Convert Lead Modal */}
       <ConvertLeadModal
