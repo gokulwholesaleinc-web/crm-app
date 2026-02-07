@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { SparklesIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 import { Button, Spinner, Modal } from '../ui';
 import { useLeadInsights, useOpportunityInsights } from '../../hooks/useAI';
+import { AIFeedbackButtons } from './AIFeedbackButtons';
 
 interface AIInsightsCardProps {
   entityType: 'lead' | 'opportunity';
@@ -142,6 +143,14 @@ export function AIInsightsCard({
             <div className="whitespace-pre-wrap text-gray-700">
               {data.insights}
             </div>
+          </div>
+          <div className="flex items-center gap-2 pt-2 border-t border-gray-200/50">
+            <span className="text-xs text-gray-400">Was this helpful?</span>
+            <AIFeedbackButtons
+              query={`${entityType} insights for #${entityId}`}
+              response={data.insights}
+              size="sm"
+            />
           </div>
         </div>
       );

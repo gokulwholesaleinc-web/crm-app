@@ -1,6 +1,7 @@
 import { LightBulbIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 import { Spinner } from '../ui';
 import { useNextBestAction } from '../../hooks/useAI';
+import { AIFeedbackButtons } from './AIFeedbackButtons';
 
 interface NextBestActionCardProps {
   entityType: 'lead' | 'opportunity' | 'contact';
@@ -98,6 +99,13 @@ export function NextBestActionCard({
               {data.reason}
             </p>
           )}
+          <div className="mt-2">
+            <AIFeedbackButtons
+              query={`next action for ${entityType} #${entityId}`}
+              response={`${data.action}. ${data.reason || ''}`}
+              size="sm"
+            />
+          </div>
         </div>
       </div>
     </div>
