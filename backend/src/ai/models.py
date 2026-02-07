@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import String, Integer, ForeignKey, Text, DateTime, func
+from sqlalchemy import String, Integer, ForeignKey, Text, DateTime, Boolean, func, JSON
 from sqlalchemy.orm import Mapped, mapped_column
 from pgvector.sqlalchemy import Vector
 from src.database import Base
@@ -68,3 +68,114 @@ class AIConversation(Base):
 
     # Session tracking
     session_id: Mapped[Optional[str]] = mapped_column(String(100), index=True)
+
+
+class AIFeedback(Base):
+    """Stores user feedback on AI responses for learning."""
+    __tablename__ = "ai_feedback"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    user_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    session_id: Mapped[Optional[str]] = mapped_column(String(100), index=True)
+    query: Mapped[str] = mapped_column(Text, nullable=False)
+    response: Mapped[str] = mapped_column(Text, nullable=False)
+    retrieved_context_ids: Mapped[Optional[dict]] = mapped_column(JSON)
+
+    # Feedback: positive, negative, correction
+    feedback: Mapped[str] = mapped_column(String(20), nullable=False)
+    correction_text: Mapped[Optional[str]] = mapped_column(Text)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+
+
+class AIKnowledgeDocument(Base):
+    """Stores uploaded knowledge base documents."""
+    __tablename__ = "ai_knowledge_documents"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    filename: Mapped[str] = mapped_column(String(500), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    chunk_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    user_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class AIActionLog(Base):
+    """Audit log for every AI function execution."""
+    __tablename__ = "ai_action_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    user_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    session_id: Mapped[Optional[str]] = mapped_column(String(100), index=True)
+    function_name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    arguments: Mapped[Optional[dict]] = mapped_column(JSON)
+    result: Mapped[Optional[dict]] = mapped_column(JSON)
+    risk_level: Mapped[str] = mapped_column(String(20), nullable=False)
+    was_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    model_used: Mapped[Optional[str]] = mapped_column(String(50))
+    tokens_used: Mapped[Optional[int]] = mapped_column(Integer)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+
+
+class AIUserPreferences(Base):
+    """Stores user preferences for AI personalization."""
+    __tablename__ = "ai_user_preferences"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    user_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+
+    preferred_communication_style: Mapped[Optional[str]] = mapped_column(
+        String(50), default="professional"
+    )
+    priority_entities: Mapped[Optional[dict]] = mapped_column(JSON)
+    custom_instructions: Mapped[Optional[str]] = mapped_column(Text)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )

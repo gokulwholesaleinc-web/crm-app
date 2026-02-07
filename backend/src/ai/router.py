@@ -1,9 +1,10 @@
 """AI Assistant API routes."""
 
 from typing import Optional
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, UploadFile, File, HTTPException
+from sqlalchemy import select, func
 from src.core.constants import HTTPStatus
-from src.core.router_utils import DBSession, CurrentUser, raise_not_found
+from src.core.router_utils import DBSession, CurrentUser, raise_not_found, raise_bad_request
 from src.ai.schemas import (
     ChatRequest,
     ChatResponse,
@@ -14,11 +15,22 @@ from src.ai.schemas import (
     NextBestAction,
     SearchResponse,
     SimilarContentResult,
+    FeedbackRequest,
+    FeedbackResponse,
+    FeedbackStatsResponse,
+    KnowledgeDocumentResponse,
+    KnowledgeDocumentListResponse,
+    UserPreferencesRequest,
+    UserPreferencesResponse,
+    ConfirmActionRequest,
+    ConfirmActionResponse,
 )
+from src.ai.models import AIFeedback, AIUserPreferences
 from src.ai.query_processor import QueryProcessor
 from src.ai.insights import InsightsGenerator
 from src.ai.recommendations import RecommendationEngine
 from src.ai.embeddings import EmbeddingService
+from src.ai.knowledge_base import KnowledgeBaseService
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
@@ -31,13 +43,47 @@ async def chat(
 ):
     """Chat with the AI assistant using natural language."""
     processor = QueryProcessor(db)
-    result = await processor.process_query(request.message, current_user.id)
+    result = await processor.process_query(
+        request.message, current_user.id, session_id=request.session_id
+    )
 
     return ChatResponse(
         response=result.get("response", ""),
         data=result.get("data"),
         function_called=result.get("function_called"),
+        session_id=result.get("session_id", request.session_id),
+        confirmation_required=result.get("confirmation_required", False),
+        pending_action=result.get("pending_action"),
+        actions_taken=result.get("actions_taken", []),
+    )
+
+
+@router.post("/confirm-action", response_model=ConfirmActionResponse)
+async def confirm_action(
+    request: ConfirmActionRequest,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Confirm and execute a high-risk AI action that was previously flagged."""
+    if not request.confirmed:
+        return ConfirmActionResponse(
+            response="Action cancelled by user.",
+            data=None,
+        )
+
+    processor = QueryProcessor(db)
+    result = await processor.execute_confirmed_action(
+        function_name=request.function_name,
+        arguments=request.arguments,
+        user_id=current_user.id,
         session_id=request.session_id,
+    )
+
+    return ConfirmActionResponse(
+        response=result.get("response", ""),
+        data=result.get("data"),
+        function_called=result.get("function_called"),
+        actions_taken=result.get("actions_taken", []),
     )
 
 
@@ -149,3 +195,212 @@ async def semantic_search(
     return SearchResponse(
         results=[SimilarContentResult(**r) for r in results]
     )
+
+
+# --- Feedback endpoints ---
+
+@router.post("/feedback", response_model=FeedbackResponse)
+async def submit_feedback(
+    request: FeedbackRequest,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Submit feedback on an AI response."""
+    if request.feedback not in ("positive", "negative", "correction"):
+        raise_bad_request("Feedback must be 'positive', 'negative', or 'correction'")
+
+    if request.feedback == "correction" and not request.correction_text:
+        raise_bad_request("Correction text is required for correction feedback")
+
+    feedback = AIFeedback(
+        user_id=current_user.id,
+        session_id=request.session_id,
+        query=request.query,
+        response=request.response,
+        retrieved_context_ids=request.retrieved_context_ids,
+        feedback=request.feedback,
+        correction_text=request.correction_text,
+    )
+    db.add(feedback)
+    await db.flush()
+    await db.refresh(feedback)
+
+    return FeedbackResponse(
+        id=feedback.id,
+        feedback=feedback.feedback,
+        created_at=feedback.created_at,
+    )
+
+
+@router.get("/feedback/stats", response_model=FeedbackStatsResponse)
+async def get_feedback_stats(
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Get feedback statistics."""
+    total_result = await db.execute(
+        select(func.count(AIFeedback.id))
+    )
+    total = total_result.scalar() or 0
+
+    positive_result = await db.execute(
+        select(func.count(AIFeedback.id)).where(AIFeedback.feedback == "positive")
+    )
+    positive = positive_result.scalar() or 0
+
+    negative_result = await db.execute(
+        select(func.count(AIFeedback.id)).where(AIFeedback.feedback == "negative")
+    )
+    negative = negative_result.scalar() or 0
+
+    corrections_result = await db.execute(
+        select(func.count(AIFeedback.id)).where(AIFeedback.feedback == "correction")
+    )
+    corrections = corrections_result.scalar() or 0
+
+    return FeedbackStatsResponse(
+        total=total,
+        positive=positive,
+        negative=negative,
+        corrections=corrections,
+    )
+
+
+# --- Knowledge Base endpoints ---
+
+ALLOWED_CONTENT_TYPES = {"text/plain", "text/csv", "application/pdf"}
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+
+
+@router.post("/knowledge-base/upload", response_model=KnowledgeDocumentResponse)
+async def upload_knowledge_document(
+    current_user: CurrentUser,
+    db: DBSession,
+    file: UploadFile = File(...),
+):
+    """Upload a document to the knowledge base."""
+    if file.content_type not in ALLOWED_CONTENT_TYPES:
+        raise_bad_request(
+            f"Unsupported file type: {file.content_type}. Allowed: {', '.join(ALLOWED_CONTENT_TYPES)}"
+        )
+
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise_bad_request("File size exceeds 10MB limit")
+
+    service = KnowledgeBaseService(db)
+    doc = await service.upload_document(
+        filename=file.filename or "unknown",
+        content=content,
+        content_type=file.content_type or "text/plain",
+        user_id=current_user.id,
+    )
+
+    return KnowledgeDocumentResponse(
+        id=doc.id,
+        filename=doc.filename,
+        content_type=doc.content_type,
+        chunk_count=doc.chunk_count,
+        created_at=doc.created_at,
+    )
+
+
+@router.get("/knowledge-base", response_model=KnowledgeDocumentListResponse)
+async def list_knowledge_documents(
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """List all knowledge base documents."""
+    service = KnowledgeBaseService(db)
+    docs = await service.list_documents(current_user.id)
+
+    return KnowledgeDocumentListResponse(
+        documents=[
+            KnowledgeDocumentResponse(
+                id=d.id,
+                filename=d.filename,
+                content_type=d.content_type,
+                chunk_count=d.chunk_count,
+                created_at=d.created_at,
+            )
+            for d in docs
+        ]
+    )
+
+
+@router.delete("/knowledge-base/{doc_id}", status_code=HTTPStatus.NO_CONTENT)
+async def delete_knowledge_document(
+    doc_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Delete a knowledge base document."""
+    service = KnowledgeBaseService(db)
+    doc = await service.delete_document(doc_id, current_user.id)
+
+    if not doc:
+        raise_not_found("Knowledge base document", doc_id)
+
+
+# --- User Preferences endpoints ---
+
+@router.get("/preferences", response_model=UserPreferencesResponse)
+async def get_preferences(
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Get user AI preferences."""
+    result = await db.execute(
+        select(AIUserPreferences).where(
+            AIUserPreferences.user_id == current_user.id
+        )
+    )
+    prefs = result.scalar_one_or_none()
+
+    if not prefs:
+        # Return defaults
+        prefs = AIUserPreferences(
+            id=0,
+            user_id=current_user.id,
+            preferred_communication_style="professional",
+            priority_entities=None,
+            custom_instructions=None,
+        )
+
+    return UserPreferencesResponse.model_validate(prefs)
+
+
+@router.put("/preferences", response_model=UserPreferencesResponse)
+async def update_preferences(
+    request: UserPreferencesRequest,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Update user AI preferences."""
+    result = await db.execute(
+        select(AIUserPreferences).where(
+            AIUserPreferences.user_id == current_user.id
+        )
+    )
+    prefs = result.scalar_one_or_none()
+
+    if prefs:
+        if request.preferred_communication_style is not None:
+            prefs.preferred_communication_style = request.preferred_communication_style
+        if request.priority_entities is not None:
+            prefs.priority_entities = request.priority_entities
+        if request.custom_instructions is not None:
+            prefs.custom_instructions = request.custom_instructions
+    else:
+        prefs = AIUserPreferences(
+            user_id=current_user.id,
+            preferred_communication_style=request.preferred_communication_style or "professional",
+            priority_entities=request.priority_entities,
+            custom_instructions=request.custom_instructions,
+        )
+        db.add(prefs)
+
+    await db.flush()
+    await db.refresh(prefs)
+
+    return UserPreferencesResponse.model_validate(prefs)

@@ -1,8 +1,9 @@
 """Natural language query processor for AI assistant."""
 
 import json
+import uuid
 from typing import Dict, Any, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from sqlalchemy import select, func, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from openai import AsyncOpenAI
@@ -10,8 +11,248 @@ from src.config import settings
 from src.contacts.models import Contact
 from src.companies.models import Company
 from src.leads.models import Lead
+from src.leads.schemas import LeadCreate, LeadUpdate
+from src.leads.service import LeadService
 from src.opportunities.models import Opportunity, PipelineStage
+from src.opportunities.schemas import OpportunityUpdate
+from src.opportunities.service import OpportunityService
 from src.activities.models import Activity
+from src.activities.schemas import ActivityCreate
+from src.activities.service import ActivityService
+from src.notes.schemas import NoteCreate
+from src.notes.service import NoteService
+from src.ai.action_safety import classify_action, requires_confirmation, get_confirmation_description, ActionRisk
+from src.ai.models import AIActionLog, AIConversation, AIUserPreferences
+
+# Tiered memory settings
+WORKING_MEMORY_SIZE = 20
+SUMMARY_THRESHOLD = 20
+
+# Maximum iterations for multi-step agent loop
+MAX_AGENT_ITERATIONS = 10
+
+
+# Tool definitions for the OpenAI tools API
+TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "search_contacts",
+            "description": "Search for contacts by name, email, company, or other criteria",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "search_term": {"type": "string", "description": "Search term for name or email"},
+                    "company": {"type": "string", "description": "Company name filter"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_leads",
+            "description": "Search for leads by name, company, status, or score",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "search_term": {"type": "string"},
+                    "status": {"type": "string", "enum": ["new", "contacted", "qualified", "unqualified", "converted", "lost"]},
+                    "min_score": {"type": "integer"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_pipeline_summary",
+            "description": "Get summary of sales pipeline including total value and deals by stage",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_upcoming_tasks",
+            "description": "Get upcoming tasks and activities",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "days": {"type": "integer", "description": "Number of days ahead to look"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_recent_activities",
+            "description": "Get recent activities for an entity or the user",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_type": {"type": "string"},
+                    "entity_id": {"type": "integer"},
+                    "limit": {"type": "integer"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_kpis",
+            "description": "Get key performance indicators and metrics",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    # Write operations
+    {
+        "type": "function",
+        "function": {
+            "name": "create_lead",
+            "description": "Create a new lead in the CRM system",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "first_name": {"type": "string", "description": "Lead's first name"},
+                    "last_name": {"type": "string", "description": "Lead's last name"},
+                    "email": {"type": "string", "description": "Lead's email address"},
+                    "company_name": {"type": "string", "description": "Lead's company name"},
+                    "source": {"type": "string", "description": "How the lead was sourced"},
+                    "notes": {"type": "string", "description": "Additional notes about the lead"},
+                },
+                "required": ["first_name", "last_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_lead_status",
+            "description": "Change the status of an existing lead",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "lead_id": {"type": "integer", "description": "ID of the lead to update"},
+                    "new_status": {
+                        "type": "string",
+                        "enum": ["new", "contacted", "qualified", "unqualified", "converted", "lost"],
+                        "description": "New status for the lead",
+                    },
+                    "reason": {"type": "string", "description": "Reason for status change"},
+                },
+                "required": ["lead_id", "new_status"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_activity",
+            "description": "Schedule a task, call, meeting, or other activity",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "subject": {"type": "string", "description": "Subject/title of the activity"},
+                    "activity_type": {
+                        "type": "string",
+                        "enum": ["call", "email", "meeting", "task", "note"],
+                        "description": "Type of activity",
+                    },
+                    "entity_type": {
+                        "type": "string",
+                        "description": "Entity type to link to (contacts, leads, opportunities, companies)",
+                    },
+                    "entity_id": {"type": "integer", "description": "ID of the entity to link to"},
+                    "due_date": {"type": "string", "description": "Due date in YYYY-MM-DD format"},
+                    "priority": {
+                        "type": "string",
+                        "enum": ["low", "normal", "high", "urgent"],
+                        "description": "Priority level",
+                    },
+                    "notes": {"type": "string", "description": "Description or notes for the activity"},
+                },
+                "required": ["subject", "activity_type", "entity_type", "entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_opportunity_stage",
+            "description": "Move an opportunity to a different pipeline stage",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "opportunity_id": {"type": "integer", "description": "ID of the opportunity"},
+                    "stage_id": {"type": "integer", "description": "ID of the target pipeline stage"},
+                    "notes": {"type": "string", "description": "Notes about the stage change"},
+                },
+                "required": ["opportunity_id", "stage_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "add_note",
+            "description": "Add a note to any entity (contact, lead, opportunity, company)",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_type": {
+                        "type": "string",
+                        "description": "Entity type (contact, lead, opportunity, company)",
+                    },
+                    "entity_id": {"type": "integer", "description": "ID of the entity"},
+                    "content": {"type": "string", "description": "Note content"},
+                },
+                "required": ["entity_type", "entity_id", "content"],
+            },
+        },
+    },
+    # Report operations
+    {
+        "type": "function",
+        "function": {
+            "name": "generate_pipeline_report",
+            "description": "Generate a detailed pipeline report for a date range",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "date_from": {"type": "string", "description": "Start date in YYYY-MM-DD format"},
+                    "date_to": {"type": "string", "description": "End date in YYYY-MM-DD format"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "generate_activity_report",
+            "description": "Generate an activity summary report for a user over a date range",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "integer", "description": "User ID to report on (omit for current user)"},
+                    "date_from": {"type": "string", "description": "Start date in YYYY-MM-DD format"},
+                    "date_to": {"type": "string", "description": "End date in YYYY-MM-DD format"},
+                },
+            },
+        },
+    },
+]
+
+
+SYSTEM_PROMPT_BASE = (
+    "You are a helpful CRM assistant. You can search data, create leads, "
+    "schedule activities, update statuses, add notes, and generate reports. "
+    "Analyze the user's query and call the appropriate function(s). "
+    "For multi-step tasks, call functions one at a time in sequence. "
+    "Provide clear, concise responses."
+)
 
 
 class QueryProcessor:
@@ -19,17 +260,137 @@ class QueryProcessor:
     Processes natural language queries about CRM data.
 
     Uses GPT-4 to understand intent and generate appropriate responses.
+    Implements tiered conversation memory, user preferences,
+    multi-step agent loops, and action safety classification.
     """
 
     def __init__(self, db: AsyncSession):
         self.db = db
         self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY) if settings.OPENAI_API_KEY else None
 
-    async def process_query(self, query: str, user_id: int) -> Dict[str, Any]:
+    # =========================================================================
+    # Conversation memory (tiered)
+    # =========================================================================
+
+    async def _get_user_preferences(self, user_id: int) -> Optional[AIUserPreferences]:
+        """Load user preferences for system prompt customization."""
+        result = await self.db.execute(
+            select(AIUserPreferences).where(AIUserPreferences.user_id == user_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def _get_conversation_history(
+        self, user_id: int, session_id: Optional[str] = None
+    ) -> List[Dict[str, str]]:
+        """Load conversation history with tiered memory.
+
+        Returns the last WORKING_MEMORY_SIZE messages. If the session has more
+        messages than SUMMARY_THRESHOLD, older messages are summarized.
+        """
+        if not session_id:
+            return []
+
+        result = await self.db.execute(
+            select(AIConversation)
+            .where(
+                AIConversation.user_id == user_id,
+                AIConversation.session_id == session_id,
+            )
+            .order_by(AIConversation.created_at.asc())
+        )
+        messages = result.scalars().all()
+
+        if not messages:
+            return []
+
+        if len(messages) <= WORKING_MEMORY_SIZE:
+            return [
+                {"role": m.role, "content": m.content}
+                for m in messages
+            ]
+
+        older = messages[:-WORKING_MEMORY_SIZE]
+        recent = messages[-WORKING_MEMORY_SIZE:]
+
+        summary = await self._summarize_messages(older)
+
+        history = []
+        if summary:
+            history.append({
+                "role": "system",
+                "content": f"Summary of earlier conversation: {summary}",
+            })
+
+        history.extend(
+            {"role": m.role, "content": m.content}
+            for m in recent
+        )
+
+        return history
+
+    async def _summarize_messages(self, messages: List[AIConversation]) -> Optional[str]:
+        """Summarize a list of conversation messages using GPT-4."""
+        if not self.client or not messages:
+            return None
+
+        conversation_text = "\n".join(
+            f"{m.role}: {m.content}" for m in messages
+        )
+
+        try:
+            response = await self.client.chat.completions.create(
+                model="gpt-4",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "Summarize this CRM assistant conversation concisely, preserving key entities, decisions, and context. Keep it under 200 words.",
+                    },
+                    {"role": "user", "content": conversation_text},
+                ],
+                max_tokens=300,
+            )
+            return response.choices[0].message.content
+        except Exception:
+            return None
+
+    async def _save_conversation(
+        self, user_id: int, session_id: Optional[str], role: str, content: str
+    ) -> None:
+        """Save a conversation message to the database."""
+        msg = AIConversation(
+            user_id=user_id,
+            session_id=session_id,
+            role=role,
+            content=content,
+        )
+        self.db.add(msg)
+        await self.db.flush()
+
+    def _build_system_prompt(self, prefs: Optional[AIUserPreferences] = None) -> str:
+        """Build system prompt incorporating user preferences."""
+        if not prefs:
+            return SYSTEM_PROMPT_BASE
+
+        parts = [SYSTEM_PROMPT_BASE]
+        if prefs.preferred_communication_style:
+            parts.append(f"Communication style: {prefs.preferred_communication_style}.")
+        if prefs.custom_instructions:
+            parts.append(f"User instructions: {prefs.custom_instructions}")
+
+        return " ".join(parts)
+
+    # =========================================================================
+    # Main query processing with agent loop
+    # =========================================================================
+
+    async def process_query(
+        self, query: str, user_id: int, session_id: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Process a natural language query and return response.
 
-        Uses function calling to determine the appropriate action.
+        Uses the tools API with an agent loop for multi-step tasks.
+        Includes tiered conversation memory and user preferences.
         """
         if not self.client:
             return {
@@ -37,120 +398,179 @@ class QueryProcessor:
                 "data": None,
             }
 
-        # Define available functions
-        functions = [
-            {
-                "name": "search_contacts",
-                "description": "Search for contacts by name, email, company, or other criteria",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "search_term": {"type": "string", "description": "Search term for name or email"},
-                        "company": {"type": "string", "description": "Company name filter"},
-                    },
-                },
-            },
-            {
-                "name": "search_leads",
-                "description": "Search for leads by name, company, status, or score",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "search_term": {"type": "string"},
-                        "status": {"type": "string", "enum": ["new", "contacted", "qualified", "unqualified", "converted", "lost"]},
-                        "min_score": {"type": "integer"},
-                    },
-                },
-            },
-            {
-                "name": "get_pipeline_summary",
-                "description": "Get summary of sales pipeline including total value and deals by stage",
-                "parameters": {"type": "object", "properties": {}},
-            },
-            {
-                "name": "get_upcoming_tasks",
-                "description": "Get upcoming tasks and activities",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "days": {"type": "integer", "description": "Number of days ahead to look"},
-                    },
-                },
-            },
-            {
-                "name": "get_recent_activities",
-                "description": "Get recent activities for an entity or the user",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "entity_type": {"type": "string"},
-                        "entity_id": {"type": "integer"},
-                        "limit": {"type": "integer"},
-                    },
-                },
-            },
-            {
-                "name": "get_kpis",
-                "description": "Get key performance indicators and metrics",
-                "parameters": {"type": "object", "properties": {}},
-            },
-        ]
+        if not session_id:
+            session_id = str(uuid.uuid4())
+
+        # Load user preferences and conversation history
+        prefs = await self._get_user_preferences(user_id)
+        history = await self._get_conversation_history(user_id, session_id)
+        system_prompt = self._build_system_prompt(prefs)
+
+        # Save user message
+        await self._save_conversation(user_id, session_id, "user", query)
+
+        # Build messages with conversation history
+        messages = [{"role": "system", "content": system_prompt}]
+        messages.extend(history)
+        messages.append({"role": "user", "content": query})
+
+        actions_taken = []
 
         try:
-            # First call to determine intent
-            response = await self.client.chat.completions.create(
-                model="gpt-4",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a helpful CRM assistant. Analyze the user's query and call the appropriate function to get data. Then provide a helpful response."
-                    },
-                    {"role": "user", "content": query}
-                ],
-                functions=functions,
-                function_call="auto",
-            )
-
-            message = response.choices[0].message
-
-            # Check if function was called
-            if message.function_call:
-                func_name = message.function_call.name
-                func_args = json.loads(message.function_call.arguments) if message.function_call.arguments else {}
-
-                # Execute the function
-                data = await self._execute_function(func_name, func_args, user_id)
-
-                # Get natural language response
-                final_response = await self.client.chat.completions.create(
+            for _iteration in range(MAX_AGENT_ITERATIONS):
+                response = await self.client.chat.completions.create(
                     model="gpt-4",
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": "You are a helpful CRM assistant. Based on the data provided, give a clear and concise response to the user's question."
-                        },
-                        {"role": "user", "content": query},
-                        {"role": "function", "name": func_name, "content": json.dumps(data)},
-                    ],
+                    messages=messages,
+                    tools=TOOLS,
+                    tool_choice="auto",
                 )
 
-                return {
-                    "response": final_response.choices[0].message.content,
-                    "data": data,
-                    "function_called": func_name,
-                }
-            else:
-                return {
-                    "response": message.content,
-                    "data": None,
-                }
+                message = response.choices[0].message
+
+                # No tool calls - model is done, return final text
+                if not message.tool_calls:
+                    response_text = message.content or ""
+
+                    # Save assistant response
+                    await self._save_conversation(
+                        user_id, session_id, "assistant", response_text
+                    )
+
+                    return {
+                        "response": response_text,
+                        "data": None,
+                        "actions_taken": actions_taken,
+                        "session_id": session_id,
+                    }
+
+                # Process each tool call
+                messages.append(message)
+
+                for tool_call in message.tool_calls:
+                    func_name = tool_call.function.name
+                    func_args = json.loads(tool_call.function.arguments) if tool_call.function.arguments else {}
+
+                    # Check if action requires confirmation
+                    if requires_confirmation(func_name):
+                        description = get_confirmation_description(func_name, func_args)
+                        # Log the pending action
+                        await self._log_action(
+                            user_id=user_id,
+                            session_id=session_id,
+                            function_name=func_name,
+                            arguments=func_args,
+                            result={"status": "pending_confirmation"},
+                            risk_level=classify_action(func_name).value,
+                            was_confirmed=False,
+                        )
+                        return {
+                            "response": f"This action requires confirmation: {description}",
+                            "data": None,
+                            "confirmation_required": True,
+                            "pending_action": {
+                                "function_name": func_name,
+                                "arguments": func_args,
+                                "description": description,
+                                "session_id": session_id,
+                            },
+                            "actions_taken": actions_taken,
+                            "session_id": session_id,
+                        }
+
+                    # Execute the function
+                    data = await self._execute_function(func_name, func_args, user_id)
+
+                    # Log the action
+                    risk = classify_action(func_name)
+                    await self._log_action(
+                        user_id=user_id,
+                        session_id=session_id,
+                        function_name=func_name,
+                        arguments=func_args,
+                        result=data,
+                        risk_level=risk.value,
+                        was_confirmed=(risk == ActionRisk.READ),
+                    )
+
+                    actions_taken.append({
+                        "function": func_name,
+                        "arguments": func_args,
+                        "result_summary": _summarize_result(data),
+                    })
+
+                    # Append tool result to messages for the next iteration
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "content": json.dumps(data),
+                    })
+
+            # If we exhaust iterations, generate a final summary
+            final_response = await self.client.chat.completions.create(
+                model="gpt-4",
+                messages=messages + [
+                    {"role": "user", "content": "Please summarize what was accomplished."}
+                ],
+            )
+
+            response_text = final_response.choices[0].message.content or ""
+
+            # Save assistant response
+            await self._save_conversation(
+                user_id, session_id, "assistant", response_text
+            )
+
+            return {
+                "response": response_text,
+                "data": None,
+                "actions_taken": actions_taken,
+                "session_id": session_id,
+            }
 
         except Exception as e:
             return {
                 "response": f"I encountered an error processing your request: {str(e)}",
                 "data": None,
                 "error": str(e),
+                "actions_taken": actions_taken,
+                "session_id": session_id,
             }
+
+    async def execute_confirmed_action(
+        self,
+        function_name: str,
+        arguments: Dict[str, Any],
+        user_id: int,
+        session_id: str,
+    ) -> Dict[str, Any]:
+        """Execute an action that was previously confirmed by the user."""
+        data = await self._execute_function(function_name, arguments, user_id)
+
+        risk = classify_action(function_name)
+        await self._log_action(
+            user_id=user_id,
+            session_id=session_id,
+            function_name=function_name,
+            arguments=arguments,
+            result=data,
+            risk_level=risk.value,
+            was_confirmed=True,
+        )
+
+        return {
+            "response": f"Action '{function_name}' completed successfully.",
+            "data": data,
+            "function_called": function_name,
+            "actions_taken": [{
+                "function": function_name,
+                "arguments": arguments,
+                "result_summary": _summarize_result(data),
+            }],
+        }
+
+    # =========================================================================
+    # Function dispatch
+    # =========================================================================
 
     async def _execute_function(
         self,
@@ -160,6 +580,7 @@ class QueryProcessor:
     ) -> Dict[str, Any]:
         """Execute a function and return results."""
 
+        # Read operations
         if func_name == "search_contacts":
             return await self._search_contacts(**args)
         elif func_name == "search_leads":
@@ -172,8 +593,31 @@ class QueryProcessor:
             return await self._get_recent_activities(**args)
         elif func_name == "get_kpis":
             return await self._get_kpis()
+
+        # Write operations
+        elif func_name == "create_lead":
+            return await self._create_lead(args, user_id)
+        elif func_name == "update_lead_status":
+            return await self._update_lead_status(args, user_id)
+        elif func_name == "create_activity":
+            return await self._create_activity(args, user_id)
+        elif func_name == "update_opportunity_stage":
+            return await self._update_opportunity_stage(args, user_id)
+        elif func_name == "add_note":
+            return await self._add_note(args, user_id)
+
+        # Report operations
+        elif func_name == "generate_pipeline_report":
+            return await self._generate_pipeline_report(args)
+        elif func_name == "generate_activity_report":
+            return await self._generate_activity_report(args, user_id)
+
         else:
             return {"error": f"Unknown function: {func_name}"}
+
+    # =========================================================================
+    # Read operations
+    # =========================================================================
 
     async def _search_contacts(
         self,
@@ -351,11 +795,9 @@ class QueryProcessor:
 
     async def _get_kpis(self) -> Dict[str, Any]:
         """Get key performance indicators."""
-        # Contacts count
         contacts = await self.db.execute(select(func.count(Contact.id)))
         contacts_count = contacts.scalar() or 0
 
-        # Open leads
         leads = await self.db.execute(
             select(func.count(Lead.id)).where(
                 Lead.status.in_(["new", "contacted", "qualified"])
@@ -363,7 +805,6 @@ class QueryProcessor:
         )
         leads_count = leads.scalar() or 0
 
-        # Pipeline value
         pipeline = await self.db.execute(
             select(func.sum(Opportunity.amount))
             .join(PipelineStage)
@@ -376,3 +817,304 @@ class QueryProcessor:
             "open_leads": leads_count,
             "pipeline_value": pipeline_value,
         }
+
+    # =========================================================================
+    # Write operations (reuse existing services)
+    # =========================================================================
+
+    async def _create_lead(self, args: Dict[str, Any], user_id: int) -> Dict[str, Any]:
+        """Create a new lead using LeadService."""
+        service = LeadService(self.db)
+        lead_data = LeadCreate(
+            first_name=args["first_name"],
+            last_name=args["last_name"],
+            email=args.get("email"),
+            company_name=args.get("company_name"),
+            source_details=args.get("source"),
+            description=args.get("notes"),
+        )
+        lead = await service.create(lead_data, user_id)
+        return {
+            "success": True,
+            "lead_id": lead.id,
+            "name": lead.full_name,
+            "status": lead.status,
+            "score": lead.score,
+            "message": f"Lead '{lead.full_name}' created successfully.",
+        }
+
+    async def _update_lead_status(self, args: Dict[str, Any], user_id: int) -> Dict[str, Any]:
+        """Update lead status using LeadService."""
+        service = LeadService(self.db)
+        lead = await service.get_by_id(args["lead_id"])
+        if not lead:
+            return {"error": f"Lead with ID {args['lead_id']} not found."}
+
+        old_status = lead.status
+        update_data = LeadUpdate(status=args["new_status"])
+        if args.get("reason"):
+            update_data.description = f"{lead.description or ''}\n\nStatus change ({old_status} -> {args['new_status']}): {args['reason']}".strip()
+
+        lead = await service.update(lead, update_data, user_id)
+        return {
+            "success": True,
+            "lead_id": lead.id,
+            "name": lead.full_name,
+            "old_status": old_status,
+            "new_status": lead.status,
+            "message": f"Lead '{lead.full_name}' status changed from '{old_status}' to '{lead.status}'.",
+        }
+
+    async def _create_activity(self, args: Dict[str, Any], user_id: int) -> Dict[str, Any]:
+        """Create an activity using ActivityService."""
+        service = ActivityService(self.db)
+
+        due = None
+        if args.get("due_date"):
+            try:
+                due = date.fromisoformat(args["due_date"])
+            except ValueError:
+                return {"error": f"Invalid date format: {args['due_date']}. Use YYYY-MM-DD."}
+
+        activity_data = ActivityCreate(
+            subject=args["subject"],
+            activity_type=args["activity_type"],
+            entity_type=args["entity_type"],
+            entity_id=args["entity_id"],
+            due_date=due,
+            priority=args.get("priority", "normal"),
+            description=args.get("notes"),
+        )
+        activity = await service.create(activity_data, user_id)
+        return {
+            "success": True,
+            "activity_id": activity.id,
+            "subject": activity.subject,
+            "type": activity.activity_type,
+            "due_date": activity.due_date.isoformat() if activity.due_date else None,
+            "message": f"Activity '{activity.subject}' created successfully.",
+        }
+
+    async def _update_opportunity_stage(self, args: Dict[str, Any], user_id: int) -> Dict[str, Any]:
+        """Move an opportunity to a different pipeline stage using OpportunityService."""
+        service = OpportunityService(self.db)
+        opportunity = await service.get_by_id(args["opportunity_id"])
+        if not opportunity:
+            return {"error": f"Opportunity with ID {args['opportunity_id']} not found."}
+
+        # Verify the target stage exists
+        stage_result = await self.db.execute(
+            select(PipelineStage).where(PipelineStage.id == args["stage_id"])
+        )
+        stage = stage_result.scalar_one_or_none()
+        if not stage:
+            return {"error": f"Pipeline stage with ID {args['stage_id']} not found."}
+
+        old_stage_name = "Unknown"
+        if opportunity.pipeline_stage:
+            old_stage_name = opportunity.pipeline_stage.name
+
+        update_data = OpportunityUpdate(pipeline_stage_id=args["stage_id"])
+        if args.get("notes"):
+            desc = opportunity.description or ""
+            update_data.description = f"{desc}\n\nStage change: {args['notes']}".strip()
+
+        opportunity = await service.update(opportunity, update_data, user_id)
+        return {
+            "success": True,
+            "opportunity_id": opportunity.id,
+            "name": opportunity.name,
+            "old_stage": old_stage_name,
+            "new_stage": stage.name,
+            "message": f"Opportunity '{opportunity.name}' moved from '{old_stage_name}' to '{stage.name}'.",
+        }
+
+    async def _add_note(self, args: Dict[str, Any], user_id: int) -> Dict[str, Any]:
+        """Add a note to an entity using NoteService."""
+        service = NoteService(self.db)
+        note_data = NoteCreate(
+            entity_type=args["entity_type"],
+            entity_id=args["entity_id"],
+            content=args["content"],
+        )
+        note = await service.create(note_data, user_id)
+        return {
+            "success": True,
+            "note_id": note["id"],
+            "entity_type": args["entity_type"],
+            "entity_id": args["entity_id"],
+            "message": f"Note added to {args['entity_type']} #{args['entity_id']}.",
+        }
+
+    # =========================================================================
+    # Report operations
+    # =========================================================================
+
+    async def _generate_pipeline_report(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate a detailed pipeline report for a date range."""
+        date_from = None
+        date_to = None
+
+        if args.get("date_from"):
+            try:
+                date_from = date.fromisoformat(args["date_from"])
+            except ValueError:
+                pass
+        if args.get("date_to"):
+            try:
+                date_to = date.fromisoformat(args["date_to"])
+            except ValueError:
+                pass
+
+        query = (
+            select(
+                PipelineStage.name,
+                PipelineStage.probability,
+                func.count(Opportunity.id).label("count"),
+                func.sum(Opportunity.amount).label("total"),
+                func.avg(Opportunity.amount).label("avg_amount"),
+            )
+            .outerjoin(Opportunity)
+            .where(PipelineStage.is_active == True)
+        )
+
+        if date_from:
+            query = query.where(Opportunity.created_at >= datetime.combine(date_from, datetime.min.time()))
+        if date_to:
+            query = query.where(Opportunity.created_at <= datetime.combine(date_to, datetime.max.time()))
+
+        query = query.group_by(PipelineStage.id).order_by(PipelineStage.order)
+        result = await self.db.execute(query)
+
+        stages = []
+        total_value = 0
+        total_weighted = 0
+        total_deals = 0
+
+        for row in result.all():
+            amount = float(row.total or 0)
+            avg = float(row.avg_amount or 0)
+            weighted = amount * (row.probability / 100)
+            stages.append({
+                "stage": row.name,
+                "deals": row.count or 0,
+                "total_value": amount,
+                "avg_deal_size": round(avg, 2),
+                "probability": row.probability,
+                "weighted_value": round(weighted, 2),
+            })
+            total_value += amount
+            total_weighted += weighted
+            total_deals += row.count or 0
+
+        return {
+            "report_type": "pipeline",
+            "date_from": args.get("date_from"),
+            "date_to": args.get("date_to"),
+            "total_deals": total_deals,
+            "total_value": total_value,
+            "total_weighted_value": round(total_weighted, 2),
+            "by_stage": stages,
+        }
+
+    async def _generate_activity_report(self, args: Dict[str, Any], user_id: int) -> Dict[str, Any]:
+        """Generate an activity summary report."""
+        report_user_id = args.get("user_id", user_id)
+        date_from = None
+        date_to = None
+
+        if args.get("date_from"):
+            try:
+                date_from = date.fromisoformat(args["date_from"])
+            except ValueError:
+                pass
+        if args.get("date_to"):
+            try:
+                date_to = date.fromisoformat(args["date_to"])
+            except ValueError:
+                pass
+
+        query = select(Activity).where(
+            or_(
+                Activity.owner_id == report_user_id,
+                Activity.assigned_to_id == report_user_id,
+            )
+        )
+
+        if date_from:
+            query = query.where(Activity.created_at >= datetime.combine(date_from, datetime.min.time()))
+        if date_to:
+            query = query.where(Activity.created_at <= datetime.combine(date_to, datetime.max.time()))
+
+        result = await self.db.execute(query)
+        activities = result.scalars().all()
+
+        by_type = {}
+        completed = 0
+        pending = 0
+        for a in activities:
+            by_type[a.activity_type] = by_type.get(a.activity_type, 0) + 1
+            if a.is_completed:
+                completed += 1
+            else:
+                pending += 1
+
+        return {
+            "report_type": "activity",
+            "user_id": report_user_id,
+            "date_from": args.get("date_from"),
+            "date_to": args.get("date_to"),
+            "total_activities": len(activities),
+            "completed": completed,
+            "pending": pending,
+            "by_type": by_type,
+        }
+
+    # =========================================================================
+    # Audit logging
+    # =========================================================================
+
+    async def _log_action(
+        self,
+        user_id: int,
+        session_id: str,
+        function_name: str,
+        arguments: Dict[str, Any],
+        result: Dict[str, Any],
+        risk_level: str,
+        was_confirmed: bool,
+        model_used: str = "gpt-4",
+        tokens_used: int = None,
+    ) -> None:
+        """Log an AI action execution to the audit log."""
+        result_to_store = result
+        result_str = json.dumps(result)
+        if len(result_str) > 5000:
+            result_to_store = {"truncated": True, "summary": _summarize_result(result)}
+
+        log_entry = AIActionLog(
+            user_id=user_id,
+            session_id=session_id,
+            function_name=function_name,
+            arguments=arguments,
+            result=result_to_store,
+            risk_level=risk_level,
+            was_confirmed=was_confirmed,
+            model_used=model_used,
+            tokens_used=tokens_used,
+        )
+        self.db.add(log_entry)
+        await self.db.flush()
+
+
+def _summarize_result(data: Dict[str, Any]) -> str:
+    """Create a brief summary of a function result for the actions_taken list."""
+    if "error" in data:
+        return f"Error: {data['error']}"
+    if "message" in data:
+        return data["message"]
+    if "count" in data:
+        return f"Found {data['count']} results"
+    if "report_type" in data:
+        return f"{data['report_type']} report generated"
+    return "Completed"
