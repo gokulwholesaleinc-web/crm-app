@@ -143,6 +143,8 @@ export {
   useNextBestAction,
   useSemanticSearch,
   useRefreshAIData,
+  useAIPreferences,
+  useUpdateAIPreferences,
   aiKeys,
 } from './useAI';
 
@@ -154,6 +156,18 @@ export {
   type ListParams,
   type EntityConfig,
 } from './useEntityCRUD';
+
+// Workflow hooks
+export {
+  useWorkflows,
+  useWorkflow,
+  useWorkflowExecutions,
+  useCreateWorkflow,
+  useUpdateWorkflow,
+  useDeleteWorkflow,
+  useTestWorkflow,
+  workflowKeys,
+} from './useWorkflows';
 
 // Auth-aware query helpers
 export { useAuthQuery, useAuthEnabled } from './useAuthQuery';

@@ -9,6 +9,8 @@ import {
   CurrencyDollarIcon,
   CalendarIcon,
   MegaphoneIcon,
+  BoltIcon,
+  ArrowsRightLeftIcon,
   ChartBarIcon,
   SparklesIcon,
   Cog6ToothIcon,
@@ -33,6 +35,8 @@ const mainNavigation: NavItem[] = [
 ];
 
 const secondaryNavigation: NavItem[] = [
+  { name: 'Workflows', href: '/workflows', icon: BoltIcon },
+  { name: 'Import/Export', href: '/import-export', icon: ArrowsRightLeftIcon },
   { name: 'Reports', href: '/reports', icon: ChartBarIcon },
   { name: 'AI Assistant', href: '/ai-assistant', icon: SparklesIcon },
   { name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
