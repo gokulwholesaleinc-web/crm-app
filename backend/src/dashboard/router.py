@@ -8,6 +8,9 @@ from src.dashboard.schemas import (
     ChartData,
     ChartDataPoint,
     DashboardResponse,
+    SalesFunnelResponse,
+    FunnelStage,
+    FunnelConversion,
 )
 from src.dashboard.number_cards import NumberCardGenerator
 from src.dashboard.charts import ChartDataGenerator
@@ -154,6 +157,21 @@ async def get_new_leads_trend_chart(
         type=data["type"],
         title=data["title"],
         data=[ChartDataPoint(**d) for d in data["data"]],
+    )
+
+
+@router.get("/funnel", response_model=SalesFunnelResponse)
+async def get_sales_funnel(
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Get sales funnel data with lead counts, conversion rates, and avg time in stage."""
+    generator = ChartDataGenerator(db)
+    data = await generator.get_sales_funnel()
+    return SalesFunnelResponse(
+        stages=[FunnelStage(**s) for s in data["stages"]],
+        conversions=[FunnelConversion(**c) for c in data["conversions"]],
+        avg_days_in_stage=data["avg_days_in_stage"],
     )
 
 

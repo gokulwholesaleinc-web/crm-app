@@ -3,7 +3,7 @@
 import json
 from datetime import datetime, timedelta, date
 from typing import Dict, Any, List, Optional
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.contacts.models import Contact
 from src.companies.models import Company
@@ -209,6 +209,70 @@ class ChartDataGenerator:
             "type": "area",
             "title": "New Leads Trend",
             "data": data,
+        }
+
+    async def get_sales_funnel(self) -> Dict[str, Any]:
+        """Get sales funnel data: leads by status with conversion rates and avg time."""
+        # Define funnel stages in order
+        funnel_stages = ["new", "contacted", "qualified", "converted"]
+        colors = {
+            "new": "#3b82f6",
+            "contacted": "#8b5cf6",
+            "qualified": "#22c55e",
+            "converted": "#06b6d4",
+        }
+
+        # Get counts per status
+        result = await self.db.execute(
+            select(
+                Lead.status,
+                func.count(Lead.id).label("count"),
+            )
+            .where(Lead.status.in_(funnel_stages))
+            .group_by(Lead.status)
+        )
+        status_counts = {row.status: row.count for row in result.all()}
+
+        stages = []
+        for stage in funnel_stages:
+            stages.append({
+                "stage": stage,
+                "count": status_counts.get(stage, 0),
+                "color": colors.get(stage),
+            })
+
+        # Calculate conversion rates between consecutive stages
+        conversions = []
+        for i in range(len(funnel_stages) - 1):
+            from_stage = funnel_stages[i]
+            to_stage = funnel_stages[i + 1]
+            from_count = status_counts.get(from_stage, 0)
+            to_count = status_counts.get(to_stage, 0)
+            rate = (to_count / from_count * 100) if from_count > 0 else 0
+            conversions.append({
+                "from_stage": from_stage,
+                "to_stage": to_stage,
+                "rate": round(rate, 1),
+            })
+
+        # Average days in each stage (approximate via created_at to updated_at)
+        avg_days = {}
+        for stage in funnel_stages:
+            avg_result = await self.db.execute(
+                select(
+                    func.avg(
+                        func.extract("epoch", Lead.updated_at - Lead.created_at) / 86400
+                    ).label("avg_days")
+                )
+                .where(Lead.status == stage)
+            )
+            row = avg_result.first()
+            avg_days[stage] = round(float(row.avg_days), 1) if row and row.avg_days else None
+
+        return {
+            "stages": stages,
+            "conversions": conversions,
+            "avg_days_in_stage": avg_days,
         }
 
     async def get_conversion_rates(self) -> Dict[str, Any]:

@@ -7,6 +7,7 @@ import type {
   DashboardResponse,
   NumberCardData,
   ChartData,
+  SalesFunnelResponse,
 } from '../types';
 
 const DASHBOARD_BASE = '/api/dashboard';
@@ -108,6 +109,14 @@ export const getConversionRatesChart = async (): Promise<ChartData> => {
   return response.data;
 };
 
+/**
+ * Get sales funnel data
+ */
+export const getSalesFunnel = async (): Promise<SalesFunnelResponse> => {
+  const response = await apiClient.get<SalesFunnelResponse>(`${DASHBOARD_BASE}/funnel`);
+  return response.data;
+};
+
 // Export all dashboard functions
 export const dashboardApi = {
   // Main
@@ -121,6 +130,7 @@ export const dashboardApi = {
   getActivitiesChart,
   getNewLeadsTrendChart,
   getConversionRatesChart,
+  getSalesFunnel,
 };
 
 export default dashboardApi;

@@ -1,8 +1,8 @@
 """Campaign models for marketing campaigns."""
 
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
-from sqlalchemy import String, Integer, ForeignKey, Text, Date, Float, Index
+from sqlalchemy import String, Integer, ForeignKey, Text, Date, Float, Index, DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.database import Base
 from src.core.mixins.auditable import AuditableMixin
@@ -112,3 +112,62 @@ class CampaignMember(Base):
         Index("ix_campaign_members_campaign", "campaign_id"),
         Index("ix_campaign_members_member", "member_type", "member_id"),
     )
+
+
+class EmailTemplate(Base):
+    """Reusable email templates for campaigns."""
+    __tablename__ = "email_templates"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    subject_template: Mapped[str] = mapped_column(String(500), nullable=False)
+    body_template: Mapped[str] = mapped_column(Text, nullable=False)
+    category: Mapped[Optional[str]] = mapped_column(String(100))
+
+    created_by_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
+class EmailCampaignStep(Base):
+    """Ordered steps in an email campaign sequence."""
+    __tablename__ = "email_campaign_steps"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    campaign_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("campaigns.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    template_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("email_templates.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    delay_days: Mapped[int] = mapped_column(Integer, default=0)
+    step_order: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    # Relationships
+    campaign: Mapped["Campaign"] = relationship("Campaign")
+    template: Mapped["EmailTemplate"] = relationship("EmailTemplate")

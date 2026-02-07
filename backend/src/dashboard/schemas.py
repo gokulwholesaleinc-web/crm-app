@@ -58,3 +58,22 @@ class ChartConfig(BaseModel):
     width: str = "half"
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# Sales Funnel schemas
+class FunnelStage(BaseModel):
+    stage: str
+    count: int
+    color: Optional[str] = None
+
+
+class FunnelConversion(BaseModel):
+    from_stage: str
+    to_stage: str
+    rate: float
+
+
+class SalesFunnelResponse(BaseModel):
+    stages: List[FunnelStage]
+    conversions: List[FunnelConversion]
+    avg_days_in_stage: Dict[str, Optional[float]]

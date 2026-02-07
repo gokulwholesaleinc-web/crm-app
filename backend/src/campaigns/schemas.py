@@ -111,3 +111,55 @@ class CampaignStats(BaseModel):
     converted: int
     response_rate: Optional[float]
     conversion_rate: Optional[float]
+
+
+# Email Template schemas
+class EmailTemplateCreate(BaseModel):
+    name: str
+    subject_template: str
+    body_template: str
+    category: Optional[str] = None
+
+
+class EmailTemplateUpdate(BaseModel):
+    name: Optional[str] = None
+    subject_template: Optional[str] = None
+    body_template: Optional[str] = None
+    category: Optional[str] = None
+
+
+class EmailTemplateResponse(BaseModel):
+    id: int
+    name: str
+    subject_template: str
+    body_template: str
+    category: Optional[str] = None
+    created_by_id: Optional[int] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# Email Campaign Step schemas
+class EmailCampaignStepCreate(BaseModel):
+    template_id: int
+    delay_days: int = 0
+    step_order: int
+
+
+class EmailCampaignStepUpdate(BaseModel):
+    template_id: Optional[int] = None
+    delay_days: Optional[int] = None
+    step_order: Optional[int] = None
+
+
+class EmailCampaignStepResponse(BaseModel):
+    id: int
+    campaign_id: int
+    template_id: int
+    delay_days: int
+    step_order: int
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

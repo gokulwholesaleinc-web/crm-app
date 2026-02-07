@@ -4,7 +4,7 @@
  */
 
 import { apiClient } from './client';
-import type { ImportResult, ImportExportEntityType } from '../types';
+import type { ImportResult, ImportExportEntityType, BulkUpdateRequest, BulkAssignRequest, BulkOperationResult } from '../types';
 
 const IMPORT_EXPORT_BASE = '/api/import-export';
 
@@ -142,6 +142,26 @@ export const generateExportFilename = (entityType: string): string => {
   return `${entityType}_export_${date}.csv`;
 };
 
+// =============================================================================
+// Bulk Operations
+// =============================================================================
+
+export const bulkUpdate = async (data: BulkUpdateRequest): Promise<BulkOperationResult> => {
+  const response = await apiClient.post<BulkOperationResult>(
+    `${IMPORT_EXPORT_BASE}/bulk/update`,
+    data
+  );
+  return response.data;
+};
+
+export const bulkAssign = async (data: BulkAssignRequest): Promise<BulkOperationResult> => {
+  const response = await apiClient.post<BulkOperationResult>(
+    `${IMPORT_EXPORT_BASE}/bulk/assign`,
+    data
+  );
+  return response.data;
+};
+
 // Export all import/export functions
 export const importExportApi = {
   exportContacts,
@@ -153,6 +173,8 @@ export const importExportApi = {
   getTemplate,
   downloadBlob,
   generateExportFilename,
+  bulkUpdate,
+  bulkAssign,
 };
 
 export default importExportApi;

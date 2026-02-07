@@ -1,13 +1,29 @@
 """Import/Export API routes."""
 
+from typing import List, Dict, Any
+from pydantic import BaseModel
 from fastapi import APIRouter, UploadFile, File
 from fastapi.responses import StreamingResponse
 import io
 from src.core.constants import HTTPStatus
 from src.core.router_utils import DBSession, CurrentUser, raise_bad_request
 from src.import_export.csv_handler import CSVHandler
+from src.import_export.bulk_operations import BulkOperationsHandler
 
 router = APIRouter(prefix="/api/import-export", tags=["import-export"])
+
+
+# Bulk operation schemas
+class BulkUpdateRequest(BaseModel):
+    entity_type: str
+    entity_ids: List[int]
+    updates: Dict[str, Any]
+
+
+class BulkAssignRequest(BaseModel):
+    entity_type: str
+    entity_ids: List[int]
+    owner_id: int
 
 
 # Export endpoints
@@ -159,3 +175,43 @@ async def get_import_template(
             "Content-Disposition": f"attachment; filename={entity_type}_template.csv"
         },
     )
+
+
+# =========================================================================
+# Bulk Operations endpoints
+# =========================================================================
+
+@router.post("/bulk/update")
+async def bulk_update(
+    request: BulkUpdateRequest,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Mass update entities of a given type."""
+    handler = BulkOperationsHandler(db)
+    result = await handler.bulk_update(
+        entity_type=request.entity_type,
+        entity_ids=request.entity_ids,
+        updates=request.updates,
+    )
+    if not result["success"]:
+        raise_bad_request(result["error"])
+    return result
+
+
+@router.post("/bulk/assign")
+async def bulk_assign(
+    request: BulkAssignRequest,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Mass assign owner to entities."""
+    handler = BulkOperationsHandler(db)
+    result = await handler.bulk_assign(
+        entity_type=request.entity_type,
+        entity_ids=request.entity_ids,
+        owner_id=request.owner_id,
+    )
+    if not result["success"]:
+        raise_bad_request(result["error"])
+    return result

@@ -14,6 +14,12 @@ import type {
   CampaignStats,
   AddMembersRequest,
   AddMembersResponse,
+  EmailTemplate,
+  EmailTemplateCreate,
+  EmailTemplateUpdate,
+  EmailCampaignStep,
+  EmailCampaignStepCreate,
+  EmailCampaignStepUpdate,
 } from '../types';
 
 const CAMPAIGNS_BASE = '/api/campaigns';
@@ -138,6 +144,90 @@ export const removeCampaignMember = async (
   await apiClient.delete(`${CAMPAIGNS_BASE}/${campaignId}/members/${memberId}`);
 };
 
+// =============================================================================
+// Email Templates
+// =============================================================================
+
+export const listEmailTemplates = async (
+  params?: { page?: number; page_size?: number; category?: string }
+): Promise<EmailTemplate[]> => {
+  const response = await apiClient.get<EmailTemplate[]>(`${CAMPAIGNS_BASE}/templates`, { params });
+  return response.data;
+};
+
+export const getEmailTemplate = async (templateId: number): Promise<EmailTemplate> => {
+  const response = await apiClient.get<EmailTemplate>(`${CAMPAIGNS_BASE}/templates/${templateId}`);
+  return response.data;
+};
+
+export const createEmailTemplate = async (data: EmailTemplateCreate): Promise<EmailTemplate> => {
+  const response = await apiClient.post<EmailTemplate>(`${CAMPAIGNS_BASE}/templates`, data);
+  return response.data;
+};
+
+export const updateEmailTemplate = async (
+  templateId: number,
+  data: EmailTemplateUpdate
+): Promise<EmailTemplate> => {
+  const response = await apiClient.put<EmailTemplate>(
+    `${CAMPAIGNS_BASE}/templates/${templateId}`,
+    data
+  );
+  return response.data;
+};
+
+export const deleteEmailTemplate = async (templateId: number): Promise<void> => {
+  await apiClient.delete(`${CAMPAIGNS_BASE}/templates/${templateId}`);
+};
+
+// =============================================================================
+// Campaign Steps
+// =============================================================================
+
+export const getCampaignSteps = async (campaignId: number): Promise<EmailCampaignStep[]> => {
+  const response = await apiClient.get<EmailCampaignStep[]>(
+    `${CAMPAIGNS_BASE}/${campaignId}/steps`
+  );
+  return response.data;
+};
+
+export const addCampaignStep = async (
+  campaignId: number,
+  data: EmailCampaignStepCreate
+): Promise<EmailCampaignStep> => {
+  const response = await apiClient.post<EmailCampaignStep>(
+    `${CAMPAIGNS_BASE}/${campaignId}/steps`,
+    data
+  );
+  return response.data;
+};
+
+export const updateCampaignStep = async (
+  campaignId: number,
+  stepId: number,
+  data: EmailCampaignStepUpdate
+): Promise<EmailCampaignStep> => {
+  const response = await apiClient.put<EmailCampaignStep>(
+    `${CAMPAIGNS_BASE}/${campaignId}/steps/${stepId}`,
+    data
+  );
+  return response.data;
+};
+
+export const deleteCampaignStep = async (
+  campaignId: number,
+  stepId: number
+): Promise<void> => {
+  await apiClient.delete(`${CAMPAIGNS_BASE}/${campaignId}/steps/${stepId}`);
+};
+
+export const executeCampaign = async (
+  campaignId: number
+): Promise<{ message: string; status: string }> => {
+  const response = await apiClient.post(`${CAMPAIGNS_BASE}/${campaignId}/execute`);
+  return response.data;
+};
+
 // Export all campaign functions
 export const campaignsApi = {
   // CRUD
@@ -152,6 +242,19 @@ export const campaignsApi = {
   addMembers: addCampaignMembers,
   updateMember: updateCampaignMember,
   removeMember: removeCampaignMember,
+  // Templates
+  listTemplates: listEmailTemplates,
+  getTemplate: getEmailTemplate,
+  createTemplate: createEmailTemplate,
+  updateTemplate: updateEmailTemplate,
+  deleteTemplate: deleteEmailTemplate,
+  // Steps
+  getSteps: getCampaignSteps,
+  addStep: addCampaignStep,
+  updateStep: updateCampaignStep,
+  deleteStep: deleteCampaignStep,
+  // Execute
+  execute: executeCampaign,
 };
 
 export default campaignsApi;

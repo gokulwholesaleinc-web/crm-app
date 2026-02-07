@@ -2,12 +2,16 @@
 
 from typing import Optional, List, Tuple, Dict
 from sqlalchemy import select, func
-from src.campaigns.models import Campaign, CampaignMember
+from src.campaigns.models import Campaign, CampaignMember, EmailTemplate, EmailCampaignStep
 from src.campaigns.schemas import (
     CampaignCreate,
     CampaignUpdate,
     CampaignMemberCreate,
     CampaignMemberUpdate,
+    EmailTemplateCreate,
+    EmailTemplateUpdate,
+    EmailCampaignStepCreate,
+    EmailCampaignStepUpdate,
 )
 from src.core.base_service import CRUDService, BaseService
 from src.core.constants import DEFAULT_PAGE_SIZE
@@ -180,4 +184,93 @@ class CampaignMemberService(BaseService[CampaignMember]):
     async def remove_member(self, member: CampaignMember) -> None:
         """Remove a member from a campaign."""
         await self.db.delete(member)
+        await self.db.flush()
+
+
+class EmailTemplateService(BaseService[EmailTemplate]):
+    """Service for EmailTemplate operations."""
+
+    model = EmailTemplate
+
+    async def get_list(
+        self,
+        page: int = 1,
+        page_size: int = DEFAULT_PAGE_SIZE,
+        category: Optional[str] = None,
+    ) -> Tuple[List[EmailTemplate], int]:
+        """Get paginated list of email templates."""
+        query = select(EmailTemplate)
+
+        if category:
+            query = query.where(EmailTemplate.category == category)
+
+        count_query = select(func.count()).select_from(query.subquery())
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar()
+
+        offset = (page - 1) * page_size
+        query = query.offset(offset).limit(page_size).order_by(EmailTemplate.created_at.desc())
+
+        result = await self.db.execute(query)
+        templates = list(result.scalars().all())
+
+        return templates, total
+
+    async def create_template(self, data: EmailTemplateCreate, user_id: int) -> EmailTemplate:
+        """Create a new email template."""
+        template = EmailTemplate(**data.model_dump(), created_by_id=user_id)
+        self.db.add(template)
+        await self.db.flush()
+        await self.db.refresh(template)
+        return template
+
+    async def update_template(self, template: EmailTemplate, data: EmailTemplateUpdate) -> EmailTemplate:
+        """Update an email template."""
+        update_data = data.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(template, field, value)
+        await self.db.flush()
+        await self.db.refresh(template)
+        return template
+
+    async def delete_template(self, template: EmailTemplate) -> None:
+        """Delete an email template."""
+        await self.db.delete(template)
+        await self.db.flush()
+
+
+class EmailCampaignStepService(BaseService[EmailCampaignStep]):
+    """Service for EmailCampaignStep operations."""
+
+    model = EmailCampaignStep
+
+    async def get_steps(self, campaign_id: int) -> List[EmailCampaignStep]:
+        """Get all steps for a campaign, ordered by step_order."""
+        result = await self.db.execute(
+            select(EmailCampaignStep)
+            .where(EmailCampaignStep.campaign_id == campaign_id)
+            .order_by(EmailCampaignStep.step_order)
+        )
+        return list(result.scalars().all())
+
+    async def create_step(self, campaign_id: int, data: EmailCampaignStepCreate) -> EmailCampaignStep:
+        """Add a step to a campaign sequence."""
+        step = EmailCampaignStep(campaign_id=campaign_id, **data.model_dump())
+        self.db.add(step)
+        await self.db.flush()
+        await self.db.refresh(step)
+        return step
+
+    async def update_step(self, step: EmailCampaignStep, data: EmailCampaignStepUpdate) -> EmailCampaignStep:
+        """Update a campaign step."""
+        update_data = data.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(step, field, value)
+        await self.db.flush()
+        await self.db.refresh(step)
+        return step
+
+    async def delete_step(self, step: EmailCampaignStep) -> None:
+        """Delete a campaign step."""
+        await self.db.delete(step)
         await self.db.flush()

@@ -779,6 +779,38 @@ export interface ChatResponse {
   data?: Record<string, unknown> | null;
   function_called?: string | null;
   session_id?: string | null;
+  confirmation_required?: boolean;
+  pending_action?: Record<string, unknown> | null;
+  actions_taken?: Array<Record<string, unknown>>;
+}
+
+export interface ConfirmActionRequest {
+  session_id: string;
+  function_name: string;
+  arguments: Record<string, unknown>;
+  confirmed: boolean;
+}
+
+export interface ConfirmActionResponse {
+  response: string;
+  data?: Record<string, unknown> | null;
+  function_called?: string | null;
+  actions_taken?: Array<Record<string, unknown>>;
+}
+
+export interface FeedbackRequest {
+  session_id?: string | null;
+  query: string;
+  response: string;
+  retrieved_context_ids?: number[] | null;
+  feedback: 'positive' | 'negative' | 'correction';
+  correction_text?: string | null;
+}
+
+export interface FeedbackResponse {
+  id: number;
+  feedback: string;
+  created_at: string;
 }
 
 export interface InsightResponse {
@@ -862,3 +894,154 @@ export interface ImportResult {
  * Entity types available for import/export
  */
 export type ImportExportEntityType = 'contacts' | 'companies' | 'leads';
+
+// Bulk Operation Types
+export interface BulkUpdateRequest {
+  entity_type: string;
+  entity_ids: number[];
+  updates: Record<string, unknown>;
+}
+
+export interface BulkAssignRequest {
+  entity_type: string;
+  entity_ids: number[];
+  owner_id: number;
+}
+
+export interface BulkOperationResult {
+  success: boolean;
+  updated: number;
+  entity_type: string;
+  error?: string;
+  updates_applied?: Record<string, unknown>;
+  owner_id?: number;
+}
+
+// =============================================================================
+// Email Template Types
+// =============================================================================
+
+export interface EmailTemplate {
+  id: number;
+  name: string;
+  subject_template: string;
+  body_template: string;
+  category?: string | null;
+  created_by_id?: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EmailTemplateCreate {
+  name: string;
+  subject_template: string;
+  body_template: string;
+  category?: string | null;
+}
+
+export interface EmailTemplateUpdate {
+  name?: string | null;
+  subject_template?: string | null;
+  body_template?: string | null;
+  category?: string | null;
+}
+
+// =============================================================================
+// Email Campaign Step Types
+// =============================================================================
+
+export interface EmailCampaignStep {
+  id: number;
+  campaign_id: number;
+  template_id: number;
+  delay_days: number;
+  step_order: number;
+  created_at: string;
+}
+
+export interface EmailCampaignStepCreate {
+  template_id: number;
+  delay_days: number;
+  step_order: number;
+}
+
+export interface EmailCampaignStepUpdate {
+  template_id?: number | null;
+  delay_days?: number | null;
+  step_order?: number | null;
+}
+
+// =============================================================================
+// Workflow Types
+// =============================================================================
+
+export interface WorkflowRule {
+  id: number;
+  name: string;
+  description?: string | null;
+  is_active: boolean;
+  trigger_entity: string;
+  trigger_event: string;
+  conditions?: Record<string, unknown> | null;
+  actions?: Record<string, unknown>[] | null;
+  created_by_id?: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkflowRuleCreate {
+  name: string;
+  description?: string | null;
+  is_active?: boolean;
+  trigger_entity: string;
+  trigger_event: string;
+  conditions?: Record<string, unknown> | null;
+  actions?: Record<string, unknown>[] | null;
+}
+
+export interface WorkflowRuleUpdate {
+  name?: string | null;
+  description?: string | null;
+  is_active?: boolean | null;
+  trigger_entity?: string | null;
+  trigger_event?: string | null;
+  conditions?: Record<string, unknown> | null;
+  actions?: Record<string, unknown>[] | null;
+}
+
+export interface WorkflowExecution {
+  id: number;
+  rule_id: number;
+  entity_type: string;
+  entity_id: number;
+  status: string;
+  result?: Record<string, unknown> | null;
+  executed_at: string;
+}
+
+export interface WorkflowTestRequest {
+  entity_type: string;
+  entity_id: number;
+}
+
+// =============================================================================
+// Sales Funnel Types
+// =============================================================================
+
+export interface FunnelStage {
+  stage: string;
+  count: number;
+  color?: string | null;
+}
+
+export interface FunnelConversion {
+  from_stage: string;
+  to_stage: string;
+  rate: number;
+}
+
+export interface SalesFunnelResponse {
+  stages: FunnelStage[];
+  conversions: FunnelConversion[];
+  avg_days_in_stage: Record<string, number | null>;
+}

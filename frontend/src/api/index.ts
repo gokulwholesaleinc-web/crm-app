@@ -101,7 +101,29 @@ export {
   addCampaignMembers,
   updateCampaignMember,
   removeCampaignMember,
+  listEmailTemplates,
+  getEmailTemplate,
+  createEmailTemplate,
+  updateEmailTemplate,
+  deleteEmailTemplate,
+  getCampaignSteps,
+  addCampaignStep,
+  updateCampaignStep,
+  deleteCampaignStep,
+  executeCampaign,
 } from './campaigns';
+
+// Workflows API
+export { workflowsApi } from './workflows';
+export {
+  listWorkflowRules,
+  getWorkflowRule,
+  createWorkflowRule,
+  updateWorkflowRule,
+  deleteWorkflowRule,
+  getWorkflowExecutions,
+  testWorkflowRule,
+} from './workflows';
 
 // Dashboard API
 export { dashboardApi } from './dashboard';
@@ -152,6 +174,8 @@ export {
   getTemplate,
   downloadBlob,
   generateExportFilename,
+  bulkUpdate,
+  bulkAssign,
 } from './importExport';
 
 // Aggregated API object for convenience
@@ -166,6 +190,7 @@ import { dashboardApi as _dashboardApi } from './dashboard';
 import { aiApi as _aiApi } from './ai';
 import { importExportApi as _importExportApi } from './importExport';
 import { notesApi as _notesApi } from './notes';
+import { workflowsApi as _workflowsApi } from './workflows';
 
 export const api = {
   auth: _authApi,
@@ -179,6 +204,7 @@ export const api = {
   ai: _aiApi,
   importExport: _importExportApi,
   notes: _notesApi,
+  workflows: _workflowsApi,
 };
 
 export default api;

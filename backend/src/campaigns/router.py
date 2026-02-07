@@ -20,11 +20,100 @@ from src.campaigns.schemas import (
     CampaignMemberUpdate,
     AddMembersRequest,
     CampaignStats,
+    EmailTemplateCreate,
+    EmailTemplateUpdate,
+    EmailTemplateResponse,
+    EmailCampaignStepCreate,
+    EmailCampaignStepUpdate,
+    EmailCampaignStepResponse,
 )
-from src.campaigns.service import CampaignService, CampaignMemberService
+from src.campaigns.service import (
+    CampaignService,
+    CampaignMemberService,
+    EmailTemplateService,
+    EmailCampaignStepService,
+)
 
 router = APIRouter(prefix="/api/campaigns", tags=["campaigns"])
 
+
+# =========================================================================
+# Email Template endpoints (MUST be before /{campaign_id} routes)
+# =========================================================================
+
+@router.post("/templates", response_model=EmailTemplateResponse, status_code=HTTPStatus.CREATED)
+async def create_email_template(
+    template_data: EmailTemplateCreate,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Create a new email template."""
+    service = EmailTemplateService(db)
+    template = await service.create_template(template_data, current_user.id)
+    return EmailTemplateResponse.model_validate(template)
+
+
+@router.get("/templates", response_model=List[EmailTemplateResponse])
+async def list_email_templates(
+    current_user: CurrentUser,
+    db: DBSession,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    category: Optional[str] = None,
+):
+    """List email templates."""
+    service = EmailTemplateService(db)
+    templates, _ = await service.get_list(page=page, page_size=page_size, category=category)
+    return [EmailTemplateResponse.model_validate(t) for t in templates]
+
+
+@router.get("/templates/{template_id}", response_model=EmailTemplateResponse)
+async def get_email_template(
+    template_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Get an email template by ID."""
+    service = EmailTemplateService(db)
+    template = await service.get_by_id(template_id)
+    if not template:
+        raise_not_found("Email template", template_id)
+    return EmailTemplateResponse.model_validate(template)
+
+
+@router.put("/templates/{template_id}", response_model=EmailTemplateResponse)
+async def update_email_template(
+    template_id: int,
+    template_data: EmailTemplateUpdate,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Update an email template."""
+    service = EmailTemplateService(db)
+    template = await service.get_by_id(template_id)
+    if not template:
+        raise_not_found("Email template", template_id)
+    updated = await service.update_template(template, template_data)
+    return EmailTemplateResponse.model_validate(updated)
+
+
+@router.delete("/templates/{template_id}", status_code=HTTPStatus.NO_CONTENT)
+async def delete_email_template(
+    template_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Delete an email template."""
+    service = EmailTemplateService(db)
+    template = await service.get_by_id(template_id)
+    if not template:
+        raise_not_found("Email template", template_id)
+    await service.delete_template(template)
+
+
+# =========================================================================
+# Campaign CRUD endpoints
+# =========================================================================
 
 @router.get("", response_model=CampaignListResponse)
 async def list_campaigns(
@@ -123,7 +212,10 @@ async def get_campaign_stats(
     return CampaignStats(**stats)
 
 
+# =========================================================================
 # Campaign Members endpoints
+# =========================================================================
+
 @router.get("/{campaign_id}/members", response_model=List[CampaignMemberResponse])
 async def list_campaign_members(
     campaign_id: int,
@@ -152,7 +244,6 @@ async def add_campaign_members(
     db: DBSession,
 ):
     """Add members to a campaign."""
-    # Verify campaign exists
     campaign_service = CampaignService(db)
     await get_entity_or_404(campaign_service, campaign_id, EntityNames.CAMPAIGN)
 
@@ -200,3 +291,85 @@ async def remove_campaign_member(
         raise_not_found(EntityNames.CAMPAIGN_MEMBER, member_id)
 
     await member_service.remove_member(member)
+
+
+# =========================================================================
+# Email Campaign Step endpoints
+# =========================================================================
+
+@router.post("/{campaign_id}/steps", response_model=EmailCampaignStepResponse, status_code=HTTPStatus.CREATED)
+async def add_campaign_step(
+    campaign_id: int,
+    step_data: EmailCampaignStepCreate,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Add a step to a campaign sequence."""
+    campaign_service = CampaignService(db)
+    await get_entity_or_404(campaign_service, campaign_id, EntityNames.CAMPAIGN)
+
+    step_service = EmailCampaignStepService(db)
+    step = await step_service.create_step(campaign_id, step_data)
+    return EmailCampaignStepResponse.model_validate(step)
+
+
+@router.get("/{campaign_id}/steps", response_model=List[EmailCampaignStepResponse])
+async def get_campaign_steps(
+    campaign_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Get all steps for a campaign."""
+    campaign_service = CampaignService(db)
+    await get_entity_or_404(campaign_service, campaign_id, EntityNames.CAMPAIGN)
+
+    step_service = EmailCampaignStepService(db)
+    steps = await step_service.get_steps(campaign_id)
+    return [EmailCampaignStepResponse.model_validate(s) for s in steps]
+
+
+@router.put("/{campaign_id}/steps/{step_id}", response_model=EmailCampaignStepResponse)
+async def update_campaign_step(
+    campaign_id: int,
+    step_id: int,
+    step_data: EmailCampaignStepUpdate,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Update a campaign step."""
+    step_service = EmailCampaignStepService(db)
+    step = await step_service.get_by_id(step_id)
+    if not step or step.campaign_id != campaign_id:
+        raise_not_found("Campaign step", step_id)
+    updated = await step_service.update_step(step, step_data)
+    return EmailCampaignStepResponse.model_validate(updated)
+
+
+@router.delete("/{campaign_id}/steps/{step_id}", status_code=HTTPStatus.NO_CONTENT)
+async def delete_campaign_step(
+    campaign_id: int,
+    step_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Delete a campaign step."""
+    step_service = EmailCampaignStepService(db)
+    step = await step_service.get_by_id(step_id)
+    if not step or step.campaign_id != campaign_id:
+        raise_not_found("Campaign step", step_id)
+    await step_service.delete_step(step)
+
+
+@router.post("/{campaign_id}/execute")
+async def execute_campaign(
+    campaign_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Trigger campaign execution (set status to in_progress)."""
+    service = CampaignService(db)
+    campaign = await get_entity_or_404(service, campaign_id, EntityNames.CAMPAIGN)
+    campaign.status = "in_progress"
+    await db.flush()
+    await db.refresh(campaign)
+    return {"message": "Campaign execution started", "status": campaign.status}
