@@ -44,11 +44,10 @@ export function KanbanBoard({
   const [localOpportunities, setLocalOpportunities] =
     useState<Opportunity[]>(opportunities);
 
-  // Update local state when props change
-  if (
-    JSON.stringify(opportunities.map((o) => o.id)) !==
-    JSON.stringify(localOpportunities.map((o) => o.id))
-  ) {
+  // Update local state when props change (compare both IDs and stages)
+  const propsKey = JSON.stringify(opportunities.map((o) => `${o.id}:${o.stage}`));
+  const localKey = JSON.stringify(localOpportunities.map((o) => `${o.id}:${o.stage}`));
+  if (propsKey !== localKey) {
     setLocalOpportunities(opportunities);
   }
 
@@ -162,11 +161,27 @@ export function KanbanBoard({
     if (!over) return;
 
     const activeId = active.id as string;
-    const opportunity = findOpportunityById(activeId);
 
-    if (!opportunity) return;
+    // Determine target stage directly from the drop target, not from stale state
+    let newStage: string | null = null;
+    const overData = over.data.current;
+    if (overData?.type === 'column') {
+      newStage = overData.stage;
+    } else {
+      // Dropped on another card - find which stage that card is in
+      const overOpportunity = findOpportunityById(over.id as string);
+      if (overOpportunity) {
+        newStage = overOpportunity.stage;
+      }
+    }
 
-    const newStage = opportunity.stage;
+    // Fallback: read from localOpportunities (may have been updated by handleDragOver)
+    if (!newStage) {
+      const opportunity = findOpportunityById(activeId);
+      if (!opportunity) return;
+      newStage = opportunity.stage;
+    }
+
     const stageOpportunities = getOpportunitiesByStage(newStage);
     const newIndex = stageOpportunities.findIndex((o) => o.id === activeId);
 
