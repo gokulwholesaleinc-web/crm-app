@@ -110,12 +110,14 @@ export function FloatingChatWidget() {
               <button
                 onClick={() => setIsMinimized(!isMinimized)}
                 className="p-1 text-white/80 hover:text-white rounded transition-colors"
+                aria-label="Minimize"
               >
                 <MinusIcon className="h-4 w-4" />
               </button>
               <button
                 onClick={handleClose}
                 className="p-1 text-white/80 hover:text-white rounded transition-colors"
+                aria-label="Close"
               >
                 <XMarkIcon className="h-4 w-4" />
               </button>
@@ -226,6 +228,7 @@ export function FloatingChatWidget() {
           'hover:shadow-xl hover:scale-105 active:scale-95',
           isOpen && 'ring-2 ring-purple-300'
         )}
+        aria-label="Open AI Assistant"
         title="AI Assistant"
       >
         {isOpen ? (

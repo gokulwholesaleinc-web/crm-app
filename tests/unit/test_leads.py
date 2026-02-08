@@ -542,21 +542,14 @@ class TestLeadScoring:
         """Test lead scoring based on profile completeness."""
         scorer = LeadScorer()
 
-        # Create a mock lead with complete profile
-        class MockLead:
-            email = "test@example.com"
-            phone = "+1-555-0100"
-            mobile = None
-            job_title = "CEO"
-            first_name = "John"
-            last_name = "Doe"
-            description = "A lead with description"
-            company_name = None
-            website = None
-            industry = None
-            budget_amount = None
-
-        lead = MockLead()
+        lead = Lead(
+            first_name="John",
+            last_name="Doe",
+            email="test@example.com",
+            phone="+1-555-0100",
+            job_title="CEO",
+            description="A lead with description",
+        )
         score, factors = scorer.calculate_score(lead)
 
         assert factors["profile_completeness"] > 0
@@ -566,36 +559,23 @@ class TestLeadScoring:
         """Test lead scoring budget tiers."""
         scorer = LeadScorer()
 
-        class MockLead:
-            email = "test@example.com"
-            phone = None
-            mobile = None
-            job_title = None
-            first_name = "John"
-            last_name = "Doe"
-            description = None
-            company_name = None
-            website = None
-            industry = None
-            budget_amount = None
-
         # No budget
-        lead = MockLead()
+        lead = Lead(first_name="John", last_name="Doe", email="test@example.com")
         _, factors = scorer.calculate_score(lead)
         assert factors["budget"] == 0
 
         # Low budget
-        lead.budget_amount = 500
+        lead = Lead(first_name="John", last_name="Doe", email="test@example.com", budget_amount=500)
         _, factors = scorer.calculate_score(lead)
         assert factors["budget"] == 2
 
         # Medium budget
-        lead.budget_amount = 10000
+        lead = Lead(first_name="John", last_name="Doe", email="test@example.com", budget_amount=10000)
         _, factors = scorer.calculate_score(lead)
         assert factors["budget"] == 10
 
         # High budget
-        lead.budget_amount = 100000
+        lead = Lead(first_name="John", last_name="Doe", email="test@example.com", budget_amount=100000)
         _, factors = scorer.calculate_score(lead)
         assert factors["budget"] == 20
 
@@ -603,31 +583,18 @@ class TestLeadScoring:
         """Test lead scoring industry matching."""
         scorer = LeadScorer()
 
-        class MockLead:
-            email = None
-            phone = None
-            mobile = None
-            job_title = None
-            first_name = "John"
-            last_name = "Doe"
-            description = None
-            company_name = None
-            website = None
-            industry = None
-            budget_amount = None
-
         # No industry
-        lead = MockLead()
+        lead = Lead(first_name="John", last_name="Doe")
         _, factors = scorer.calculate_score(lead)
         assert factors["industry"] == 0
 
         # Priority industry
-        lead.industry = "Technology"
+        lead = Lead(first_name="John", last_name="Doe", industry="Technology")
         _, factors = scorer.calculate_score(lead)
         assert factors["industry"] == 15
 
         # Non-priority industry
-        lead.industry = "Agriculture"
+        lead = Lead(first_name="John", last_name="Doe", industry="Agriculture")
         _, factors = scorer.calculate_score(lead)
         assert factors["industry"] == 5
 
@@ -635,20 +602,7 @@ class TestLeadScoring:
         """Test lead scoring source quality."""
         scorer = LeadScorer()
 
-        class MockLead:
-            email = None
-            phone = None
-            mobile = None
-            job_title = None
-            first_name = "John"
-            last_name = "Doe"
-            description = None
-            company_name = None
-            website = None
-            industry = None
-            budget_amount = None
-
-        lead = MockLead()
+        lead = Lead(first_name="John", last_name="Doe")
 
         # No source
         _, factors = scorer.calculate_score(lead, source_name=None)
@@ -668,21 +622,18 @@ class TestLeadScoring:
 
     def test_calculate_lead_score_function(self):
         """Test the convenience calculate_lead_score function."""
-
-        class MockLead:
-            email = "test@example.com"
-            phone = "+1-555-0100"
-            mobile = None
-            job_title = "CEO"
-            first_name = "John"
-            last_name = "Doe"
-            description = "A lead"
-            company_name = "Test Corp"
-            website = "https://test.com"
-            industry = "Technology"
-            budget_amount = 50000
-
-        lead = MockLead()
+        lead = Lead(
+            first_name="John",
+            last_name="Doe",
+            email="test@example.com",
+            phone="+1-555-0100",
+            job_title="CEO",
+            description="A lead",
+            company_name="Test Corp",
+            website="https://test.com",
+            industry="Technology",
+            budget_amount=50000,
+        )
         score, factors_json = calculate_lead_score(lead, "Referral")
 
         assert isinstance(score, int)

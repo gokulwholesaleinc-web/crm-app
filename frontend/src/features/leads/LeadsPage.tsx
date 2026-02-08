@@ -248,7 +248,7 @@ function LeadsPage() {
                 id="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="block w-full pl-10 pr-3 py-2.5 sm:py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 text-base sm:text-sm"
+                className="block w-full pl-10 pr-3 py-2.5 sm:py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus-visible:outline-none focus-visible:placeholder-gray-400 focus-visible:ring-1 focus-visible:ring-primary-500 focus-visible:border-primary-500 text-base sm:text-sm"
                 placeholder="Search by name, email, or company..."
               />
             </div>
@@ -261,7 +261,7 @@ function LeadsPage() {
                   setStatusFilter(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 py-2.5 sm:py-2 text-base sm:text-sm"
+                className="block w-full rounded-md border-gray-300 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 py-2.5 sm:py-2 text-base sm:text-sm"
               >
                 {statusOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -344,7 +344,7 @@ function LeadsPage() {
                         type="checkbox"
                         checked={selectedIds.includes(lead.id)}
                         onChange={() => toggleSelectOne(lead.id)}
-                        className="mt-1 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        className="mt-1 rounded border-gray-300 text-primary-600 focus-visible:ring-primary-500"
                       />
                       <div className="min-w-0 flex-1">
                         <Link
@@ -401,7 +401,7 @@ function LeadsPage() {
                         type="checkbox"
                         checked={leads.length > 0 && selectedIds.length === leads.length}
                         onChange={toggleSelectAll}
-                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        className="rounded border-gray-300 text-primary-600 focus-visible:ring-primary-500"
                       />
                     </th>
                     <th
@@ -453,7 +453,7 @@ function LeadsPage() {
                           type="checkbox"
                           checked={selectedIds.includes(lead.id)}
                           onChange={() => toggleSelectOne(lead.id)}
-                          className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                          className="rounded border-gray-300 text-primary-600 focus-visible:ring-primary-500"
                         />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">

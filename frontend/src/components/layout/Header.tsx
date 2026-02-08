@@ -71,7 +71,7 @@ export function Header({
       {/* Mobile menu button (hamburger) */}
       <button
         type="button"
-        className="lg:hidden p-2 -ml-1 rounded-lg text-gray-500 hover:text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
+        className="lg:hidden p-2 -ml-1 rounded-lg text-gray-500 hover:text-gray-600 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 touch-manipulation"
         onClick={onMenuClick}
         aria-label="Open navigation menu"
       >
@@ -91,7 +91,7 @@ export function Header({
             <input
               type="search"
               placeholder="Search contacts, companies, deals..."
-              className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-400 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:border-primary-500"
               onChange={(e) => onSearch?.(e.target.value)}
             />
           </div>
@@ -102,7 +102,7 @@ export function Header({
       {showSearch && (
         <button
           type="button"
-          className="sm:hidden ml-2 p-2 rounded-lg text-gray-500 hover:text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
+          className="sm:hidden ml-2 p-2 rounded-lg text-gray-500 hover:text-gray-600 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 touch-manipulation"
           onClick={() => setMobileSearchOpen(true)}
           aria-label="Open search"
         >
@@ -125,14 +125,14 @@ export function Header({
                 ref={searchInputRef}
                 type="search"
                 placeholder="Search..."
-                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-400 text-base focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-400 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:border-primary-500"
                 onChange={(e) => onSearch?.(e.target.value)}
               />
             </div>
             <button
               type="button"
               onClick={() => setMobileSearchOpen(false)}
-              className="ml-2 p-2 rounded-lg text-gray-500 hover:text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
+              className="ml-2 p-2 rounded-lg text-gray-500 hover:text-gray-600 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 touch-manipulation"
               aria-label="Close search"
             >
               <XMarkIcon className="h-6 w-6" aria-hidden="true" />
@@ -149,7 +149,7 @@ export function Header({
         {/* Notifications */}
         <button
           type="button"
-          className="relative p-2 rounded-lg text-gray-500 hover:text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
+          className="relative p-2 rounded-lg text-gray-500 hover:text-gray-600 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 touch-manipulation"
           aria-label="View notifications"
         >
           <BellIcon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />
@@ -162,7 +162,7 @@ export function Header({
 
         {/* User Menu - touch-friendly with larger tap targets */}
         <Menu as="div" className="relative">
-          <Menu.Button className="flex items-center p-1 sm:p-0 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 touch-manipulation">
+          <Menu.Button className="flex items-center p-1 sm:p-0 rounded-full text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 touch-manipulation">
             <span className="sr-only">Open user menu</span>
             <div className="flex items-center">
               <Avatar
@@ -190,7 +190,7 @@ export function Header({
             leaveFrom="transform opacity-100 scale-100"
             leaveTo="transform opacity-0 scale-95"
           >
-            <Menu.Items className="absolute right-0 z-50 mt-2 w-56 sm:w-48 origin-top-right rounded-lg bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+            <Menu.Items className="absolute right-0 z-50 mt-2 w-56 sm:w-48 origin-top-right rounded-lg bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus-visible:outline-none">
               {user && (
                 <div className="px-4 py-3 border-b border-gray-100">
                   <p className="text-sm font-medium text-gray-900 truncate">

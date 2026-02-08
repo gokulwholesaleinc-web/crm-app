@@ -29,7 +29,7 @@ export function formatCurrency(
 
   const { minimumFractionDigits = 0, maximumFractionDigits = 0 } = options ?? {};
 
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat(undefined, {
     style: 'currency',
     currency,
     minimumFractionDigits,
@@ -93,14 +93,14 @@ export function formatDate(
 
   switch (format) {
     case 'short':
-      return dateObj.toLocaleDateString('en-US', {
+      return dateObj.toLocaleDateString(undefined, {
         month: 'numeric',
         day: 'numeric',
         year: 'numeric',
       });
 
     case 'long':
-      return dateObj.toLocaleDateString('en-US', {
+      return dateObj.toLocaleDateString(undefined, {
         month: 'long',
         day: 'numeric',
         year: 'numeric',
@@ -150,7 +150,7 @@ function formatRelativeDate(date: Date): string {
     return `In ${weeks} week${weeks > 1 ? 's' : ''}`;
   } else {
     // Fallback to standard date format for dates outside 30 days
-    return date.toLocaleDateString('en-US', {
+    return date.toLocaleDateString(undefined, {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -187,7 +187,7 @@ export function formatDateTime(
     return typeof date === 'string' ? date : '-';
   }
 
-  return dateObj.toLocaleString('en-US', {
+  return dateObj.toLocaleString(undefined, {
     month: 'numeric',
     day: 'numeric',
     year: 'numeric',
@@ -282,7 +282,7 @@ export function formatNumber(
     return '-';
   }
 
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat(undefined, {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   }).format(value);
@@ -310,7 +310,7 @@ export function truncateText(
     return text;
   }
 
-  return `${text.slice(0, maxLength)}...`;
+  return `${text.slice(0, maxLength)}\u2026`;
 }
 
 /**

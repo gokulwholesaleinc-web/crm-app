@@ -104,7 +104,7 @@ function RegisterPage() {
                   {...register('firstName', {
                     required: 'First name is required',
                   })}
-                  className="mt-1 appearance-none relative block w-full px-3 py-2.5 sm:py-2 border border-gray-300 placeholder-gray-500 text-gray-900 text-base sm:text-sm rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                  className="mt-1 appearance-none relative block w-full px-3 py-2.5 sm:py-2 border border-gray-300 placeholder-gray-500 text-gray-900 text-base sm:text-sm rounded-md focus-visible:outline-none focus-visible:ring-primary-500 focus-visible:border-primary-500"
                   placeholder="John"
                 />
                 {errors.firstName && (
@@ -123,7 +123,7 @@ function RegisterPage() {
                   {...register('lastName', {
                     required: 'Last name is required',
                   })}
-                  className="mt-1 appearance-none relative block w-full px-3 py-2.5 sm:py-2 border border-gray-300 placeholder-gray-500 text-gray-900 text-base sm:text-sm rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                  className="mt-1 appearance-none relative block w-full px-3 py-2.5 sm:py-2 border border-gray-300 placeholder-gray-500 text-gray-900 text-base sm:text-sm rounded-md focus-visible:outline-none focus-visible:ring-primary-500 focus-visible:border-primary-500"
                   placeholder="Doe"
                 />
                 {errors.lastName && (
@@ -147,7 +147,7 @@ function RegisterPage() {
                     message: 'Invalid email address',
                   },
                 })}
-                className="mt-1 appearance-none relative block w-full px-3 py-2.5 sm:py-2 border border-gray-300 placeholder-gray-500 text-gray-900 text-base sm:text-sm rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="mt-1 appearance-none relative block w-full px-3 py-2.5 sm:py-2 border border-gray-300 placeholder-gray-500 text-gray-900 text-base sm:text-sm rounded-md focus-visible:outline-none focus-visible:ring-primary-500 focus-visible:border-primary-500"
                 placeholder="john.doe@example.com"
               />
               {errors.email && (
@@ -166,7 +166,7 @@ function RegisterPage() {
                 {...register('password', {
                   required: 'Password is required',
                 })}
-                className="mt-1 appearance-none relative block w-full px-3 py-2.5 sm:py-2 border border-gray-300 placeholder-gray-500 text-gray-900 text-base sm:text-sm rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="mt-1 appearance-none relative block w-full px-3 py-2.5 sm:py-2 border border-gray-300 placeholder-gray-500 text-gray-900 text-base sm:text-sm rounded-md focus-visible:outline-none focus-visible:ring-primary-500 focus-visible:border-primary-500"
                 placeholder="Create a password"
               />
               {errors.password && (
@@ -187,7 +187,7 @@ function RegisterPage() {
                   validate: (value) =>
                     value === password || 'Passwords do not match',
                 })}
-                className="mt-1 appearance-none relative block w-full px-3 py-2.5 sm:py-2 border border-gray-300 placeholder-gray-500 text-gray-900 text-base sm:text-sm rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="mt-1 appearance-none relative block w-full px-3 py-2.5 sm:py-2 border border-gray-300 placeholder-gray-500 text-gray-900 text-base sm:text-sm rounded-md focus-visible:outline-none focus-visible:ring-primary-500 focus-visible:border-primary-500"
                 placeholder="Confirm your password"
               />
               {errors.confirmPassword && (
@@ -202,7 +202,7 @@ function RegisterPage() {
               name="terms"
               type="checkbox"
               required
-              className="h-4 w-4 mt-0.5 sm:mt-0 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+              className="h-4 w-4 mt-0.5 sm:mt-0 text-primary-600 focus-visible:ring-primary-500 border-gray-300 rounded"
             />
             <label htmlFor="terms" className="ml-2 block text-xs sm:text-sm text-gray-900">
               I agree to the{' '}

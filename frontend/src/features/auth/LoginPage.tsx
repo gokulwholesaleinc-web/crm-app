@@ -100,7 +100,7 @@ function LoginPage() {
                     message: 'Invalid email address',
                   },
                 })}
-                className="appearance-none rounded-none relative block w-full px-3 py-2.5 sm:py-2 border border-gray-300 placeholder-gray-500 text-gray-900 text-base sm:text-sm rounded-t-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10"
+                className="appearance-none rounded-none relative block w-full px-3 py-2.5 sm:py-2 border border-gray-300 placeholder-gray-500 text-gray-900 text-base sm:text-sm rounded-t-md focus-visible:outline-none focus-visible:ring-primary-500 focus-visible:border-primary-500 focus-visible:z-10"
                 placeholder="Email address"
               />
               {errors.email && (
@@ -118,7 +118,7 @@ function LoginPage() {
                 {...register('password', {
                   required: 'Password is required',
                 })}
-                className="appearance-none rounded-none relative block w-full px-3 py-2.5 sm:py-2 border border-gray-300 placeholder-gray-500 text-gray-900 text-base sm:text-sm rounded-b-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10"
+                className="appearance-none rounded-none relative block w-full px-3 py-2.5 sm:py-2 border border-gray-300 placeholder-gray-500 text-gray-900 text-base sm:text-sm rounded-b-md focus-visible:outline-none focus-visible:ring-primary-500 focus-visible:border-primary-500 focus-visible:z-10"
                 placeholder="Password"
               />
               {errors.password && (
@@ -133,7 +133,7 @@ function LoginPage() {
                 id="remember-me"
                 name="remember-me"
                 type="checkbox"
-                className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                className="h-4 w-4 text-primary-600 focus-visible:ring-primary-500 border-gray-300 rounded"
               />
               <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
                 Remember me
