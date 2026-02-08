@@ -137,6 +137,7 @@ export {
   getActivitiesChart,
   getNewLeadsTrendChart,
   getConversionRatesChart,
+  getSalesFunnel,
 } from './dashboard';
 
 // Notes API
@@ -160,6 +161,8 @@ export {
   getRecommendations,
   getNextBestAction,
   semanticSearch,
+  confirmAction,
+  submitFeedback,
   getPreferences,
   updatePreferences,
 } from './ai';

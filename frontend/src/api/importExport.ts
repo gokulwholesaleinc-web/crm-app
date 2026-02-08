@@ -52,9 +52,6 @@ export const importContacts = async (
     `${IMPORT_EXPORT_BASE}/import/contacts`,
     formData,
     {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
       params: { skip_errors: skipErrors },
     }
   );
@@ -75,9 +72,6 @@ export const importCompanies = async (
     `${IMPORT_EXPORT_BASE}/import/companies`,
     formData,
     {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
       params: { skip_errors: skipErrors },
     }
   );
@@ -98,9 +92,6 @@ export const importLeads = async (
     `${IMPORT_EXPORT_BASE}/import/leads`,
     formData,
     {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
       params: { skip_errors: skipErrors },
     }
   );

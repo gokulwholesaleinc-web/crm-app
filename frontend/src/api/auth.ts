@@ -35,11 +35,11 @@ export const login = async (credentials: LoginRequest): Promise<Token> => {
  * Login with form data (OAuth2 compatible)
  */
 export const loginWithForm = async (email: string, password: string): Promise<Token> => {
-  const formData = new FormData();
-  formData.append('username', email);
-  formData.append('password', password);
+  const params = new URLSearchParams();
+  params.append('username', email);
+  params.append('password', password);
 
-  const response = await apiClient.post<Token>(`${AUTH_BASE}/login`, formData, {
+  const response = await apiClient.post<Token>(`${AUTH_BASE}/login`, params, {
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
     },
