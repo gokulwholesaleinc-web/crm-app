@@ -1,9 +1,10 @@
 """Activity service layer."""
 
 from datetime import datetime, timezone
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Any, Dict
 from sqlalchemy import select, func, or_
 from src.activities.models import Activity, ActivityType
+from src.core.filtering import apply_filters_to_query
 from src.activities.schemas import ActivityCreate, ActivityUpdate
 from src.core.base_service import CRUDService
 from src.core.constants import DEFAULT_PAGE_SIZE
@@ -28,9 +29,13 @@ class ActivityService(CRUDService[Activity, ActivityCreate, ActivityUpdate]):
         assigned_to_id: Optional[int] = None,
         is_completed: Optional[bool] = None,
         priority: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
     ) -> Tuple[List[Activity], int]:
         """Get paginated list of activities with filters."""
         query = select(Activity)
+
+        if filters:
+            query = apply_filters_to_query(query, Activity, filters)
 
         if entity_type:
             query = query.where(Activity.entity_type == entity_type)

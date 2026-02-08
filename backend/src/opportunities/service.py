@@ -1,9 +1,10 @@
 """Opportunity service layer."""
 
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Any, Dict
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from src.opportunities.models import Opportunity, PipelineStage
+from src.core.filtering import apply_filters_to_query
 from src.opportunities.schemas import (
     OpportunityCreate,
     OpportunityUpdate,
@@ -41,6 +42,7 @@ class OpportunityService(
         company_id: Optional[int] = None,
         owner_id: Optional[int] = None,
         tag_ids: Optional[List[int]] = None,
+        filters: Optional[Dict[str, Any]] = None,
     ) -> Tuple[List[Opportunity], int]:
         """Get paginated list of opportunities with filters."""
         query = (
@@ -51,6 +53,9 @@ class OpportunityService(
                 selectinload(Opportunity.company),
             )
         )
+
+        if filters:
+            query = apply_filters_to_query(query, Opportunity, filters)
 
         if search:
             query = query.where(Opportunity.name.ilike(f"%{search}%"))

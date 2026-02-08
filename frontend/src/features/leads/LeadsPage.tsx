@@ -55,6 +55,8 @@ function ScoreIndicator({ score }: { score: number }) {
 }
 
 function LeadsPage() {
+  usePageTitle('Leads');
+
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -121,8 +123,9 @@ function LeadsPage() {
     try {
       await deleteLeadMutation.mutateAsync(deleteConfirm.lead.id);
       setDeleteConfirm({ isOpen: false, lead: null });
+      showSuccess('Lead deleted successfully');
     } catch (err) {
-      console.error('Failed to delete lead:', err);
+      showError('Failed to delete lead');
     }
   };
 
@@ -166,8 +169,9 @@ function LeadsPage() {
       }
       setShowForm(false);
       setEditingLead(null);
+      showSuccess(editingLead ? 'Lead updated successfully' : 'Lead created successfully');
     } catch (err) {
-      console.error('Failed to save lead:', err);
+      showError(editingLead ? 'Failed to update lead' : 'Failed to create lead');
     }
   };
 

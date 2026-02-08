@@ -183,6 +183,15 @@ export {
   bulkAssign,
 } from './importExport';
 
+// Audit API
+export { auditApi } from './audit';
+
+// Comments API
+export { commentsApi } from './comments';
+
+// Pipelines API
+export { pipelinesApi } from './pipelines';
+
 // Aggregated API object for convenience
 import { authApi as _authApi } from './auth';
 import { contactsApi as _contactsApi } from './contacts';
@@ -196,6 +205,9 @@ import { aiApi as _aiApi } from './ai';
 import { importExportApi as _importExportApi } from './importExport';
 import { notesApi as _notesApi } from './notes';
 import { workflowsApi as _workflowsApi } from './workflows';
+import { auditApi as _auditApi } from './audit';
+import { commentsApi as _commentsApi } from './comments';
+import { pipelinesApi as _pipelinesApi } from './pipelines';
 
 export const api = {
   auth: _authApi,
@@ -210,6 +222,9 @@ export const api = {
   importExport: _importExportApi,
   notes: _notesApi,
   workflows: _workflowsApi,
+  audit: _auditApi,
+  comments: _commentsApi,
+  pipelines: _pipelinesApi,
 };
 
 export default api;

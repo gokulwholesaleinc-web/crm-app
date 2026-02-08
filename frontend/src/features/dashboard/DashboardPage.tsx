@@ -58,30 +58,34 @@ function DashboardPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Spinner size="lg" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="rounded-md bg-red-50 p-4">
-        <div className="flex">
-          <div className="ml-3">
-            <h3 className="text-sm font-medium text-red-800">Error loading dashboard</h3>
-            <p className="mt-2 text-sm text-red-700">{error}</p>
-          </div>
+      <div className="space-y-4 sm:space-y-6">
+        <div>
+          <div className="h-7 w-40 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+          <div className="mt-2 h-4 w-64 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:gap-6 sm:grid-cols-2 lg:grid-cols-4 stagger-fade-in">
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:gap-6 lg:grid-cols-2">
+          <SkeletonChart />
+          <SkeletonChart />
         </div>
       </div>
     );
   }
 
+  if (error) {
+    return <ErrorEmptyState onRetry={() => window.location.reload()} />;
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="mt-0.5 sm:mt-1 text-xs sm:text-sm text-gray-500">
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Dashboard</h1>
+        <p className="mt-0.5 sm:mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
           Overview of your CRM performance
         </p>
       </div>
