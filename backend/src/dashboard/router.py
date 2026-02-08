@@ -188,3 +188,68 @@ async def get_conversion_rates_chart(
         title=data["title"],
         data=[ChartDataPoint(**d) for d in data["data"]],
     )
+
+
+# =========================================================================
+# Multi-Currency endpoints
+# =========================================================================
+
+
+@router.get("/currencies")
+async def list_currencies(
+    current_user: CurrentUser,
+):
+    """List all supported currencies with exchange rates."""
+    from src.core.currencies import get_base_currency, get_supported_currencies_list
+
+    return {
+        "base_currency": get_base_currency(),
+        "currencies": get_supported_currencies_list(),
+    }
+
+
+@router.get("/revenue/converted")
+async def get_converted_revenue(
+    current_user: CurrentUser,
+    db: DBSession,
+    target_currency: str = "USD",
+):
+    """Get pipeline revenue converted to a target currency."""
+    from sqlalchemy import select
+    from src.opportunities.models import Opportunity, PipelineStage
+    from src.core.currencies import convert_amount
+
+    result = await db.execute(
+        select(Opportunity).join(PipelineStage)
+    )
+    opportunities = result.scalars().all()
+
+    total_pipeline = 0.0
+    total_revenue = 0.0
+    weighted_pipeline = 0.0
+    open_count = 0
+    won_count = 0
+
+    for opp in opportunities:
+        amount = opp.amount or 0.0
+        opp_currency = opp.currency or "USD"
+        converted = convert_amount(amount, opp_currency, target_currency)
+
+        stage = opp.pipeline_stage
+        if stage.is_won:
+            total_revenue += converted
+            won_count += 1
+        elif not stage.is_lost:
+            total_pipeline += converted
+            prob = opp.probability if opp.probability is not None else stage.probability
+            weighted_pipeline += converted * (prob / 100)
+            open_count += 1
+
+    return {
+        "target_currency": target_currency,
+        "total_pipeline_value": round(total_pipeline, 2),
+        "total_revenue": round(total_revenue, 2),
+        "weighted_pipeline_value": round(weighted_pipeline, 2),
+        "open_deal_count": open_count,
+        "won_deal_count": won_count,
+    }
