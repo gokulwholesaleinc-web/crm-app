@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
-import { NotesList } from '../../components/shared';
+import { NotesList, AttachmentList } from '../../components/shared';
 import { OpportunityForm, OpportunityFormData } from './components/OpportunityForm';
 import { AIInsightsCard, NextBestActionCard } from '../../components/ai';
 import {
@@ -18,7 +18,7 @@ import { getStatusBadgeClasses } from '../../utils';
 import type { OpportunityUpdate } from '../../types';
 import clsx from 'clsx';
 
-type TabType = 'details' | 'activities' | 'notes';
+type TabType = 'details' | 'activities' | 'notes' | 'attachments';
 
 function OpportunityDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -148,6 +148,7 @@ function OpportunityDetailPage() {
     { id: 'details', name: 'Details' },
     { id: 'activities', name: 'Activities' },
     { id: 'notes', name: 'Notes' },
+    { id: 'attachments', name: 'Attachments' },
   ];
 
   return (
@@ -436,6 +437,10 @@ function OpportunityDetailPage() {
 
       {activeTab === 'notes' && opportunityId && (
         <NotesList entityType="opportunity" entityId={opportunityId} />
+      )}
+
+      {activeTab === 'attachments' && opportunityId && (
+        <AttachmentList entityType="opportunities" entityId={opportunityId} />
       )}
 
       {/* Edit Form Modal */}

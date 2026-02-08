@@ -169,5 +169,31 @@ export {
   workflowKeys,
 } from './useWorkflows';
 
+// Audit hooks
+export {
+  useEntityAuditLog,
+  auditKeys,
+} from './useAudit';
+
+// Comment hooks
+export {
+  useEntityComments,
+  useComment,
+  useCreateComment,
+  useUpdateComment,
+  useDeleteComment,
+  commentKeys,
+} from './useComments';
+
+// Pipeline hooks
+export {
+  usePipelines,
+  usePipeline,
+  useCreatePipeline,
+  useUpdatePipeline,
+  useDeletePipeline,
+  pipelineEntityKeys,
+} from './usePipelines';
+
 // Auth-aware query helpers
 export { useAuthQuery, useAuthEnabled } from './useAuthQuery';

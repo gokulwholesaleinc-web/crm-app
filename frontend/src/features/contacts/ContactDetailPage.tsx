@@ -110,6 +110,7 @@ function ContactDetailPage() {
     { id: 'details', name: 'Details' },
     { id: 'activities', name: 'Activities' },
     { id: 'notes', name: 'Notes' },
+    { id: 'attachments', name: 'Attachments' },
   ];
 
   return (
@@ -339,6 +340,10 @@ function ContactDetailPage() {
 
       {activeTab === 'notes' && contactId && (
         <NotesList entityType="contact" entityId={contactId} />
+      )}
+
+      {activeTab === 'attachments' && contactId && (
+        <AttachmentList entityType="contacts" entityId={contactId} />
       )}
 
       {/* Edit Form Modal */}

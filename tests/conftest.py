@@ -28,6 +28,8 @@ from src.activities.models import Activity
 from src.campaigns.models import Campaign, CampaignMember, EmailTemplate, EmailCampaignStep
 from src.core.models import Note, Tag, EntityTag
 from src.workflows.models import WorkflowRule, WorkflowExecution
+from src.audit.models import AuditLog
+from src.comments.models import Comment
 
 
 # Test database URL - using SQLite in-memory for tests
@@ -339,3 +341,36 @@ async def test_note(db_session: AsyncSession, test_user: User, test_contact: Con
     await db_session.commit()
     await db_session.refresh(note)
     return note
+
+
+@pytest_asyncio.fixture(scope="function")
+async def test_pipeline(db_session: AsyncSession) -> Pipeline:
+    """Create a test pipeline."""
+    pipeline = Pipeline(
+        name="Default Sales Pipeline",
+        description="Main sales pipeline for testing",
+        is_default=True,
+        is_active=True,
+    )
+    db_session.add(pipeline)
+    await db_session.commit()
+    await db_session.refresh(pipeline)
+    return pipeline
+
+
+@pytest_asyncio.fixture(scope="function")
+async def test_comment(
+    db_session: AsyncSession, test_user: User, test_contact: Contact
+) -> Comment:
+    """Create a test comment."""
+    comment = Comment(
+        content="This is a test comment @john.doe",
+        entity_type="contacts",
+        entity_id=test_contact.id,
+        user_id=test_user.id,
+        is_internal=False,
+    )
+    db_session.add(comment)
+    await db_session.commit()
+    await db_session.refresh(comment)
+    return comment

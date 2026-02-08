@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
-import { NotesList } from '../../components/shared';
+import { NotesList, AttachmentList } from '../../components/shared';
 import { ConvertLeadModal } from './components/ConvertLeadModal';
 import { LeadForm, LeadFormData } from './components/LeadForm';
 import { AIInsightsCard, NextBestActionCard } from '../../components/ai';
@@ -12,7 +12,7 @@ import { useTimeline } from '../../hooks/useActivities';
 import type { LeadUpdate } from '../../types';
 import clsx from 'clsx';
 
-type TabType = 'details' | 'activities' | 'notes';
+type TabType = 'details' | 'activities' | 'notes' | 'attachments';
 
 function LeadDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -162,6 +162,7 @@ function LeadDetailPage() {
     { id: 'details', name: 'Details' },
     { id: 'activities', name: 'Activities' },
     { id: 'notes', name: 'Notes' },
+    { id: 'attachments', name: 'Attachments' },
   ];
 
   return (
@@ -458,6 +459,10 @@ function LeadDetailPage() {
 
       {activeTab === 'notes' && leadId && (
         <NotesList entityType="lead" entityId={leadId} />
+      )}
+
+      {activeTab === 'attachments' && leadId && (
+        <AttachmentList entityType="leads" entityId={leadId} />
       )}
 
       {/* Convert Lead Modal */}
