@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { NotesList } from '../../components/shared';
+import { AuditTimeline } from '../../components/shared/AuditTimeline';
+import { CommentSection } from '../../components/shared/CommentSection';
 import { EmailComposeModal, EmailHistory } from '../../components/email';
 import { ConvertLeadModal } from './components/ConvertLeadModal';
 import { LeadForm, LeadFormData } from './components/LeadForm';
@@ -13,7 +15,7 @@ import { useTimeline } from '../../hooks/useActivities';
 import type { LeadUpdate } from '../../types';
 import clsx from 'clsx';
 
-type TabType = 'details' | 'activities' | 'notes' | 'emails';
+type TabType = 'details' | 'activities' | 'notes' | 'emails' | 'comments' | 'history';
 
 function LeadDetailPage() {
   const { id } = useParams<{ id: string }>();

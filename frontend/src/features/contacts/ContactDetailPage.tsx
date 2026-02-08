@@ -13,7 +13,7 @@ import { formatDate, formatPhoneNumber } from '../../utils/formatters';
 import type { ContactUpdate } from '../../types';
 import clsx from 'clsx';
 
-type TabType = 'details' | 'activities' | 'notes' | 'emails';
+type TabType = 'details' | 'activities' | 'notes' | 'emails' | 'comments' | 'history';
 
 function ContactDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -115,6 +115,8 @@ function ContactDetailPage() {
     { id: 'activities', name: 'Activities' },
     { id: 'notes', name: 'Notes' },
     { id: 'emails', name: 'Emails' },
+    { id: 'comments', name: 'Comments' },
+    { id: 'history', name: 'History' },
   ];
 
   return (
@@ -359,6 +361,16 @@ function ContactDetailPage() {
             <EmailHistory entityType="contacts" entityId={contactId} />
           </div>
         </div>
+      )}
+
+      {/* Comments Tab */}
+      {activeTab === 'comments' && contactId && (
+        <CommentSection entityType="contacts" entityId={contactId} />
+      )}
+
+      {/* History Tab */}
+      {activeTab === 'history' && contactId && (
+        <AuditTimeline entityType="contacts" entityId={contactId} />
       )}
 
       {/* Email Compose Modal */}
