@@ -1,5 +1,6 @@
 """Company API routes."""
 
+import logging
 from typing import Optional
 from fastapi import APIRouter, Query
 from src.core.constants import HTTPStatus, EntityNames
@@ -25,6 +26,8 @@ from src.ai.embedding_hooks import (
     build_company_embedding_content,
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/companies", tags=["companies"])
 
 
@@ -32,7 +35,7 @@ async def _build_company_response(
     service: CompanyService, company, include_contact_count: bool = True
 ) -> CompanyResponse:
     """Build a CompanyResponse with tags and optional contact count."""
-    tags = await service.get_company_tags(company.id)
+    tags = await service.get_tags(company.id)
     response_dict = CompanyResponse.model_validate(company).model_dump()
     response_dict["tags"] = [TagBrief.model_validate(t) for t in tags]
     if include_contact_count:
@@ -89,8 +92,11 @@ async def create_company(
     company = await service.create(company_data, current_user.id)
 
     # Generate embedding for semantic search
-    content = build_company_embedding_content(company)
-    await store_entity_embedding(db, "company", company.id, content)
+    try:
+        content = build_company_embedding_content(company)
+        await store_entity_embedding(db, "company", company.id, content)
+    except Exception as e:
+        logger.warning("Failed to store embedding: %s", e)
 
     # New company has no contacts, so pass include_contact_count=False to avoid query
     # and manually set contact_count to 0
@@ -126,8 +132,11 @@ async def update_company(
     updated_company = await service.update(company, company_data, current_user.id)
 
     # Update embedding for semantic search
-    content = build_company_embedding_content(updated_company)
-    await store_entity_embedding(db, "company", updated_company.id, content)
+    try:
+        content = build_company_embedding_content(updated_company)
+        await store_entity_embedding(db, "company", updated_company.id, content)
+    except Exception as e:
+        logger.warning("Failed to store embedding: %s", e)
 
     return await _build_company_response(service, updated_company)
 

@@ -11,7 +11,6 @@ from src.opportunities.schemas import (
     PipelineStageUpdate,
 )
 from src.core.base_service import CRUDService, BaseService, TaggableServiceMixin
-from src.core.models import Tag
 from src.core.constants import ENTITY_TYPE_OPPORTUNITIES, DEFAULT_PAGE_SIZE
 
 
@@ -108,9 +107,6 @@ class OpportunityService(
         await self.clear_tags(opportunity.id)
         await super().delete(opportunity)
 
-    async def get_opportunity_tags(self, opportunity_id: int) -> List[Tag]:
-        """Get tags for an opportunity."""
-        return await self.get_tags(opportunity_id)
 
 
 class PipelineStageService(BaseService[PipelineStage]):

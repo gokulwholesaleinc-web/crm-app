@@ -10,6 +10,21 @@ from src.core.router_utils import DBSession, CurrentUser, raise_bad_request
 from src.import_export.csv_handler import CSVHandler
 from src.import_export.bulk_operations import BulkOperationsHandler
 
+MAX_CSV_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+
+
+async def _read_csv_upload(file: UploadFile) -> str:
+    """Validate and read a CSV upload file, returning the decoded content string."""
+    if not file.filename.endswith(".csv"):
+        raise_bad_request("File must be a CSV")
+
+    content = await file.read()
+
+    if len(content) > MAX_CSV_FILE_SIZE:
+        raise_bad_request("File size exceeds 10MB limit")
+
+    return content.decode("utf-8")
+
 router = APIRouter(prefix="/api/import-export", tags=["import-export"])
 
 
@@ -90,11 +105,7 @@ async def import_contacts(
     skip_errors: bool = True,
 ):
     """Import contacts from CSV file."""
-    if not file.filename.endswith(".csv"):
-        raise_bad_request("File must be a CSV")
-
-    content = await file.read()
-    csv_content = content.decode("utf-8")
+    csv_content = await _read_csv_upload(file)
 
     handler = CSVHandler(db)
     result = await handler.import_contacts(
@@ -114,11 +125,7 @@ async def import_companies(
     skip_errors: bool = True,
 ):
     """Import companies from CSV file."""
-    if not file.filename.endswith(".csv"):
-        raise_bad_request("File must be a CSV")
-
-    content = await file.read()
-    csv_content = content.decode("utf-8")
+    csv_content = await _read_csv_upload(file)
 
     handler = CSVHandler(db)
     result = await handler.import_companies(
@@ -138,11 +145,7 @@ async def import_leads(
     skip_errors: bool = True,
 ):
     """Import leads from CSV file."""
-    if not file.filename.endswith(".csv"):
-        raise_bad_request("File must be a CSV")
-
-    content = await file.read()
-    csv_content = content.decode("utf-8")
+    csv_content = await _read_csv_upload(file)
 
     handler = CSVHandler(db)
     result = await handler.import_leads(

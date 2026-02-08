@@ -7,7 +7,6 @@ from src.leads.models import Lead, LeadSource
 from src.leads.schemas import LeadCreate, LeadUpdate, LeadSourceCreate
 from src.leads.scoring import calculate_lead_score
 from src.core.base_service import CRUDService, TaggableServiceMixin
-from src.core.models import Tag
 from src.core.constants import ENTITY_TYPE_LEADS, DEFAULT_PAGE_SIZE
 
 
@@ -121,9 +120,6 @@ class LeadService(
         await self.clear_tags(lead.id)
         await super().delete(lead)
 
-    async def get_lead_tags(self, lead_id: int) -> List[Tag]:
-        """Get tags for a lead."""
-        return await self.get_tags(lead_id)
 
     # Lead Source methods
     async def get_source_by_id(self, source_id: int) -> Optional[LeadSource]:

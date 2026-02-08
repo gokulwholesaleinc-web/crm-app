@@ -6,7 +6,6 @@ from sqlalchemy.orm import selectinload
 from src.contacts.models import Contact
 from src.contacts.schemas import ContactCreate, ContactUpdate
 from src.core.base_service import CRUDService, TaggableServiceMixin
-from src.core.models import Tag
 from src.core.constants import ENTITY_TYPE_CONTACTS, DEFAULT_PAGE_SIZE
 
 
@@ -99,6 +98,3 @@ class ContactService(
         await self.clear_tags(contact.id)
         await super().delete(contact)
 
-    async def get_contact_tags(self, contact_id: int) -> List[Tag]:
-        """Get tags for a contact."""
-        return await self.get_tags(contact_id)

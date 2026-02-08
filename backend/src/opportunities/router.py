@@ -1,5 +1,6 @@
 """Opportunity API routes."""
 
+import logging
 from typing import Optional, List
 from fastapi import APIRouter, HTTPException, Query
 from src.core.constants import HTTPStatus, EntityNames
@@ -40,6 +41,8 @@ from src.ai.embedding_hooks import (
     build_opportunity_embedding_content,
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/opportunities", tags=["opportunities"])
 
 
@@ -47,7 +50,7 @@ async def _build_opportunity_response(
     service: OpportunityService, opportunity
 ) -> OpportunityResponse:
     """Build an OpportunityResponse with tags."""
-    tags = await service.get_opportunity_tags(opportunity.id)
+    tags = await service.get_tags(opportunity.id)
     response_dict = OpportunityResponse.model_validate(opportunity).model_dump()
     response_dict["tags"] = [TagBrief.model_validate(t) for t in tags]
     return OpportunityResponse(**response_dict)
@@ -240,8 +243,11 @@ async def create_opportunity(
     opportunity = await service.create(opp_data, current_user.id)
 
     # Generate embedding for semantic search
-    content = build_opportunity_embedding_content(opportunity)
-    await store_entity_embedding(db, "opportunity", opportunity.id, content)
+    try:
+        content = build_opportunity_embedding_content(opportunity)
+        await store_entity_embedding(db, "opportunity", opportunity.id, content)
+    except Exception as e:
+        logger.warning("Failed to store embedding: %s", e)
 
     return await _build_opportunity_response(service, opportunity)
 
@@ -276,8 +282,11 @@ async def update_opportunity(
     updated_opp = await service.update(opportunity, opp_data, current_user.id)
 
     # Update embedding for semantic search
-    content = build_opportunity_embedding_content(updated_opp)
-    await store_entity_embedding(db, "opportunity", updated_opp.id, content)
+    try:
+        content = build_opportunity_embedding_content(updated_opp)
+        await store_entity_embedding(db, "opportunity", updated_opp.id, content)
+    except Exception as e:
+        logger.warning("Failed to store embedding: %s", e)
 
     return await _build_opportunity_response(service, updated_opp)
 

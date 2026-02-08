@@ -6,7 +6,6 @@ from src.companies.models import Company
 from src.companies.schemas import CompanyCreate, CompanyUpdate
 from src.contacts.models import Contact
 from src.core.base_service import CRUDService, TaggableServiceMixin
-from src.core.models import Tag
 from src.core.constants import ENTITY_TYPE_COMPANIES, DEFAULT_PAGE_SIZE
 
 
@@ -92,9 +91,6 @@ class CompanyService(
         await self.clear_tags(company.id)
         await super().delete(company)
 
-    async def get_company_tags(self, company_id: int) -> List[Tag]:
-        """Get tags for a company."""
-        return await self.get_tags(company_id)
 
     async def get_contact_count(self, company_id: int) -> int:
         """Get count of contacts for a company."""

@@ -1,5 +1,6 @@
 """Contact API routes."""
 
+import logging
 from typing import Optional
 from fastapi import APIRouter, Query
 from src.core.constants import HTTPStatus, EntityNames
@@ -25,12 +26,14 @@ from src.ai.embedding_hooks import (
     build_contact_embedding_content,
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/contacts", tags=["contacts"])
 
 
 async def _build_contact_response(service: ContactService, contact) -> ContactResponse:
     """Build a ContactResponse with tags."""
-    tags = await service.get_contact_tags(contact.id)
+    tags = await service.get_tags(contact.id)
     response_dict = ContactResponse.model_validate(contact).model_dump()
     response_dict["tags"] = [TagBrief.model_validate(t) for t in tags]
     return ContactResponse(**response_dict)
@@ -85,9 +88,12 @@ async def create_contact(
     contact = await service.create(contact_data, current_user.id)
 
     # Generate embedding for semantic search
-    company_name = contact.company.name if contact.company else None
-    content = build_contact_embedding_content(contact, company_name)
-    await store_entity_embedding(db, "contact", contact.id, content)
+    try:
+        company_name = contact.company.name if contact.company else None
+        content = build_contact_embedding_content(contact, company_name)
+        await store_entity_embedding(db, "contact", contact.id, content)
+    except Exception as e:
+        logger.warning("Failed to store embedding: %s", e)
 
     return await _build_contact_response(service, contact)
 
@@ -118,9 +124,12 @@ async def update_contact(
     updated_contact = await service.update(contact, contact_data, current_user.id)
 
     # Update embedding for semantic search
-    company_name = updated_contact.company.name if updated_contact.company else None
-    content = build_contact_embedding_content(updated_contact, company_name)
-    await store_entity_embedding(db, "contact", updated_contact.id, content)
+    try:
+        company_name = updated_contact.company.name if updated_contact.company else None
+        content = build_contact_embedding_content(updated_contact, company_name)
+        await store_entity_embedding(db, "contact", updated_contact.id, content)
+    except Exception as e:
+        logger.warning("Failed to store embedding: %s", e)
 
     return await _build_contact_response(service, updated_contact)
 

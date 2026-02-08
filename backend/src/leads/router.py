@@ -1,5 +1,6 @@
 """Lead API routes."""
 
+import logging
 from typing import Optional, List
 from fastapi import APIRouter, Query
 from src.core.constants import HTTPStatus, EntityNames, ErrorMessages
@@ -38,12 +39,14 @@ from src.ai.embedding_hooks import (
     build_lead_embedding_content,
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/leads", tags=["leads"])
 
 
 async def _build_lead_response(service: LeadService, lead) -> LeadResponse:
     """Build a LeadResponse with tags."""
-    tags = await service.get_lead_tags(lead.id)
+    tags = await service.get_tags(lead.id)
     response_dict = LeadResponse.model_validate(lead).model_dump()
     response_dict["tags"] = [TagBrief.model_validate(t) for t in tags]
     return LeadResponse(**response_dict)
@@ -98,8 +101,11 @@ async def create_lead(
     lead = await service.create(lead_data, current_user.id)
 
     # Generate embedding for semantic search
-    content = build_lead_embedding_content(lead)
-    await store_entity_embedding(db, "lead", lead.id, content)
+    try:
+        content = build_lead_embedding_content(lead)
+        await store_entity_embedding(db, "lead", lead.id, content)
+    except Exception as e:
+        logger.warning("Failed to store embedding: %s", e)
 
     return await _build_lead_response(service, lead)
 
@@ -130,8 +136,11 @@ async def update_lead(
     updated_lead = await service.update(lead, lead_data, current_user.id)
 
     # Update embedding for semantic search
-    content = build_lead_embedding_content(updated_lead)
-    await store_entity_embedding(db, "lead", updated_lead.id, content)
+    try:
+        content = build_lead_embedding_content(updated_lead)
+        await store_entity_embedding(db, "lead", updated_lead.id, content)
+    except Exception as e:
+        logger.warning("Failed to store embedding: %s", e)
 
     return await _build_lead_response(service, updated_lead)
 
