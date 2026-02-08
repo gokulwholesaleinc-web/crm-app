@@ -114,8 +114,12 @@ async def list_activities(
     assigned_to_id: Optional[int] = None,
     is_completed: Optional[bool] = None,
     priority: Optional[str] = None,
+    filters: Optional[str] = None,
 ):
     """List activities with pagination and filters."""
+    import json as _json
+    parsed_filters = _json.loads(filters) if filters else None
+
     service = ActivityService(db)
 
     activities, total = await service.get_list(
@@ -128,6 +132,7 @@ async def list_activities(
         assigned_to_id=assigned_to_id,
         is_completed=is_completed,
         priority=priority,
+        filters=parsed_filters,
     )
 
     return ActivityListResponse(

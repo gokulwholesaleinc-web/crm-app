@@ -107,6 +107,8 @@ class EntityNames:
     TAG = "Tag"
     USER = "User"
     NOTE = "Note"
+    COMMENT = "Comment"
+    PIPELINE = "Pipeline"
     TENANT = "Tenant"
     TENANT_SETTINGS = "Tenant settings"
     TENANT_USER = "Tenant user"

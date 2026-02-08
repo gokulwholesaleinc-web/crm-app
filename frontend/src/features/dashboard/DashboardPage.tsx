@@ -1,10 +1,12 @@
 import { NumberCard } from './components/NumberCard';
 import { ChartCard } from './components/ChartCard';
 import { SalesFunnelChart } from './components/SalesFunnelChart';
-import { Spinner } from '../../components/ui/Spinner';
+import { SkeletonCard, SkeletonChart } from '../../components/ui/Skeleton';
+import { ErrorEmptyState } from '../../components/ui/EmptyState';
 import { DashboardRecommendations } from '../../components/ai/DashboardRecommendations';
 import { formatCurrency, formatDate } from '../../utils';
 import { useDashboard, usePipelineFunnelChart, useLeadsBySourceChart, useUserTimeline, useSalesFunnel } from '../../hooks';
+import { usePageTitle } from '../../hooks/usePageTitle';
 import type { NumberCardData, ChartDataPoint } from '../../types';
 
 // Helper to find number card by id
@@ -19,6 +21,8 @@ function findCardChange(cards: NumberCardData[], id: string): number {
 }
 
 function DashboardPage() {
+  usePageTitle('Dashboard');
+
   // Use hooks for data fetching
   const { data: dashboardData, isLoading: isLoadingDashboard, error: dashboardError } = useDashboard();
   const { data: pipelineData } = usePipelineFunnelChart();

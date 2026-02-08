@@ -1059,3 +1059,126 @@ export interface SalesFunnelResponse {
   conversions: FunnelConversion[];
   avg_days_in_stage: Record<string, number | null>;
 }
+
+// =============================================================================
+// Audit / Change History Types
+// =============================================================================
+
+export interface AuditChangeDetail {
+  field: string;
+  old_value: unknown;
+  new_value: unknown;
+}
+
+export interface AuditLogEntry {
+  id: number;
+  entity_type: string;
+  entity_id: number;
+  action: string;
+  changes: AuditChangeDetail[];
+  user_id: number;
+  user_name?: string;
+  user_email?: string;
+  created_at: string;
+}
+
+export interface AuditLogListResponse {
+  items: AuditLogEntry[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+}
+
+// =============================================================================
+// Comment / Team Collaboration Types
+// =============================================================================
+
+export interface CommentCreate {
+  content: string;
+  entity_type: string;
+  entity_id: number;
+  parent_id?: number | null;
+  is_internal?: boolean;
+}
+
+export interface CommentUpdate {
+  content: string;
+}
+
+export interface Comment {
+  id: number;
+  content: string;
+  entity_type: string;
+  entity_id: number;
+  parent_id: number | null;
+  is_internal: boolean;
+  user_id: number;
+  user_name?: string;
+  user_email?: string;
+  mentioned_users: string[];
+  replies: Comment[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CommentListResponse {
+  items: Comment[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+}
+
+export interface CommentFilters {
+  entity_type: string;
+  entity_id: number;
+  page?: number;
+  page_size?: number;
+}
+
+// =============================================================================
+// Pipeline (Multiple Pipelines) Types
+// =============================================================================
+
+export interface PipelineStageInPipeline {
+  id: number;
+  name: string;
+  order: number;
+  color: string | null;
+  probability: number;
+  is_won: boolean;
+  is_lost: boolean;
+}
+
+export interface Pipeline {
+  id: number;
+  name: string;
+  description: string | null;
+  is_default: boolean;
+  is_active: boolean;
+  stages: PipelineStageInPipeline[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PipelineCreate {
+  name: string;
+  description?: string;
+  is_default?: boolean;
+}
+
+export interface PipelineUpdate {
+  name?: string;
+  description?: string;
+  is_default?: boolean;
+  is_active?: boolean;
+}
+
+export interface PipelineListResponse {
+  items: Pipeline[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+}
