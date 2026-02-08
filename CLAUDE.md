@@ -1,19 +1,35 @@
 # CRM Application Development Guidelines
 
 ## App Startup
-- Use `docker-compose up` to start
-- Ensure Docker is running after computer restart
+
+To Start the app use docker compose
+
+When restarting the computer make sure docker is running
+
+Command to run the app: `docker-compose up`
 
 ## Development Rules
-1. **Feature Branches** - Create `<name_of_feature>/features` branch, merge before starting new feature
-2. **DRY Code** - Always search for existing methods before writing new ones
-3. **Testing** - All new endpoints/methods MUST have test cases (no mocking)
-4. **Git Push** - Push on feature completion, follow KISS principles
-5. **Commit Messages** - Keep detailed, NO unnecessary MD files
-6. **New Services** - Ask permission before adding Redis, Celery, etc.
 
-## Database
-- Credentials in environment variables (see .env.example for DATABASE_URL)
+Then to Make new features always ensure we make a feature branch
+
+This branch will be called `<name_of_feature>/features` and then merge it before starting new feature
+
+Ensure to keep the code DRY and always read and search for related methods before composing them for the app here.
+
+ALL NEW ENDPOINTS AND METHODS MUST HAVE ONE OR MORE TEST CASES TO VALIDATE FUNCTIONALITY AND MUST NOT MOCK ANYTHING.
+
+ALWAYS GIT PUSH On feature completion here and follow the KISS Coding principles to ensure no spaghetti code here.
+
+Keep Commit Messages Detailed and MUST NOT WRITE UNNECESSARY MD Files for Commits and new Features.
+
+Use Docker compose to manage new services here and always ask permission before considering to add or create new services like Redis, Celery, Etc.
+
+ALWAYS FOLLOW THE RULES HERE
+
+## Database Connection
+
+Database credentials are stored securely in environment variables.
+See .env.example for required variables: DATABASE_URL
 
 ## Tech Stack
 - **Backend**: FastAPI (Python 3.11+)

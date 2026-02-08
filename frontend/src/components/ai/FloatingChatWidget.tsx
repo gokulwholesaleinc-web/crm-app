@@ -42,6 +42,8 @@ export function FloatingChatWidget() {
 
   const pageContext = getPageContext(location.pathname);
 
+  const isAIAssistantPage = location.pathname === '/ai-assistant';
+
   const {
     messages,
     sendMessage,
@@ -52,17 +54,17 @@ export function FloatingChatWidget() {
     sessionId,
   } = useChat(pageContext);
 
-  // Don't show floating widget on the AI Assistant page (it has its own full chat)
-  if (location.pathname === '/ai-assistant') {
-    return null;
-  }
-
   // Scroll to bottom when messages change
   useEffect(() => {
     if (messagesEndRef.current && isOpen && !isMinimized) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages, isOpen, isMinimized]);
+
+  // Don't show floating widget on the AI Assistant page (it has its own full chat)
+  if (isAIAssistantPage) {
+    return null;
+  }
 
   const handleSend = async (content: string) => {
     try {
