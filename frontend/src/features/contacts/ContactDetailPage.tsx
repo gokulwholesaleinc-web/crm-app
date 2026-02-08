@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { NotesList } from '../../components/shared';
 import { ContactForm, ContactFormData } from './components/ContactForm';
-import { AIInsightsCard, NextBestActionCard } from '../../components/ai';
+import { NextBestActionCard } from '../../components/ai';
 import { useContact, useDeleteContact, useUpdateContact } from '../../hooks';
 import { useTimeline } from '../../hooks/useActivities';
 import { formatDate, formatPhoneNumber } from '../../utils/formatters';
@@ -167,7 +167,6 @@ function ContactDetailPage() {
 
       {/* AI Suggestions */}
       <NextBestActionCard entityType="contact" entityId={contact.id} />
-      <AIInsightsCard entityType="lead" entityId={contact.id} variant="inline" entityName={`${contact.first_name} ${contact.last_name}`} />
 
       {/* Tabs */}
       <div className="border-b border-gray-200 overflow-x-auto">
