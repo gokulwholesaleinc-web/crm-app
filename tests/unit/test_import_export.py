@@ -580,6 +580,223 @@ class TestImportExportRoundTrip:
         assert export_response.status_code == 200
 
 
+class TestBulkAssign:
+    """Tests for POST /api/import-export/bulk/assign."""
+
+    @pytest.mark.asyncio
+    async def test_bulk_assign_contacts(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_contact: Contact,
+    ):
+        """Test bulk assigning owner to contacts."""
+        response = await client.post(
+            "/api/import-export/bulk/assign",
+            headers=auth_headers,
+            json={
+                "entity_type": "contacts",
+                "entity_ids": [test_contact.id],
+                "owner_id": test_user.id,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["updated"] == 1
+        assert data["entity_type"] == "contacts"
+        assert data["owner_id"] == test_user.id
+
+    @pytest.mark.asyncio
+    async def test_bulk_assign_leads(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_lead: Lead,
+    ):
+        """Test bulk assigning owner to leads."""
+        response = await client.post(
+            "/api/import-export/bulk/assign",
+            headers=auth_headers,
+            json={
+                "entity_type": "leads",
+                "entity_ids": [test_lead.id],
+                "owner_id": test_user.id,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["updated"] == 1
+
+    @pytest.mark.asyncio
+    async def test_bulk_assign_invalid_entity_type(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """Test bulk assign with invalid entity type returns 400."""
+        response = await client.post(
+            "/api/import-export/bulk/assign",
+            headers=auth_headers,
+            json={
+                "entity_type": "invalid",
+                "entity_ids": [1],
+                "owner_id": test_user.id,
+            },
+        )
+
+        assert response.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_bulk_assign_empty_ids(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """Test bulk assign with empty entity_ids returns 400."""
+        response = await client.post(
+            "/api/import-export/bulk/assign",
+            headers=auth_headers,
+            json={
+                "entity_type": "contacts",
+                "entity_ids": [],
+                "owner_id": test_user.id,
+            },
+        )
+
+        assert response.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_bulk_assign_unauthorized(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        """Test bulk assign without auth returns 401."""
+        response = await client.post(
+            "/api/import-export/bulk/assign",
+            json={
+                "entity_type": "contacts",
+                "entity_ids": [1],
+                "owner_id": 1,
+            },
+        )
+        assert response.status_code == 401
+
+
+class TestBulkUpdate:
+    """Tests for POST /api/import-export/bulk/update."""
+
+    @pytest.mark.asyncio
+    async def test_bulk_update_lead_status(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_lead: Lead,
+    ):
+        """Test bulk updating lead status."""
+        response = await client.post(
+            "/api/import-export/bulk/update",
+            headers=auth_headers,
+            json={
+                "entity_type": "leads",
+                "entity_ids": [test_lead.id],
+                "updates": {"status": "contacted"},
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["updated"] == 1
+        assert data["updates_applied"]["status"] == "contacted"
+
+    @pytest.mark.asyncio
+    async def test_bulk_update_invalid_entity_type(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+    ):
+        """Test bulk update with invalid entity type returns 400."""
+        response = await client.post(
+            "/api/import-export/bulk/update",
+            headers=auth_headers,
+            json={
+                "entity_type": "invalid",
+                "entity_ids": [1],
+                "updates": {"status": "active"},
+            },
+        )
+
+        assert response.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_bulk_update_no_valid_fields(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+    ):
+        """Test bulk update with only disallowed fields returns 400."""
+        response = await client.post(
+            "/api/import-export/bulk/update",
+            headers=auth_headers,
+            json={
+                "entity_type": "leads",
+                "entity_ids": [1],
+                "updates": {"email": "hacked@test.com"},
+            },
+        )
+
+        assert response.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_bulk_update_empty_ids(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+    ):
+        """Test bulk update with empty entity_ids returns 400."""
+        response = await client.post(
+            "/api/import-export/bulk/update",
+            headers=auth_headers,
+            json={
+                "entity_type": "leads",
+                "entity_ids": [],
+                "updates": {"status": "contacted"},
+            },
+        )
+
+        assert response.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_bulk_update_unauthorized(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        """Test bulk update without auth returns 401."""
+        response = await client.post(
+            "/api/import-export/bulk/update",
+            json={
+                "entity_type": "leads",
+                "entity_ids": [1],
+                "updates": {"status": "contacted"},
+            },
+        )
+        assert response.status_code == 401
+
+
 class TestImportExportUnauthorized:
     """Tests for unauthorized access to import/export endpoints."""
 
