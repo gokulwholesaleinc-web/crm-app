@@ -1269,3 +1269,108 @@ class TestTenantEdgeCases:
             assert response.status_code == 201
             data = response.json()
             assert data["role"] == role
+
+
+class TestDomainConfigLookup:
+    """Tests for domain-based tenant configuration lookup."""
+
+    @pytest.mark.asyncio
+    async def test_domain_config_returns_full_settings(
+        self, client: AsyncClient, db_session: AsyncSession, test_tenant: Tenant
+    ):
+        """Test domain config lookup returns all expected public config fields."""
+        response = await client.get(
+            f"/api/tenants/config/domain/{test_tenant.domain}"
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["tenant_slug"] == test_tenant.slug
+        assert data["company_name"] == "Test Tenant Inc"
+        assert data["logo_url"] == "https://example.com/logo.png"
+        assert data["favicon_url"] == "https://example.com/favicon.ico"
+        assert data["primary_color"] == "#6366f1"
+        assert data["secondary_color"] == "#8b5cf6"
+        assert data["accent_color"] == "#22c55e"
+        assert data["footer_text"] == "Test Tenant Footer"
+        assert data["privacy_policy_url"] == "https://example.com/privacy"
+        assert data["terms_of_service_url"] == "https://example.com/terms"
+        assert data["default_language"] == "en"
+        assert data["date_format"] == "MM/DD/YYYY"
+
+
+class TestTenantUserAddRemoveLifecycle:
+    """Tests for tenant user add and remove lifecycle."""
+
+    @pytest.mark.asyncio
+    async def test_add_then_remove_user_lifecycle(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_tenant: Tenant,
+        test_user: User,
+    ):
+        """Test adding a user to a tenant then removing them verifies full lifecycle."""
+        # Add user to tenant
+        add_response = await client.post(
+            f"/api/tenants/{test_tenant.id}/users",
+            headers=auth_headers,
+            json={
+                "tenant_id": test_tenant.id,
+                "user_id": test_user.id,
+                "role": "admin",
+                "is_primary": True,
+            },
+        )
+
+        assert add_response.status_code == 201
+        added_user = add_response.json()
+        assert added_user["tenant_id"] == test_tenant.id
+        assert added_user["user_id"] == test_user.id
+        assert added_user["role"] == "admin"
+        assert added_user["is_primary"] is True
+
+        # Verify user appears in tenant users list
+        list_response = await client.get(
+            f"/api/tenants/{test_tenant.id}/users",
+            headers=auth_headers,
+        )
+
+        assert list_response.status_code == 200
+        users = list_response.json()
+        assert any(u["user_id"] == test_user.id for u in users)
+
+        # Remove user from tenant
+        remove_response = await client.delete(
+            f"/api/tenants/{test_tenant.id}/users/{test_user.id}",
+            headers=auth_headers,
+        )
+
+        assert remove_response.status_code == 204
+
+        # Verify user no longer in tenant users list
+        list_after = await client.get(
+            f"/api/tenants/{test_tenant.id}/users",
+            headers=auth_headers,
+        )
+
+        assert list_after.status_code == 200
+        users_after = list_after.json()
+        assert not any(u["user_id"] == test_user.id for u in users_after)
+
+    @pytest.mark.asyncio
+    async def test_remove_nonexistent_user_from_tenant(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_tenant: Tenant,
+    ):
+        """Test removing a user that is not in the tenant returns 404."""
+        response = await client.delete(
+            f"/api/tenants/{test_tenant.id}/users/99999",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 404

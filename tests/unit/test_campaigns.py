@@ -1,7 +1,8 @@
 """
 Unit tests for campaigns CRUD endpoints.
 
-Tests for list, create, get, update, delete, and campaign member operations.
+Tests for list, create, get, update, delete, campaign member operations,
+email templates, campaign steps, stats, and execute.
 """
 
 import pytest
@@ -11,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from src.auth.models import User
-from src.campaigns.models import Campaign, CampaignMember
+from src.campaigns.models import Campaign, CampaignMember, EmailTemplate, EmailCampaignStep
 from src.contacts.models import Contact
 from src.leads.models import Lead
 
@@ -714,4 +715,459 @@ class TestCampaignsUnauthorized:
     ):
         """Test deleting campaign without auth fails."""
         response = await client.delete(f"/api/campaigns/{test_campaign.id}")
+        assert response.status_code == 401
+
+
+class TestEmailTemplates:
+    """Tests for email template CRUD lifecycle."""
+
+    @pytest.mark.asyncio
+    async def test_email_template_full_lifecycle(
+        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+    ):
+        """Test email template create -> list -> get -> update -> delete lifecycle."""
+        # CREATE
+        create_response = await client.post(
+            "/api/campaigns/templates",
+            headers=auth_headers,
+            json={
+                "name": "Welcome Email",
+                "subject_template": "Welcome to {{company}}",
+                "body_template": "<h1>Hello {{name}}</h1><p>Welcome aboard!</p>",
+                "category": "onboarding",
+            },
+        )
+
+        assert create_response.status_code == 201
+        template = create_response.json()
+        assert template["name"] == "Welcome Email"
+        assert template["subject_template"] == "Welcome to {{company}}"
+        assert template["body_template"] == "<h1>Hello {{name}}</h1><p>Welcome aboard!</p>"
+        assert template["category"] == "onboarding"
+        assert "id" in template
+        template_id = template["id"]
+
+        # LIST
+        list_response = await client.get(
+            "/api/campaigns/templates",
+            headers=auth_headers,
+        )
+
+        assert list_response.status_code == 200
+        templates = list_response.json()
+        assert any(t["id"] == template_id for t in templates)
+
+        # GET
+        get_response = await client.get(
+            f"/api/campaigns/templates/{template_id}",
+            headers=auth_headers,
+        )
+
+        assert get_response.status_code == 200
+        data = get_response.json()
+        assert data["id"] == template_id
+        assert data["name"] == "Welcome Email"
+
+        # UPDATE
+        update_response = await client.put(
+            f"/api/campaigns/templates/{template_id}",
+            headers=auth_headers,
+            json={
+                "name": "Updated Welcome Email",
+                "subject_template": "Welcome to {{company}} - Updated",
+            },
+        )
+
+        assert update_response.status_code == 200
+        updated = update_response.json()
+        assert updated["name"] == "Updated Welcome Email"
+        assert updated["subject_template"] == "Welcome to {{company}} - Updated"
+
+        # DELETE
+        delete_response = await client.delete(
+            f"/api/campaigns/templates/{template_id}",
+            headers=auth_headers,
+        )
+
+        assert delete_response.status_code == 204
+
+        # Verify deletion
+        get_deleted = await client.get(
+            f"/api/campaigns/templates/{template_id}",
+            headers=auth_headers,
+        )
+        assert get_deleted.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_create_template_minimal(
+        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+    ):
+        """Test creating email template with minimal required fields."""
+        response = await client.post(
+            "/api/campaigns/templates",
+            headers=auth_headers,
+            json={
+                "name": "Simple Template",
+                "subject_template": "Hello",
+                "body_template": "Body content",
+            },
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["name"] == "Simple Template"
+        assert data["category"] is None
+
+    @pytest.mark.asyncio
+    async def test_create_template_missing_name(
+        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+    ):
+        """Test creating email template without name fails."""
+        response = await client.post(
+            "/api/campaigns/templates",
+            headers=auth_headers,
+            json={
+                "subject_template": "Hello",
+                "body_template": "Body content",
+            },
+        )
+
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_get_template_not_found(
+        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+    ):
+        """Test getting non-existent email template."""
+        response = await client.get(
+            "/api/campaigns/templates/99999",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_update_template_not_found(
+        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+    ):
+        """Test updating non-existent email template."""
+        response = await client.put(
+            "/api/campaigns/templates/99999",
+            headers=auth_headers,
+            json={"name": "Updated"},
+        )
+
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_delete_template_not_found(
+        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+    ):
+        """Test deleting non-existent email template."""
+        response = await client.delete(
+            "/api/campaigns/templates/99999",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_templates_unauthorized(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        """Test accessing templates without auth fails."""
+        response = await client.get("/api/campaigns/templates")
+        assert response.status_code == 401
+
+        response = await client.post(
+            "/api/campaigns/templates",
+            json={
+                "name": "Test",
+                "subject_template": "Test",
+                "body_template": "Test",
+            },
+        )
+        assert response.status_code == 401
+
+
+class TestCampaignSteps:
+    """Tests for email campaign steps CRUD lifecycle."""
+
+    @pytest.mark.asyncio
+    async def test_campaign_steps_full_lifecycle(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_campaign: Campaign,
+    ):
+        """Test campaign steps create -> list -> update -> delete lifecycle."""
+        # First create a template for the step
+        template_response = await client.post(
+            "/api/campaigns/templates",
+            headers=auth_headers,
+            json={
+                "name": "Step Template",
+                "subject_template": "Follow up {{day}}",
+                "body_template": "<p>Following up on our conversation.</p>",
+            },
+        )
+        assert template_response.status_code == 201
+        template_id = template_response.json()["id"]
+
+        # CREATE step
+        create_response = await client.post(
+            f"/api/campaigns/{test_campaign.id}/steps",
+            headers=auth_headers,
+            json={
+                "template_id": template_id,
+                "delay_days": 0,
+                "step_order": 1,
+            },
+        )
+
+        assert create_response.status_code == 201
+        step = create_response.json()
+        assert step["campaign_id"] == test_campaign.id
+        assert step["template_id"] == template_id
+        assert step["delay_days"] == 0
+        assert step["step_order"] == 1
+        step_id = step["id"]
+
+        # LIST steps
+        list_response = await client.get(
+            f"/api/campaigns/{test_campaign.id}/steps",
+            headers=auth_headers,
+        )
+
+        assert list_response.status_code == 200
+        steps = list_response.json()
+        assert len(steps) >= 1
+        assert any(s["id"] == step_id for s in steps)
+
+        # UPDATE step
+        update_response = await client.put(
+            f"/api/campaigns/{test_campaign.id}/steps/{step_id}",
+            headers=auth_headers,
+            json={
+                "delay_days": 3,
+                "step_order": 2,
+            },
+        )
+
+        assert update_response.status_code == 200
+        updated = update_response.json()
+        assert updated["delay_days"] == 3
+        assert updated["step_order"] == 2
+
+        # DELETE step
+        delete_response = await client.delete(
+            f"/api/campaigns/{test_campaign.id}/steps/{step_id}",
+            headers=auth_headers,
+        )
+
+        assert delete_response.status_code == 204
+
+        # Verify deletion - list should be empty
+        list_after = await client.get(
+            f"/api/campaigns/{test_campaign.id}/steps",
+            headers=auth_headers,
+        )
+        assert list_after.status_code == 200
+        assert not any(s["id"] == step_id for s in list_after.json())
+
+    @pytest.mark.asyncio
+    async def test_create_step_campaign_not_found(
+        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+    ):
+        """Test creating step for non-existent campaign."""
+        response = await client.post(
+            "/api/campaigns/99999/steps",
+            headers=auth_headers,
+            json={
+                "template_id": 1,
+                "delay_days": 0,
+                "step_order": 1,
+            },
+        )
+
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_list_steps_campaign_not_found(
+        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+    ):
+        """Test listing steps for non-existent campaign."""
+        response = await client.get(
+            "/api/campaigns/99999/steps",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_update_step_not_found(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_campaign: Campaign,
+    ):
+        """Test updating non-existent campaign step."""
+        response = await client.put(
+            f"/api/campaigns/{test_campaign.id}/steps/99999",
+            headers=auth_headers,
+            json={"delay_days": 5},
+        )
+
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_delete_step_not_found(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_campaign: Campaign,
+    ):
+        """Test deleting non-existent campaign step."""
+        response = await client.delete(
+            f"/api/campaigns/{test_campaign.id}/steps/99999",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_multiple_steps_ordering(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_campaign: Campaign,
+    ):
+        """Test creating multiple steps with different orders."""
+        # Create template
+        template_response = await client.post(
+            "/api/campaigns/templates",
+            headers=auth_headers,
+            json={
+                "name": "Multi Step Template",
+                "subject_template": "Step {{n}}",
+                "body_template": "Step body",
+            },
+        )
+        template_id = template_response.json()["id"]
+
+        # Create 3 steps with different orders and delays
+        for order, delay in [(1, 0), (2, 3), (3, 7)]:
+            response = await client.post(
+                f"/api/campaigns/{test_campaign.id}/steps",
+                headers=auth_headers,
+                json={
+                    "template_id": template_id,
+                    "delay_days": delay,
+                    "step_order": order,
+                },
+            )
+            assert response.status_code == 201
+
+        # List and verify all steps are present
+        list_response = await client.get(
+            f"/api/campaigns/{test_campaign.id}/steps",
+            headers=auth_headers,
+        )
+        assert list_response.status_code == 200
+        steps = list_response.json()
+        assert len(steps) == 3
+
+
+class TestCampaignStatsWithMembers:
+    """Tests for campaign stats with actual member data."""
+
+    @pytest.mark.asyncio
+    async def test_campaign_stats_with_members(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_campaign: Campaign,
+        test_contact: Contact,
+        test_lead: Lead,
+    ):
+        """Test campaign stats reflect actual member statuses."""
+        # Add members with different statuses
+        member1 = CampaignMember(
+            campaign_id=test_campaign.id,
+            member_type="contact",
+            member_id=test_contact.id,
+            status="sent",
+        )
+        member2 = CampaignMember(
+            campaign_id=test_campaign.id,
+            member_type="lead",
+            member_id=test_lead.id,
+            status="pending",
+        )
+        db_session.add_all([member1, member2])
+        await db_session.commit()
+
+        response = await client.get(
+            f"/api/campaigns/{test_campaign.id}/stats",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total_members"] == 2
+        assert data["pending"] == 1
+        assert data["sent"] == 1
+
+
+class TestCampaignExecute:
+    """Tests for campaign execute endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_execute_campaign_success(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_campaign: Campaign,
+    ):
+        """Test executing a campaign sets status to in_progress."""
+        response = await client.post(
+            f"/api/campaigns/{test_campaign.id}/execute",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "in_progress"
+        assert "message" in data
+
+    @pytest.mark.asyncio
+    async def test_execute_campaign_not_found(
+        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+    ):
+        """Test executing non-existent campaign."""
+        response = await client.post(
+            "/api/campaigns/99999/execute",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_execute_campaign_unauthorized(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_campaign: Campaign,
+    ):
+        """Test executing campaign without auth fails."""
+        response = await client.post(
+            f"/api/campaigns/{test_campaign.id}/execute",
+        )
+
         assert response.status_code == 401
