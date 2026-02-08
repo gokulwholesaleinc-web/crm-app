@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { NotesList } from '../../components/shared';
+import { EmailComposeModal, EmailHistory } from '../../components/email';
 import { ConvertLeadModal } from './components/ConvertLeadModal';
 import { LeadForm, LeadFormData } from './components/LeadForm';
 import { AIInsightsCard, NextBestActionCard } from '../../components/ai';
@@ -12,7 +13,7 @@ import { useTimeline } from '../../hooks/useActivities';
 import type { LeadUpdate } from '../../types';
 import clsx from 'clsx';
 
-type TabType = 'details' | 'activities' | 'notes';
+type TabType = 'details' | 'activities' | 'notes' | 'emails';
 
 function LeadDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -22,6 +23,7 @@ function LeadDetailPage() {
   const [showConvertModal, setShowConvertModal] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showEmailCompose, setShowEmailCompose] = useState(false);
 
   // Use hooks for data fetching
   const { data: lead, isLoading, error } = useLead(leadId);
@@ -162,6 +164,7 @@ function LeadDetailPage() {
     { id: 'details', name: 'Details' },
     { id: 'activities', name: 'Activities' },
     { id: 'notes', name: 'Notes' },
+    { id: 'emails', name: 'Emails' },
   ];
 
   return (
@@ -196,6 +199,13 @@ function LeadDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2 sm:gap-3">
+          <Button
+            variant="primary"
+            onClick={() => setShowEmailCompose(true)}
+            className="flex-1 sm:flex-none"
+          >
+            Send Email
+          </Button>
           <AIInsightsCard
             entityType="lead"
             entityId={lead.id}
@@ -459,6 +469,23 @@ function LeadDetailPage() {
       {activeTab === 'notes' && leadId && (
         <NotesList entityType="lead" entityId={leadId} />
       )}
+
+      {activeTab === 'emails' && leadId && (
+        <div className="bg-white shadow rounded-lg">
+          <div className="px-4 py-5 sm:p-6">
+            <EmailHistory entityType="leads" entityId={leadId} />
+          </div>
+        </div>
+      )}
+
+      {/* Email Compose Modal */}
+      <EmailComposeModal
+        isOpen={showEmailCompose}
+        onClose={() => setShowEmailCompose(false)}
+        defaultTo={lead.email || ''}
+        entityType="leads"
+        entityId={leadId}
+      />
 
       {/* Convert Lead Modal */}
       <ConvertLeadModal

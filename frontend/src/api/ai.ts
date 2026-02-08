@@ -176,6 +176,67 @@ export const updatePreferences = async (
   return response.data;
 };
 
+// =============================================================================
+// Predictive AI
+// =============================================================================
+
+export interface WinProbabilityResponse {
+  opportunity_id: number;
+  win_probability: number;
+  base_stage_probability: number;
+  factors: Record<string, number | boolean>;
+}
+
+export interface ActivitySummaryResponse {
+  entity_type: string;
+  entity_id: number;
+  period_days: number;
+  total_activities: number;
+  by_type: Record<string, number>;
+  last_activity: { id: number; type: string; subject: string; date: string } | null;
+  summary: string;
+}
+
+/**
+ * Predict win probability for an opportunity
+ */
+export const predictWinProbability = async (
+  opportunityId: number
+): Promise<WinProbabilityResponse> => {
+  const response = await apiClient.get<WinProbabilityResponse>(
+    `${AI_BASE}/predict/opportunity/${opportunityId}`
+  );
+  return response.data;
+};
+
+/**
+ * Suggest next best action for an entity
+ */
+export const suggestNextAction = async (
+  entityType: string,
+  entityId: number
+): Promise<NextBestAction> => {
+  const response = await apiClient.get<NextBestAction>(
+    `${AI_BASE}/suggest/next-action/${entityType}/${entityId}`
+  );
+  return response.data;
+};
+
+/**
+ * Get activity summary for an entity
+ */
+export const getActivitySummary = async (
+  entityType: string,
+  entityId: number,
+  days = 30
+): Promise<ActivitySummaryResponse> => {
+  const response = await apiClient.get<ActivitySummaryResponse>(
+    `${AI_BASE}/summary/${entityType}/${entityId}`,
+    { params: { days } }
+  );
+  return response.data;
+};
+
 // Export all AI functions
 export const aiApi = {
   chat,
@@ -196,6 +257,10 @@ export const aiApi = {
   // Preferences
   getPreferences,
   updatePreferences,
+  // Predictive AI
+  predictWinProbability,
+  suggestNextAction,
+  getActivitySummary,
 };
 
 export default aiApi;

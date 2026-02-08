@@ -153,6 +153,31 @@ export const bulkAssign = async (data: BulkAssignRequest): Promise<BulkOperation
   return response.data;
 };
 
+// =============================================================================
+// Bulk Delete
+// =============================================================================
+
+export interface BulkDeleteRequest {
+  entity_type: string;
+  entity_ids: number[];
+}
+
+export interface BulkDeleteResult {
+  success: boolean;
+  entity_type: string;
+  success_count: number;
+  error_count: number;
+  errors: string[];
+}
+
+export const bulkDelete = async (data: BulkDeleteRequest): Promise<BulkDeleteResult> => {
+  const response = await apiClient.post<BulkDeleteResult>(
+    `${IMPORT_EXPORT_BASE}/bulk/delete`,
+    data
+  );
+  return response.data;
+};
+
 // Export all import/export functions
 export const importExportApi = {
   exportContacts,
@@ -166,6 +191,7 @@ export const importExportApi = {
   generateExportFilename,
   bulkUpdate,
   bulkAssign,
+  bulkDelete,
 };
 
 export default importExportApi;

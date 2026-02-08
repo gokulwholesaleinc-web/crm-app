@@ -174,6 +174,53 @@ export const getOverdueActivities = async (limit = 20): Promise<TimelineResponse
   return response.data;
 };
 
+// =============================================================================
+// Calendar
+// =============================================================================
+
+export interface CalendarActivity {
+  id: number;
+  activity_type: string;
+  subject: string;
+  description: string | null;
+  scheduled_at: string | null;
+  due_date: string | null;
+  is_completed: boolean;
+  priority: string;
+  entity_type: string;
+  entity_id: number;
+}
+
+export interface CalendarResponse {
+  start_date: string;
+  end_date: string;
+  dates: Record<string, CalendarActivity[]>;
+  total_activities: number;
+}
+
+/**
+ * Get activities for calendar view
+ */
+export const getCalendarActivities = async (
+  startDate: string,
+  endDate: string,
+  activityType?: string,
+  ownerId?: number
+): Promise<CalendarResponse> => {
+  const response = await apiClient.get<CalendarResponse>(
+    `${ACTIVITIES_BASE}/calendar`,
+    {
+      params: {
+        start_date: startDate,
+        end_date: endDate,
+        ...(activityType && { activity_type: activityType }),
+        ...(ownerId && { owner_id: ownerId }),
+      },
+    }
+  );
+  return response.data;
+};
+
 // Export all activity functions
 export const activitiesApi = {
   // CRUD
@@ -190,6 +237,8 @@ export const activitiesApi = {
   getUserTimeline,
   getUpcoming: getUpcomingActivities,
   getOverdue: getOverdueActivities,
+  // Calendar
+  getCalendarActivities,
 };
 
 export default activitiesApi;

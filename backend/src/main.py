@@ -199,7 +199,7 @@ async def health_check():
 # Serve frontend in production (after API routes so they take precedence)
 if FRONTEND_DIST.exists():
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
-    
+
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
         """Serve SPA for all non-API routes."""

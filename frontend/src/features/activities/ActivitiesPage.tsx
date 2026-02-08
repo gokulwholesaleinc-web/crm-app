@@ -20,6 +20,7 @@ import { Button, Select, Spinner, Modal, ConfirmDialog } from '../../components/
 import { ActivityCard } from './components/ActivityCard';
 import { ActivityTimeline } from './components/ActivityTimeline';
 import { ActivityForm } from './components/ActivityForm';
+import CalendarView from './components/CalendarView';
 import {
   useActivities,
   useUserTimeline,
@@ -30,7 +31,7 @@ import {
 } from '../../hooks/useActivities';
 import type { Activity, ActivityCreate, ActivityUpdate, ActivityFilters } from '../../types';
 
-type ViewMode = 'list' | 'timeline';
+type ViewMode = 'list' | 'timeline' | 'calendar';
 
 const activityTypeFilters = [
   { value: '', label: 'All Types', icon: null },
@@ -159,7 +160,7 @@ export function ActivitiesPage() {
     setEditingActivity(null);
   };
 
-  const isLoading = viewMode === 'list' ? isLoadingList : isLoadingTimeline;
+  const isLoading = viewMode === 'list' ? isLoadingList : viewMode === 'timeline' ? isLoadingTimeline : false;
   const activities = activitiesData?.items || [];
   const timelineItems = timelineData?.items || [];
 
@@ -237,6 +238,18 @@ export function ActivitiesPage() {
               title="Timeline view"
             >
               <ClockIcon className="h-5 w-5" />
+            </button>
+            <button
+              onClick={() => setViewMode('calendar')}
+              className={clsx(
+                'p-2 sm:p-2 rounded-lg transition-colors',
+                viewMode === 'calendar'
+                  ? 'bg-primary-100 text-primary-600'
+                  : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
+              )}
+              title="Calendar view"
+            >
+              <CalendarIcon className="h-5 w-5" />
             </button>
           </div>
           <Button
@@ -349,12 +362,14 @@ export function ActivitiesPage() {
             </div>
           )}
         </div>
-      ) : (
+      ) : viewMode === 'timeline' ? (
         <ActivityTimeline
           items={timelineItems}
           onComplete={handleComplete}
           emptyMessage="Create your first activity to see it here"
         />
+      ) : (
+        <CalendarView />
       )}
 
       {/* Form Modal - fullscreen on mobile */}

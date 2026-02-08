@@ -41,6 +41,11 @@ class BulkAssignRequest(BaseModel):
     owner_id: int
 
 
+class BulkDeleteRequest(BaseModel):
+    entity_type: str
+    entity_ids: List[int]
+
+
 # Export endpoints
 @router.get("/export/contacts")
 async def export_contacts(
@@ -214,6 +219,23 @@ async def bulk_assign(
         entity_type=request.entity_type,
         entity_ids=request.entity_ids,
         owner_id=request.owner_id,
+    )
+    if not result["success"]:
+        raise_bad_request(result["error"])
+    return result
+
+
+@router.post("/bulk/delete")
+async def bulk_delete(
+    request: BulkDeleteRequest,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Mass delete entities of a given type."""
+    handler = BulkOperationsHandler(db)
+    result = await handler.bulk_delete(
+        entity_type=request.entity_type,
+        entity_ids=request.entity_ids,
     )
     if not result["success"]:
         raise_bad_request(result["error"])

@@ -404,3 +404,163 @@ async def update_preferences(
     await db.refresh(prefs)
 
     return UserPreferencesResponse.model_validate(prefs)
+
+
+# =========================================================================
+# Predictive AI endpoints
+# =========================================================================
+
+
+@router.get("/predict/opportunity/{opportunity_id}")
+async def predict_win_probability(
+    opportunity_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Predict win probability for an opportunity using heuristic scoring."""
+    from src.opportunities.models import Opportunity, PipelineStage
+    from src.activities.models import Activity
+    from datetime import datetime, timedelta, timezone
+
+    result = await db.execute(
+        select(Opportunity).where(Opportunity.id == opportunity_id)
+    )
+    opp = result.scalar_one_or_none()
+    if not opp:
+        raise_not_found("Opportunity", opportunity_id)
+
+    stage = opp.pipeline_stage
+
+    # Won/Lost overrides
+    if stage.is_won:
+        return {
+            "opportunity_id": opp.id,
+            "win_probability": 100,
+            "base_stage_probability": stage.probability,
+            "factors": {"stage_won": True},
+        }
+    if stage.is_lost:
+        return {
+            "opportunity_id": opp.id,
+            "win_probability": 0,
+            "base_stage_probability": stage.probability,
+            "factors": {"stage_lost": True},
+        }
+
+    # Base probability from stage
+    base_prob = stage.probability
+    factors = {}
+
+    # Factor: has contact (+5)
+    if opp.contact_id:
+        factors["has_contact"] = 5
+    # Factor: has company (+3)
+    if opp.company_id:
+        factors["has_company"] = 3
+    # Factor: closing soon (+5)
+    if opp.expected_close_date:
+        days_until = (opp.expected_close_date - datetime.now(timezone.utc).date()).days
+        if 0 < days_until <= 30:
+            factors["closing_soon"] = 5
+        elif days_until < 0:
+            factors["overdue"] = -10
+
+    # Factor: recent activity count
+    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
+    activity_result = await db.execute(
+        select(func.count(Activity.id)).where(
+            Activity.entity_type == "opportunities",
+            Activity.entity_id == opp.id,
+            Activity.created_at >= thirty_days_ago,
+        )
+    )
+    activity_count = activity_result.scalar() or 0
+    if activity_count >= 3:
+        factors["high_activity_bonus"] = 5
+
+    # Calculate final probability
+    adjustments = sum(factors.values())
+    final_prob = max(0, min(100, base_prob + adjustments))
+
+    return {
+        "opportunity_id": opp.id,
+        "win_probability": final_prob,
+        "base_stage_probability": base_prob,
+        "factors": factors,
+    }
+
+
+@router.get("/suggest/next-action/{entity_type}/{entity_id}")
+async def suggest_next_action(
+    entity_type: str,
+    entity_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Suggest the next best action for an entity."""
+    engine = RecommendationEngine(db)
+    result = await engine.get_next_best_action(entity_type, entity_id)
+
+    if "error" in result:
+        raise_not_found(result["error"])
+
+    return result
+
+
+@router.get("/summary/{entity_type}/{entity_id}")
+async def get_activity_summary(
+    entity_type: str,
+    entity_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+    days: int = Query(30, ge=1, le=365),
+):
+    """Get activity summary for an entity over a time period."""
+    from src.activities.models import Activity
+    from datetime import datetime, timedelta, timezone
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    result = await db.execute(
+        select(Activity).where(
+            Activity.entity_type == entity_type,
+            Activity.entity_id == entity_id,
+            Activity.created_at >= cutoff,
+        ).order_by(Activity.created_at.desc())
+    )
+    activities = result.scalars().all()
+
+    # Count by type
+    by_type: dict = {}
+    for act in activities:
+        by_type[act.activity_type] = by_type.get(act.activity_type, 0) + 1
+
+    total = len(activities)
+
+    # Last activity info
+    last_activity = None
+    if activities:
+        last = activities[0]
+        last_activity = {
+            "id": last.id,
+            "type": last.activity_type,
+            "subject": last.subject,
+            "date": last.created_at.isoformat() if last.created_at else None,
+        }
+
+    # Generate summary text
+    if total == 0:
+        summary = f"No activities recorded in the last {days} days."
+    else:
+        type_parts = [f"{count} {atype}(s)" for atype, count in by_type.items()]
+        summary = f"{total} activities in the last {days} days: {', '.join(type_parts)}."
+
+    return {
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "period_days": days,
+        "total_activities": total,
+        "by_type": by_type,
+        "last_activity": last_activity,
+        "summary": summary,
+    }

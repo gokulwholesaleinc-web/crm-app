@@ -1,8 +1,10 @@
 """Activity API routes."""
 
-from typing import Optional, List
-from fastapi import APIRouter, Query
+from typing import Annotated, Optional, List
+from fastapi import APIRouter, Depends, Query
+from src.auth.models import User
 from src.core.constants import HTTPStatus, EntityNames
+from src.core.permissions import require_permission
 from src.core.router_utils import (
     DBSession,
     CurrentUser,
@@ -26,6 +28,75 @@ from src.activities.timeline import ActivityTimeline
 router = APIRouter(prefix="/api/activities", tags=["activities"])
 
 
+@router.get("/calendar")
+async def get_calendar_activities(
+    current_user: CurrentUser,
+    db: DBSession,
+    start_date: str = Query(...),
+    end_date: str = Query(...),
+    activity_type: Optional[str] = None,
+    owner_id: Optional[int] = None,
+):
+    """Get activities grouped by date for calendar view."""
+    from datetime import date as date_type
+    from sqlalchemy import select, or_
+    from sqlalchemy import func as sa_func
+    from src.activities.models import Activity as ActivityModel
+
+    start = date_type.fromisoformat(start_date)
+    end = date_type.fromisoformat(end_date)
+
+    # Query activities within date range (by scheduled_at or due_date)
+    query = select(ActivityModel).where(
+        or_(
+            sa_func.date(ActivityModel.scheduled_at).between(start, end),
+            ActivityModel.due_date.between(start, end),
+        )
+    )
+
+    if activity_type:
+        query = query.where(ActivityModel.activity_type == activity_type)
+    if owner_id:
+        query = query.where(ActivityModel.owner_id == owner_id)
+
+    result = await db.execute(query)
+    activities = result.scalars().all()
+
+    # Group by date
+    dates: dict = {}
+    for act in activities:
+        if act.scheduled_at:
+            act_date = act.scheduled_at.date().isoformat()
+        elif act.due_date:
+            act_date = act.due_date.isoformat()
+        else:
+            continue
+
+        if act_date not in dates:
+            dates[act_date] = []
+        dates[act_date].append({
+            "id": act.id,
+            "activity_type": act.activity_type,
+            "subject": act.subject,
+            "description": act.description,
+            "scheduled_at": act.scheduled_at.isoformat() if act.scheduled_at else None,
+            "due_date": act.due_date.isoformat() if act.due_date else None,
+            "is_completed": act.is_completed,
+            "priority": act.priority,
+            "entity_type": act.entity_type,
+            "entity_id": act.entity_id,
+        })
+
+    total = sum(len(v) for v in dates.values())
+
+    return {
+        "start_date": start_date,
+        "end_date": end_date,
+        "dates": dates,
+        "total_activities": total,
+    }
+
+
 @router.get("", response_model=ActivityListResponse)
 async def list_activities(
     current_user: CurrentUser,
@@ -39,8 +110,12 @@ async def list_activities(
     assigned_to_id: Optional[int] = None,
     is_completed: Optional[bool] = None,
     priority: Optional[str] = None,
+    filters: Optional[str] = None,
 ):
     """List activities with pagination and filters."""
+    import json as _json
+    parsed_filters = _json.loads(filters) if filters else None
+
     service = ActivityService(db)
 
     activities, total = await service.get_list(
@@ -53,6 +128,7 @@ async def list_activities(
         assigned_to_id=assigned_to_id,
         is_completed=is_completed,
         priority=priority,
+        filters=parsed_filters,
     )
 
     return ActivityListResponse(
@@ -67,7 +143,7 @@ async def list_activities(
 @router.post("", response_model=ActivityResponse, status_code=HTTPStatus.CREATED)
 async def create_activity(
     activity_data: ActivityCreate,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("activities", "create"))],
     db: DBSession,
 ):
     """Create a new activity."""
@@ -184,7 +260,7 @@ async def get_activity(
 async def update_activity(
     activity_id: int,
     activity_data: ActivityUpdate,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("activities", "update"))],
     db: DBSession,
 ):
     """Update an activity."""
@@ -212,7 +288,7 @@ async def complete_activity(
 @router.delete("/{activity_id}", status_code=HTTPStatus.NO_CONTENT)
 async def delete_activity(
     activity_id: int,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("activities", "delete"))],
     db: DBSession,
 ):
     """Delete an activity."""
