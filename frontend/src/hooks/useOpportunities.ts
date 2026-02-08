@@ -134,7 +134,8 @@ export function useCreatePipelineStage() {
   return useMutation({
     mutationFn: (data: PipelineStageCreate) => opportunitiesApi.createStage(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: pipelineKeys.stages() });
+      queryClient.invalidateQueries({ queryKey: [...pipelineKeys.all, 'stages'] });
+      queryClient.invalidateQueries({ queryKey: [...pipelineKeys.all, 'kanban'] });
     },
   });
 }
@@ -149,8 +150,8 @@ export function useUpdatePipelineStage() {
     mutationFn: ({ id, data }: { id: number; data: PipelineStageUpdate }) =>
       opportunitiesApi.updateStage(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: pipelineKeys.stages() });
-      queryClient.invalidateQueries({ queryKey: pipelineKeys.kanban() });
+      queryClient.invalidateQueries({ queryKey: [...pipelineKeys.all, 'stages'] });
+      queryClient.invalidateQueries({ queryKey: [...pipelineKeys.all, 'kanban'] });
     },
   });
 }
@@ -165,8 +166,8 @@ export function useReorderPipelineStages() {
     mutationFn: (stageOrders: Array<{ id: number; order: number }>) =>
       opportunitiesApi.reorderStages(stageOrders),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: pipelineKeys.stages() });
-      queryClient.invalidateQueries({ queryKey: pipelineKeys.kanban() });
+      queryClient.invalidateQueries({ queryKey: [...pipelineKeys.all, 'stages'] });
+      queryClient.invalidateQueries({ queryKey: [...pipelineKeys.all, 'kanban'] });
     },
   });
 }
