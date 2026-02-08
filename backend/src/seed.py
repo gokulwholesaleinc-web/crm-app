@@ -69,7 +69,6 @@ async def _seed_admin_user(session: AsyncSession) -> User:
         full_name="Admin User",
         is_active=True,
         is_superuser=True,
-        role="admin",
     )
     session.add(user)
     await session.flush()
@@ -96,7 +95,6 @@ async def _seed_demo_user(session: AsyncSession) -> User | None:
         full_name="Demo User",
         is_active=True,
         is_superuser=True,
-        role="admin",
     )
     session.add(user)
     await session.flush()
