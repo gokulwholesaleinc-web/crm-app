@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     BACKEND_CORS_ORIGINS: str = '["*"]'
 
+    # Seed data
+    SEED_ON_STARTUP: bool = True
+
     @property
     def cors_origins(self) -> List[str]:
         origins = json.loads(self.BACKEND_CORS_ORIGINS)

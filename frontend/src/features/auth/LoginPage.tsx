@@ -15,6 +15,7 @@ function LoginPage() {
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors },
   } = useForm<LoginRequest>({
     defaultValues: {
@@ -22,6 +23,11 @@ function LoginPage() {
       password: '',
     },
   });
+
+  const fillDemoAccount = (email: string, password: string) => {
+    setValue('email', email);
+    setValue('password', password);
+  };
 
   const onSubmit = async (data: LoginRequest) => {
     setIsLoading(true);
@@ -147,6 +153,26 @@ function LoginPage() {
             </Button>
           </div>
         </form>
+
+        <div className="border-t border-gray-200 pt-4">
+          <p className="text-xs text-gray-400 text-center mb-3">Demo Accounts</p>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <button
+              type="button"
+              onClick={() => fillDemoAccount('demo@demo.com', 'demo123')}
+              className="flex-1 text-xs px-3 py-2 border border-gray-200 rounded-md text-gray-500 hover:bg-gray-50 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 transition-colors"
+            >
+              Demo User (sample data)
+            </button>
+            <button
+              type="button"
+              onClick={() => fillDemoAccount('admin@admin.com', 'admin123')}
+              className="flex-1 text-xs px-3 py-2 border border-gray-200 rounded-md text-gray-500 hover:bg-gray-50 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 transition-colors"
+            >
+              Admin (clean account)
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
