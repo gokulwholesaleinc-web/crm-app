@@ -16,6 +16,9 @@ export {
 
 export type { StatusType, StatusColorConfig } from './statusColors';
 
+// Lead scoring utilities
+export { getScoreColor } from './leadScoring';
+
 // Formatting utilities
 export {
   formatCurrency,

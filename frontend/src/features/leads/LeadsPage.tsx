@@ -14,7 +14,7 @@ import {
   leadKeys,
 } from '../../hooks';
 import { bulkUpdate, bulkAssign } from '../../api/importExport';
-import { getStatusBadgeClasses, formatStatusLabel } from '../../utils';
+import { getStatusBadgeClasses, formatStatusLabel, getScoreColor } from '../../utils';
 import { formatDate } from '../../utils/formatters';
 import type { Lead, LeadCreate, LeadUpdate } from '../../types';
 import clsx from 'clsx';
@@ -27,13 +27,6 @@ const statusOptions = [
   { value: 'unqualified', label: 'Unqualified' },
   { value: 'nurturing', label: 'Nurturing' },
 ];
-
-function getScoreColor(score: number): string {
-  if (score >= 80) return 'text-green-600';
-  if (score >= 60) return 'text-yellow-600';
-  if (score >= 40) return 'text-orange-600';
-  return 'text-red-600';
-}
 
 function ScoreIndicator({ score }: { score: number }) {
   const percentage = Math.min(100, Math.max(0, score));

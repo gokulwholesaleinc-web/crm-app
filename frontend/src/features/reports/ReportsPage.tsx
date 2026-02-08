@@ -28,6 +28,7 @@ import {
   CurrencyDollarIcon,
   ArrowTrendingUpIcon,
 } from '@heroicons/react/24/outline';
+import type { ChartDataPoint, NumberCardData } from '../../types';
 
 type ReportType = 'pipeline' | 'leads' | 'conversion' | 'revenue';
 
@@ -195,23 +196,23 @@ function ReportsPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {(pipelineData?.data || []).map((item: any, idx: number) => {
+                  {(pipelineData?.data || []).map((item: ChartDataPoint, idx: number) => {
                     const totalCount = (pipelineData?.data || []).reduce(
-                      (sum: number, i: any) => sum + (i.count || i.value || 0),
+                      (sum: number, i: ChartDataPoint) => sum + (typeof i.value === 'number' ? i.value : 0),
                       0
                     );
-                    const count = item.count || item.value || 0;
+                    const count = typeof item.value === 'number' ? item.value : 0;
                     const percentage = totalCount > 0 ? ((count / totalCount) * 100).toFixed(1) : '0';
                     return (
                       <tr key={idx} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {item.stage || item.label || `Stage ${idx + 1}`}
+                          {item.label || `Stage ${idx + 1}`}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">
                           {count}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">
-                          {formatCurrency(item.value || 0)}
+                          {formatCurrency(typeof item.value === 'number' ? item.value : 0)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">
                           {percentage}%
@@ -225,14 +226,14 @@ function ReportsPage() {
                     <td className="px-6 py-3 text-sm font-medium text-gray-900">Total</td>
                     <td className="px-6 py-3 text-sm font-medium text-gray-900 text-right">
                       {(pipelineData?.data || []).reduce(
-                        (sum: number, i: any) => sum + (i.count || i.value || 0),
+                        (sum: number, i: ChartDataPoint) => sum + (typeof i.value === 'number' ? i.value : 0),
                         0
                       )}
                     </td>
                     <td className="px-6 py-3 text-sm font-medium text-gray-900 text-right">
                       {formatCurrency(
                         (pipelineData?.data || []).reduce(
-                          (sum: number, i: any) => sum + (i.value || 0),
+                          (sum: number, i: ChartDataPoint) => sum + (typeof i.value === 'number' ? i.value : 0),
                           0
                         )
                       )}
@@ -284,17 +285,17 @@ function ReportsPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {(leadsData?.data || []).map((item: any, idx: number) => {
+                  {(leadsData?.data || []).map((item: ChartDataPoint, idx: number) => {
                     const totalCount = (leadsData?.data || []).reduce(
-                      (sum: number, i: any) => sum + (i.count || i.value || 0),
+                      (sum: number, i: ChartDataPoint) => sum + (typeof i.value === 'number' ? i.value : 0),
                       0
                     );
-                    const count = item.count || item.value || 0;
+                    const count = typeof item.value === 'number' ? item.value : 0;
                     const percentage = totalCount > 0 ? ((count / totalCount) * 100).toFixed(1) : '0';
                     return (
                       <tr key={idx} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {item.source || item.label || `Source ${idx + 1}`}
+                          {item.label || `Source ${idx + 1}`}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">
                           {count}
@@ -333,7 +334,7 @@ function ReportsPage() {
             </div>
             {/* Cards - full width on mobile, 3 columns on desktop */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-6">
-              {(conversionData?.data || []).map((item: any, idx: number) => (
+              {(conversionData?.data || []).map((item: ChartDataPoint, idx: number) => (
                 <Card key={idx}>
                   <CardBody className="p-4 sm:p-6">
                     <div className="text-center">
@@ -358,9 +359,9 @@ function ReportsPage() {
 
       case 'revenue':
         const numberCards = dashboardData?.number_cards || [];
-        const totalRevenueRaw = numberCards.find((c: any) => c.id === 'total_revenue')?.value;
+        const totalRevenueRaw = numberCards.find((c: NumberCardData) => c.id === 'total_revenue')?.value;
         const totalRevenue = typeof totalRevenueRaw === 'number' ? totalRevenueRaw : 0;
-        const openOpportunitiesRaw = numberCards.find((c: any) => c.id === 'open_opportunities')?.value;
+        const openOpportunitiesRaw = numberCards.find((c: NumberCardData) => c.id === 'open_opportunities')?.value;
         const openOpportunities = typeof openOpportunitiesRaw === 'number' ? openOpportunitiesRaw : 0;
 
         return (
@@ -412,16 +413,16 @@ function ReportsPage() {
               <CardHeader title="Pipeline Value by Stage" />
               <CardBody className="p-3 sm:p-6">
                 <div className="space-y-2 sm:space-y-3">
-                  {(pipelineData?.data || []).map((item: any, idx: number) => {
+                  {(pipelineData?.data || []).map((item: ChartDataPoint, idx: number) => {
                     const maxValue = Math.max(
-                      ...(pipelineData?.data || []).map((i: any) => i.value || 0)
+                      ...(pipelineData?.data || []).map((i: ChartDataPoint) => typeof i.value === 'number' ? i.value : 0)
                     );
-                    const value = item.value || 0;
+                    const value = typeof item.value === 'number' ? item.value : 0;
                     const width = maxValue > 0 ? (value / maxValue) * 100 : 0;
                     return (
                       <div key={idx} className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
                         <div className="w-full sm:w-32 text-xs sm:text-sm text-gray-600 truncate">
-                          {item.stage || item.label || `Stage ${idx + 1}`}
+                          {item.label || `Stage ${idx + 1}`}
                         </div>
                         <div className="flex items-center gap-2 sm:gap-4 flex-1">
                           <div className="flex-1">

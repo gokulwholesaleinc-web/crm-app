@@ -5,7 +5,7 @@ import { NotesList } from '../../components/shared';
 import { ConvertLeadModal } from './components/ConvertLeadModal';
 import { LeadForm, LeadFormData } from './components/LeadForm';
 import { AIInsightsCard, NextBestActionCard } from '../../components/ai';
-import { getStatusBadgeClasses, formatStatusLabel } from '../../utils';
+import { getStatusBadgeClasses, formatStatusLabel, getScoreColor } from '../../utils';
 import { formatDate, formatPhoneNumber } from '../../utils/formatters';
 import { useLead, useDeleteLead, useConvertLead, useUpdateLead } from '../../hooks';
 import { useTimeline } from '../../hooks/useActivities';
@@ -13,13 +13,6 @@ import type { LeadUpdate } from '../../types';
 import clsx from 'clsx';
 
 type TabType = 'details' | 'activities' | 'notes';
-
-function getScoreColor(score: number): string {
-  if (score >= 80) return 'text-green-600';
-  if (score >= 60) return 'text-yellow-600';
-  if (score >= 40) return 'text-orange-600';
-  return 'text-red-600';
-}
 
 function LeadDetailPage() {
   const { id } = useParams<{ id: string }>();
