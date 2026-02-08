@@ -1,8 +1,9 @@
 """Company service layer."""
 
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Any, Dict
 from sqlalchemy import select, func, or_
 from src.companies.models import Company
+from src.core.filtering import apply_filters_to_query
 from src.companies.schemas import CompanyCreate, CompanyUpdate
 from src.contacts.models import Contact
 from src.core.base_service import CRUDService, TaggableServiceMixin
@@ -27,9 +28,13 @@ class CompanyService(
         industry: Optional[str] = None,
         owner_id: Optional[int] = None,
         tag_ids: Optional[List[int]] = None,
+        filters: Optional[Dict[str, Any]] = None,
     ) -> Tuple[List[Company], int]:
         """Get paginated list of companies with filters."""
         query = select(Company)
+
+        if filters:
+            query = apply_filters_to_query(query, Company, filters)
 
         # Apply filters
         if search:

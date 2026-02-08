@@ -1,9 +1,10 @@
 """Contact service layer."""
 
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Any, Dict
 from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
 from src.contacts.models import Contact
+from src.core.filtering import apply_filters_to_query
 from src.contacts.schemas import ContactCreate, ContactUpdate
 from src.core.base_service import CRUDService, TaggableServiceMixin
 from src.core.constants import ENTITY_TYPE_CONTACTS, DEFAULT_PAGE_SIZE
@@ -31,9 +32,13 @@ class ContactService(
         status: Optional[str] = None,
         owner_id: Optional[int] = None,
         tag_ids: Optional[List[int]] = None,
+        filters: Optional[Dict[str, Any]] = None,
     ) -> Tuple[List[Contact], int]:
         """Get paginated list of contacts with filters."""
         query = select(Contact).options(selectinload(Contact.company))
+
+        if filters:
+            query = apply_filters_to_query(query, Contact, filters)
 
         # Apply filters
         if search:

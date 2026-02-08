@@ -26,6 +26,81 @@ from src.activities.timeline import ActivityTimeline
 router = APIRouter(prefix="/api/activities", tags=["activities"])
 
 
+@router.get("/calendar")
+async def get_calendar_activities(
+    current_user: CurrentUser,
+    db: DBSession,
+    start_date: str = Query(..., description="Start date (YYYY-MM-DD)"),
+    end_date: str = Query(..., description="End date (YYYY-MM-DD)"),
+    activity_type: Optional[str] = None,
+    owner_id: Optional[int] = None,
+):
+    """Get activities grouped by date for calendar view."""
+    from datetime import date as date_type
+    from sqlalchemy import select, or_, and_, func as sa_func
+    from collections import defaultdict
+
+    start = date_type.fromisoformat(start_date)
+    end = date_type.fromisoformat(end_date)
+
+    from src.activities.models import Activity as ActivityModel
+
+    query = select(ActivityModel)
+    filters = []
+
+    # Use func.date() for cross-database compatibility (works in both PostgreSQL and SQLite)
+    scheduled_filter = and_(
+        ActivityModel.scheduled_at.isnot(None),
+        sa_func.date(ActivityModel.scheduled_at) >= start.isoformat(),
+        sa_func.date(ActivityModel.scheduled_at) <= end.isoformat(),
+    )
+    due_filter = and_(
+        ActivityModel.due_date.isnot(None),
+        ActivityModel.due_date >= start,
+        ActivityModel.due_date <= end,
+    )
+    filters.append(or_(scheduled_filter, due_filter))
+
+    if activity_type:
+        filters.append(ActivityModel.activity_type == activity_type)
+    if owner_id:
+        filters.append(ActivityModel.owner_id == owner_id)
+
+    query = query.where(and_(*filters))
+    result = await db.execute(query)
+    activities = result.scalars().all()
+
+    dates = defaultdict(list)
+    for act in activities:
+        if act.scheduled_at:
+            act_date = act.scheduled_at.date() if hasattr(act.scheduled_at, 'date') else act.scheduled_at
+        elif act.due_date:
+            act_date = act.due_date
+        else:
+            continue
+
+        date_key = act_date.isoformat() if hasattr(act_date, 'isoformat') else str(act_date)
+        dates[date_key].append({
+            "id": act.id,
+            "activity_type": act.activity_type,
+            "subject": act.subject,
+            "description": act.description,
+            "scheduled_at": act.scheduled_at.isoformat() if act.scheduled_at else None,
+            "due_date": act.due_date.isoformat() if act.due_date else None,
+            "is_completed": act.is_completed,
+            "priority": act.priority,
+            "entity_type": act.entity_type,
+            "entity_id": act.entity_id,
+        })
+
+    return {
+        "start_date": start_date,
+        "end_date": end_date,
+        "dates": dict(dates),
+        "total_activities": len(activities),
+    }
+
+
 @router.get("", response_model=ActivityListResponse)
 async def list_activities(
     current_user: CurrentUser,

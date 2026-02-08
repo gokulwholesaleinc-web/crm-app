@@ -1,9 +1,10 @@
 """Lead service layer."""
 
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Any, Dict
 from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
 from src.leads.models import Lead, LeadSource
+from src.core.filtering import apply_filters_to_query
 from src.leads.schemas import LeadCreate, LeadUpdate, LeadSourceCreate
 from src.leads.scoring import calculate_lead_score
 from src.core.base_service import CRUDService, TaggableServiceMixin
@@ -33,9 +34,13 @@ class LeadService(
         owner_id: Optional[int] = None,
         min_score: Optional[int] = None,
         tag_ids: Optional[List[int]] = None,
+        filters: Optional[Dict[str, Any]] = None,
     ) -> Tuple[List[Lead], int]:
         """Get paginated list of leads with filters."""
         query = select(Lead).options(selectinload(Lead.source))
+
+        if filters:
+            query = apply_filters_to_query(query, Lead, filters)
 
         if search:
             search_filter = or_(

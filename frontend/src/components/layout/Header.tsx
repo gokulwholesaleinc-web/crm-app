@@ -10,9 +10,13 @@ import {
   Cog6ToothIcon,
   ArrowRightOnRectangleIcon,
   XMarkIcon,
+  SunIcon,
+  MoonIcon,
 } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 import { Avatar } from '../ui/Avatar';
+import { NotificationBell } from '../notifications';
+import { useTheme } from '../../hooks/useTheme';
 
 export interface User {
   id: string;
@@ -42,6 +46,7 @@ export function Header({
 }: HeaderProps) {
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const { toggleTheme, isDark } = useTheme();
 
   // Focus search input when mobile search opens
   useEffect(() => {
@@ -64,7 +69,7 @@ export function Header({
   return (
     <header
       className={clsx(
-        'sticky top-0 z-30 flex items-center h-14 sm:h-16 px-3 sm:px-4 bg-white border-b border-gray-200',
+        'sticky top-0 z-30 flex items-center h-14 sm:h-16 px-3 sm:px-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700',
         className
       )}
     >
@@ -146,19 +151,22 @@ export function Header({
 
       {/* Right side */}
       <div className="flex items-center ml-auto space-x-2 sm:space-x-4">
-        {/* Notifications */}
+        {/* Theme Toggle */}
         <button
           type="button"
-          className="relative p-2 rounded-lg text-gray-500 hover:text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
-          aria-label="View notifications"
+          onClick={toggleTheme}
+          className="p-2 rounded-lg text-gray-500 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
+          aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
         >
-          <BellIcon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />
-          {notifications > 0 && (
-            <span className="absolute top-0.5 right-0.5 sm:top-1 sm:right-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-xs font-bold leading-none text-white bg-red-500 rounded-full">
-              {notifications > 99 ? '99+' : notifications}
-            </span>
+          {isDark ? (
+            <SunIcon className="h-5 w-5" aria-hidden="true" />
+          ) : (
+            <MoonIcon className="h-5 w-5" aria-hidden="true" />
           )}
         </button>
+
+        {/* Notifications */}
+        <NotificationBell />
 
         {/* User Menu - touch-friendly with larger tap targets */}
         <Menu as="div" className="relative">
@@ -190,7 +198,7 @@ export function Header({
             leaveFrom="transform opacity-100 scale-100"
             leaveTo="transform opacity-0 scale-95"
           >
-            <Menu.Items className="absolute right-0 z-50 mt-2 w-56 sm:w-48 origin-top-right rounded-lg bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+            <Menu.Items className="absolute right-0 z-50 mt-2 w-56 sm:w-48 origin-top-right rounded-lg bg-white dark:bg-gray-800 py-1 shadow-lg ring-1 ring-black ring-opacity-5 dark:ring-gray-700 focus:outline-none">
               {user && (
                 <div className="px-4 py-3 border-b border-gray-100">
                   <p className="text-sm font-medium text-gray-900 truncate">

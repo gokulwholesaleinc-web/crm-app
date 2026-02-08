@@ -33,6 +33,9 @@ from src.whitelabel.router import router as whitelabel_router
 from src.import_export.router import router as import_export_router
 from src.notes.router import router as notes_router
 from src.workflows.router import router as workflows_router
+from src.reports.router import router as reports_router
+from src.filters.router import router as filters_router
+from src.roles.router import router as roles_router
 
 
 @asynccontextmanager
@@ -59,6 +62,9 @@ async def lifespan(app: FastAPI):
     from src.workflows.models import WorkflowRule, WorkflowExecution
     from src.ai.models import AIEmbedding, AIConversation, AIFeedback, AIKnowledgeDocument, AIUserPreferences
     from src.whitelabel.models import Tenant, TenantSettings, TenantUser
+    from src.reports.models import SavedReport
+    from src.filters.models import SavedFilter
+    from src.roles.models import Role, UserRole
 
     # Create tables
     from src.database import Base
@@ -66,6 +72,18 @@ async def lifespan(app: FastAPI):
         await conn.run_sync(Base.metadata.create_all)
 
     print("Database initialized successfully")
+
+    # Seed default RBAC roles
+    from src.database import async_session_maker
+    from src.roles.service import RoleService
+    try:
+        async with async_session_maker() as session:
+            role_service = RoleService(session)
+            await role_service.seed_default_roles()
+            await session.commit()
+        print("Default roles seeded successfully")
+    except Exception as e:
+        print(f"Warning: Failed to seed default roles: {e}")
 
     yield
 
@@ -109,6 +127,9 @@ app.include_router(whitelabel_router)
 app.include_router(import_export_router)
 app.include_router(notes_router)
 app.include_router(workflows_router)
+app.include_router(reports_router)
+app.include_router(filters_router)
+app.include_router(roles_router)
 
 
 # Static files for production - serve frontend if dist exists

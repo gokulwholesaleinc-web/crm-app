@@ -33,7 +33,7 @@ export function Card({
   return (
     <div
       className={clsx(
-        'bg-white rounded-lg border border-gray-200',
+        'bg-white rounded-lg border border-gray-200 dark:bg-gray-800 dark:border-gray-700',
         paddingStyles[padding],
         shadowStyles[shadow],
         hover && 'transition-shadow duration-200 hover:shadow-lg',
@@ -61,9 +61,9 @@ export function CardHeader({
   return (
     <div className={clsx('flex items-start justify-between', className)}>
       <div>
-        <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
         {description && (
-          <p className="mt-1 text-sm text-gray-500">{description}</p>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{description}</p>
         )}
       </div>
       {action && <div className="ml-4 flex-shrink-0">{action}</div>}
@@ -95,7 +95,7 @@ export function CardFooter({
     <div
       className={clsx(
         'mt-4 pt-4',
-        border && 'border-t border-gray-200',
+        border && 'border-t border-gray-200 dark:border-gray-700',
         className
       )}
     >

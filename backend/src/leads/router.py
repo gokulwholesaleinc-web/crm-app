@@ -1,9 +1,11 @@
 """Lead API routes."""
 
 import logging
-from typing import Optional, List
-from fastapi import APIRouter, Query
+from typing import Annotated, Optional, List
+from fastapi import APIRouter, Depends, Query
+from src.auth.models import User
 from src.core.constants import HTTPStatus, EntityNames, ErrorMessages
+from src.core.permissions import require_permission
 from src.core.router_utils import (
     DBSession,
     CurrentUser,
@@ -64,8 +66,12 @@ async def list_leads(
     owner_id: Optional[int] = None,
     min_score: Optional[int] = None,
     tag_ids: Optional[str] = None,
+    filters: Optional[str] = None,
 ):
     """List leads with pagination and filters."""
+    import json as _json
+    parsed_filters = _json.loads(filters) if filters else None
+
     service = LeadService(db)
 
     leads, total = await service.get_list(
@@ -77,6 +83,7 @@ async def list_leads(
         owner_id=owner_id,
         min_score=min_score,
         tag_ids=parse_tag_ids(tag_ids),
+        filters=parsed_filters,
     )
 
     lead_responses = [await _build_lead_response(service, lead) for lead in leads]
@@ -93,7 +100,7 @@ async def list_leads(
 @router.post("", response_model=LeadResponse, status_code=HTTPStatus.CREATED)
 async def create_lead(
     lead_data: LeadCreate,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("leads", "create"))],
     db: DBSession,
 ):
     """Create a new lead."""

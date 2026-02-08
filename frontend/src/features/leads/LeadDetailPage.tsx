@@ -10,9 +10,10 @@ import { formatDate, formatPhoneNumber } from '../../utils/formatters';
 import { useLead, useDeleteLead, useConvertLead, useUpdateLead } from '../../hooks';
 import { useTimeline } from '../../hooks/useActivities';
 import type { LeadUpdate } from '../../types';
+import { EmailComposeModal, EmailHistory } from '../../components/email';
 import clsx from 'clsx';
 
-type TabType = 'details' | 'activities' | 'notes';
+type TabType = 'details' | 'activities' | 'notes' | 'emails';
 
 function LeadDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -22,6 +23,7 @@ function LeadDetailPage() {
   const [showConvertModal, setShowConvertModal] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showEmailCompose, setShowEmailCompose] = useState(false);
 
   // Use hooks for data fetching
   const { data: lead, isLoading, error } = useLead(leadId);
@@ -162,6 +164,7 @@ function LeadDetailPage() {
     { id: 'details', name: 'Details' },
     { id: 'activities', name: 'Activities' },
     { id: 'notes', name: 'Notes' },
+    { id: 'emails', name: 'Emails' },
   ];
 
   return (
@@ -196,6 +199,13 @@ function LeadDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2 sm:gap-3">
+          <Button
+            variant="secondary"
+            onClick={() => setShowEmailCompose(true)}
+            className="flex-1 sm:flex-none"
+          >
+            Send Email
+          </Button>
           <AIInsightsCard
             entityType="lead"
             entityId={lead.id}
@@ -459,6 +469,19 @@ function LeadDetailPage() {
       {activeTab === 'notes' && leadId && (
         <NotesList entityType="lead" entityId={leadId} />
       )}
+
+      {activeTab === 'emails' && leadId && (
+        <EmailHistory entityType="leads" entityId={leadId} />
+      )}
+
+      {/* Email Compose Modal */}
+      <EmailComposeModal
+        isOpen={showEmailCompose}
+        onClose={() => setShowEmailCompose(false)}
+        defaultTo={lead.email || ''}
+        entityType="leads"
+        entityId={lead.id}
+      />
 
       {/* Convert Lead Modal */}
       <ConvertLeadModal

@@ -17,6 +17,7 @@ import {
   useUpdateOpportunity,
   useContacts,
   useCompanies,
+  usePipelines,
 } from '../../hooks';
 import {
   formatCurrency,
@@ -40,6 +41,7 @@ function OpportunitiesPage() {
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [showForm, setShowForm] = useState(false);
   const [editingOpportunity, setEditingOpportunity] = useState<Opportunity | null>(null);
+  const [selectedPipelineId, setSelectedPipelineId] = useState<number | null>(null);
 
   // Use the hooks for data fetching
   const {

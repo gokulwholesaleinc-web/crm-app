@@ -8,9 +8,10 @@ import { useContact, useDeleteContact, useUpdateContact } from '../../hooks';
 import { useTimeline } from '../../hooks/useActivities';
 import { formatDate, formatPhoneNumber } from '../../utils/formatters';
 import type { ContactUpdate } from '../../types';
+import { EmailComposeModal, EmailHistory } from '../../components/email';
 import clsx from 'clsx';
 
-type TabType = 'details' | 'activities' | 'notes';
+type TabType = 'details' | 'activities' | 'notes' | 'emails';
 
 function ContactDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -19,6 +20,7 @@ function ContactDetailPage() {
   const [activeTab, setActiveTab] = useState<TabType>('details');
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showEmailCompose, setShowEmailCompose] = useState(false);
 
   // Use hooks for data fetching
   const { data: contact, isLoading, error } = useContact(contactId);
@@ -110,6 +112,7 @@ function ContactDetailPage() {
     { id: 'details', name: 'Details' },
     { id: 'activities', name: 'Activities' },
     { id: 'notes', name: 'Notes' },
+    { id: 'emails', name: 'Emails' },
   ];
 
   return (
@@ -147,6 +150,13 @@ function ContactDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-3 w-full sm:w-auto">
+          <Button
+            variant="secondary"
+            onClick={() => setShowEmailCompose(true)}
+            className="flex-1 sm:flex-none"
+          >
+            Send Email
+          </Button>
           <Button
             variant="secondary"
             onClick={() => setShowEditForm(true)}
@@ -340,6 +350,19 @@ function ContactDetailPage() {
       {activeTab === 'notes' && contactId && (
         <NotesList entityType="contact" entityId={contactId} />
       )}
+
+      {activeTab === 'emails' && contactId && (
+        <EmailHistory entityType="contacts" entityId={contactId} />
+      )}
+
+      {/* Email Compose Modal */}
+      <EmailComposeModal
+        isOpen={showEmailCompose}
+        onClose={() => setShowEmailCompose(false)}
+        defaultTo={contact.email || ''}
+        entityType="contacts"
+        entityId={contact.id}
+      />
 
       {/* Edit Form Modal */}
       <Modal

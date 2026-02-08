@@ -188,3 +188,74 @@ async def get_conversion_rates_chart(
         title=data["title"],
         data=[ChartDataPoint(**d) for d in data["data"]],
     )
+
+
+# =========================================================================
+# Multi-Currency endpoints
+# =========================================================================
+
+from typing import Optional
+from fastapi import Query
+from sqlalchemy import select
+from src.core.currencies import (
+    get_supported_currencies_list,
+    get_base_currency,
+    convert_amount,
+)
+from src.opportunities.models import Opportunity, PipelineStage
+
+
+@router.get("/currencies")
+async def list_currencies(
+    current_user: CurrentUser,
+):
+    """List all supported currencies with exchange rates."""
+    return {
+        "base_currency": get_base_currency(),
+        "currencies": get_supported_currencies_list(),
+    }
+
+
+@router.get("/revenue/converted")
+async def get_converted_revenue(
+    current_user: CurrentUser,
+    db: DBSession,
+    target_currency: str = Query("USD", description="Target currency for conversion"),
+):
+    """Get pipeline revenue converted to a target currency."""
+    # Fetch all opportunities with their pipeline stages
+    result = await db.execute(
+        select(Opportunity).join(PipelineStage)
+    )
+    opportunities = result.scalars().all()
+
+    total_pipeline_value = 0.0
+    total_revenue = 0.0
+    weighted_pipeline_value = 0.0
+    open_deal_count = 0
+    won_deal_count = 0
+
+    for opp in opportunities:
+        if opp.amount is None:
+            continue
+
+        converted = convert_amount(opp.amount, opp.currency or "USD", target_currency)
+        stage = opp.pipeline_stage
+
+        if stage.is_won:
+            total_revenue += converted
+            won_deal_count += 1
+        elif not stage.is_lost:
+            total_pipeline_value += converted
+            open_deal_count += 1
+            prob = opp.probability if opp.probability is not None else stage.probability
+            weighted_pipeline_value += converted * (prob / 100)
+
+    return {
+        "target_currency": target_currency,
+        "total_pipeline_value": round(total_pipeline_value, 2),
+        "total_revenue": round(total_revenue, 2),
+        "weighted_pipeline_value": round(weighted_pipeline_value, 2),
+        "open_deal_count": open_deal_count,
+        "won_deal_count": won_deal_count,
+    }

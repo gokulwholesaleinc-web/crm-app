@@ -66,10 +66,11 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
         'group flex items-center rounded-lg transition-colors duration-200',
         collapsed ? 'px-3 py-3 justify-center' : 'px-3 py-2',
         isActive(item.href)
-          ? 'bg-primary-50 text-primary-600'
-          : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
+          ? 'bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400'
+          : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-gray-100'
       )}
       title={collapsed ? item.name : undefined}
+      aria-current={isActive(item.href) ? 'page' : undefined}
     >
       <item.icon
         className={clsx(
@@ -104,7 +105,7 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
   return (
     <aside
       className={clsx(
-        'flex flex-col h-full bg-white border-r border-gray-200',
+        'flex flex-col h-full bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-[width] duration-200',
         collapsed ? 'w-16' : 'w-64',
         className
       )}

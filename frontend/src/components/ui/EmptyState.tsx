@@ -54,14 +54,14 @@ export function EmptyState({
       <div
         className={clsx(
           'mx-auto',
-          variant === 'error' ? 'text-red-400' : 'text-gray-400'
+          variant === 'error' ? 'text-red-400' : 'text-gray-400 dark:text-gray-500'
         )}
       >
         {displayIcon}
       </div>
-      <h3 className="mt-4 text-lg font-medium text-gray-900">{title}</h3>
+      <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-gray-100">{title}</h3>
       {description && (
-        <p className="mt-2 text-sm text-gray-500 max-w-md">{description}</p>
+        <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-md">{description}</p>
       )}
       {(action || secondaryAction) && (
         <div className="mt-6 flex items-center gap-3">
