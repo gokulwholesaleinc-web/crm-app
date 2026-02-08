@@ -843,6 +843,31 @@ class TestOpportunitiesUnauthorized:
         response = await client.get(f"/api/opportunities/{test_opportunity.id}")
         assert response.status_code == 401
 
+    @pytest.mark.asyncio
+    async def test_update_opportunity_unauthorized(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_opportunity: Opportunity,
+    ):
+        """Test updating opportunity without auth fails."""
+        response = await client.patch(
+            f"/api/opportunities/{test_opportunity.id}",
+            json={"name": "Hacked"},
+        )
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_delete_opportunity_unauthorized(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_opportunity: Opportunity,
+    ):
+        """Test deleting opportunity without auth fails."""
+        response = await client.delete(f"/api/opportunities/{test_opportunity.id}")
+        assert response.status_code == 401
+
 
 class TestReorderStages:
     """Tests for reordering pipeline stages endpoint."""

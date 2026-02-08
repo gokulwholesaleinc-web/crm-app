@@ -543,3 +543,96 @@ class TestDashboardUnauthorized:
         """Test getting revenue trend without auth fails."""
         response = await client.get("/api/dashboard/charts/revenue-trend")
         assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_get_leads_by_source_unauthorized(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        """Test getting leads by source without auth fails."""
+        response = await client.get("/api/dashboard/charts/leads-by-source")
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_get_activities_chart_unauthorized(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        """Test getting activities chart without auth fails."""
+        response = await client.get("/api/dashboard/charts/activities")
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_get_new_leads_trend_unauthorized(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        """Test getting new leads trend without auth fails."""
+        response = await client.get("/api/dashboard/charts/new-leads-trend")
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_get_conversion_rates_unauthorized(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        """Test getting conversion rates without auth fails."""
+        response = await client.get("/api/dashboard/charts/conversion-rates")
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_get_sales_funnel_unauthorized(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        """Test getting sales funnel without auth fails."""
+        response = await client.get("/api/dashboard/funnel")
+        assert response.status_code == 401
+
+
+class TestSalesFunnel:
+    """Tests for sales funnel endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_get_sales_funnel_empty(
+        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+    ):
+        """Test getting sales funnel when no data exists."""
+        response = await client.get("/api/dashboard/funnel", headers=auth_headers)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "stages" in data
+        assert "conversions" in data
+        assert "avg_days_in_stage" in data
+        assert isinstance(data["stages"], list)
+        assert isinstance(data["conversions"], list)
+        assert isinstance(data["avg_days_in_stage"], dict)
+
+    @pytest.mark.asyncio
+    async def test_get_sales_funnel_with_data(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """Test getting sales funnel with lead data across stages."""
+        # Create leads with different statuses to populate the funnel
+        for status in ["new", "contacted", "qualified", "converted"]:
+            lead = Lead(
+                first_name="Funnel",
+                last_name=status,
+                email=f"funnel-{status}@test.com",
+                status=status,
+                owner_id=test_user.id,
+                created_by_id=test_user.id,
+            )
+            db_session.add(lead)
+        await db_session.commit()
+
+        response = await client.get("/api/dashboard/funnel", headers=auth_headers)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "stages" in data
+        assert isinstance(data["stages"], list)
+        # Each stage should have stage name and count
+        for stage in data["stages"]:
+            assert "stage" in stage
+            assert "count" in stage

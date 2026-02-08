@@ -847,3 +847,244 @@ class TestActivitiesUnauthorized:
         """Test deleting activity without auth fails."""
         response = await client.delete(f"/api/activities/{test_activity.id}")
         assert response.status_code == 401
+
+
+class TestActivitiesFilterByOwner:
+    """Tests for filtering activities by owner_id."""
+
+    @pytest.mark.asyncio
+    async def test_list_activities_filter_by_owner(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_contact: Contact,
+    ):
+        """Test filtering activities by owner_id returns only owned activities."""
+        # Create activities owned by test_user
+        for i in range(3):
+            activity = Activity(
+                activity_type="call",
+                subject=f"Owned Call {i}",
+                entity_type="contacts",
+                entity_id=test_contact.id,
+                priority="normal",
+                owner_id=test_user.id,
+                created_by_id=test_user.id,
+            )
+            db_session.add(activity)
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/activities",
+            headers=auth_headers,
+            params={"owner_id": test_user.id},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] >= 3
+        assert all(a["owner_id"] == test_user.id for a in data["items"])
+
+
+class TestActivitiesFilterByAssignee:
+    """Tests for filtering activities by assigned_to_id."""
+
+    @pytest.mark.asyncio
+    async def test_list_activities_filter_by_assigned_to(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_superuser: User,
+        test_contact: Contact,
+    ):
+        """Test filtering activities by assigned_to_id returns only assigned activities."""
+        # Create activity assigned to superuser
+        assigned_activity = Activity(
+            activity_type="task",
+            subject="Assigned to superuser",
+            entity_type="contacts",
+            entity_id=test_contact.id,
+            priority="high",
+            owner_id=test_user.id,
+            assigned_to_id=test_superuser.id,
+            created_by_id=test_user.id,
+        )
+        # Create activity assigned to test_user
+        own_activity = Activity(
+            activity_type="task",
+            subject="Assigned to user",
+            entity_type="contacts",
+            entity_id=test_contact.id,
+            priority="normal",
+            owner_id=test_user.id,
+            assigned_to_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add_all([assigned_activity, own_activity])
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/activities",
+            headers=auth_headers,
+            params={"assigned_to_id": test_superuser.id},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] >= 1
+        assert all(a["assigned_to_id"] == test_superuser.id for a in data["items"])
+
+
+class TestMyTasksLimit:
+    """Tests for my-tasks endpoint with limit parameter."""
+
+    @pytest.mark.asyncio
+    async def test_get_my_tasks_with_limit(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_contact: Contact,
+    ):
+        """Test getting tasks with a custom limit returns at most that many tasks."""
+        # Create 5 task activities
+        for i in range(5):
+            task = Activity(
+                activity_type="task",
+                subject=f"Limited Task {i}",
+                entity_type="contacts",
+                entity_id=test_contact.id,
+                priority="normal",
+                is_completed=False,
+                owner_id=test_user.id,
+                created_by_id=test_user.id,
+            )
+            db_session.add(task)
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/activities/my-tasks",
+            headers=auth_headers,
+            params={"limit": 3},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+        assert len(data) <= 3
+
+
+class TestEntityTimelineFiltered:
+    """Tests for entity timeline with activity_types filter."""
+
+    @pytest.mark.asyncio
+    async def test_get_entity_timeline_filter_by_activity_types(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_contact: Contact,
+    ):
+        """Test getting entity timeline filtered by activity types."""
+        # Create activities of different types
+        call = Activity(
+            activity_type="call",
+            subject="Timeline Call",
+            entity_type="contacts",
+            entity_id=test_contact.id,
+            priority="normal",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        email = Activity(
+            activity_type="email",
+            subject="Timeline Email",
+            entity_type="contacts",
+            entity_id=test_contact.id,
+            priority="normal",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add_all([call, email])
+        await db_session.commit()
+
+        response = await client.get(
+            f"/api/activities/timeline/entity/contacts/{test_contact.id}",
+            headers=auth_headers,
+            params={"activity_types": "call"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "items" in data
+        assert isinstance(data["items"], list)
+
+
+class TestUserTimelineOptions:
+    """Tests for user timeline with include_assigned parameter."""
+
+    @pytest.mark.asyncio
+    async def test_get_user_timeline_exclude_assigned(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_activity: Activity,
+    ):
+        """Test getting user timeline with include_assigned=False."""
+        response = await client.get(
+            "/api/activities/timeline/user",
+            headers=auth_headers,
+            params={"include_assigned": False},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "items" in data
+        assert isinstance(data["items"], list)
+
+
+class TestUpcomingActivitiesOptions:
+    """Tests for upcoming activities with different days_ahead."""
+
+    @pytest.mark.asyncio
+    async def test_get_upcoming_activities_custom_days(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_contact: Contact,
+    ):
+        """Test getting upcoming activities with a longer lookahead window."""
+        # Create activity scheduled 20 days from now
+        from datetime import timezone
+        far_activity = Activity(
+            activity_type="meeting",
+            subject="Far Future Meeting",
+            entity_type="contacts",
+            entity_id=test_contact.id,
+            scheduled_at=datetime.now(timezone.utc) + timedelta(days=20),
+            priority="normal",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(far_activity)
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/activities/upcoming",
+            headers=auth_headers,
+            params={"days_ahead": 30},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "items" in data
+        assert isinstance(data["items"], list)
