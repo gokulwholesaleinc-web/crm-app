@@ -124,7 +124,9 @@ def raise_forbidden(message: str = None) -> None:
 
 def check_ownership(entity: Any, current_user: Any, entity_name: str = None) -> None:
     """
-    Check if the current user owns the entity.
+    Check if the current user owns the entity (RBAC-aware).
+
+    Superusers, admins, and managers bypass ownership checks.
 
     Args:
         entity: The entity to check ownership of (must have owner_id attribute)
@@ -134,6 +136,11 @@ def check_ownership(entity: Any, current_user: Any, entity_name: str = None) -> 
     Raises:
         HTTPException: 403 Forbidden if user is not the owner
     """
+    if current_user.is_superuser:
+        return
+    user_role = getattr(current_user, 'role', 'sales_rep')
+    if user_role in ('admin', 'manager'):
+        return
     if entity.owner_id != current_user.id:
         message = (
             f"You do not have permission to modify this {entity_name.lower()}"

@@ -33,6 +33,7 @@ from src.whitelabel.router import router as whitelabel_router
 from src.import_export.router import router as import_export_router
 from src.notes.router import router as notes_router
 from src.workflows.router import router as workflows_router
+from src.roles.router import router as roles_router
 
 
 @asynccontextmanager
@@ -59,11 +60,24 @@ async def lifespan(app: FastAPI):
     from src.workflows.models import WorkflowRule, WorkflowExecution
     from src.ai.models import AIEmbedding, AIConversation, AIFeedback, AIKnowledgeDocument, AIUserPreferences
     from src.whitelabel.models import Tenant, TenantSettings, TenantUser
+    from src.roles.models import Role, UserRole
 
     # Create tables
     from src.database import Base
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    # Seed default roles
+    from src.database import async_session_maker
+    from src.roles.service import RoleService
+    async with async_session_maker() as session:
+        role_service = RoleService(session)
+        seeded = await role_service.seed_default_roles()
+        if seeded:
+            await session.commit()
+            print(f"Seeded {len(seeded)} default roles")
+        else:
+            print("Default roles already exist")
 
     print("Database initialized successfully")
 
@@ -109,6 +123,7 @@ app.include_router(whitelabel_router)
 app.include_router(import_export_router)
 app.include_router(notes_router)
 app.include_router(workflows_router)
+app.include_router(roles_router)
 
 
 # Static files for production - serve frontend if dist exists
@@ -123,7 +138,7 @@ async def health_check():
 # Serve frontend in production (after API routes so they take precedence)
 if FRONTEND_DIST.exists():
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
-    
+
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
         """Serve SPA for all non-API routes."""
