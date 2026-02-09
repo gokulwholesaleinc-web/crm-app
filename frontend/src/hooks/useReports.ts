@@ -3,7 +3,7 @@
  * Provides hooks for report execution, templates, and saved reports.
  */
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { reportsApi } from '../api/reports';
 import type {
   ReportDefinition,

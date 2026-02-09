@@ -5,7 +5,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthQuery } from './useAuthQuery';
 import { attachmentsApi } from '../api/attachments';
-import type { AttachmentResponse } from '../api/attachments';
+
 
 export const attachmentKeys = {
   all: ['attachments'] as const,

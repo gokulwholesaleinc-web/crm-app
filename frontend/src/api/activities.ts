@@ -189,6 +189,7 @@ export interface CalendarActivity {
   priority: string;
   entity_type: string;
   entity_id: number;
+  meeting_location?: string | null;
 }
 
 export interface CalendarResponse {

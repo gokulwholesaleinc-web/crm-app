@@ -1,10 +1,9 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronLeftIcon, ChevronRightIcon, PlusIcon } from '@heroicons/react/24/outline';
+import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import { getCalendarActivities } from '../../../api/activities';
 import type { CalendarActivity } from '../../../api/activities';
 import { Spinner, Modal } from '../../../components/ui';
-import { ActivityForm } from './ActivityForm';
 import clsx from 'clsx';
 
 type ViewMode = 'month' | 'week' | 'day';
@@ -67,9 +66,7 @@ function getWeekDays(baseDate: Date): Date[] {
 function CalendarView() {
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedActivity, setSelectedActivity] = useState<CalendarActivity | null>(null);
-  const [showNewActivityForm, setShowNewActivityForm] = useState(false);
 
   const today = useMemo(() => formatDateKey(new Date()), []);
 
@@ -85,7 +82,7 @@ function CalendarView() {
       return { start: formatDateKey(start), end: formatDateKey(end) };
     } else if (viewMode === 'week') {
       const days = getWeekDays(currentDate);
-      return { start: formatDateKey(days[0]), end: formatDateKey(days[6]) };
+      return { start: formatDateKey(days[0]!), end: formatDateKey(days[6]!) };
     } else {
       const key = formatDateKey(currentDate);
       return { start: key, end: key };
@@ -116,8 +113,8 @@ function CalendarView() {
       return currentDate.toLocaleString(undefined, { month: 'long', year: 'numeric' });
     } else if (viewMode === 'week') {
       const days = getWeekDays(currentDate);
-      const s = days[0].toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-      const e = days[6].toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+      const s = days[0]!.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      const e = days[6]!.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
       return `${s} - ${e}`;
     } else {
       return currentDate.toLocaleDateString(undefined, {
@@ -155,13 +152,9 @@ function CalendarView() {
             <div
               key={key}
               className={clsx(
-                'border-r border-b border-gray-200 min-h-[100px] p-1 cursor-pointer hover:bg-gray-50 transition-colors',
+                'border-r border-b border-gray-200 min-h-[100px] p-1 hover:bg-gray-50 transition-colors',
                 !isCurrentMonth && 'bg-gray-50/50'
               )}
-              onClick={() => {
-                setSelectedDate(key);
-                setShowNewActivityForm(true);
-              }}
             >
               <div className="flex items-center justify-between px-1">
                 <span
@@ -267,15 +260,9 @@ function CalendarView() {
         {dayActivities.length === 0 ? (
           <div className="text-center py-12 text-gray-500">
             <p>No activities scheduled for this day.</p>
-            <button
-              className="mt-2 text-primary-600 hover:text-primary-800 text-sm font-medium"
-              onClick={() => {
-                setSelectedDate(key);
-                setShowNewActivityForm(true);
-              }}
-            >
-              Create an activity
-            </button>
+            <span className="mt-2 text-primary-600 text-sm font-medium">
+              No activities yet
+            </span>
           </div>
         ) : (
           <div className="space-y-3">

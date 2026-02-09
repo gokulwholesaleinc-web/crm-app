@@ -197,12 +197,12 @@ function DeliveryLog({ webhookId }: { webhookId: number }) {
               </td>
               <td className="py-2 px-2">{d.response_code || '-'}</td>
               <td className="py-2 px-2">
-                {new Intl.DateTimeFormat(undefined, {
+                {d.attempted_at ? new Intl.DateTimeFormat(undefined, {
                   month: 'short',
                   day: 'numeric',
                   hour: '2-digit',
                   minute: '2-digit',
-                }).format(new Date(d.attempted_at))}
+                }).format(new Date(d.attempted_at)) : '\u2014'}
               </td>
             </tr>
           ))}

@@ -59,7 +59,7 @@ function ChangeDetail({ change }: { change: AuditChangeDetail }) {
 
 function AuditEntry({ entry }: { entry: AuditLogEntry }) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const colors = ACTION_COLORS[entry.action] ?? ACTION_COLORS.update;
+  const colors = ACTION_COLORS[entry.action] ?? ACTION_COLORS['update']!;
   const hasChanges = entry.changes && entry.changes.length > 0;
 
   return (

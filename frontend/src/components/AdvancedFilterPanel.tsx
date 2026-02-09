@@ -340,7 +340,7 @@ export function AdvancedFilterPanel({ entityType, onApply, className }: Advanced
             {rows.map((row) => {
               const fieldDef = getFieldDef(row.field);
               const fieldType = fieldDef?.type || 'string';
-              const operators = OPERATORS_BY_TYPE[fieldType] || OPERATORS_BY_TYPE.string;
+              const operators = OPERATORS_BY_TYPE[fieldType] ?? OPERATORS_BY_TYPE['string']!;
               const needsValue = !NO_VALUE_OPS.has(row.op);
 
               return (

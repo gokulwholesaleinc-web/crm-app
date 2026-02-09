@@ -2,7 +2,7 @@
  * Webhooks hooks using TanStack Query.
  */
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { webhooksApi } from '../api/webhooks';
 import { useAuthQuery } from './useAuthQuery';
 import type { WebhookCreate, WebhookUpdate } from '../types';

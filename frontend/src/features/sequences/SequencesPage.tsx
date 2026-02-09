@@ -23,7 +23,6 @@ import type {
   SequenceCreate,
   SequenceUpdate,
   SequenceStep,
-  SequenceEnrollment,
 } from '../../types';
 import {
   PlusIcon,
