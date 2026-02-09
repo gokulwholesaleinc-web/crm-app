@@ -5,8 +5,61 @@
  * Server-side enforcement is the source of truth; this is for UI purposes.
  */
 
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../store/authStore';
 import type { RoleName } from '../store/authStore';
+import { rolesApi } from '../api/roles';
+import type { UserRoleAssign } from '../types';
+
+// =============================================================================
+// Query Keys
+// =============================================================================
+
+export const roleKeys = {
+  all: ['roles'] as const,
+  list: () => [...roleKeys.all, 'list'] as const,
+  myPermissions: () => [...roleKeys.all, 'my-permissions'] as const,
+};
+
+// =============================================================================
+// Server-side Roles & Permissions Hooks
+// =============================================================================
+
+/**
+ * Hook to fetch all available roles from the server
+ */
+export function useRoles() {
+  return useQuery({
+    queryKey: roleKeys.list(),
+    queryFn: () => rolesApi.listRoles(),
+    staleTime: 10 * 60 * 1000, // 10 minutes
+  });
+}
+
+/**
+ * Hook to fetch the current user's permissions from the server
+ */
+export function useMyPermissions() {
+  return useQuery({
+    queryKey: roleKeys.myPermissions(),
+    queryFn: () => rolesApi.getMyPermissions(),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+}
+
+/**
+ * Hook to assign a role to a user (admin-only)
+ */
+export function useAssignRole() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: UserRoleAssign) => rolesApi.assignRole(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: roleKeys.all });
+    },
+  });
+}
 
 const DEFAULT_PERMISSIONS: Record<RoleName, Record<string, string[]>> = {
   admin: {
