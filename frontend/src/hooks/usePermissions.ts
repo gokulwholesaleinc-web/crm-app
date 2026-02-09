@@ -119,7 +119,7 @@ const DEFAULT_PERMISSIONS: Record<RoleName, Record<string, string[]>> = {
 export function usePermissions() {
   const user = useAuthStore((state) => state.user);
 
-  const role: RoleName = user?.role || 'sales_rep';
+  const role: RoleName = (user?.role as RoleName) || 'sales_rep';
   const isAdmin = role === 'admin' || user?.is_superuser === true;
   const isManager = role === 'manager';
   const isManagerOrAbove = isAdmin || isManager;
