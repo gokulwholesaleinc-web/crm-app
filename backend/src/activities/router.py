@@ -63,8 +63,9 @@ async def get_calendar_activities(
 
     if activity_type:
         filters.append(ActivityModel.activity_type == activity_type)
-    if owner_id:
-        filters.append(ActivityModel.owner_id == owner_id)
+    # Auto-scope to current user's data by default
+    effective_owner_id = owner_id if owner_id is not None else current_user.id
+    filters.append(ActivityModel.owner_id == effective_owner_id)
 
     query = query.where(and_(*filters))
     result = await db.execute(query)
