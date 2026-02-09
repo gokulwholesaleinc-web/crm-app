@@ -1205,3 +1205,138 @@ export interface UserRoleAssign {
   user_id: number;
   role_id: number;
 }
+
+// =============================================================================
+// Assignment Rule Types
+// =============================================================================
+
+export interface AssignmentRule {
+  id: number;
+  name: string;
+  assignment_type: 'round_robin' | 'load_balance';
+  user_ids: number[];
+  filters?: Record<string, unknown> | null;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AssignmentRuleCreate {
+  name: string;
+  assignment_type: 'round_robin' | 'load_balance';
+  user_ids: number[];
+  filters?: Record<string, unknown> | null;
+  is_active?: boolean;
+}
+
+export interface AssignmentRuleUpdate {
+  name?: string;
+  assignment_type?: 'round_robin' | 'load_balance';
+  user_ids?: number[];
+  filters?: Record<string, unknown> | null;
+  is_active?: boolean;
+}
+
+export interface AssignmentStats {
+  user_id: number;
+  assigned_count: number;
+  active_leads_count?: number;
+  period?: string;
+}
+
+// =============================================================================
+// Webhook Types
+// =============================================================================
+
+export interface Webhook {
+  id: number;
+  name?: string;
+  url: string;
+  events: string[];
+  is_active: boolean;
+  secret?: string;
+  description?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface WebhookCreate {
+  name?: string;
+  url: string;
+  events: string[];
+  is_active?: boolean;
+  secret?: string;
+  description?: string;
+}
+
+export interface WebhookUpdate {
+  name?: string;
+  url?: string;
+  events?: string[];
+  is_active?: boolean;
+  secret?: string;
+  description?: string;
+}
+
+export interface WebhookDelivery {
+  id: number;
+  webhook_id: number;
+  event: string;
+  event_type?: string;
+  status: string;
+  response_code?: number;
+  response_body?: string;
+  attempted_at?: string;
+  created_at?: string;
+}
+
+// =============================================================================
+// Sequence Types
+// =============================================================================
+
+export interface SequenceStep {
+  step_number: number;
+  type: 'email' | 'task' | 'wait';
+  delay_days: number;
+  template_id?: number;
+  task_description?: string;
+}
+
+export interface Sequence {
+  id: number;
+  name: string;
+  description?: string;
+  steps: SequenceStep[];
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface SequenceCreate {
+  name: string;
+  description?: string;
+  steps: SequenceStep[];
+  is_active?: boolean;
+}
+
+export interface SequenceUpdate {
+  name?: string;
+  description?: string;
+  steps?: SequenceStep[];
+  is_active?: boolean;
+}
+
+export interface SequenceEnrollment {
+  id: number;
+  sequence_id: number;
+  contact_id: number;
+  current_step: number;
+  status: 'active' | 'paused' | 'completed' | 'cancelled';
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ProcessDueResult {
+  processed: number;
+  errors: number;
+}
