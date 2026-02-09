@@ -1182,3 +1182,26 @@ export interface PipelineListResponse {
   page_size: number;
   pages: number;
 }
+
+// =============================================================================
+// Role & Permission Types
+// =============================================================================
+
+export interface Role {
+  id: number;
+  name: string;
+  description?: string;
+  permissions?: Record<string, string[]>;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface UserPermissions {
+  role: string;
+  permissions: Record<string, string[]>;
+}
+
+export interface UserRoleAssign {
+  user_id: number;
+  role_id: number;
+}

@@ -216,6 +216,12 @@ export { assignmentApi } from './assignment';
 // Sequences API
 export { sequencesApi } from './sequences';
 
+// Attachments API
+export { attachmentsApi } from './attachments';
+
+// Dedup API
+export { dedupApi } from './dedup';
+
 // Aggregated API object for convenience
 import { authApi as _authApi } from './auth';
 import { contactsApi as _contactsApi } from './contacts';
@@ -240,6 +246,8 @@ import { rolesApi as _rolesApi } from './roles';
 import { webhooksApi as _webhooksApi } from './webhooks';
 import { assignmentApi as _assignmentApi } from './assignment';
 import { sequencesApi as _sequencesApi } from './sequences';
+import { attachmentsApi as _attachmentsApi } from './attachments';
+import { dedupApi as _dedupApi } from './dedup';
 
 export const api = {
   auth: _authApi,
@@ -265,6 +273,8 @@ export const api = {
   webhooks: _webhooksApi,
   assignment: _assignmentApi,
   sequences: _sequencesApi,
+  attachments: _attachmentsApi,
+  dedup: _dedupApi,
 };
 
 export default api;

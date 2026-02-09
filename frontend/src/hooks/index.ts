@@ -145,6 +145,7 @@ export {
   useRefreshAIData,
   useAIPreferences,
   useUpdateAIPreferences,
+  useFeedback,
   aiKeys,
 } from './useAI';
 
@@ -178,6 +179,7 @@ export {
 // Comment hooks
 export {
   useEntityComments,
+  useComment,
   useCreateComment,
   useUpdateComment,
   useDeleteComment,
@@ -198,28 +200,61 @@ export {
 export { useSavedFilters, useCreateSavedFilter, useDeleteSavedFilter, filterKeys } from './useFilters';
 
 // Report hooks
-export { useReports } from './useReports';
+export { reportKeys, useReportTemplates, useSavedReports, useSavedReport, useExecuteReport, useExportReportCsv, useCreateSavedReport, useDeleteSavedReport } from './useReports';
 
 // Permission hooks
-export { usePermissions } from './usePermissions';
+export { usePermissions, useRoles, useMyPermissions, useAssignRole, roleKeys } from './usePermissions';
 
 // Email hooks
-export { useEmail } from './useEmail';
+export { emailKeys, useEmailList, useEntityEmails, useSendEmail, useSendTemplateEmail } from './useEmail';
 
 // Notification hooks
-export { useNotifications } from './useNotifications';
+export { notificationKeys, useNotifications, useUnreadCount, useMarkNotificationRead, useMarkAllNotificationsRead } from './useNotifications';
 
 // Webhook hooks
-export { useWebhooks } from './useWebhooks';
+export {
+  webhookKeys,
+  useWebhooks,
+  useWebhook,
+  useWebhookDeliveries,
+  useCreateWebhook,
+  useUpdateWebhook,
+  useDeleteWebhook,
+  useTestWebhook,
+} from './useWebhooks';
 
 // Assignment hooks
-export { useAssignment } from './useAssignment';
+export {
+  assignmentKeys,
+  useAssignmentRules,
+  useAssignmentRule,
+  useAssignmentStats,
+  useCreateAssignmentRule,
+  useUpdateAssignmentRule,
+  useDeleteAssignmentRule,
+} from './useAssignment';
 
 // Sequence hooks
-export { useSequences } from './useSequences';
+export {
+  sequenceKeys,
+  useSequences,
+  useSequence,
+  useSequenceEnrollments,
+  useContactEnrollments,
+  useCreateSequence,
+  useUpdateSequence,
+  useDeleteSequence,
+  useEnrollContact,
+  usePauseEnrollment,
+  useResumeEnrollment,
+  useProcessDueSteps,
+} from './useSequences';
 
 // Attachment hooks
-export { useAttachments } from './useAttachments';
+export { attachmentKeys, useAttachments, useUploadAttachment, useDeleteAttachment } from './useAttachments';
+
+// Dedup hooks
+export { useCheckDuplicates, useMergeEntities } from './useDedup';
 
 // Theme hook
 export { useTheme } from './useTheme';
