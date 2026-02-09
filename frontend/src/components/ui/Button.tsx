@@ -40,6 +40,7 @@ const iconSizeStyles: Record<ButtonSize, string> = {
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   (
     {
+      type = 'button',
       variant = 'primary',
       size = 'md',
       isLoading = false,
@@ -58,6 +59,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     return (
       <button
         ref={ref}
+        type={type}
         disabled={isDisabled}
         className={clsx(
           'inline-flex items-center justify-center font-medium rounded-lg transition-colors duration-200',
