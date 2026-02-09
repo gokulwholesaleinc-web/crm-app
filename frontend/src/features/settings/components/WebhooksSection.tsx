@@ -197,7 +197,7 @@ function DeliveryLog({ webhookId }: { webhookId: number }) {
               </td>
               <td className="py-2 px-2">{d.response_code || '-'}</td>
               <td className="py-2 px-2">
-                {new Intl.DateTimeFormat('en-US', {
+                {new Intl.DateTimeFormat(undefined, {
                   month: 'short',
                   day: 'numeric',
                   hour: '2-digit',

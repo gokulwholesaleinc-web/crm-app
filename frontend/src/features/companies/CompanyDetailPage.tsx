@@ -17,6 +17,8 @@ import {
 } from '@heroicons/react/24/outline';
 import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { NotesList, AttachmentList } from '../../components/shared';
+import { AuditTimeline } from '../../components/shared/AuditTimeline';
+import { CommentSection } from '../../components/shared/CommentSection';
 import { CompanyForm } from './components/CompanyForm';
 import { useCompany, useUpdateCompany, useDeleteCompany } from '../../hooks/useCompanies';
 import { useContacts } from '../../hooks/useContacts';
@@ -25,7 +27,7 @@ import { getStatusColor, formatStatusLabel } from '../../utils/statusColors';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import type { CompanyUpdate, Contact } from '../../types';
 
-type TabType = 'overview' | 'activities' | 'notes' | 'attachments';
+type TabType = 'overview' | 'activities' | 'notes' | 'attachments' | 'comments' | 'history';
 
 function DetailItem({
   icon: Icon,
@@ -188,6 +190,8 @@ export function CompanyDetailPage() {
     { id: 'activities', name: 'Activities' },
     { id: 'notes', name: 'Notes' },
     { id: 'attachments', name: 'Attachments' },
+    { id: 'comments', name: 'Comments' },
+    { id: 'history', name: 'History' },
   ];
 
   return (
@@ -494,6 +498,16 @@ export function CompanyDetailPage() {
 
       {activeTab === 'attachments' && companyId && (
         <AttachmentList entityType="companies" entityId={companyId} />
+      )}
+
+      {/* Comments Tab */}
+      {activeTab === 'comments' && companyId && (
+        <CommentSection entityType="companies" entityId={companyId} />
+      )}
+
+      {/* History Tab */}
+      {activeTab === 'history' && companyId && (
+        <AuditTimeline entityType="companies" entityId={companyId} />
       )}
 
       {/* Edit Form Modal */}

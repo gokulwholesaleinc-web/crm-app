@@ -88,7 +88,7 @@ export {
   activityKeys,
 } from './useActivities';
 
-// Re-export useUpcoming and useUpcomingActivities alias
+// Re-export useUpcoming alias
 export { useUpcomingActivities as useUpcoming } from './useActivities';
 
 // Campaign hooks
@@ -194,33 +194,38 @@ export {
   pipelineEntityKeys,
 } from './usePipelines';
 
-// Auth-aware query helpers
-export { useAuthQuery, useAuthEnabled } from './useAuthQuery';
+// Filter hooks
+export { useFilters } from './useFilters';
 
-// Audit log hooks
-export { useEntityAuditLog, auditKeys } from './useAudit';
+// Report hooks
+export { useReports } from './useReports';
 
-// Comment hooks
-export {
-  useEntityComments,
-  useCreateComment,
-  useUpdateComment,
-  useDeleteComment,
-  commentKeys,
-} from './useComments';
+// Permission hooks
+export { usePermissions } from './usePermissions';
 
-// Pipeline management hooks
-export {
-  usePipelines,
-  usePipeline,
-  useCreatePipeline,
-  useUpdatePipeline,
-  useDeletePipeline,
-  pipelineEntityKeys,
-} from './usePipelines';
+// Email hooks
+export { useEmail } from './useEmail';
+
+// Notification hooks
+export { useNotifications } from './useNotifications';
+
+// Webhook hooks
+export { useWebhooks } from './useWebhooks';
+
+// Assignment hooks
+export { useAssignment } from './useAssignment';
+
+// Sequence hooks
+export { useSequences } from './useSequences';
+
+// Attachment hooks
+export { useAttachments } from './useAttachments';
 
 // Theme hook
 export { useTheme } from './useTheme';
 
 // Page title hook
 export { usePageTitle } from './usePageTitle';
+
+// Auth-aware query helpers
+export { useAuthQuery, useAuthEnabled } from './useAuthQuery';

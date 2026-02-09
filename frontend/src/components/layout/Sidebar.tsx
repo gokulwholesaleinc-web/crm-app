@@ -15,6 +15,7 @@ import {
   SparklesIcon,
   Cog6ToothIcon,
   XMarkIcon,
+  QueueListIcon,
 } from '@heroicons/react/24/outline';
 
 export interface NavItem {
@@ -35,6 +36,7 @@ const mainNavigation: NavItem[] = [
 ];
 
 const secondaryNavigation: NavItem[] = [
+  { name: 'Sequences', href: '/sequences', icon: QueueListIcon },
   { name: 'Workflows', href: '/workflows', icon: BoltIcon },
   { name: 'Import/Export', href: '/import-export', icon: ArrowsRightLeftIcon },
   { name: 'Reports', href: '/reports', icon: ChartBarIcon },

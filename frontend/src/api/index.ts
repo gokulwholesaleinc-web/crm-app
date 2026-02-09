@@ -192,6 +192,30 @@ export { commentsApi } from './comments';
 // Pipelines API
 export { pipelinesApi } from './pipelines';
 
+// Email API
+export { emailApi } from './email';
+
+// Notifications API
+export { notificationsApi } from './notifications';
+
+// Filters API
+export { filtersApi } from './filters';
+
+// Reports API
+export { reportsApi } from './reports';
+
+// Roles API
+export { rolesApi } from './roles';
+
+// Webhooks API
+export { webhooksApi } from './webhooks';
+
+// Assignment API
+export { assignmentApi } from './assignment';
+
+// Sequences API
+export { sequencesApi } from './sequences';
+
 // Aggregated API object for convenience
 import { authApi as _authApi } from './auth';
 import { contactsApi as _contactsApi } from './contacts';
@@ -208,6 +232,14 @@ import { workflowsApi as _workflowsApi } from './workflows';
 import { auditApi as _auditApi } from './audit';
 import { commentsApi as _commentsApi } from './comments';
 import { pipelinesApi as _pipelinesApi } from './pipelines';
+import { emailApi as _emailApi } from './email';
+import { notificationsApi as _notificationsApi } from './notifications';
+import { filtersApi as _filtersApi } from './filters';
+import { reportsApi as _reportsApi } from './reports';
+import { rolesApi as _rolesApi } from './roles';
+import { webhooksApi as _webhooksApi } from './webhooks';
+import { assignmentApi as _assignmentApi } from './assignment';
+import { sequencesApi as _sequencesApi } from './sequences';
 
 export const api = {
   auth: _authApi,
@@ -225,6 +257,14 @@ export const api = {
   audit: _auditApi,
   comments: _commentsApi,
   pipelines: _pipelinesApi,
+  email: _emailApi,
+  notifications: _notificationsApi,
+  filters: _filtersApi,
+  reports: _reportsApi,
+  roles: _rolesApi,
+  webhooks: _webhooksApi,
+  assignment: _assignmentApi,
+  sequences: _sequencesApi,
 };
 
 export default api;

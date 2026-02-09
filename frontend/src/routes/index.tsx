@@ -50,6 +50,9 @@ const WorkflowsPage = lazy(() => import('../features/workflows/WorkflowsPage'));
 // Import/Export
 const ImportExportPage = lazy(() => import('../features/import-export/ImportExportPage'));
 
+// Sequences
+const SequencesPage = lazy(() => import('../features/sequences/SequencesPage'));
+
 // Settings
 const SettingsPage = lazy(() => import('../features/settings/SettingsPage'));
 
@@ -206,6 +209,16 @@ function AppRoutes() {
         element={
           <PrivateRoute>
             <ImportExportPage />
+          </PrivateRoute>
+        }
+      />
+
+      {/* Sequences */}
+      <Route
+        path="/sequences"
+        element={
+          <PrivateRoute>
+            <SequencesPage />
           </PrivateRoute>
         }
       />

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
-import { NotesList } from '../../components/shared';
+import { NotesList, AttachmentList } from '../../components/shared';
 import { AuditTimeline } from '../../components/shared/AuditTimeline';
 import { CommentSection } from '../../components/shared/CommentSection';
 import { EmailComposeModal, EmailHistory } from '../../components/email';
@@ -13,7 +13,7 @@ import { formatDate, formatPhoneNumber } from '../../utils/formatters';
 import type { ContactUpdate } from '../../types';
 import clsx from 'clsx';
 
-type TabType = 'details' | 'activities' | 'notes' | 'emails' | 'comments' | 'history';
+type TabType = 'details' | 'activities' | 'notes' | 'emails' | 'attachments' | 'comments' | 'history';
 
 function ContactDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -115,6 +115,7 @@ function ContactDetailPage() {
     { id: 'activities', name: 'Activities' },
     { id: 'notes', name: 'Notes' },
     { id: 'emails', name: 'Emails' },
+    { id: 'attachments', name: 'Attachments' },
     { id: 'comments', name: 'Comments' },
     { id: 'history', name: 'History' },
   ];
@@ -361,6 +362,11 @@ function ContactDetailPage() {
             <EmailHistory entityType="contacts" entityId={contactId} />
           </div>
         </div>
+      )}
+
+      {/* Attachments Tab */}
+      {activeTab === 'attachments' && contactId && (
+        <AttachmentList entityType="contacts" entityId={contactId} />
       )}
 
       {/* Comments Tab */}

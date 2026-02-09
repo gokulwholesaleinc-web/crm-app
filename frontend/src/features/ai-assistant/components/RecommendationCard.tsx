@@ -108,7 +108,7 @@ export function RecommendationCard({ recommendation, onAction, feedbackSlot }: R
               {recommendation.amount && (
                 <span className="flex items-center gap-1">
                   <CurrencyDollarIcon className="h-3.5 w-3.5" />
-                  {new Intl.NumberFormat('en-US', {
+                  {new Intl.NumberFormat(undefined, {
                     style: 'currency',
                     currency: 'USD',
                     minimumFractionDigits: 0,

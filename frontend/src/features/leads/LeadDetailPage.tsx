@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
-import { NotesList } from '../../components/shared';
+import { NotesList, AttachmentList } from '../../components/shared';
 import { AuditTimeline } from '../../components/shared/AuditTimeline';
 import { CommentSection } from '../../components/shared/CommentSection';
 import { EmailComposeModal, EmailHistory } from '../../components/email';
@@ -15,7 +15,7 @@ import { useTimeline } from '../../hooks/useActivities';
 import type { LeadUpdate } from '../../types';
 import clsx from 'clsx';
 
-type TabType = 'details' | 'activities' | 'notes' | 'emails' | 'comments' | 'history';
+type TabType = 'details' | 'activities' | 'notes' | 'emails' | 'attachments' | 'comments' | 'history';
 
 function LeadDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -167,6 +167,9 @@ function LeadDetailPage() {
     { id: 'activities', name: 'Activities' },
     { id: 'notes', name: 'Notes' },
     { id: 'emails', name: 'Emails' },
+    { id: 'attachments', name: 'Attachments' },
+    { id: 'comments', name: 'Comments' },
+    { id: 'history', name: 'History' },
   ];
 
   return (
@@ -478,6 +481,21 @@ function LeadDetailPage() {
             <EmailHistory entityType="leads" entityId={leadId} />
           </div>
         </div>
+      )}
+
+      {/* Attachments Tab */}
+      {activeTab === 'attachments' && leadId && (
+        <AttachmentList entityType="leads" entityId={leadId} />
+      )}
+
+      {/* Comments Tab */}
+      {activeTab === 'comments' && leadId && (
+        <CommentSection entityType="leads" entityId={leadId} />
+      )}
+
+      {/* History Tab */}
+      {activeTab === 'history' && leadId && (
+        <AuditTimeline entityType="leads" entityId={leadId} />
       )}
 
       {/* Email Compose Modal */}

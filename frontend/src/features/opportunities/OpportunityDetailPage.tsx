@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { NotesList, AttachmentList } from '../../components/shared';
+import { AuditTimeline } from '../../components/shared/AuditTimeline';
+import { CommentSection } from '../../components/shared/CommentSection';
 import { OpportunityForm, OpportunityFormData } from './components/OpportunityForm';
 import { AIInsightsCard, NextBestActionCard } from '../../components/ai';
 import {
@@ -18,7 +20,7 @@ import { getStatusBadgeClasses } from '../../utils';
 import type { OpportunityUpdate } from '../../types';
 import clsx from 'clsx';
 
-type TabType = 'details' | 'activities' | 'notes' | 'attachments';
+type TabType = 'details' | 'activities' | 'notes' | 'attachments' | 'comments' | 'history';
 
 function OpportunityDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -149,6 +151,8 @@ function OpportunityDetailPage() {
     { id: 'activities', name: 'Activities' },
     { id: 'notes', name: 'Notes' },
     { id: 'attachments', name: 'Attachments' },
+    { id: 'comments', name: 'Comments' },
+    { id: 'history', name: 'History' },
   ];
 
   return (
@@ -441,6 +445,16 @@ function OpportunityDetailPage() {
 
       {activeTab === 'attachments' && opportunityId && (
         <AttachmentList entityType="opportunities" entityId={opportunityId} />
+      )}
+
+      {/* Comments Tab */}
+      {activeTab === 'comments' && opportunityId && (
+        <CommentSection entityType="opportunities" entityId={opportunityId} />
+      )}
+
+      {/* History Tab */}
+      {activeTab === 'history' && opportunityId && (
+        <AuditTimeline entityType="opportunities" entityId={opportunityId} />
       )}
 
       {/* Edit Form Modal */}

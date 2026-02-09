@@ -28,8 +28,20 @@ from src.activities.models import Activity
 from src.campaigns.models import Campaign, CampaignMember, EmailTemplate, EmailCampaignStep
 from src.core.models import Note, Tag, EntityTag
 from src.workflows.models import WorkflowRule, WorkflowExecution
+from src.dashboard.models import DashboardNumberCard, DashboardChart
+from src.ai.models import AIEmbedding, AIConversation, AIFeedback, AIKnowledgeDocument, AIUserPreferences
+from src.whitelabel.models import Tenant, TenantSettings, TenantUser
+from src.attachments.models import Attachment
+from src.email.models import EmailQueue
+from src.notifications.models import Notification
+from src.filters.models import SavedFilter
+from src.reports.models import SavedReport
 from src.audit.models import AuditLog
 from src.comments.models import Comment
+from src.roles.models import Role, UserRole
+from src.webhooks.models import Webhook, WebhookDelivery
+from src.assignment.models import AssignmentRule
+from src.sequences.models import Sequence, SequenceEnrollment
 
 
 # Test database URL - using SQLite in-memory for tests
@@ -344,18 +356,20 @@ async def test_note(db_session: AsyncSession, test_user: User, test_contact: Con
 
 
 @pytest_asyncio.fixture(scope="function")
-async def test_pipeline(db_session: AsyncSession) -> Pipeline:
-    """Create a test pipeline."""
-    pipeline = Pipeline(
-        name="Default Sales Pipeline",
-        description="Main sales pipeline for testing",
-        is_default=True,
-        is_active=True,
+async def test_saved_report(db_session: AsyncSession, test_user: User) -> SavedReport:
+    """Create a test saved report."""
+    report = SavedReport(
+        name="Test Report",
+        entity_type="leads",
+        metric="count",
+        group_by="status",
+        chart_type="bar",
+        created_by_id=test_user.id,
     )
-    db_session.add(pipeline)
+    db_session.add(report)
     await db_session.commit()
-    await db_session.refresh(pipeline)
-    return pipeline
+    await db_session.refresh(report)
+    return report
 
 
 @pytest_asyncio.fixture(scope="function")
