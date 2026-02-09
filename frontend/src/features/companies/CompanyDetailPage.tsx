@@ -16,7 +16,7 @@ import {
   LinkIcon,
 } from '@heroicons/react/24/outline';
 import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
-import { NotesList } from '../../components/shared';
+import { NotesList, AttachmentList } from '../../components/shared';
 import { CompanyForm } from './components/CompanyForm';
 import { useCompany, useUpdateCompany, useDeleteCompany } from '../../hooks/useCompanies';
 import { useContacts } from '../../hooks/useContacts';
@@ -25,7 +25,7 @@ import { getStatusColor, formatStatusLabel } from '../../utils/statusColors';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import type { CompanyUpdate, Contact } from '../../types';
 
-type TabType = 'overview' | 'activities' | 'notes';
+type TabType = 'overview' | 'activities' | 'notes' | 'attachments';
 
 function DetailItem({
   icon: Icon,
@@ -187,6 +187,7 @@ export function CompanyDetailPage() {
     { id: 'overview', name: 'Overview' },
     { id: 'activities', name: 'Activities' },
     { id: 'notes', name: 'Notes' },
+    { id: 'attachments', name: 'Attachments' },
   ];
 
   return (
@@ -489,6 +490,10 @@ export function CompanyDetailPage() {
 
       {activeTab === 'notes' && companyId && (
         <NotesList entityType="company" entityId={companyId} />
+      )}
+
+      {activeTab === 'attachments' && companyId && (
+        <AttachmentList entityType="companies" entityId={companyId} />
       )}
 
       {/* Edit Form Modal */}
