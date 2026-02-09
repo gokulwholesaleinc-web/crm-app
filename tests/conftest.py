@@ -23,13 +23,15 @@ from src.auth.models import User
 from src.contacts.models import Contact
 from src.companies.models import Company
 from src.leads.models import Lead, LeadSource
-from src.opportunities.models import Opportunity, PipelineStage, Pipeline
+from src.opportunities.models import Opportunity, PipelineStage
 from src.activities.models import Activity
 from src.campaigns.models import Campaign, CampaignMember, EmailTemplate, EmailCampaignStep
 from src.core.models import Note, Tag, EntityTag
 from src.workflows.models import WorkflowRule, WorkflowExecution
 from src.audit.models import AuditLog
 from src.comments.models import Comment
+from src.reports.models import SavedReport
+from src.filters.models import SavedFilter
 
 
 # Test database URL - using SQLite in-memory for tests

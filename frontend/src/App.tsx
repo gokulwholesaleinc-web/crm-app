@@ -66,9 +66,10 @@ function App() {
         <Suspense fallback={<PageLoader />}>
           <AppRoutes />
         </Suspense>
-        <Toaster
-          position="top-right"
-          toastOptions={{
+        <div aria-live="polite" aria-atomic="true">
+          <Toaster
+            position="top-right"
+            toastOptions={{
             duration: 4000,
             style: {
               background: '#363636',
@@ -86,8 +87,9 @@ function App() {
                 background: '#EF4444',
               },
             },
-          }}
-        />
+            }}
+          />
+        </div>
       </BrowserRouter>
     </QueryClientProvider>
   );

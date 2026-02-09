@@ -6,6 +6,8 @@ from pydantic import BaseModel, ConfigDict
 
 
 class CommentCreate(BaseModel):
+    """Schema for creating a comment."""
+
     content: str
     entity_type: str
     entity_id: int
@@ -14,27 +16,34 @@ class CommentCreate(BaseModel):
 
 
 class CommentUpdate(BaseModel):
-    content: Optional[str] = None
+    """Schema for updating a comment."""
+
+    content: str
 
 
 class CommentResponse(BaseModel):
+    """Response schema for a comment."""
+
     id: int
     content: str
     entity_type: str
     entity_id: int
-    user_id: Optional[int] = None
-    author_name: Optional[str] = None
     parent_id: Optional[int] = None
     is_internal: bool = False
+    user_id: int
+    user_name: Optional[str] = None
+    user_email: Optional[str] = None
+    mentioned_users: List[str] = []
+    replies: List["CommentResponse"] = []
     created_at: datetime
     updated_at: datetime
-    replies: List["CommentResponse"] = []
-    mentions: List[str] = []
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class CommentListResponse(BaseModel):
+    """Paginated list of comments."""
+
     items: List[CommentResponse]
     total: int
     page: int

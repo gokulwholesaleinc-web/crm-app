@@ -4,11 +4,8 @@ import { PlusIcon } from '@heroicons/react/24/outline';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button, Modal, ConfirmDialog } from '../../components/ui';
 import { SkeletonTable } from '../../components/ui/Skeleton';
-import { ErrorEmptyState } from '../../components/ui/EmptyState';
 import { LeadForm, LeadFormData } from './components/LeadForm';
 import { BulkActionToolbar } from './components/BulkActionToolbar';
-import { usePageTitle } from '../../hooks/usePageTitle';
-import { showSuccess, showError } from '../../utils/toast';
 import {
   useLeads,
   useCreateLead,
@@ -20,6 +17,8 @@ import {
 import { bulkUpdate, bulkAssign } from '../../api/importExport';
 import { getStatusBadgeClasses, formatStatusLabel, getScoreColor } from '../../utils';
 import { formatDate } from '../../utils/formatters';
+import { usePageTitle } from '../../hooks/usePageTitle';
+import { showSuccess, showError } from '../../utils/toast';
 import type { Lead, LeadCreate, LeadUpdate } from '../../types';
 import clsx from 'clsx';
 
@@ -56,7 +55,6 @@ function ScoreIndicator({ score }: { score: number }) {
 
 function LeadsPage() {
   usePageTitle('Leads');
-
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -154,6 +152,7 @@ function LeadsPage() {
           id: editingLead.id,
           data: updateData,
         });
+        showSuccess('Lead updated successfully');
       } else {
         const createData: LeadCreate = {
           first_name: data.firstName,
@@ -166,12 +165,12 @@ function LeadsPage() {
           budget_currency: 'USD', // Required field
         };
         await createLeadMutation.mutateAsync(createData);
+        showSuccess('Lead created successfully');
       }
       setShowForm(false);
       setEditingLead(null);
-      showSuccess(editingLead ? 'Lead updated successfully' : 'Lead created successfully');
     } catch (err) {
-      showError(editingLead ? 'Failed to update lead' : 'Failed to create lead');
+      showError('Failed to save lead');
     }
   };
 
@@ -314,9 +313,7 @@ function LeadsPage() {
       {/* Leads Table */}
       <div className="bg-white shadow rounded-lg overflow-hidden">
         {isLoading ? (
-          <div className="flex items-center justify-center h-64">
-            <Spinner size="lg" />
-          </div>
+          <SkeletonTable rows={5} cols={7} />
         ) : leads.length === 0 ? (
           <div className="text-center py-12 px-4">
             <svg

@@ -78,37 +78,37 @@
 
   /* Form elements */
   .form-label {
-    @apply block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300;
+    @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1;
   }
 
   .form-input {
-    @apply w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm
+    @apply w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm
+           bg-white dark:bg-gray-700 dark:text-gray-100
            focus:ring-blue-500 focus:border-blue-500
-           disabled:bg-gray-100 disabled:cursor-not-allowed
-           dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100 dark:disabled:bg-gray-700;
+           disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed;
   }
 
   .form-select {
-    @apply w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm
+    @apply w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm
+           bg-white dark:bg-gray-700 dark:text-gray-100
            focus:ring-blue-500 focus:border-blue-500
-           disabled:bg-gray-100 disabled:cursor-not-allowed
-           dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100;
+           disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed;
   }
 
   .form-textarea {
-    @apply w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm
+    @apply w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm
+           bg-white dark:bg-gray-700 dark:text-gray-100
            focus:ring-blue-500 focus:border-blue-500
-           disabled:bg-gray-100 disabled:cursor-not-allowed
-           resize-y min-h-[100px]
-           dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100;
+           disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed
+           resize-y min-h-[100px];
   }
 
   .form-error {
-    @apply text-sm text-red-600 mt-1 dark:text-red-400;
+    @apply text-sm text-red-600 dark:text-red-400 mt-1;
   }
 
   .form-hint {
-    @apply text-sm text-gray-500 mt-1 dark:text-gray-400;
+    @apply text-sm text-gray-500 dark:text-gray-400 mt-1;
   }
 
   /* Badge styles */
@@ -117,23 +117,23 @@
   }
 
   .badge-primary {
-    @apply bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200;
+    @apply bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300;
   }
 
   .badge-success {
-    @apply bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200;
+    @apply bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300;
   }
 
   .badge-warning {
-    @apply bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200;
+    @apply bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300;
   }
 
   .badge-danger {
-    @apply bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200;
+    @apply bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300;
   }
 
   .badge-gray {
-    @apply bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200;
+    @apply bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300;
   }
 
   /* Table styles */
@@ -150,11 +150,11 @@
   }
 
   .table th {
-    @apply px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-400;
+    @apply px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider;
   }
 
   .table tbody {
-    @apply bg-white divide-y divide-gray-200 dark:bg-gray-900 dark:divide-gray-700;
+    @apply bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700;
   }
 
   .table td {
@@ -238,39 +238,6 @@
     }
   }
 
-  /* Skip link for accessibility */
-  .skip-link {
-    @apply sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50
-           focus:px-4 focus:py-2 focus:bg-primary-600 focus:text-white focus:rounded-lg
-           focus:shadow-lg focus:outline-none;
-  }
-
-  /* Stagger animation for card/list items */
-  .stagger-fade-in > * {
-    animation: fadeIn 0.3s ease-out both;
-  }
-  .stagger-fade-in > *:nth-child(1) { animation-delay: 0ms; }
-  .stagger-fade-in > *:nth-child(2) { animation-delay: 50ms; }
-  .stagger-fade-in > *:nth-child(3) { animation-delay: 100ms; }
-  .stagger-fade-in > *:nth-child(4) { animation-delay: 150ms; }
-  .stagger-fade-in > *:nth-child(5) { animation-delay: 200ms; }
-  .stagger-fade-in > *:nth-child(6) { animation-delay: 250ms; }
-  .stagger-fade-in > *:nth-child(n+7) { animation-delay: 300ms; }
-
-  /* Tabular numbers for numeric data */
-  .tabular-nums {
-    font-variant-numeric: tabular-nums;
-  }
-
-  /* Respect reduced motion preference */
-  @media (prefers-reduced-motion: reduce) {
-    .stagger-fade-in > *,
-    .animate-fade-in,
-    .animate-slide-up {
-      animation: none !important;
-    }
-  }
-
   /* Truncate with multiple lines */
   .line-clamp-2 {
     display: -webkit-box;
@@ -284,5 +251,67 @@
     -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Skip link for accessibility */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: #4f46e5;
+  color: white;
+  padding: 8px 16px;
+  z-index: 100;
+  font-size: 14px;
+  border-radius: 0 0 4px 0;
+  transition: top 0.2s;
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
+/* Stagger fade-in animation for list/card items */
+.stagger-fade-in > * {
+  opacity: 0;
+  animation: staggerFadeIn 0.4s ease-out forwards;
+}
+
+.stagger-fade-in > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-fade-in > *:nth-child(2) { animation-delay: 60ms; }
+.stagger-fade-in > *:nth-child(3) { animation-delay: 120ms; }
+.stagger-fade-in > *:nth-child(4) { animation-delay: 180ms; }
+.stagger-fade-in > *:nth-child(5) { animation-delay: 240ms; }
+.stagger-fade-in > *:nth-child(6) { animation-delay: 300ms; }
+.stagger-fade-in > *:nth-child(7) { animation-delay: 360ms; }
+.stagger-fade-in > *:nth-child(8) { animation-delay: 420ms; }
+
+@keyframes staggerFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .stagger-fade-in > * {
+    opacity: 1;
+    animation: none;
   }
 }

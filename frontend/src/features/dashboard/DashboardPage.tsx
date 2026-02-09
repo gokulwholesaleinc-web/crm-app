@@ -60,10 +60,10 @@ function DashboardPage() {
     return (
       <div className="space-y-4 sm:space-y-6">
         <div>
-          <div className="h-7 w-40 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
-          <div className="mt-2 h-4 w-64 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+          <div className="h-8 w-40 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+          <div className="mt-2 h-4 w-64 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:gap-6 sm:grid-cols-2 lg:grid-cols-4 stagger-fade-in">
+        <div className="grid grid-cols-1 gap-3 sm:gap-6 sm:grid-cols-2 lg:grid-cols-4">
           <SkeletonCard />
           <SkeletonCard />
           <SkeletonCard />
@@ -91,7 +91,7 @@ function DashboardPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 gap-3 sm:gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:gap-6 sm:grid-cols-2 lg:grid-cols-4 stagger-fade-in">
         <NumberCard
           title="Total Contacts"
           value={data?.totalContacts ?? 0}

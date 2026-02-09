@@ -1,186 +1,217 @@
 /**
- * Roles management section for Settings page.
- * Only visible to admins; lists all roles and their permissions.
+ * Roles management section for the Settings page.
+ * Shows current user's role and allows admins to manage roles.
  */
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useRoles, useMyPermissions, useAssignRole } from '../../../hooks/usePermissions';
+import { useUsers } from '../../../hooks/useAuth';
+import { useAuthStore } from '../../../store/authStore';
 import { Card, CardHeader, CardBody } from '../../../components/ui/Card';
 import { Spinner } from '../../../components/ui/Spinner';
 import { Badge } from '../../../components/ui/Badge';
-import { usePermissions } from '../../../hooks/usePermissions';
-import { rolesApi } from '../../../api/roles';
-import type { Role } from '../../../types';
+import { Button } from '../../../components/ui/Button';
+import { Modal, ModalFooter } from '../../../components/ui/Modal';
 import {
   ShieldCheckIcon,
-  CheckIcon,
-  XMarkIcon,
+  UserGroupIcon,
 } from '@heroicons/react/24/outline';
+import type { BadgeVariant } from '../../../components/ui/Badge';
 
-const ROLE_COLORS: Record<string, 'purple' | 'blue' | 'green' | 'gray'> = {
-  admin: 'purple',
-  manager: 'blue',
-  sales_rep: 'green',
+const ROLE_BADGE_COLORS: Record<string, BadgeVariant> = {
+  admin: 'red',
+  manager: 'purple',
+  sales_rep: 'blue',
   viewer: 'gray',
 };
 
-const ENTITY_LABELS: Record<string, string> = {
-  leads: 'Leads',
-  contacts: 'Contacts',
-  companies: 'Companies',
-  opportunities: 'Opportunities',
-  activities: 'Activities',
-  campaigns: 'Campaigns',
-  workflows: 'Workflows',
-  reports: 'Reports',
-  settings: 'Settings',
-  users: 'Users',
-  roles: 'Roles',
+const ROLE_LABELS: Record<string, string> = {
+  admin: 'Admin',
+  manager: 'Manager',
+  sales_rep: 'Sales Rep',
+  viewer: 'Viewer',
 };
 
-const ACTIONS = ['create', 'read', 'update', 'delete'];
+function formatPermissions(permissions: Record<string, string[]>): string[] {
+  const lines: string[] = [];
+  for (const [entity, actions] of Object.entries(permissions)) {
+    if (actions.length > 0) {
+      lines.push(`${entity}: ${actions.join(', ')}`);
+    }
+  }
+  return lines;
+}
 
 export function RolesSection() {
-  const { isAdmin } = usePermissions();
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { user } = useAuthStore();
+  const { data: roles, isLoading: rolesLoading } = useRoles();
+  const { data: myPermissions, isLoading: permsLoading } = useMyPermissions();
+  const { data: users } = useUsers();
+  const assignMutation = useAssignRole();
+  const [assignModalOpen, setAssignModalOpen] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState<number>(0);
+  const [selectedRoleId, setSelectedRoleId] = useState<number>(0);
 
-  useEffect(() => {
-    if (!isAdmin) return;
+  const isAdmin = user?.is_superuser || myPermissions?.role === 'admin';
+  const isLoading = rolesLoading || permsLoading;
 
-    let cancelled = false;
-    const fetchRoles = async () => {
-      try {
-        const data = await rolesApi.listRoles();
-        if (!cancelled) {
-          setRoles(data);
-          setError(null);
-        }
-      } catch {
-        if (!cancelled) {
-          setError('Failed to load roles');
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    fetchRoles();
-    return () => { cancelled = true; };
-  }, [isAdmin]);
-
-  if (!isAdmin) return null;
+  const handleAssign = async () => {
+    if (selectedUserId && selectedRoleId) {
+      await assignMutation.mutateAsync({
+        user_id: selectedUserId,
+        role_id: selectedRoleId,
+      });
+      setAssignModalOpen(false);
+      setSelectedUserId(0);
+      setSelectedRoleId(0);
+    }
+  };
 
   return (
     <Card>
       <CardHeader
         title="Roles & Permissions"
-        description="View role-based access control configuration"
+        description="View your role and permissions"
+        action={
+          isAdmin ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              leftIcon={<UserGroupIcon className="h-4 w-4" />}
+              onClick={() => setAssignModalOpen(true)}
+            >
+              Assign Role
+            </Button>
+          ) : undefined
+        }
       />
       <CardBody className="p-4 sm:p-6">
         {isLoading ? (
           <div className="flex justify-center py-4">
             <Spinner size="md" />
           </div>
-        ) : error ? (
-          <p className="text-sm text-red-600 text-center py-4">{error}</p>
-        ) : roles.length === 0 ? (
-          <p className="text-sm text-gray-500 text-center py-4">
-            No roles configured.
-          </p>
         ) : (
           <div className="space-y-6">
-            {/* Role Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {roles.map((role) => (
-                <div
-                  key={role.id}
-                  className="bg-gray-50 rounded-lg p-4 border border-gray-200"
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <ShieldCheckIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
-                    <Badge
-                      variant={ROLE_COLORS[role.name] || 'gray'}
-                      size="md"
-                    >
-                      {role.name.replace('_', ' ')}
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {role.description || 'No description'}
-                  </p>
-                </div>
-              ))}
+            {/* Current User Role */}
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-indigo-100 flex items-center justify-center">
+                <ShieldCheckIcon className="h-5 w-5 text-indigo-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-900">Your Role</p>
+                <Badge variant={ROLE_BADGE_COLORS[myPermissions?.role ?? 'sales_rep'] ?? 'gray'}>
+                  {ROLE_LABELS[myPermissions?.role ?? 'sales_rep'] ?? myPermissions?.role ?? 'Sales Rep'}
+                </Badge>
+              </div>
             </div>
 
-            {/* Permissions Matrix */}
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-2 pr-4 font-medium text-gray-700">
-                      Entity
-                    </th>
-                    {roles.map((role) => (
-                      <th
-                        key={role.id}
-                        className="text-center px-2 py-2 font-medium text-gray-700 capitalize"
-                      >
-                        {role.name.replace('_', ' ')}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {Object.entries(ENTITY_LABELS).map(([entity, label]) => (
-                    <tr key={entity} className="hover:bg-gray-50">
-                      <td className="py-2 pr-4 font-medium text-gray-600">
-                        {label}
-                      </td>
-                      {roles.map((role) => {
-                        const perms = role.permissions?.[entity] || [];
-                        const hasAll = ACTIONS.every((a) => perms.includes(a));
-                        const hasNone = perms.length === 0;
-                        const readOnly =
-                          perms.length === 1 && perms[0] === 'read';
-
-                        return (
-                          <td
-                            key={role.id}
-                            className="text-center px-2 py-2"
-                          >
-                            {hasAll ? (
-                              <span className="inline-flex items-center text-green-600">
-                                <CheckIcon className="h-4 w-4" aria-hidden="true" />
-                                <span className="sr-only">Full access</span>
-                                <span className="ml-1 text-xs">Full</span>
-                              </span>
-                            ) : hasNone ? (
-                              <span className="inline-flex items-center text-gray-400">
-                                <XMarkIcon className="h-4 w-4" aria-hidden="true" />
-                                <span className="sr-only">No access</span>
-                                <span className="ml-1 text-xs">None</span>
-                              </span>
-                            ) : readOnly ? (
-                              <span className="text-xs text-blue-600">Read</span>
-                            ) : (
-                              <span className="text-xs text-yellow-600">
-                                {perms.join(', ')}
-                              </span>
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
+            {/* Permissions Summary */}
+            {myPermissions && (
+              <div>
+                <p className="text-sm font-medium text-gray-700 mb-2">Your Permissions</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {formatPermissions(myPermissions.permissions).map((line) => (
+                    <div key={line} className="text-xs text-gray-600 bg-gray-50 rounded px-3 py-2">
+                      {line}
+                    </div>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </div>
+              </div>
+            )}
+
+            {/* All Roles (visible to everyone) */}
+            {roles && roles.length > 0 && (
+              <div>
+                <p className="text-sm font-medium text-gray-700 mb-2">Available Roles</p>
+                <div className="flex flex-wrap gap-2">
+                  {roles.map((role) => (
+                    <Badge
+                      key={role.id}
+                      variant={ROLE_BADGE_COLORS[role.name] ?? 'gray'}
+                      size="lg"
+                    >
+                      {ROLE_LABELS[role.name] ?? role.name}
+                      {role.description ? ` - ${role.description}` : ''}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </CardBody>
+
+      {/* Assign Role Modal (Admin only) */}
+      <Modal
+        isOpen={assignModalOpen}
+        onClose={() => setAssignModalOpen(false)}
+        title="Assign Role to User"
+        size="md"
+      >
+        <div className="space-y-4">
+          {assignMutation.isError && (
+            <div className="rounded-md bg-red-50 p-3">
+              <p className="text-sm text-red-800">Failed to assign role. Please try again.</p>
+            </div>
+          )}
+
+          <div>
+            <label htmlFor="assign-user" className="block text-sm font-medium text-gray-700 mb-1">
+              User
+            </label>
+            <select
+              id="assign-user"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              value={selectedUserId}
+              onChange={(e) => setSelectedUserId(Number(e.target.value))}
+            >
+              <option value={0}>Select a user...</option>
+              {users?.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.full_name} ({u.email})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="assign-role" className="block text-sm font-medium text-gray-700 mb-1">
+              Role
+            </label>
+            <select
+              id="assign-role"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              value={selectedRoleId}
+              onChange={(e) => setSelectedRoleId(Number(e.target.value))}
+            >
+              <option value={0}>Select a role...</option>
+              {roles?.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {ROLE_LABELS[r.name] ?? r.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <ModalFooter>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setAssignModalOpen(false)}
+              disabled={assignMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAssign}
+              isLoading={assignMutation.isPending}
+              disabled={!selectedUserId || !selectedRoleId}
+            >
+              Assign Role
+            </Button>
+          </ModalFooter>
+        </div>
+      </Modal>
     </Card>
   );
 }

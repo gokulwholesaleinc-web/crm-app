@@ -30,9 +30,7 @@ export function Layout({
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-900 overflow-hidden">
       {/* Skip Link */}
-      <a href="#main-content" className="skip-link">
-        Skip to main content
-      </a>
+      <a href="#main-content" className="skip-link">Skip to main content</a>
 
       {/* Desktop Sidebar - hidden on mobile/tablet, visible on lg+ */}
       <div className="hidden lg:flex lg:flex-shrink-0">
@@ -109,12 +107,12 @@ export function PageHeader({
                 {crumb.href ? (
                   <Link
                     to={crumb.href}
-                    className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                    className="text-gray-500 hover:text-gray-700"
                   >
                     {crumb.label}
                   </Link>
                 ) : (
-                  <span className="text-gray-900 dark:text-gray-100 font-medium">
+                  <span className="text-gray-900 font-medium">
                     {crumb.label}
                   </span>
                 )}

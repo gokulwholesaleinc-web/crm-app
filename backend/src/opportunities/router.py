@@ -204,8 +204,12 @@ async def list_opportunities(
     company_id: Optional[int] = None,
     owner_id: Optional[int] = None,
     tag_ids: Optional[str] = None,
+    filters: Optional[str] = None,
 ):
     """List opportunities with pagination and filters."""
+    import json as _json
+    parsed_filters = _json.loads(filters) if filters else None
+
     service = OpportunityService(db)
 
     opportunities, total = await service.get_list(
@@ -217,6 +221,7 @@ async def list_opportunities(
         company_id=company_id,
         owner_id=owner_id,
         tag_ids=parse_tag_ids(tag_ids),
+        filters=parsed_filters,
     )
 
     opp_responses = [

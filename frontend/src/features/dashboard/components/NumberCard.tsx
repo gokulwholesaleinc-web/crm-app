@@ -23,15 +23,15 @@ export function NumberCard({
   return (
     <div
       className={clsx(
-        'bg-white rounded-lg shadow p-4 sm:p-6 border border-gray-200',
+        'bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 border border-gray-200 dark:border-gray-700',
         className
       )}
     >
       <div className="flex items-center justify-between">
         <div className="flex-1 min-w-0">
-          <p className="text-xs sm:text-sm font-medium text-gray-500 truncate">{title}</p>
+          <p className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400 truncate">{title}</p>
           <div className="mt-1 sm:mt-2 flex items-baseline flex-wrap">
-            <p className="text-xl sm:text-2xl font-semibold text-gray-900 truncate">{value}</p>
+            <p className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-gray-100 truncate tabular-nums">{value}</p>
             {trend && (
               <span
                 className={clsx(
@@ -49,7 +49,7 @@ export function NumberCard({
           )}
         </div>
         {icon && (
-          <div className="flex-shrink-0 p-3 bg-primary-50 rounded-lg">
+          <div className="flex-shrink-0 p-3 bg-primary-50 dark:bg-primary-900/30 rounded-lg">
             <span className="h-6 w-6 text-primary-600">{icon}</span>
           </div>
         )}

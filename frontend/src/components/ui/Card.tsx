@@ -33,7 +33,7 @@ export function Card({
   return (
     <div
       className={clsx(
-        'bg-white rounded-lg border border-gray-200 dark:bg-gray-800 dark:border-gray-700',
+        'bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700',
         paddingStyles[padding],
         shadowStyles[shadow],
         hover && 'transition-shadow duration-200 hover:shadow-lg',

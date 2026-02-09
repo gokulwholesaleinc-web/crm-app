@@ -54,8 +54,12 @@ async def list_companies(
     industry: Optional[str] = None,
     owner_id: Optional[int] = None,
     tag_ids: Optional[str] = None,
+    filters: Optional[str] = None,
 ):
     """List companies with pagination and filters."""
+    import json as _json
+    parsed_filters = _json.loads(filters) if filters else None
+
     service = CompanyService(db)
 
     companies, total = await service.get_list(
@@ -66,6 +70,7 @@ async def list_companies(
         industry=industry,
         owner_id=owner_id,
         tag_ids=parse_tag_ids(tag_ids),
+        filters=parsed_filters,
     )
 
     company_responses = [
