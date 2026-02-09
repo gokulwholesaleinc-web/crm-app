@@ -4,12 +4,7 @@ import { PlusIcon } from '@heroicons/react/24/outline';
 import { Button, Modal, ConfirmDialog } from '../../components/ui';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { ContactForm, ContactFormData } from './components/ContactForm';
-import {
-  useContacts,
-  useCreateContact,
-  useUpdateContact,
-  useDeleteContact,
-} from '../../hooks';
+import { useContacts, useCreateContact, useUpdateContact, useDeleteContact } from '../../hooks/useContacts';
 import { formatDate, formatPhoneNumber } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { showSuccess, showError } from '../../utils/toast';

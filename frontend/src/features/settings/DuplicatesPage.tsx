@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Spinner, ConfirmDialog } from '../../components/ui';
-import { useCheckDuplicates, useMergeEntities } from '../../hooks';
+import { useCheckDuplicates, useMergeEntities } from '../../hooks/useDedup';
 import { useContacts } from '../../hooks/useContacts';
 import { useCompanies } from '../../hooks/useCompanies';
 import { useLeads } from '../../hooks/useLeads';

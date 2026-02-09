@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 import { Spinner } from '../ui';
-import { useEntityAuditLog } from '../../hooks';
+import { useEntityAuditLog } from '../../hooks/useAudit';
 import { formatDate } from '../../utils/formatters';
 import type { AuditLogEntry, AuditChangeDetail } from '../../types';
 

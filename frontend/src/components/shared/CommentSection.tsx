@@ -5,12 +5,8 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { Button, Spinner, ConfirmDialog } from '../ui';
-import {
-  useEntityComments,
-  useCreateComment,
-  useDeleteComment,
-  useUsers,
-} from '../../hooks';
+import { useEntityComments, useCreateComment, useDeleteComment } from '../../hooks/useComments';
+import { useUsers } from '../../hooks/useAuth';
 import { formatDate } from '../../utils/formatters';
 import { useUIStore } from '../../store/uiStore';
 import { useAuthStore } from '../../store/authStore';

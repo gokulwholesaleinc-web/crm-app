@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 import { Button, Spinner, ConfirmDialog } from '../ui';
-import { useEntityNotes, useCreateNote, useDeleteNote } from '../../hooks';
+import { useEntityNotes, useCreateNote, useDeleteNote } from '../../hooks/useNotes';
 import { formatDate } from '../../utils/formatters';
 import { useUIStore } from '../../store/uiStore';
 
