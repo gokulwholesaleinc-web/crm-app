@@ -1,6 +1,7 @@
 """FastAPI CRM Application - Main Entry Point."""
 
 import os
+import asyncio
 from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -47,73 +48,72 @@ from src.assignment.router import router as assignment_router
 from src.sequences.router import router as sequences_router
 
 
+async def _init_database():
+    """Initialize database tables and seed data in background."""
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+
+        from src.auth.models import User
+        from src.core.models import Note, Tag, EntityTag
+        from src.contacts.models import Contact
+        from src.companies.models import Company
+        from src.leads.models import Lead, LeadSource
+        from src.opportunities.models import Opportunity, PipelineStage
+        from src.activities.models import Activity
+        from src.campaigns.models import Campaign, CampaignMember, EmailTemplate, EmailCampaignStep
+        from src.dashboard.models import DashboardNumberCard, DashboardChart
+        from src.workflows.models import WorkflowRule, WorkflowExecution
+        from src.ai.models import AIEmbedding, AIConversation, AIFeedback, AIKnowledgeDocument, AIUserPreferences
+        from src.whitelabel.models import Tenant, TenantSettings, TenantUser
+        from src.attachments.models import Attachment
+        from src.email.models import EmailQueue
+        from src.notifications.models import Notification
+        from src.filters.models import SavedFilter
+        from src.reports.models import SavedReport
+        from src.audit.models import AuditLog
+        from src.comments.models import Comment
+        from src.roles.models import Role, UserRole
+        from src.webhooks.models import Webhook, WebhookDelivery
+        from src.assignment.models import AssignmentRule
+        from src.sequences.models import Sequence, SequenceEnrollment
+
+        from src.database import Base
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
+        from src.database import async_session_maker
+        from src.roles.service import RoleService
+        async with async_session_maker() as session:
+            role_service = RoleService(session)
+            seeded = await role_service.seed_default_roles()
+            if seeded:
+                await session.commit()
+                print(f"Seeded {len(seeded)} default roles")
+            else:
+                print("Default roles already exist")
+
+        print("Database initialized successfully")
+
+        if getattr(settings, 'SEED_ON_STARTUP', False):
+            try:
+                from src.seed import seed_database
+                async with async_session_maker() as session:
+                    await seed_database(session)
+            except ImportError:
+                pass
+    except Exception as e:
+        print(f"Database initialization error: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup/shutdown events."""
-    # Startup
     print("Starting up CRM application...")
-
-    # Initialize database
-    async with engine.begin() as conn:
-        # Enable pgvector extension
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-
-    # Import all models to ensure they're registered
-    from src.auth.models import User
-    from src.core.models import Note, Tag, EntityTag
-    from src.contacts.models import Contact
-    from src.companies.models import Company
-    from src.leads.models import Lead, LeadSource
-    from src.opportunities.models import Opportunity, PipelineStage
-    from src.activities.models import Activity
-    from src.campaigns.models import Campaign, CampaignMember, EmailTemplate, EmailCampaignStep
-    from src.dashboard.models import DashboardNumberCard, DashboardChart
-    from src.workflows.models import WorkflowRule, WorkflowExecution
-    from src.ai.models import AIEmbedding, AIConversation, AIFeedback, AIKnowledgeDocument, AIUserPreferences
-    from src.whitelabel.models import Tenant, TenantSettings, TenantUser
-    from src.attachments.models import Attachment
-    from src.email.models import EmailQueue
-    from src.notifications.models import Notification
-    from src.filters.models import SavedFilter
-    from src.reports.models import SavedReport
-    from src.audit.models import AuditLog
-    from src.comments.models import Comment
-    from src.roles.models import Role, UserRole
-    from src.webhooks.models import Webhook, WebhookDelivery
-    from src.assignment.models import AssignmentRule
-    from src.sequences.models import Sequence, SequenceEnrollment
-
-    # Create tables
-    from src.database import Base
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-    # Seed default roles
-    from src.database import async_session_maker
-    from src.roles.service import RoleService
-    async with async_session_maker() as session:
-        role_service = RoleService(session)
-        seeded = await role_service.seed_default_roles()
-        if seeded:
-            await session.commit()
-            print(f"Seeded {len(seeded)} default roles")
-        else:
-            print("Default roles already exist")
-
-    print("Database initialized successfully")
-
-    # Seed demo and admin accounts if enabled
-    if getattr(settings, 'SEED_ON_STARTUP', False):
-        try:
-            from src.seed import seed_database
-            async with async_session_maker() as session:
-                await seed_database(session)
-        except ImportError:
-            pass
+    asyncio.create_task(_init_database())
 
     yield
 
-    # Shutdown
     print("Shutting down CRM application...")
     await engine.dispose()
 
