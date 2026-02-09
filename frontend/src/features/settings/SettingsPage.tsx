@@ -20,6 +20,7 @@ import { EditProfileModal } from './components/EditProfileModal';
 import { AIPreferencesSection } from './components/AIPreferencesSection';
 import { PipelineStagesSection } from './components/PipelineStagesSection';
 import { LeadSourcesSection } from './components/LeadSourcesSection';
+import { RolesSection } from './components/RolesSection';
 
 function SettingsPage() {
   const { user, isLoading } = useAuthStore();
@@ -145,6 +146,9 @@ function SettingsPage() {
       {/* Lead Sources Section */}
       <LeadSourcesSection />
 
+      {/* Roles & Permissions Section */}
+      <RolesSection />
+
       {/* Account Settings Section */}
       <Card>
         <CardHeader
@@ -263,8 +267,8 @@ function SettingsPage() {
             </div>
             <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
               <p className="text-xs sm:text-sm font-medium text-gray-500">Role</p>
-              <p className="mt-1 text-sm text-gray-900">
-                {user?.is_superuser ? 'Administrator' : 'User'}
+              <p className="mt-1 text-sm text-gray-900 capitalize">
+                {user?.role ?? (user?.is_superuser ? 'admin' : 'sales_rep')}
               </p>
             </div>
             <div className="bg-gray-50 rounded-lg p-3 sm:p-4">

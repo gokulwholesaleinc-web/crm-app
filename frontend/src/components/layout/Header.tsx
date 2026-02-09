@@ -10,9 +10,12 @@ import {
   Cog6ToothIcon,
   ArrowRightOnRectangleIcon,
   XMarkIcon,
+  SunIcon,
+  MoonIcon,
 } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 import { Avatar } from '../ui/Avatar';
+import { useTheme } from '../../hooks/useTheme';
 
 export interface User {
   id: string;
@@ -42,6 +45,7 @@ export function Header({
 }: HeaderProps) {
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const { toggleTheme, isDark } = useTheme();
 
   // Focus search input when mobile search opens
   useEffect(() => {
@@ -64,14 +68,14 @@ export function Header({
   return (
     <header
       className={clsx(
-        'sticky top-0 z-30 flex items-center h-14 sm:h-16 px-3 sm:px-4 bg-white border-b border-gray-200',
+        'sticky top-0 z-30 flex items-center h-14 sm:h-16 px-3 sm:px-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700',
         className
       )}
     >
       {/* Mobile menu button (hamburger) */}
       <button
         type="button"
-        className="lg:hidden p-2 -ml-1 rounded-lg text-gray-500 hover:text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
+        className="lg:hidden p-2 -ml-1 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
         onClick={onMenuClick}
         aria-label="Open navigation menu"
       >
@@ -91,7 +95,7 @@ export function Header({
             <input
               type="search"
               placeholder="Search contacts, companies, deals..."
-              className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg leading-5 bg-white dark:bg-gray-700 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               onChange={(e) => onSearch?.(e.target.value)}
             />
           </div>
@@ -102,7 +106,7 @@ export function Header({
       {showSearch && (
         <button
           type="button"
-          className="sm:hidden ml-2 p-2 rounded-lg text-gray-500 hover:text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
+          className="sm:hidden ml-2 p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
           onClick={() => setMobileSearchOpen(true)}
           aria-label="Open search"
         >
@@ -112,8 +116,8 @@ export function Header({
 
       {/* Mobile Search Overlay */}
       {showSearch && mobileSearchOpen && (
-        <div className="sm:hidden fixed inset-0 z-50 bg-white">
-          <div className="flex items-center h-14 px-3 border-b border-gray-200">
+        <div className="sm:hidden fixed inset-0 z-50 bg-white dark:bg-gray-800">
+          <div className="flex items-center h-14 px-3 border-b border-gray-200 dark:border-gray-700">
             <div className="flex-1 relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <MagnifyingGlassIcon
@@ -125,14 +129,14 @@ export function Header({
                 ref={searchInputRef}
                 type="search"
                 placeholder="Search..."
-                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-400 text-base focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg leading-5 bg-white dark:bg-gray-700 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 text-base focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 onChange={(e) => onSearch?.(e.target.value)}
               />
             </div>
             <button
               type="button"
               onClick={() => setMobileSearchOpen(false)}
-              className="ml-2 p-2 rounded-lg text-gray-500 hover:text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
+              className="ml-2 p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
               aria-label="Close search"
             >
               <XMarkIcon className="h-6 w-6" aria-hidden="true" />
@@ -146,10 +150,24 @@ export function Header({
 
       {/* Right side */}
       <div className="flex items-center ml-auto space-x-2 sm:space-x-4">
+        {/* Theme Toggle */}
+        <button
+          type="button"
+          className="p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
+          onClick={toggleTheme}
+          aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+        >
+          {isDark ? (
+            <SunIcon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />
+          ) : (
+            <MoonIcon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />
+          )}
+        </button>
+
         {/* Notifications */}
         <button
           type="button"
-          className="relative p-2 rounded-lg text-gray-500 hover:text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
+          className="relative p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
           aria-label="View notifications"
         >
           <BellIcon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />
@@ -162,7 +180,7 @@ export function Header({
 
         {/* User Menu - touch-friendly with larger tap targets */}
         <Menu as="div" className="relative">
-          <Menu.Button className="flex items-center p-1 sm:p-0 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 touch-manipulation">
+          <Menu.Button className="flex items-center p-1 sm:p-0 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 touch-manipulation">
             <span className="sr-only">Open user menu</span>
             <div className="flex items-center">
               <Avatar
@@ -171,7 +189,7 @@ export function Header({
                 size="sm"
               />
               <div className="hidden md:flex md:items-center md:ml-2">
-                <span className="text-sm font-medium text-gray-700 max-w-[120px] truncate">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-200 max-w-[120px] truncate">
                   {user?.name || 'User'}
                 </span>
                 <ChevronDownIcon
@@ -190,13 +208,13 @@ export function Header({
             leaveFrom="transform opacity-100 scale-100"
             leaveTo="transform opacity-0 scale-95"
           >
-            <Menu.Items className="absolute right-0 z-50 mt-2 w-56 sm:w-48 origin-top-right rounded-lg bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+            <Menu.Items className="absolute right-0 z-50 mt-2 w-56 sm:w-48 origin-top-right rounded-lg bg-white dark:bg-gray-800 py-1 shadow-lg ring-1 ring-black ring-opacity-5 dark:ring-gray-700 focus:outline-none">
               {user && (
-                <div className="px-4 py-3 border-b border-gray-100">
-                  <p className="text-sm font-medium text-gray-900 truncate">
+                <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                     {user.name}
                   </p>
-                  <p className="text-sm text-gray-500 truncate">{user.email}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{user.email}</p>
                 </div>
               )}
               <Menu.Item>
@@ -205,7 +223,7 @@ export function Header({
                     to="/profile"
                     className={clsx(
                       'flex items-center px-4 py-3 sm:py-2 text-sm touch-manipulation',
-                      active ? 'bg-gray-100 text-gray-900' : 'text-gray-700'
+                      active ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100' : 'text-gray-700 dark:text-gray-300'
                     )}
                   >
                     <UserCircleIcon
@@ -222,7 +240,7 @@ export function Header({
                     to="/settings"
                     className={clsx(
                       'flex items-center px-4 py-3 sm:py-2 text-sm touch-manipulation',
-                      active ? 'bg-gray-100 text-gray-900' : 'text-gray-700'
+                      active ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100' : 'text-gray-700 dark:text-gray-300'
                     )}
                   >
                     <Cog6ToothIcon
@@ -233,14 +251,14 @@ export function Header({
                   </Link>
                 )}
               </Menu.Item>
-              <div className="border-t border-gray-100" />
+              <div className="border-t border-gray-100 dark:border-gray-700" />
               <Menu.Item>
                 {({ active }) => (
                   <button
                     onClick={onLogout}
                     className={clsx(
                       'flex items-center w-full px-4 py-3 sm:py-2 text-sm text-left touch-manipulation',
-                      active ? 'bg-gray-100 text-gray-900' : 'text-gray-700'
+                      active ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100' : 'text-gray-700 dark:text-gray-300'
                     )}
                   >
                     <ArrowRightOnRectangleIcon
