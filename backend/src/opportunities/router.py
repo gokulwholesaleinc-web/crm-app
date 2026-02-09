@@ -131,8 +131,10 @@ async def get_kanban_view(
     owner_id: Optional[int] = None,
 ):
     """Get Kanban board view of pipeline."""
+    # Auto-scope to current user's data by default
+    effective_owner_id = owner_id if owner_id is not None else current_user.id
     manager = PipelineManager(db)
-    kanban_data = await manager.get_kanban_data(owner_id=owner_id)
+    kanban_data = await manager.get_kanban_data(owner_id=effective_owner_id)
 
     return KanbanResponse(stages=[KanbanStage(**stage) for stage in kanban_data])
 
@@ -171,10 +173,12 @@ async def get_forecast(
     owner_id: Optional[int] = None,
 ):
     """Get revenue forecast."""
+    # Auto-scope to current user's data by default
+    effective_owner_id = owner_id if owner_id is not None else current_user.id
     forecaster = RevenueForecast(db)
     forecast = await forecaster.get_forecast(
         months_ahead=months_ahead,
-        owner_id=owner_id,
+        owner_id=effective_owner_id,
     )
     return forecast
 
@@ -186,8 +190,10 @@ async def get_pipeline_summary(
     owner_id: Optional[int] = None,
 ):
     """Get pipeline summary."""
+    # Auto-scope to current user's data by default
+    effective_owner_id = owner_id if owner_id is not None else current_user.id
     forecaster = RevenueForecast(db)
-    summary = await forecaster.get_pipeline_summary(owner_id=owner_id)
+    summary = await forecaster.get_pipeline_summary(owner_id=effective_owner_id)
     return summary
 
 
