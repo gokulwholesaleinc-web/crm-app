@@ -28,6 +28,7 @@ class UserResponse(UserBase):
     is_active: bool
     is_superuser: bool
     avatar_url: Optional[str] = None
+    role: str = "sales_rep"
     created_at: datetime
     last_login: Optional[datetime] = None
 

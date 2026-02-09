@@ -13,6 +13,7 @@ export interface User {
   job_title?: string | null;
   is_active: boolean;
   is_superuser: boolean;
+  role?: string;
   avatar_url?: string | null;
   created_at: string;
   last_login?: string | null;

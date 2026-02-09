@@ -50,8 +50,12 @@ async def list_contacts(
     status: Optional[str] = None,
     owner_id: Optional[int] = None,
     tag_ids: Optional[str] = None,
+    filters: Optional[str] = None,
 ):
     """List contacts with pagination and filters."""
+    import json as _json
+    parsed_filters = _json.loads(filters) if filters else None
+
     service = ContactService(db)
 
     contacts, total = await service.get_list(
@@ -62,6 +66,7 @@ async def list_contacts(
         status=status,
         owner_id=owner_id,
         tag_ids=parse_tag_ids(tag_ids),
+        filters=parsed_filters,
     )
 
     contact_responses = [
