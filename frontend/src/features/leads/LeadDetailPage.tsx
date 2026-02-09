@@ -1,16 +1,18 @@
-import { useState } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
-import { NotesList, AttachmentList } from '../../components/shared';
-import { AuditTimeline } from '../../components/shared/AuditTimeline';
-import { CommentSection } from '../../components/shared/CommentSection';
+
+const NotesList = lazy(() => import('../../components/shared/NotesList'));
+const AttachmentList = lazy(() => import('../../components/shared/AttachmentList'));
+const AuditTimeline = lazy(() => import('../../components/shared/AuditTimeline'));
+const CommentSection = lazy(() => import('../../components/shared/CommentSection'));
 import { EmailComposeModal, EmailHistory } from '../../components/email';
 import { ConvertLeadModal } from './components/ConvertLeadModal';
 import { LeadForm, LeadFormData } from './components/LeadForm';
 import { AIInsightsCard, NextBestActionCard } from '../../components/ai';
 import { getStatusBadgeClasses, formatStatusLabel, getScoreColor } from '../../utils';
 import { formatDate, formatPhoneNumber } from '../../utils/formatters';
-import { useLead, useDeleteLead, useConvertLead, useUpdateLead } from '../../hooks';
+import { useLead, useDeleteLead, useConvertLead, useUpdateLead } from '../../hooks/useLeads';
 import { useTimeline } from '../../hooks/useActivities';
 import type { LeadUpdate } from '../../types';
 import clsx from 'clsx';
@@ -472,7 +474,9 @@ function LeadDetailPage() {
       )}
 
       {activeTab === 'notes' && leadId && (
-        <NotesList entityType="lead" entityId={leadId} />
+        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+          <NotesList entityType="lead" entityId={leadId} />
+        </Suspense>
       )}
 
       {activeTab === 'emails' && leadId && (
@@ -485,17 +489,23 @@ function LeadDetailPage() {
 
       {/* Attachments Tab */}
       {activeTab === 'attachments' && leadId && (
-        <AttachmentList entityType="leads" entityId={leadId} />
+        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+          <AttachmentList entityType="leads" entityId={leadId} />
+        </Suspense>
       )}
 
       {/* Comments Tab */}
       {activeTab === 'comments' && leadId && (
-        <CommentSection entityType="leads" entityId={leadId} />
+        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+          <CommentSection entityType="leads" entityId={leadId} />
+        </Suspense>
       )}
 
       {/* History Tab */}
       {activeTab === 'history' && leadId && (
-        <AuditTimeline entityType="leads" entityId={leadId} />
+        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+          <AuditTimeline entityType="leads" entityId={leadId} />
+        </Suspense>
       )}
 
       {/* Email Compose Modal */}

@@ -5,7 +5,7 @@
 
 import { useState, useCallback, useRef } from 'react';
 import { Button, Spinner, ConfirmDialog } from '../ui';
-import { useAttachments, useUploadAttachment, useDeleteAttachment } from '../../hooks';
+import { useAttachments, useUploadAttachment, useDeleteAttachment } from '../../hooks/useAttachments';
 import { getDownloadUrl } from '../../api/attachments';
 import { getToken } from '../../api/client';
 import { useUIStore } from '../../store/uiStore';

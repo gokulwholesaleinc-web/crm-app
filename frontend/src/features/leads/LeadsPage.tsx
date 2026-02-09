@@ -6,14 +6,8 @@ import { Button, Modal, ConfirmDialog } from '../../components/ui';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { LeadForm, LeadFormData } from './components/LeadForm';
 import { BulkActionToolbar } from './components/BulkActionToolbar';
-import {
-  useLeads,
-  useCreateLead,
-  useUpdateLead,
-  useDeleteLead,
-  useUsers,
-  leadKeys,
-} from '../../hooks';
+import { useLeads, useCreateLead, useUpdateLead, useDeleteLead, leadKeys } from '../../hooks/useLeads';
+import { useUsers } from '../../hooks/useAuth';
 import { bulkUpdate, bulkAssign } from '../../api/importExport';
 import { getStatusBadgeClasses, formatStatusLabel, getScoreColor } from '../../utils';
 import { formatDate } from '../../utils/formatters';

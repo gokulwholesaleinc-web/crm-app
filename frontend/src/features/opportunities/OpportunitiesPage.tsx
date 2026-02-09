@@ -9,16 +9,9 @@ import {
 import { Opportunity as KanbanOpportunity } from './components/KanbanBoard/KanbanCard';
 import { OpportunityForm, OpportunityFormData } from './components/OpportunityForm';
 import { AIInsightsCard, NextBestActionCard } from '../../components/ai';
-import {
-  useOpportunities,
-  useMoveOpportunity,
-  usePipelineStages,
-  useCreateOpportunity,
-  useUpdateOpportunity,
-  useContacts,
-  useCompanies,
-  usePipelines,
-} from '../../hooks';
+import { useOpportunities, useMoveOpportunity, usePipelineStages, useCreateOpportunity, useUpdateOpportunity } from '../../hooks/useOpportunities';
+import { useContacts } from '../../hooks/useContacts';
+import { useCompanies } from '../../hooks/useCompanies';
 import {
   formatCurrency,
   formatDate,
@@ -41,7 +34,6 @@ function OpportunitiesPage() {
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [showForm, setShowForm] = useState(false);
   const [editingOpportunity, setEditingOpportunity] = useState<Opportunity | null>(null);
-  const [selectedPipelineId, setSelectedPipelineId] = useState<number | null>(null);
 
   // Use the hooks for data fetching
   const {

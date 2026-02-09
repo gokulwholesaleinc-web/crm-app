@@ -2,7 +2,7 @@
  * Company detail page with contacts list, activities, and notes tabs
  */
 
-import { useState } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import clsx from 'clsx';
 import {
@@ -16,9 +16,11 @@ import {
   LinkIcon,
 } from '@heroicons/react/24/outline';
 import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
-import { NotesList, AttachmentList } from '../../components/shared';
-import { AuditTimeline } from '../../components/shared/AuditTimeline';
-import { CommentSection } from '../../components/shared/CommentSection';
+
+const NotesList = lazy(() => import('../../components/shared/NotesList'));
+const AttachmentList = lazy(() => import('../../components/shared/AttachmentList'));
+const AuditTimeline = lazy(() => import('../../components/shared/AuditTimeline'));
+const CommentSection = lazy(() => import('../../components/shared/CommentSection'));
 import { CompanyForm } from './components/CompanyForm';
 import { useCompany, useUpdateCompany, useDeleteCompany } from '../../hooks/useCompanies';
 import { useContacts } from '../../hooks/useContacts';
@@ -493,21 +495,29 @@ export function CompanyDetailPage() {
       )}
 
       {activeTab === 'notes' && companyId && (
-        <NotesList entityType="company" entityId={companyId} />
+        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+          <NotesList entityType="company" entityId={companyId} />
+        </Suspense>
       )}
 
       {activeTab === 'attachments' && companyId && (
-        <AttachmentList entityType="companies" entityId={companyId} />
+        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+          <AttachmentList entityType="companies" entityId={companyId} />
+        </Suspense>
       )}
 
       {/* Comments Tab */}
       {activeTab === 'comments' && companyId && (
-        <CommentSection entityType="companies" entityId={companyId} />
+        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+          <CommentSection entityType="companies" entityId={companyId} />
+        </Suspense>
       )}
 
       {/* History Tab */}
       {activeTab === 'history' && companyId && (
-        <AuditTimeline entityType="companies" entityId={companyId} />
+        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+          <AuditTimeline entityType="companies" entityId={companyId} />
+        </Suspense>
       )}
 
       {/* Edit Form Modal */}

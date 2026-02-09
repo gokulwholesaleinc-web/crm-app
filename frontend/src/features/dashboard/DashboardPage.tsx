@@ -5,7 +5,8 @@ import { SkeletonCard, SkeletonChart } from '../../components/ui/Skeleton';
 import { ErrorEmptyState } from '../../components/ui/EmptyState';
 import { DashboardRecommendations } from '../../components/ai/DashboardRecommendations';
 import { formatCurrency, formatDate } from '../../utils';
-import { useDashboard, usePipelineFunnelChart, useLeadsBySourceChart, useUserTimeline, useSalesFunnel } from '../../hooks';
+import { useDashboard, usePipelineFunnelChart, useLeadsBySourceChart, useSalesFunnel } from '../../hooks/useDashboard';
+import { useUserTimeline } from '../../hooks/useActivities';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import type { NumberCardData, ChartDataPoint } from '../../types';
 

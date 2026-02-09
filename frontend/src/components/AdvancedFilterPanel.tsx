@@ -13,7 +13,7 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline';
 import { Button } from './ui/Button';
-import { useSavedFilters, useCreateSavedFilter, useDeleteSavedFilter } from '../hooks';
+import { useSavedFilters, useCreateSavedFilter, useDeleteSavedFilter } from '../hooks/useFilters';
 import type { FilterCondition, FilterGroup, SavedFilter } from '../api/filters';
 
 // =============================================================================

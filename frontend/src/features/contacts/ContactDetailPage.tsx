@@ -1,13 +1,15 @@
-import { useState } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
-import { NotesList, AttachmentList } from '../../components/shared';
-import { AuditTimeline } from '../../components/shared/AuditTimeline';
-import { CommentSection } from '../../components/shared/CommentSection';
+
+const NotesList = lazy(() => import('../../components/shared/NotesList'));
+const AttachmentList = lazy(() => import('../../components/shared/AttachmentList'));
+const AuditTimeline = lazy(() => import('../../components/shared/AuditTimeline'));
+const CommentSection = lazy(() => import('../../components/shared/CommentSection'));
 import { EmailComposeModal, EmailHistory } from '../../components/email';
 import { ContactForm, ContactFormData } from './components/ContactForm';
 import { NextBestActionCard } from '../../components/ai';
-import { useContact, useDeleteContact, useUpdateContact } from '../../hooks';
+import { useContact, useDeleteContact, useUpdateContact } from '../../hooks/useContacts';
 import { useTimeline } from '../../hooks/useActivities';
 import { formatDate, formatPhoneNumber } from '../../utils/formatters';
 import type { ContactUpdate } from '../../types';
@@ -353,7 +355,9 @@ function ContactDetailPage() {
       )}
 
       {activeTab === 'notes' && contactId && (
-        <NotesList entityType="contact" entityId={contactId} />
+        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+          <NotesList entityType="contact" entityId={contactId} />
+        </Suspense>
       )}
 
       {activeTab === 'emails' && contactId && (
@@ -366,17 +370,23 @@ function ContactDetailPage() {
 
       {/* Attachments Tab */}
       {activeTab === 'attachments' && contactId && (
-        <AttachmentList entityType="contacts" entityId={contactId} />
+        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+          <AttachmentList entityType="contacts" entityId={contactId} />
+        </Suspense>
       )}
 
       {/* Comments Tab */}
       {activeTab === 'comments' && contactId && (
-        <CommentSection entityType="contacts" entityId={contactId} />
+        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+          <CommentSection entityType="contacts" entityId={contactId} />
+        </Suspense>
       )}
 
       {/* History Tab */}
       {activeTab === 'history' && contactId && (
-        <AuditTimeline entityType="contacts" entityId={contactId} />
+        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+          <AuditTimeline entityType="contacts" entityId={contactId} />
+        </Suspense>
       )}
 
       {/* Email Compose Modal */}

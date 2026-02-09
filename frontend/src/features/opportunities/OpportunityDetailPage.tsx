@@ -1,19 +1,16 @@
-import { useState } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
-import { NotesList, AttachmentList } from '../../components/shared';
-import { AuditTimeline } from '../../components/shared/AuditTimeline';
-import { CommentSection } from '../../components/shared/CommentSection';
+
+const NotesList = lazy(() => import('../../components/shared/NotesList'));
+const AttachmentList = lazy(() => import('../../components/shared/AttachmentList'));
+const AuditTimeline = lazy(() => import('../../components/shared/AuditTimeline'));
+const CommentSection = lazy(() => import('../../components/shared/CommentSection'));
 import { OpportunityForm, OpportunityFormData } from './components/OpportunityForm';
 import { AIInsightsCard, NextBestActionCard } from '../../components/ai';
-import {
-  useOpportunity,
-  useDeleteOpportunity,
-  useUpdateOpportunity,
-  usePipelineStages,
-  useContacts,
-  useCompanies,
-} from '../../hooks';
+import { useOpportunity, useDeleteOpportunity, useUpdateOpportunity, usePipelineStages } from '../../hooks/useOpportunities';
+import { useContacts } from '../../hooks/useContacts';
+import { useCompanies } from '../../hooks/useCompanies';
 import { useTimeline } from '../../hooks/useActivities';
 import { formatCurrency, formatDate, formatPercentage } from '../../utils/formatters';
 import { getStatusBadgeClasses } from '../../utils';
@@ -440,21 +437,29 @@ function OpportunityDetailPage() {
       )}
 
       {activeTab === 'notes' && opportunityId && (
-        <NotesList entityType="opportunity" entityId={opportunityId} />
+        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+          <NotesList entityType="opportunity" entityId={opportunityId} />
+        </Suspense>
       )}
 
       {activeTab === 'attachments' && opportunityId && (
-        <AttachmentList entityType="opportunities" entityId={opportunityId} />
+        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+          <AttachmentList entityType="opportunities" entityId={opportunityId} />
+        </Suspense>
       )}
 
       {/* Comments Tab */}
       {activeTab === 'comments' && opportunityId && (
-        <CommentSection entityType="opportunities" entityId={opportunityId} />
+        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+          <CommentSection entityType="opportunities" entityId={opportunityId} />
+        </Suspense>
       )}
 
       {/* History Tab */}
       {activeTab === 'history' && opportunityId && (
-        <AuditTimeline entityType="opportunities" entityId={opportunityId} />
+        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+          <AuditTimeline entityType="opportunities" entityId={opportunityId} />
+        </Suspense>
       )}
 
       {/* Edit Form Modal */}
