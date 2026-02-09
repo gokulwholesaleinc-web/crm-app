@@ -195,7 +195,7 @@ export {
 } from './usePipelines';
 
 // Filter hooks
-export { useFilters } from './useFilters';
+export { useSavedFilters, useCreateSavedFilter, useDeleteSavedFilter, filterKeys } from './useFilters';
 
 // Report hooks
 export { useReports } from './useReports';
