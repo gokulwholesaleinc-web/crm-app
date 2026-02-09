@@ -13,6 +13,20 @@ from src.filters.schemas import SavedFilterCreate, SavedFilterUpdate, SavedFilte
 router = APIRouter(prefix="/api/filters", tags=["filters"])
 
 
+def _filter_to_response(f: SavedFilter) -> SavedFilterResponse:
+    """Convert a SavedFilter ORM object to a response, parsing JSON filters."""
+    return SavedFilterResponse(
+        id=f.id,
+        name=f.name,
+        entity_type=f.entity_type,
+        filters=json.loads(f.filters) if isinstance(f.filters, str) else f.filters,
+        user_id=f.user_id,
+        is_default=f.is_default,
+        created_at=f.created_at,
+        updated_at=f.updated_at,
+    )
+
+
 @router.get("", response_model=List[SavedFilterResponse])
 async def list_saved_filters(
     current_user: CurrentUser,
@@ -28,12 +42,7 @@ async def list_saved_filters(
     result = await db.execute(query)
     filters = result.scalars().all()
 
-    responses = []
-    for f in filters:
-        data = SavedFilterResponse.model_validate(f).model_dump()
-        data["filters"] = json.loads(f.filters) if isinstance(f.filters, str) else f.filters
-        responses.append(SavedFilterResponse(**data))
-    return responses
+    return [_filter_to_response(f) for f in filters]
 
 
 @router.post("", response_model=SavedFilterResponse, status_code=HTTPStatus.CREATED)
@@ -54,9 +63,7 @@ async def create_saved_filter(
     await db.flush()
     await db.refresh(saved_filter)
 
-    resp = SavedFilterResponse.model_validate(saved_filter).model_dump()
-    resp["filters"] = data.filters
-    return SavedFilterResponse(**resp)
+    return _filter_to_response(saved_filter)
 
 
 @router.get("/{filter_id}", response_model=SavedFilterResponse)
@@ -77,9 +84,7 @@ async def get_saved_filter(
         from src.core.router_utils import raise_not_found
         raise_not_found("Saved filter", filter_id)
 
-    resp = SavedFilterResponse.model_validate(saved_filter).model_dump()
-    resp["filters"] = json.loads(saved_filter.filters) if isinstance(saved_filter.filters, str) else saved_filter.filters
-    return SavedFilterResponse(**resp)
+    return _filter_to_response(saved_filter)
 
 
 @router.patch("/{filter_id}", response_model=SavedFilterResponse)
@@ -111,9 +116,7 @@ async def update_saved_filter(
     await db.flush()
     await db.refresh(saved_filter)
 
-    resp = SavedFilterResponse.model_validate(saved_filter).model_dump()
-    resp["filters"] = json.loads(saved_filter.filters) if isinstance(saved_filter.filters, str) else saved_filter.filters
-    return SavedFilterResponse(**resp)
+    return _filter_to_response(saved_filter)
 
 
 @router.delete("/{filter_id}", status_code=HTTPStatus.NO_CONTENT)

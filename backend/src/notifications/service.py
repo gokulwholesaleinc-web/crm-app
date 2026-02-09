@@ -161,7 +161,7 @@ async def notify_on_activity_due(
         user_id=user_id,
         type="activity_due",
         title="Activity due",
-        message=f"Activity "{activity_subject}" is due soon",
+        message=f'Activity "{activity_subject}" is due soon',
         entity_type="activities",
         entity_id=activity_id,
     )
