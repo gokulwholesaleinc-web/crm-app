@@ -117,6 +117,52 @@ export const getSalesFunnel = async (): Promise<SalesFunnelResponse> => {
   return response.data;
 };
 
+// =============================================================================
+// Multi-Currency
+// =============================================================================
+
+export interface CurrencyInfo {
+  code: string;
+  name: string;
+  symbol: string;
+  exchange_rate: number;
+}
+
+export interface CurrenciesResponse {
+  base_currency: string;
+  currencies: CurrencyInfo[];
+}
+
+export interface ConvertedRevenueResponse {
+  target_currency: string;
+  total_pipeline_value: number;
+  total_revenue: number;
+  weighted_pipeline_value: number;
+  open_deal_count: number;
+  won_deal_count: number;
+}
+
+/**
+ * Get list of supported currencies with exchange rates
+ */
+export const getCurrencies = async (): Promise<CurrenciesResponse> => {
+  const response = await apiClient.get<CurrenciesResponse>(`${DASHBOARD_BASE}/currencies`);
+  return response.data;
+};
+
+/**
+ * Get revenue converted to target currency
+ */
+export const getConvertedRevenue = async (
+  targetCurrency = 'USD'
+): Promise<ConvertedRevenueResponse> => {
+  const response = await apiClient.get<ConvertedRevenueResponse>(
+    `${DASHBOARD_BASE}/revenue/converted`,
+    { params: { target_currency: targetCurrency } }
+  );
+  return response.data;
+};
+
 // Export all dashboard functions
 export const dashboardApi = {
   // Main
@@ -131,6 +177,9 @@ export const dashboardApi = {
   getNewLeadsTrendChart,
   getConversionRatesChart,
   getSalesFunnel,
+  // Multi-Currency
+  getCurrencies,
+  getConvertedRevenue,
 };
 
 export default dashboardApi;

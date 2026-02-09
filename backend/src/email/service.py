@@ -1,20 +1,22 @@
-"""Email service for sending and tracking emails."""
+"""Email service layer - handles sending, tracking, and queue management."""
 
 import os
+import re
 import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timezone
-from typing import Optional, Tuple, List
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from typing import Optional, List, Tuple, Dict
 
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.email.models import EmailQueue
+from src.core.constants import DEFAULT_PAGE_SIZE
 
 
 def get_smtp_config() -> dict:
-    """Get SMTP configuration from environment variables."""
+    """Read SMTP configuration from environment variables."""
     return {
         "host": os.getenv("SMTP_HOST", "localhost"),
         "port": int(os.getenv("SMTP_PORT", "587")),
@@ -40,19 +42,20 @@ def send_email_smtp(to_email: str, subject: str, body: str) -> None:
             server.starttls()
         if config["user"] and config["password"]:
             server.login(config["user"], config["password"])
-        server.sendmail(config["from_email"], to_email, msg.as_string())
+        server.sendmail(config["from_email"], [to_email], msg.as_string())
 
 
-def render_template(template_str: str, variables: dict) -> str:
-    """Render a template string with {{variable}} placeholders."""
-    result = template_str
-    for key, value in variables.items():
-        result = result.replace("{{" + key + "}}", str(value))
-    return result
+def render_template(template: str, variables: Dict[str, str]) -> str:
+    """Render a template string by replacing {{var}} placeholders."""
+    def replacer(match):
+        key = match.group(1)
+        return variables.get(key, match.group(0))
+
+    return re.sub(r"\{\{(\w+)\}\}", replacer, template)
 
 
 class EmailService:
-    """Service for email queue management and sending."""
+    """Service for email queue operations."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -62,27 +65,29 @@ class EmailService:
         to_email: str,
         subject: str,
         body: str,
-        sent_by_id: int,
+        sent_by_id: Optional[int] = None,
         entity_type: Optional[str] = None,
         entity_id: Optional[int] = None,
         template_id: Optional[int] = None,
         campaign_id: Optional[int] = None,
     ) -> EmailQueue:
-        """Queue an email and attempt to send it immediately."""
+        """Create an email queue entry and attempt to send."""
         email = EmailQueue(
             to_email=to_email,
             subject=subject,
             body=body,
-            status="pending",
+            sent_by_id=sent_by_id,
             entity_type=entity_type,
             entity_id=entity_id,
             template_id=template_id,
             campaign_id=campaign_id,
-            sent_by_id=sent_by_id,
+            status="pending",
+            attempts=0,
         )
         self.db.add(email)
         await self.db.flush()
 
+        # Attempt immediate send
         await self._attempt_send(email)
         return email
 
@@ -93,9 +98,10 @@ class EmailService:
             send_email_smtp(email.to_email, email.subject, email.body)
             email.status = "sent"
             email.sent_at = datetime.now(timezone.utc)
-        except Exception as e:
+        except Exception as exc:
             email.status = "failed"
-            email.error = str(e)
+            email.error = str(exc)[:500]
+        await self.db.flush()
 
     async def get_by_id(self, email_id: int) -> Optional[EmailQueue]:
         """Get an email by ID."""
@@ -107,30 +113,39 @@ class EmailService:
     async def get_list(
         self,
         page: int = 1,
-        page_size: int = 20,
+        page_size: int = DEFAULT_PAGE_SIZE,
         entity_type: Optional[str] = None,
         entity_id: Optional[int] = None,
         status: Optional[str] = None,
+        sent_by_id: Optional[int] = None,
     ) -> Tuple[List[EmailQueue], int]:
         """Get paginated list of emails with optional filters."""
-        query = select(EmailQueue)
-        count_query = select(func.count()).select_from(EmailQueue)
-
+        filters = []
         if entity_type:
-            query = query.where(EmailQueue.entity_type == entity_type)
-            count_query = count_query.where(EmailQueue.entity_type == entity_type)
+            filters.append(EmailQueue.entity_type == entity_type)
         if entity_id is not None:
-            query = query.where(EmailQueue.entity_id == entity_id)
-            count_query = count_query.where(EmailQueue.entity_id == entity_id)
+            filters.append(EmailQueue.entity_id == entity_id)
         if status:
-            query = query.where(EmailQueue.status == status)
-            count_query = count_query.where(EmailQueue.status == status)
+            filters.append(EmailQueue.status == status)
+        if sent_by_id is not None:
+            filters.append(EmailQueue.sent_by_id == sent_by_id)
 
+        # Count
+        if filters:
+            count_query = select(func.count()).select_from(
+                select(EmailQueue.id).where(*filters).subquery()
+            )
+        else:
+            count_query = select(func.count()).select_from(EmailQueue)
         total_result = await self.db.execute(count_query)
         total = total_result.scalar() or 0
 
-        offset = (page - 1) * page_size
-        query = query.order_by(EmailQueue.created_at.desc()).offset(offset).limit(page_size)
+        # Fetch
+        query = select(EmailQueue).order_by(EmailQueue.created_at.desc())
+        if filters:
+            query = query.where(*filters)
+        query = query.offset((page - 1) * page_size).limit(page_size)
+
         result = await self.db.execute(query)
         items = list(result.scalars().all())
 
@@ -139,42 +154,46 @@ class EmailService:
     async def record_open(self, email_id: int) -> Optional[EmailQueue]:
         """Record an email open event."""
         email = await self.get_by_id(email_id)
-        if email:
-            email.open_count += 1
-            if not email.opened_at:
-                email.opened_at = datetime.now(timezone.utc)
+        if not email:
+            return None
+        email.open_count += 1
+        if not email.opened_at:
+            email.opened_at = datetime.now(timezone.utc)
+        await self.db.flush()
         return email
 
     async def record_click(self, email_id: int) -> Optional[EmailQueue]:
         """Record an email click event."""
         email = await self.get_by_id(email_id)
-        if email:
-            email.click_count += 1
-            if not email.clicked_at:
-                email.clicked_at = datetime.now(timezone.utc)
+        if not email:
+            return None
+        email.click_count += 1
+        if not email.clicked_at:
+            email.clicked_at = datetime.now(timezone.utc)
+        await self.db.flush()
         return email
 
     async def send_template_email(
         self,
         to_email: str,
         template_id: int,
-        variables: dict,
-        sent_by_id: int,
+        variables: Optional[Dict[str, str]] = None,
+        sent_by_id: Optional[int] = None,
         entity_type: Optional[str] = None,
         entity_id: Optional[int] = None,
     ) -> EmailQueue:
         """Send an email using a template."""
         from src.campaigns.models import EmailTemplate
-
         result = await self.db.execute(
             select(EmailTemplate).where(EmailTemplate.id == template_id)
         )
         template = result.scalar_one_or_none()
         if not template:
-            raise ValueError(f"Email template {template_id} not found")
+            raise ValueError(f"Template {template_id} not found")
 
-        subject = render_template(template.subject_template, variables)
-        body = render_template(template.body_template, variables)
+        vars_dict = variables or {}
+        subject = render_template(template.subject, vars_dict)
+        body = render_template(template.body_html or template.body_text or "", vars_dict)
 
         return await self.queue_email(
             to_email=to_email,
@@ -187,45 +206,46 @@ class EmailService:
         )
 
     async def send_campaign_emails(
-        self, campaign_id: int, sent_by_id: int
+        self,
+        campaign_id: int,
+        template_id: int,
+        variables: Optional[Dict[str, str]] = None,
+        sent_by_id: Optional[int] = None,
     ) -> List[EmailQueue]:
-        """Send emails to all pending members of a campaign."""
+        """Send emails to all members of a campaign."""
         from src.campaigns.models import CampaignMember
-
         result = await self.db.execute(
-            select(CampaignMember).where(
-                CampaignMember.campaign_id == campaign_id,
-                CampaignMember.status == "pending",
-            )
+            select(CampaignMember).where(CampaignMember.campaign_id == campaign_id)
         )
-        members = list(result.scalars().all())
+        members = result.scalars().all()
 
         sent_emails = []
         for member in members:
             email_addr = await self._get_member_email(member)
             if email_addr:
-                email = await self.queue_email(
+                email = await self.send_template_email(
                     to_email=email_addr,
-                    subject=f"Campaign #{campaign_id}",
-                    body=f"Campaign message for member {member.member_id}",
+                    template_id=template_id,
+                    variables=variables,
                     sent_by_id=sent_by_id,
-                    campaign_id=campaign_id,
+                    entity_type=member.entity_type,
+                    entity_id=member.entity_id,
                 )
                 sent_emails.append(email)
 
         return sent_emails
 
     async def _get_member_email(self, member) -> Optional[str]:
-        """Resolve email address from a campaign member."""
-        if member.member_type == "contact":
+        """Get the email address for a campaign member."""
+        if member.entity_type == "contacts":
             from src.contacts.models import Contact
             result = await self.db.execute(
-                select(Contact.email).where(Contact.id == member.member_id)
+                select(Contact.email).where(Contact.id == member.entity_id)
             )
-        elif member.member_type == "lead":
+        elif member.entity_type == "leads":
             from src.leads.models import Lead
             result = await self.db.execute(
-                select(Lead.email).where(Lead.id == member.member_id)
+                select(Lead.email).where(Lead.id == member.entity_id)
             )
         else:
             return None

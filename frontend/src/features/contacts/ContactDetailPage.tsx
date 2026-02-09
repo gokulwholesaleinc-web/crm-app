@@ -2,16 +2,18 @@ import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { NotesList } from '../../components/shared';
+import { AuditTimeline } from '../../components/shared/AuditTimeline';
+import { CommentSection } from '../../components/shared/CommentSection';
+import { EmailComposeModal, EmailHistory } from '../../components/email';
 import { ContactForm, ContactFormData } from './components/ContactForm';
 import { NextBestActionCard } from '../../components/ai';
 import { useContact, useDeleteContact, useUpdateContact } from '../../hooks';
 import { useTimeline } from '../../hooks/useActivities';
 import { formatDate, formatPhoneNumber } from '../../utils/formatters';
 import type { ContactUpdate } from '../../types';
-import { EmailComposeModal, EmailHistory } from '../../components/email';
 import clsx from 'clsx';
 
-type TabType = 'details' | 'activities' | 'notes' | 'emails';
+type TabType = 'details' | 'activities' | 'notes' | 'emails' | 'comments' | 'history';
 
 function ContactDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -113,6 +115,8 @@ function ContactDetailPage() {
     { id: 'activities', name: 'Activities' },
     { id: 'notes', name: 'Notes' },
     { id: 'emails', name: 'Emails' },
+    { id: 'comments', name: 'Comments' },
+    { id: 'history', name: 'History' },
   ];
 
   return (
@@ -151,7 +155,7 @@ function ContactDetailPage() {
         </div>
         <div className="flex items-center gap-3 w-full sm:w-auto">
           <Button
-            variant="secondary"
+            variant="primary"
             onClick={() => setShowEmailCompose(true)}
             className="flex-1 sm:flex-none"
           >
@@ -352,7 +356,21 @@ function ContactDetailPage() {
       )}
 
       {activeTab === 'emails' && contactId && (
-        <EmailHistory entityType="contacts" entityId={contactId} />
+        <div className="bg-white shadow rounded-lg">
+          <div className="px-4 py-5 sm:p-6">
+            <EmailHistory entityType="contacts" entityId={contactId} />
+          </div>
+        </div>
+      )}
+
+      {/* Comments Tab */}
+      {activeTab === 'comments' && contactId && (
+        <CommentSection entityType="contacts" entityId={contactId} />
+      )}
+
+      {/* History Tab */}
+      {activeTab === 'history' && contactId && (
+        <AuditTimeline entityType="contacts" entityId={contactId} />
       )}
 
       {/* Email Compose Modal */}
@@ -361,7 +379,7 @@ function ContactDetailPage() {
         onClose={() => setShowEmailCompose(false)}
         defaultTo={contact.email || ''}
         entityType="contacts"
-        entityId={contact.id}
+        entityId={contactId}
       />
 
       {/* Edit Form Modal */}

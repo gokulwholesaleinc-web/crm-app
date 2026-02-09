@@ -1,11 +1,13 @@
 """Email API routes."""
 
 import base64
-from fastapi import APIRouter, Query
-from fastapi.responses import Response, RedirectResponse
 from typing import Optional
 
-from src.core.router_utils import DBSession, CurrentUser, calculate_pages, raise_not_found
+from fastapi import APIRouter, Query, HTTPException
+from fastapi.responses import Response, RedirectResponse
+
+from src.core.constants import HTTPStatus
+from src.core.router_utils import DBSession, CurrentUser, calculate_pages
 from src.email.schemas import (
     SendEmailRequest,
     SendTemplateEmailRequest,
@@ -23,60 +25,71 @@ TRACKING_PIXEL = base64.b64decode(
 )
 
 
-@router.post("/send", response_model=EmailQueueResponse, status_code=201)
+@router.post("/send", response_model=EmailQueueResponse, status_code=HTTPStatus.CREATED)
 async def send_email(
-    request: SendEmailRequest,
+    data: SendEmailRequest,
     current_user: CurrentUser,
     db: DBSession,
 ):
-    """Send a single email."""
+    """Send an email and queue it for tracking."""
     service = EmailService(db)
     email = await service.queue_email(
-        to_email=request.to_email,
-        subject=request.subject,
-        body=request.body,
+        to_email=data.to_email,
+        subject=data.subject,
+        body=data.body,
         sent_by_id=current_user.id,
-        entity_type=request.entity_type,
-        entity_id=request.entity_id,
+        entity_type=data.entity_type,
+        entity_id=data.entity_id,
     )
-    return EmailQueueResponse.model_validate(email)
+    return email
 
 
-@router.post("/send-template", response_model=EmailQueueResponse, status_code=201)
+@router.post("/send-template", response_model=EmailQueueResponse, status_code=HTTPStatus.CREATED)
 async def send_template_email(
-    request: SendTemplateEmailRequest,
+    data: SendTemplateEmailRequest,
     current_user: CurrentUser,
     db: DBSession,
 ):
     """Send an email using a template."""
     service = EmailService(db)
-    email = await service.send_template_email(
-        to_email=request.to_email,
-        template_id=request.template_id,
-        variables=request.variables,
-        sent_by_id=current_user.id,
-        entity_type=request.entity_type,
-        entity_id=request.entity_id,
-    )
-    return EmailQueueResponse.model_validate(email)
+    try:
+        email = await service.send_template_email(
+            to_email=data.to_email,
+            template_id=data.template_id,
+            variables=data.variables,
+            sent_by_id=current_user.id,
+            entity_type=data.entity_type,
+            entity_id=data.entity_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail=str(exc),
+        )
+    return email
 
 
-@router.post("/send-campaign", status_code=201)
-async def send_campaign_emails(
-    request: SendCampaignEmailRequest,
+@router.post("/send-campaign", status_code=HTTPStatus.CREATED)
+async def send_campaign_email(
+    data: SendCampaignEmailRequest,
     current_user: CurrentUser,
     db: DBSession,
 ):
-    """Send emails to all pending campaign members."""
+    """Send campaign emails to all members."""
     service = EmailService(db)
-    emails = await service.send_campaign_emails(
-        campaign_id=request.campaign_id,
-        sent_by_id=current_user.id,
-    )
-    return {
-        "sent": len(emails),
-        "emails": [EmailQueueResponse.model_validate(e) for e in emails],
-    }
+    try:
+        emails = await service.send_campaign_emails(
+            campaign_id=data.campaign_id,
+            template_id=data.template_id,
+            variables=data.variables,
+            sent_by_id=current_user.id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail=str(exc),
+        )
+    return {"sent": len(emails), "items": [EmailQueueResponse.model_validate(e) for e in emails]}
 
 
 @router.get("", response_model=EmailListResponse)
@@ -89,7 +102,7 @@ async def list_emails(
     entity_id: Optional[int] = None,
     status: Optional[str] = None,
 ):
-    """List emails with pagination and filters."""
+    """List sent emails with optional filters."""
     service = EmailService(db)
     items, total = await service.get_list(
         page=page,
@@ -109,7 +122,7 @@ async def list_emails(
 
 @router.get("/track/{email_id}/open")
 async def track_open(email_id: int, db: DBSession):
-    """Track email open via tracking pixel (no auth required)."""
+    """Track email open - returns a 1x1 transparent pixel."""
     service = EmailService(db)
     await service.record_open(email_id)
     return Response(content=TRACKING_PIXEL, media_type="image/gif")
@@ -119,9 +132,9 @@ async def track_open(email_id: int, db: DBSession):
 async def track_click(
     email_id: int,
     db: DBSession,
-    url: str = Query(..., description="Redirect URL"),
+    url: str = Query(..., description="The destination URL"),
 ):
-    """Track email click and redirect (no auth required)."""
+    """Track email link click and redirect to destination."""
     service = EmailService(db)
     await service.record_click(email_id)
     return RedirectResponse(url=url, status_code=302)
@@ -133,9 +146,12 @@ async def get_email(
     current_user: CurrentUser,
     db: DBSession,
 ):
-    """Get a single email by ID."""
+    """Get email details by ID."""
     service = EmailService(db)
     email = await service.get_by_id(email_id)
     if not email:
-        raise_not_found("Email", email_id)
-    return EmailQueueResponse.model_validate(email)
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail=f"Email with ID {email_id} not found",
+        )
+    return email

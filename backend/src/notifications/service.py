@@ -1,15 +1,16 @@
-"""Notification service for creating and managing notifications."""
+"""Notification service layer."""
 
-from typing import Optional, Tuple, List
+from typing import Optional, List, Tuple
 
 from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.notifications.models import Notification
+from src.core.constants import DEFAULT_PAGE_SIZE
 
 
 class NotificationService:
-    """Service for notification management."""
+    """Service for notification CRUD operations."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -24,7 +25,7 @@ class NotificationService:
         entity_id: Optional[int] = None,
     ) -> Notification:
         """Create a new notification."""
-        notification = Notification(
+        notif = Notification(
             user_id=user_id,
             type=type,
             title=title,
@@ -32,9 +33,10 @@ class NotificationService:
             entity_type=entity_type,
             entity_id=entity_id,
         )
-        self.db.add(notification)
+        self.db.add(notif)
         await self.db.flush()
-        return notification
+        await self.db.refresh(notif)
+        return notif
 
     async def get_by_id(self, notification_id: int) -> Optional[Notification]:
         """Get a notification by ID."""
@@ -47,70 +49,80 @@ class NotificationService:
         self,
         user_id: int,
         page: int = 1,
-        page_size: int = 20,
+        page_size: int = DEFAULT_PAGE_SIZE,
         unread_only: bool = False,
     ) -> Tuple[List[Notification], int]:
         """Get paginated notifications for a user."""
-        query = select(Notification).where(Notification.user_id == user_id)
-        count_query = select(func.count()).select_from(Notification).where(
-            Notification.user_id == user_id
-        )
-
+        filters = [Notification.user_id == user_id]
         if unread_only:
-            query = query.where(Notification.is_read == False)
-            count_query = count_query.where(Notification.is_read == False)
+            filters.append(Notification.is_read == False)
 
+        # Count
+        count_query = select(func.count()).select_from(
+            select(Notification.id).where(*filters).subquery()
+        )
         total_result = await self.db.execute(count_query)
         total = total_result.scalar() or 0
 
-        offset = (page - 1) * page_size
-        query = query.order_by(Notification.created_at.desc()).offset(offset).limit(page_size)
+        # Fetch
+        query = (
+            select(Notification)
+            .where(*filters)
+            .order_by(Notification.created_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
         result = await self.db.execute(query)
         items = list(result.scalars().all())
 
         return items, total
 
     async def mark_read(self, notification_id: int, user_id: int) -> Optional[Notification]:
-        """Mark a single notification as read."""
-        notification = await self.get_by_id(notification_id)
-        if notification and notification.user_id == user_id:
-            notification.is_read = True
-        return notification
+        """Mark a notification as read."""
+        notif = await self.get_by_id(notification_id)
+        if not notif or notif.user_id != user_id:
+            return None
+        notif.is_read = True
+        await self.db.flush()
+        await self.db.refresh(notif)
+        return notif
 
     async def mark_all_read(self, user_id: int) -> int:
         """Mark all notifications as read for a user. Returns count updated."""
-        result = await self.db.execute(
+        stmt = (
             update(Notification)
             .where(Notification.user_id == user_id, Notification.is_read == False)
             .values(is_read=True)
         )
+        result = await self.db.execute(stmt)
+        await self.db.flush()
         return result.rowcount
 
     async def get_unread_count(self, user_id: int) -> int:
-        """Get unread notification count for a user."""
+        """Get count of unread notifications for a user."""
         result = await self.db.execute(
-            select(func.count())
-            .select_from(Notification)
-            .where(Notification.user_id == user_id, Notification.is_read == False)
+            select(func.count()).where(
+                Notification.user_id == user_id,
+                Notification.is_read == False,
+            )
         )
         return result.scalar() or 0
 
 
 async def notify_on_assignment(
     db: AsyncSession,
-    assigned_to_id: int,
-    assigner_name: str,
+    user_id: int,
     entity_type: str,
     entity_id: int,
     entity_name: str,
 ) -> Notification:
-    """Create notification when an entity is assigned to a user."""
+    """Create a notification when an entity is assigned to a user."""
     service = NotificationService(db)
     return await service.create_notification(
-        user_id=assigned_to_id,
+        user_id=user_id,
         type="assignment",
-        title=f"New {entity_type} assigned",
-        message=f"{assigner_name} assigned you {entity_type} '{entity_name}'",
+        title=f"{entity_type.rstrip('s').capitalize()} assigned to you",
+        message=f"You have been assigned {entity_name}",
         entity_type=entity_type,
         entity_id=entity_id,
     )
@@ -125,13 +137,13 @@ async def notify_on_stage_change(
     old_stage: str,
     new_stage: str,
 ) -> Notification:
-    """Create notification when a pipeline stage changes."""
+    """Create a notification when a pipeline stage changes."""
     service = NotificationService(db)
     return await service.create_notification(
         user_id=user_id,
         type="stage_change",
-        title=f"{entity_type.title()} stage updated",
-        message=f"'{entity_name}' moved from {old_stage} to {new_stage}",
+        title=f"Stage changed: {entity_name}",
+        message=f"Moved from {old_stage} to {new_stage}",
         entity_type=entity_type,
         entity_id=entity_id,
     )
@@ -140,16 +152,16 @@ async def notify_on_stage_change(
 async def notify_on_activity_due(
     db: AsyncSession,
     user_id: int,
-    activity_subject: str,
     activity_id: int,
+    activity_subject: str,
 ) -> Notification:
-    """Create notification when an activity is due."""
+    """Create a notification when an activity is due."""
     service = NotificationService(db)
     return await service.create_notification(
         user_id=user_id,
         type="activity_due",
         title="Activity due",
-        message=f"Activity '{activity_subject}' is due",
+        message=f"Activity "{activity_subject}" is due soon",
         entity_type="activities",
         entity_id=activity_id,
     )

@@ -1,8 +1,9 @@
 """Notification API routes."""
 
-from fastapi import APIRouter, Query
-
-from src.core.router_utils import DBSession, CurrentUser, calculate_pages, raise_not_found
+from typing import Optional
+from fastapi import APIRouter, Query, HTTPException
+from src.core.constants import HTTPStatus
+from src.core.router_utils import DBSession, CurrentUser, calculate_pages
 from src.notifications.schemas import (
     NotificationResponse,
     NotificationListResponse,
@@ -19,7 +20,7 @@ async def list_notifications(
     db: DBSession,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    unread_only: bool = False,
+    unread_only: bool = Query(False),
 ):
     """List notifications for the current user."""
     service = NotificationService(db)
@@ -43,24 +44,27 @@ async def get_unread_count(
     current_user: CurrentUser,
     db: DBSession,
 ):
-    """Get unread notification count."""
+    """Get the count of unread notifications."""
     service = NotificationService(db)
     count = await service.get_unread_count(current_user.id)
     return UnreadCountResponse(count=count)
 
 
 @router.put("/{notification_id}/read", response_model=NotificationResponse)
-async def mark_notification_read(
+async def mark_read(
     notification_id: int,
     current_user: CurrentUser,
     db: DBSession,
 ):
     """Mark a notification as read."""
     service = NotificationService(db)
-    notification = await service.mark_read(notification_id, current_user.id)
-    if not notification:
-        raise_not_found("Notification", notification_id)
-    return NotificationResponse.model_validate(notification)
+    notif = await service.mark_read(notification_id, current_user.id)
+    if not notif:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail=f"Notification with ID {notification_id} not found",
+        )
+    return notif
 
 
 @router.put("/read-all")
@@ -68,7 +72,7 @@ async def mark_all_read(
     current_user: CurrentUser,
     db: DBSession,
 ):
-    """Mark all notifications as read."""
+    """Mark all notifications as read for the current user."""
     service = NotificationService(db)
-    count = await service.mark_all_read(current_user.id)
-    return {"updated": count}
+    updated = await service.mark_all_read(current_user.id)
+    return {"updated": updated}
