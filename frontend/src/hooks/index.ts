@@ -171,3 +171,25 @@ export {
 
 // Auth-aware query helpers
 export { useAuthQuery, useAuthEnabled } from './useAuthQuery';
+
+// Audit log hooks
+export { useEntityAuditLog, auditKeys } from './useAudit';
+
+// Comment hooks
+export {
+  useEntityComments,
+  useCreateComment,
+  useUpdateComment,
+  useDeleteComment,
+  commentKeys,
+} from './useComments';
+
+// Pipeline management hooks
+export {
+  usePipelines,
+  usePipeline,
+  useCreatePipeline,
+  useUpdatePipeline,
+  useDeletePipeline,
+  pipelineEntityKeys,
+} from './usePipelines';

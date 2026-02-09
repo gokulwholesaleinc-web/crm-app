@@ -28,6 +28,8 @@ from src.activities.models import Activity
 from src.campaigns.models import Campaign, CampaignMember, EmailTemplate, EmailCampaignStep
 from src.core.models import Note, Tag, EntityTag
 from src.workflows.models import WorkflowRule, WorkflowExecution
+from src.audit.models import AuditLog
+from src.comments.models import Comment
 
 
 # Test database URL - using SQLite in-memory for tests
@@ -339,3 +341,20 @@ async def test_note(db_session: AsyncSession, test_user: User, test_contact: Con
     await db_session.commit()
     await db_session.refresh(note)
     return note
+
+
+@pytest_asyncio.fixture(scope="function")
+async def test_comment(db_session: AsyncSession, test_user: User, test_contact: Contact) -> Comment:
+    """Create a test comment."""
+    comment = Comment(
+        content="This is a test comment",
+        entity_type="contact",
+        entity_id=test_contact.id,
+        user_id=test_user.id,
+        user_name=test_user.full_name,
+        user_email=test_user.email,
+    )
+    db_session.add(comment)
+    await db_session.commit()
+    await db_session.refresh(comment)
+    return comment

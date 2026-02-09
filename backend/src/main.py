@@ -33,6 +33,10 @@ from src.whitelabel.router import router as whitelabel_router
 from src.import_export.router import router as import_export_router
 from src.notes.router import router as notes_router
 from src.workflows.router import router as workflows_router
+from src.audit.router import router as audit_router
+from src.comments.router import router as comments_router
+from src.reports.router import router as reports_router
+from src.filters.router import router as filters_router
 
 
 @asynccontextmanager
@@ -59,6 +63,10 @@ async def lifespan(app: FastAPI):
     from src.workflows.models import WorkflowRule, WorkflowExecution
     from src.ai.models import AIEmbedding, AIConversation, AIFeedback, AIKnowledgeDocument, AIUserPreferences
     from src.whitelabel.models import Tenant, TenantSettings, TenantUser
+    from src.reports.models import SavedReport
+    from src.filters.models import SavedFilter
+    from src.audit.models import AuditLog
+    from src.comments.models import Comment
 
     # Create tables
     from src.database import Base
@@ -109,6 +117,10 @@ app.include_router(whitelabel_router)
 app.include_router(import_export_router)
 app.include_router(notes_router)
 app.include_router(workflows_router)
+app.include_router(audit_router)
+app.include_router(comments_router)
+app.include_router(reports_router)
+app.include_router(filters_router)
 
 
 # Static files for production - serve frontend if dist exists
