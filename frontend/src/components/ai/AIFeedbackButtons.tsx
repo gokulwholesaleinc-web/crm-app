@@ -60,6 +60,7 @@ export function AIFeedbackButtons({
               ? 'text-gray-400 hover:text-green-600 hover:bg-green-50'
               : 'text-gray-300 cursor-default'
         )}
+        aria-label="Helpful"
         title="Helpful"
       >
         {submitted === 'positive' ? (
@@ -80,6 +81,7 @@ export function AIFeedbackButtons({
               ? 'text-gray-400 hover:text-red-600 hover:bg-red-50'
               : 'text-gray-300 cursor-default'
         )}
+        aria-label="Not helpful"
         title="Not helpful"
       >
         {submitted === 'negative' ? (
