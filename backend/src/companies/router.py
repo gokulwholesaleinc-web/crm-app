@@ -60,6 +60,11 @@ async def list_companies(
     import json as _json
     parsed_filters = _json.loads(filters) if filters else None
 
+    # Auto-scope to current user's data by default
+    effective_owner_id = owner_id
+    if effective_owner_id is None:
+        effective_owner_id = current_user.id
+
     service = CompanyService(db)
 
     companies, total = await service.get_list(
@@ -68,7 +73,7 @@ async def list_companies(
         search=search,
         status=status,
         industry=industry,
-        owner_id=owner_id,
+        owner_id=effective_owner_id,
         tag_ids=parse_tag_ids(tag_ids),
         filters=parsed_filters,
     )

@@ -210,6 +210,11 @@ async def list_opportunities(
     import json as _json
     parsed_filters = _json.loads(filters) if filters else None
 
+    # Auto-scope to current user's data by default
+    effective_owner_id = owner_id
+    if effective_owner_id is None:
+        effective_owner_id = current_user.id
+
     service = OpportunityService(db)
 
     opportunities, total = await service.get_list(
@@ -219,7 +224,7 @@ async def list_opportunities(
         pipeline_stage_id=pipeline_stage_id,
         contact_id=contact_id,
         company_id=company_id,
-        owner_id=owner_id,
+        owner_id=effective_owner_id,
         tag_ids=parse_tag_ids(tag_ids),
         filters=parsed_filters,
     )

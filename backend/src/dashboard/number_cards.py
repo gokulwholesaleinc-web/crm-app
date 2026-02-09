@@ -14,11 +14,15 @@ from src.activities.models import Activity
 class NumberCardGenerator:
     """Generates data for dashboard number cards."""
 
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, user_id: Optional[int] = None):
         self.db = db
+        self.user_id = user_id
 
     async def get_all_kpis(self, user_id: Optional[int] = None) -> List[Dict[str, Any]]:
         """Get all KPI data for number cards."""
+        # Use passed user_id or fall back to instance user_id
+        if user_id and not self.user_id:
+            self.user_id = user_id
         kpis = [
             await self.get_total_contacts(),
             await self.get_total_leads(),
@@ -28,7 +32,7 @@ class NumberCardGenerator:
             await self.get_open_leads(),
             await self.get_pipeline_value(),
             await self.get_won_this_month(),
-            await self.get_tasks_due_today(user_id),
+            await self.get_tasks_due_today(self.user_id),
             await self.get_new_leads_this_week(),
             await self.get_conversion_rate(),
         ]
@@ -36,20 +40,24 @@ class NumberCardGenerator:
 
     async def get_total_contacts(self) -> Dict[str, Any]:
         """Get total active contacts count."""
+        filters = [Contact.status == "active"]
+        if self.user_id:
+            filters.append(Contact.owner_id == self.user_id)
         result = await self.db.execute(
-            select(func.count(Contact.id)).where(Contact.status == "active")
+            select(func.count(Contact.id)).where(and_(*filters))
         )
         count = result.scalar() or 0
 
         # Get last month for comparison
         month_ago = date.today() - timedelta(days=30)
+        last_month_filters = [
+            Contact.status == "active",
+            Contact.created_at < datetime.combine(month_ago, datetime.min.time()),
+        ]
+        if self.user_id:
+            last_month_filters.append(Contact.owner_id == self.user_id)
         last_month_result = await self.db.execute(
-            select(func.count(Contact.id)).where(
-                and_(
-                    Contact.status == "active",
-                    Contact.created_at < datetime.combine(month_ago, datetime.min.time()),
-                )
-            )
+            select(func.count(Contact.id)).where(and_(*last_month_filters))
         )
         last_month_count = last_month_result.scalar() or 0
         change = self._calculate_change(count, last_month_count)
@@ -65,15 +73,21 @@ class NumberCardGenerator:
 
     async def get_total_leads(self) -> Dict[str, Any]:
         """Get total leads count (all statuses)."""
-        result = await self.db.execute(select(func.count(Lead.id)))
+        query = select(func.count(Lead.id))
+        if self.user_id:
+            query = query.where(Lead.owner_id == self.user_id)
+        result = await self.db.execute(query)
         count = result.scalar() or 0
 
         # Get last month for comparison
         month_ago = date.today() - timedelta(days=30)
+        last_month_filters = [
+            Lead.created_at < datetime.combine(month_ago, datetime.min.time()),
+        ]
+        if self.user_id:
+            last_month_filters.append(Lead.owner_id == self.user_id)
         last_month_result = await self.db.execute(
-            select(func.count(Lead.id)).where(
-                Lead.created_at < datetime.combine(month_ago, datetime.min.time())
-            )
+            select(func.count(Lead.id)).where(and_(*last_month_filters))
         )
         last_month_count = last_month_result.scalar() or 0
         change = self._calculate_change(count, last_month_count)
@@ -89,30 +103,32 @@ class NumberCardGenerator:
 
     async def get_open_opportunities(self) -> Dict[str, Any]:
         """Get count of open opportunities."""
+        filters = [
+            PipelineStage.is_won == False,
+            PipelineStage.is_lost == False,
+        ]
+        if self.user_id:
+            filters.append(Opportunity.owner_id == self.user_id)
         result = await self.db.execute(
             select(func.count(Opportunity.id))
             .join(PipelineStage)
-            .where(
-                and_(
-                    PipelineStage.is_won == False,
-                    PipelineStage.is_lost == False,
-                )
-            )
+            .where(and_(*filters))
         )
         count = result.scalar() or 0
 
         # Get last month for comparison
         month_ago = date.today() - timedelta(days=30)
+        last_month_filters = [
+            PipelineStage.is_won == False,
+            PipelineStage.is_lost == False,
+            Opportunity.created_at < datetime.combine(month_ago, datetime.min.time()),
+        ]
+        if self.user_id:
+            last_month_filters.append(Opportunity.owner_id == self.user_id)
         last_month_result = await self.db.execute(
             select(func.count(Opportunity.id))
             .join(PipelineStage)
-            .where(
-                and_(
-                    PipelineStage.is_won == False,
-                    PipelineStage.is_lost == False,
-                    Opportunity.created_at < datetime.combine(month_ago, datetime.min.time()),
-                )
-            )
+            .where(and_(*last_month_filters))
         )
         last_month_count = last_month_result.scalar() or 0
         change = self._calculate_change(count, last_month_count)
@@ -128,24 +144,28 @@ class NumberCardGenerator:
 
     async def get_total_revenue(self) -> Dict[str, Any]:
         """Get total revenue from won opportunities."""
+        filters = [PipelineStage.is_won == True]
+        if self.user_id:
+            filters.append(Opportunity.owner_id == self.user_id)
         result = await self.db.execute(
             select(func.sum(Opportunity.amount))
             .join(PipelineStage)
-            .where(PipelineStage.is_won == True)
+            .where(and_(*filters))
         )
         value = result.scalar() or 0
 
         # Get last month for comparison
         month_ago = date.today() - timedelta(days=30)
+        last_month_filters = [
+            PipelineStage.is_won == True,
+            Opportunity.actual_close_date < month_ago,
+        ]
+        if self.user_id:
+            last_month_filters.append(Opportunity.owner_id == self.user_id)
         last_month_result = await self.db.execute(
             select(func.sum(Opportunity.amount))
             .join(PipelineStage)
-            .where(
-                and_(
-                    PipelineStage.is_won == True,
-                    Opportunity.actual_close_date < month_ago,
-                )
-            )
+            .where(and_(*last_month_filters))
         )
         last_month_value = last_month_result.scalar() or 0
         change = self._calculate_change(float(value), float(last_month_value))
@@ -170,7 +190,10 @@ class NumberCardGenerator:
 
     async def get_total_companies(self) -> Dict[str, Any]:
         """Get total companies count."""
-        result = await self.db.execute(select(func.count(Company.id)))
+        query = select(func.count(Company.id))
+        if self.user_id:
+            query = query.where(Company.owner_id == self.user_id)
+        result = await self.db.execute(query)
         count = result.scalar() or 0
 
         return {
@@ -183,10 +206,11 @@ class NumberCardGenerator:
 
     async def get_open_leads(self) -> Dict[str, Any]:
         """Get count of open leads (not converted or lost)."""
+        filters = [Lead.status.in_(["new", "contacted", "qualified"])]
+        if self.user_id:
+            filters.append(Lead.owner_id == self.user_id)
         result = await self.db.execute(
-            select(func.count(Lead.id)).where(
-                Lead.status.in_(["new", "contacted", "qualified"])
-            )
+            select(func.count(Lead.id)).where(and_(*filters))
         )
         count = result.scalar() or 0
 
@@ -200,15 +224,16 @@ class NumberCardGenerator:
 
     async def get_pipeline_value(self) -> Dict[str, Any]:
         """Get total value of open opportunities."""
+        filters = [
+            PipelineStage.is_won == False,
+            PipelineStage.is_lost == False,
+        ]
+        if self.user_id:
+            filters.append(Opportunity.owner_id == self.user_id)
         result = await self.db.execute(
             select(func.sum(Opportunity.amount))
             .join(PipelineStage)
-            .where(
-                and_(
-                    PipelineStage.is_won == False,
-                    PipelineStage.is_lost == False,
-                )
-            )
+            .where(and_(*filters))
         )
         value = result.scalar() or 0
 
@@ -226,15 +251,16 @@ class NumberCardGenerator:
         today = date.today()
         month_start = date(today.year, today.month, 1)
 
+        filters = [
+            PipelineStage.is_won == True,
+            Opportunity.actual_close_date >= month_start,
+        ]
+        if self.user_id:
+            filters.append(Opportunity.owner_id == self.user_id)
         result = await self.db.execute(
             select(func.sum(Opportunity.amount))
             .join(PipelineStage)
-            .where(
-                and_(
-                    PipelineStage.is_won == True,
-                    Opportunity.actual_close_date >= month_start,
-                )
-            )
+            .where(and_(*filters))
         )
         value = result.scalar() or 0
 
@@ -284,10 +310,11 @@ class NumberCardGenerator:
         today = date.today()
         week_start = today - timedelta(days=today.weekday())
 
+        filters = [Lead.created_at >= datetime.combine(week_start, datetime.min.time())]
+        if self.user_id:
+            filters.append(Lead.owner_id == self.user_id)
         result = await self.db.execute(
-            select(func.count(Lead.id)).where(
-                Lead.created_at >= datetime.combine(week_start, datetime.min.time())
-            )
+            select(func.count(Lead.id)).where(and_(*filters))
         )
         count = result.scalar() or 0
 
@@ -295,13 +322,14 @@ class NumberCardGenerator:
         last_week_start = week_start - timedelta(days=7)
         last_week_end = week_start
 
+        last_week_filters = [
+            Lead.created_at >= datetime.combine(last_week_start, datetime.min.time()),
+            Lead.created_at < datetime.combine(last_week_end, datetime.min.time()),
+        ]
+        if self.user_id:
+            last_week_filters.append(Lead.owner_id == self.user_id)
         last_week_result = await self.db.execute(
-            select(func.count(Lead.id)).where(
-                and_(
-                    Lead.created_at >= datetime.combine(last_week_start, datetime.min.time()),
-                    Lead.created_at < datetime.combine(last_week_end, datetime.min.time()),
-                )
-            )
+            select(func.count(Lead.id)).where(and_(*last_week_filters))
         )
         last_week_count = last_week_result.scalar() or 0
         change = self._calculate_change(count, last_week_count)
@@ -318,16 +346,20 @@ class NumberCardGenerator:
     async def get_conversion_rate(self) -> Dict[str, Any]:
         """Get overall lead to opportunity conversion rate."""
         # Total leads (excluding very recent ones)
+        total_filters = [Lead.created_at < datetime.now() - timedelta(days=7)]
+        if self.user_id:
+            total_filters.append(Lead.owner_id == self.user_id)
         total_result = await self.db.execute(
-            select(func.count(Lead.id)).where(
-                Lead.created_at < datetime.now() - timedelta(days=7)
-            )
+            select(func.count(Lead.id)).where(and_(*total_filters))
         )
         total = total_result.scalar() or 1
 
         # Converted leads
+        converted_filters = [Lead.status == "converted"]
+        if self.user_id:
+            converted_filters.append(Lead.owner_id == self.user_id)
         converted_result = await self.db.execute(
-            select(func.count(Lead.id)).where(Lead.status == "converted")
+            select(func.count(Lead.id)).where(and_(*converted_filters))
         )
         converted = converted_result.scalar() or 0
 

@@ -127,6 +127,11 @@ async def list_campaigns(
     owner_id: Optional[int] = None,
 ):
     """List campaigns with pagination and filters."""
+    # Auto-scope to current user's data by default
+    effective_owner_id = owner_id
+    if effective_owner_id is None:
+        effective_owner_id = current_user.id
+
     service = CampaignService(db)
 
     campaigns, total = await service.get_list(
@@ -135,7 +140,7 @@ async def list_campaigns(
         search=search,
         campaign_type=campaign_type,
         status=status,
-        owner_id=owner_id,
+        owner_id=effective_owner_id,
     )
 
     return CampaignListResponse(

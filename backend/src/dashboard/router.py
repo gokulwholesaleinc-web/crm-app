@@ -25,11 +25,11 @@ async def get_dashboard(
 ):
     """Get full dashboard data including KPIs and charts."""
     # Get KPIs
-    kpi_generator = NumberCardGenerator(db)
+    kpi_generator = NumberCardGenerator(db, user_id=current_user.id)
     kpis = await kpi_generator.get_all_kpis(user_id=current_user.id)
 
     # Get charts
-    chart_generator = ChartDataGenerator(db)
+    chart_generator = ChartDataGenerator(db, user_id=current_user.id)
     charts_data = [
         await chart_generator.get_pipeline_funnel(),
         await chart_generator.get_leads_by_status(),
@@ -62,7 +62,7 @@ async def get_kpis(
     db: DBSession,
 ):
     """Get KPI number cards only."""
-    generator = NumberCardGenerator(db)
+    generator = NumberCardGenerator(db, user_id=current_user.id)
     kpis = await generator.get_all_kpis(user_id=current_user.id)
     return [NumberCardData(**kpi) for kpi in kpis]
 
@@ -73,7 +73,7 @@ async def get_pipeline_funnel_chart(
     db: DBSession,
 ):
     """Get pipeline funnel chart data."""
-    generator = ChartDataGenerator(db)
+    generator = ChartDataGenerator(db, user_id=current_user.id)
     data = await generator.get_pipeline_funnel()
     return ChartData(
         type=data["type"],
@@ -88,7 +88,7 @@ async def get_leads_by_status_chart(
     db: DBSession,
 ):
     """Get leads by status chart data."""
-    generator = ChartDataGenerator(db)
+    generator = ChartDataGenerator(db, user_id=current_user.id)
     data = await generator.get_leads_by_status()
     return ChartData(
         type=data["type"],
@@ -103,7 +103,7 @@ async def get_leads_by_source_chart(
     db: DBSession,
 ):
     """Get leads by source chart data."""
-    generator = ChartDataGenerator(db)
+    generator = ChartDataGenerator(db, user_id=current_user.id)
     data = await generator.get_leads_by_source()
     return ChartData(
         type=data["type"],
@@ -119,7 +119,7 @@ async def get_revenue_trend_chart(
     months: int = 6,
 ):
     """Get monthly revenue trend chart data."""
-    generator = ChartDataGenerator(db)
+    generator = ChartDataGenerator(db, user_id=current_user.id)
     data = await generator.get_revenue_trend(months=months)
     return ChartData(
         type=data["type"],
@@ -135,7 +135,7 @@ async def get_activities_chart(
     days: int = 30,
 ):
     """Get activities by type chart data."""
-    generator = ChartDataGenerator(db)
+    generator = ChartDataGenerator(db, user_id=current_user.id)
     data = await generator.get_activities_by_type(days=days)
     return ChartData(
         type=data["type"],
@@ -151,7 +151,7 @@ async def get_new_leads_trend_chart(
     weeks: int = 8,
 ):
     """Get new leads trend chart data."""
-    generator = ChartDataGenerator(db)
+    generator = ChartDataGenerator(db, user_id=current_user.id)
     data = await generator.get_new_leads_trend(weeks=weeks)
     return ChartData(
         type=data["type"],
@@ -166,7 +166,7 @@ async def get_sales_funnel(
     db: DBSession,
 ):
     """Get sales funnel data with lead counts, conversion rates, and avg time in stage."""
-    generator = ChartDataGenerator(db)
+    generator = ChartDataGenerator(db, user_id=current_user.id)
     data = await generator.get_sales_funnel()
     return SalesFunnelResponse(
         stages=[FunnelStage(**s) for s in data["stages"]],
@@ -181,7 +181,7 @@ async def get_conversion_rates_chart(
     db: DBSession,
 ):
     """Get conversion rates chart data."""
-    generator = ChartDataGenerator(db)
+    generator = ChartDataGenerator(db, user_id=current_user.id)
     data = await generator.get_conversion_rates()
     return ChartData(
         type=data["type"],
@@ -223,9 +223,11 @@ async def get_converted_revenue(
     target_currency: str = Query("USD", description="Target currency for conversion"),
 ):
     """Get pipeline revenue converted to a target currency."""
-    # Fetch all opportunities with their pipeline stages
+    # Fetch opportunities owned by current user with their pipeline stages
     result = await db.execute(
-        select(Opportunity).join(PipelineStage)
+        select(Opportunity)
+        .join(PipelineStage)
+        .where(Opportunity.owner_id == current_user.id)
     )
     opportunities = result.scalars().all()
 
