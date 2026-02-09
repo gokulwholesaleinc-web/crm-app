@@ -72,6 +72,11 @@ async def list_leads(
     import json as _json
     parsed_filters = _json.loads(filters) if filters else None
 
+    # Auto-scope to current user's data by default
+    effective_owner_id = owner_id
+    if effective_owner_id is None:
+        effective_owner_id = current_user.id
+
     service = LeadService(db)
 
     leads, total = await service.get_list(
@@ -80,7 +85,7 @@ async def list_leads(
         search=search,
         status=status,
         source_id=source_id,
-        owner_id=owner_id,
+        owner_id=effective_owner_id,
         min_score=min_score,
         tag_ids=parse_tag_ids(tag_ids),
         filters=parsed_filters,
