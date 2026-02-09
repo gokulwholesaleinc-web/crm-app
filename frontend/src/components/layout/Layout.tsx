@@ -28,7 +28,10 @@ export function Layout({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
+    <div className="flex h-screen bg-gray-50 dark:bg-gray-900 overflow-hidden">
+      {/* Skip Link */}
+      <a href="#main-content" className="skip-link">Skip to main content</a>
+
       {/* Desktop Sidebar - hidden on mobile/tablet, visible on lg+ */}
       <div className="hidden lg:flex lg:flex-shrink-0">
         <Sidebar
@@ -55,6 +58,7 @@ export function Layout({
 
         {/* Page Content - responsive padding */}
         <main
+          id="main-content"
           className={clsx(
             'flex-1 overflow-y-auto focus:outline-none',
             '-webkit-overflow-scrolling: touch', // Smooth scrolling on iOS
@@ -121,11 +125,11 @@ export function PageHeader({
       {/* Title and Actions - stacks on mobile, inline on larger screens */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div className="min-w-0 flex-1">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">
             {title}
           </h1>
           {description && (
-            <p className="mt-1 text-sm text-gray-500 line-clamp-2 sm:line-clamp-1">
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 line-clamp-2 sm:line-clamp-1">
               {description}
             </p>
           )}

@@ -66,18 +66,19 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
         'group flex items-center rounded-lg transition-colors duration-200',
         collapsed ? 'px-3 py-3 justify-center' : 'px-3 py-2',
         isActive(item.href)
-          ? 'bg-primary-50 text-primary-600'
-          : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
+          ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400'
+          : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100'
       )}
       title={collapsed ? item.name : undefined}
+      aria-current={isActive(item.href) ? 'page' : undefined}
     >
       <item.icon
         className={clsx(
           'flex-shrink-0',
           collapsed ? 'h-6 w-6' : 'h-5 w-5 mr-3',
           isActive(item.href)
-            ? 'text-primary-500'
-            : 'text-gray-400 group-hover:text-gray-500'
+            ? 'text-primary-500 dark:text-primary-400'
+            : 'text-gray-400 dark:text-gray-500 group-hover:text-gray-500 dark:group-hover:text-gray-400'
         )}
         aria-hidden="true"
       />
@@ -104,7 +105,7 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
   return (
     <aside
       className={clsx(
-        'flex flex-col h-full bg-white border-r border-gray-200',
+        'flex flex-col h-full bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-[width] duration-200',
         collapsed ? 'w-16' : 'w-64',
         className
       )}
@@ -112,7 +113,7 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
       {/* Logo */}
       <div
         className={clsx(
-          'flex items-center h-16 px-4 border-b border-gray-200',
+          'flex items-center h-16 px-4 border-b border-gray-200 dark:border-gray-700',
           collapsed ? 'justify-center' : 'justify-start'
         )}
       >
@@ -121,19 +122,19 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
             <span className="text-white font-bold text-lg">C</span>
           </div>
           {!collapsed && (
-            <span className="ml-2 text-xl font-bold text-gray-900">CRM</span>
+            <span className="ml-2 text-xl font-bold text-gray-900 dark:text-gray-100">CRM</span>
           )}
         </div>
       </div>
 
       {/* Main Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto" aria-label="Main navigation">
         <div className="space-y-1">
           {mainNavigation.map(renderNavItem)}
         </div>
 
         {/* Divider */}
-        <div className="my-4 border-t border-gray-200" />
+        <div className="my-4 border-t border-gray-200 dark:border-gray-700" />
 
         {/* Secondary Navigation */}
         <div className="space-y-1">
@@ -143,8 +144,8 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
 
       {/* Sidebar Footer */}
       {!collapsed && (
-        <div className="px-4 py-4 border-t border-gray-200">
-          <div className="text-xs text-gray-500">
+        <div className="px-4 py-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="text-xs text-gray-500 dark:text-gray-400">
             <p>CRM Application v1.0</p>
           </div>
         </div>
@@ -217,16 +218,16 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
         'group flex items-center px-3 py-3 rounded-lg transition-colors duration-200',
         'touch-manipulation', // Better touch handling
         isActive(item.href)
-          ? 'bg-primary-50 text-primary-600'
-          : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900 active:bg-gray-200'
+          ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400'
+          : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100 active:bg-gray-200 dark:active:bg-gray-600'
       )}
     >
       <item.icon
         className={clsx(
           'flex-shrink-0 h-6 w-6 mr-3',
           isActive(item.href)
-            ? 'text-primary-500'
-            : 'text-gray-400 group-hover:text-gray-500'
+            ? 'text-primary-500 dark:text-primary-400'
+            : 'text-gray-400 dark:text-gray-500 group-hover:text-gray-500 dark:group-hover:text-gray-400'
         )}
         aria-hidden="true"
       />
@@ -261,7 +262,7 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
       {/* Sidebar panel with slide animation */}
       <div
         className={clsx(
-          'fixed inset-y-0 left-0 z-50 flex flex-col w-72 max-w-[85vw] bg-white shadow-xl',
+          'fixed inset-y-0 left-0 z-50 flex flex-col w-72 max-w-[85vw] bg-white dark:bg-gray-800 shadow-xl',
           'transform transition-transform duration-300 ease-in-out lg:hidden',
           isOpen ? 'translate-x-0' : '-translate-x-full'
         )}
@@ -270,12 +271,12 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
         aria-label="Mobile navigation"
       >
         {/* Header with close button */}
-        <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200">
+        <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center">
             <div className="h-8 w-8 bg-primary-500 rounded-lg flex items-center justify-center">
               <span className="text-white font-bold text-lg">C</span>
             </div>
-            <span className="ml-2 text-xl font-bold text-gray-900">CRM</span>
+            <span className="ml-2 text-xl font-bold text-gray-900 dark:text-gray-100">CRM</span>
           </div>
           <button
             type="button"
@@ -288,13 +289,13 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto overscroll-contain">
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto overscroll-contain" aria-label="Mobile navigation">
           <div className="space-y-1">
             {mainNavigation.map(renderMobileNavItem)}
           </div>
 
           {/* Divider */}
-          <div className="my-4 border-t border-gray-200" />
+          <div className="my-4 border-t border-gray-200 dark:border-gray-700" />
 
           {/* Secondary Navigation */}
           <div className="space-y-1">
@@ -303,8 +304,8 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
         </nav>
 
         {/* Footer */}
-        <div className="px-4 py-4 border-t border-gray-200 safe-area-inset-bottom">
-          <div className="text-xs text-gray-500">
+        <div className="px-4 py-4 border-t border-gray-200 dark:border-gray-700 safe-area-inset-bottom">
+          <div className="text-xs text-gray-500 dark:text-gray-400">
             <p>CRM Application v1.0</p>
           </div>
         </div>

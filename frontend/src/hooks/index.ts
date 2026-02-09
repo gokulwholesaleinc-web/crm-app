@@ -171,3 +171,9 @@ export {
 
 // Auth-aware query helpers
 export { useAuthQuery, useAuthEnabled } from './useAuthQuery';
+
+// Theme hook
+export { useTheme } from './useTheme';
+
+// Page title hook
+export { usePageTitle } from './usePageTitle';

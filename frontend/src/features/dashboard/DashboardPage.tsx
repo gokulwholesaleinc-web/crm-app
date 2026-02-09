@@ -1,10 +1,12 @@
 import { NumberCard } from './components/NumberCard';
 import { ChartCard } from './components/ChartCard';
 import { SalesFunnelChart } from './components/SalesFunnelChart';
-import { Spinner } from '../../components/ui/Spinner';
+import { SkeletonCard, SkeletonChart } from '../../components/ui/Skeleton';
+import { ErrorEmptyState } from '../../components/ui/EmptyState';
 import { DashboardRecommendations } from '../../components/ai/DashboardRecommendations';
 import { formatCurrency, formatDate } from '../../utils';
 import { useDashboard, usePipelineFunnelChart, useLeadsBySourceChart, useUserTimeline, useSalesFunnel } from '../../hooks';
+import { usePageTitle } from '../../hooks/usePageTitle';
 import type { NumberCardData, ChartDataPoint } from '../../types';
 
 // Helper to find number card by id
@@ -19,6 +21,8 @@ function findCardChange(cards: NumberCardData[], id: string): number {
 }
 
 function DashboardPage() {
+  usePageTitle('Dashboard');
+
   // Use hooks for data fetching
   const { data: dashboardData, isLoading: isLoadingDashboard, error: dashboardError } = useDashboard();
   const { data: pipelineData } = usePipelineFunnelChart();
@@ -54,36 +58,40 @@ function DashboardPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Spinner size="lg" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="rounded-md bg-red-50 p-4">
-        <div className="flex">
-          <div className="ml-3">
-            <h3 className="text-sm font-medium text-red-800">Error loading dashboard</h3>
-            <p className="mt-2 text-sm text-red-700">{error}</p>
-          </div>
+      <div className="space-y-4 sm:space-y-6">
+        <div>
+          <div className="h-8 w-40 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+          <div className="mt-2 h-4 w-64 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:gap-6 lg:grid-cols-2">
+          <SkeletonChart />
+          <SkeletonChart />
         </div>
       </div>
     );
   }
 
+  if (error) {
+    return <ErrorEmptyState onRetry={() => window.location.reload()} />;
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="mt-0.5 sm:mt-1 text-xs sm:text-sm text-gray-500">
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Dashboard</h1>
+        <p className="mt-0.5 sm:mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
           Overview of your CRM performance
         </p>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 gap-3 sm:gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:gap-6 sm:grid-cols-2 lg:grid-cols-4 stagger-fade-in">
         <NumberCard
           title="Total Contacts"
           value={data?.totalContacts ?? 0}

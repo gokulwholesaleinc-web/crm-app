@@ -77,7 +77,7 @@ export function Modal({
             >
               <Dialog.Panel
                 className={clsx(
-                  'w-full transform bg-white p-4 sm:p-6 text-left align-middle shadow-xl transition-all',
+                  'w-full transform bg-white dark:bg-gray-800 p-4 sm:p-6 text-left align-middle shadow-xl transition-all',
                   'overflow-y-auto', // Proper scroll behavior
                   sizeStyles[size],
                   fullScreenOnMobile ? mobileFullScreenStyles : 'rounded-2xl'
@@ -89,13 +89,13 @@ export function Modal({
                       {title && (
                         <Dialog.Title
                           as="h3"
-                          className="text-lg font-semibold leading-6 text-gray-900"
+                          className="text-lg font-semibold leading-6 text-gray-900 dark:text-gray-100"
                         >
                           {title}
                         </Dialog.Title>
                       )}
                       {description && (
-                        <Dialog.Description className="mt-1 text-sm text-gray-500">
+                        <Dialog.Description className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                           {description}
                         </Dialog.Description>
                       )}

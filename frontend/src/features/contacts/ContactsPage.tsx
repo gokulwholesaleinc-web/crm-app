@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { PlusIcon } from '@heroicons/react/24/outline';
-import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
+import { Button, Modal, ConfirmDialog } from '../../components/ui';
+import { SkeletonTable } from '../../components/ui/Skeleton';
 import { ContactForm, ContactFormData } from './components/ContactForm';
 import {
   useContacts,
@@ -10,9 +11,12 @@ import {
   useDeleteContact,
 } from '../../hooks';
 import { formatDate, formatPhoneNumber } from '../../utils/formatters';
+import { usePageTitle } from '../../hooks/usePageTitle';
+import { showSuccess, showError } from '../../utils/toast';
 import type { Contact, ContactCreate, ContactUpdate } from '../../types';
 
 function ContactsPage() {
+  usePageTitle('Contacts');
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -70,8 +74,9 @@ function ContactsPage() {
     try {
       await deleteContactMutation.mutateAsync(deleteConfirm.contact.id);
       setDeleteConfirm({ isOpen: false, contact: null });
+      showSuccess('Contact deleted successfully');
     } catch (err) {
-      console.error('Failed to delete contact:', err);
+      showError('Failed to delete contact');
     }
   };
 
@@ -98,6 +103,7 @@ function ContactsPage() {
           id: editingContact.id,
           data: updateData,
         });
+        showSuccess('Contact updated successfully');
       } else {
         const createData: ContactCreate = {
           first_name: data.firstName,
@@ -108,11 +114,12 @@ function ContactsPage() {
           status: 'active', // Default status for new contacts
         };
         await createContactMutation.mutateAsync(createData);
+        showSuccess('Contact created successfully');
       }
       setShowForm(false);
       setEditingContact(null);
     } catch (err) {
-      console.error('Failed to save contact:', err);
+      showError('Failed to save contact');
     }
   };
 
@@ -220,9 +227,7 @@ function ContactsPage() {
       {/* Contacts Table */}
       <div className="bg-white shadow rounded-lg overflow-hidden">
         {isLoading ? (
-          <div className="flex items-center justify-center h-64">
-            <Spinner size="lg" />
-          </div>
+          <SkeletonTable rows={5} cols={5} />
         ) : contacts.length === 0 ? (
           <div className="text-center py-12">
             <svg

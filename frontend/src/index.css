@@ -20,7 +20,7 @@
   }
 
   body {
-    @apply bg-gray-50 text-gray-900 antialiased;
+    @apply bg-gray-50 text-gray-900 antialiased dark:bg-gray-900 dark:text-gray-100;
     font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
       Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
@@ -61,11 +61,11 @@
 @layer components {
   /* Card component */
   .card {
-    @apply bg-white rounded-lg shadow-sm border border-gray-200;
+    @apply bg-white rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700;
   }
 
   .card-header {
-    @apply px-6 py-4 border-b border-gray-200;
+    @apply px-6 py-4 border-b border-gray-200 dark:border-gray-700;
   }
 
   .card-body {
@@ -73,39 +73,42 @@
   }
 
   .card-footer {
-    @apply px-6 py-4 border-t border-gray-200;
+    @apply px-6 py-4 border-t border-gray-200 dark:border-gray-700;
   }
 
   /* Form elements */
   .form-label {
-    @apply block text-sm font-medium text-gray-700 mb-1;
+    @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1;
   }
 
   .form-input {
-    @apply w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm
+    @apply w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm
+           bg-white dark:bg-gray-700 dark:text-gray-100
            focus:ring-blue-500 focus:border-blue-500
-           disabled:bg-gray-100 disabled:cursor-not-allowed;
+           disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed;
   }
 
   .form-select {
-    @apply w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm
+    @apply w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm
+           bg-white dark:bg-gray-700 dark:text-gray-100
            focus:ring-blue-500 focus:border-blue-500
-           disabled:bg-gray-100 disabled:cursor-not-allowed;
+           disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed;
   }
 
   .form-textarea {
-    @apply w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm
+    @apply w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm
+           bg-white dark:bg-gray-700 dark:text-gray-100
            focus:ring-blue-500 focus:border-blue-500
-           disabled:bg-gray-100 disabled:cursor-not-allowed
+           disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed
            resize-y min-h-[100px];
   }
 
   .form-error {
-    @apply text-sm text-red-600 mt-1;
+    @apply text-sm text-red-600 dark:text-red-400 mt-1;
   }
 
   .form-hint {
-    @apply text-sm text-gray-500 mt-1;
+    @apply text-sm text-gray-500 dark:text-gray-400 mt-1;
   }
 
   /* Badge styles */
@@ -114,52 +117,52 @@
   }
 
   .badge-primary {
-    @apply bg-blue-100 text-blue-800;
+    @apply bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300;
   }
 
   .badge-success {
-    @apply bg-green-100 text-green-800;
+    @apply bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300;
   }
 
   .badge-warning {
-    @apply bg-yellow-100 text-yellow-800;
+    @apply bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300;
   }
 
   .badge-danger {
-    @apply bg-red-100 text-red-800;
+    @apply bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300;
   }
 
   .badge-gray {
-    @apply bg-gray-100 text-gray-800;
+    @apply bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300;
   }
 
   /* Table styles */
   .table-container {
-    @apply overflow-x-auto rounded-lg border border-gray-200;
+    @apply overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700;
   }
 
   .table {
-    @apply min-w-full divide-y divide-gray-200;
+    @apply min-w-full divide-y divide-gray-200 dark:divide-gray-700;
   }
 
   .table thead {
-    @apply bg-gray-50;
+    @apply bg-gray-50 dark:bg-gray-800;
   }
 
   .table th {
-    @apply px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider;
+    @apply px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider;
   }
 
   .table tbody {
-    @apply bg-white divide-y divide-gray-200;
+    @apply bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700;
   }
 
   .table td {
-    @apply px-6 py-4 whitespace-nowrap text-sm text-gray-900;
+    @apply px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100;
   }
 
   .table tr:hover {
-    @apply bg-gray-50;
+    @apply bg-gray-50 dark:bg-gray-800;
   }
 
   /* Page layout */
@@ -172,11 +175,11 @@
   }
 
   .page-title {
-    @apply text-2xl font-bold text-gray-900;
+    @apply text-2xl font-bold text-gray-900 dark:text-gray-100;
   }
 
   .page-description {
-    @apply mt-2 text-sm text-gray-600;
+    @apply mt-2 text-sm text-gray-600 dark:text-gray-400;
   }
 }
 
@@ -248,5 +251,67 @@
     -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Skip link for accessibility */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: #4f46e5;
+  color: white;
+  padding: 8px 16px;
+  z-index: 100;
+  font-size: 14px;
+  border-radius: 0 0 4px 0;
+  transition: top 0.2s;
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
+/* Stagger fade-in animation for list/card items */
+.stagger-fade-in > * {
+  opacity: 0;
+  animation: staggerFadeIn 0.4s ease-out forwards;
+}
+
+.stagger-fade-in > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-fade-in > *:nth-child(2) { animation-delay: 60ms; }
+.stagger-fade-in > *:nth-child(3) { animation-delay: 120ms; }
+.stagger-fade-in > *:nth-child(4) { animation-delay: 180ms; }
+.stagger-fade-in > *:nth-child(5) { animation-delay: 240ms; }
+.stagger-fade-in > *:nth-child(6) { animation-delay: 300ms; }
+.stagger-fade-in > *:nth-child(7) { animation-delay: 360ms; }
+.stagger-fade-in > *:nth-child(8) { animation-delay: 420ms; }
+
+@keyframes staggerFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .stagger-fade-in > * {
+    opacity: 1;
+    animation: none;
   }
 }

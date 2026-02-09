@@ -41,3 +41,14 @@ export type { AvatarProps, AvatarGroupProps, AvatarSize } from './Avatar';
 // EmptyState
 export { EmptyState, NoResultsEmptyState, ErrorEmptyState } from './EmptyState';
 export type { EmptyStateProps, EmptyStateVariant } from './EmptyState';
+
+// Skeleton
+export {
+  Skeleton,
+  SkeletonText,
+  SkeletonCard,
+  SkeletonTable,
+  SkeletonChart,
+  SkeletonKanban,
+  SkeletonDetailPage,
+} from './Skeleton';
