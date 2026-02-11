@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
 
     # Application
-    DEBUG: bool = True
+    DEBUG: bool = False
     BACKEND_CORS_ORIGINS: str = '["*"]'
 
     # Seed data

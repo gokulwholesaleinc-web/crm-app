@@ -6,6 +6,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZIPMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
@@ -107,7 +108,7 @@ async def _init_database():
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup/shutdown events."""
     print("Starting up CRM application...")
-    asyncio.create_task(_init_database())
+    await _init_database()
 
     yield
 
@@ -135,6 +136,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Compress responses > 500 bytes
+app.add_middleware(GZIPMiddleware, minimum_size=500)
 
 # Include routers - they already have /api prefix in their definitions
 app.include_router(auth_router)
@@ -199,12 +203,17 @@ async def health_check():
 if FRONTEND_DIST.exists():
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
 
+    _CACHEABLE_EXTENSIONS = {".js", ".css", ".svg", ".png", ".jpg", ".jpeg", ".gif", ".ico", ".woff", ".woff2", ".ttf", ".eot"}
+
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
         """Serve SPA for all non-API routes."""
         file_path = FRONTEND_DIST / full_path
         if file_path.exists() and file_path.is_file():
-            return FileResponse(file_path)
+            response = FileResponse(file_path)
+            if file_path.suffix in _CACHEABLE_EXTENSIONS:
+                response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            return response
         return FileResponse(FRONTEND_DIST / "index.html")
 else:
     @app.get("/")
