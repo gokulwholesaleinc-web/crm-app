@@ -191,20 +191,20 @@ function OpportunitiesPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Opportunities</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Opportunities</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             Manage your sales pipeline
           </p>
         </div>
         <div className="flex items-center justify-between sm:justify-end gap-3">
           {/* View Toggle */}
-          <div className="flex items-center bg-gray-100 rounded-lg p-1">
+          <div className="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
             <button
               onClick={() => setViewMode('kanban')}
               className={`px-2 sm:px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                 viewMode === 'kanban'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
+                  ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-100 shadow-sm'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
               }`}
               aria-label="Kanban view"
             >
@@ -226,8 +226,8 @@ function OpportunitiesPage() {
               onClick={() => setViewMode('list')}
               className={`px-2 sm:px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                 viewMode === 'list'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
+                  ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-100 shadow-sm'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
               }`}
               aria-label="List view"
             >
@@ -258,29 +258,29 @@ function OpportunitiesPage() {
       </div>
 
       {/* Pipeline Summary */}
-      <div className="bg-white shadow rounded-lg p-4 sm:p-6">
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4 sm:p-6 border border-transparent dark:border-gray-700">
         <div className="grid grid-cols-1 gap-4 sm:gap-6 sm:grid-cols-3">
           <div>
-            <p className="text-sm font-medium text-gray-500">
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
               Total Pipeline Value
             </p>
-            <p className="mt-1 sm:mt-2 text-2xl sm:text-3xl font-semibold text-gray-900">
+            <p className="mt-1 sm:mt-2 text-2xl sm:text-3xl font-semibold text-gray-900 dark:text-gray-100">
               {formatCurrency(totalPipelineValue)}
             </p>
           </div>
           <div>
-            <p className="text-sm font-medium text-gray-500">
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
               Weighted Pipeline Value
             </p>
-            <p className="mt-1 sm:mt-2 text-2xl sm:text-3xl font-semibold text-gray-900">
+            <p className="mt-1 sm:mt-2 text-2xl sm:text-3xl font-semibold text-gray-900 dark:text-gray-100">
               {formatCurrency(weightedPipelineValue)}
             </p>
           </div>
           <div>
-            <p className="text-sm font-medium text-gray-500">
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
               Open Opportunities
             </p>
-            <p className="mt-1 sm:mt-2 text-2xl sm:text-3xl font-semibold text-gray-900">
+            <p className="mt-1 sm:mt-2 text-2xl sm:text-3xl font-semibold text-gray-900 dark:text-gray-100">
               {
                 opportunities.filter(
                   (o) => !['closed_won', 'closed_lost'].includes(o.stage)
@@ -293,10 +293,10 @@ function OpportunitiesPage() {
 
       {/* Error Message */}
       {error && (
-        <div className="rounded-md bg-red-50 p-4">
+        <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-4">
           <div className="flex">
             <div className="ml-3">
-              <h3 className="text-sm font-medium text-red-800">
+              <h3 className="text-sm font-medium text-red-800 dark:text-red-300">
                 {error instanceof Error ? error.message : 'An error occurred'}
               </h3>
             </div>
@@ -322,7 +322,7 @@ function OpportunitiesPage() {
         </div>
       ) : (
         /* List View */
-        <div className="bg-white shadow rounded-lg overflow-hidden">
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden border border-transparent dark:border-gray-700">
           {opportunities.length === 0 ? (
             <div className="text-center py-12 px-4">
               <svg
@@ -338,10 +338,10 @@ function OpportunitiesPage() {
                   d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
                 />
               </svg>
-              <h3 className="mt-2 text-sm font-medium text-gray-900">
+              <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">
                 No opportunities
               </h3>
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                 Get started by creating a new opportunity.
               </p>
               <div className="mt-6">
@@ -352,36 +352,36 @@ function OpportunitiesPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-900">
                   <tr>
                     <th
                       scope="col"
-                      className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                      className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                     >
                       Opportunity
                     </th>
                     <th
                       scope="col"
-                      className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                      className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                     >
                       Value
                     </th>
                     <th
                       scope="col"
-                      className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                      className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                     >
                       Stage
                     </th>
                     <th
                       scope="col"
-                      className="hidden sm:table-cell px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                      className="hidden sm:table-cell px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                     >
                       Probability
                     </th>
                     <th
                       scope="col"
-                      className="hidden md:table-cell px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                      className="hidden md:table-cell px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                     >
                       Close Date
                     </th>
@@ -390,24 +390,24 @@ function OpportunitiesPage() {
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                   {opportunities.map((opportunity) => (
                     <tr
                       key={opportunity.id}
-                      className="hover:bg-gray-50 cursor-pointer"
+                      className="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
                       onClick={() => handleOpportunityClick(opportunity)}
                     >
                       <td className="px-4 sm:px-6 py-4">
-                        <div className="text-sm font-medium text-gray-900 truncate max-w-[150px] sm:max-w-none">
+                        <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate max-w-[150px] sm:max-w-none">
                           {opportunity.name}
                         </div>
                         {opportunity.companyName && (
-                          <div className="text-sm text-gray-500 truncate max-w-[150px] sm:max-w-none">
+                          <div className="text-sm text-gray-500 dark:text-gray-400 truncate max-w-[150px] sm:max-w-none">
                             {opportunity.companyName}
                           </div>
                         )}
                       </td>
-                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
                         {formatCurrency(opportunity.value)}
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
@@ -416,10 +416,10 @@ function OpportunitiesPage() {
                             ?.title || opportunity.stage}
                         </span>
                       </td>
-                      <td className="hidden sm:table-cell px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="hidden sm:table-cell px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {formatPercentage(opportunity.probability)}
                       </td>
-                      <td className="hidden md:table-cell px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="hidden md:table-cell px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {formatDate(opportunity.expectedCloseDate)}
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-right text-sm font-medium">

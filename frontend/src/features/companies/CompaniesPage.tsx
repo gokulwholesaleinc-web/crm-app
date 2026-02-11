@@ -61,7 +61,7 @@ function CompanyCard({
 
   return (
     <div
-      className="bg-white rounded-lg shadow-sm border p-5 hover:shadow-md transition-all cursor-pointer"
+      className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 p-5 hover:shadow-md transition-all cursor-pointer"
       onClick={onClick}
     >
       <div className="flex items-start gap-4">
@@ -74,7 +74,7 @@ function CompanyCard({
               className="h-12 w-12 rounded-lg object-cover"
             />
           ) : (
-            <div className="h-12 w-12 rounded-lg bg-gray-100 flex items-center justify-center">
+            <div className="h-12 w-12 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
               <BuildingOffice2Icon className="h-6 w-6 text-gray-400" />
             </div>
           )}
@@ -82,14 +82,14 @@ function CompanyCard({
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-900 truncate">{company.name}</h3>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">{company.name}</h3>
             <div className="flex items-center gap-1 ml-2">
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   onEdit();
                 }}
-                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path
@@ -105,7 +105,7 @@ function CompanyCard({
                   e.stopPropagation();
                   onDelete();
                 }}
-                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-red-500"
+                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-red-500"
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path
@@ -130,11 +130,11 @@ function CompanyCard({
               {formatStatusLabel(company.status)}
             </span>
             {company.industry && (
-              <span className="text-xs text-gray-500 capitalize">{company.industry}</span>
+              <span className="text-xs text-gray-500 dark:text-gray-400 capitalize">{company.industry}</span>
             )}
           </div>
 
-          <div className="flex items-center gap-4 mt-3 text-sm text-gray-500">
+          <div className="flex items-center gap-4 mt-3 text-sm text-gray-500 dark:text-gray-400">
             {company.website && (
               <a
                 href={company.website}
@@ -155,7 +155,7 @@ function CompanyCard({
             </span>
           </div>
 
-          <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+          <div className="flex items-center gap-4 mt-2 text-xs text-gray-500 dark:text-gray-400">
             {company.city && company.country && (
               <span>
                 {company.city}, {company.country}
@@ -171,7 +171,7 @@ function CompanyCard({
               {company.tags.slice(0, 3).map((tag) => (
                 <span
                   key={tag.id}
-                  className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600"
+                  className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
                   style={tag.color ? { backgroundColor: `${tag.color}20`, color: tag.color } : undefined}
                 >
                   {tag.name}
@@ -287,8 +287,8 @@ export function CompaniesPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Companies</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Companies</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Manage your accounts and track business relationships
           </p>
         </div>
@@ -322,7 +322,7 @@ export function CompaniesPage() {
           </Button>
 
           {companiesData && (
-            <div className="text-sm text-gray-500">
+            <div className="text-sm text-gray-500 dark:text-gray-400">
               {companies.length} of {companiesData.total}
             </div>
           )}
@@ -331,7 +331,7 @@ export function CompaniesPage() {
 
       {/* Filters Panel */}
       {showFilters && (
-        <div className="bg-gray-50 rounded-lg p-4">
+        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
             <Select
               label="Status"
@@ -357,8 +357,8 @@ export function CompaniesPage() {
       ) : companies.length === 0 ? (
         <div className="text-center py-12 px-4">
           <BuildingOffice2Icon className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">No companies</h3>
-          <p className="mt-1 text-sm text-gray-500">
+          <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">No companies</h3>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             Get started by adding a new company.
           </p>
           <div className="mt-6">
@@ -395,7 +395,7 @@ export function CompaniesPage() {
                 >
                   Previous
                 </Button>
-                <span className="text-sm text-gray-600 whitespace-nowrap">
+                <span className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
                   Page {filters.page} of {companiesData.pages}
                 </span>
                 <Button

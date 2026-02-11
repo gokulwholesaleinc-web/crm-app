@@ -49,13 +49,12 @@ function RegisterPage() {
         state: { message: 'Registration successful. Please sign in.' },
       });
     } catch (err) {
-      if (err instanceof Error) {
+      if (typeof err === 'object' && err !== null && 'detail' in err) {
+        setError((err as { detail: string }).detail);
+      } else if (err instanceof Error) {
         setError(err.message);
-      } else if (typeof err === 'object' && err !== null && 'response' in err) {
-        const axiosError = err as { response?: { data?: { detail?: string } } };
-        setError(axiosError.response?.data?.detail || 'Registration failed');
       } else {
-        setError('An error occurred');
+        setError('Registration failed. Please try again.');
       }
     } finally {
       setIsLoading(false);
@@ -63,13 +62,13 @@ function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-8 sm:py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-8 sm:py-12 px-4 sm:px-6 lg:px-8">
       <div className="w-full max-w-md space-y-6 sm:space-y-8">
         <div>
-          <h2 className="mt-4 sm:mt-6 text-center text-2xl sm:text-3xl font-extrabold text-gray-900">
+          <h2 className="mt-4 sm:mt-6 text-center text-2xl sm:text-3xl font-extrabold text-gray-900 dark:text-gray-100">
             Create your account
           </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
+          <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
             Already have an account?{' '}
             <Link
               to="/login"
@@ -82,10 +81,10 @@ function RegisterPage() {
 
         <form className="mt-6 sm:mt-8 space-y-4 sm:space-y-6" onSubmit={handleSubmit(onSubmit)}>
           {error && (
-            <div className="rounded-md bg-red-50 p-3 sm:p-4">
+            <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-3 sm:p-4">
               <div className="flex">
                 <div className="ml-3">
-                  <h3 className="text-sm font-medium text-red-800">{error}</h3>
+                  <h3 className="text-sm font-medium text-red-800 dark:text-red-300">{error}</h3>
                 </div>
               </div>
             </div>
@@ -94,7 +93,7 @@ function RegisterPage() {
           <div className="space-y-3 sm:space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div>
-                <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   First name
                 </label>
                 <input
@@ -104,16 +103,16 @@ function RegisterPage() {
                   {...register('firstName', {
                     required: 'First name is required',
                   })}
-                  className="mt-1 appearance-none relative block w-full px-3 py-2.5 sm:py-2 border border-gray-300 placeholder-gray-500 text-gray-900 text-base sm:text-sm rounded-md focus-visible:outline-none focus-visible:ring-primary-500 focus-visible:border-primary-500"
+                  className="mt-1 appearance-none relative block w-full px-3 py-2.5 sm:py-2 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 text-base sm:text-sm rounded-md focus-visible:outline-none focus-visible:ring-primary-500 focus-visible:border-primary-500"
                   placeholder="John"
                 />
                 {errors.firstName && (
-                  <p className="mt-1 text-xs sm:text-sm text-red-600">{errors.firstName.message}</p>
+                  <p className="mt-1 text-xs sm:text-sm text-red-600 dark:text-red-400">{errors.firstName.message}</p>
                 )}
               </div>
 
               <div>
-                <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Last name
                 </label>
                 <input
@@ -123,17 +122,17 @@ function RegisterPage() {
                   {...register('lastName', {
                     required: 'Last name is required',
                   })}
-                  className="mt-1 appearance-none relative block w-full px-3 py-2.5 sm:py-2 border border-gray-300 placeholder-gray-500 text-gray-900 text-base sm:text-sm rounded-md focus-visible:outline-none focus-visible:ring-primary-500 focus-visible:border-primary-500"
+                  className="mt-1 appearance-none relative block w-full px-3 py-2.5 sm:py-2 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 text-base sm:text-sm rounded-md focus-visible:outline-none focus-visible:ring-primary-500 focus-visible:border-primary-500"
                   placeholder="Doe"
                 />
                 {errors.lastName && (
-                  <p className="mt-1 text-xs sm:text-sm text-red-600">{errors.lastName.message}</p>
+                  <p className="mt-1 text-xs sm:text-sm text-red-600 dark:text-red-400">{errors.lastName.message}</p>
                 )}
               </div>
             </div>
 
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                 Email address
               </label>
               <input
@@ -147,16 +146,16 @@ function RegisterPage() {
                     message: 'Invalid email address',
                   },
                 })}
-                className="mt-1 appearance-none relative block w-full px-3 py-2.5 sm:py-2 border border-gray-300 placeholder-gray-500 text-gray-900 text-base sm:text-sm rounded-md focus-visible:outline-none focus-visible:ring-primary-500 focus-visible:border-primary-500"
+                className="mt-1 appearance-none relative block w-full px-3 py-2.5 sm:py-2 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 text-base sm:text-sm rounded-md focus-visible:outline-none focus-visible:ring-primary-500 focus-visible:border-primary-500"
                 placeholder="john.doe@example.com"
               />
               {errors.email && (
-                <p className="mt-1 text-xs sm:text-sm text-red-600">{errors.email.message}</p>
+                <p className="mt-1 text-xs sm:text-sm text-red-600 dark:text-red-400">{errors.email.message}</p>
               )}
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                 Password
               </label>
               <input
@@ -166,16 +165,16 @@ function RegisterPage() {
                 {...register('password', {
                   required: 'Password is required',
                 })}
-                className="mt-1 appearance-none relative block w-full px-3 py-2.5 sm:py-2 border border-gray-300 placeholder-gray-500 text-gray-900 text-base sm:text-sm rounded-md focus-visible:outline-none focus-visible:ring-primary-500 focus-visible:border-primary-500"
+                className="mt-1 appearance-none relative block w-full px-3 py-2.5 sm:py-2 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 text-base sm:text-sm rounded-md focus-visible:outline-none focus-visible:ring-primary-500 focus-visible:border-primary-500"
                 placeholder="Create a password"
               />
               {errors.password && (
-                <p className="mt-1 text-xs sm:text-sm text-red-600">{errors.password.message}</p>
+                <p className="mt-1 text-xs sm:text-sm text-red-600 dark:text-red-400">{errors.password.message}</p>
               )}
             </div>
 
             <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                 Confirm password
               </label>
               <input
@@ -187,11 +186,11 @@ function RegisterPage() {
                   validate: (value) =>
                     value === password || 'Passwords do not match',
                 })}
-                className="mt-1 appearance-none relative block w-full px-3 py-2.5 sm:py-2 border border-gray-300 placeholder-gray-500 text-gray-900 text-base sm:text-sm rounded-md focus-visible:outline-none focus-visible:ring-primary-500 focus-visible:border-primary-500"
+                className="mt-1 appearance-none relative block w-full px-3 py-2.5 sm:py-2 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 text-base sm:text-sm rounded-md focus-visible:outline-none focus-visible:ring-primary-500 focus-visible:border-primary-500"
                 placeholder="Confirm your password"
               />
               {errors.confirmPassword && (
-                <p className="mt-1 text-xs sm:text-sm text-red-600">{errors.confirmPassword.message}</p>
+                <p className="mt-1 text-xs sm:text-sm text-red-600 dark:text-red-400">{errors.confirmPassword.message}</p>
               )}
             </div>
           </div>
@@ -204,7 +203,7 @@ function RegisterPage() {
               required
               className="h-4 w-4 mt-0.5 sm:mt-0 text-primary-600 focus-visible:ring-primary-500 border-gray-300 rounded"
             />
-            <label htmlFor="terms" className="ml-2 block text-xs sm:text-sm text-gray-900">
+            <label htmlFor="terms" className="ml-2 block text-xs sm:text-sm text-gray-900 dark:text-gray-300">
               I agree to the{' '}
               <Link to="/terms" className="text-primary-600 hover:text-primary-500">
                 Terms of Service

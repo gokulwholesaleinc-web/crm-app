@@ -169,8 +169,8 @@ export function ActivitiesPage() {
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Activities</h1>
-          <p className="text-xs sm:text-sm text-gray-500 mt-1">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Activities</h1>
+          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1">
             Track and manage all your activities in one place
           </p>
         </div>
@@ -184,7 +184,7 @@ export function ActivitiesPage() {
       </div>
 
       {/* Activity Type Tabs */}
-      <div className="border-b border-gray-200 -mx-4 px-4 sm:mx-0 sm:px-0 overflow-x-auto">
+      <div className="border-b border-gray-200 dark:border-gray-700 -mx-4 px-4 sm:mx-0 sm:px-0 overflow-x-auto">
         <nav className="flex -mb-px space-x-3 sm:space-x-6 min-w-max" aria-label="Activity types">
           {activityTypeFilters.map((type) => {
             const Icon = type.icon;
@@ -198,8 +198,8 @@ export function ActivitiesPage() {
                 className={clsx(
                   'flex items-center gap-1.5 sm:gap-2 py-2.5 sm:py-3 px-1 border-b-2 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap',
                   isActive
-                    ? 'border-primary-500 text-primary-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
                 )}
               >
                 {Icon && <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
@@ -220,8 +220,8 @@ export function ActivitiesPage() {
               className={clsx(
                 'p-2 sm:p-2 rounded-lg transition-colors',
                 viewMode === 'list'
-                  ? 'bg-primary-100 text-primary-600'
-                  : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
+                  ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400'
+                  : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-600 dark:hover:text-gray-300'
               )}
               title="List view"
             >
@@ -232,8 +232,8 @@ export function ActivitiesPage() {
               className={clsx(
                 'p-2 sm:p-2 rounded-lg transition-colors',
                 viewMode === 'timeline'
-                  ? 'bg-primary-100 text-primary-600'
-                  : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
+                  ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400'
+                  : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-600 dark:hover:text-gray-300'
               )}
               title="Timeline view"
             >
@@ -244,8 +244,8 @@ export function ActivitiesPage() {
               className={clsx(
                 'p-2 sm:p-2 rounded-lg transition-colors',
                 viewMode === 'calendar'
-                  ? 'bg-primary-100 text-primary-600'
-                  : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
+                  ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400'
+                  : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-600 dark:hover:text-gray-300'
               )}
               title="Calendar view"
             >
@@ -273,7 +273,7 @@ export function ActivitiesPage() {
 
       {/* Filters Panel */}
       {showFilters && (
-        <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
+        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 sm:p-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
             <Select
               label="Priority"
@@ -307,8 +307,8 @@ export function ActivitiesPage() {
           {activities.length === 0 ? (
             <div className="text-center py-8 sm:py-12">
               <DocumentTextIcon className="mx-auto h-10 w-10 sm:h-12 sm:w-12 text-gray-400" />
-              <h3 className="mt-2 text-sm font-medium text-gray-900">No activities</h3>
-              <p className="mt-1 text-xs sm:text-sm text-gray-500">
+              <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">No activities</h3>
+              <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
                 Get started by creating a new activity.
               </p>
               <div className="mt-4 sm:mt-6">
@@ -356,7 +356,7 @@ export function ActivitiesPage() {
                   Next
                 </Button>
               </div>
-              <span className="text-xs sm:text-sm text-gray-600 order-first sm:order-none">
+              <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 order-first sm:order-none">
                 Page {filters.page} of {activitiesData.pages}
               </span>
             </div>

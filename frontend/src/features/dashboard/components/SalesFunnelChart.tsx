@@ -27,10 +27,10 @@ export function SalesFunnelChart({ data }: SalesFunnelChartProps) {
           return (
             <div key={stage.stage}>
               <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-medium text-gray-700">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
                   {stageLabels[stage.stage] || stage.stage}
                 </span>
-                <span className="text-sm font-semibold text-gray-900">{stage.count}</span>
+                <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{stage.count}</span>
               </div>
               <div className="relative">
                 <div
@@ -61,17 +61,17 @@ export function SalesFunnelChart({ data }: SalesFunnelChartProps) {
       </div>
 
       {/* Average days in stage */}
-      <div className="border-t pt-3 mt-3">
-        <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+      <div className="border-t dark:border-gray-700 pt-3 mt-3">
+        <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
           Avg. Days in Stage
         </h4>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {data.stages.map((stage) => (
-            <div key={stage.stage} className="text-center p-2 bg-gray-50 rounded">
-              <div className="text-xs text-gray-500">
+            <div key={stage.stage} className="text-center p-2 bg-gray-50 dark:bg-gray-700 rounded">
+              <div className="text-xs text-gray-500 dark:text-gray-400">
                 {stageLabels[stage.stage] || stage.stage}
               </div>
-              <div className="text-sm font-semibold text-gray-900">
+              <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                 {data.avg_days_in_stage[stage.stage] != null
                   ? `${data.avg_days_in_stage[stage.stage]} days`
                   : '-'}

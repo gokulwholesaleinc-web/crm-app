@@ -52,7 +52,7 @@ export function KanbanCard({ opportunity, onClick }: KanbanCardProps) {
       {...listeners}
       onClick={onClick}
       className={clsx(
-        'bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4 cursor-grab active:cursor-grabbing touch-manipulation',
+        'bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-3 sm:p-4 cursor-grab active:cursor-grabbing touch-manipulation',
         'hover:shadow-md transition-shadow duration-200',
         isDragging && 'opacity-50 shadow-lg'
       )}
@@ -60,11 +60,11 @@ export function KanbanCard({ opportunity, onClick }: KanbanCardProps) {
       <div className="space-y-2 sm:space-y-3">
         {/* Opportunity Name */}
         <div>
-          <h4 className="text-sm font-medium text-gray-900 line-clamp-2">
+          <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 line-clamp-2">
             {opportunity.name}
           </h4>
           {opportunity.companyName && (
-            <p className="text-xs text-gray-500 mt-0.5 truncate">
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
               {opportunity.companyName}
             </p>
           )}
@@ -72,16 +72,16 @@ export function KanbanCard({ opportunity, onClick }: KanbanCardProps) {
 
         {/* Value */}
         <div className="flex items-center justify-between gap-2">
-          <span className="text-base sm:text-lg font-semibold text-gray-900">
+          <span className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">
             {formatCurrency(opportunity.value)}
           </span>
-          <span className="text-xs text-gray-500 shrink-0">
+          <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0">
             {opportunity.probability}%
           </span>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between gap-2 pt-2 border-t border-gray-100">
+        <div className="flex items-center justify-between gap-2 pt-2 border-t border-gray-100 dark:border-gray-700">
           {/* Contact */}
           {opportunity.contactName && (
             <div className="flex items-center gap-1 min-w-0">

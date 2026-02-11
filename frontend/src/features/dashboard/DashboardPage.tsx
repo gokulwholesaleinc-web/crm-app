@@ -207,12 +207,12 @@ function DashboardPage() {
               const maxCount = Math.max(...(data?.pipelineData?.map(p => p.count ?? (typeof p.value === 'number' ? p.value : 0)) || [1]));
               return (
                 <div key={label} className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-0">
-                  <div className="w-full sm:w-28 md:w-32 text-xs sm:text-sm font-medium text-gray-600 truncate">
+                  <div className="w-full sm:w-28 md:w-32 text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400 truncate">
                     {label}
                   </div>
                   <div className="flex items-center flex-1 gap-2 sm:gap-4">
                     <div className="flex-1 sm:ml-4">
-                      <div className="relative h-3 sm:h-4 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="relative h-3 sm:h-4 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                         <div
                           className="absolute h-full bg-primary-500 rounded-full"
                           style={{
@@ -221,7 +221,7 @@ function DashboardPage() {
                         />
                       </div>
                     </div>
-                    <div className="w-auto sm:w-20 text-right text-xs sm:text-sm font-medium text-gray-900 whitespace-nowrap">
+                    <div className="w-auto sm:w-20 text-right text-xs sm:text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">
                       {count} ({formatCurrency(typeof value === 'number' ? value : 0)})
                     </div>
                   </div>
@@ -242,12 +242,12 @@ function DashboardPage() {
               const maxCount = Math.max(...(data?.leadsBySource?.map(l => l.count ?? (typeof l.value === 'number' ? l.value : 0)) || [1]));
               return (
                 <div key={label} className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-0">
-                  <div className="w-full sm:w-28 md:w-32 text-xs sm:text-sm font-medium text-gray-600 truncate">
+                  <div className="w-full sm:w-28 md:w-32 text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400 truncate">
                     {label}
                   </div>
                   <div className="flex items-center flex-1 gap-2 sm:gap-4">
                     <div className="flex-1 sm:ml-4">
-                      <div className="relative h-3 sm:h-4 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="relative h-3 sm:h-4 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                         <div
                           className="absolute h-full bg-green-500 rounded-full"
                           style={{
@@ -256,7 +256,7 @@ function DashboardPage() {
                         />
                       </div>
                     </div>
-                    <div className="w-8 sm:w-12 text-right text-xs sm:text-sm font-medium text-gray-900">
+                    <div className="w-8 sm:w-12 text-right text-xs sm:text-sm font-medium text-gray-900 dark:text-gray-100">
                       {count}
                     </div>
                   </div>
@@ -290,13 +290,13 @@ function DashboardPage() {
                   <div className="relative pb-6 sm:pb-8">
                     {idx !== (data?.recentActivities?.length || 0) - 1 && (
                       <span
-                        className="absolute top-3 sm:top-4 left-3 sm:left-4 -ml-px h-full w-0.5 bg-gray-200"
+                        className="absolute top-3 sm:top-4 left-3 sm:left-4 -ml-px h-full w-0.5 bg-gray-200 dark:bg-gray-700"
                         aria-hidden="true"
                       />
                     )}
                     <div className="relative flex space-x-2 sm:space-x-3">
                       <div>
-                        <span className="h-6 w-6 sm:h-8 sm:w-8 rounded-full bg-primary-100 flex items-center justify-center ring-4 sm:ring-8 ring-white">
+                        <span className="h-6 w-6 sm:h-8 sm:w-8 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center ring-4 sm:ring-8 ring-white dark:ring-gray-800">
                           <svg
                             className="h-3 w-3 sm:h-4 sm:w-4 text-primary-600"
                             fill="none"
@@ -314,10 +314,10 @@ function DashboardPage() {
                       </div>
                       <div className="min-w-0 flex-1 pt-0.5 sm:pt-1.5">
                         <div className="flex flex-col sm:flex-row sm:justify-between sm:space-x-4">
-                          <p className="text-xs sm:text-sm text-gray-500 break-words">
+                          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 break-words">
                             {activity.description}
                           </p>
-                          <div className="text-xs sm:text-sm text-gray-400 sm:text-gray-500 whitespace-nowrap mt-0.5 sm:mt-0">
+                          <div className="text-xs sm:text-sm text-gray-400 sm:text-gray-500 dark:text-gray-500 whitespace-nowrap mt-0.5 sm:mt-0">
                             {formatDate(activity.timestamp)}
                           </div>
                         </div>
@@ -327,7 +327,7 @@ function DashboardPage() {
                 </li>
               ))
             ) : (
-              <li className="text-center py-4 text-sm text-gray-500">
+              <li className="text-center py-4 text-sm text-gray-500 dark:text-gray-400">
                 No recent activities
               </li>
             )}

@@ -9,11 +9,11 @@ import clsx from 'clsx';
 type ViewMode = 'month' | 'week' | 'day';
 
 const ACTIVITY_COLORS: Record<string, string> = {
-  call: 'bg-blue-100 text-blue-800 border-blue-200',
-  meeting: 'bg-green-100 text-green-800 border-green-200',
-  task: 'bg-orange-100 text-orange-800 border-orange-200',
-  email: 'bg-purple-100 text-purple-800 border-purple-200',
-  note: 'bg-gray-100 text-gray-800 border-gray-200',
+  call: 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800',
+  meeting: 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800',
+  task: 'bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800',
+  email: 'bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800',
+  note: 'bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600',
 };
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -134,10 +134,10 @@ function CalendarView() {
     const days = getMonthDays(year, month);
 
     return (
-      <div className="grid grid-cols-7 border-t border-l border-gray-200">
+      <div className="grid grid-cols-7 border-t border-l border-gray-200 dark:border-gray-700">
         {/* Header row */}
         {WEEKDAY_LABELS.map((label) => (
-          <div key={label} className="border-r border-b border-gray-200 bg-gray-50 px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase">
+          <div key={label} className="border-r border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-2 py-2 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
             {label}
           </div>
         ))}
@@ -152,8 +152,8 @@ function CalendarView() {
             <div
               key={key}
               className={clsx(
-                'border-r border-b border-gray-200 min-h-[100px] p-1 hover:bg-gray-50 transition-colors',
-                !isCurrentMonth && 'bg-gray-50/50'
+                'border-r border-b border-gray-200 dark:border-gray-700 min-h-[100px] p-1 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors',
+                !isCurrentMonth && 'bg-gray-50/50 dark:bg-gray-900/50'
               )}
             >
               <div className="flex items-center justify-between px-1">
@@ -161,14 +161,14 @@ function CalendarView() {
                   className={clsx(
                     'text-sm font-medium inline-flex items-center justify-center w-7 h-7 rounded-full',
                     isToday && 'bg-primary-600 text-white',
-                    !isToday && isCurrentMonth && 'text-gray-900',
-                    !isToday && !isCurrentMonth && 'text-gray-400'
+                    !isToday && isCurrentMonth && 'text-gray-900 dark:text-gray-100',
+                    !isToday && !isCurrentMonth && 'text-gray-400 dark:text-gray-600'
                   )}
                 >
                   {day.getDate()}
                 </span>
                 {dayActivities.length > 0 && (
-                  <span className="text-xs text-gray-400">{dayActivities.length}</span>
+                  <span className="text-xs text-gray-400 dark:text-gray-500">{dayActivities.length}</span>
                 )}
               </div>
               <div className="mt-1 space-y-0.5 overflow-hidden max-h-[60px]">
@@ -204,21 +204,21 @@ function CalendarView() {
     const days = getWeekDays(currentDate);
 
     return (
-      <div className="grid grid-cols-7 border-t border-l border-gray-200">
+      <div className="grid grid-cols-7 border-t border-l border-gray-200 dark:border-gray-700">
         {days.map((day) => {
           const key = formatDateKey(day);
           const isToday = key === today;
           const dayActivities = activitiesByDate[key] ?? [];
 
           return (
-            <div key={key} className="border-r border-b border-gray-200 min-h-[300px] p-2">
+            <div key={key} className="border-r border-b border-gray-200 dark:border-gray-700 min-h-[300px] p-2">
               <div className="text-center mb-2">
-                <div className="text-xs text-gray-500 uppercase">{WEEKDAY_LABELS[day.getDay()]}</div>
+                <div className="text-xs text-gray-500 dark:text-gray-400 uppercase">{WEEKDAY_LABELS[day.getDay()]}</div>
                 <div
                   className={clsx(
                     'text-lg font-semibold inline-flex items-center justify-center w-9 h-9 rounded-full',
                     isToday && 'bg-primary-600 text-white',
-                    !isToday && 'text-gray-900'
+                    !isToday && 'text-gray-900 dark:text-gray-100'
                   )}
                 >
                   {day.getDate()}
@@ -256,9 +256,9 @@ function CalendarView() {
     const dayActivities = activitiesByDate[key] ?? [];
 
     return (
-      <div className="bg-white rounded-lg border border-gray-200 p-4 min-h-[400px]">
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 min-h-[400px]">
         {dayActivities.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">
+          <div className="text-center py-12 text-gray-500 dark:text-gray-400">
             <p>No activities scheduled for this day.</p>
             <span className="mt-2 text-primary-600 text-sm font-medium">
               No activities yet
@@ -305,28 +305,28 @@ function CalendarView() {
   return (
     <div className="space-y-4">
       {/* Calendar Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-white rounded-lg shadow p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-white dark:bg-gray-800 rounded-lg shadow dark:border dark:border-gray-700 p-4">
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate(-1)}
-            className="p-2 rounded-md hover:bg-gray-100 transition-colors"
+            className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
             aria-label="Previous"
           >
-            <ChevronLeftIcon className="h-5 w-5 text-gray-600" />
+            <ChevronLeftIcon className="h-5 w-5 text-gray-600 dark:text-gray-400" />
           </button>
-          <h2 className="text-lg font-semibold text-gray-900 min-w-[200px] text-center">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 min-w-[200px] text-center">
             {headerLabel}
           </h2>
           <button
             onClick={() => navigate(1)}
-            className="p-2 rounded-md hover:bg-gray-100 transition-colors"
+            className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
             aria-label="Next"
           >
-            <ChevronRightIcon className="h-5 w-5 text-gray-600" />
+            <ChevronRightIcon className="h-5 w-5 text-gray-600 dark:text-gray-400" />
           </button>
           <button
             onClick={goToToday}
-            className="ml-2 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+            className="ml-2 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
           >
             Today
           </button>
@@ -344,7 +344,7 @@ function CalendarView() {
                   mode === 'day' && 'rounded-r-md',
                   viewMode === mode
                     ? 'bg-primary-600 text-white border-primary-600'
-                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                    : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
                 )}
               >
                 {mode.charAt(0).toUpperCase() + mode.slice(1)}
@@ -367,7 +367,7 @@ function CalendarView() {
       </div>
 
       {/* Calendar Grid */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:border dark:border-gray-700 overflow-hidden">
         {isLoading ? (
           <div className="flex items-center justify-center h-64">
             <Spinner size="lg" />

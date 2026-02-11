@@ -149,7 +149,7 @@ export function ActivityCard({
   return (
     <div
       className={clsx(
-        'bg-white rounded-lg shadow-sm border p-3 sm:p-4 transition-all hover:shadow-md',
+        'bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-3 sm:p-4 transition-all hover:shadow-md',
         activity.is_completed && 'opacity-75'
       )}
     >
@@ -162,7 +162,7 @@ export function ActivityCard({
           <div className="flex flex-col xs:flex-row xs:items-center xs:justify-between gap-1 xs:gap-2">
             <h4
               className={clsx(
-                'text-sm sm:text-base font-medium text-gray-900 truncate',
+                'text-sm sm:text-base font-medium text-gray-900 dark:text-gray-100 truncate',
                 activity.is_completed && 'line-through text-gray-500'
               )}
             >
@@ -184,7 +184,7 @@ export function ActivityCard({
           </div>
 
           {activity.description && (
-            <p className="text-xs sm:text-sm text-gray-600 mt-1 line-clamp-2">{activity.description}</p>
+            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">{activity.description}</p>
           )}
 
           <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-2 text-[10px] sm:text-xs text-gray-500">
@@ -217,7 +217,7 @@ export function ActivityCard({
           {!activity.is_completed && onComplete && (
             <button
               onClick={() => onComplete(activity.id)}
-              className="p-2 sm:p-1.5 rounded-lg hover:bg-gray-100 transition-colors min-h-[40px] min-w-[40px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
+              className="p-2 sm:p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors min-h-[40px] min-w-[40px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
               title="Mark as complete"
             >
               <CheckCircleIcon className="h-5 w-5 text-gray-400 hover:text-green-500" />
@@ -231,7 +231,7 @@ export function ActivityCard({
           {onEdit && (
             <button
               onClick={() => onEdit(activity)}
-              className="p-2 sm:p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600 min-h-[40px] min-w-[40px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
+              className="p-2 sm:p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 min-h-[40px] min-w-[40px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
               title="Edit"
             >
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -247,7 +247,7 @@ export function ActivityCard({
           {onDelete && (
             <button
               onClick={() => onDelete(activity.id)}
-              className="p-2 sm:p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-red-500 min-h-[40px] min-w-[40px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
+              className="p-2 sm:p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-400 hover:text-red-500 min-h-[40px] min-w-[40px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
               title="Delete"
             >
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

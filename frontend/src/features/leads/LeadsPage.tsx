@@ -31,7 +31,7 @@ function ScoreIndicator({ score }: { score: number }) {
 
   return (
     <div className="flex items-center space-x-2">
-      <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
+      <div className="w-16 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
         <div
           className={clsx('h-full rounded-full', {
             'bg-green-500': score >= 80,
@@ -207,8 +207,8 @@ function LeadsPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Leads</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Leads</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             Track and manage your sales leads
           </p>
         </div>
@@ -222,7 +222,7 @@ function LeadsPage() {
       </div>
 
       {/* Search and Filters */}
-      <div className="bg-white shadow rounded-lg p-4">
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4 border border-transparent dark:border-gray-700">
         <form onSubmit={handleSearch} className="flex flex-col gap-3 sm:flex-row sm:gap-4">
           <div className="flex-1">
             <label htmlFor="search" className="sr-only">
@@ -249,7 +249,7 @@ function LeadsPage() {
                 id="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="block w-full pl-10 pr-3 py-2.5 sm:py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus-visible:outline-none focus-visible:placeholder-gray-400 focus-visible:ring-1 focus-visible:ring-primary-500 focus-visible:border-primary-500 text-base sm:text-sm"
+                className="block w-full pl-10 pr-3 py-2.5 sm:py-2 border border-gray-300 dark:border-gray-600 rounded-md leading-5 bg-white dark:bg-gray-700 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus-visible:outline-none focus-visible:placeholder-gray-400 focus-visible:ring-1 focus-visible:ring-primary-500 focus-visible:border-primary-500 text-base sm:text-sm"
                 placeholder="Search by name, email, or company..."
               />
             </div>
@@ -262,7 +262,7 @@ function LeadsPage() {
                   setStatusFilter(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 py-2.5 sm:py-2 text-base sm:text-sm"
+                className="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 py-2.5 sm:py-2 text-base sm:text-sm"
               >
                 {statusOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -280,10 +280,10 @@ function LeadsPage() {
 
       {/* Error Message */}
       {error && (
-        <div className="rounded-md bg-red-50 p-4">
+        <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-4">
           <div className="flex">
             <div className="ml-3">
-              <h3 className="text-sm font-medium text-red-800">
+              <h3 className="text-sm font-medium text-red-800 dark:text-red-300">
                 {error instanceof Error ? error.message : 'An error occurred'}
               </h3>
             </div>
@@ -293,10 +293,10 @@ function LeadsPage() {
 
       {/* Delete Error Message */}
       {deleteLeadMutation.isError && (
-        <div className="rounded-md bg-red-50 p-4">
+        <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-4">
           <div className="flex">
             <div className="ml-3">
-              <h3 className="text-sm font-medium text-red-800">
+              <h3 className="text-sm font-medium text-red-800 dark:text-red-300">
                 Failed to delete lead
               </h3>
             </div>
@@ -305,7 +305,7 @@ function LeadsPage() {
       )}
 
       {/* Leads Table */}
-      <div className="bg-white shadow rounded-lg overflow-hidden">
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden border border-transparent dark:border-gray-700">
         {isLoading ? (
           <SkeletonTable rows={5} cols={7} />
         ) : leads.length === 0 ? (
@@ -323,8 +323,8 @@ function LeadsPage() {
                 d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
               />
             </svg>
-            <h3 className="mt-2 text-sm font-medium text-gray-900">No leads</h3>
-            <p className="mt-1 text-sm text-gray-500">
+            <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">No leads</h3>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
               Get started by creating a new lead.
             </p>
             <div className="mt-6">
@@ -334,9 +334,9 @@ function LeadsPage() {
         ) : (
           <>
             {/* Mobile Card View */}
-            <div className="sm:hidden divide-y divide-gray-200">
+            <div className="sm:hidden divide-y divide-gray-200 dark:divide-gray-700">
               {leads.map((lead: Lead) => (
-                <div key={lead.id} className={clsx('p-4 space-y-3', selectedIds.includes(lead.id) && 'bg-primary-50')}>
+                <div key={lead.id} className={clsx('p-4 space-y-3', selectedIds.includes(lead.id) && 'bg-primary-50 dark:bg-primary-900/20')}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-start gap-3 min-w-0 flex-1">
                       <input
@@ -352,9 +352,9 @@ function LeadsPage() {
                         >
                           {lead.first_name} {lead.last_name}
                         </Link>
-                        <p className="text-sm text-gray-500 truncate">{lead.email || '-'}</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{lead.email || '-'}</p>
                         {lead.company_name && (
-                          <p className="text-sm text-gray-500 truncate">{lead.company_name}</p>
+                          <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{lead.company_name}</p>
                         )}
                       </div>
                     </div>
@@ -365,22 +365,22 @@ function LeadsPage() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
                       <ScoreIndicator score={lead.score} />
-                      <span className="text-xs text-gray-500">
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
                         {lead.source?.name ? formatStatusLabel(lead.source.name) : '-'}
                       </span>
                     </div>
-                    <span className="text-xs text-gray-500">{formatDate(lead.created_at)}</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{formatDate(lead.created_at)}</span>
                   </div>
-                  <div className="flex gap-4 pt-2 border-t border-gray-100">
+                  <div className="flex gap-4 pt-2 border-t border-gray-100 dark:border-gray-700">
                     <button
                       onClick={() => handleEdit(lead)}
-                      className="flex-1 text-center py-2 text-sm font-medium text-primary-600 hover:text-primary-900 hover:bg-primary-50 rounded-md transition-colors"
+                      className="flex-1 text-center py-2 text-sm font-medium text-primary-600 hover:text-primary-900 dark:hover:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-md transition-colors"
                     >
                       Edit
                     </button>
                     <button
                       onClick={() => handleDeleteClick(lead)}
-                      className="flex-1 text-center py-2 text-sm font-medium text-red-600 hover:text-red-900 hover:bg-red-50 rounded-md transition-colors"
+                      className="flex-1 text-center py-2 text-sm font-medium text-red-600 hover:text-red-900 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
                       disabled={deleteLeadMutation.isPending}
                     >
                       Delete
@@ -392,8 +392,8 @@ function LeadsPage() {
 
             {/* Desktop Table View */}
             <div className="hidden sm:block overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-900">
                   <tr>
                     <th scope="col" className="px-4 py-3 w-10">
                       <input
@@ -444,9 +444,9 @@ function LeadsPage() {
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                   {leads.map((lead: Lead) => (
-                    <tr key={lead.id} className={clsx('hover:bg-gray-50', selectedIds.includes(lead.id) && 'bg-primary-50')}>
+                    <tr key={lead.id} className={clsx('hover:bg-gray-50 dark:hover:bg-gray-700', selectedIds.includes(lead.id) && 'bg-primary-50 dark:bg-primary-900/20')}>
                       <td className="px-4 py-4 w-10">
                         <input
                           type="checkbox"
@@ -462,9 +462,9 @@ function LeadsPage() {
                         >
                           {lead.first_name} {lead.last_name}
                         </Link>
-                        <p className="text-sm text-gray-500">{lead.email || '-'}</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">{lead.email || '-'}</p>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {lead.company_name || '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -475,10 +475,10 @@ function LeadsPage() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <ScoreIndicator score={lead.score} />
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {lead.source?.name ? formatStatusLabel(lead.source.name) : '-'}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {formatDate(lead.created_at)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -503,7 +503,7 @@ function LeadsPage() {
             </div>
 
             {/* Pagination */}
-            <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+            <div className="bg-white dark:bg-gray-800 px-4 py-3 flex items-center justify-between border-t border-gray-200 dark:border-gray-700 sm:px-6">
               <div className="flex-1 flex justify-between sm:hidden">
                 <Button
                   variant="secondary"
@@ -522,7 +522,7 @@ function LeadsPage() {
               </div>
               <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
                 <div>
-                  <p className="text-sm text-gray-700">
+                  <p className="text-sm text-gray-700 dark:text-gray-300">
                     Showing{' '}
                     <span className="font-medium">
                       {(currentPage - 1) * pageSize + 1}
@@ -542,7 +542,7 @@ function LeadsPage() {
                     <button
                       onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                       disabled={currentPage === 1}
-                      className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <span className="sr-only">Previous</span>
                       <svg
@@ -557,7 +557,7 @@ function LeadsPage() {
                         />
                       </svg>
                     </button>
-                    <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
+                    <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300">
                       Page {currentPage} of {totalPages}
                     </span>
                     <button
@@ -565,7 +565,7 @@ function LeadsPage() {
                         setCurrentPage((p) => Math.min(totalPages, p + 1))
                       }
                       disabled={currentPage === totalPages}
-                      className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <span className="sr-only">Next</span>
                       <svg

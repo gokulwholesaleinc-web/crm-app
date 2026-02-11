@@ -100,7 +100,7 @@ function TimelineEntry({
     <div className="relative pb-4 sm:pb-6">
       {!isLast && (
         <span
-          className="absolute left-3 sm:left-4 top-8 sm:top-10 -ml-px h-full w-0.5 bg-gray-200"
+          className="absolute left-3 sm:left-4 top-8 sm:top-10 -ml-px h-full w-0.5 bg-gray-200 dark:bg-gray-700"
           aria-hidden="true"
         />
       )}
@@ -123,8 +123,8 @@ function TimelineEntry({
         <div className="min-w-0 flex-1">
           <div
             className={clsx(
-              'bg-white rounded-lg border border-gray-200 p-2.5 sm:p-3 shadow-sm transition-all',
-              onActivityClick && 'cursor-pointer hover:shadow-md hover:border-gray-300 active:bg-gray-50'
+              'bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-2.5 sm:p-3 shadow-sm transition-all',
+              onActivityClick && 'cursor-pointer hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 active:bg-gray-50 dark:active:bg-gray-700'
             )}
             onClick={() => onActivityClick?.(item)}
           >
@@ -163,24 +163,24 @@ function TimelineEntry({
             </div>
             <p
               className={clsx(
-                'mt-1 text-xs sm:text-sm font-medium text-gray-900',
+                'mt-1 text-xs sm:text-sm font-medium text-gray-900 dark:text-gray-100',
                 item.is_completed && 'line-through text-gray-500'
               )}
             >
               {item.subject}
             </p>
             {item.description && (
-              <p className="mt-1 text-xs sm:text-sm text-gray-600 line-clamp-2">{item.description}</p>
+              <p className="mt-1 text-xs sm:text-sm text-gray-600 dark:text-gray-400 line-clamp-2">{item.description}</p>
             )}
             {(item.call_duration_minutes || item.call_outcome || item.meeting_location) && (
               <div className="mt-1.5 sm:mt-2 flex flex-wrap gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-gray-500">
                 {item.call_duration_minutes && (
-                  <span className="bg-gray-100 px-1.5 sm:px-2 py-0.5 rounded">
+                  <span className="bg-gray-100 dark:bg-gray-700 px-1.5 sm:px-2 py-0.5 rounded">
                     {item.call_duration_minutes} min
                   </span>
                 )}
                 {item.call_outcome && (
-                  <span className="bg-gray-100 px-1.5 sm:px-2 py-0.5 rounded">
+                  <span className="bg-gray-100 dark:bg-gray-700 px-1.5 sm:px-2 py-0.5 rounded">
                     {item.call_outcome.replace('_', ' ')}
                   </span>
                 )}
@@ -228,8 +228,8 @@ export function ActivityTimeline({
     return (
       <div className="text-center py-8 sm:py-12">
         <DocumentTextIcon className="mx-auto h-10 w-10 sm:h-12 sm:w-12 text-gray-400" />
-        <h3 className="mt-2 text-sm font-medium text-gray-900">No activities</h3>
-        <p className="mt-1 text-xs sm:text-sm text-gray-500">{emptyMessage}</p>
+        <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">No activities</h3>
+        <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400">{emptyMessage}</p>
       </div>
     );
   }
@@ -240,7 +240,7 @@ export function ActivityTimeline({
     <div className="flow-root">
       {groupedActivities.map((group, groupIndex) => (
         <div key={group.date} className={groupIndex > 0 ? 'mt-4 sm:mt-6' : ''}>
-          <h3 className="text-xs sm:text-sm font-semibold text-gray-900 mb-3 sm:mb-4 sticky top-0 bg-gray-50 py-1 -mx-1 px-1 z-10">
+          <h3 className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 sm:mb-4 sticky top-0 bg-gray-50 dark:bg-gray-900 py-1 -mx-1 px-1 z-10">
             {group.dateLabel}
           </h3>
           <div className="pl-1 sm:pl-2">

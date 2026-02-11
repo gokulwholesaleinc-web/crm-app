@@ -10,6 +10,7 @@ import { Toaster } from 'react-hot-toast';
 import AppRoutes from './routes';
 import { Spinner } from './components/ui/Spinner';
 import { useAuthStore } from './store/authStore';
+import { useTheme } from './hooks/useTheme';
 
 // Configure QueryClient with sensible defaults
 const queryClient = new QueryClient({
@@ -53,9 +54,16 @@ function AuthEventHandler() {
   return null;
 }
 
+// Initialize theme at app root to prevent flash of wrong theme
+function ThemeInitializer() {
+  useTheme();
+  return null;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
+      <ThemeInitializer />
       <AuthEventHandler />
       <BrowserRouter
         future={{
