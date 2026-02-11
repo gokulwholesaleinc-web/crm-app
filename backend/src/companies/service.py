@@ -29,6 +29,7 @@ class CompanyService(
         owner_id: Optional[int] = None,
         tag_ids: Optional[List[int]] = None,
         filters: Optional[Dict[str, Any]] = None,
+        shared_entity_ids: Optional[List[int]] = None,
     ) -> Tuple[List[Company], int]:
         """Get paginated list of companies with filters."""
         query = select(Company)
@@ -36,7 +37,6 @@ class CompanyService(
         if filters:
             query = apply_filters_to_query(query, Company, filters)
 
-        # Apply filters
         if search:
             search_filter = or_(
                 Company.name.ilike(f"%{search}%"),
@@ -52,17 +52,18 @@ class CompanyService(
             query = query.where(Company.industry == industry)
 
         if owner_id:
-            query = query.where(Company.owner_id == owner_id)
+            if shared_entity_ids:
+                query = query.where(or_(Company.owner_id == owner_id, Company.id.in_(shared_entity_ids)))
+            else:
+                query = query.where(Company.owner_id == owner_id)
 
         if tag_ids:
             query = await self._filter_by_tags(query, tag_ids)
 
-        # Get total count
         count_query = select(func.count()).select_from(query.subquery())
         total_result = await self.db.execute(count_query)
         total = total_result.scalar()
 
-        # Apply pagination
         offset = (page - 1) * page_size
         query = query.offset(offset).limit(page_size).order_by(Company.created_at.desc())
 

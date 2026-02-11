@@ -42,6 +42,7 @@ from src.roles.router import router as roles_router
 from src.webhooks.router import router as webhooks_router
 from src.assignment.router import router as assignment_router
 from src.sequences.router import router as sequences_router
+from src.core.sharing_router import router as sharing_router
 
 
 async def _init_database():
@@ -51,7 +52,7 @@ async def _init_database():
             await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
 
         from src.auth.models import User
-        from src.core.models import Note, Tag, EntityTag
+        from src.core.models import Note, Tag, EntityTag, EntityShare
         from src.contacts.models import Contact
         from src.companies.models import Company
         from src.leads.models import Lead, LeadSource
@@ -165,6 +166,7 @@ app.include_router(roles_router)
 app.include_router(webhooks_router)
 app.include_router(assignment_router)
 app.include_router(sequences_router)
+app.include_router(sharing_router)
 
 
 # Register webhook event handler with event system

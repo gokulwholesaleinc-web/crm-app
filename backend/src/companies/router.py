@@ -1,9 +1,9 @@
 """Company API routes."""
 
 import logging
-from typing import Optional
-from fastapi import APIRouter, Query
-from src.core.constants import HTTPStatus, EntityNames
+from typing import Annotated, Optional
+from fastapi import APIRouter, Depends, Query
+from src.core.constants import HTTPStatus, EntityNames, ENTITY_TYPE_COMPANIES
 from src.core.router_utils import (
     DBSession,
     CurrentUser,
@@ -12,6 +12,7 @@ from src.core.router_utils import (
     calculate_pages,
     check_ownership,
 )
+from src.core.data_scope import DataScope, get_data_scope, check_record_access_or_shared
 from src.companies.schemas import (
     CompanyCreate,
     CompanyUpdate,
@@ -47,6 +48,7 @@ async def _build_company_response(
 async def list_companies(
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     search: Optional[str] = None,
@@ -60,10 +62,10 @@ async def list_companies(
     import json as _json
     parsed_filters = _json.loads(filters) if filters else None
 
-    # Auto-scope to current user's data by default
-    effective_owner_id = owner_id
-    if effective_owner_id is None:
-        effective_owner_id = current_user.id
+    if data_scope.can_see_all():
+        effective_owner_id = owner_id
+    else:
+        effective_owner_id = data_scope.owner_id
 
     service = CompanyService(db)
 
@@ -76,6 +78,7 @@ async def list_companies(
         owner_id=effective_owner_id,
         tag_ids=parse_tag_ids(tag_ids),
         filters=parsed_filters,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_COMPANIES),
     )
 
     company_responses = [
@@ -121,10 +124,15 @@ async def get_company(
     company_id: int,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Get a company by ID."""
     service = CompanyService(db)
     company = await get_entity_or_404(service, company_id, EntityNames.COMPANY)
+    check_record_access_or_shared(
+        company, current_user, data_scope.role_name,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_COMPANIES),
+    )
     return await _build_company_response(service, company)
 
 

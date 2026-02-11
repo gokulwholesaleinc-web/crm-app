@@ -43,6 +43,7 @@ class OpportunityService(
         owner_id: Optional[int] = None,
         tag_ids: Optional[List[int]] = None,
         filters: Optional[Dict[str, Any]] = None,
+        shared_entity_ids: Optional[List[int]] = None,
     ) -> Tuple[List[Opportunity], int]:
         """Get paginated list of opportunities with filters."""
         query = (
@@ -70,7 +71,10 @@ class OpportunityService(
             query = query.where(Opportunity.company_id == company_id)
 
         if owner_id:
-            query = query.where(Opportunity.owner_id == owner_id)
+            if shared_entity_ids:
+                query = query.where(or_(Opportunity.owner_id == owner_id, Opportunity.id.in_(shared_entity_ids)))
+            else:
+                query = query.where(Opportunity.owner_id == owner_id)
 
         if tag_ids:
             query = await self._filter_by_tags(query, tag_ids)

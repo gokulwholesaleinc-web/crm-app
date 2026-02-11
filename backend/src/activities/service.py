@@ -30,6 +30,7 @@ class ActivityService(CRUDService[Activity, ActivityCreate, ActivityUpdate]):
         is_completed: Optional[bool] = None,
         priority: Optional[str] = None,
         filters: Optional[Dict[str, Any]] = None,
+        shared_entity_ids: Optional[List[int]] = None,
     ) -> Tuple[List[Activity], int]:
         """Get paginated list of activities with filters."""
         query = select(Activity)
@@ -47,7 +48,10 @@ class ActivityService(CRUDService[Activity, ActivityCreate, ActivityUpdate]):
             query = query.where(Activity.activity_type == activity_type)
 
         if owner_id:
-            query = query.where(Activity.owner_id == owner_id)
+            if shared_entity_ids:
+                query = query.where(or_(Activity.owner_id == owner_id, Activity.id.in_(shared_entity_ids)))
+            else:
+                query = query.where(Activity.owner_id == owner_id)
 
         if assigned_to_id:
             query = query.where(Activity.assigned_to_id == assigned_to_id)
