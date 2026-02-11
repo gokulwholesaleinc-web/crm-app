@@ -71,17 +71,28 @@ async def login_json(
     db: DBSession,
 ):
     """Login with JSON body and get access token."""
-    service = AuthService(db)
-    user = await service.authenticate_user(login_data.email, login_data.password)
+    import traceback
+    try:
+        service = AuthService(db)
+        user = await service.authenticate_user(login_data.email, login_data.password)
 
-    if not user:
+        if not user:
+            raise HTTPException(
+                status_code=HTTPStatus.UNAUTHORIZED,
+                detail="Incorrect email or password",
+            )
+
+        access_token = create_access_token(data={"sub": str(user.id)})
+        return Token(access_token=access_token)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"LOGIN ERROR: {type(e).__name__}: {e}")
+        traceback.print_exc()
         raise HTTPException(
-            status_code=HTTPStatus.UNAUTHORIZED,
-            detail="Incorrect email or password",
+            status_code=500,
+            detail=f"Internal error: {type(e).__name__}: {e}",
         )
-
-    access_token = create_access_token(data={"sub": str(user.id)})
-    return Token(access_token=access_token)
 
 
 @router.get("/me", response_model=UserResponse)

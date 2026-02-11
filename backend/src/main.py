@@ -202,6 +202,69 @@ async def health_check():
     return {"status": "healthy"}
 
 
+@app.get("/api/debug/login-check")
+async def debug_login_check():
+    """Temporary diagnostic endpoint to find the 500 error source on login."""
+    results = {}
+
+    # 1. Test DB connection
+    try:
+        from src.database import async_session_maker
+        from sqlalchemy import text as sa_text
+        async with async_session_maker() as session:
+            row = await session.execute(sa_text("SELECT 1"))
+            results["db_connection"] = "OK"
+    except Exception as e:
+        results["db_connection"] = f"FAIL: {type(e).__name__}: {e}"
+
+    # 2. Test user query
+    try:
+        from src.database import async_session_maker
+        from src.auth.service import AuthService
+        async with async_session_maker() as session:
+            service = AuthService(session)
+            user = await service.get_user_by_email("admin@admin.com")
+            results["user_query"] = f"OK: found={user is not None}"
+            if user:
+                results["user_id"] = user.id
+                results["user_hash_prefix"] = user.hashed_password[:10]
+    except Exception as e:
+        results["user_query"] = f"FAIL: {type(e).__name__}: {e}"
+
+    # 3. Test password verification
+    try:
+        from src.auth.security import verify_password
+        if user and user.hashed_password:
+            ok = verify_password("admin123", user.hashed_password)
+            results["password_verify"] = f"OK: valid={ok}"
+        else:
+            results["password_verify"] = "SKIP: no user found"
+    except Exception as e:
+        results["password_verify"] = f"FAIL: {type(e).__name__}: {e}"
+
+    # 4. Test JWT creation
+    try:
+        from src.auth.security import create_access_token
+        token = create_access_token(data={"sub": "1"})
+        results["jwt_creation"] = f"OK: token_len={len(token)}"
+    except Exception as e:
+        results["jwt_creation"] = f"FAIL: {type(e).__name__}: {e}"
+
+    # 5. Test rate limiter key func
+    try:
+        results["rate_limiter"] = "OK: limiter loaded"
+    except Exception as e:
+        results["rate_limiter"] = f"FAIL: {type(e).__name__}: {e}"
+
+    # 6. Check config
+    results["secret_key_set"] = len(settings.SECRET_KEY) > 0
+    results["secret_key_is_default"] = settings.SECRET_KEY == "dev-secret-key-change-in-production"
+    results["debug"] = settings.DEBUG
+    results["seed_on_startup"] = settings.SEED_ON_STARTUP
+
+    return results
+
+
 # Serve frontend in production (after API routes so they take precedence)
 if FRONTEND_DIST.exists():
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
