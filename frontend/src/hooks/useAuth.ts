@@ -51,15 +51,15 @@ export function useLogin() {
   return useMutation({
     mutationFn: (credentials: LoginRequest) => authApi.login(credentials),
     onSuccess: async (data) => {
+      // Clear all cached data from previous session before loading new user data
+      queryClient.clear();
+
       // Token is already stored by authApi.login
       useAuthStore.getState().setToken(data.access_token);
 
       // Fetch user profile
       const user = await authApi.getMe();
       storeLogin(toStoreUser(user), data.access_token);
-
-      // Invalidate queries to refresh data with new auth
-      queryClient.invalidateQueries();
     },
   });
 }
@@ -85,13 +85,12 @@ export function useRegister() {
       return token;
     },
     onSuccess: async (data) => {
+      queryClient.clear();
       useAuthStore.getState().setToken(data.access_token);
 
       // Fetch user profile
       const user = await authApi.getMe();
       storeLogin(toStoreUser(user), data.access_token);
-
-      queryClient.invalidateQueries();
     },
   });
 }

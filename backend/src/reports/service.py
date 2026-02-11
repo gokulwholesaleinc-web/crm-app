@@ -74,8 +74,15 @@ def _format_date_label(dt, date_group: str) -> str:
 class ReportExecutor:
     """Executes custom report definitions against the database."""
 
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, user_id: int = None):
         self.db = db
+        self.user_id = user_id
+
+    def _apply_owner_filter(self, query, model):
+        """Apply owner_id filter if user_id is set and model has owner_id."""
+        if self.user_id and hasattr(model, "owner_id"):
+            query = query.where(model.owner_id == self.user_id)
+        return query
 
     async def execute(self, definition: ReportDefinition) -> ReportResult:
         """Execute a report definition and return results."""
@@ -98,12 +105,15 @@ class ReportExecutor:
 
         if group_col is not None:
             query = select(group_col, metric_col.label("metric_value"))
+            # Apply owner scoping
+            query = self._apply_owner_filter(query, model)
             # Apply filters
             if definition.filters:
                 base_q = select(model)
                 base_q = apply_filters_to_query(base_q, model, definition.filters)
                 # Extract the where clauses from the filtered query
                 query = select(group_col, metric_col.label("metric_value"))
+                query = self._apply_owner_filter(query, model)
                 for clause in base_q.whereclause.clauses if hasattr(base_q.whereclause, 'clauses') else ([base_q.whereclause] if base_q.whereclause is not None else []):
                     query = query.where(clause)
 
@@ -113,6 +123,7 @@ class ReportExecutor:
                     PipelineStage.name.label("group_label"),
                     metric_col.label("metric_value"),
                 ).select_from(Opportunity).join(PipelineStage)
+                query = self._apply_owner_filter(query, Opportunity)
                 if definition.filters:
                     query = apply_filters_to_query(query, Opportunity, definition.filters)
                 query = query.group_by(PipelineStage.name).order_by(metric_col.label("metric_value").desc())
@@ -121,6 +132,7 @@ class ReportExecutor:
         else:
             # No grouping - return single aggregate value
             query = select(metric_col.label("metric_value"))
+            query = self._apply_owner_filter(query, model)
             if definition.filters:
                 query = apply_filters_to_query(
                     select(model).with_only_columns(metric_col.label("metric_value")),

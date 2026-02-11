@@ -40,23 +40,32 @@ class CSVHandler:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def export_contacts(self) -> str:
-        """Export all contacts to CSV."""
-        result = await self.db.execute(select(Contact))
+    async def export_contacts(self, user_id: int = None) -> str:
+        """Export contacts to CSV, scoped to user."""
+        query = select(Contact)
+        if user_id:
+            query = query.where(Contact.owner_id == user_id)
+        result = await self.db.execute(query)
         contacts = result.scalars().all()
 
         return self._to_csv(contacts, self.CONTACT_FIELDS)
 
-    async def export_companies(self) -> str:
-        """Export all companies to CSV."""
-        result = await self.db.execute(select(Company))
+    async def export_companies(self, user_id: int = None) -> str:
+        """Export companies to CSV, scoped to user."""
+        query = select(Company)
+        if user_id:
+            query = query.where(Company.owner_id == user_id)
+        result = await self.db.execute(query)
         companies = result.scalars().all()
 
         return self._to_csv(companies, self.COMPANY_FIELDS)
 
-    async def export_leads(self) -> str:
-        """Export all leads to CSV."""
-        result = await self.db.execute(select(Lead))
+    async def export_leads(self, user_id: int = None) -> str:
+        """Export leads to CSV, scoped to user."""
+        query = select(Lead)
+        if user_id:
+            query = query.where(Lead.owner_id == user_id)
+        result = await self.db.execute(query)
         leads = result.scalars().all()
 
         return self._to_csv(leads, self.LEAD_FIELDS)
@@ -160,8 +169,8 @@ class CSVHandler:
                                 value = None
                         entity_data[field] = value
 
-                # Create entity
-                entity = entity_class(**entity_data, created_by_id=user_id)
+                # Create entity with owner_id for data scoping
+                entity = entity_class(**entity_data, owner_id=user_id, created_by_id=user_id)
                 self.db.add(entity)
                 imported += 1
 

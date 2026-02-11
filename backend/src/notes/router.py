@@ -29,7 +29,7 @@ async def list_notes(
     entity_type: Optional[str] = None,
     entity_id: Optional[int] = None,
 ):
-    """List notes with pagination and filters."""
+    """List notes with pagination and filters (scoped to current user)."""
     service = NoteService(db)
 
     notes, total = await service.get_list(
@@ -37,6 +37,7 @@ async def list_notes(
         page_size=page_size,
         entity_type=entity_type,
         entity_id=entity_id,
+        created_by_id=current_user.id,
     )
 
     return NoteListResponse(

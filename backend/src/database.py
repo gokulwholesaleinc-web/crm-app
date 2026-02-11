@@ -1,3 +1,5 @@
+import ssl as ssl_module
+
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy import MetaData
@@ -19,15 +21,26 @@ class Base(DeclarativeBase):
     metadata = metadata
 
 
+# Enable SSL for remote database hosts (e.g. NeonDB)
+_db_url = settings.db_url
+_connect_args: dict = {}
+_is_remote = "localhost" not in _db_url and "127.0.0.1" not in _db_url and "db:" not in _db_url
+if _is_remote:
+    _ssl_ctx = ssl_module.create_default_context()
+    _ssl_ctx.check_hostname = False
+    _ssl_ctx.verify_mode = ssl_module.CERT_NONE
+    _connect_args["ssl"] = _ssl_ctx
+
 # Create async engine
 engine = create_async_engine(
-    settings.db_url,
+    _db_url,
     echo=settings.DEBUG,
     future=True,
     pool_size=10,
     max_overflow=20,
     pool_pre_ping=True,
     pool_recycle=3600,
+    connect_args=_connect_args,
 )
 
 # Create async session factory

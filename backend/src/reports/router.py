@@ -29,8 +29,8 @@ async def execute_report(
     current_user: CurrentUser,
     db: DBSession,
 ):
-    """Execute a report definition and return results."""
-    executor = ReportExecutor(db)
+    """Execute a report definition and return results (scoped to current user)."""
+    executor = ReportExecutor(db, user_id=current_user.id)
     return await executor.execute(definition)
 
 
@@ -41,7 +41,7 @@ async def export_report_csv(
     db: DBSession,
 ):
     """Execute a report and return results as CSV download."""
-    executor = ReportExecutor(db)
+    executor = ReportExecutor(db, user_id=current_user.id)
     csv_content = await executor.export_csv(definition)
 
     return StreamingResponse(

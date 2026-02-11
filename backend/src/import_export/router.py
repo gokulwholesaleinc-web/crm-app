@@ -52,9 +52,9 @@ async def export_contacts(
     current_user: CurrentUser,
     db: DBSession,
 ):
-    """Export all contacts as CSV."""
+    """Export contacts as CSV (scoped to current user)."""
     handler = CSVHandler(db)
-    csv_content = await handler.export_contacts()
+    csv_content = await handler.export_contacts(user_id=current_user.id)
 
     return StreamingResponse(
         io.StringIO(csv_content),
@@ -70,9 +70,9 @@ async def export_companies(
     current_user: CurrentUser,
     db: DBSession,
 ):
-    """Export all companies as CSV."""
+    """Export companies as CSV (scoped to current user)."""
     handler = CSVHandler(db)
-    csv_content = await handler.export_companies()
+    csv_content = await handler.export_companies(user_id=current_user.id)
 
     return StreamingResponse(
         io.StringIO(csv_content),
@@ -88,9 +88,9 @@ async def export_leads(
     current_user: CurrentUser,
     db: DBSession,
 ):
-    """Export all leads as CSV."""
+    """Export leads as CSV (scoped to current user)."""
     handler = CSVHandler(db)
-    csv_content = await handler.export_leads()
+    csv_content = await handler.export_leads(user_id=current_user.id)
 
     return StreamingResponse(
         io.StringIO(csv_content),

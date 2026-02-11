@@ -29,6 +29,7 @@ class NoteService:
         page_size: int = DEFAULT_PAGE_SIZE,
         entity_type: Optional[str] = None,
         entity_id: Optional[int] = None,
+        created_by_id: Optional[int] = None,
     ) -> Tuple[List[dict], int]:
         """Get paginated list of notes with author info."""
         query = (
@@ -42,12 +43,17 @@ class NoteService:
         if entity_id:
             query = query.where(Note.entity_id == entity_id)
 
+        if created_by_id:
+            query = query.where(Note.created_by_id == created_by_id)
+
         # Get total count using same filters
         count_base_query = select(Note.id)
         if entity_type:
             count_base_query = count_base_query.where(Note.entity_type == entity_type)
         if entity_id:
             count_base_query = count_base_query.where(Note.entity_id == entity_id)
+        if created_by_id:
+            count_base_query = count_base_query.where(Note.created_by_id == created_by_id)
 
         count_query = select(func.count()).select_from(count_base_query.subquery())
         total_result = await self.db.execute(count_query)

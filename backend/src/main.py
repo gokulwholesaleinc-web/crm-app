@@ -198,67 +198,100 @@ async def health_check():
     return {"status": "healthy"}
 
 
-@app.get("/api/debug/login-check")
-async def debug_login_check():
-    """Temporary diagnostic endpoint to find the 500 error source on login."""
-    results = {}
+@app.get("/api/debug/data-scope-check")
+async def debug_data_scope_check(current_user: CurrentUser):
+    """Check data ownership for the currently logged-in user."""
+    from sqlalchemy import select, func
+    from src.database import async_session_maker
+    from src.auth.models import User
+    from src.contacts.models import Contact
+    from src.companies.models import Company
+    from src.leads.models import Lead
+    from src.opportunities.models import Opportunity
+    from src.activities.models import Activity
+    from src.campaigns.models import Campaign
 
-    # 1. Test DB connection
-    try:
-        from src.database import async_session_maker
-        from sqlalchemy import text as sa_text
-        async with async_session_maker() as session:
-            row = await session.execute(sa_text("SELECT 1"))
-            results["db_connection"] = "OK"
-    except Exception as e:
-        results["db_connection"] = f"FAIL: {type(e).__name__}: {e}"
+    async with async_session_maker() as session:
+        # Get all users
+        users_result = await session.execute(
+            select(User.id, User.email, User.is_superuser)
+        )
+        users = [{"id": r.id, "email": r.email, "is_superuser": r.is_superuser} for r in users_result.all()]
 
-    # 2. Test user query
-    try:
-        from src.database import async_session_maker
-        from src.auth.service import AuthService
-        async with async_session_maker() as session:
-            service = AuthService(session)
-            user = await service.get_user_by_email("admin@admin.com")
-            results["user_query"] = f"OK: found={user is not None}"
-            if user:
-                results["user_id"] = user.id
-                results["user_hash_prefix"] = user.hashed_password[:10]
-    except Exception as e:
-        results["user_query"] = f"FAIL: {type(e).__name__}: {e}"
+        # Count records per owner for each entity
+        entities = {
+            "contacts": Contact,
+            "companies": Company,
+            "leads": Lead,
+            "opportunities": Opportunity,
+            "activities": Activity,
+            "campaigns": Campaign,
+        }
+        ownership = {}
+        for name, model in entities.items():
+            result = await session.execute(
+                select(model.owner_id, func.count(model.id))
+                .group_by(model.owner_id)
+            )
+            ownership[name] = {str(r[0]): r[1] for r in result.all()}
 
-    # 3. Test password verification
-    try:
-        from src.auth.security import verify_password
-        if user and user.hashed_password:
-            ok = verify_password("admin123", user.hashed_password)
-            results["password_verify"] = f"OK: valid={ok}"
-        else:
-            results["password_verify"] = "SKIP: no user found"
-    except Exception as e:
-        results["password_verify"] = f"FAIL: {type(e).__name__}: {e}"
+        return {
+            "current_user_id": current_user.id,
+            "current_user_email": current_user.email,
+            "users": users,
+            "records_by_owner": ownership,
+        }
 
-    # 4. Test JWT creation
-    try:
-        from src.auth.security import create_access_token
-        token = create_access_token(data={"sub": "1"})
-        results["jwt_creation"] = f"OK: token_len={len(token)}"
-    except Exception as e:
-        results["jwt_creation"] = f"FAIL: {type(e).__name__}: {e}"
 
-    # 5. Test rate limiter key func
-    try:
-        results["rate_limiter"] = "OK: limiter loaded"
-    except Exception as e:
-        results["rate_limiter"] = f"FAIL: {type(e).__name__}: {e}"
+@app.post("/api/admin/reseed-demo-data")
+async def reseed_demo_data(current_user: CurrentUser):
+    """Delete all demo data and re-seed it. Only the demo user gets demo data."""
+    if not current_user.is_superuser:
+        from src.core.router_utils import raise_forbidden
+        raise_forbidden("Only superusers can reseed data")
 
-    # 6. Check config
-    results["secret_key_set"] = len(settings.SECRET_KEY) > 0
-    results["secret_key_is_default"] = settings.SECRET_KEY == "dev-secret-key-change-in-production"
-    results["debug"] = settings.DEBUG
-    results["seed_on_startup"] = settings.SEED_ON_STARTUP
+    from sqlalchemy import select, delete
+    from src.database import async_session_maker
+    from src.auth.models import User
+    from src.contacts.models import Contact
+    from src.companies.models import Company
+    from src.leads.models import Lead
+    from src.opportunities.models import Opportunity
+    from src.activities.models import Activity
+    from src.campaigns.models import Campaign
+    from src.core.models import Note, EntityTag
 
-    return results
+    async with async_session_maker() as session:
+        # Find the demo user
+        result = await session.execute(
+            select(User).where(User.email == "demo@demo.com")
+        )
+        demo_user = result.scalar_one_or_none()
+        if not demo_user:
+            return {"error": "Demo user not found", "action": "none"}
+
+        demo_id = demo_user.id
+
+        # Delete all demo user's data in dependency order
+        await session.execute(delete(EntityTag))
+        await session.execute(delete(Note).where(Note.created_by_id == demo_id))
+        await session.execute(delete(Activity).where(Activity.owner_id == demo_id))
+        await session.execute(delete(Opportunity).where(Opportunity.owner_id == demo_id))
+        await session.execute(delete(Contact).where(Contact.owner_id == demo_id))
+        await session.execute(delete(Company).where(Company.owner_id == demo_id))
+        await session.execute(delete(Lead).where(Lead.owner_id == demo_id))
+        await session.execute(delete(Campaign).where(Campaign.owner_id == demo_id))
+
+        # Delete the demo user so seed_database will recreate everything
+        await session.execute(delete(User).where(User.id == demo_id))
+        await session.commit()
+
+    # Re-run the seed
+    from src.seed import seed_database
+    async with async_session_maker() as session:
+        await seed_database(session)
+
+    return {"status": "success", "message": "Demo data re-seeded. Admin account has clean data, demo account has sample data."}
 
 
 # Serve frontend in production (after API routes so they take precedence)
