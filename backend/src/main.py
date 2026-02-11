@@ -18,7 +18,7 @@ from src.database import engine, init_db
 from src.core.router_utils import CurrentUser
 from src.core.rate_limit import limiter
 
-# Import routers
+# Import routers (AI router deferred to avoid loading OpenAI SDK at startup)
 from src.auth.router import router as auth_router
 from src.contacts.router import router as contacts_router
 from src.companies.router import router as companies_router
@@ -27,7 +27,6 @@ from src.opportunities.router import router as opportunities_router
 from src.activities.router import router as activities_router
 from src.campaigns.router import router as campaigns_router
 from src.dashboard.router import router as dashboard_router
-from src.ai.router import router as ai_router
 from src.whitelabel.router import router as whitelabel_router
 from src.import_export.router import router as import_export_router
 from src.notes.router import router as notes_router
@@ -110,6 +109,10 @@ async def lifespan(app: FastAPI):
     print("Starting up CRM application...")
     await _init_database()
 
+    # Defer AI router import to avoid loading OpenAI SDK at module level
+    from src.ai.router import router as ai_router
+    app.include_router(ai_router)
+
     yield
 
     print("Shutting down CRM application...")
@@ -149,7 +152,7 @@ app.include_router(opportunities_router)
 app.include_router(activities_router)
 app.include_router(campaigns_router)
 app.include_router(dashboard_router)
-app.include_router(ai_router)
+# ai_router included in lifespan() to defer OpenAI SDK import
 app.include_router(whitelabel_router)
 app.include_router(import_export_router)
 app.include_router(notes_router)

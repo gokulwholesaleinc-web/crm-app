@@ -20,8 +20,8 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     BACKEND_CORS_ORIGINS: str = '["*"]'
 
-    # Seed data
-    SEED_ON_STARTUP: bool = True
+    # Seed data (set to true in .env for initial setup, false for production)
+    SEED_ON_STARTUP: bool = False
 
     @property
     def cors_origins(self) -> List[str]:
