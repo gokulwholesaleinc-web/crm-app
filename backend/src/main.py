@@ -43,6 +43,7 @@ from src.webhooks.router import router as webhooks_router
 from src.assignment.router import router as assignment_router
 from src.sequences.router import router as sequences_router
 from src.core.sharing_router import router as sharing_router
+from src.quotes.router import router as quotes_router
 
 
 async def _init_database():
@@ -74,6 +75,7 @@ async def _init_database():
         from src.webhooks.models import Webhook, WebhookDelivery
         from src.assignment.models import AssignmentRule
         from src.sequences.models import Sequence, SequenceEnrollment
+        from src.quotes.models import Quote, QuoteLineItem, QuoteTemplate
 
         from src.database import Base
         async with engine.begin() as conn:
@@ -167,6 +169,7 @@ app.include_router(webhooks_router)
 app.include_router(assignment_router)
 app.include_router(sequences_router)
 app.include_router(sharing_router)
+app.include_router(quotes_router)
 
 
 # Register webhook event handler with event system

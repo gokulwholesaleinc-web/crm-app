@@ -42,6 +42,7 @@ from src.roles.models import Role, UserRole
 from src.webhooks.models import Webhook, WebhookDelivery
 from src.assignment.models import AssignmentRule
 from src.sequences.models import Sequence, SequenceEnrollment
+from src.quotes.models import Quote, QuoteLineItem, QuoteTemplate
 
 
 # Test database URL - using SQLite in-memory for tests
