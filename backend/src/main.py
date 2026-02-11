@@ -16,6 +16,7 @@ from src.config import settings
 from src.database import engine, init_db
 from src.core.router_utils import CurrentUser
 from src.core.rate_limit import limiter
+from src.whitelabel.middleware import TenantMiddleware
 
 # Import routers (AI router deferred to avoid loading OpenAI SDK at startup)
 from src.auth.router import router as auth_router
@@ -44,6 +45,8 @@ from src.assignment.router import router as assignment_router
 from src.sequences.router import router as sequences_router
 from src.core.sharing_router import router as sharing_router
 from src.quotes.router import router as quotes_router
+from src.payments.router import router as payments_router
+from src.proposals.router import router as proposals_router
 
 
 async def _init_database():
@@ -76,6 +79,8 @@ async def _init_database():
         from src.assignment.models import AssignmentRule
         from src.sequences.models import Sequence, SequenceEnrollment
         from src.quotes.models import Quote, QuoteLineItem, QuoteTemplate
+        from src.payments.models import StripeCustomer, Product, Price, Payment, Subscription
+        from src.proposals.models import Proposal, ProposalTemplate, ProposalView
 
         from src.database import Base
         async with engine.begin() as conn:
@@ -142,6 +147,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Tenant resolution middleware (runs after CORS)
+app.add_middleware(TenantMiddleware)
+
 # Include routers - they already have /api prefix in their definitions
 app.include_router(auth_router)
 app.include_router(contacts_router)
@@ -170,6 +178,8 @@ app.include_router(assignment_router)
 app.include_router(sequences_router)
 app.include_router(sharing_router)
 app.include_router(quotes_router)
+app.include_router(payments_router)
+app.include_router(proposals_router)
 
 
 # Register webhook event handler with event system

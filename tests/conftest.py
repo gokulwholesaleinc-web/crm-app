@@ -43,6 +43,8 @@ from src.webhooks.models import Webhook, WebhookDelivery
 from src.assignment.models import AssignmentRule
 from src.sequences.models import Sequence, SequenceEnrollment
 from src.quotes.models import Quote, QuoteLineItem, QuoteTemplate
+from src.payments.models import StripeCustomer, Product, Price, Payment, Subscription
+from src.proposals.models import Proposal, ProposalTemplate, ProposalView
 
 
 # Test database URL - using SQLite in-memory for tests
@@ -389,3 +391,61 @@ async def test_comment(
     await db_session.commit()
     await db_session.refresh(comment)
     return comment
+
+
+@pytest_asyncio.fixture(scope="function")
+async def test_tenant(db_session: AsyncSession) -> Tenant:
+    """Create a test tenant with settings for use in conftest-level tests."""
+    tenant = Tenant(
+        name="Test Tenant",
+        slug="test-tenant",
+        domain="test.example.com",
+        is_active=True,
+        plan="professional",
+        max_users=10,
+        max_contacts=1000,
+    )
+    db_session.add(tenant)
+    await db_session.flush()
+
+    settings = TenantSettings(
+        tenant_id=tenant.id,
+        company_name="Test Tenant Inc",
+        logo_url="https://example.com/logo.png",
+        favicon_url="https://example.com/favicon.ico",
+        primary_color="#6366f1",
+        secondary_color="#8b5cf6",
+        accent_color="#22c55e",
+        footer_text="Test Tenant Footer",
+    )
+    db_session.add(settings)
+    await db_session.commit()
+    await db_session.refresh(tenant)
+    return tenant
+
+
+@pytest_asyncio.fixture(scope="function")
+async def test_tenant_settings(db_session: AsyncSession, test_tenant: Tenant) -> TenantSettings:
+    """Get the test tenant's settings."""
+    from sqlalchemy import select
+    result = await db_session.execute(
+        select(TenantSettings).where(TenantSettings.tenant_id == test_tenant.id)
+    )
+    return result.scalar_one()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def test_tenant_user(
+    db_session: AsyncSession, test_tenant: Tenant, test_user: User
+) -> TenantUser:
+    """Link the test_user to the test_tenant as admin."""
+    tenant_user = TenantUser(
+        tenant_id=test_tenant.id,
+        user_id=test_user.id,
+        role="admin",
+        is_primary=True,
+    )
+    db_session.add(tenant_user)
+    await db_session.commit()
+    await db_session.refresh(tenant_user)
+    return tenant_user

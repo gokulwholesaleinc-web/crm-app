@@ -28,6 +28,8 @@ ENTITY_TYPE_OPPORTUNITIES = "opportunities"
 ENTITY_TYPE_ACTIVITIES = "activities"
 ENTITY_TYPE_CAMPAIGNS = "campaigns"
 ENTITY_TYPE_QUOTES = "quotes"
+ENTITY_TYPE_PAYMENTS = "payments"
+ENTITY_TYPE_PROPOSALS = "proposals"
 
 
 # HTTP Status Codes - commonly used codes as constants
@@ -114,6 +116,8 @@ class EntityNames:
     TENANT = "Tenant"
     TENANT_SETTINGS = "Tenant settings"
     TENANT_USER = "Tenant user"
+    PAYMENT = "Payment"
+    PROPOSAL = "Proposal"
 
 
 # Pagination defaults

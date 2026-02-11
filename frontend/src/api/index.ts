@@ -222,6 +222,22 @@ export { attachmentsApi } from './attachments';
 // Dedup API
 export { dedupApi } from './dedup';
 
+// Proposals API
+export { proposalsApi } from './proposals';
+export {
+  listProposals,
+  getProposal,
+  createProposal,
+  updateProposal,
+  deleteProposal,
+  sendProposal,
+  acceptProposal,
+  rejectProposal,
+  generateProposal,
+  listProposalTemplates,
+  createProposalTemplate,
+} from './proposals';
+
 // Aggregated API object for convenience
 import { authApi as _authApi } from './auth';
 import { contactsApi as _contactsApi } from './contacts';
@@ -248,6 +264,7 @@ import { assignmentApi as _assignmentApi } from './assignment';
 import { sequencesApi as _sequencesApi } from './sequences';
 import { attachmentsApi as _attachmentsApi } from './attachments';
 import { dedupApi as _dedupApi } from './dedup';
+import { proposalsApi as _proposalsApi } from './proposals';
 
 export const api = {
   auth: _authApi,
@@ -275,6 +292,7 @@ export const api = {
   sequences: _sequencesApi,
   attachments: _attachmentsApi,
   dedup: _dedupApi,
+  proposals: _proposalsApi,
 };
 
 export default api;

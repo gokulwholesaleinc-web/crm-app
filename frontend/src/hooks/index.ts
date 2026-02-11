@@ -256,6 +256,22 @@ export { attachmentKeys, useAttachments, useUploadAttachment, useDeleteAttachmen
 // Dedup hooks
 export { useCheckDuplicates, useMergeEntities } from './useDedup';
 
+// Proposal hooks
+export {
+  proposalKeys,
+  useProposals,
+  useProposal,
+  useCreateProposal,
+  useUpdateProposal,
+  useDeleteProposal,
+  useSendProposal,
+  useAcceptProposal,
+  useRejectProposal,
+  useGenerateProposal,
+  useProposalTemplates,
+  useCreateProposalTemplate,
+} from './useProposals';
+
 // Theme hook
 export { useTheme } from './useTheme';
 
