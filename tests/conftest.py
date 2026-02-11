@@ -26,7 +26,7 @@ from src.leads.models import Lead, LeadSource
 from src.opportunities.models import Opportunity, PipelineStage
 from src.activities.models import Activity
 from src.campaigns.models import Campaign, CampaignMember, EmailTemplate, EmailCampaignStep
-from src.core.models import Note, Tag, EntityTag
+from src.core.models import Note, Tag, EntityTag, EntityShare
 from src.workflows.models import WorkflowRule, WorkflowExecution
 from src.dashboard.models import DashboardNumberCard, DashboardChart
 from src.ai.models import AIEmbedding, AIConversation, AIFeedback, AIKnowledgeDocument, AIUserPreferences

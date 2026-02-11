@@ -1,9 +1,9 @@
 """Contact API routes."""
 
 import logging
-from typing import Optional
-from fastapi import APIRouter, Query
-from src.core.constants import HTTPStatus, EntityNames
+from typing import Annotated, Optional
+from fastapi import APIRouter, Depends, Query
+from src.core.constants import HTTPStatus, EntityNames, ENTITY_TYPE_CONTACTS
 from src.core.router_utils import (
     DBSession,
     CurrentUser,
@@ -12,6 +12,7 @@ from src.core.router_utils import (
     calculate_pages,
     check_ownership,
 )
+from src.core.data_scope import DataScope, get_data_scope, check_record_access_or_shared
 from src.contacts.schemas import (
     ContactCreate,
     ContactUpdate,
@@ -43,6 +44,7 @@ async def _build_contact_response(service: ContactService, contact) -> ContactRe
 async def list_contacts(
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     search: Optional[str] = None,
@@ -56,10 +58,10 @@ async def list_contacts(
     import json as _json
     parsed_filters = _json.loads(filters) if filters else None
 
-    # Auto-scope to current user's data by default
-    effective_owner_id = owner_id
-    if effective_owner_id is None:
-        effective_owner_id = current_user.id
+    if data_scope.can_see_all():
+        effective_owner_id = owner_id
+    else:
+        effective_owner_id = data_scope.owner_id
 
     service = ContactService(db)
 
@@ -72,6 +74,7 @@ async def list_contacts(
         owner_id=effective_owner_id,
         tag_ids=parse_tag_ids(tag_ids),
         filters=parsed_filters,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_CONTACTS),
     )
 
     contact_responses = [
@@ -113,10 +116,15 @@ async def get_contact(
     contact_id: int,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Get a contact by ID."""
     service = ContactService(db)
     contact = await get_entity_or_404(service, contact_id, EntityNames.CONTACT)
+    check_record_access_or_shared(
+        contact, current_user, data_scope.role_name,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_CONTACTS),
+    )
     return await _build_contact_response(service, contact)
 
 

@@ -35,6 +35,7 @@ class LeadService(
         min_score: Optional[int] = None,
         tag_ids: Optional[List[int]] = None,
         filters: Optional[Dict[str, Any]] = None,
+        shared_entity_ids: Optional[List[int]] = None,
     ) -> Tuple[List[Lead], int]:
         """Get paginated list of leads with filters."""
         query = select(Lead).options(selectinload(Lead.source))
@@ -58,7 +59,10 @@ class LeadService(
             query = query.where(Lead.source_id == source_id)
 
         if owner_id:
-            query = query.where(Lead.owner_id == owner_id)
+            if shared_entity_ids:
+                query = query.where(or_(Lead.owner_id == owner_id, Lead.id.in_(shared_entity_ids)))
+            else:
+                query = query.where(Lead.owner_id == owner_id)
 
         if min_score is not None:
             query = query.where(Lead.score >= min_score)

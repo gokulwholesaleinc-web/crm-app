@@ -4,7 +4,7 @@ import logging
 from typing import Annotated, Optional, List
 from fastapi import APIRouter, Depends, Query
 from src.auth.models import User
-from src.core.constants import HTTPStatus, EntityNames, ErrorMessages
+from src.core.constants import HTTPStatus, EntityNames, ErrorMessages, ENTITY_TYPE_LEADS
 from src.core.permissions import require_permission
 from src.core.router_utils import (
     DBSession,
@@ -15,6 +15,7 @@ from src.core.router_utils import (
     raise_bad_request,
     check_ownership,
 )
+from src.core.data_scope import DataScope, get_data_scope, check_record_access_or_shared
 from src.core.cache import (
     cached_fetch,
     CACHE_LEAD_SOURCES,
@@ -58,6 +59,7 @@ async def _build_lead_response(service: LeadService, lead) -> LeadResponse:
 async def list_leads(
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     search: Optional[str] = None,
@@ -68,14 +70,20 @@ async def list_leads(
     tag_ids: Optional[str] = None,
     filters: Optional[str] = None,
 ):
-    """List leads with pagination and filters."""
+    """List leads with pagination and filters.
+
+    Data scoping:
+    - Admin/Manager: see all leads (or filter by owner_id if provided)
+    - Sales_rep/Viewer: see only own leads + shared leads
+    """
     import json as _json
     parsed_filters = _json.loads(filters) if filters else None
 
-    # Auto-scope to current user's data by default
-    effective_owner_id = owner_id
-    if effective_owner_id is None:
-        effective_owner_id = current_user.id
+    # Use data_scope to determine owner_id filter
+    if data_scope.can_see_all():
+        effective_owner_id = owner_id  # None = all, or specific user if requested
+    else:
+        effective_owner_id = data_scope.owner_id  # Forced to own records
 
     service = LeadService(db)
 
@@ -89,6 +97,7 @@ async def list_leads(
         min_score=min_score,
         tag_ids=parse_tag_ids(tag_ids),
         filters=parsed_filters,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_LEADS),
     )
 
     lead_responses = [await _build_lead_response(service, lead) for lead in leads]
@@ -127,10 +136,15 @@ async def get_lead(
     lead_id: int,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Get a lead by ID."""
     service = LeadService(db)
     lead = await get_entity_or_404(service, lead_id, EntityNames.LEAD)
+    check_record_access_or_shared(
+        lead, current_user, data_scope.role_name,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_LEADS),
+    )
     return await _build_lead_response(service, lead)
 
 
