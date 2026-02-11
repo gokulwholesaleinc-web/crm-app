@@ -27,6 +27,7 @@ ENTITY_TYPE_LEADS = "leads"
 ENTITY_TYPE_OPPORTUNITIES = "opportunities"
 ENTITY_TYPE_ACTIVITIES = "activities"
 ENTITY_TYPE_CAMPAIGNS = "campaigns"
+ENTITY_TYPE_QUOTES = "quotes"
 
 
 # HTTP Status Codes - commonly used codes as constants
@@ -108,6 +109,7 @@ class EntityNames:
     USER = "User"
     NOTE = "Note"
     COMMENT = "Comment"
+    QUOTE = "Quote"
     PIPELINE = "Pipeline"
     TENANT = "Tenant"
     TENANT_SETTINGS = "Tenant settings"

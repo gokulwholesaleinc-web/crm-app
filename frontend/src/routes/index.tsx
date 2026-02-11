@@ -31,6 +31,10 @@ const LeadDetailPage = lazy(() => import('../features/leads/LeadDetailPage'));
 const OpportunitiesPage = lazy(() => import('../features/opportunities/OpportunitiesPage'));
 const OpportunityDetailPage = lazy(() => import('../features/opportunities/OpportunityDetailPage'));
 
+// Quotes
+const QuotesPage = lazy(() => import('../features/quotes/QuotesPage'));
+const QuoteDetailPage = lazy(() => import('../features/quotes/QuoteDetail'));
+
 // Activities
 const ActivitiesPage = lazy(() => import('../features/activities/ActivitiesPage'));
 
@@ -141,6 +145,24 @@ function AppRoutes() {
         element={
           <PrivateRoute>
             <OpportunityDetailPage />
+          </PrivateRoute>
+        }
+      />
+
+      {/* Quotes */}
+      <Route
+        path="/quotes"
+        element={
+          <PrivateRoute>
+            <QuotesPage />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/quotes/:id"
+        element={
+          <PrivateRoute>
+            <QuoteDetailPage />
           </PrivateRoute>
         }
       />
