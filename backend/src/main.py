@@ -6,7 +6,6 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.gzip import GZIPMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
@@ -139,9 +138,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Compress responses > 500 bytes
-app.add_middleware(GZIPMiddleware, minimum_size=500)
 
 # Include routers - they already have /api prefix in their definitions
 app.include_router(auth_router)
