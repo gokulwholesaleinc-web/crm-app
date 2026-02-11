@@ -8,6 +8,7 @@ import {
   FunnelIcon,
   CurrencyDollarIcon,
   DocumentTextIcon,
+  DocumentDuplicateIcon,
   CalendarIcon,
   MegaphoneIcon,
   BoltIcon,
@@ -33,6 +34,7 @@ const mainNavigation: NavItem[] = [
   { name: 'Leads', href: '/leads', icon: FunnelIcon },
   { name: 'Opportunities', href: '/opportunities', icon: CurrencyDollarIcon },
   { name: 'Quotes', href: '/quotes', icon: DocumentTextIcon },
+  { name: 'Proposals', href: '/proposals', icon: DocumentDuplicateIcon },
   { name: 'Activities', href: '/activities', icon: CalendarIcon },
   { name: 'Campaigns', href: '/campaigns', icon: MegaphoneIcon },
 ];

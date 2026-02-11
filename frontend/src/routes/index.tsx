@@ -35,6 +35,14 @@ const OpportunityDetailPage = lazy(() => import('../features/opportunities/Oppor
 const QuotesPage = lazy(() => import('../features/quotes/QuotesPage'));
 const QuoteDetailPage = lazy(() => import('../features/quotes/QuoteDetail'));
 
+// Payments
+const PaymentsPage = lazy(() => import('../features/payments/PaymentsPage'));
+const PaymentDetailPage = lazy(() => import('../features/payments/PaymentDetail'));
+
+// Proposals
+const ProposalsPage = lazy(() => import('../features/proposals/ProposalsPage'));
+const ProposalDetailPage = lazy(() => import('../features/proposals/ProposalDetail'));
+
 // Activities
 const ActivitiesPage = lazy(() => import('../features/activities/ActivitiesPage'));
 
@@ -163,6 +171,42 @@ function AppRoutes() {
         element={
           <PrivateRoute>
             <QuoteDetailPage />
+          </PrivateRoute>
+        }
+      />
+
+      {/* Payments */}
+      <Route
+        path="/payments"
+        element={
+          <PrivateRoute>
+            <PaymentsPage />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/payments/:id"
+        element={
+          <PrivateRoute>
+            <PaymentDetailPage />
+          </PrivateRoute>
+        }
+      />
+
+      {/* Proposals */}
+      <Route
+        path="/proposals"
+        element={
+          <PrivateRoute>
+            <ProposalsPage />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/proposals/:id"
+        element={
+          <PrivateRoute>
+            <ProposalDetailPage />
           </PrivateRoute>
         }
       />
