@@ -9,16 +9,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from src.config import settings
 from src.database import engine, init_db
 from src.core.router_utils import CurrentUser
-
-# Initialize rate limiter
-limiter = Limiter(key_func=get_remote_address)
+from src.core.rate_limit import limiter
 
 # Import routers
 from src.auth.router import router as auth_router

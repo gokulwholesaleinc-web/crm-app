@@ -3,8 +3,6 @@
 from typing import Annotated, List
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordRequestForm
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from src.core.constants import HTTPStatus, ErrorMessages, EntityNames
 from src.core.router_utils import DBSession, CurrentUser, raise_bad_request
 from src.auth.models import User
@@ -19,10 +17,9 @@ from src.auth.service import AuthService
 from src.auth.security import create_access_token
 from src.auth.dependencies import get_current_active_user, get_current_superuser
 
-router = APIRouter(prefix="/api/auth", tags=["auth"])
+from src.core.rate_limit import limiter
 
-# Rate limiter for auth endpoints
-limiter = Limiter(key_func=get_remote_address)
+router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 @router.post("/register", response_model=UserResponse, status_code=HTTPStatus.CREATED)
