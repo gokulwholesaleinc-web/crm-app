@@ -11,7 +11,6 @@ import type {
   ProposalCreate,
   ProposalUpdate,
   ProposalFilters,
-  ProposalTemplate,
   AIGenerateProposalRequest,
 } from '../types';
 

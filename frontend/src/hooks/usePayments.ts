@@ -12,7 +12,6 @@ import type {
   PaymentCreate,
   PaymentUpdate,
   PaymentFilters,
-  ProductItem,
   ProductCreate,
   CreateCheckoutRequest,
   CreatePaymentIntentRequest,

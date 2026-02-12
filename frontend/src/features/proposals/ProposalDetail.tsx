@@ -72,7 +72,7 @@ function ProposalDetailPage() {
 
   const handleSend = async () => {
     try {
-      await sendProposalMutation.mutateAsync(proposal.id);
+      await sendProposalMutation.mutateAsync({ proposalId: proposal.id });
       showSuccess('Proposal sent');
     } catch {
       showError('Failed to send proposal');
