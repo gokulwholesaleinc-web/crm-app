@@ -84,6 +84,13 @@ class Quote(Base, AuditableMixin):
     accepted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     rejected_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
+    # E-signature fields (captured when client accepts via public link)
+    signer_name: Mapped[Optional[str]] = mapped_column(String(255))
+    signer_email: Mapped[Optional[str]] = mapped_column(String(255))
+    signer_ip: Mapped[Optional[str]] = mapped_column(String(45))
+    signed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    rejection_reason: Mapped[Optional[str]] = mapped_column(Text)
+
     # ORM relationships
     line_items: Mapped[List["QuoteLineItem"]] = relationship(
         "QuoteLineItem",

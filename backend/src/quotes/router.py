@@ -2,7 +2,7 @@
 
 import logging
 from typing import Annotated, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 from src.core.constants import HTTPStatus, EntityNames, ENTITY_TYPE_QUOTES
 from src.core.router_utils import (
@@ -20,6 +20,10 @@ from src.quotes.schemas import (
     QuoteListResponse,
     QuoteLineItemCreate,
     QuoteLineItemResponse,
+    QuoteBranding,
+    QuotePublicResponse,
+    QuoteAcceptRequest,
+    QuoteRejectRequest,
     ProductBundleCreate,
     ProductBundleUpdate,
     ProductBundleResponse,
@@ -171,6 +175,118 @@ async def delete_bundle(
     if not bundle:
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Bundle not found")
     await service.delete(bundle)
+
+
+# =============================================================================
+# Public quote endpoints (no auth, BEFORE /{quote_id} to avoid path conflicts)
+# =============================================================================
+
+@router.get("/public/{quote_number}", response_model=QuotePublicResponse)
+async def get_public_quote(
+    quote_number: str,
+    request: Request,
+    db: DBSession,
+):
+    """Public view of a quote (no auth required). Auto-transitions sent to viewed."""
+    service = QuoteService(db)
+    quote = await service.get_public_quote(quote_number)
+
+    if not quote:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Quote not found")
+
+    # Record the view (auto-transitions sent -> viewed)
+    await service.record_quote_view(quote)
+
+    # Resolve branding from quote owner's tenant
+    branding_data = await service.get_branding_for_quote(quote)
+    branding = QuoteBranding(
+        company_name=branding_data.get("company_name"),
+        logo_url=branding_data.get("logo_url"),
+        primary_color=branding_data.get("primary_color", "#6366f1"),
+        secondary_color=branding_data.get("secondary_color", "#8b5cf6"),
+        accent_color=branding_data.get("accent_color", "#22c55e"),
+        footer_text=branding_data.get("footer_text"),
+    )
+
+    response = QuotePublicResponse.model_validate(quote)
+    response.branding = branding
+    return response
+
+
+@router.post("/public/{quote_number}/accept", response_model=QuotePublicResponse)
+async def accept_quote_public(
+    quote_number: str,
+    accept_data: QuoteAcceptRequest,
+    request: Request,
+    db: DBSession,
+):
+    """Accept a quote via public link with e-signature data (no auth required)."""
+    service = QuoteService(db)
+    quote = await service.get_public_quote(quote_number)
+
+    if not quote:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Quote not found")
+
+    signer_ip = request.client.host if request.client else None
+    try:
+        quote = await service.accept_quote_public(
+            quote,
+            signer_name=accept_data.signer_name,
+            signer_email=accept_data.signer_email,
+            signer_ip=signer_ip,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
+
+    branding_data = await service.get_branding_for_quote(quote)
+    branding = QuoteBranding(
+        company_name=branding_data.get("company_name"),
+        logo_url=branding_data.get("logo_url"),
+        primary_color=branding_data.get("primary_color", "#6366f1"),
+        secondary_color=branding_data.get("secondary_color", "#8b5cf6"),
+        accent_color=branding_data.get("accent_color", "#22c55e"),
+        footer_text=branding_data.get("footer_text"),
+    )
+
+    response = QuotePublicResponse.model_validate(quote)
+    response.branding = branding
+    return response
+
+
+@router.post("/public/{quote_number}/reject", response_model=QuotePublicResponse)
+async def reject_quote_public(
+    quote_number: str,
+    request: Request,
+    db: DBSession,
+    reject_data: Optional[QuoteRejectRequest] = None,
+):
+    """Reject a quote via public link (no auth required)."""
+    service = QuoteService(db)
+    quote = await service.get_public_quote(quote_number)
+
+    if not quote:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Quote not found")
+
+    signer_ip = request.client.host if request.client else None
+    reason = reject_data.reason if reject_data else None
+    try:
+        quote = await service.reject_quote_public(quote, reason=reason, signer_ip=signer_ip)
+    except ValueError as e:
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
+
+    branding_data = await service.get_branding_for_quote(quote)
+    branding = QuoteBranding(
+        company_name=branding_data.get("company_name"),
+        logo_url=branding_data.get("logo_url"),
+        primary_color=branding_data.get("primary_color", "#6366f1"),
+        secondary_color=branding_data.get("secondary_color", "#8b5cf6"),
+        accent_color=branding_data.get("accent_color", "#22c55e"),
+        footer_text=branding_data.get("footer_text"),
+    )
+
+    response = QuotePublicResponse.model_validate(quote)
+    response.branding = branding
+    return response
 
 
 # =============================================================================

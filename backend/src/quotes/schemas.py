@@ -96,6 +96,10 @@ class QuoteResponse(QuoteBase):
     sent_at: Optional[datetime] = None
     accepted_at: Optional[datetime] = None
     rejected_at: Optional[datetime] = None
+    signer_name: Optional[str] = None
+    signer_email: Optional[str] = None
+    signed_at: Optional[datetime] = None
+    rejection_reason: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     line_items: List[QuoteLineItemResponse] = []
@@ -112,6 +116,66 @@ class QuoteListResponse(BaseModel):
     page: int
     page_size: int
     pages: int
+
+
+# =============================================================================
+# Public Quote View Schemas
+# =============================================================================
+
+class QuoteBranding(BaseModel):
+    """Tenant branding data for public quote view."""
+    company_name: Optional[str] = None
+    logo_url: Optional[str] = None
+    primary_color: str = "#6366f1"
+    secondary_color: str = "#8b5cf6"
+    accent_color: str = "#22c55e"
+    footer_text: Optional[str] = None
+
+
+class QuotePublicLineItem(BaseModel):
+    """Line item for public quote view (no internal IDs exposed)."""
+    description: str
+    quantity: float
+    unit_price: float
+    discount: float
+    total: float
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class QuotePublicResponse(BaseModel):
+    """Public view of a quote (no auth required)."""
+    quote_number: str
+    title: str
+    description: Optional[str] = None
+    status: str
+    currency: str = "USD"
+    valid_until: Optional[date] = None
+    subtotal: float = 0
+    tax_amount: float = 0
+    total: float = 0
+    discount_type: Optional[str] = None
+    discount_value: float = 0
+    terms_and_conditions: Optional[str] = None
+    payment_type: str = "one_time"
+    recurring_interval: Optional[str] = None
+    line_items: List[QuotePublicLineItem] = []
+    contact: Optional[ContactBrief] = None
+    company: Optional[CompanyBrief] = None
+    branding: Optional[QuoteBranding] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class QuoteAcceptRequest(BaseModel):
+    """Request body for accepting a quote via public link (e-sign)."""
+    signer_name: str
+    signer_email: str
+
+
+class QuoteRejectRequest(BaseModel):
+    """Request body for rejecting a quote via public link."""
+    reason: Optional[str] = None
 
 
 # =============================================================================

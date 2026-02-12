@@ -1,5 +1,6 @@
 """Quote service layer."""
 
+import os
 from datetime import datetime, timezone
 from typing import Optional, List, Tuple
 from sqlalchemy import select, func, or_
@@ -251,6 +252,10 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
         if quote.contact and quote.contact.email:
             branding = await TenantBrandingHelper.get_branding_for_user(self.db, user_id)
 
+            # Build public view URL for CTA button in email
+            base_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+            view_url = f"{base_url}/quotes/public/{quote.quote_number}"
+
             quote_data = {
                 "quote_number": quote.quote_number,
                 "client_name": quote.contact.full_name,
@@ -266,6 +271,7 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
                     }
                     for item in quote.line_items
                 ],
+                "view_url": view_url,
             }
 
             subject, html_body = render_quote_email(branding, quote_data)
@@ -327,6 +333,68 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
 
         generator = BrandedPDFGenerator()
         return generator.generate_quote_pdf(quote_data, branding)
+
+    async def get_public_quote(self, quote_number: str) -> Optional[Quote]:
+        """Get a quote by its number for public viewing."""
+        query = (
+            select(Quote)
+            .options(
+                selectinload(Quote.line_items),
+                selectinload(Quote.contact),
+                selectinload(Quote.company),
+            )
+            .where(Quote.quote_number == quote_number)
+        )
+        result = await self.db.execute(query)
+        return result.scalar_one_or_none()
+
+    async def get_branding_for_quote(self, quote: Quote) -> dict:
+        """Get tenant branding from the quote owner's tenant."""
+        if quote.owner_id:
+            return await TenantBrandingHelper.get_branding_for_user(self.db, quote.owner_id)
+        return TenantBrandingHelper.get_default_branding()
+
+    async def record_quote_view(self, quote: Quote) -> Quote:
+        """Record a view on a quote (auto-transition sent -> viewed)."""
+        if quote.status == "sent":
+            quote.status = "viewed"
+        await self.db.flush()
+        await self.db.refresh(quote)
+        return quote
+
+    async def accept_quote_public(
+        self, quote: Quote, signer_name: str, signer_email: str, signer_ip: Optional[str] = None
+    ) -> Quote:
+        """Accept a quote via the public link with e-signature data."""
+        if quote.status not in ("sent", "viewed"):
+            raise ValueError(f"Cannot accept quote in '{quote.status}' status")
+
+        now = datetime.now(timezone.utc)
+        quote.status = "accepted"
+        quote.accepted_at = now
+        quote.signer_name = signer_name
+        quote.signer_email = signer_email
+        quote.signer_ip = signer_ip
+        quote.signed_at = now
+        await self.db.flush()
+        await self.db.refresh(quote)
+        return quote
+
+    async def reject_quote_public(
+        self, quote: Quote, reason: Optional[str] = None, signer_ip: Optional[str] = None
+    ) -> Quote:
+        """Reject a quote via the public link."""
+        if quote.status not in ("sent", "viewed"):
+            raise ValueError(f"Cannot reject quote in '{quote.status}' status")
+
+        now = datetime.now(timezone.utc)
+        quote.status = "rejected"
+        quote.rejected_at = now
+        quote.rejection_reason = reason
+        quote.signer_ip = signer_ip
+        await self.db.flush()
+        await self.db.refresh(quote)
+        return quote
 
     async def add_bundle_to_quote(self, quote: Quote, bundle_id: int) -> Quote:
         """Add all items from a product bundle to a quote as line items."""

@@ -34,6 +34,7 @@ const OpportunityDetailPage = lazy(() => import('../features/opportunities/Oppor
 // Quotes
 const QuotesPage = lazy(() => import('../features/quotes/QuotesPage'));
 const QuoteDetailPage = lazy(() => import('../features/quotes/QuoteDetail'));
+const PublicQuoteView = lazy(() => import('../features/quotes/PublicQuoteView'));
 
 // Payments
 const PaymentsPage = lazy(() => import('../features/payments/PaymentsPage'));
@@ -85,6 +86,7 @@ function AppRoutes() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/proposals/public/:token" element={<PublicProposalView />} />
+      <Route path="/quotes/public/:quoteNumber" element={<PublicQuoteView />} />
 
       {/* Protected routes */}
       <Route
