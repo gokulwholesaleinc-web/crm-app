@@ -61,7 +61,6 @@ export function Layout({
           id="main-content"
           className={clsx(
             'flex-1 overflow-y-auto focus:outline-none',
-            '-webkit-overflow-scrolling: touch', // Smooth scrolling on iOS
             className
           )}
         >

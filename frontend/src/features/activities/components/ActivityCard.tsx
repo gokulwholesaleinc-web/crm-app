@@ -149,7 +149,7 @@ export function ActivityCard({
   return (
     <div
       className={clsx(
-        'bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-3 sm:p-4 transition-all hover:shadow-md',
+        'bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-3 sm:p-4 transition-shadow hover:shadow-md',
         activity.is_completed && 'opacity-75'
       )}
     >
@@ -218,9 +218,9 @@ export function ActivityCard({
             <button
               onClick={() => onComplete(activity.id)}
               className="p-2 sm:p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors min-h-[40px] min-w-[40px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
-              title="Mark as complete"
+              aria-label="Mark as complete"
             >
-              <CheckCircleIcon className="h-5 w-5 text-gray-400 hover:text-green-500" />
+              <CheckCircleIcon className="h-5 w-5 text-gray-400 hover:text-green-500" aria-hidden="true" />
             </button>
           )}
           {activity.is_completed && (
@@ -232,9 +232,9 @@ export function ActivityCard({
             <button
               onClick={() => onEdit(activity)}
               className="p-2 sm:p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 min-h-[40px] min-w-[40px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
-              title="Edit"
+              aria-label="Edit activity"
             >
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -248,9 +248,9 @@ export function ActivityCard({
             <button
               onClick={() => onDelete(activity.id)}
               className="p-2 sm:p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-400 hover:text-red-500 min-h-[40px] min-w-[40px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
-              title="Delete"
+              aria-label="Delete activity"
             >
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"

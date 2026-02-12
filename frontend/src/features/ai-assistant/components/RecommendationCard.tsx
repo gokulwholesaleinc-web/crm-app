@@ -74,7 +74,7 @@ export function RecommendationCard({ recommendation, onAction, feedbackSlot }: R
   const cardContent = (
     <div
       className={clsx(
-        'rounded-lg border p-4 transition-all hover:shadow-md cursor-pointer',
+        'rounded-lg border p-4 transition-shadow hover:shadow-md cursor-pointer',
         priorityStyle.border,
         priorityStyle.bg
       )}

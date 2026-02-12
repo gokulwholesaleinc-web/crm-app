@@ -94,7 +94,7 @@ export function FloatingChatWidget() {
       {isOpen && (
         <div
           className={clsx(
-            'fixed bottom-20 right-4 sm:right-6 z-50 bg-white rounded-xl shadow-2xl border border-gray-200 flex flex-col transition-all duration-200',
+            'fixed bottom-20 right-4 sm:right-6 z-50 bg-white rounded-xl shadow-2xl border border-gray-200 flex flex-col transition-[width,height] duration-200',
             isMinimized
               ? 'w-72 h-12'
               : 'w-[calc(100vw-2rem)] sm:w-96 h-[min(500px,calc(100vh-10rem))]'
@@ -223,7 +223,7 @@ export function FloatingChatWidget() {
       <button
         onClick={handleToggle}
         className={clsx(
-          'fixed bottom-4 right-4 sm:right-6 z-50 p-3.5 rounded-full shadow-lg transition-all duration-200',
+          'fixed bottom-4 right-4 sm:right-6 z-50 p-3.5 rounded-full shadow-lg transition-[transform,box-shadow] duration-200',
           'bg-gradient-to-r from-purple-500 to-indigo-600 text-white',
           'hover:shadow-xl hover:scale-105 active:scale-95',
           isOpen && 'ring-2 ring-purple-300'

@@ -97,8 +97,9 @@ export function AddMembersModal({
             <button
               onClick={onClose}
               className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+              aria-label="Close"
             >
-              <XMarkIcon className="h-5 w-5 text-gray-500" />
+              <XMarkIcon className="h-5 w-5 text-gray-500" aria-hidden="true" />
             </button>
           </div>
 
@@ -134,8 +135,11 @@ export function AddMembersModal({
           <div className="px-4 sm:px-6 py-3 border-b flex-shrink-0">
             <div className="relative">
               <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+              <label htmlFor="member-search" className="sr-only">Search members</label>
               <input
-                type="text"
+                type="search"
+                id="member-search"
+                name="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={`Search ${memberType}s...`}
@@ -201,7 +205,7 @@ export function AddMembersModal({
                       key={item.id}
                       onClick={() => handleToggleSelect(item.id)}
                       className={clsx(
-                        'flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all',
+                        'flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors',
                         isSelected
                           ? 'border-primary-500 bg-primary-50'
                           : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'

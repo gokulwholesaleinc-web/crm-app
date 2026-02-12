@@ -72,8 +72,11 @@ function CampaignCard({
 
   return (
     <div
-      className="bg-white rounded-lg shadow-sm border p-5 hover:shadow-md transition-all cursor-pointer"
+      className="bg-white rounded-lg shadow-sm border p-5 hover:shadow-md transition-shadow cursor-pointer"
       onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
     >
       <div className="flex items-start justify-between">
         <div className="flex-1 min-w-0">
@@ -103,8 +106,9 @@ function CampaignCard({
               onEdit();
             }}
             className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+            aria-label="Edit campaign"
           >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -119,8 +123,9 @@ function CampaignCard({
               onDelete();
             }}
             className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-red-500"
+            aria-label="Delete campaign"
           >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"

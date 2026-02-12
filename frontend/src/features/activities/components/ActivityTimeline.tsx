@@ -123,7 +123,7 @@ function TimelineEntry({
         <div className="min-w-0 flex-1">
           <div
             className={clsx(
-              'bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-2.5 sm:p-3 shadow-sm transition-all',
+              'bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-2.5 sm:p-3 shadow-sm transition-shadow',
               onActivityClick && 'cursor-pointer hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 active:bg-gray-50 dark:active:bg-gray-700'
             )}
             onClick={() => onActivityClick?.(item)}

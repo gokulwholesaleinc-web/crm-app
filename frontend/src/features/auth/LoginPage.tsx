@@ -75,7 +75,7 @@ function LoginPage() {
 
         <form className="mt-6 sm:mt-8 space-y-4 sm:space-y-6" onSubmit={handleSubmit(onSubmit)}>
           {error && (
-            <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-3 sm:p-4">
+            <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-3 sm:p-4" role="alert" aria-live="polite">
               <div className="flex">
                 <div className="ml-3">
                   <h3 className="text-sm font-medium text-red-800 dark:text-red-300">{error}</h3>
@@ -93,6 +93,7 @@ function LoginPage() {
                 id="email"
                 type="email"
                 autoComplete="email"
+                spellCheck={false}
                 {...register('email', {
                   required: 'Email is required',
                   pattern: {

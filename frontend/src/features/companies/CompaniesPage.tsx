@@ -61,8 +61,11 @@ function CompanyCard({
 
   return (
     <div
-      className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 p-5 hover:shadow-md transition-all cursor-pointer"
+      className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 p-5 hover:shadow-md transition-shadow cursor-pointer"
       onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
     >
       <div className="flex items-start gap-4">
         {/* Logo or Avatar */}
@@ -71,6 +74,8 @@ function CompanyCard({
             <img
               src={company.logo_url}
               alt={company.name}
+              width={48}
+              height={48}
               className="h-12 w-12 rounded-lg object-cover"
             />
           ) : (
@@ -90,8 +95,9 @@ function CompanyCard({
                   onEdit();
                 }}
                 className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                aria-label="Edit company"
               >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -106,8 +112,9 @@ function CompanyCard({
                   onDelete();
                 }}
                 className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-red-500"
+                aria-label="Delete company"
               >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"

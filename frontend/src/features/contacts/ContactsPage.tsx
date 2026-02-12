@@ -178,7 +178,8 @@ function ContactsPage() {
                 </svg>
               </div>
               <input
-                type="text"
+                type="search"
+                name="search"
                 id="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}

@@ -34,7 +34,7 @@ export function SalesFunnelChart({ data }: SalesFunnelChartProps) {
               </div>
               <div className="relative">
                 <div
-                  className="h-8 rounded transition-all duration-500"
+                  className="h-8 rounded transition-[width] duration-500"
                   style={{
                     width: `${widthPct}%`,
                     backgroundColor: stage.color || '#6366f1',

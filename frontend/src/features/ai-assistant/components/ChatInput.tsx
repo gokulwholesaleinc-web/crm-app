@@ -68,7 +68,7 @@ export function ChatInput({
             'text-sm text-gray-900 placeholder:text-gray-400',
             'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent',
             'disabled:bg-gray-50 disabled:cursor-not-allowed',
-            'transition-all duration-200'
+            'transition-colors duration-200'
           )}
           style={{ minHeight: '48px', maxHeight: '150px' }}
         />
@@ -76,8 +76,9 @@ export function ChatInput({
           <button
             type="submit"
             disabled={!canSend}
+            aria-label="Send message"
             className={clsx(
-              'p-2 rounded-full transition-all duration-200',
+              'p-2 rounded-full transition-colors duration-200',
               canSend
                 ? 'bg-primary-500 text-white hover:bg-primary-600 shadow-sm'
                 : 'bg-gray-100 text-gray-400 cursor-not-allowed'
@@ -86,7 +87,7 @@ export function ChatInput({
             {isLoading ? (
               <Spinner size="sm" className="h-4 w-4" />
             ) : (
-              <PaperAirplaneIcon className="h-4 w-4" />
+              <PaperAirplaneIcon className="h-4 w-4" aria-hidden="true" />
             )}
           </button>
         </div>

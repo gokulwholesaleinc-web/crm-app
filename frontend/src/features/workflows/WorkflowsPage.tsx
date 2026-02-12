@@ -50,7 +50,7 @@ function WorkflowCard({
   onToggle: () => void;
 }) {
   return (
-    <div className="bg-white rounded-lg shadow-sm border p-5 hover:shadow-md transition-all">
+    <div className="bg-white rounded-lg shadow-sm border p-5 hover:shadow-md transition-shadow">
       <div className="flex items-start justify-between">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
@@ -82,7 +82,7 @@ function WorkflowCard({
                 ? 'text-yellow-500 hover:text-yellow-600'
                 : 'text-green-500 hover:text-green-600'
             )}
-            title={workflow.is_active ? 'Deactivate' : 'Activate'}
+            aria-label={workflow.is_active ? 'Deactivate workflow' : 'Activate workflow'}
           >
             {workflow.is_active ? (
               <PauseIcon className="h-5 w-5" />
@@ -93,8 +93,9 @@ function WorkflowCard({
           <button
             onClick={onEdit}
             className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+            aria-label="Edit workflow"
           >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -106,8 +107,9 @@ function WorkflowCard({
           <button
             onClick={onDelete}
             className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-red-500"
+            aria-label="Delete workflow"
           >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"

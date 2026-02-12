@@ -245,7 +245,8 @@ function LeadsPage() {
                 </svg>
               </div>
               <input
-                type="text"
+                type="search"
+                name="search"
                 id="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -256,7 +257,10 @@ function LeadsPage() {
           </div>
           <div className="flex gap-3 sm:gap-4">
             <div className="flex-1 sm:flex-none sm:w-48">
+              <label htmlFor="status-filter" className="sr-only">Filter by status</label>
               <select
+                id="status-filter"
+                name="status"
                 value={statusFilter}
                 onChange={(e) => {
                   setStatusFilter(e.target.value);
