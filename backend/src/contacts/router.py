@@ -28,6 +28,7 @@ from src.ai.embedding_hooks import (
 )
 from src.audit.utils import audit_entity_create, audit_entity_update, audit_entity_delete, snapshot_entity
 from src.events.service import emit, CONTACT_CREATED, CONTACT_UPDATED
+from src.notifications.service import notify_on_assignment
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +122,9 @@ async def create_contact(
         "data": {"first_name": contact.first_name, "last_name": contact.last_name, "email": contact.email, "status": contact.status},
     })
 
+    if contact.owner_id and contact.owner_id != current_user.id:
+        await notify_on_assignment(db, contact.owner_id, "contacts", contact.id, contact.full_name)
+
     return await _build_contact_response(service, contact)
 
 
@@ -154,6 +158,8 @@ async def update_contact(
     contact = await get_entity_or_404(service, contact_id, EntityNames.CONTACT)
     check_ownership(contact, current_user, EntityNames.CONTACT)
 
+    old_owner_id = contact.owner_id
+
     update_fields = list(contact_data.model_dump(exclude_unset=True).keys())
     old_data = snapshot_entity(contact, update_fields)
 
@@ -177,6 +183,9 @@ async def update_contact(
         "user_id": current_user.id,
         "data": {"first_name": updated_contact.first_name, "last_name": updated_contact.last_name, "email": updated_contact.email, "status": updated_contact.status},
     })
+
+    if updated_contact.owner_id and updated_contact.owner_id != old_owner_id:
+        await notify_on_assignment(db, updated_contact.owner_id, "contacts", updated_contact.id, updated_contact.full_name)
 
     return await _build_contact_response(service, updated_contact)
 

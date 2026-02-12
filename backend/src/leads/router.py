@@ -44,6 +44,7 @@ from src.ai.embedding_hooks import (
 )
 from src.audit.utils import audit_entity_create, audit_entity_update, audit_entity_delete, snapshot_entity
 from src.events.service import emit, LEAD_CREATED, LEAD_UPDATED
+from src.notifications.service import notify_on_assignment
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +143,9 @@ async def create_lead(
         "data": {"first_name": lead.first_name, "last_name": lead.last_name, "email": lead.email, "status": lead.status},
     })
 
+    if lead.owner_id and lead.owner_id != current_user.id:
+        await notify_on_assignment(db, lead.owner_id, "leads", lead.id, lead.full_name)
+
     return await _build_lead_response(service, lead)
 
 
@@ -175,6 +179,8 @@ async def update_lead(
     lead = await get_entity_or_404(service, lead_id, EntityNames.LEAD)
     check_ownership(lead, current_user, EntityNames.LEAD)
 
+    old_owner_id = lead.owner_id
+
     update_fields = list(lead_data.model_dump(exclude_unset=True).keys())
     old_data = snapshot_entity(lead, update_fields)
 
@@ -197,6 +203,9 @@ async def update_lead(
         "user_id": current_user.id,
         "data": {"first_name": updated_lead.first_name, "last_name": updated_lead.last_name, "email": updated_lead.email, "status": updated_lead.status},
     })
+
+    if updated_lead.owner_id and updated_lead.owner_id != old_owner_id:
+        await notify_on_assignment(db, updated_lead.owner_id, "leads", updated_lead.id, updated_lead.full_name)
 
     return await _build_lead_response(service, updated_lead)
 

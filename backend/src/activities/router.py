@@ -25,6 +25,7 @@ from src.activities.service import ActivityService
 from src.activities.timeline import ActivityTimeline
 from src.audit.utils import audit_entity_create, audit_entity_update, audit_entity_delete, snapshot_entity
 from src.events.service import emit, ACTIVITY_CREATED
+from src.notifications.service import notify_on_activity_due
 
 router = APIRouter(prefix="/api/activities", tags=["activities"])
 
@@ -175,6 +176,10 @@ async def create_activity(
         "user_id": current_user.id,
         "data": {"activity_type": activity.activity_type, "subject": activity.subject},
     })
+
+    if activity.due_date:
+        notify_user = activity.assigned_to_id or activity.owner_id or current_user.id
+        await notify_on_activity_due(db, notify_user, activity.id, activity.subject)
 
     return ActivityResponse.model_validate(activity)
 

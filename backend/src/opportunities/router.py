@@ -49,6 +49,7 @@ from src.events.service import (
     OPPORTUNITY_UPDATED,
     OPPORTUNITY_STAGE_CHANGED,
 )
+from src.notifications.service import notify_on_assignment, notify_on_stage_change
 
 logger = logging.getLogger(__name__)
 
@@ -289,6 +290,9 @@ async def create_opportunity(
         "data": {"name": opportunity.name, "amount": opportunity.amount, "pipeline_stage_id": opportunity.pipeline_stage_id},
     })
 
+    if opportunity.owner_id and opportunity.owner_id != current_user.id:
+        await notify_on_assignment(db, opportunity.owner_id, "opportunities", opportunity.id, opportunity.name)
+
     return await _build_opportunity_response(service, opportunity)
 
 
@@ -326,6 +330,8 @@ async def update_opportunity(
     )
     check_ownership(opportunity, current_user, EntityNames.OPPORTUNITY)
     old_stage_id = opportunity.pipeline_stage_id
+    old_stage_name = opportunity.pipeline_stage.name if opportunity.pipeline_stage else str(old_stage_id)
+    old_owner_id = opportunity.owner_id
 
     update_fields = list(opp_data.model_dump(exclude_unset=True).keys())
     old_data = snapshot_entity(opportunity, update_fields)
@@ -357,6 +363,13 @@ async def update_opportunity(
             "user_id": current_user.id,
             "data": {"name": updated_opp.name, "old_stage_id": old_stage_id, "new_stage_id": updated_opp.pipeline_stage_id},
         })
+
+        new_stage_name = updated_opp.pipeline_stage.name if updated_opp.pipeline_stage else str(updated_opp.pipeline_stage_id)
+        notify_user = updated_opp.owner_id or current_user.id
+        await notify_on_stage_change(db, notify_user, "opportunities", updated_opp.id, updated_opp.name, old_stage_name, new_stage_name)
+
+    if updated_opp.owner_id and updated_opp.owner_id != old_owner_id:
+        await notify_on_assignment(db, updated_opp.owner_id, "opportunities", updated_opp.id, updated_opp.name)
 
     return await _build_opportunity_response(service, updated_opp)
 
