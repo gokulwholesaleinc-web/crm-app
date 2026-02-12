@@ -11,6 +11,9 @@ from src.sequences.models import Sequence, SequenceEnrollment
 from src.sequences.schemas import SequenceCreate, SequenceUpdate
 from src.core.base_service import BaseService
 from src.core.constants import DEFAULT_PAGE_SIZE
+from src.contacts.models import Contact
+from src.email.service import EmailService
+from src.activities.models import Activity
 
 logger = logging.getLogger(__name__)
 
@@ -210,6 +213,13 @@ class SequenceService(BaseService[Sequence]):
         await self.db.flush()
         return processed
 
+    async def _get_contact(self, contact_id: int) -> Optional[Contact]:
+        """Get a contact by ID."""
+        result = await self.db.execute(
+            select(Contact).where(Contact.id == contact_id)
+        )
+        return result.scalar_one_or_none()
+
     async def _execute_step(self, enrollment: SequenceEnrollment) -> Dict[str, Any]:
         """Execute the current step for an enrollment and advance."""
         seq = await self.get_by_id(enrollment.sequence_id)
@@ -245,11 +255,45 @@ class SequenceService(BaseService[Sequence]):
         }
 
         if step_type == "email":
+            template_id = step.get("template_id")
+            contact = await self._get_contact(enrollment.contact_id)
+            if contact and contact.email and template_id:
+                email_service = EmailService(self.db)
+                queued = await email_service.send_template_email(
+                    to_email=contact.email,
+                    template_id=template_id,
+                    variables={
+                        "first_name": contact.first_name,
+                        "last_name": contact.last_name,
+                        "full_name": contact.full_name,
+                    },
+                    sent_by_id=seq.created_by_id,
+                    entity_type="contacts",
+                    entity_id=contact.id,
+                )
+                result["email_queue_id"] = queued.id
             result["action"] = "email_queued"
-            result["template_id"] = step.get("template_id")
+            result["template_id"] = template_id
         elif step_type == "task":
+            task_description = step.get("task_description", "Sequence task")
+            contact = await self._get_contact(enrollment.contact_id)
+            activity = Activity(
+                activity_type="task",
+                subject=task_description,
+                description=f"Auto-created by sequence '{seq.name}' step {current_step_index}",
+                entity_type="contacts",
+                entity_id=enrollment.contact_id,
+                due_date=datetime.now(timezone.utc).date(),
+                is_completed=False,
+                priority="normal",
+                owner_id=seq.created_by_id,
+                assigned_to_id=contact.owner_id if contact else seq.created_by_id,
+            )
+            self.db.add(activity)
+            await self.db.flush()
             result["action"] = "task_created"
-            result["task_description"] = step.get("task_description")
+            result["activity_id"] = activity.id
+            result["task_description"] = task_description
         elif step_type == "wait":
             result["action"] = "wait_completed"
 

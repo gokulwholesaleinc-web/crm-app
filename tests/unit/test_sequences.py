@@ -15,16 +15,33 @@ from src.contacts.models import Contact
 from src.companies.models import Company
 from src.sequences.models import Sequence, SequenceEnrollment
 from src.sequences.service import SequenceService
+from src.campaigns.models import EmailTemplate
 
 
 @pytest.fixture
-async def test_sequence(db_session: AsyncSession, test_user: User) -> Sequence:
+async def _seq_email_template(db_session: AsyncSession, test_user: User) -> EmailTemplate:
+    """Create an email template for sequence test fixtures."""
+    template = EmailTemplate(
+        name="Sequence Test Template",
+        subject_template="Hello {{first_name}}",
+        body_template="<p>Welcome {{full_name}}</p>",
+        category="sequence",
+        created_by_id=test_user.id,
+    )
+    db_session.add(template)
+    await db_session.commit()
+    await db_session.refresh(template)
+    return template
+
+
+@pytest.fixture
+async def test_sequence(db_session: AsyncSession, test_user: User, _seq_email_template: EmailTemplate) -> Sequence:
     """Create a test sequence with steps."""
     seq = Sequence(
         name="Onboarding Sequence",
         description="Welcome new contacts",
         steps=[
-            {"step_number": 0, "type": "email", "delay_days": 0, "template_id": 1},
+            {"step_number": 0, "type": "email", "delay_days": 0, "template_id": _seq_email_template.id},
             {"step_number": 1, "type": "wait", "delay_days": 3},
             {"step_number": 2, "type": "task", "delay_days": 0, "task_description": "Follow up call"},
         ],
