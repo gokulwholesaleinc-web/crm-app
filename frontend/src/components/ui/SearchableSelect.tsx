@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Combobox } from '@headlessui/react';
-import { ChevronUpDownIcon, CheckIcon } from '@heroicons/react/20/solid';
+import { ChevronUpDownIcon, CheckIcon, XMarkIcon } from '@heroicons/react/20/solid';
 import clsx from 'clsx';
 
 export interface SearchableSelectOption {
@@ -16,6 +16,8 @@ export interface SearchableSelectProps {
   options: SearchableSelectOption[];
   placeholder?: string;
   name?: string;
+  error?: string;
+  disabled?: boolean;
 }
 
 function matchesSearch(text: string, query: string): boolean {
@@ -33,6 +35,8 @@ export function SearchableSelect({
   options,
   placeholder = 'Search...',
   name,
+  error,
+  disabled = false,
 }: SearchableSelectProps) {
   const [query, setQuery] = useState('');
 
@@ -58,6 +62,7 @@ export function SearchableSelect({
         }}
         nullable
         name={name}
+        disabled={disabled}
       >
         {label && (
           <Combobox.Label
@@ -73,23 +78,41 @@ export function SearchableSelect({
             autoComplete="off"
             className={clsx(
               'block w-full rounded-md border shadow-sm sm:text-sm',
-              'border-gray-300 dark:border-gray-600',
-              'bg-white dark:bg-gray-700',
-              'text-gray-900 dark:text-gray-100',
+              disabled
+                ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-500 cursor-not-allowed'
+                : 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100',
+              error
+                ? 'border-red-300 dark:border-red-600 focus-visible:border-red-500 focus-visible:ring-1 focus-visible:ring-red-500'
+                : 'border-gray-300 dark:border-gray-600 focus-visible:border-primary-500 focus-visible:ring-1 focus-visible:ring-primary-500',
               'placeholder:text-gray-400 dark:placeholder:text-gray-500',
-              'focus-visible:border-primary-500 focus-visible:ring-1 focus-visible:ring-primary-500',
-              'pr-10 py-2 pl-3'
+              'pr-16 py-2 pl-3'
             )}
             displayValue={(opt: SearchableSelectOption | null) => opt?.label ?? ''}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={placeholder}
           />
-          <Combobox.Button
-            className="absolute inset-y-0 right-0 flex items-center pr-2"
-            aria-label={`Toggle ${label ?? 'options'} list`}
-          >
-            <ChevronUpDownIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
-          </Combobox.Button>
+          <div className="absolute inset-y-0 right-0 flex items-center pr-2 gap-0.5">
+            {value != null && !disabled && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  onChange(null);
+                  setQuery('');
+                }}
+                className="flex items-center justify-center h-5 w-5 rounded-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                aria-label={`Clear ${label ?? 'selection'}`}
+              >
+                <XMarkIcon className="h-4 w-4" aria-hidden="true" />
+              </button>
+            )}
+            <Combobox.Button
+              className="flex items-center"
+              aria-label={`Toggle ${label ?? 'options'} list`}
+            >
+              <ChevronUpDownIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
+            </Combobox.Button>
+          </div>
 
           <Combobox.Options
             className={clsx(
@@ -152,6 +175,9 @@ export function SearchableSelect({
           </Combobox.Options>
         </div>
       </Combobox>
+      {error && (
+        <p className="mt-1 text-sm text-red-600 dark:text-red-400">{error}</p>
+      )}
     </div>
   );
 }

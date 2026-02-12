@@ -1,13 +1,15 @@
+import { useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
-import { Button } from '../../../components/ui/Button';
+import { Button, SearchableSelect } from '../../../components/ui';
 import { FormInput, FormTextarea } from '../../../components/forms';
+import { useCompanies } from '../../../hooks/useCompanies';
 
 export interface ContactFormData {
   firstName: string;
   lastName: string;
   email: string;
   phone?: string;
-  company?: string;
+  company_id?: number | null;
   jobTitle?: string;
   address?: string;
   city?: string;
@@ -43,7 +45,6 @@ export function ContactForm({
       lastName: '',
       email: '',
       phone: '',
-      company: '',
       jobTitle: '',
       address: '',
       city: '',
@@ -55,11 +56,23 @@ export function ContactForm({
     },
   });
 
+  const [companyId, setCompanyId] = useState<number | null>(initialData?.company_id ?? null);
+  const { data: companiesData } = useCompanies({ page_size: 100 });
+
+  const companyOptions = useMemo(
+    () => (companiesData?.items ?? []).map((c) => ({ value: c.id, label: c.name })),
+    [companiesData]
+  );
+
+  const onFormSubmit = (data: ContactFormData) => {
+    return onSubmit({ ...data, company_id: companyId });
+  };
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+    <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-6">
       {/* Basic Information */}
-      <div className="bg-white shadow rounded-lg p-6">
-        <h3 className="text-lg font-medium text-gray-900 mb-4">
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
           Basic Information
         </h3>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
@@ -108,15 +121,19 @@ export function ContactForm({
       </div>
 
       {/* Work Information */}
-      <div className="bg-white shadow rounded-lg p-6">
-        <h3 className="text-lg font-medium text-gray-900 mb-4">
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
           Work Information
         </h3>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-          <FormInput
+          <SearchableSelect
             label="Company"
-            name="company"
-            register={register('company')}
+            id="contact-company"
+            name="company_id"
+            value={companyId}
+            onChange={setCompanyId}
+            options={companyOptions}
+            placeholder="Search companies..."
           />
 
           <FormInput
@@ -128,8 +145,8 @@ export function ContactForm({
       </div>
 
       {/* Address Information */}
-      <div className="bg-white shadow rounded-lg p-6">
-        <h3 className="text-lg font-medium text-gray-900 mb-4">Address</h3>
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Address</h3>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <FormInput
@@ -166,8 +183,8 @@ export function ContactForm({
       </div>
 
       {/* Notes */}
-      <div className="bg-white shadow rounded-lg p-6">
-        <h3 className="text-lg font-medium text-gray-900 mb-4">Notes</h3>
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Notes</h3>
         <FormTextarea
           label="Notes"
           name="notes"

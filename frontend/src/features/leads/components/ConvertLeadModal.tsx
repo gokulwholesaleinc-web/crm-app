@@ -74,10 +74,10 @@ export function ConvertLeadModal({
           <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100">
             <CheckIcon className="h-6 w-6 text-green-600" aria-hidden="true" />
           </div>
-          <h3 className="mt-3 text-lg leading-6 font-medium text-gray-900">
+          <h3 className="mt-3 text-lg leading-6 font-medium text-gray-900 dark:text-gray-100">
             Convert Lead
           </h3>
-          <p className="mt-2 text-sm text-gray-500 px-2">
+          <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 px-2">
             Convert "{leadName}" to a contact and/or opportunity.
           </p>
         </div>
@@ -97,7 +97,7 @@ export function ConvertLeadModal({
               <div className="ml-3 text-sm">
                 <label
                   htmlFor="createContact"
-                  className="font-medium text-gray-700"
+                  className="font-medium text-gray-700 dark:text-gray-300"
                 >
                   Create Contact
                 </label>
@@ -120,7 +120,7 @@ export function ConvertLeadModal({
               <div className="ml-3 text-sm">
                 <label
                   htmlFor="createOpportunity"
-                  className="font-medium text-gray-700"
+                  className="font-medium text-gray-700 dark:text-gray-300"
                 >
                   Create Opportunity
                 </label>
@@ -136,7 +136,7 @@ export function ConvertLeadModal({
                 <div>
                   <label
                     htmlFor="opportunityName"
-                    className="block text-sm font-medium text-gray-700"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300"
                   >
                     Opportunity Name *
                   </label>
@@ -161,7 +161,7 @@ export function ConvertLeadModal({
                 <div>
                   <label
                     htmlFor="opportunityValue"
-                    className="block text-sm font-medium text-gray-700"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300"
                   >
                     Expected Value
                   </label>
@@ -189,7 +189,7 @@ export function ConvertLeadModal({
                 <div>
                   <label
                     htmlFor="opportunityStage"
-                    className="block text-sm font-medium text-gray-700"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300"
                   >
                     Stage
                   </label>

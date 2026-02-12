@@ -93,6 +93,7 @@ function ContactsPage() {
           email: data.email,
           phone: data.phone,
           job_title: data.jobTitle,
+          company_id: data.company_id ?? undefined,
         };
         await updateContactMutation.mutateAsync({
           id: editingContact.id,
@@ -106,6 +107,7 @@ function ContactsPage() {
           email: data.email,
           phone: data.phone,
           job_title: data.jobTitle,
+          company_id: data.company_id ?? undefined,
           status: 'active', // Default status for new contacts
         };
         await createContactMutation.mutateAsync(createData);
@@ -131,7 +133,7 @@ function ContactsPage() {
       email: editingContact.email || '',
       phone: editingContact.phone || '',
       jobTitle: editingContact.job_title || '',
-      company: editingContact.company?.name || '',
+      company_id: editingContact.company_id ?? null,
     };
   };
 

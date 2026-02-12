@@ -10,8 +10,6 @@ const SharePanel = lazy(() => import('../../components/shared/SharePanel'));
 import { OpportunityForm, OpportunityFormData } from './components/OpportunityForm';
 import { AIInsightsCard, NextBestActionCard } from '../../components/ai';
 import { useOpportunity, useDeleteOpportunity, useUpdateOpportunity, usePipelineStages } from '../../hooks/useOpportunities';
-import { useContacts } from '../../hooks/useContacts';
-import { useCompanies } from '../../hooks/useCompanies';
 import { useTimeline } from '../../hooks/useActivities';
 import { useQuotes } from '../../hooks/useQuotes';
 import { useProposals } from '../../hooks/useProposals';
@@ -36,9 +34,6 @@ function OpportunityDetailPage() {
   const deleteOpportunityMutation = useDeleteOpportunity();
   const updateOpportunityMutation = useUpdateOpportunity();
   const { data: pipelineStages } = usePipelineStages();
-  const { data: contactsData } = useContacts({ page_size: 100 });
-  const { data: companiesData } = useCompanies({ page_size: 100 });
-
   // Fetch timeline/activities - only when on activities tab
   const shouldFetchActivities = activeTab === 'activities' && !!opportunityId;
   const { data: timelineData, isLoading: isLoadingActivities } = useTimeline(
@@ -81,8 +76,8 @@ function OpportunityDetailPage() {
         probability: data.probability,
         expected_close_date: data.expectedCloseDate || undefined,
         pipeline_stage_id: stage?.id,
-        contact_id: data.contactId ? parseInt(data.contactId, 10) : undefined,
-        company_id: data.companyId ? parseInt(data.companyId, 10) : undefined,
+        contact_id: data.contactId ?? undefined,
+        company_id: data.companyId ?? undefined,
         description: data.description,
       };
       await updateOpportunityMutation.mutateAsync({
@@ -105,8 +100,8 @@ function OpportunityDetailPage() {
         'qualification',
       probability: opportunity.probability ?? 0,
       expectedCloseDate: opportunity.expected_close_date ?? '',
-      contactId: opportunity.contact_id ? String(opportunity.contact_id) : '',
-      companyId: opportunity.company_id ? String(opportunity.company_id) : '',
+      contactId: opportunity.contact_id ?? null,
+      companyId: opportunity.company_id ?? null,
       description: opportunity.description ?? '',
     };
   };
@@ -120,17 +115,6 @@ function OpportunityDetailPage() {
       // Error handled by mutation
     }
   };
-
-  // Build contacts and companies lists for form dropdowns
-  const contactsList = (contactsData?.items ?? []).map((contact) => ({
-    id: String(contact.id),
-    name: `${contact.first_name} ${contact.last_name}`,
-  }));
-
-  const companiesList = (companiesData?.items ?? []).map((company) => ({
-    id: String(company.id),
-    name: company.name,
-  }));
 
   if (isLoading) {
     return (
@@ -677,8 +661,6 @@ function OpportunityDetailPage() {
           onCancel={() => setShowEditForm(false)}
           isLoading={updateOpportunityMutation.isPending}
           submitLabel="Update Opportunity"
-          contacts={contactsList}
-          companies={companiesList}
         />
       </Modal>
 

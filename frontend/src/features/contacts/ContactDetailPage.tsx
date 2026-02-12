@@ -64,6 +64,7 @@ function ContactDetailPage() {
         email: data.email,
         phone: data.phone,
         job_title: data.jobTitle,
+        company_id: data.company_id ?? undefined,
       };
       await updateContactMutation.mutateAsync({
         id: contactId,
@@ -83,7 +84,7 @@ function ContactDetailPage() {
       email: contact.email || '',
       phone: contact.phone || '',
       jobTitle: contact.job_title || '',
-      company: contact.company?.name || '',
+      company_id: contact.company_id ?? null,
     };
   };
 

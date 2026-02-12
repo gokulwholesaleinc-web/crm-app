@@ -141,6 +141,7 @@ function LeadsPage() {
           company_name: data.company,
           job_title: data.jobTitle,
           status: data.status,
+          source_id: data.source_id ?? undefined,
         };
         await updateLeadMutation.mutateAsync({
           id: editingLead.id,
@@ -156,6 +157,7 @@ function LeadsPage() {
           company_name: data.company,
           job_title: data.jobTitle,
           status: data.status,
+          source_id: data.source_id ?? undefined,
           budget_currency: 'USD', // Required field
         };
         await createLeadMutation.mutateAsync(createData);
@@ -197,6 +199,7 @@ function LeadsPage() {
       company: editingLead.company_name || '',
       jobTitle: editingLead.job_title || '',
       source: editingLead.source?.name || 'website',
+      source_id: editingLead.source?.id ?? null,
       status: editingLead.status,
       score: editingLead.score,
     };
