@@ -348,6 +348,60 @@ async def cancel_subscription(
 
 
 # =============================================================================
+# Invoice & Receipt Endpoints (MUST be before /{payment_id} catch-all)
+# =============================================================================
+
+@router.get("/{payment_id}/invoice")
+async def download_invoice(
+    payment_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Generate and return branded invoice PDF (HTML) for a payment."""
+    from fastapi.responses import Response
+
+    service = PaymentService(db)
+    payment = await get_entity_or_404(service, payment_id, EntityNames.PAYMENT)
+
+    try:
+        pdf_bytes = await service.generate_invoice_pdf(payment_id)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail=str(e),
+        )
+
+    return Response(
+        content=pdf_bytes,
+        media_type="text/html",
+        headers={
+            "Content-Disposition": f'inline; filename="invoice-{payment_id}.html"',
+        },
+    )
+
+
+@router.post("/{payment_id}/send-receipt")
+async def send_receipt(
+    payment_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Manually resend receipt email for a payment."""
+    service = PaymentService(db)
+    payment = await get_entity_or_404(service, payment_id, EntityNames.PAYMENT)
+
+    try:
+        await service.send_payment_receipt(payment_id)
+    except Exception as e:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail=f"Failed to send receipt: {str(e)}",
+        )
+
+    return {"message": "Receipt email sent", "payment_id": payment_id}
+
+
+# =============================================================================
 # Payment Detail Endpoint (MUST be last - path param catches all)
 # =============================================================================
 

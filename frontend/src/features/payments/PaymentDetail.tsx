@@ -1,10 +1,12 @@
+import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeftIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, DocumentArrowDownIcon, EnvelopeIcon } from '@heroicons/react/24/outline';
 import { StatusBadge } from '../../components/ui';
 import type { StatusType } from '../../components/ui/Badge';
 import { usePayment } from '../../hooks/usePayments';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
+import { apiClient } from '../../api/client';
 
 function PaymentDetailPage() {
   const { id } = useParams();
@@ -12,6 +14,28 @@ function PaymentDetailPage() {
 
   const { data: payment, isLoading, error } = usePayment(paymentId);
   usePageTitle(payment ? `Payment #${payment.id}` : 'Payment');
+
+  const [sendingReceipt, setSendingReceipt] = useState(false);
+  const [receiptStatus, setReceiptStatus] = useState<string | null>(null);
+
+  const handleDownloadInvoice = () => {
+    if (!payment) return;
+    window.open(`/api/payments/${payment.id}/invoice`, '_blank');
+  };
+
+  const handleResendReceipt = async () => {
+    if (!payment) return;
+    setSendingReceipt(true);
+    setReceiptStatus(null);
+    try {
+      await apiClient.post(`/api/payments/${payment.id}/send-receipt`);
+      setReceiptStatus('Receipt email sent successfully');
+    } catch {
+      setReceiptStatus('Failed to send receipt email');
+    } finally {
+      setSendingReceipt(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -60,7 +84,45 @@ function PaymentDetailPage() {
             )}
           </div>
         </div>
+
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleDownloadInvoice}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
+            aria-label="Download invoice"
+          >
+            <DocumentArrowDownIcon className="h-4 w-4" aria-hidden="true" />
+            Download Invoice
+          </button>
+          <button
+            type="button"
+            onClick={handleResendReceipt}
+            disabled={sendingReceipt}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label="Resend receipt email"
+          >
+            <EnvelopeIcon className="h-4 w-4" aria-hidden="true" />
+            {sendingReceipt ? 'Sending...' : 'Resend Receipt'}
+          </button>
+        </div>
       </div>
+
+      {/* Receipt status message */}
+      {receiptStatus && (
+        <div
+          className={`rounded-lg p-3 text-sm ${
+            receiptStatus.includes('success')
+              ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800'
+              : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'
+          }`}
+          role="status"
+          aria-live="polite"
+        >
+          {receiptStatus}
+        </div>
+      )}
 
       {/* Payment Details Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
