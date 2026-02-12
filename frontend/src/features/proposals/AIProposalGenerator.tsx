@@ -34,7 +34,7 @@ export function AIProposalGenerator({ onClose }: AIProposalGeneratorProps) {
 
     try {
       const proposal = await generateMutation.mutateAsync({
-        opportunity_id: Number(selectedOpportunityId),
+        opportunity_id: selectedOpportunityId,
       });
       showSuccess('Proposal generated successfully');
       onClose();
@@ -58,27 +58,21 @@ export function AIProposalGenerator({ onClose }: AIProposalGeneratorProps) {
       </p>
 
       <div>
-        <label htmlFor="ai-opportunity-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-          Select Opportunity *
-        </label>
         {loadingOpps ? (
-          <div className="mt-1 animate-pulse h-10 bg-gray-200 dark:bg-gray-700 rounded-md" />
+          <div>
+            <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">Select Opportunity *</span>
+            <div className="mt-1 animate-pulse h-10 bg-gray-200 dark:bg-gray-700 rounded-md" />
+          </div>
         ) : (
-          <select
+          <SearchableSelect
+            label="Select Opportunity *"
             id="ai-opportunity-select"
+            name="opportunity_id"
             value={selectedOpportunityId}
-            onChange={(e) => setSelectedOpportunityId(e.target.value ? Number(e.target.value) : '')}
-            className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 py-2.5 sm:py-2 text-base sm:text-sm"
-          >
-            <option value="">Choose an opportunity...</option>
-            {opportunities.map((opp) => (
-              <option key={opp.id} value={opp.id}>
-                {opp.name}
-                {opp.company ? ` - ${opp.company.name}` : ''}
-                {opp.amount ? ` ($${opp.amount.toLocaleString()})` : ''}
-              </option>
-            ))}
-          </select>
+            onChange={setSelectedOpportunityId}
+            options={opportunityOptions}
+            placeholder="Search opportunities..."
+          />
         )}
       </div>
 
