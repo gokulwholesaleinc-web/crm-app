@@ -247,10 +247,14 @@ def render_branded_email(
 def render_quote_email(branding: dict, quote_data: dict) -> tuple[str, str]:
     """Returns (subject, html_body) for quote emails.
 
+    When ``view_url`` is provided the email directs the recipient to
+    review and accept/reject the quote via a branded public link
+    (e-sign flow).  The line-items summary is included as a preview.
+
     Expected quote_data keys:
         quote_number, client_name, total, currency, valid_until,
         items (list of {description, quantity, unit_price, total}),
-        view_url (optional)
+        view_url (optional - public quote link for e-sign)
     """
     company = escape(branding.get("company_name", "CRM"))
     number = escape(str(quote_data.get("quote_number", "")))
@@ -258,6 +262,7 @@ def render_quote_email(branding: dict, quote_data: dict) -> tuple[str, str]:
     total = escape(str(quote_data.get("total", "0.00")))
     currency = escape(str(quote_data.get("currency", "USD")))
     valid_until = escape(str(quote_data.get("valid_until", "")))
+    view_url = quote_data.get("view_url")
 
     # Build items table rows
     items = quote_data.get("items", [])
@@ -276,9 +281,21 @@ def render_quote_email(branding: dict, quote_data: dict) -> tuple[str, str]:
             f'</tr>'
         )
 
+    # Intro copy changes depending on whether this is an e-sign flow
+    if view_url:
+        intro = (
+            f'<p>Dear {client},</p>'
+            f'<p>{company} has sent you quote <strong>#{number}</strong> for your review. '
+            f'Please click the button below to view the full details, and accept or decline the quote.</p>'
+        )
+    else:
+        intro = (
+            f'<p>Dear {client},</p>'
+            f'<p>Please find your quote <strong>#{number}</strong> below.</p>'
+        )
+
     body_html = f"""\
-<p>Dear {client},</p>
-<p>Please find your quote <strong>#{number}</strong> below.</p>
+{intro}
 <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border:1px solid #e5e7eb;border-radius:6px;margin:16px 0;">
 <thead>
 <tr style="background-color:#f9fafb;">
@@ -301,13 +318,12 @@ def render_quote_email(branding: dict, quote_data: dict) -> tuple[str, str]:
 <p style="color:#6b7280;font-size:13px;">Valid until: {valid_until}</p>"""
 
     subject = f"Quote #{number} from {company}"
-    view_url = quote_data.get("view_url")
     html = render_branded_email(
         branding=branding,
         subject=subject,
         headline=f"Quote #{number}",
         body_html=body_html,
-        cta_text="View Quote" if view_url else None,
+        cta_text="Review & Accept Quote" if view_url else None,
         cta_url=view_url,
     )
     return subject, html

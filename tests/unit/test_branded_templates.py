@@ -234,18 +234,22 @@ class TestRenderQuoteEmail:
         assert "15,000.00" in html
         assert "2026-03-15" in html
 
-    def test_quote_has_view_button(self):
+    def test_quote_has_review_accept_button_with_view_url(self):
         subject, html = render_quote_email(SAMPLE_BRANDING, SAMPLE_QUOTE)
 
-        assert "View Quote" in html
+        assert "Review &amp; Accept Quote" in html
         assert "https://app.acme.com/quotes/Q-2026-001" in html
+        # E-sign flow copy directs recipient to click through
+        assert "accept or decline" in html
 
     def test_quote_without_view_url(self):
         data = {**SAMPLE_QUOTE}
         del data["view_url"]
         subject, html = render_quote_email(SAMPLE_BRANDING, data)
 
-        assert "View Quote" not in html
+        assert "Review &amp; Accept Quote" not in html
+        # Fallback copy without link
+        assert "Please find your quote" in html
 
 
 # ===================================================================
