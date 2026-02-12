@@ -2,10 +2,20 @@
 Unit tests for the caching module.
 
 Tests for in-memory caching utilities used for reference data.
+Covers both the new async TTLCache and the legacy cachetools-based API.
 """
+
+import asyncio
+import time
 
 import pytest
 from src.core.cache import (
+    # New TTLCache API
+    TTLCache,
+    app_cache,
+    cached,
+    invalidate_on_change,
+    # Legacy API
     get_cache,
     cache_get,
     cache_set,
@@ -15,14 +25,330 @@ from src.core.cache import (
     invalidate_tags_cache,
     invalidate_lead_sources_cache,
     invalidate_pipeline_stages_cache,
+    invalidate_roles_cache,
+    invalidate_tenant_settings_cache,
+    invalidate_dashboard_cache,
+    invalidate_admin_stats_cache,
     CACHE_TAGS,
     CACHE_LEAD_SOURCES,
     CACHE_PIPELINE_STAGES,
+    CACHE_ROLES,
+    CACHE_TENANT_SETTINGS,
+    CACHE_DASHBOARD,
+    CACHE_ADMIN_STATS,
 )
 
 
-class TestCacheBasics:
-    """Tests for basic cache operations."""
+# =========================================================================
+# New TTLCache Tests
+# =========================================================================
+
+
+class TestTTLCache:
+    """Tests for the new async TTLCache class."""
+
+    @pytest.mark.asyncio
+    async def test_get_set(self):
+        """Test basic get/set operations."""
+        cache = TTLCache(default_ttl=60)
+        await cache.set("key1", "value1")
+        result = await cache.get("key1")
+        assert result == "value1"
+
+    @pytest.mark.asyncio
+    async def test_get_missing_key(self):
+        """Test getting a missing key returns None."""
+        cache = TTLCache(default_ttl=60)
+        result = await cache.get("nonexistent")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_ttl_expiration(self):
+        """Test that entries expire after TTL."""
+        cache = TTLCache(default_ttl=1)
+        await cache.set("key", "value", ttl=1)
+        # Should be available immediately
+        assert await cache.get("key") == "value"
+        # Wait for expiration
+        await asyncio.sleep(1.1)
+        assert await cache.get("key") is None
+
+    @pytest.mark.asyncio
+    async def test_custom_ttl(self):
+        """Test setting a custom TTL on individual entries."""
+        cache = TTLCache(default_ttl=60)
+        await cache.set("short", "value", ttl=1)
+        await cache.set("long", "value", ttl=60)
+        await asyncio.sleep(1.1)
+        assert await cache.get("short") is None
+        assert await cache.get("long") == "value"
+        await cache.clear()
+
+    @pytest.mark.asyncio
+    async def test_delete(self):
+        """Test deleting a specific key."""
+        cache = TTLCache(default_ttl=60)
+        await cache.set("key", "value")
+        await cache.delete("key")
+        assert await cache.get("key") is None
+
+    @pytest.mark.asyncio
+    async def test_delete_nonexistent(self):
+        """Test deleting a nonexistent key doesn't raise."""
+        cache = TTLCache(default_ttl=60)
+        await cache.delete("nonexistent")  # Should not raise
+
+    @pytest.mark.asyncio
+    async def test_delete_pattern(self):
+        """Test deleting keys matching a pattern."""
+        cache = TTLCache(default_ttl=60)
+        await cache.set("dashboard:user1", "data1")
+        await cache.set("dashboard:user2", "data2")
+        await cache.set("settings:global", "data3")
+
+        deleted = await cache.delete_pattern("dashboard:*")
+        assert deleted == 2
+        assert await cache.get("dashboard:user1") is None
+        assert await cache.get("dashboard:user2") is None
+        assert await cache.get("settings:global") == "data3"
+        await cache.clear()
+
+    @pytest.mark.asyncio
+    async def test_delete_pattern_no_match(self):
+        """Test delete_pattern returns 0 when no keys match."""
+        cache = TTLCache(default_ttl=60)
+        await cache.set("key1", "value1")
+        deleted = await cache.delete_pattern("nonexistent:*")
+        assert deleted == 0
+        await cache.clear()
+
+    @pytest.mark.asyncio
+    async def test_clear(self):
+        """Test clearing all entries."""
+        cache = TTLCache(default_ttl=60)
+        await cache.set("key1", "value1")
+        await cache.set("key2", "value2")
+        await cache.set("key3", "value3")
+
+        count = await cache.clear()
+        assert count == 3
+        assert await cache.get("key1") is None
+        assert await cache.get("key2") is None
+        assert await cache.get("key3") is None
+
+    @pytest.mark.asyncio
+    async def test_clear_empty(self):
+        """Test clearing an empty cache."""
+        cache = TTLCache(default_ttl=60)
+        count = await cache.clear()
+        assert count == 0
+
+    @pytest.mark.asyncio
+    async def test_stats(self):
+        """Test stats returns correct counts."""
+        cache = TTLCache(default_ttl=60)
+        await cache.clear()
+
+        await cache.set("key1", "value1")
+        await cache.set("key2", "value2")
+
+        # Generate a hit and a miss
+        await cache.get("key1")  # hit
+        await cache.get("nonexistent")  # miss
+
+        stats = await cache.stats()
+        assert stats["total_keys"] == 2
+        assert stats["active_keys"] == 2
+        assert stats["expired_keys"] == 0
+        assert stats["hits"] == 1
+        assert stats["misses"] == 1
+        assert stats["hit_rate_percent"] == 50.0
+        assert stats["memory_bytes"] > 0
+        await cache.clear()
+
+    @pytest.mark.asyncio
+    async def test_stats_with_expired(self):
+        """Test stats correctly counts expired entries."""
+        cache = TTLCache(default_ttl=60)
+        await cache.clear()
+
+        await cache.set("expired", "value", ttl=1)
+        await cache.set("active", "value", ttl=60)
+        await asyncio.sleep(1.1)
+
+        stats = await cache.stats()
+        assert stats["total_keys"] == 2
+        assert stats["expired_keys"] == 1
+        assert stats["active_keys"] == 1
+        await cache.clear()
+
+    @pytest.mark.asyncio
+    async def test_cleanup(self):
+        """Test cleanup removes expired entries."""
+        cache = TTLCache(default_ttl=60)
+        await cache.set("expired1", "value", ttl=1)
+        await cache.set("expired2", "value", ttl=1)
+        await cache.set("active", "value", ttl=60)
+        await asyncio.sleep(1.1)
+
+        removed = await cache.cleanup()
+        assert removed == 2
+        assert await cache.get("active") == "value"
+        await cache.clear()
+
+    @pytest.mark.asyncio
+    async def test_overwrite_value(self):
+        """Test that setting a key twice overwrites the value."""
+        cache = TTLCache(default_ttl=60)
+        await cache.set("key", "old")
+        await cache.set("key", "new")
+        assert await cache.get("key") == "new"
+        await cache.clear()
+
+    @pytest.mark.asyncio
+    async def test_complex_values(self):
+        """Test caching complex objects like lists and dicts."""
+        cache = TTLCache(default_ttl=60)
+        data = [{"id": 1, "name": "test"}, {"id": 2, "name": "test2"}]
+        await cache.set("complex", data)
+        result = await cache.get("complex")
+        assert result == data
+        await cache.clear()
+
+
+class TestCachedDecorator:
+    """Tests for the @cached decorator."""
+
+    @pytest.mark.asyncio
+    async def test_cached_decorator_caches_result(self):
+        """Test that the decorator caches function results."""
+        await app_cache.clear()
+
+        call_count = 0
+
+        @cached("test_decorator_basic", ttl=60)
+        async def expensive_func():
+            nonlocal call_count
+            call_count += 1
+            return [1, 2, 3]
+
+        result1 = await expensive_func()
+        result2 = await expensive_func()
+
+        assert result1 == [1, 2, 3]
+        assert result2 == [1, 2, 3]
+        assert call_count == 1  # Only called once
+        await app_cache.clear()
+
+    @pytest.mark.asyncio
+    async def test_cached_decorator_with_params(self):
+        """Test the decorator with parameterized key templates."""
+        await app_cache.clear()
+
+        call_count = 0
+
+        @cached("test_param:{entity_id}", ttl=60)
+        async def get_entity(entity_id: int):
+            nonlocal call_count
+            call_count += 1
+            return {"id": entity_id, "name": f"Entity {entity_id}"}
+
+        result1 = await get_entity(1)
+        result2 = await get_entity(1)
+        result3 = await get_entity(2)
+
+        assert result1 == {"id": 1, "name": "Entity 1"}
+        assert result2 == {"id": 1, "name": "Entity 1"}
+        assert result3 == {"id": 2, "name": "Entity 2"}
+        assert call_count == 2  # Called twice (once per unique entity_id)
+        await app_cache.clear()
+
+    @pytest.mark.asyncio
+    async def test_cached_decorator_respects_ttl(self):
+        """Test that the decorator respects TTL."""
+        await app_cache.clear()
+
+        call_count = 0
+
+        @cached("test_ttl_decorator", ttl=1)
+        async def short_lived():
+            nonlocal call_count
+            call_count += 1
+            return "data"
+
+        await short_lived()
+        assert call_count == 1
+
+        await asyncio.sleep(1.1)
+        await short_lived()
+        assert call_count == 2  # Re-fetched after TTL expired
+        await app_cache.clear()
+
+    @pytest.mark.asyncio
+    async def test_cached_decorator_none_not_cached(self):
+        """Test that None results are not cached."""
+        await app_cache.clear()
+
+        call_count = 0
+
+        @cached("test_none_cache", ttl=60)
+        async def returns_none():
+            nonlocal call_count
+            call_count += 1
+            return None
+
+        result1 = await returns_none()
+        result2 = await returns_none()
+
+        assert result1 is None
+        assert result2 is None
+        assert call_count == 2  # Called twice because None isn't cached
+        await app_cache.clear()
+
+
+class TestInvalidateOnChange:
+    """Tests for the invalidate_on_change helper."""
+
+    @pytest.mark.asyncio
+    async def test_invalidate_pipeline_stages(self):
+        """Test invalidating pipeline stages cache."""
+        await app_cache.set("pipeline_stages:all", "data")
+        deleted = await invalidate_on_change("pipeline_stages")
+        assert deleted >= 1
+        assert await app_cache.get("pipeline_stages:all") is None
+
+    @pytest.mark.asyncio
+    async def test_invalidate_lead_sources(self):
+        """Test invalidating lead sources cache."""
+        await app_cache.set("lead_sources:active", "data")
+        deleted = await invalidate_on_change("lead_sources")
+        assert deleted >= 1
+        assert await app_cache.get("lead_sources:active") is None
+
+    @pytest.mark.asyncio
+    async def test_invalidate_also_clears_dashboard(self):
+        """Test that non-dashboard entity changes also clear dashboard cache."""
+        await app_cache.set("dashboard:user1", "data")
+        await invalidate_on_change("pipeline_stages")
+        assert await app_cache.get("dashboard:user1") is None
+
+    @pytest.mark.asyncio
+    async def test_invalidate_unknown_entity(self):
+        """Test invalidating an unknown entity type doesn't fail."""
+        await app_cache.set("dashboard:test", "data")
+        deleted = await invalidate_on_change("unknown_entity")
+        # Should still clear dashboard caches
+        assert await app_cache.get("dashboard:test") is None
+        await app_cache.clear()
+
+
+# =========================================================================
+# Legacy API Tests (backward compatibility)
+# =========================================================================
+
+
+class TestLegacyCacheBasics:
+    """Tests for basic legacy cache operations."""
 
     def test_get_cache_creates_new(self):
         """Test that get_cache creates a new cache if it doesn't exist."""
@@ -38,7 +364,7 @@ class TestCacheBasics:
     def test_cache_set_and_get(self):
         """Test setting and getting values from cache."""
         cache_name = "test_set_get"
-        invalidate_cache(cache_name)  # Clear any existing
+        invalidate_cache(cache_name)
 
         cache_set(cache_name, "key1", "value1")
         result = cache_get(cache_name, "key1")
@@ -72,8 +398,8 @@ class TestCacheBasics:
         assert cache_get("cache2", "key") is None
 
 
-class TestCachedFetch:
-    """Tests for the cached_fetch helper."""
+class TestLegacyCachedFetch:
+    """Tests for the legacy cached_fetch helper."""
 
     @pytest.mark.asyncio
     async def test_cached_fetch_cache_miss(self):
@@ -105,13 +431,11 @@ class TestCachedFetch:
             call_count += 1
             return ["item1", "item2"]
 
-        # First call - cache miss
         result1 = await cached_fetch(cache_name, "key", fetch_func)
-        # Second call - cache hit
         result2 = await cached_fetch(cache_name, "key", fetch_func)
 
         assert result1 == result2
-        assert call_count == 1  # fetch_func called only once
+        assert call_count == 1
 
     @pytest.mark.asyncio
     async def test_cached_fetch_different_keys(self):
@@ -153,17 +477,145 @@ class TestConvenienceInvalidators:
         invalidate_pipeline_stages_cache()
         assert cache_get(CACHE_PIPELINE_STAGES, "test_key") is None
 
+    def test_invalidate_roles_cache(self):
+        """Test invalidating roles cache."""
+        cache_set(CACHE_ROLES, "test_key", "value")
+        invalidate_roles_cache()
+        assert cache_get(CACHE_ROLES, "test_key") is None
+
+    def test_invalidate_tenant_settings_cache(self):
+        """Test invalidating tenant settings cache."""
+        cache_set(CACHE_TENANT_SETTINGS, "test_key", "value")
+        invalidate_tenant_settings_cache()
+        assert cache_get(CACHE_TENANT_SETTINGS, "test_key") is None
+
+    def test_invalidate_dashboard_cache(self):
+        """Test invalidating dashboard cache."""
+        cache_set(CACHE_DASHBOARD, "test_key", "value")
+        invalidate_dashboard_cache()
+        assert cache_get(CACHE_DASHBOARD, "test_key") is None
+
+    def test_invalidate_admin_stats_cache(self):
+        """Test invalidating admin stats cache."""
+        cache_set(CACHE_ADMIN_STATS, "test_key", "value")
+        invalidate_admin_stats_cache()
+        assert cache_get(CACHE_ADMIN_STATS, "test_key") is None
+
 
 class TestCacheConstants:
     """Tests for cache name constants."""
 
     def test_cache_name_constants_are_unique(self):
         """Test that cache name constants are unique."""
-        names = [CACHE_TAGS, CACHE_LEAD_SOURCES, CACHE_PIPELINE_STAGES]
+        names = [
+            CACHE_TAGS,
+            CACHE_LEAD_SOURCES,
+            CACHE_PIPELINE_STAGES,
+            CACHE_ROLES,
+            CACHE_TENANT_SETTINGS,
+            CACHE_DASHBOARD,
+            CACHE_ADMIN_STATS,
+        ]
         assert len(names) == len(set(names))
 
     def test_cache_name_constants_are_strings(self):
         """Test that cache name constants are strings."""
-        assert isinstance(CACHE_TAGS, str)
-        assert isinstance(CACHE_LEAD_SOURCES, str)
-        assert isinstance(CACHE_PIPELINE_STAGES, str)
+        for name in [
+            CACHE_TAGS,
+            CACHE_LEAD_SOURCES,
+            CACHE_PIPELINE_STAGES,
+            CACHE_ROLES,
+            CACHE_TENANT_SETTINGS,
+            CACHE_DASHBOARD,
+            CACHE_ADMIN_STATS,
+        ]:
+            assert isinstance(name, str)
+
+
+# =========================================================================
+# Admin Cache Endpoint Tests
+# =========================================================================
+
+
+class TestAdminCacheEndpoints:
+    """Tests for the admin cache management API endpoints."""
+
+    @pytest.mark.asyncio
+    async def test_get_cache_stats(self, client, admin_auth_headers):
+        """Test GET /api/admin/cache/stats returns cache statistics."""
+        # Populate some cache data
+        await app_cache.set("test_key_1", "value1")
+        await app_cache.set("test_key_2", "value2")
+
+        response = await client.get(
+            "/api/admin/cache/stats",
+            headers=admin_auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "total_keys" in data
+        assert "active_keys" in data
+        assert "memory_bytes" in data
+        assert "hit_rate_percent" in data
+        assert "hits" in data
+        assert "misses" in data
+        await app_cache.clear()
+
+    @pytest.mark.asyncio
+    async def test_get_cache_stats_requires_admin(self, client, auth_headers):
+        """Test that cache stats endpoint requires admin access."""
+        response = await client.get(
+            "/api/admin/cache/stats",
+            headers=auth_headers,
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_clear_all_cache(self, client, admin_auth_headers):
+        """Test POST /api/admin/cache/clear clears all cache entries."""
+        await app_cache.set("key1", "value1")
+        await app_cache.set("key2", "value2")
+
+        response = await client.post(
+            "/api/admin/cache/clear",
+            headers=admin_auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["cleared_count"] >= 2
+        assert "message" in data
+
+        # Verify cache is empty
+        assert await app_cache.get("key1") is None
+        assert await app_cache.get("key2") is None
+
+    @pytest.mark.asyncio
+    async def test_clear_cache_pattern(self, client, admin_auth_headers):
+        """Test DELETE /api/admin/cache/{pattern} clears matching entries."""
+        await app_cache.set("dashboard:user1", "data1")
+        await app_cache.set("dashboard:user2", "data2")
+        await app_cache.set("settings:global", "data3")
+
+        response = await client.delete(
+            "/api/admin/cache/dashboard*",
+            headers=admin_auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["cleared_count"] == 2
+
+        # dashboard entries should be gone
+        assert await app_cache.get("dashboard:user1") is None
+        assert await app_cache.get("dashboard:user2") is None
+        # settings should remain
+        assert await app_cache.get("settings:global") == "data3"
+        await app_cache.clear()
+
+    @pytest.mark.asyncio
+    async def test_clear_cache_requires_admin(self, client, auth_headers):
+        """Test that cache clear endpoint requires admin access."""
+        response = await client.post(
+            "/api/admin/cache/clear",
+            headers=auth_headers,
+        )
+        assert response.status_code == 403

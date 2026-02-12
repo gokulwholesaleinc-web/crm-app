@@ -9,6 +9,7 @@ import { leadsApi } from '../api/leads';
 import { contactKeys } from './useContacts';
 import { companyKeys } from './useCompanies';
 import { opportunityKeys } from './useOpportunities';
+import { CACHE_TIMES } from '../config/queryConfig';
 import type {
   Lead,
   LeadCreate,
@@ -154,7 +155,7 @@ export function useLeadSources(activeOnly = true) {
   return useQuery({
     queryKey: leadSourceKeys.list(activeOnly),
     queryFn: () => leadsApi.listSources(activeOnly),
-    staleTime: 10 * 60 * 1000, // 10 minutes - sources don't change often
+    ...CACHE_TIMES.REFERENCE,
   });
 }
 

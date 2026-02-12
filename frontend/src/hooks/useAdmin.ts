@@ -5,6 +5,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '../api/admin';
 import { useAuthStore } from '../store/authStore';
+import { CACHE_TIMES } from '../config/queryConfig';
 import type { AdminUserUpdate, AssignRoleRequest } from '../types';
 
 export const adminKeys = {
@@ -13,6 +14,7 @@ export const adminKeys = {
   stats: () => [...adminKeys.all, 'stats'] as const,
   teamOverview: () => [...adminKeys.all, 'team-overview'] as const,
   activityFeed: (limit?: number) => [...adminKeys.all, 'activity-feed', { limit }] as const,
+  cacheStats: () => [...adminKeys.all, 'cache-stats'] as const,
 };
 
 export function useAdminUsers() {
@@ -20,7 +22,7 @@ export function useAdminUsers() {
   return useQuery({
     queryKey: adminKeys.users(),
     queryFn: () => adminApi.getAdminUsers(),
-    staleTime: 60 * 1000,
+    ...CACHE_TIMES.DASHBOARD,
     enabled: isAuthenticated && !authLoading,
   });
 }
@@ -30,7 +32,7 @@ export function useSystemStats() {
   return useQuery({
     queryKey: adminKeys.stats(),
     queryFn: () => adminApi.getSystemStats(),
-    staleTime: 60 * 1000,
+    ...CACHE_TIMES.DASHBOARD,
     enabled: isAuthenticated && !authLoading,
   });
 }
@@ -40,7 +42,7 @@ export function useTeamOverview() {
   return useQuery({
     queryKey: adminKeys.teamOverview(),
     queryFn: () => adminApi.getTeamOverview(),
-    staleTime: 60 * 1000,
+    ...CACHE_TIMES.DASHBOARD,
     enabled: isAuthenticated && !authLoading,
   });
 }
@@ -50,7 +52,7 @@ export function useActivityFeed(limit = 50) {
   return useQuery({
     queryKey: adminKeys.activityFeed(limit),
     queryFn: () => adminApi.getActivityFeed(limit),
-    staleTime: 30 * 1000,
+    ...CACHE_TIMES.DASHBOARD,
     enabled: isAuthenticated && !authLoading,
   });
 }
@@ -87,6 +89,37 @@ export function useAssignUserRole() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: adminKeys.users() });
       queryClient.invalidateQueries({ queryKey: adminKeys.teamOverview() });
+    },
+  });
+}
+
+export function useCacheStats() {
+  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+  return useQuery({
+    queryKey: adminKeys.cacheStats(),
+    queryFn: () => adminApi.getCacheStats(),
+    staleTime: 10 * 1000,
+    refetchInterval: 30 * 1000,
+    enabled: isAuthenticated && !authLoading,
+  });
+}
+
+export function useClearAllCache() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => adminApi.clearAllCache(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: adminKeys.cacheStats() });
+    },
+  });
+}
+
+export function useClearCachePattern() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (pattern: string) => adminApi.clearCachePattern(pattern),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: adminKeys.cacheStats() });
     },
   });
 }

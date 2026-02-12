@@ -2,6 +2,7 @@
 
 from typing import List
 from fastapi import APIRouter
+from fastapi.responses import Response
 from src.core.router_utils import DBSession, CurrentUser
 from src.dashboard.schemas import (
     NumberCardData,
@@ -22,6 +23,7 @@ router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 async def get_dashboard(
     current_user: CurrentUser,
     db: DBSession,
+    response: Response,
 ):
     """Get full dashboard data including KPIs and charts."""
     # Get KPIs
@@ -50,6 +52,7 @@ async def get_dashboard(
         for c in charts_data
     ]
 
+    response.headers["Cache-Control"] = "private, max-age=60"
     return DashboardResponse(
         number_cards=number_cards,
         charts=charts,

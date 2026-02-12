@@ -3,6 +3,7 @@
 import logging
 from typing import Annotated, Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from src.core.constants import HTTPStatus, EntityNames, ENTITY_TYPE_OPPORTUNITIES
 from src.core.router_utils import (
     DBSession,
@@ -62,6 +63,7 @@ async def _build_opportunity_response(
 async def list_stages(
     current_user: CurrentUser,
     db: DBSession,
+    response: Response,
     active_only: bool = True,
 ):
     """List all pipeline stages (cached for 5 minutes)."""
@@ -77,6 +79,7 @@ async def list_stages(
         f"stages:{active_only}",
         fetch_stages,
     )
+    response.headers["Cache-Control"] = "public, max-age=300"
     return cached_stages
 
 

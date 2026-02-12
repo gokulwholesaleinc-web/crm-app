@@ -3,6 +3,7 @@
 import logging
 from typing import Annotated, Optional, List
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import Response
 from src.auth.models import User
 from src.core.constants import HTTPStatus, EntityNames, ErrorMessages, ENTITY_TYPE_LEADS
 from src.core.permissions import require_permission
@@ -287,6 +288,7 @@ async def full_conversion(
 async def list_sources(
     current_user: CurrentUser,
     db: DBSession,
+    response: Response,
     active_only: bool = True,
 ):
     """List all lead sources (cached for 5 minutes)."""
@@ -302,6 +304,7 @@ async def list_sources(
         f"sources:{active_only}",
         fetch_sources,
     )
+    response.headers["Cache-Control"] = "public, max-age=300"
     return cached_sources
 
 

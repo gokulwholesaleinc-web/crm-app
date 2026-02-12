@@ -69,3 +69,20 @@ class ActivityFeedEntry(BaseModel):
     changes: Optional[dict] = None
 
     model_config = {"from_attributes": True}
+
+
+class CacheStatsResponse(BaseModel):
+    """Cache statistics."""
+    total_keys: int = 0
+    active_keys: int = 0
+    expired_keys: int = 0
+    memory_bytes: int = 0
+    hits: int = 0
+    misses: int = 0
+    hit_rate_percent: float = 0.0
+
+
+class CacheClearResponse(BaseModel):
+    """Response for cache clear operations."""
+    cleared_count: int = 0
+    message: str = ""

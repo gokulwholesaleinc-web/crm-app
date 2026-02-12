@@ -9,6 +9,7 @@ import {
 } from '../../hooks/useAdmin';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import UserManagement from './UserManagement';
+import CacheManagement from './CacheManagement';
 import type { TeamMemberOverview } from '../../types';
 import type { Column } from '../../components/ui/Table';
 import {
@@ -176,6 +177,9 @@ export default function AdminDashboard() {
           <StatCard key={card.label} {...card} />
         ))}
       </div>
+
+      {/* Cache Management */}
+      <CacheManagement />
 
       {/* User Management */}
       <UserManagement />

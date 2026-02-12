@@ -14,6 +14,7 @@ from src.roles.schemas import (
     UserRoleResponse,
 )
 from src.roles.service import RoleService
+from src.core.cache import cached_fetch, CACHE_ROLES, invalidate_roles_cache
 
 router = APIRouter(prefix="/api/roles", tags=["roles"])
 
@@ -31,9 +32,14 @@ async def list_roles(
     current_user: CurrentUser,
     db: DBSession,
 ):
-    """List all roles."""
+    """List all roles (cached for 10 minutes)."""
     service = RoleService(db)
-    return await service.get_all_roles()
+
+    async def fetch_roles():
+        roles = await service.get_all_roles()
+        return [RoleResponse.model_validate(r).model_dump() for r in roles]
+
+    return await cached_fetch(CACHE_ROLES, "all_roles", fetch_roles)
 
 
 @router.post("", response_model=RoleResponse, status_code=HTTPStatus.CREATED)
@@ -52,7 +58,9 @@ async def create_role(
             status_code=HTTPStatus.CONFLICT,
             detail=f"Role '{role_data.name}' already exists",
         )
-    return await service.create_role(role_data)
+    role = await service.create_role(role_data)
+    invalidate_roles_cache()
+    return role
 
 
 @router.get("/{role_id}", response_model=RoleResponse)
@@ -83,7 +91,9 @@ async def update_role(
     role = await service.get_role_by_id(role_id)
     if not role:
         raise_not_found("Role", role_id)
-    return await service.update_role(role, role_data)
+    updated = await service.update_role(role, role_data)
+    invalidate_roles_cache()
+    return updated
 
 
 @router.delete("/{role_id}", status_code=HTTPStatus.NO_CONTENT)
@@ -109,6 +119,7 @@ async def delete_role(
         )
 
     await service.delete_role(role)
+    invalidate_roles_cache()
 
 
 @router.post("/assign", response_model=UserRoleResponse)

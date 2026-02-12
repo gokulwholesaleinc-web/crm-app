@@ -2,6 +2,7 @@
 
 from typing import Annotated, List, Any
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import Response
 from src.core.constants import (
     HTTPStatus,
     EntityNames,
@@ -190,6 +191,7 @@ async def get_tenant_settings(
     tenant_id: int,
     current_user: CurrentUser,
     db: DBSession,
+    response: Response,
 ):
     """Get tenant settings."""
     service = TenantSettingsService(db)
@@ -198,6 +200,7 @@ async def get_tenant_settings(
     if not settings:
         raise_not_found(EntityNames.TENANT_SETTINGS)
 
+    response.headers["Cache-Control"] = "private, max-age=300"
     return settings
 
 

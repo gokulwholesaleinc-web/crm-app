@@ -70,6 +70,40 @@ export const assignUserRole = async (
   return response.data;
 };
 
+export interface CacheStats {
+  total_keys: number;
+  active_keys: number;
+  expired_keys: number;
+  memory_bytes: number;
+  hits: number;
+  misses: number;
+  hit_rate_percent: number;
+}
+
+export interface CacheClearResult {
+  cleared_count: number;
+  message: string;
+}
+
+export const getCacheStats = async (): Promise<CacheStats> => {
+  const response = await apiClient.get<CacheStats>(`${ADMIN_BASE}/cache/stats`);
+  return response.data;
+};
+
+export const clearAllCache = async (): Promise<CacheClearResult> => {
+  const response = await apiClient.post<CacheClearResult>(`${ADMIN_BASE}/cache/clear`);
+  return response.data;
+};
+
+export const clearCachePattern = async (
+  pattern: string
+): Promise<CacheClearResult> => {
+  const response = await apiClient.delete<CacheClearResult>(
+    `${ADMIN_BASE}/cache/${encodeURIComponent(pattern)}`
+  );
+  return response.data;
+};
+
 export const adminApi = {
   getAdminUsers,
   updateAdminUser,
@@ -78,6 +112,9 @@ export const adminApi = {
   getTeamOverview,
   getActivityFeed,
   assignUserRole,
+  getCacheStats,
+  clearAllCache,
+  clearCachePattern,
 };
 
 export default adminApi;

@@ -9,6 +9,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../store/authStore';
 import type { RoleName } from '../store/authStore';
 import { rolesApi } from '../api/roles';
+import { CACHE_TIMES } from '../config/queryConfig';
 import type { UserRoleAssign } from '../types';
 
 // =============================================================================
@@ -32,7 +33,7 @@ export function useRoles() {
   return useQuery({
     queryKey: roleKeys.list(),
     queryFn: () => rolesApi.listRoles(),
-    staleTime: 10 * 60 * 1000, // 10 minutes
+    ...CACHE_TIMES.REFERENCE,
   });
 }
 
@@ -43,7 +44,7 @@ export function useMyPermissions() {
   return useQuery({
     queryKey: roleKeys.myPermissions(),
     queryFn: () => rolesApi.getMyPermissions(),
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    ...CACHE_TIMES.REFERENCE,
   });
 }
 

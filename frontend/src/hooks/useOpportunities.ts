@@ -6,6 +6,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { createEntityHooks, createQueryKeys } from './useEntityCRUD';
 import { opportunitiesApi } from '../api/opportunities';
+import { CACHE_TIMES } from '../config/queryConfig';
 import type {
   Opportunity,
   OpportunityCreate,
@@ -121,7 +122,7 @@ export function usePipelineStages(activeOnly = true) {
   return useQuery({
     queryKey: pipelineKeys.stages(activeOnly),
     queryFn: () => opportunitiesApi.listStages(activeOnly),
-    staleTime: 10 * 60 * 1000, // 10 minutes
+    ...CACHE_TIMES.REFERENCE,
   });
 }
 

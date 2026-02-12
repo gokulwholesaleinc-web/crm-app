@@ -5,6 +5,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { dashboardApi } from '../api/dashboard';
 import { useAuthStore } from '../store/authStore';
+import { CACHE_TIMES } from '../config/queryConfig';
 import type { ChartData } from '../types';
 
 // Query keys
@@ -25,7 +26,7 @@ export function useDashboard() {
   return useQuery({
     queryKey: dashboardKeys.full(),
     queryFn: () => dashboardApi.getDashboard(),
-    staleTime: 60 * 1000, // 1 minute - dashboard data should refresh periodically
+    ...CACHE_TIMES.DASHBOARD,
     enabled: isAuthenticated && !authLoading,
   });
 }
@@ -38,7 +39,7 @@ export function useKPIs() {
   return useQuery({
     queryKey: dashboardKeys.kpis(),
     queryFn: () => dashboardApi.getKpis(),
-    staleTime: 60 * 1000,
+    ...CACHE_TIMES.DASHBOARD,
     enabled: isAuthenticated && !authLoading,
   });
 }
@@ -51,6 +52,7 @@ export function usePipelineFunnelChart() {
   return useQuery({
     queryKey: dashboardKeys.chart('pipeline-funnel'),
     queryFn: () => dashboardApi.getPipelineFunnelChart(),
+    ...CACHE_TIMES.DASHBOARD,
     enabled: isAuthenticated && !authLoading,
   });
 }
@@ -63,6 +65,7 @@ export function useLeadsByStatusChart() {
   return useQuery({
     queryKey: dashboardKeys.chart('leads-by-status'),
     queryFn: () => dashboardApi.getLeadsByStatusChart(),
+    ...CACHE_TIMES.DASHBOARD,
     enabled: isAuthenticated && !authLoading,
   });
 }
@@ -75,6 +78,7 @@ export function useLeadsBySourceChart() {
   return useQuery({
     queryKey: dashboardKeys.chart('leads-by-source'),
     queryFn: () => dashboardApi.getLeadsBySourceChart(),
+    ...CACHE_TIMES.DASHBOARD,
     enabled: isAuthenticated && !authLoading,
   });
 }
@@ -87,6 +91,7 @@ export function useRevenueTrendChart(months = 6) {
   return useQuery({
     queryKey: dashboardKeys.chart('revenue-trend', { months }),
     queryFn: () => dashboardApi.getRevenueTrendChart(months),
+    ...CACHE_TIMES.DASHBOARD,
     enabled: isAuthenticated && !authLoading,
   });
 }
@@ -99,6 +104,7 @@ export function useActivitiesChart(days = 30) {
   return useQuery({
     queryKey: dashboardKeys.chart('activities', { days }),
     queryFn: () => dashboardApi.getActivitiesChart(days),
+    ...CACHE_TIMES.DASHBOARD,
     enabled: isAuthenticated && !authLoading,
   });
 }
@@ -111,6 +117,7 @@ export function useNewLeadsTrendChart(weeks = 8) {
   return useQuery({
     queryKey: dashboardKeys.chart('new-leads-trend', { weeks }),
     queryFn: () => dashboardApi.getNewLeadsTrendChart(weeks),
+    ...CACHE_TIMES.DASHBOARD,
     enabled: isAuthenticated && !authLoading,
   });
 }
@@ -123,6 +130,7 @@ export function useConversionRatesChart() {
   return useQuery({
     queryKey: dashboardKeys.chart('conversion-rates'),
     queryFn: () => dashboardApi.getConversionRatesChart(),
+    ...CACHE_TIMES.DASHBOARD,
     enabled: isAuthenticated && !authLoading,
   });
 }
@@ -135,6 +143,7 @@ export function useSalesFunnel() {
   return useQuery({
     queryKey: dashboardKeys.chart('sales-funnel'),
     queryFn: () => dashboardApi.getSalesFunnel(),
+    ...CACHE_TIMES.DASHBOARD,
     enabled: isAuthenticated && !authLoading,
   });
 }
@@ -147,7 +156,7 @@ export function useSalesKpis() {
   return useQuery({
     queryKey: dashboardKeys.chart('sales-kpis'),
     queryFn: () => dashboardApi.getSalesKpis(),
-    staleTime: 60 * 1000,
+    ...CACHE_TIMES.DASHBOARD,
     enabled: isAuthenticated && !authLoading,
   });
 }
