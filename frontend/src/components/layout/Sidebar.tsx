@@ -385,31 +385,6 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
 
       {/* Main Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto" aria-label="Main navigation">
-        {/* Edit mode toggle */}
-        {!collapsed && (
-          <div className="flex items-center justify-end mb-2">
-            <button
-              type="button"
-              onClick={() => setEditMode(prev => !prev)}
-              className={clsx(
-                'p-1.5 rounded-md transition-colors duration-150',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
-                editMode
-                  ? 'text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20'
-                  : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-              )}
-              aria-label={editMode ? 'Finish customizing menu' : 'Customize menu order'}
-              title={editMode ? 'Done editing' : 'Customize order'}
-            >
-              {editMode ? (
-                <CheckIcon className="h-4 w-4" aria-hidden="true" />
-              ) : (
-                <PencilSquareIcon className="h-4 w-4" aria-hidden="true" />
-              )}
-            </button>
-          </div>
-        )}
-
         {editMode ? (
           <>
             <DndContext
@@ -505,10 +480,34 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
 
       {/* Sidebar Footer */}
       {!collapsed && (
-        <div className="px-4 py-4 border-t border-gray-200 dark:border-gray-700">
-          <div className="text-xs text-gray-500 dark:text-gray-400">
-            <p>{tenant?.footer_text || 'CRM Application v1.0'}</p>
-          </div>
+        <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700 space-y-2">
+          <button
+            type="button"
+            onClick={() => setEditMode(prev => !prev)}
+            className={clsx(
+              'flex items-center gap-1.5 w-full text-xs rounded-md px-2 py-1.5 transition-colors duration-150',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
+              editMode
+                ? 'text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 font-medium'
+                : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+            )}
+            aria-label={editMode ? 'Finish customizing menu' : 'Customize menu order'}
+          >
+            {editMode ? (
+              <>
+                <CheckIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                Done Editing
+              </>
+            ) : (
+              <>
+                <PencilSquareIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                Customize Menu
+              </>
+            )}
+          </button>
+          <p className="text-xs text-gray-400 dark:text-gray-500">
+            {tenant?.footer_text || 'CRM Application v1.0'}
+          </p>
         </div>
       )}
     </aside>
@@ -668,7 +667,7 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
           <button
             type="button"
             onClick={onClose}
-            className="p-2 -mr-2 rounded-lg text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
+            className="p-2 -mr-2 rounded-lg text-gray-400 hover:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 dark:hover:text-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 touch-manipulation"
             aria-label="Close sidebar"
           >
             <XMarkIcon className="h-6 w-6" aria-hidden="true" />

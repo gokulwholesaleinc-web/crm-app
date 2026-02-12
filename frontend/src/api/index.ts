@@ -245,6 +245,9 @@ export { paymentsApi } from './payments';
 
 // Proposals API
 export { proposalsApi } from './proposals';
+
+// Admin API
+export { adminApi } from './admin';
 export {
   listProposals,
   getProposal,
@@ -289,6 +292,7 @@ import { sharingApi as _sharingApi } from './sharing';
 import { quotesApi as _quotesApi } from './quotes';
 import { paymentsApi as _paymentsApi } from './payments';
 import { proposalsApi as _proposalsApi } from './proposals';
+import { adminApi as _adminApi } from './admin';
 
 export const api = {
   auth: _authApi,
@@ -320,6 +324,7 @@ export const api = {
   quotes: _quotesApi,
   payments: _paymentsApi,
   proposals: _proposalsApi,
+  admin: _adminApi,
 };
 
 export default api;

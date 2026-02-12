@@ -312,3 +312,15 @@ export { sharingKeys, useEntityShares, useShareEntity, useRevokeShare } from './
 
 // Auth-aware query helpers
 export { useAuthQuery, useAuthEnabled } from './useAuthQuery';
+
+// Admin hooks
+export {
+  adminKeys,
+  useAdminUsers,
+  useSystemStats,
+  useTeamOverview,
+  useActivityFeed,
+  useUpdateAdminUser,
+  useDeactivateUser,
+  useAssignUserRole,
+} from './useAdmin';
