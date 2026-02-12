@@ -77,7 +77,7 @@ export function Modal({
             >
               <Dialog.Panel
                 className={clsx(
-                  'w-full transform bg-white dark:bg-gray-800 p-4 sm:p-6 text-left align-middle shadow-xl transition-all',
+                  'w-full transform bg-white dark:bg-gray-800 p-4 sm:p-6 text-left align-middle shadow-xl transition-[opacity,transform]',
                   'overflow-y-auto', // Proper scroll behavior
                   sizeStyles[size],
                   fullScreenOnMobile ? mobileFullScreenStyles : 'rounded-2xl'
@@ -103,7 +103,7 @@ export function Modal({
                     {showCloseButton && (
                       <button
                         type="button"
-                        className="rounded-lg p-2 sm:p-1 text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 -mr-1 sm:mr-0 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center dark:hover:bg-gray-700 dark:hover:text-gray-300"
+                        className="rounded-lg p-2 sm:p-1 text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 -mr-1 sm:mr-0 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center dark:hover:bg-gray-700 dark:hover:text-gray-300"
                         onClick={onClose}
                       >
                         <span className="sr-only">Close</span>
