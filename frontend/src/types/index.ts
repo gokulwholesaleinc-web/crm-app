@@ -1034,6 +1034,49 @@ export interface AIUserPreferencesUpdate {
   custom_instructions?: string | null;
 }
 
+export interface AILearning {
+  id: number;
+  user_id: number;
+  category: string;
+  key: string;
+  value: string;
+  confidence: number;
+  times_reinforced: number;
+  last_used_at: string | null;
+  created_at: string;
+}
+
+export interface AILearningListResponse {
+  learnings: AILearning[];
+}
+
+export interface TeachAIRequest {
+  category: string;
+  key: string;
+  value: string;
+}
+
+export interface SmartSuggestion {
+  type: string;
+  priority: string;
+  title: string;
+  description: string;
+  action: string;
+  entity_type?: string | null;
+  entity_id?: number | null;
+}
+
+export interface SmartSuggestionsResponse {
+  suggestions: SmartSuggestion[];
+}
+
+export interface EntityInsightsResponse {
+  entity_type: string;
+  entity_id: number;
+  insights: Array<{ label: string; value: number }>;
+  suggestions: string[];
+}
+
 // =============================================================================
 // Tag Types
 // =============================================================================

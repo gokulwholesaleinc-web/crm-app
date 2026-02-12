@@ -17,6 +17,11 @@ import type {
   FeedbackResponse,
   AIUserPreferences,
   AIUserPreferencesUpdate,
+  AILearningListResponse,
+  AILearning,
+  TeachAIRequest,
+  SmartSuggestionsResponse,
+  EntityInsightsResponse,
 } from '../types';
 
 const AI_BASE = '/api/ai';
@@ -237,6 +242,46 @@ export const getActivitySummary = async (
   return response.data;
 };
 
+// =============================================================================
+// AI Learning
+// =============================================================================
+
+export const getLearnings = async (
+  category?: string
+): Promise<AILearningListResponse> => {
+  const response = await apiClient.get<AILearningListResponse>(
+    `${AI_BASE}/learnings`,
+    { params: category ? { category } : {} }
+  );
+  return response.data;
+};
+
+export const deleteLearning = async (learningId: number): Promise<void> => {
+  await apiClient.delete(`${AI_BASE}/learnings/${learningId}`);
+};
+
+export const teachAI = async (request: TeachAIRequest): Promise<AILearning> => {
+  const response = await apiClient.post<AILearning>(`${AI_BASE}/teach`, request);
+  return response.data;
+};
+
+export const getSmartSuggestions = async (): Promise<SmartSuggestionsResponse> => {
+  const response = await apiClient.get<SmartSuggestionsResponse>(
+    `${AI_BASE}/smart-suggestions`
+  );
+  return response.data;
+};
+
+export const getEntityInsights = async (
+  entityType: string,
+  entityId: number
+): Promise<EntityInsightsResponse> => {
+  const response = await apiClient.get<EntityInsightsResponse>(
+    `${AI_BASE}/entity-insights/${entityType}/${entityId}`
+  );
+  return response.data;
+};
+
 // Export all AI functions
 export const aiApi = {
   chat,
@@ -261,6 +306,12 @@ export const aiApi = {
   predictWinProbability,
   suggestNextAction,
   getActivitySummary,
+  // Learning
+  getLearnings,
+  deleteLearning,
+  teachAI,
+  getSmartSuggestions,
+  getEntityInsights,
 };
 
 export default aiApi;

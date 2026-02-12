@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import String, Integer, ForeignKey, Text, DateTime, Boolean, func, JSON
+from sqlalchemy import String, Integer, Float, ForeignKey, Text, DateTime, Boolean, func, JSON
 from sqlalchemy.orm import Mapped, mapped_column
 from pgvector.sqlalchemy import Vector
 from src.database import Base
@@ -121,6 +121,53 @@ class AIKnowledgeDocument(Base):
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
+    )
+
+
+class AILearning(Base):
+    """Stores learned preferences and patterns per user."""
+    __tablename__ = "ai_learnings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    category: Mapped[str] = mapped_column(String(50), nullable=False)
+    key: Mapped[str] = mapped_column(String(200), nullable=False)
+    value: Mapped[str] = mapped_column(Text, nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, default=1.0)
+    times_reinforced: Mapped[int] = mapped_column(Integer, default=1)
+    last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class AIInteractionLog(Base):
+    """Logs AI interactions for pattern analysis."""
+    __tablename__ = "ai_interaction_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    query: Mapped[str] = mapped_column(Text, nullable=False)
+    tool_calls: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    response_quality: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    correction_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
     )
 
 

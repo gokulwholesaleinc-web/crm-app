@@ -28,6 +28,15 @@ ACTION_CLASSIFICATION: Dict[str, ActionRisk] = {
     # High-risk write operations
     "update_lead_status": ActionRisk.WRITE_HIGH,
     "update_opportunity_stage": ActionRisk.WRITE_HIGH,
+    # New learning/expanded tools
+    "search_quotes": ActionRisk.READ,
+    "get_quote_details": ActionRisk.READ,
+    "search_proposals": ActionRisk.READ,
+    "get_payment_summary": ActionRisk.READ,
+    "list_recent_payments": ActionRisk.READ,
+    "get_campaign_stats": ActionRisk.READ,
+    "get_deal_coaching": ActionRisk.READ,
+    "remember_preference": ActionRisk.WRITE_LOW,
 }
 
 

@@ -562,3 +562,373 @@ class TestAILearningUnauthorized:
             json={"preferred_communication_style": "casual"},
         )
         assert response.status_code == 401
+
+
+# =========================================================================
+# AI Learning Memory Tests
+# =========================================================================
+
+
+class TestTeachAI:
+    """Tests for the teach AI endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_teach_preference(
+        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+    ):
+        """Test teaching the AI a new preference."""
+        response = await client.post(
+            "/api/ai/teach",
+            headers=auth_headers,
+            json={
+                "category": "preference",
+                "key": "report_format",
+                "value": "Always show numbers in tables",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["category"] == "preference"
+        assert data["key"] == "report_format"
+        assert data["value"] == "Always show numbers in tables"
+        assert data["confidence"] == 1.0
+        assert data["times_reinforced"] == 1
+        assert "id" in data
+        assert "created_at" in data
+
+    @pytest.mark.asyncio
+    async def test_teach_reinforces_existing(
+        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+    ):
+        """Test that teaching the same key reinforces it."""
+        # Teach first time
+        r1 = await client.post(
+            "/api/ai/teach",
+            headers=auth_headers,
+            json={
+                "category": "preference",
+                "key": "timezone",
+                "value": "PST",
+            },
+        )
+        assert r1.status_code == 200
+        first_id = r1.json()["id"]
+
+        # Teach same key again with updated value
+        r2 = await client.post(
+            "/api/ai/teach",
+            headers=auth_headers,
+            json={
+                "category": "preference",
+                "key": "timezone",
+                "value": "EST",
+            },
+        )
+        assert r2.status_code == 200
+        data = r2.json()
+        assert data["id"] == first_id
+        assert data["value"] == "EST"
+        assert data["times_reinforced"] == 2
+
+    @pytest.mark.asyncio
+    async def test_teach_entity_context(
+        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+    ):
+        """Test teaching entity context."""
+        response = await client.post(
+            "/api/ai/teach",
+            headers=auth_headers,
+            json={
+                "category": "entity_context",
+                "key": "Acme Corp",
+                "value": "Our largest client, contact through VP of Sales",
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["category"] == "entity_context"
+
+    @pytest.mark.asyncio
+    async def test_teach_missing_fields(
+        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+    ):
+        """Test that missing required fields returns 422."""
+        response = await client.post(
+            "/api/ai/teach",
+            headers=auth_headers,
+            json={"category": "preference"},
+        )
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_teach_unauthorized(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        """Test teach without auth fails."""
+        response = await client.post(
+            "/api/ai/teach",
+            json={"category": "preference", "key": "test", "value": "test"},
+        )
+        assert response.status_code == 401
+
+
+class TestGetLearnings:
+    """Tests for listing AI learnings."""
+
+    @pytest.mark.asyncio
+    async def test_get_learnings_empty(
+        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+    ):
+        """Test getting learnings when none exist."""
+        response = await client.get(
+            "/api/ai/learnings",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "learnings" in data
+        assert isinstance(data["learnings"], list)
+
+    @pytest.mark.asyncio
+    async def test_get_learnings_after_teach(
+        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+    ):
+        """Test getting learnings after teaching."""
+        # Teach something first
+        await client.post(
+            "/api/ai/teach",
+            headers=auth_headers,
+            json={
+                "category": "preference",
+                "key": "favorite_metric",
+                "value": "Pipeline value",
+            },
+        )
+
+        response = await client.get(
+            "/api/ai/learnings",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["learnings"]) >= 1
+        learning = data["learnings"][0]
+        assert "id" in learning
+        assert "category" in learning
+        assert "key" in learning
+        assert "value" in learning
+        assert "confidence" in learning
+
+    @pytest.mark.asyncio
+    async def test_get_learnings_filtered_by_category(
+        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+    ):
+        """Test filtering learnings by category."""
+        # Teach two categories
+        await client.post(
+            "/api/ai/teach",
+            headers=auth_headers,
+            json={"category": "preference", "key": "style", "value": "brief"},
+        )
+        await client.post(
+            "/api/ai/teach",
+            headers=auth_headers,
+            json={"category": "entity_context", "key": "BigCorp", "value": "Important client"},
+        )
+
+        # Filter by preference
+        response = await client.get(
+            "/api/ai/learnings",
+            headers=auth_headers,
+            params={"category": "preference"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        for learning in data["learnings"]:
+            assert learning["category"] == "preference"
+
+    @pytest.mark.asyncio
+    async def test_get_learnings_unauthorized(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        """Test learnings without auth fails."""
+        response = await client.get("/api/ai/learnings")
+        assert response.status_code == 401
+
+
+class TestDeleteLearning:
+    """Tests for deleting AI learnings."""
+
+    @pytest.mark.asyncio
+    async def test_delete_learning(
+        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+    ):
+        """Test deleting a learning."""
+        # Create one
+        teach_resp = await client.post(
+            "/api/ai/teach",
+            headers=auth_headers,
+            json={"category": "preference", "key": "to_delete", "value": "will be deleted"},
+        )
+        learning_id = teach_resp.json()["id"]
+
+        # Delete it
+        delete_resp = await client.delete(
+            f"/api/ai/learnings/{learning_id}",
+            headers=auth_headers,
+        )
+        assert delete_resp.status_code == 204
+
+        # Verify it's gone
+        list_resp = await client.get(
+            "/api/ai/learnings",
+            headers=auth_headers,
+        )
+        data = list_resp.json()
+        assert all(l["id"] != learning_id for l in data["learnings"])
+
+    @pytest.mark.asyncio
+    async def test_delete_nonexistent_learning(
+        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+    ):
+        """Test deleting a non-existent learning returns 404."""
+        response = await client.delete(
+            "/api/ai/learnings/99999",
+            headers=auth_headers,
+        )
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_delete_learning_unauthorized(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        """Test delete learning without auth fails."""
+        response = await client.delete("/api/ai/learnings/1")
+        assert response.status_code == 401
+
+
+class TestSmartSuggestions:
+    """Tests for smart suggestions endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_get_smart_suggestions(
+        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+    ):
+        """Test getting smart suggestions."""
+        response = await client.get(
+            "/api/ai/smart-suggestions",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "suggestions" in data
+        assert isinstance(data["suggestions"], list)
+
+    @pytest.mark.asyncio
+    async def test_smart_suggestions_unauthorized(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        """Test smart suggestions without auth fails."""
+        response = await client.get("/api/ai/smart-suggestions")
+        assert response.status_code == 401
+
+
+class TestEntityInsights:
+    """Tests for entity insights endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_get_entity_insights(
+        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+    ):
+        """Test getting entity insights for a valid entity type."""
+        response = await client.get(
+            "/api/ai/entity-insights/contacts/1",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["entity_type"] == "contacts"
+        assert data["entity_id"] == 1
+        assert "insights" in data
+        assert "suggestions" in data
+        assert isinstance(data["insights"], list)
+        assert isinstance(data["suggestions"], list)
+
+    @pytest.mark.asyncio
+    async def test_entity_insights_for_opportunity(
+        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+    ):
+        """Test getting entity insights for an opportunity."""
+        response = await client.get(
+            "/api/ai/entity-insights/opportunities/1",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["entity_type"] == "opportunities"
+
+    @pytest.mark.asyncio
+    async def test_entity_insights_unauthorized(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        """Test entity insights without auth fails."""
+        response = await client.get("/api/ai/entity-insights/contacts/1")
+        assert response.status_code == 401
+
+
+class TestLearningService:
+    """Tests for the AILearningService directly via the endpoints."""
+
+    @pytest.mark.asyncio
+    async def test_learning_confidence_increases(
+        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+    ):
+        """Test that reinforcing a learning increases confidence."""
+        # First teach
+        r1 = await client.post(
+            "/api/ai/teach",
+            headers=auth_headers,
+            json={"category": "pattern", "key": "daily_routine", "value": "Check leads first"},
+        )
+        assert r1.status_code == 200
+        initial_confidence = r1.json()["confidence"]
+
+        # Reinforce by teaching same thing
+        r2 = await client.post(
+            "/api/ai/teach",
+            headers=auth_headers,
+            json={"category": "pattern", "key": "daily_routine", "value": "Check leads first thing"},
+        )
+        assert r2.status_code == 200
+        assert r2.json()["times_reinforced"] > r1.json()["times_reinforced"]
+
+    @pytest.mark.asyncio
+    async def test_multiple_categories(
+        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+    ):
+        """Test teaching and retrieving multiple categories."""
+        categories = [
+            {"category": "preference", "key": "tone", "value": "professional"},
+            {"category": "correction", "key": "name spelling", "value": "It's MacDonald, not McDonald"},
+            {"category": "entity_context", "key": "Project Alpha", "value": "High priority Q1 initiative"},
+        ]
+
+        for cat in categories:
+            resp = await client.post(
+                "/api/ai/teach",
+                headers=auth_headers,
+                json=cat,
+            )
+            assert resp.status_code == 200
+
+        # Get all
+        all_resp = await client.get("/api/ai/learnings", headers=auth_headers)
+        assert all_resp.status_code == 200
+        assert len(all_resp.json()["learnings"]) >= 3

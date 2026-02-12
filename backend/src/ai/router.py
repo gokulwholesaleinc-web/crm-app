@@ -24,8 +24,15 @@ from src.ai.schemas import (
     UserPreferencesResponse,
     ConfirmActionRequest,
     ConfirmActionResponse,
+    AILearningResponse,
+    AILearningListResponse,
+    TeachAIRequest,
+    SmartSuggestion,
+    SmartSuggestionsResponse,
+    EntityInsightsResponse,
 )
 from src.ai.models import AIFeedback, AIUserPreferences
+from src.ai.learning_service import AILearningService
 from src.ai.query_processor import QueryProcessor
 from src.ai.insights import InsightsGenerator
 from src.ai.recommendations import RecommendationEngine
@@ -404,6 +411,78 @@ async def update_preferences(
     await db.refresh(prefs)
 
     return UserPreferencesResponse.model_validate(prefs)
+
+
+# --- AI Learning endpoints ---
+
+@router.get("/learnings", response_model=AILearningListResponse)
+async def get_learnings(
+    current_user: CurrentUser,
+    db: DBSession,
+    category: Optional[str] = None,
+):
+    """Get all AI learnings for the current user."""
+    service = AILearningService(db)
+    learnings = await service.get_learnings(current_user.id, category=category)
+    return AILearningListResponse(
+        learnings=[AILearningResponse.model_validate(l) for l in learnings]
+    )
+
+
+@router.delete("/learnings/{learning_id}", status_code=HTTPStatus.NO_CONTENT)
+async def delete_learning(
+    learning_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Delete a specific AI learning."""
+    service = AILearningService(db)
+    deleted = await service.delete_learning(learning_id, current_user.id)
+    if not deleted:
+        raise_not_found("AI learning", learning_id)
+
+
+@router.post("/teach", response_model=AILearningResponse)
+async def teach_ai(
+    request: TeachAIRequest,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Teach the AI a new preference or fact."""
+    service = AILearningService(db)
+    learning = await service.learn_preference(
+        user_id=current_user.id,
+        category=request.category,
+        key=request.key,
+        value=request.value,
+    )
+    return AILearningResponse.model_validate(learning)
+
+
+@router.get("/smart-suggestions", response_model=SmartSuggestionsResponse)
+async def get_smart_suggestions(
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Get personalized smart suggestions."""
+    service = AILearningService(db)
+    suggestions = await service.generate_smart_suggestions(current_user.id)
+    return SmartSuggestionsResponse(
+        suggestions=[SmartSuggestion(**s) for s in suggestions]
+    )
+
+
+@router.get("/entity-insights/{entity_type}/{entity_id}", response_model=EntityInsightsResponse)
+async def get_entity_insights(
+    entity_type: str,
+    entity_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Get AI-powered insights for a specific entity."""
+    service = AILearningService(db)
+    result = await service.get_entity_insights(entity_type, entity_id, current_user.id)
+    return EntityInsightsResponse(**result)
 
 
 # =========================================================================

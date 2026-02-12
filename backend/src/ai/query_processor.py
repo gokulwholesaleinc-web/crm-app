@@ -245,12 +245,23 @@ TOOLS = [
             },
         },
     },
+    # Extended tools for quotes, proposals, payments, campaigns
+    {"type": "function", "function": {"name": "search_quotes", "description": "Search quotes by status, contact, or company", "parameters": {"type": "object", "properties": {"status": {"type": "string", "enum": ["draft", "sent", "accepted", "rejected", "expired"]}, "search_term": {"type": "string"}, "limit": {"type": "integer"}}}}},
+    {"type": "function", "function": {"name": "get_quote_details", "description": "Get full details of a specific quote including line items", "parameters": {"type": "object", "properties": {"quote_id": {"type": "integer", "description": "ID of the quote"}}, "required": ["quote_id"]}}},
+    {"type": "function", "function": {"name": "search_proposals", "description": "Search proposals by status or title", "parameters": {"type": "object", "properties": {"status": {"type": "string"}, "search_term": {"type": "string"}, "limit": {"type": "integer"}}}}},
+    {"type": "function", "function": {"name": "get_payment_summary", "description": "Get summary of payments including totals by status", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "list_recent_payments", "description": "List recent payments with optional status filter", "parameters": {"type": "object", "properties": {"status": {"type": "string"}, "limit": {"type": "integer"}}}}},
+    {"type": "function", "function": {"name": "get_campaign_stats", "description": "Get campaign statistics and performance data", "parameters": {"type": "object", "properties": {"campaign_id": {"type": "integer"}}}}},
+    {"type": "function", "function": {"name": "remember_preference", "description": "Remember a user preference or important context for future interactions", "parameters": {"type": "object", "properties": {"category": {"type": "string", "description": "Category: preference, entity_context, or pattern"}, "key": {"type": "string", "description": "What to remember"}, "value": {"type": "string", "description": "The preference or context value"}}, "required": ["category", "key", "value"]}}},
+    {"type": "function", "function": {"name": "get_deal_coaching", "description": "Get AI coaching tips for a specific opportunity", "parameters": {"type": "object", "properties": {"opportunity_id": {"type": "integer", "description": "ID of the opportunity"}}, "required": ["opportunity_id"]}}},
 ]
 
 
 SYSTEM_PROMPT_BASE = (
     "You are a helpful CRM assistant. You can search data, create leads, "
-    "schedule activities, update statuses, add notes, and generate reports. "
+    "schedule activities, update statuses, add notes, generate reports, "
+    "search quotes and proposals, view payment summaries, get campaign stats, "
+    "and provide deal coaching. You can also remember user preferences. "
     "Analyze the user's query and call the appropriate function(s). "
     "For multi-step tasks, call functions one at a time in sequence. "
     "Provide clear, concise responses."
@@ -368,16 +379,22 @@ class QueryProcessor:
         self.db.add(msg)
         await self.db.flush()
 
-    def _build_system_prompt(self, prefs: Optional[AIUserPreferences] = None) -> str:
-        """Build system prompt incorporating user preferences."""
-        if not prefs:
-            return SYSTEM_PROMPT_BASE
-
+    def _build_system_prompt(
+        self,
+        prefs: Optional[AIUserPreferences] = None,
+        learning_context: str = "",
+    ) -> str:
+        """Build system prompt incorporating user preferences and learned context."""
         parts = [SYSTEM_PROMPT_BASE]
-        if prefs.preferred_communication_style:
-            parts.append(f"Communication style: {prefs.preferred_communication_style}.")
-        if prefs.custom_instructions:
-            parts.append(f"User instructions: {prefs.custom_instructions}")
+
+        if prefs:
+            if prefs.preferred_communication_style:
+                parts.append(f"Communication style: {prefs.preferred_communication_style}.")
+            if prefs.custom_instructions:
+                parts.append(f"User instructions: {prefs.custom_instructions}")
+
+        if learning_context:
+            parts.append(f"\n\nLearned context about this user:\n{learning_context}")
 
         return " ".join(parts)
 
@@ -403,10 +420,12 @@ class QueryProcessor:
         if not session_id:
             session_id = str(uuid.uuid4())
 
-        # Load user preferences and conversation history
+        # Load user preferences, learning context, and conversation history
         prefs = await self._get_user_preferences(user_id)
+        learning_service = AILearningService(self.db)
+        learning_context = await learning_service.get_user_context(user_id)
         history = await self._get_conversation_history(user_id, session_id)
-        system_prompt = self._build_system_prompt(prefs)
+        system_prompt = self._build_system_prompt(prefs, learning_context)
 
         # Save user message
         await self._save_conversation(user_id, session_id, "user", query)
@@ -436,6 +455,14 @@ class QueryProcessor:
                     # Save assistant response
                     await self._save_conversation(
                         user_id, session_id, "assistant", response_text
+                    )
+
+                    # Log interaction for learning
+                    tool_log = [a for a in actions_taken] if actions_taken else None
+                    await learning_service.log_interaction(
+                        user_id=user_id,
+                        query=query,
+                        tool_calls=tool_log,
                     )
 
                     return {
@@ -613,6 +640,24 @@ class QueryProcessor:
             return await self._generate_pipeline_report(args)
         elif func_name == "generate_activity_report":
             return await self._generate_activity_report(args, user_id)
+
+        # Extended tools
+        elif func_name == "search_quotes":
+            return await self._search_quotes(args)
+        elif func_name == "get_quote_details":
+            return await self._get_quote_details(args)
+        elif func_name == "search_proposals":
+            return await self._search_proposals(args)
+        elif func_name == "get_payment_summary":
+            return await self._get_payment_summary()
+        elif func_name == "list_recent_payments":
+            return await self._list_recent_payments(args)
+        elif func_name == "get_campaign_stats":
+            return await self._get_campaign_stats(args)
+        elif func_name == "remember_preference":
+            return await self._remember_preference(args, user_id)
+        elif func_name == "get_deal_coaching":
+            return await self._get_deal_coaching(args)
 
         else:
             return {"error": f"Unknown function: {func_name}"}
@@ -1062,6 +1107,256 @@ class QueryProcessor:
             "completed": completed,
             "pending": pending,
             "by_type": by_type,
+        }
+
+    # =========================================================================
+    # Extended tool implementations
+    # =========================================================================
+
+    async def _search_quotes(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Search quotes."""
+        from src.quotes.models import Quote
+
+        query = select(Quote).order_by(Quote.created_at.desc()).limit(args.get("limit", 10))
+
+        if args.get("status"):
+            query = query.where(Quote.status == args["status"])
+
+        if args.get("search_term"):
+            query = query.where(Quote.title.ilike(f"%{args['search_term']}%"))
+
+        result = await self.db.execute(query)
+        quotes = result.scalars().all()
+
+        return {
+            "count": len(quotes),
+            "quotes": [
+                {
+                    "id": q.id,
+                    "title": q.title,
+                    "quote_number": q.quote_number,
+                    "status": q.status,
+                    "total": float(q.total) if q.total else 0,
+                    "valid_until": q.valid_until.isoformat() if q.valid_until else None,
+                }
+                for q in quotes
+            ],
+        }
+
+    async def _get_quote_details(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Get full details of a quote."""
+        from src.quotes.models import Quote
+
+        result = await self.db.execute(
+            select(Quote).where(Quote.id == args["quote_id"])
+        )
+        quote = result.scalar_one_or_none()
+        if not quote:
+            return {"error": f"Quote with ID {args['quote_id']} not found."}
+
+        return {
+            "id": quote.id,
+            "title": quote.title,
+            "quote_number": quote.quote_number,
+            "status": quote.status,
+            "subtotal": float(quote.subtotal) if quote.subtotal else 0,
+            "tax_amount": float(quote.tax_amount) if quote.tax_amount else 0,
+            "total": float(quote.total) if quote.total else 0,
+            "valid_until": quote.valid_until.isoformat() if quote.valid_until else None,
+            "payment_type": getattr(quote, "payment_type", None),
+            "line_items": [
+                {
+                    "description": li.description,
+                    "quantity": li.quantity,
+                    "unit_price": float(li.unit_price) if li.unit_price else 0,
+                    "total": float(li.total) if li.total else 0,
+                }
+                for li in (quote.line_items or [])
+            ],
+        }
+
+    async def _search_proposals(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Search proposals."""
+        from src.proposals.models import Proposal
+
+        query = select(Proposal).order_by(Proposal.created_at.desc()).limit(args.get("limit", 10))
+
+        if args.get("status"):
+            query = query.where(Proposal.status == args["status"])
+
+        if args.get("search_term"):
+            query = query.where(Proposal.title.ilike(f"%{args['search_term']}%"))
+
+        result = await self.db.execute(query)
+        proposals = result.scalars().all()
+
+        return {
+            "count": len(proposals),
+            "proposals": [
+                {
+                    "id": p.id,
+                    "title": p.title,
+                    "status": p.status,
+                    "created_at": p.created_at.isoformat() if p.created_at else None,
+                }
+                for p in proposals
+            ],
+        }
+
+    async def _get_payment_summary(self) -> Dict[str, Any]:
+        """Get payment summary."""
+        from src.payments.models import Payment
+
+        result = await self.db.execute(
+            select(
+                Payment.status,
+                func.count(Payment.id).label("count"),
+                func.sum(Payment.amount).label("total"),
+            ).group_by(Payment.status)
+        )
+
+        by_status = {}
+        grand_total = 0
+        total_count = 0
+        for row in result.all():
+            amount = float(row.total or 0)
+            by_status[row.status] = {
+                "count": row.count or 0,
+                "total": amount,
+            }
+            grand_total += amount
+            total_count += row.count or 0
+
+        return {
+            "total_payments": total_count,
+            "total_amount": grand_total,
+            "by_status": by_status,
+        }
+
+    async def _list_recent_payments(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """List recent payments."""
+        from src.payments.models import Payment
+
+        query = select(Payment).order_by(Payment.created_at.desc()).limit(args.get("limit", 10))
+
+        if args.get("status"):
+            query = query.where(Payment.status == args["status"])
+
+        result = await self.db.execute(query)
+        payments = result.scalars().all()
+
+        return {
+            "count": len(payments),
+            "payments": [
+                {
+                    "id": p.id,
+                    "amount": float(p.amount) if p.amount else 0,
+                    "status": p.status,
+                    "payment_date": p.payment_date.isoformat() if p.payment_date else None,
+                    "created_at": p.created_at.isoformat() if p.created_at else None,
+                }
+                for p in payments
+            ],
+        }
+
+    async def _get_campaign_stats(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Get campaign statistics."""
+        from src.campaigns.models import Campaign
+
+        if args.get("campaign_id"):
+            result = await self.db.execute(
+                select(Campaign).where(Campaign.id == args["campaign_id"])
+            )
+            campaign = result.scalar_one_or_none()
+            if not campaign:
+                return {"error": f"Campaign with ID {args['campaign_id']} not found."}
+
+            return {
+                "id": campaign.id,
+                "name": campaign.name,
+                "status": campaign.status,
+                "type": getattr(campaign, "campaign_type", None),
+                "start_date": campaign.start_date.isoformat() if campaign.start_date else None,
+                "end_date": campaign.end_date.isoformat() if campaign.end_date else None,
+            }
+
+        # Return overview
+        result = await self.db.execute(
+            select(
+                Campaign.status,
+                func.count(Campaign.id).label("count"),
+            ).group_by(Campaign.status)
+        )
+
+        by_status = {}
+        total = 0
+        for row in result.all():
+            by_status[row.status] = row.count or 0
+            total += row.count or 0
+
+        return {"total_campaigns": total, "by_status": by_status}
+
+    async def _remember_preference(self, args: Dict[str, Any], user_id: int) -> Dict[str, Any]:
+        """Remember a user preference."""
+        learning_service = AILearningService(self.db)
+        learning = await learning_service.learn_preference(
+            user_id=user_id,
+            category=args["category"],
+            key=args["key"],
+            value=args["value"],
+        )
+        return {
+            "success": True,
+            "message": f"Remembered: {args['key']} = {args['value']}",
+            "learning_id": learning.id,
+        }
+
+    async def _get_deal_coaching(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Get coaching tips for an opportunity."""
+        result = await self.db.execute(
+            select(Opportunity).where(Opportunity.id == args["opportunity_id"])
+        )
+        opp = result.scalar_one_or_none()
+        if not opp:
+            return {"error": f"Opportunity with ID {args['opportunity_id']} not found."}
+
+        tips = []
+
+        # Check activity level
+        activity_result = await self.db.execute(
+            select(func.count(Activity.id))
+            .where(Activity.entity_type == "opportunities")
+            .where(Activity.entity_id == opp.id)
+        )
+        activity_count = activity_result.scalar() or 0
+
+        if activity_count == 0:
+            tips.append("No activities recorded. Schedule an initial meeting or call.")
+        elif activity_count < 3:
+            tips.append("Low activity. Increase engagement with more touchpoints.")
+
+        # Check close date
+        if opp.expected_close_date:
+            days_to_close = (opp.expected_close_date - date.today()).days
+            if days_to_close < 0:
+                tips.append(f"Deal is {abs(days_to_close)} days overdue. Re-evaluate or update the close date.")
+            elif days_to_close <= 7:
+                tips.append(f"Closing in {days_to_close} days. Push for a decision.")
+            elif days_to_close <= 30:
+                tips.append("Closing within a month. Ensure all stakeholders are aligned.")
+
+        # Check contact
+        if not opp.contact_id:
+            tips.append("No contact assigned. Associate a decision maker.")
+
+        if not tips:
+            tips.append("Deal looks healthy. Continue current engagement strategy.")
+
+        return {
+            "opportunity_id": opp.id,
+            "name": opp.name,
+            "amount": float(opp.amount) if opp.amount else 0,
+            "coaching_tips": tips,
         }
 
     # =========================================================================

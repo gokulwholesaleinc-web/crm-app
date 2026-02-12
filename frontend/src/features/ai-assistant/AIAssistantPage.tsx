@@ -11,6 +11,9 @@ import {
   LightBulbIcon,
   ChartBarIcon,
   ClockIcon,
+  AcademicCapIcon,
+  XMarkIcon,
+  BoltIcon,
 } from '@heroicons/react/24/outline';
 import { Button } from '../../components/ui/Button';
 import { Spinner } from '../../components/ui/Spinner';
@@ -22,6 +25,9 @@ import {
   useRecommendations,
   useDailySummary,
   useRefreshAIData,
+  useAILearnings,
+  useDeleteAILearning,
+  useSmartSuggestions,
 } from '../../hooks/useAI';
 import { AIFeedbackButtons } from '../../components/ai/AIFeedbackButtons';
 
@@ -56,7 +62,7 @@ function QuickAction({
 
 export function AIAssistantPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [activeTab, setActiveTab] = useState<'chat' | 'recommendations' | 'summary'>('chat');
+  const [activeTab, setActiveTab] = useState<'chat' | 'recommendations' | 'summary' | 'memory'>('chat');
 
   // Chat state
   const { messages, sendMessage, clearChat, confirmAction, isLoading: isChatLoading, pendingConfirmation, sessionId } = useChat();
@@ -65,6 +71,11 @@ export function AIAssistantPage() {
   const { data: recommendationsData, isLoading: isLoadingRecs } = useRecommendations();
   const { data: summaryData, isLoading: isLoadingSummary } = useDailySummary();
   const refreshAIData = useRefreshAIData();
+
+  // Learning and suggestions
+  const { data: learningsData, isLoading: isLoadingLearnings } = useAILearnings();
+  const deleteLearningMutation = useDeleteAILearning();
+  const { data: suggestionsData, isLoading: isLoadingSuggestions } = useSmartSuggestions();
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {
@@ -158,6 +169,24 @@ export function AIAssistantPage() {
           <ChartBarIcon className="h-4 w-4" />
           <span className="hidden sm:inline">Daily Summary</span>
           <span className="sm:hidden">Summary</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('memory')}
+          className={clsx(
+            'flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap flex-shrink-0',
+            activeTab === 'memory'
+              ? 'bg-primary-100 text-primary-700'
+              : 'text-gray-600 hover:bg-gray-100'
+          )}
+        >
+          <AcademicCapIcon className="h-4 w-4" />
+          <span className="hidden sm:inline">AI Memory</span>
+          <span className="sm:hidden">Memory</span>
+          {(learningsData?.learnings?.length ?? 0) > 0 && (
+            <span className="bg-purple-500 text-white text-xs px-1.5 py-0.5 rounded-full">
+              {learningsData?.learnings?.length}
+            </span>
+          )}
         </button>
       </div>
 
@@ -372,6 +401,97 @@ export function AIAssistantPage() {
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === 'memory' && (
+          <div className="h-full overflow-y-auto p-4">
+            {/* Smart Suggestions Panel */}
+            <div className="mb-6">
+              <div className="flex items-center gap-2 mb-3">
+                <BoltIcon className="h-5 w-5 text-amber-500" />
+                <h3 className="text-sm font-semibold text-gray-900">Smart Suggestions</h3>
+              </div>
+              {isLoadingSuggestions ? (
+                <div className="flex items-center justify-center py-4">
+                  <Spinner size="sm" />
+                </div>
+              ) : (suggestionsData?.suggestions?.length ?? 0) === 0 ? (
+                <p className="text-sm text-gray-500">No suggestions right now. Check back later.</p>
+              ) : (
+                <div className="space-y-2">
+                  {suggestionsData?.suggestions.map((suggestion, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg"
+                    >
+                      <span
+                        className={clsx(
+                          'mt-0.5 inline-block h-2 w-2 rounded-full flex-shrink-0',
+                          suggestion.priority === 'high' ? 'bg-red-500' :
+                          suggestion.priority === 'medium' ? 'bg-amber-500' : 'bg-green-500'
+                        )}
+                      />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-900">{suggestion.title}</p>
+                        <p className="text-xs text-gray-600 mt-0.5">{suggestion.description}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* AI Memory / Learnings */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <AcademicCapIcon className="h-5 w-5 text-purple-500" />
+                <h3 className="text-sm font-semibold text-gray-900">What I've Learned</h3>
+              </div>
+              {isLoadingLearnings ? (
+                <div className="flex items-center justify-center py-8">
+                  <Spinner size="lg" />
+                </div>
+              ) : (learningsData?.learnings?.length ?? 0) === 0 ? (
+                <div className="text-center py-8">
+                  <AcademicCapIcon className="mx-auto h-12 w-12 text-gray-400" />
+                  <h3 className="mt-2 text-sm font-medium text-gray-900">No learnings yet</h3>
+                  <p className="mt-1 text-sm text-gray-500">
+                    As you use the AI assistant, it will learn your preferences and patterns.
+                    You can also teach it by saying "remember that..." in the chat.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {learningsData?.learnings.map((learning) => (
+                    <div
+                      key={learning.id}
+                      className="flex items-start justify-between gap-3 p-3 bg-white border rounded-lg"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
+                            {learning.category}
+                          </span>
+                          <span className="text-xs text-gray-400">
+                            confidence: {Math.round(learning.confidence * 100)}%
+                          </span>
+                        </div>
+                        <p className="text-sm font-medium text-gray-900 mt-1">{learning.key}</p>
+                        <p className="text-xs text-gray-600 mt-0.5">{learning.value}</p>
+                      </div>
+                      <button
+                        onClick={() => deleteLearningMutation.mutate(learning.id)}
+                        className="flex-shrink-0 p-1 text-gray-400 hover:text-red-500 transition-colors rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500"
+                        aria-label={`Delete learning: ${learning.key}`}
+                      >
+                        <XMarkIcon className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

@@ -5,7 +5,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useCallback } from 'react';
 import { aiApi } from '../api/ai';
-import type { ChatMessage, ChatRequest, FeedbackRequest, ConfirmActionRequest, ChatResponse, AIUserPreferencesUpdate } from '../types';
+import type { ChatMessage, ChatRequest, FeedbackRequest, ConfirmActionRequest, ChatResponse, AIUserPreferencesUpdate, TeachAIRequest } from '../types';
 
 // Query keys
 export const aiKeys = {
@@ -19,6 +19,10 @@ export const aiKeys = {
   search: (query: string, entityTypes?: string) =>
     [...aiKeys.all, 'search', query, entityTypes] as const,
   preferences: () => [...aiKeys.all, 'preferences'] as const,
+  learnings: (category?: string) => [...aiKeys.all, 'learnings', category] as const,
+  smartSuggestions: () => [...aiKeys.all, 'smart-suggestions'] as const,
+  entityInsights: (entityType: string, entityId: number) =>
+    [...aiKeys.all, 'entity-insights', entityType, entityId] as const,
 };
 
 /**
@@ -287,5 +291,67 @@ export function useUpdateAIPreferences() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: aiKeys.preferences() });
     },
+  });
+}
+
+/**
+ * Hook to get AI learnings
+ */
+export function useAILearnings(category?: string) {
+  return useQuery({
+    queryKey: aiKeys.learnings(category),
+    queryFn: () => aiApi.getLearnings(category),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * Hook to delete an AI learning
+ */
+export function useDeleteAILearning() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (learningId: number) => aiApi.deleteLearning(learningId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: aiKeys.learnings() });
+    },
+  });
+}
+
+/**
+ * Hook to teach the AI something new
+ */
+export function useTeachAI() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: TeachAIRequest) => aiApi.teachAI(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: aiKeys.learnings() });
+    },
+  });
+}
+
+/**
+ * Hook to get smart suggestions
+ */
+export function useSmartSuggestions() {
+  return useQuery({
+    queryKey: aiKeys.smartSuggestions(),
+    queryFn: () => aiApi.getSmartSuggestions(),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * Hook to get entity insights
+ */
+export function useEntityInsights(entityType: string, entityId: number) {
+  return useQuery({
+    queryKey: aiKeys.entityInsights(entityType, entityId),
+    queryFn: () => aiApi.getEntityInsights(entityType, entityId),
+    enabled: !!entityType && !!entityId,
+    staleTime: 5 * 60 * 1000,
   });
 }

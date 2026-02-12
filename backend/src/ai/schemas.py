@@ -152,3 +152,49 @@ class AIActionLogResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# AI Learning schemas
+class AILearningResponse(BaseModel):
+    id: int
+    user_id: int
+    category: str
+    key: str
+    value: str
+    confidence: float
+    times_reinforced: int
+    last_used_at: Optional[datetime] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AILearningListResponse(BaseModel):
+    learnings: List[AILearningResponse]
+
+
+class TeachAIRequest(BaseModel):
+    category: str
+    key: str
+    value: str
+
+
+class SmartSuggestion(BaseModel):
+    type: str
+    priority: str
+    title: str
+    description: str
+    action: str
+    entity_type: Optional[str] = None
+    entity_id: Optional[int] = None
+
+
+class SmartSuggestionsResponse(BaseModel):
+    suggestions: List[SmartSuggestion]
+
+
+class EntityInsightsResponse(BaseModel):
+    entity_type: str
+    entity_id: int
+    insights: List[Dict[str, Any]]
+    suggestions: List[str]
