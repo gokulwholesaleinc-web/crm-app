@@ -15,7 +15,8 @@ import {
   UsersIcon,
   LinkIcon,
 } from '@heroicons/react/24/outline';
-import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
+import { Button, Spinner, Modal, ConfirmDialog, StatusBadge } from '../../components/ui';
+import type { StatusType } from '../../components/ui/Badge';
 
 const NotesList = lazy(() => import('../../components/shared/NotesList'));
 const AttachmentList = lazy(() => import('../../components/shared/AttachmentList'));
@@ -25,12 +26,15 @@ const SharePanel = lazy(() => import('../../components/shared/SharePanel'));
 import { CompanyForm } from './components/CompanyForm';
 import { useCompany, useUpdateCompany, useDeleteCompany } from '../../hooks/useCompanies';
 import { useContacts } from '../../hooks/useContacts';
+import { useOpportunities } from '../../hooks/useOpportunities';
+import { useQuotes } from '../../hooks/useQuotes';
+import { useProposals } from '../../hooks/useProposals';
 import { useTimeline } from '../../hooks/useActivities';
 import { getStatusColor, formatStatusLabel } from '../../utils/statusColors';
 import { formatCurrency, formatDate } from '../../utils/formatters';
-import type { CompanyUpdate, Contact } from '../../types';
+import type { CompanyUpdate, Contact, Opportunity, Quote, Proposal } from '../../types';
 
-type TabType = 'overview' | 'activities' | 'notes' | 'attachments' | 'comments' | 'history' | 'sharing';
+type TabType = 'overview' | 'opportunities' | 'quotes' | 'proposals' | 'activities' | 'notes' | 'attachments' | 'comments' | 'history' | 'sharing';
 
 function DetailItem({
   icon: Icon,
@@ -123,6 +127,20 @@ export function CompanyDetailPage() {
     page_size: 50,
   });
 
+  // Fetch opportunities, quotes, proposals for this company - only on active tab
+  const { data: opportunitiesData } = useOpportunities(
+    activeTab === 'opportunities' && companyId ? { company_id: companyId } : undefined
+  );
+  const { data: quotesData } = useQuotes(
+    activeTab === 'quotes' && companyId ? { company_id: companyId } : undefined
+  );
+  const { data: proposalsData } = useProposals(
+    activeTab === 'proposals' && companyId ? { company_id: companyId } : undefined
+  );
+  const companyOpportunities = opportunitiesData?.items ?? [];
+  const companyQuotes = quotesData?.items ?? [];
+  const companyProposals = proposalsData?.items ?? [];
+
   // Fetch timeline/activities - only when on activities tab
   const shouldFetchActivities = activeTab === 'activities' && !!companyId;
   const { data: timelineData, isLoading: isLoadingActivities } = useTimeline(
@@ -190,6 +208,9 @@ export function CompanyDetailPage() {
 
   const tabs: { id: TabType; name: string }[] = [
     { id: 'overview', name: 'Overview' },
+    { id: 'opportunities', name: 'Opportunities' },
+    { id: 'quotes', name: 'Quotes' },
+    { id: 'proposals', name: 'Proposals' },
     { id: 'activities', name: 'Activities' },
     { id: 'notes', name: 'Notes' },
     { id: 'attachments', name: 'Attachments' },
@@ -442,6 +463,152 @@ export function CompanyDetailPage() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Opportunities Tab */}
+      {activeTab === 'opportunities' && companyId && (
+        <div className="bg-white shadow rounded-lg overflow-hidden">
+          {companyOpportunities.length === 0 ? (
+            <div className="text-center py-12 px-4">
+              <p className="text-sm text-gray-500">No opportunities for this company.</p>
+              <Link
+                to={`/opportunities?company_id=${companyId}`}
+                className="mt-2 inline-block text-sm text-primary-600 hover:text-primary-900"
+              >
+                View Opportunities
+              </Link>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stage</th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {companyOpportunities.map((opp: Opportunity) => (
+                    <tr key={opp.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <Link to={`/opportunities/${opp.id}`} className="text-primary-600 hover:text-primary-900">
+                          {opp.name}
+                        </Link>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {opp.pipeline_stage?.name ?? '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                        {opp.amount ? formatCurrency(opp.amount) : '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatDate(opp.created_at)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Quotes Tab */}
+      {activeTab === 'quotes' && companyId && (
+        <div className="bg-white shadow rounded-lg overflow-hidden">
+          {companyQuotes.length === 0 ? (
+            <div className="text-center py-12 px-4">
+              <p className="text-sm text-gray-500">No quotes for this company.</p>
+              <Link
+                to={`/quotes?company_id=${companyId}`}
+                className="mt-2 inline-block text-sm text-primary-600 hover:text-primary-900"
+              >
+                Create a Quote
+              </Link>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quote</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {companyQuotes.map((quote: Quote) => (
+                    <tr key={quote.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <Link to={`/quotes/${quote.id}`} className="text-primary-600 hover:text-primary-900">
+                          {quote.title} ({quote.quote_number})
+                        </Link>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <StatusBadge status={quote.status as StatusType} size="sm" showDot={false} />
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                        {formatCurrency(quote.total)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatDate(quote.created_at)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Proposals Tab */}
+      {activeTab === 'proposals' && companyId && (
+        <div className="bg-white shadow rounded-lg overflow-hidden">
+          {companyProposals.length === 0 ? (
+            <div className="text-center py-12 px-4">
+              <p className="text-sm text-gray-500">No proposals for this company.</p>
+              <Link
+                to="/proposals"
+                className="mt-2 inline-block text-sm text-primary-600 hover:text-primary-900"
+              >
+                View Proposals
+              </Link>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Proposal</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {companyProposals.map((proposal: Proposal) => (
+                    <tr key={proposal.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <Link to={`/proposals/${proposal.id}`} className="text-primary-600 hover:text-primary-900">
+                          {proposal.title} ({proposal.proposal_number})
+                        </Link>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <StatusBadge status={proposal.status as StatusType} size="sm" showDot={false} />
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatDate(proposal.created_at)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 

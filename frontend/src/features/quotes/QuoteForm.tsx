@@ -1,6 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { TrashIcon, PlusIcon } from '@heroicons/react/24/outline';
 import { Button } from '../../components/ui';
+import { useContacts } from '../../hooks/useContacts';
+import { useCompanies } from '../../hooks/useCompanies';
+import { useOpportunities, useOpportunity } from '../../hooks/useOpportunities';
 import type { QuoteCreate, QuoteLineItemCreate } from '../../types';
 
 interface QuoteFormProps {
@@ -19,8 +23,41 @@ const EMPTY_LINE_ITEM: QuoteLineItemCreate = {
 };
 
 export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteFormProps) {
+  const [searchParams] = useSearchParams();
+  const urlOpportunityId = searchParams.get('opportunity_id');
+
   const [title, setTitle] = useState(initialData?.title ?? '');
   const [description, setDescription] = useState(initialData?.description ?? '');
+  const [contactId, setContactId] = useState<number | null>(initialData?.contact_id ?? null);
+  const [companyId, setCompanyId] = useState<number | null>(initialData?.company_id ?? null);
+  const [opportunityId, setOpportunityId] = useState<number | null>(
+    initialData?.opportunity_id ?? (urlOpportunityId ? parseInt(urlOpportunityId, 10) : null)
+  );
+
+  // Fetch entity lists for dropdowns
+  const { data: contactsData } = useContacts({ page_size: 100 });
+  const { data: companiesData } = useCompanies({ page_size: 100 });
+  const { data: opportunitiesData } = useOpportunities({ page_size: 100 });
+  const { data: urlOpportunity } = useOpportunity(
+    urlOpportunityId ? parseInt(urlOpportunityId, 10) : undefined
+  );
+
+  const contacts = contactsData?.items ?? [];
+  const companies = companiesData?.items ?? [];
+  const opportunities = opportunitiesData?.items ?? [];
+
+  // Auto-fill contact/company from URL opportunity
+  useEffect(() => {
+    if (urlOpportunity) {
+      if (urlOpportunity.contact_id && !contactId) {
+        setContactId(urlOpportunity.contact_id);
+      }
+      if (urlOpportunity.company_id && !companyId) {
+        setCompanyId(urlOpportunity.company_id);
+      }
+    }
+  }, [urlOpportunity]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const [currency, setCurrency] = useState(initialData?.currency ?? 'USD');
   const [validUntil, setValidUntil] = useState(initialData?.valid_until ?? '');
   const [discountType, setDiscountType] = useState(initialData?.discount_type ?? '');
@@ -28,6 +65,8 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
   const [taxRate, setTaxRate] = useState(initialData?.tax_rate ?? 0);
   const [termsAndConditions, setTermsAndConditions] = useState(initialData?.terms_and_conditions ?? '');
   const [notes, setNotes] = useState(initialData?.notes ?? '');
+  const [paymentType, setPaymentType] = useState(initialData?.payment_type ?? 'one_time');
+  const [recurringInterval, setRecurringInterval] = useState(initialData?.recurring_interval ?? '');
   const [lineItems, setLineItems] = useState<QuoteLineItemCreate[]>(
     initialData?.line_items ?? [{ ...EMPTY_LINE_ITEM }]
   );
@@ -74,6 +113,11 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
       terms_and_conditions: termsAndConditions || null,
       notes: notes || null,
       status: 'draft',
+      contact_id: contactId,
+      company_id: companyId,
+      opportunity_id: opportunityId,
+      payment_type: paymentType,
+      recurring_interval: paymentType === 'subscription' ? recurringInterval : null,
       line_items: lineItems.filter((item) => item.description.trim() !== ''),
     };
 
@@ -142,6 +186,124 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
               onChange={(e) => setValidUntil(e.target.value)}
               className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
             />
+          </div>
+        </div>
+      </div>
+
+      {/* Payment Type */}
+      <div className="space-y-4">
+        <fieldset>
+          <legend className="block text-sm font-medium text-gray-700 dark:text-gray-300">Payment Type</legend>
+          <div className="mt-2 flex gap-4">
+            <label className="inline-flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="payment_type"
+                value="one_time"
+                checked={paymentType === 'one_time'}
+                onChange={() => {
+                  setPaymentType('one_time');
+                  setRecurringInterval('');
+                }}
+                className="text-primary-600 focus-visible:ring-primary-500"
+              />
+              <span className="text-sm text-gray-700 dark:text-gray-300">One-Time Payment</span>
+            </label>
+            <label className="inline-flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="payment_type"
+                value="subscription"
+                checked={paymentType === 'subscription'}
+                onChange={() => {
+                  setPaymentType('subscription');
+                  if (!recurringInterval) setRecurringInterval('monthly');
+                }}
+                className="text-primary-600 focus-visible:ring-primary-500"
+              />
+              <span className="text-sm text-gray-700 dark:text-gray-300">Subscription</span>
+            </label>
+          </div>
+        </fieldset>
+
+        {paymentType === 'subscription' && (
+          <div className="sm:w-1/2">
+            <label htmlFor="quote-recurring-interval" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Billing Interval
+            </label>
+            <select
+              id="quote-recurring-interval"
+              value={recurringInterval}
+              onChange={(e) => setRecurringInterval(e.target.value)}
+              className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
+            >
+              <option value="monthly">Monthly</option>
+              <option value="quarterly">Quarterly</option>
+              <option value="yearly">Yearly</option>
+            </select>
+          </div>
+        )}
+      </div>
+
+      {/* Related Records */}
+      <div className="space-y-4">
+        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Related Records</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label htmlFor="quote-opportunity" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Opportunity
+            </label>
+            <select
+              id="quote-opportunity"
+              value={opportunityId ?? ''}
+              onChange={(e) => {
+                const val = e.target.value ? parseInt(e.target.value, 10) : null;
+                setOpportunityId(val);
+                if (val) {
+                  const opp = opportunities.find((o) => o.id === val);
+                  if (opp?.contact_id) setContactId(opp.contact_id);
+                  if (opp?.company_id) setCompanyId(opp.company_id);
+                }
+              }}
+              className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
+            >
+              <option value="">-- None --</option>
+              {opportunities.map((opp) => (
+                <option key={opp.id} value={opp.id}>{opp.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="quote-contact" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Contact
+            </label>
+            <select
+              id="quote-contact"
+              value={contactId ?? ''}
+              onChange={(e) => setContactId(e.target.value ? parseInt(e.target.value, 10) : null)}
+              className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
+            >
+              <option value="">-- None --</option>
+              {contacts.map((c) => (
+                <option key={c.id} value={c.id}>{c.full_name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="quote-company" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Company
+            </label>
+            <select
+              id="quote-company"
+              value={companyId ?? ''}
+              onChange={(e) => setCompanyId(e.target.value ? parseInt(e.target.value, 10) : null)}
+              className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
+            >
+              <option value="">-- None --</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
