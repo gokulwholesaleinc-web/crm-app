@@ -4,6 +4,7 @@ import re
 from typing import Optional, List, Tuple
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from src.comments.models import Comment
 from src.auth.models import User
 from src.core.constants import DEFAULT_PAGE_SIZE
@@ -56,6 +57,7 @@ class CommentService:
         query = (
             select(Comment, User.full_name.label("author_name"))
             .outerjoin(User, Comment.user_id == User.id)
+            .options(selectinload(Comment.replies))
             .where(*base_filter)
             .order_by(Comment.created_at.desc())
             .offset((page - 1) * page_size)
@@ -75,10 +77,12 @@ class CommentService:
         """Build a comment response dict with nested replies."""
         mentions = parse_mentions(comment.content)
 
-        # Build replies recursively
+        # Build replies (only if already loaded to avoid lazy-load MissingGreenlet)
         replies = []
-        if comment.replies:
-            for reply in comment.replies:
+        from sqlalchemy import inspect as sa_inspect
+        state = sa_inspect(comment)
+        if "replies" in state.dict:
+            for reply in (comment.replies or []):
                 # Get author name for reply
                 reply_author = None
                 if reply.user_id:

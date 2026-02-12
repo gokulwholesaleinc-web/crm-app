@@ -172,7 +172,17 @@ class CSVHandler:
                 # Create entity with owner_id for data scoping
                 entity = entity_class(**entity_data, owner_id=user_id, created_by_id=user_id)
                 self.db.add(entity)
-                imported += 1
+
+                if skip_errors:
+                    try:
+                        await self.db.flush()
+                        imported += 1
+                    except Exception as flush_exc:
+                        await self.db.rollback()
+                        error_msg = f"Row {row_num}: {str(flush_exc)}"
+                        errors.append(error_msg)
+                else:
+                    imported += 1
 
             except Exception as e:
                 error_msg = f"Row {row_num}: {str(e)}"
@@ -185,7 +195,8 @@ class CSVHandler:
                         "success": False,
                     }
 
-        await self.db.flush()
+        if not skip_errors:
+            await self.db.flush()
 
         return {
             "imported": imported,

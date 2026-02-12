@@ -31,9 +31,8 @@ class CommentResponse(BaseModel):
     parent_id: Optional[int] = None
     is_internal: bool = False
     user_id: int
-    user_name: Optional[str] = None
-    user_email: Optional[str] = None
-    mentioned_users: List[str] = []
+    author_name: Optional[str] = None
+    mentions: List[str] = []
     replies: List["CommentResponse"] = []
     created_at: datetime
     updated_at: datetime

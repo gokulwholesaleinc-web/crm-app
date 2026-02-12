@@ -238,7 +238,7 @@ class TestPaymentCRUD:
         assert response.status_code == 200
         data = response.json()
         assert data["id"] == rep_a_payment.id
-        assert data["amount"] == 100.00
+        assert float(data["amount"]) == 100.00
         assert data["status"] == "succeeded"
 
     @pytest.mark.asyncio

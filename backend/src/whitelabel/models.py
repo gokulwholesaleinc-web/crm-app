@@ -37,6 +37,7 @@ class Tenant(Base, TimestampMixin):
         back_populates="tenant",
         uselist=False,
         lazy="joined",
+        cascade="all, delete-orphan",
     )
 
 

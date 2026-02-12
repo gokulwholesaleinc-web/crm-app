@@ -62,7 +62,7 @@ class AuditService:
             select(AuditLog, User.full_name.label("user_name"))
             .outerjoin(User, AuditLog.user_id == User.id)
             .where(*base_filter)
-            .order_by(AuditLog.timestamp.desc())
+            .order_by(AuditLog.timestamp.desc(), AuditLog.id.desc())
             .offset((page - 1) * page_size)
             .limit(page_size)
         )
@@ -80,7 +80,7 @@ class AuditService:
                 "action": log.action,
                 "changes": log.changes,
                 "ip_address": log.ip_address,
-                "timestamp": log.timestamp,
+                "created_at": log.timestamp,
             })
 
         return items, total

@@ -2,7 +2,7 @@
 
 import json
 from typing import List, Optional
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, or_
 import io
@@ -31,7 +31,10 @@ async def execute_report(
 ):
     """Execute a report definition and return results (scoped to current user)."""
     executor = ReportExecutor(db, user_id=current_user.id)
-    return await executor.execute(definition)
+    try:
+        return await executor.execute(definition)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.post("/export-csv")
@@ -112,8 +115,22 @@ async def create_saved_report(
     await db.flush()
     await db.refresh(report)
 
-    resp = SavedReportResponse.model_validate(report).model_dump()
-    resp["filters"] = data.filters
+    resp = {
+        "id": report.id,
+        "name": report.name,
+        "description": report.description,
+        "entity_type": report.entity_type,
+        "filters": data.filters,
+        "group_by": report.group_by,
+        "date_group": report.date_group,
+        "metric": report.metric,
+        "metric_field": report.metric_field,
+        "chart_type": report.chart_type,
+        "created_by_id": report.created_by_id,
+        "is_public": report.is_public,
+        "created_at": report.created_at,
+        "updated_at": report.updated_at,
+    }
     return SavedReportResponse(**resp)
 
 

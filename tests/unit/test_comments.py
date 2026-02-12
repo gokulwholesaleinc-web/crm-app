@@ -215,7 +215,7 @@ class TestCommentEndpoints:
             "/api/comments",
             headers=auth_headers,
             params={
-                "entity_type": "contact",
+                "entity_type": "contacts",
                 "entity_id": test_contact.id,
             },
         )
@@ -239,7 +239,7 @@ class TestCommentEndpoints:
             headers=auth_headers,
             json={
                 "content": "API comment test @admin",
-                "entity_type": "contact",
+                "entity_type": "contacts",
                 "entity_id": test_contact.id,
             },
         )

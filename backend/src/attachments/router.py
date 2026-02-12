@@ -38,22 +38,6 @@ async def upload_file(
     return AttachmentResponse.model_validate(attachment)
 
 
-@router.get("/{entity_type}/{entity_id}", response_model=AttachmentListResponse)
-async def list_attachments(
-    entity_type: str,
-    entity_id: int,
-    current_user: CurrentUser,
-    db: DBSession,
-):
-    """List all attachments for a given entity."""
-    service = AttachmentService(db)
-    items, total = await service.list_attachments(entity_type, entity_id)
-    return AttachmentListResponse(
-        items=[AttachmentResponse.model_validate(a) for a in items],
-        total=total,
-    )
-
-
 @router.get("/{attachment_id}/download")
 async def download_attachment(
     attachment_id: int,
@@ -74,6 +58,22 @@ async def download_attachment(
         path=str(file_path),
         filename=attachment.original_filename,
         media_type=attachment.mime_type,
+    )
+
+
+@router.get("/{entity_type}/{entity_id}", response_model=AttachmentListResponse)
+async def list_attachments(
+    entity_type: str,
+    entity_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """List all attachments for a given entity."""
+    service = AttachmentService(db)
+    items, total = await service.list_attachments(entity_type, entity_id)
+    return AttachmentListResponse(
+        items=[AttachmentResponse.model_validate(a) for a in items],
+        total=total,
     )
 
 

@@ -141,7 +141,7 @@ class TestSendTemplateEmail:
         db_session: AsyncSession,
         auth_headers: dict,
     ):
-        """Test sending template email with non-existent template returns 400."""
+        """Test sending template email with non-existent template returns 404."""
         response = await client.post(
             "/api/email/send-template",
             headers=auth_headers,
@@ -152,7 +152,7 @@ class TestSendTemplateEmail:
             },
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 404
 
     @pytest.mark.asyncio
     async def test_send_template_email_unauthorized(

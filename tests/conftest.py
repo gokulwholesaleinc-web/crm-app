@@ -29,7 +29,7 @@ from src.campaigns.models import Campaign, CampaignMember, EmailTemplate, EmailC
 from src.core.models import Note, Tag, EntityTag, EntityShare
 from src.workflows.models import WorkflowRule, WorkflowExecution
 from src.dashboard.models import DashboardNumberCard, DashboardChart
-from src.ai.models import AIEmbedding, AIConversation, AIFeedback, AIKnowledgeDocument, AIUserPreferences
+from src.ai.models import AIEmbedding, AIConversation, AIFeedback, AIKnowledgeDocument, AIUserPreferences, AIActionLog, AILearning, AIInteractionLog
 from src.whitelabel.models import Tenant, TenantSettings, TenantUser
 from src.attachments.models import Attachment
 from src.email.models import EmailQueue
