@@ -37,6 +37,21 @@ ACTION_CLASSIFICATION: Dict[str, ActionRisk] = {
     "get_campaign_stats": ActionRisk.READ,
     "get_deal_coaching": ActionRisk.READ,
     "remember_preference": ActionRisk.WRITE_LOW,
+    # Pipeline intelligence (safe - read-only analysis)
+    "analyze_pipeline": ActionRisk.READ,
+    "suggest_improvements": ActionRisk.READ,
+    "get_stale_deals": ActionRisk.READ,
+    "get_follow_up_priorities": ActionRisk.READ,
+    # Execution tools (high-risk - send/create externally)
+    "create_and_send_quote": ActionRisk.WRITE_HIGH,
+    "resend_quote": ActionRisk.WRITE_HIGH,
+    "create_and_send_proposal": ActionRisk.WRITE_HIGH,
+    "resend_proposal": ActionRisk.WRITE_HIGH,
+    "create_payment_link": ActionRisk.WRITE_HIGH,
+    "send_invoice": ActionRisk.WRITE_HIGH,
+    "send_email_to_contact": ActionRisk.WRITE_HIGH,
+    "schedule_follow_up_sequence": ActionRisk.WRITE_HIGH,
+    "send_campaign_to_segment": ActionRisk.WRITE_HIGH,
 }
 
 
@@ -44,6 +59,15 @@ ACTION_CLASSIFICATION: Dict[str, ActionRisk] = {
 ACTION_DESCRIPTIONS: Dict[str, str] = {
     "update_lead_status": "Change the status of lead #{lead_id} to '{new_status}'",
     "update_opportunity_stage": "Move opportunity #{opportunity_id} to a new pipeline stage",
+    "create_and_send_quote": "Create a quote titled '{title}' for contact #{contact_id} and send it",
+    "resend_quote": "Resend quote #{quote_id} to the client",
+    "create_and_send_proposal": "Generate a proposal for opportunity #{opportunity_id} and send it",
+    "resend_proposal": "Resend proposal #{proposal_id} to the client",
+    "create_payment_link": "Create a payment link for ${amount} {currency}",
+    "send_invoice": "Send an invoice for payment #{payment_id}",
+    "send_email_to_contact": "Send an email to contact #{contact_id} with subject '{subject}'",
+    "schedule_follow_up_sequence": "Schedule a multi-step follow-up sequence for {entity_type} #{entity_id}",
+    "send_campaign_to_segment": "Send campaign #{campaign_id} to segment '{segment}'",
 }
 
 

@@ -593,5 +593,5 @@ class TestToolDefinitions:
         assert "generate_activity_report" in tool_names
 
     def test_tool_count(self):
-        """Verify total number of tools is as expected (6 read + 5 write + 2 report)."""
-        assert len(TOOLS) == 13
+        """Verify total number of tools is as expected."""
+        assert len(TOOLS) == 34

@@ -14,6 +14,9 @@ import {
   AcademicCapIcon,
   XMarkIcon,
   BoltIcon,
+  SignalIcon,
+  ExclamationTriangleIcon,
+  PhoneIcon,
 } from '@heroicons/react/24/outline';
 import { Button } from '../../components/ui/Button';
 import { Spinner } from '../../components/ui/Spinner';
@@ -32,12 +35,12 @@ import {
 import { AIFeedbackButtons } from '../../components/ai/AIFeedbackButtons';
 
 const suggestedPrompts = [
+  'Analyze my sales pipeline and suggest improvements',
+  'Find stale deals that need follow-up',
+  'Show me follow-up priorities ranked by urgency',
   'What are my top priorities today?',
   'Show me high-value opportunities closing this month',
-  'Which leads should I follow up with?',
-  'Give me a summary of recent activities',
-  'What tasks are overdue?',
-  'Find contacts in the technology industry',
+  'Create a quote for my top opportunity and send it',
 ];
 
 function QuickAction({
@@ -52,9 +55,9 @@ function QuickAction({
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-colors text-xs sm:text-sm text-gray-700 whitespace-nowrap flex-shrink-0"
+      className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600 transition-colors text-xs sm:text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap flex-shrink-0"
     >
-      <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-500" />
+      <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-500 dark:text-gray-400" />
       {label}
     </button>
   );
@@ -285,7 +288,7 @@ export function AIAssistantPage() {
             </div>
 
             {/* Input Area - fixed at bottom on mobile */}
-            <div className="p-2 sm:p-4 border-t bg-white sticky bottom-0 left-0 right-0">
+            <div className="p-2 sm:p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 sticky bottom-0 left-0 right-0">
               {messages.length > 0 && (
                 <div className="flex items-center justify-between mb-2 sm:mb-3">
                   <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto scrollbar-hide">
@@ -299,10 +302,25 @@ export function AIAssistantPage() {
                       label="Suggestions"
                       onClick={() => handleSendMessage('Give me actionable suggestions')}
                     />
+                    <QuickAction
+                      icon={SignalIcon}
+                      label="Analyze Pipeline"
+                      onClick={() => handleSendMessage('Analyze my sales pipeline and suggest improvements')}
+                    />
+                    <QuickAction
+                      icon={ExclamationTriangleIcon}
+                      label="Stale Deals"
+                      onClick={() => handleSendMessage('Find stale deals that need attention')}
+                    />
+                    <QuickAction
+                      icon={PhoneIcon}
+                      label="Follow-up Priorities"
+                      onClick={() => handleSendMessage('Show me follow-up priorities ranked by urgency')}
+                    />
                   </div>
                   <button
                     onClick={clearChat}
-                    className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors flex-shrink-0 ml-2"
+                    className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors flex-shrink-0 ml-2"
                   >
                     <TrashIcon className="h-3.5 w-3.5" />
                     <span className="hidden sm:inline">Clear chat</span>
