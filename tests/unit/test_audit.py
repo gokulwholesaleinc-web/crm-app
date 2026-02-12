@@ -264,7 +264,6 @@ class TestAuditEndpoint:
         assert response.status_code == 401
 
 
-@pytest.mark.skip(reason="Audit integration not yet wired into contact/opportunity routers")
 class TestAuditIntegration:
     """Tests that audit logging is triggered by CRUD operations."""
 
