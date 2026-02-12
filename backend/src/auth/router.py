@@ -77,7 +77,7 @@ async def register(
 
 
 @router.post("/login", response_model=Token)
-@limiter.limit("5/minute")
+@limiter.limit("15/minute")
 async def login(
     request: Request,
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
@@ -100,7 +100,7 @@ async def login(
 
 
 @router.post("/login/json", response_model=Token)
-@limiter.limit("5/minute")
+@limiter.limit("15/minute")
 async def login_json(
     request: Request,
     login_data: LoginRequest,
@@ -122,7 +122,9 @@ async def login_json(
         return Token(access_token=access_token, tenants=tenants)
     except HTTPException:
         raise
-    except Exception:
+    except Exception as e:
+        import logging
+        logging.error(f"Login error: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail="Internal server error",
