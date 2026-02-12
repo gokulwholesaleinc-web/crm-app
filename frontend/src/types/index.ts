@@ -535,6 +535,8 @@ export interface QuoteBase {
   terms_and_conditions?: string | null;
   notes?: string | null;
   owner_id?: number | null;
+  payment_type?: string;
+  recurring_interval?: string | null;
 }
 
 export interface QuoteCreate extends QuoteBase {
@@ -556,6 +558,8 @@ export interface QuoteUpdate {
   terms_and_conditions?: string | null;
   notes?: string | null;
   owner_id?: number | null;
+  payment_type?: string | null;
+  recurring_interval?: string | null;
 }
 
 export interface Quote extends QuoteBase {
@@ -603,19 +607,9 @@ export interface ProductBundleItem {
 
 export interface ProductBundleItemCreate {
   description: string;
-  quantity: number;
-  unit_price: number;
-  sort_order: number;
-}
-
-export interface ProductBundle {
-  id: number;
-  name: string;
-  description: string | null;
-  is_active: boolean;
-  items: ProductBundleItem[];
-  created_at: string;
-  updated_at: string;
+  quantity?: number;
+  unit_price?: number;
+  sort_order?: number;
 }
 
 export interface ProductBundleCreate {
@@ -632,7 +626,24 @@ export interface ProductBundleUpdate {
   items?: ProductBundleItemCreate[];
 }
 
+export interface ProductBundle {
+  id: number;
+  name: string;
+  description?: string | null;
+  is_active: boolean;
+  items: ProductBundleItem[];
+  created_at: string;
+  updated_at: string;
+}
+
 export type ProductBundleListResponse = PaginatedResponse<ProductBundle>;
+
+export interface ProductBundleFilters {
+  page?: number;
+  page_size?: number;
+  search?: string;
+  is_active?: boolean;
+}
 
 // =============================================================================
 // Activity Types

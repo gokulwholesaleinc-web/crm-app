@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { PlusIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, CubeIcon } from '@heroicons/react/24/outline';
 import { Button, Modal, ConfirmDialog, StatusBadge, PaginationBar } from '../../components/ui';
 import type { StatusType } from '../../components/ui/Badge';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { QuoteForm } from './QuoteForm';
+import { BundleManager } from './BundleManager';
 import { useQuotes, useCreateQuote, useDeleteQuote } from '../../hooks/useQuotes';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
@@ -28,6 +29,7 @@ function QuotesPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
+  const [showBundles, setShowBundles] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; quote: Quote | null }>({
     isOpen: false,
     quote: null,
@@ -101,14 +103,26 @@ function QuotesPage() {
             Create and manage sales quotes
           </p>
         </div>
-        <Button
-          leftIcon={<PlusIcon className="h-5 w-5" />}
-          onClick={() => setShowForm(true)}
-          className="w-full sm:w-auto"
-        >
-          Create Quote
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="secondary"
+            leftIcon={<CubeIcon className="h-5 w-5" />}
+            onClick={() => setShowBundles((v) => !v)}
+          >
+            Bundles
+          </Button>
+          <Button
+            leftIcon={<PlusIcon className="h-5 w-5" />}
+            onClick={() => setShowForm(true)}
+            className="w-full sm:w-auto"
+          >
+            Create Quote
+          </Button>
+        </div>
       </div>
+
+      {/* Bundles Panel */}
+      {showBundles && <BundleManager />}
 
       {/* Search and Filters */}
       <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4 border border-transparent dark:border-gray-700">

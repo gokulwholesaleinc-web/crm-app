@@ -8,6 +8,7 @@ import {
   PlusIcon,
   TrashIcon,
   PencilIcon,
+  CubeIcon,
 } from '@heroicons/react/24/outline';
 import { Button, Modal, ConfirmDialog, StatusBadge } from '../../components/ui';
 import type { StatusType } from '../../components/ui/Badge';
@@ -20,11 +21,13 @@ import {
   useRejectQuote,
   useAddLineItem,
   useRemoveLineItem,
+  useBundles,
+  useAddBundleToQuote,
 } from '../../hooks/useQuotes';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { showSuccess, showError } from '../../utils/toast';
-import type { QuoteUpdate, QuoteLineItemCreate } from '../../types';
+import type { QuoteUpdate, QuoteLineItemCreate, ProductBundle } from '../../types';
 
 function QuoteDetailPage() {
   const { id } = useParams();
@@ -41,8 +44,12 @@ function QuoteDetailPage() {
   const rejectQuoteMutation = useRejectQuote();
   const addLineItemMutation = useAddLineItem();
   const removeLineItemMutation = useRemoveLineItem();
+  const addBundleMutation = useAddBundleToQuote();
+  const { data: bundlesData } = useBundles({ is_active: true });
+  const bundles = bundlesData?.items ?? [];
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showBundleDropdown, setShowBundleDropdown] = useState(false);
   const [showAddLineItem, setShowAddLineItem] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editTitle, setEditTitle] = useState('');
@@ -142,6 +149,16 @@ function QuoteDetailPage() {
       showSuccess('Line item removed');
     } catch {
       showError('Failed to remove line item');
+    }
+  };
+
+  const handleAddBundle = async (bundle: ProductBundle) => {
+    setShowBundleDropdown(false);
+    try {
+      await addBundleMutation.mutateAsync({ quoteId: quote.id, bundleId: bundle.id });
+      showSuccess(`Added bundle "${bundle.name}"`);
+    } catch {
+      showError('Failed to add bundle');
     }
   };
 
@@ -250,14 +267,46 @@ function QuoteDetailPage() {
             <div className="px-6 py-4 flex items-center justify-between border-b border-gray-200 dark:border-gray-700">
               <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100">Line Items</h2>
               {isDraft && (
-                <button
-                  type="button"
-                  onClick={() => setShowAddLineItem(true)}
-                  className="inline-flex items-center text-sm text-primary-600 hover:text-primary-900 dark:hover:text-primary-300"
-                >
-                  <PlusIcon className="h-4 w-4 mr-1" aria-hidden="true" />
-                  Add Item
-                </button>
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowBundleDropdown((v) => !v)}
+                      className="inline-flex items-center text-sm text-primary-600 hover:text-primary-900 dark:hover:text-primary-300"
+                      disabled={addBundleMutation.isPending}
+                    >
+                      <CubeIcon className="h-4 w-4 mr-1" aria-hidden="true" />
+                      {addBundleMutation.isPending ? 'Adding...' : 'Add Bundle'}
+                    </button>
+                    {showBundleDropdown && bundles.length > 0 && (
+                      <div className="absolute right-0 mt-1 w-56 rounded-md shadow-lg bg-white dark:bg-gray-700 ring-1 ring-black ring-opacity-5 z-10">
+                        <div className="py-1 max-h-60 overflow-y-auto">
+                          {bundles.map((bundle: ProductBundle) => (
+                            <button
+                              key={bundle.id}
+                              type="button"
+                              onClick={() => handleAddBundle(bundle)}
+                              className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
+                            >
+                              <span className="font-medium">{bundle.name}</span>
+                              <span className="ml-2 text-xs text-gray-400">
+                                {bundle.items.length} item{bundle.items.length !== 1 ? 's' : ''}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddLineItem(true)}
+                    className="inline-flex items-center text-sm text-primary-600 hover:text-primary-900 dark:hover:text-primary-300"
+                  >
+                    <PlusIcon className="h-4 w-4 mr-1" aria-hidden="true" />
+                    Add Item
+                  </button>
+                </div>
               )}
             </div>
 
@@ -357,6 +406,23 @@ function QuoteDetailPage() {
           <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700">
             <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-4">Details</h2>
             <dl className="space-y-3">
+              <div>
+                <dt className="text-xs text-gray-500 dark:text-gray-400">Payment Type</dt>
+                <dd className="mt-0.5">
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                    quote.payment_type === 'subscription'
+                      ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
+                      : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+                  }`}>
+                    {quote.payment_type === 'subscription' ? 'Subscription' : 'One-Time'}
+                  </span>
+                  {quote.payment_type === 'subscription' && quote.recurring_interval && (
+                    <span className="ml-2 text-sm text-gray-500 dark:text-gray-400 capitalize">
+                      {quote.recurring_interval}
+                    </span>
+                  )}
+                </dd>
+              </div>
               <div>
                 <dt className="text-xs text-gray-500 dark:text-gray-400">Currency</dt>
                 <dd className="text-sm font-medium text-gray-900 dark:text-gray-100">{quote.currency}</dd>

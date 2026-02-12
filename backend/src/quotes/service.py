@@ -4,9 +4,12 @@ from datetime import datetime, timezone
 from typing import Optional, List, Tuple
 from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
-from src.quotes.models import Quote, QuoteLineItem, QuoteTemplate
-from src.quotes.schemas import QuoteCreate, QuoteUpdate, QuoteLineItemCreate
-from src.core.base_service import CRUDService, StatusTransitionMixin
+from src.quotes.models import Quote, QuoteLineItem, QuoteTemplate, ProductBundle, ProductBundleItem
+from src.quotes.schemas import (
+    QuoteCreate, QuoteUpdate, QuoteLineItemCreate,
+    ProductBundleCreate, ProductBundleUpdate,
+)
+from src.core.base_service import CRUDService, StatusTransitionMixin, BaseService
 from src.core.constants import DEFAULT_PAGE_SIZE
 
 # Valid status transitions
@@ -51,27 +54,28 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
 
     def _calculate_line_item_total(self, item: QuoteLineItem) -> float:
         """Calculate total for a single line item."""
-        return (item.quantity * item.unit_price) - item.discount
+        return float(item.quantity * item.unit_price) - float(item.discount)
 
     def _recalculate_totals(self, quote: Quote) -> None:
         """Recalculate subtotal, tax_amount, and total from line items and discount."""
-        subtotal = sum(
+        subtotal = float(sum(
             self._calculate_line_item_total(item) for item in quote.line_items
-        )
+        ))
         quote.subtotal = subtotal
 
         # Apply quote-level discount
         discount_amount = 0.0
         if quote.discount_type == "percent" and quote.discount_value:
-            discount_amount = subtotal * (quote.discount_value / 100)
+            discount_amount = subtotal * (float(quote.discount_value) / 100)
         elif quote.discount_type == "fixed" and quote.discount_value:
-            discount_amount = quote.discount_value
+            discount_amount = float(quote.discount_value)
 
         after_discount = subtotal - discount_amount
 
         # Apply tax
-        quote.tax_amount = after_discount * (quote.tax_rate / 100) if quote.tax_rate else 0
-        quote.total = after_discount + quote.tax_amount
+        tax_rate = float(quote.tax_rate) if quote.tax_rate else 0.0
+        quote.tax_amount = after_discount * (tax_rate / 100) if tax_rate else 0
+        quote.total = after_discount + float(quote.tax_amount)
 
     async def get_list(
         self,
@@ -226,4 +230,135 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
         # Refresh and recalculate
         await self.db.refresh(quote)
         self._recalculate_totals(quote)
+        await self.db.flush()
+
+    async def add_bundle_to_quote(self, quote: Quote, bundle_id: int) -> Quote:
+        """Add all items from a product bundle to a quote as line items."""
+        result = await self.db.execute(
+            select(ProductBundle)
+            .options(selectinload(ProductBundle.items))
+            .where(ProductBundle.id == bundle_id)
+        )
+        bundle = result.scalar_one_or_none()
+        if not bundle:
+            raise ValueError(f"Product bundle {bundle_id} not found")
+        if not bundle.is_active:
+            raise ValueError(f"Product bundle {bundle_id} is not active")
+
+        current_sort = len(quote.line_items)
+        for bundle_item in bundle.items:
+            item = QuoteLineItem(
+                quote_id=quote.id,
+                description=bundle_item.description,
+                quantity=float(bundle_item.quantity),
+                unit_price=float(bundle_item.unit_price),
+                discount=0,
+                sort_order=current_sort,
+            )
+            item.total = self._calculate_line_item_total(item)
+            self.db.add(item)
+            current_sort += 1
+
+        await self.db.flush()
+        await self.db.refresh(quote)
+        self._recalculate_totals(quote)
+        await self.db.flush()
+        await self.db.refresh(quote)
+
+        return quote
+
+
+class ProductBundleService(BaseService[ProductBundle]):
+    """Service for ProductBundle CRUD operations."""
+
+    model = ProductBundle
+
+    def _get_eager_load_options(self):
+        return [selectinload(ProductBundle.items)]
+
+    async def get_list(
+        self,
+        page: int = 1,
+        page_size: int = DEFAULT_PAGE_SIZE,
+        search: Optional[str] = None,
+        is_active: Optional[bool] = None,
+    ) -> Tuple[List[ProductBundle], int]:
+        """Get paginated list of bundles."""
+        query = select(ProductBundle).options(selectinload(ProductBundle.items))
+
+        if search:
+            query = query.where(ProductBundle.name.ilike(f"%{search}%"))
+        if is_active is not None:
+            query = query.where(ProductBundle.is_active == is_active)
+
+        count_query = select(func.count()).select_from(query.subquery())
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar()
+
+        offset = (page - 1) * page_size
+        query = query.offset(offset).limit(page_size).order_by(ProductBundle.name)
+
+        result = await self.db.execute(query)
+        bundles = list(result.scalars().all())
+
+        return bundles, total
+
+    async def create(self, data: ProductBundleCreate, user_id: int) -> ProductBundle:
+        """Create a product bundle with items."""
+        items_data = data.items or []
+        bundle = ProductBundle(
+            name=data.name,
+            description=data.description,
+            is_active=data.is_active,
+            created_by_id=user_id,
+        )
+        self.db.add(bundle)
+        await self.db.flush()
+
+        for item_data in items_data:
+            item = ProductBundleItem(
+                bundle_id=bundle.id,
+                description=item_data.description,
+                quantity=item_data.quantity,
+                unit_price=item_data.unit_price,
+                sort_order=item_data.sort_order,
+            )
+            self.db.add(item)
+
+        await self.db.flush()
+        await self.db.refresh(bundle)
+        return bundle
+
+    async def update(self, bundle: ProductBundle, data: ProductBundleUpdate, user_id: int) -> ProductBundle:
+        """Update a product bundle, optionally replacing items."""
+        if data.name is not None:
+            bundle.name = data.name
+        if data.description is not None:
+            bundle.description = data.description
+        if data.is_active is not None:
+            bundle.is_active = data.is_active
+
+        if data.items is not None:
+            # Replace all items
+            for old_item in bundle.items:
+                await self.db.delete(old_item)
+            await self.db.flush()
+
+            for item_data in data.items:
+                item = ProductBundleItem(
+                    bundle_id=bundle.id,
+                    description=item_data.description,
+                    quantity=item_data.quantity,
+                    unit_price=item_data.unit_price,
+                    sort_order=item_data.sort_order,
+                )
+                self.db.add(item)
+
+        await self.db.flush()
+        await self.db.refresh(bundle)
+        return bundle
+
+    async def delete(self, bundle: ProductBundle) -> None:
+        """Delete a product bundle."""
+        await self.db.delete(bundle)
         await self.db.flush()

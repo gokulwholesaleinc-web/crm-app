@@ -121,3 +121,55 @@ export const quotesApi = {
 };
 
 export default quotesApi;
+
+// =============================================================================
+// Product Bundle API
+// =============================================================================
+
+import type {
+  ProductBundle,
+  ProductBundleCreate,
+  ProductBundleUpdate,
+  ProductBundleListResponse,
+  ProductBundleFilters,
+} from '../types';
+
+const BUNDLES_BASE = `${QUOTES_BASE}/bundles`;
+
+export const listBundles = async (filters: ProductBundleFilters = {}): Promise<ProductBundleListResponse> => {
+  const response = await apiClient.get<ProductBundleListResponse>(BUNDLES_BASE, { params: filters });
+  return response.data;
+};
+
+export const getBundle = async (bundleId: number): Promise<ProductBundle> => {
+  const response = await apiClient.get<ProductBundle>(`${BUNDLES_BASE}/${bundleId}`);
+  return response.data;
+};
+
+export const createBundle = async (data: ProductBundleCreate): Promise<ProductBundle> => {
+  const response = await apiClient.post<ProductBundle>(BUNDLES_BASE, data);
+  return response.data;
+};
+
+export const updateBundle = async (bundleId: number, data: ProductBundleUpdate): Promise<ProductBundle> => {
+  const response = await apiClient.patch<ProductBundle>(`${BUNDLES_BASE}/${bundleId}`, data);
+  return response.data;
+};
+
+export const deleteBundle = async (bundleId: number): Promise<void> => {
+  await apiClient.delete(`${BUNDLES_BASE}/${bundleId}`);
+};
+
+export const addBundleToQuote = async (quoteId: number, bundleId: number): Promise<Quote> => {
+  const response = await apiClient.post<Quote>(`${QUOTES_BASE}/${quoteId}/add-bundle/${bundleId}`);
+  return response.data;
+};
+
+export const bundlesApi = {
+  list: listBundles,
+  get: getBundle,
+  create: createBundle,
+  update: updateBundle,
+  delete: deleteBundle,
+  addToQuote: addBundleToQuote,
+};

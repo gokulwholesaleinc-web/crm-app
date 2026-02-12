@@ -5,13 +5,15 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createEntityHooks, createQueryKeys } from './useEntityCRUD';
-import { quotesApi } from '../api/quotes';
+import { useAuthQuery } from './useAuthQuery';
+import { quotesApi, bundlesApi } from '../api/quotes';
 import type {
   Quote,
   QuoteCreate,
   QuoteUpdate,
   QuoteFilters,
   QuoteLineItemCreate,
+  ProductBundleFilters,
 } from '../types';
 
 // =============================================================================
@@ -148,6 +150,66 @@ export function useRemoveLineItem() {
   return useMutation({
     mutationFn: ({ quoteId, itemId }: { quoteId: number; itemId: number }) =>
       quotesApi.removeLineItem(quoteId, itemId),
+    onSuccess: (_data, { quoteId }) => {
+      queryClient.invalidateQueries({ queryKey: quoteKeys.detail(quoteId) });
+      queryClient.invalidateQueries({ queryKey: quoteKeys.lists() });
+    },
+  });
+}
+
+// =============================================================================
+// Product Bundle Hooks
+// =============================================================================
+
+export const bundleKeys = createQueryKeys('bundles');
+
+export function useBundles(filters?: ProductBundleFilters) {
+  return useAuthQuery({
+    queryKey: [...bundleKeys.lists(), filters],
+    queryFn: () => bundlesApi.list(filters),
+  });
+}
+
+export function useCreateBundle() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: bundlesApi.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: bundleKeys.lists() });
+    },
+  });
+}
+
+export function useUpdateBundle() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof bundlesApi.update>[1] }) =>
+      bundlesApi.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: bundleKeys.lists() });
+    },
+  });
+}
+
+export function useDeleteBundle() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: bundlesApi.delete,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: bundleKeys.lists() });
+    },
+  });
+}
+
+export function useAddBundleToQuote() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ quoteId, bundleId }: { quoteId: number; bundleId: number }) =>
+      bundlesApi.addToQuote(quoteId, bundleId),
     onSuccess: (_data, { quoteId }) => {
       queryClient.invalidateQueries({ queryKey: quoteKeys.detail(quoteId) });
       queryClient.invalidateQueries({ queryKey: quoteKeys.lists() });

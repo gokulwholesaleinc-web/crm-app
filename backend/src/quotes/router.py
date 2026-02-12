@@ -19,8 +19,12 @@ from src.quotes.schemas import (
     QuoteListResponse,
     QuoteLineItemCreate,
     QuoteLineItemResponse,
+    ProductBundleCreate,
+    ProductBundleUpdate,
+    ProductBundleResponse,
+    ProductBundleListResponse,
 )
-from src.quotes.service import QuoteService
+from src.quotes.service import QuoteService, ProductBundleService
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +85,96 @@ async def create_quote(
     quote = await service.create(quote_data, current_user.id)
     return QuoteResponse.model_validate(quote)
 
+
+# =============================================================================
+# Bundle endpoints (BEFORE /{quote_id} to avoid path conflicts)
+# =============================================================================
+
+@router.get("/bundles", response_model=ProductBundleListResponse)
+async def list_bundles(
+    current_user: CurrentUser,
+    db: DBSession,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    search: Optional[str] = None,
+    is_active: Optional[bool] = None,
+):
+    """List product bundles."""
+    service = ProductBundleService(db)
+    bundles, total = await service.get_list(
+        page=page,
+        page_size=page_size,
+        search=search,
+        is_active=is_active,
+    )
+    return ProductBundleListResponse(
+        items=[ProductBundleResponse.model_validate(b) for b in bundles],
+        total=total,
+        page=page,
+        page_size=page_size,
+        pages=calculate_pages(total, page_size),
+    )
+
+
+@router.post("/bundles", response_model=ProductBundleResponse, status_code=HTTPStatus.CREATED)
+async def create_bundle(
+    bundle_data: ProductBundleCreate,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Create a product bundle."""
+    service = ProductBundleService(db)
+    bundle = await service.create(bundle_data, current_user.id)
+    return ProductBundleResponse.model_validate(bundle)
+
+
+@router.get("/bundles/{bundle_id}", response_model=ProductBundleResponse)
+async def get_bundle(
+    bundle_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Get a product bundle by ID."""
+    service = ProductBundleService(db)
+    bundle = await service.get_by_id(bundle_id)
+    if not bundle:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Bundle not found")
+    return ProductBundleResponse.model_validate(bundle)
+
+
+@router.patch("/bundles/{bundle_id}", response_model=ProductBundleResponse)
+async def update_bundle(
+    bundle_id: int,
+    bundle_data: ProductBundleUpdate,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Update a product bundle."""
+    service = ProductBundleService(db)
+    bundle = await service.get_by_id(bundle_id)
+    if not bundle:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Bundle not found")
+    updated = await service.update(bundle, bundle_data, current_user.id)
+    return ProductBundleResponse.model_validate(updated)
+
+
+@router.delete("/bundles/{bundle_id}", status_code=HTTPStatus.NO_CONTENT)
+async def delete_bundle(
+    bundle_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Delete a product bundle."""
+    service = ProductBundleService(db)
+    bundle = await service.get_by_id(bundle_id)
+    if not bundle:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Bundle not found")
+    await service.delete(bundle)
+
+
+# =============================================================================
+# Quote detail endpoints
+# =============================================================================
 
 @router.get("/{quote_id}", response_model=QuoteResponse)
 async def get_quote(
@@ -208,3 +302,21 @@ async def remove_line_item(
         await service.remove_line_item(quote, item_id)
     except ValueError as e:
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail=str(e))
+
+
+@router.post("/{quote_id}/add-bundle/{bundle_id}", response_model=QuoteResponse)
+async def add_bundle_to_quote(
+    quote_id: int,
+    bundle_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Add all items from a product bundle to a quote."""
+    service = QuoteService(db)
+    quote = await get_entity_or_404(service, quote_id, EntityNames.QUOTE)
+    check_ownership(quote, current_user, EntityNames.QUOTE)
+    try:
+        quote = await service.add_bundle_to_quote(quote, bundle_id)
+    except ValueError as e:
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
+    return QuoteResponse.model_validate(quote)

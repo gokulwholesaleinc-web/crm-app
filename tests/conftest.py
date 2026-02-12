@@ -38,11 +38,11 @@ from src.filters.models import SavedFilter
 from src.reports.models import SavedReport
 from src.audit.models import AuditLog
 from src.comments.models import Comment
-from src.roles.models import Role, UserRole
+from src.roles.models import Role, UserRole, RoleName, DEFAULT_PERMISSIONS
 from src.webhooks.models import Webhook, WebhookDelivery
 from src.assignment.models import AssignmentRule
 from src.sequences.models import Sequence, SequenceEnrollment
-from src.quotes.models import Quote, QuoteLineItem, QuoteTemplate
+from src.quotes.models import Quote, QuoteLineItem, QuoteTemplate, ProductBundle, ProductBundleItem
 from src.payments.models import StripeCustomer, Product, Price, Payment, Subscription
 from src.proposals.models import Proposal, ProposalTemplate, ProposalView
 
@@ -142,6 +142,15 @@ async def auth_headers(auth_token: str) -> dict:
 async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     """Create async test client."""
     from src.main import app
+
+    # Register AI router (normally done in lifespan which doesn't run in tests)
+    try:
+        from src.ai.router import router as ai_router
+        ai_paths = {r.path for r in app.routes if hasattr(r, 'path')}
+        if "/api/ai/chat" not in ai_paths:
+            app.include_router(ai_router)
+    except ImportError:
+        pass
 
     # Override the database dependency
     async def override_get_db():
@@ -449,3 +458,133 @@ async def test_tenant_user(
     await db_session.commit()
     await db_session.refresh(tenant_user)
     return tenant_user
+
+
+# =============================================================================
+# RBAC / Role fixtures
+# =============================================================================
+
+@pytest_asyncio.fixture(scope="function")
+async def seed_roles(db_session: AsyncSession) -> list:
+    """Seed default roles (admin, manager, sales_rep, viewer) for tests."""
+    roles = []
+    for role_name in RoleName:
+        role = Role(
+            name=role_name.value,
+            description=f"Default {role_name.value} role",
+            permissions=DEFAULT_PERMISSIONS.get(role_name, {}),
+        )
+        db_session.add(role)
+        roles.append(role)
+    await db_session.commit()
+    for r in roles:
+        await db_session.refresh(r)
+    return roles
+
+
+@pytest_asyncio.fixture(scope="function")
+async def test_admin_user(db_session: AsyncSession, seed_roles: list) -> User:
+    """Create a test admin user with admin role assigned."""
+    user = User(
+        email="role_admin@example.com",
+        hashed_password=get_password_hash("adminpassword123"),
+        full_name="Role Admin User",
+        is_active=True,
+        is_superuser=True,
+    )
+    db_session.add(user)
+    await db_session.flush()
+    admin_role = next(r for r in seed_roles if r.name == "admin")
+    user_role = UserRole(user_id=user.id, role_id=admin_role.id)
+    db_session.add(user_role)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture(scope="function")
+async def admin_auth_headers(test_admin_user: User) -> dict:
+    """Create authorization headers for admin user."""
+    token = create_access_token(data={"sub": str(test_admin_user.id)})
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest_asyncio.fixture(scope="function")
+async def _viewer_user(db_session: AsyncSession, seed_roles: list) -> User:
+    """Create a test viewer user with viewer role assigned."""
+    user = User(
+        email="role_viewer@example.com",
+        hashed_password=get_password_hash("viewerpassword123"),
+        full_name="Viewer User",
+        is_active=True,
+        is_superuser=False,
+    )
+    db_session.add(user)
+    await db_session.flush()
+    viewer_role = next(r for r in seed_roles if r.name == "viewer")
+    user_role = UserRole(user_id=user.id, role_id=viewer_role.id)
+    db_session.add(user_role)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture(scope="function")
+async def viewer_auth_headers(_viewer_user: User) -> dict:
+    """Create authorization headers for viewer user."""
+    token = create_access_token(data={"sub": str(_viewer_user.id)})
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest_asyncio.fixture(scope="function")
+async def _sales_rep_user(db_session: AsyncSession, seed_roles: list) -> User:
+    """Create a test sales rep user with sales_rep role assigned."""
+    user = User(
+        email="role_salesrep@example.com",
+        hashed_password=get_password_hash("salesreppassword123"),
+        full_name="Sales Rep User",
+        is_active=True,
+        is_superuser=False,
+    )
+    db_session.add(user)
+    await db_session.flush()
+    sales_role = next(r for r in seed_roles if r.name == "sales_rep")
+    user_role = UserRole(user_id=user.id, role_id=sales_role.id)
+    db_session.add(user_role)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture(scope="function")
+async def sales_rep_auth_headers(_sales_rep_user: User) -> dict:
+    """Create authorization headers for sales rep user."""
+    token = create_access_token(data={"sub": str(_sales_rep_user.id)})
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest_asyncio.fixture(scope="function")
+async def _manager_user(db_session: AsyncSession, seed_roles: list) -> User:
+    """Create a test manager user with manager role assigned."""
+    user = User(
+        email="role_manager@example.com",
+        hashed_password=get_password_hash("managerpassword123"),
+        full_name="Manager User",
+        is_active=True,
+        is_superuser=False,
+    )
+    db_session.add(user)
+    await db_session.flush()
+    manager_role = next(r for r in seed_roles if r.name == "manager")
+    user_role = UserRole(user_id=user.id, role_id=manager_role.id)
+    db_session.add(user_role)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture(scope="function")
+async def manager_auth_headers(_manager_user: User) -> dict:
+    """Create authorization headers for manager user."""
+    token = create_access_token(data={"sub": str(_manager_user.id)})
+    return {"Authorization": f"Bearer {token}"}

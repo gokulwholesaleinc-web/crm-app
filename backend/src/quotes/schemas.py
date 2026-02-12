@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 from typing import Optional, List
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 
 # =============================================================================
@@ -49,6 +49,16 @@ class QuoteBase(BaseModel):
     terms_and_conditions: Optional[str] = None
     notes: Optional[str] = None
     owner_id: Optional[int] = None
+    payment_type: str = "one_time"
+    recurring_interval: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_recurring_interval(self):
+        if self.payment_type == "subscription" and not self.recurring_interval:
+            raise ValueError("recurring_interval is required for subscription quotes")
+        if self.payment_type != "subscription":
+            self.recurring_interval = None
+        return self
 
 
 class QuoteCreate(QuoteBase):
@@ -70,6 +80,8 @@ class QuoteUpdate(BaseModel):
     terms_and_conditions: Optional[str] = None
     notes: Optional[str] = None
     owner_id: Optional[int] = None
+    payment_type: Optional[str] = None
+    recurring_interval: Optional[str] = None
 
 
 from src.core.schemas import ContactBrief, CompanyBrief, OpportunityBrief  # noqa: E402
@@ -125,3 +137,59 @@ class QuoteTemplateResponse(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# =============================================================================
+# Product Bundle Schemas
+# =============================================================================
+
+class ProductBundleItemCreate(BaseModel):
+    description: str
+    quantity: float = 1
+    unit_price: float = 0
+    sort_order: int = 0
+
+
+class ProductBundleItemResponse(BaseModel):
+    id: int
+    bundle_id: int
+    description: str
+    quantity: float
+    unit_price: float
+    sort_order: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ProductBundleCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    is_active: bool = True
+    items: Optional[List[ProductBundleItemCreate]] = None
+
+
+class ProductBundleUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
+    items: Optional[List[ProductBundleItemCreate]] = None
+
+
+class ProductBundleResponse(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    is_active: bool
+    items: List[ProductBundleItemResponse] = []
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ProductBundleListResponse(BaseModel):
+    items: List[ProductBundleResponse]
+    total: int
+    page: int
+    page_size: int
+    pages: int

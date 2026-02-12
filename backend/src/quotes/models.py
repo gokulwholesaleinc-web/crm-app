@@ -46,6 +46,14 @@ class Quote(Base, AuditableMixin):
     # Status: draft, sent, viewed, accepted, rejected, expired
     status: Mapped[str] = mapped_column(String(20), default="draft", nullable=False)
 
+    # Payment type: one_time or subscription
+    payment_type: Mapped[str] = mapped_column(
+        String(20), default="one_time", nullable=False
+    )
+    recurring_interval: Mapped[Optional[str]] = mapped_column(
+        String(20)
+    )  # monthly, quarterly, yearly
+
     # Validity and currency
     valid_until: Mapped[Optional[date]] = mapped_column(Date)
     currency: Mapped[str] = mapped_column(String(3), default="USD")
@@ -130,3 +138,42 @@ class QuoteTemplate(Base, AuditableMixin):
     default_terms: Mapped[Optional[str]] = mapped_column(Text)
     default_notes: Mapped[Optional[str]] = mapped_column(Text)
     line_items_template: Mapped[Optional[dict]] = mapped_column(JSON)
+
+
+class ProductBundle(Base, AuditableMixin):
+    """Reusable product bundle grouping multiple items."""
+    __tablename__ = "product_bundles"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+
+    # ORM relationships
+    items: Mapped[List["ProductBundleItem"]] = relationship(
+        "ProductBundleItem",
+        back_populates="bundle",
+        cascade="all, delete-orphan",
+        order_by="ProductBundleItem.sort_order",
+        lazy="selectin",
+    )
+
+
+class ProductBundleItem(Base):
+    """Individual item within a product bundle."""
+    __tablename__ = "product_bundle_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    bundle_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("product_bundles.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    description: Mapped[str] = mapped_column(String(500), nullable=False)
+    quantity: Mapped[float] = mapped_column(Numeric(10, 2), default=1)
+    unit_price: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+
+    # ORM relationship
+    bundle: Mapped["ProductBundle"] = relationship("ProductBundle", back_populates="items")
