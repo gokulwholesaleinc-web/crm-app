@@ -493,12 +493,27 @@ class TestStatusTransitions:
         client: AsyncClient,
         db_session: AsyncSession,
         auth_headers: dict,
-        test_proposal: Proposal,
+        test_user: User,
+        test_contact: Contact,
     ):
-        """Test sending a draft proposal."""
+        """Test sending a draft proposal with a contact."""
+        proposal = Proposal(
+            proposal_number="PR-2026-SEND",
+            title="Sendable Proposal",
+            content="Content here",
+            status="draft",
+            contact_id=test_contact.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(proposal)
+        await db_session.commit()
+        await db_session.refresh(proposal)
+
         response = await client.post(
-            f"/api/proposals/{test_proposal.id}/send",
+            f"/api/proposals/{proposal.id}/send",
             headers=auth_headers,
+            json={"attach_pdf": False},
         )
 
         assert response.status_code == 200

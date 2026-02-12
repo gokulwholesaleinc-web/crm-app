@@ -60,10 +60,23 @@ export const deleteQuote = async (quoteId: number): Promise<void> => {
 };
 
 /**
- * Send a quote
+ * Send a branded quote email
  */
-export const sendQuote = async (quoteId: number): Promise<Quote> => {
-  const response = await apiClient.post<Quote>(`${QUOTES_BASE}/${quoteId}/send`);
+export const sendQuote = async (quoteId: number, attachPdf: boolean = false): Promise<Quote> => {
+  const response = await apiClient.post<Quote>(`${QUOTES_BASE}/${quoteId}/send`, null, {
+    params: attachPdf ? { attach_pdf: true } : undefined,
+  });
+  return response.data;
+};
+
+/**
+ * Download quote as branded PDF
+ */
+export const downloadQuotePDF = async (quoteId: number): Promise<Blob> => {
+  const response = await apiClient.get(`${QUOTES_BASE}/${quoteId}/pdf`, {
+    params: { download: true },
+    responseType: 'blob',
+  });
   return response.data;
 };
 
@@ -118,6 +131,7 @@ export const quotesApi = {
   reject: rejectQuote,
   addLineItem,
   removeLineItem,
+  downloadPDF: downloadQuotePDF,
 };
 
 export default quotesApi;

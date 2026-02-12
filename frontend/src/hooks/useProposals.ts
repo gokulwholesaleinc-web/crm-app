@@ -76,18 +76,36 @@ export function useDeleteProposal() {
 // =============================================================================
 
 /**
- * Hook to send a proposal
+ * Hook to send a proposal with branded email
  */
 export function useSendProposal() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (proposalId: number) => proposalsApi.send(proposalId),
-    onSuccess: (_data, proposalId) => {
+    mutationFn: ({ proposalId, attachPdf = false }: { proposalId: number; attachPdf?: boolean }) =>
+      proposalsApi.sendWithEmail(proposalId, attachPdf),
+    onSuccess: (_data, { proposalId }) => {
       queryClient.invalidateQueries({ queryKey: proposalKeys.lists() });
       queryClient.invalidateQueries({ queryKey: proposalKeys.detail(proposalId) });
     },
   });
+}
+
+/**
+ * Download a branded proposal PDF and trigger browser download
+ */
+export function useDownloadProposalPDF() {
+  return async (proposalId: number, proposalNumber: string) => {
+    const blob = await proposalsApi.downloadPDF(proposalId);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `proposal-${proposalNumber}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 }
 
 /**

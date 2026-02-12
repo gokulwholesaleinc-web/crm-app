@@ -89,6 +89,16 @@ class ProposalListResponse(BaseModel):
     pages: int
 
 
+class ProposalBranding(BaseModel):
+    """Tenant branding data for public proposal view."""
+    company_name: Optional[str] = None
+    logo_url: Optional[str] = None
+    primary_color: str = "#6366f1"
+    secondary_color: str = "#8b5cf6"
+    accent_color: str = "#22c55e"
+    footer_text: Optional[str] = None
+
+
 class ProposalPublicResponse(BaseModel):
     """Public view of a proposal (no auth required)."""
     proposal_number: str
@@ -104,8 +114,14 @@ class ProposalPublicResponse(BaseModel):
     status: str
     company: Optional[CompanyBrief] = None
     contact: Optional[ContactBrief] = None
+    branding: Optional[ProposalBranding] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ProposalSendRequest(BaseModel):
+    """Request to send a proposal with optional PDF attachment."""
+    attach_pdf: bool = False
 
 
 # =============================================================================

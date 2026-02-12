@@ -12,6 +12,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.email.models import EmailQueue
+from src.email.branded_templates import TenantBrandingHelper, render_branded_email
 from src.core.constants import DEFAULT_PAGE_SIZE
 
 
@@ -181,8 +182,14 @@ class EmailService:
         sent_by_id: Optional[int] = None,
         entity_type: Optional[str] = None,
         entity_id: Optional[int] = None,
+        use_branded_wrapper: bool = False,
+        branding: Optional[dict] = None,
     ) -> EmailQueue:
-        """Send an email using a template."""
+        """Send an email using a template.
+
+        When use_branded_wrapper is True and branding is provided, the
+        rendered body is wrapped in the tenant's branded email template.
+        """
         from src.campaigns.models import EmailTemplate
         result = await self.db.execute(
             select(EmailTemplate).where(EmailTemplate.id == template_id)
@@ -192,8 +199,16 @@ class EmailService:
             raise ValueError(f"Template {template_id} not found")
 
         vars_dict = variables or {}
-        subject = render_template(template.subject, vars_dict)
-        body = render_template(template.body_html or template.body_text or "", vars_dict)
+        subject = render_template(template.subject_template, vars_dict)
+        body = render_template(template.body_template or "", vars_dict)
+
+        if use_branded_wrapper and branding:
+            body = render_branded_email(
+                branding=branding,
+                subject=subject,
+                headline="",
+                body_html=body,
+            )
 
         return await self.queue_email(
             to_email=to_email,
@@ -212,8 +227,33 @@ class EmailService:
         variables: Optional[Dict[str, str]] = None,
         sent_by_id: Optional[int] = None,
     ) -> List[EmailQueue]:
-        """Send emails to all members of a campaign."""
-        from src.campaigns.models import CampaignMember
+        """Send branded emails to all members of a campaign.
+
+        Wraps each email in the tenant's branded template with an
+        unsubscribe link in the footer.
+        """
+        from src.campaigns.models import CampaignMember, EmailTemplate
+        from src.email.branded_templates import render_campaign_wrapper
+
+        # Fetch tenant branding for the sending user
+        branding = TenantBrandingHelper.get_default_branding()
+        if sent_by_id:
+            branding = await TenantBrandingHelper.get_branding_for_user(
+                self.db, sent_by_id
+            )
+
+        # Resolve template body once
+        tmpl_result = await self.db.execute(
+            select(EmailTemplate).where(EmailTemplate.id == template_id)
+        )
+        template = tmpl_result.scalar_one_or_none()
+        if not template:
+            raise ValueError(f"Template {template_id} not found")
+
+        vars_dict = variables or {}
+        subject = render_template(template.subject_template, vars_dict)
+        raw_body = render_template(template.body_template or "", vars_dict)
+
         result = await self.db.execute(
             select(CampaignMember).where(CampaignMember.campaign_id == campaign_id)
         )
@@ -223,13 +263,24 @@ class EmailService:
         for member in members:
             email_addr = await self._get_member_email(member)
             if email_addr:
-                email = await self.send_template_email(
+                unsubscribe_url = (
+                    f"/api/campaigns/{campaign_id}/unsubscribe"
+                    f"?member_id={member.id}&email={email_addr}"
+                )
+                branded_body = render_campaign_wrapper(
+                    branding=branding,
+                    campaign_body=raw_body,
+                    unsubscribe_url=unsubscribe_url,
+                )
+                email = await self.queue_email(
                     to_email=email_addr,
-                    template_id=template_id,
-                    variables=variables,
+                    subject=subject,
+                    body=branded_body,
                     sent_by_id=sent_by_id,
-                    entity_type=member.entity_type,
-                    entity_id=member.entity_id,
+                    entity_type=member.member_type,
+                    entity_id=member.member_id,
+                    template_id=template_id,
+                    campaign_id=campaign_id,
                 )
                 sent_emails.append(email)
 
@@ -237,16 +288,57 @@ class EmailService:
 
     async def _get_member_email(self, member) -> Optional[str]:
         """Get the email address for a campaign member."""
-        if member.entity_type == "contacts":
+        if member.member_type in ("contact", "contacts"):
             from src.contacts.models import Contact
             result = await self.db.execute(
-                select(Contact.email).where(Contact.id == member.entity_id)
+                select(Contact.email).where(Contact.id == member.member_id)
             )
-        elif member.entity_type == "leads":
+        elif member.member_type in ("lead", "leads"):
             from src.leads.models import Lead
             result = await self.db.execute(
-                select(Lead.email).where(Lead.id == member.entity_id)
+                select(Lead.email).where(Lead.id == member.member_id)
             )
         else:
             return None
         return result.scalar_one_or_none()
+
+    async def send_branded_email(
+        self,
+        to_email: str,
+        subject: str,
+        headline: str,
+        body_html: str,
+        sent_by_id: int,
+        cta_text: Optional[str] = None,
+        cta_url: Optional[str] = None,
+        entity_type: Optional[str] = None,
+        entity_id: Optional[int] = None,
+    ) -> EmailQueue:
+        """Send an email wrapped in the tenant-branded template.
+
+        1. Fetches tenant branding for the sending user.
+        2. Wraps content in the branded HTML template.
+        3. Uses email_from_name / email_from_address from TenantSettings.
+        4. Queues and sends via existing SMTP infrastructure.
+        """
+        branding = await TenantBrandingHelper.get_branding_for_user(
+            self.db, sent_by_id
+        )
+
+        html = render_branded_email(
+            branding=branding,
+            subject=subject,
+            headline=headline,
+            body_html=body_html,
+            cta_text=cta_text,
+            cta_url=cta_url,
+        )
+
+        return await self.queue_email(
+            to_email=to_email,
+            subject=subject,
+            body=html,
+            sent_by_id=sent_by_id,
+            entity_type=entity_type,
+            entity_id=entity_id,
+        )

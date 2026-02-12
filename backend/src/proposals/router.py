@@ -3,6 +3,7 @@
 import logging
 from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import Response
 from src.core.constants import HTTPStatus, EntityNames, ENTITY_TYPE_PROPOSALS
 from src.core.router_utils import (
     DBSession,
@@ -18,6 +19,8 @@ from src.proposals.schemas import (
     ProposalResponse,
     ProposalListResponse,
     ProposalPublicResponse,
+    ProposalBranding,
+    ProposalSendRequest,
     ProposalTemplateCreate,
     ProposalTemplateResponse,
     AIGenerateRequest,
@@ -151,7 +154,20 @@ async def get_public_proposal(
     user_agent = request.headers.get("user-agent")
     await service.record_view(proposal.id, ip_address, user_agent)
 
-    return ProposalPublicResponse.model_validate(proposal)
+    # Resolve branding from proposal owner's tenant
+    branding_data = await service.get_branding_for_proposal(proposal)
+    branding = ProposalBranding(
+        company_name=branding_data.get("company_name"),
+        logo_url=branding_data.get("logo_url"),
+        primary_color=branding_data.get("primary_color", "#6366f1"),
+        secondary_color=branding_data.get("secondary_color", "#8b5cf6"),
+        accent_color=branding_data.get("accent_color", "#22c55e"),
+        footer_text=branding_data.get("footer_text"),
+    )
+
+    response = ProposalPublicResponse.model_validate(proposal)
+    response.branding = branding
+    return response
 
 
 @router.get("/{proposal_id}", response_model=ProposalResponse)
@@ -204,16 +220,42 @@ async def send_proposal(
     proposal_id: int,
     current_user: CurrentUser,
     db: DBSession,
+    send_request: Optional[ProposalSendRequest] = None,
 ):
-    """Mark a proposal as sent."""
+    """Send a branded proposal email and mark as sent."""
     service = ProposalService(db)
     proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
     check_ownership(proposal, current_user, EntityNames.PROPOSAL)
     try:
-        proposal = await service.mark_sent(proposal)
+        attach_pdf = send_request.attach_pdf if send_request else False
+        await service.send_proposal_email(proposal_id, current_user.id, attach_pdf)
     except ValueError as e:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
+    # Refresh to return updated state
+    proposal = await service.get_by_id(proposal_id)
     return ProposalResponse.model_validate(proposal)
+
+
+@router.get("/{proposal_id}/pdf")
+async def get_proposal_pdf(
+    proposal_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Generate and return branded proposal PDF."""
+    service = ProposalService(db)
+    proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
+    check_ownership(proposal, current_user, EntityNames.PROPOSAL)
+    try:
+        pdf_bytes = await service.generate_proposal_pdf(proposal_id, current_user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
+    filename = f"proposal-{proposal.proposal_number}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.post("/{proposal_id}/accept", response_model=ProposalResponse)

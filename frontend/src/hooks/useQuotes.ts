@@ -77,17 +77,27 @@ export function useDeleteQuote() {
 // =============================================================================
 
 /**
- * Hook to send a quote
+ * Hook to send a branded quote email
  */
 export function useSendQuote() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (quoteId: number) => quotesApi.send(quoteId),
-    onSuccess: (_data, quoteId) => {
+    mutationFn: ({ quoteId, attachPdf = false }: { quoteId: number; attachPdf?: boolean }) =>
+      quotesApi.send(quoteId, attachPdf),
+    onSuccess: (_data, { quoteId }) => {
       queryClient.invalidateQueries({ queryKey: quoteKeys.lists() });
       queryClient.invalidateQueries({ queryKey: quoteKeys.detail(quoteId) });
     },
+  });
+}
+
+/**
+ * Hook to download a quote as branded PDF
+ */
+export function useDownloadQuotePDF() {
+  return useMutation({
+    mutationFn: (quoteId: number) => quotesApi.downloadPDF(quoteId),
   });
 }
 

@@ -108,6 +108,30 @@ export const createProposalTemplate = async (data: ProposalTemplateCreate): Prom
   return response.data;
 };
 
+/**
+ * Send a proposal with branded email
+ */
+export const sendProposalWithEmail = async (
+  proposalId: number,
+  attachPdf: boolean = false
+): Promise<Proposal> => {
+  const response = await apiClient.post<Proposal>(
+    `${PROPOSALS_BASE}/${proposalId}/send`,
+    { attach_pdf: attachPdf }
+  );
+  return response.data;
+};
+
+/**
+ * Download a branded proposal PDF
+ */
+export const downloadProposalPDF = async (proposalId: number): Promise<Blob> => {
+  const response = await apiClient.get(`${PROPOSALS_BASE}/${proposalId}/pdf`, {
+    responseType: 'blob',
+  });
+  return response.data;
+};
+
 export const proposalsApi = {
   list: listProposals,
   get: getProposal,
@@ -115,11 +139,13 @@ export const proposalsApi = {
   update: updateProposal,
   delete: deleteProposal,
   send: sendProposal,
+  sendWithEmail: sendProposalWithEmail,
   accept: acceptProposal,
   reject: rejectProposal,
   generate: generateProposal,
   listTemplates: listProposalTemplates,
   createTemplate: createProposalTemplate,
+  downloadPDF: downloadProposalPDF,
 };
 
 export default proposalsApi;

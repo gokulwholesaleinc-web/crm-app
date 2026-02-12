@@ -3,6 +3,7 @@
 import logging
 from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from src.core.constants import HTTPStatus, EntityNames, ENTITY_TYPE_QUOTES
 from src.core.router_utils import (
     DBSession,
@@ -226,16 +227,42 @@ async def send_quote(
     quote_id: int,
     current_user: CurrentUser,
     db: DBSession,
+    attach_pdf: bool = Query(False, description="Attach PDF to the email"),
 ):
-    """Mark a quote as sent."""
+    """Send a branded quote email to the contact and mark as sent."""
     service = QuoteService(db)
     quote = await get_entity_or_404(service, quote_id, EntityNames.QUOTE)
     check_ownership(quote, current_user, EntityNames.QUOTE)
     try:
-        quote = await service.mark_sent(quote)
+        quote = await service.send_quote_email(quote_id, current_user.id, attach_pdf=attach_pdf)
     except ValueError as e:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
     return QuoteResponse.model_validate(quote)
+
+
+@router.get("/{quote_id}/pdf")
+async def get_quote_pdf(
+    quote_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+    download: bool = Query(False, description="Force download instead of inline display"),
+):
+    """Generate and return a branded quote PDF."""
+    service = QuoteService(db)
+    quote = await get_entity_or_404(service, quote_id, EntityNames.QUOTE)
+    check_ownership(quote, current_user, EntityNames.QUOTE)
+    try:
+        pdf_bytes = await service.generate_quote_pdf(quote_id, current_user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
+
+    disposition = "attachment" if download else "inline"
+    filename = f"quote-{quote.quote_number}.html"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'{disposition}; filename="{filename}"'},
+    )
 
 
 @router.post("/{quote_id}/accept", response_model=QuoteResponse)

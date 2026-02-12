@@ -9,6 +9,7 @@ import {
   TrashIcon,
   PencilIcon,
   CubeIcon,
+  ArrowDownTrayIcon,
 } from '@heroicons/react/24/outline';
 import { Button, Modal, ConfirmDialog, StatusBadge } from '../../components/ui';
 import type { StatusType } from '../../components/ui/Badge';
@@ -23,6 +24,7 @@ import {
   useRemoveLineItem,
   useBundles,
   useAddBundleToQuote,
+  useDownloadQuotePDF,
 } from '../../hooks/useQuotes';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
@@ -45,6 +47,7 @@ function QuoteDetailPage() {
   const addLineItemMutation = useAddLineItem();
   const removeLineItemMutation = useRemoveLineItem();
   const addBundleMutation = useAddBundleToQuote();
+  const downloadPDFMutation = useDownloadQuotePDF();
   const { data: bundlesData } = useBundles({ is_active: true });
   const bundles = bundlesData?.items ?? [];
 
@@ -86,10 +89,27 @@ function QuoteDetailPage() {
 
   const handleSend = async () => {
     try {
-      await sendQuoteMutation.mutateAsync(quote.id);
-      showSuccess('Quote sent');
+      await sendQuoteMutation.mutateAsync({ quoteId: quote.id });
+      showSuccess('Quote email sent');
     } catch {
-      showError('Failed to send quote');
+      showError('Failed to send quote email');
+    }
+  };
+
+  const handleDownloadPDF = async () => {
+    try {
+      const blob = await downloadPDFMutation.mutateAsync(quote.id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `quote-${quote.quote_number}.html`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showSuccess('PDF downloaded');
+    } catch {
+      showError('Failed to download PDF');
     }
   };
 
@@ -211,6 +231,15 @@ function QuoteDetailPage() {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <Button
+            variant="secondary"
+            onClick={handleDownloadPDF}
+            leftIcon={<ArrowDownTrayIcon className="h-4 w-4" />}
+            disabled={downloadPDFMutation.isPending}
+            aria-label="Download quote as PDF"
+          >
+            {downloadPDFMutation.isPending ? 'Generating...' : 'Download PDF'}
+          </Button>
           {isDraft && (
             <Button variant="secondary" onClick={openEditModal} leftIcon={<PencilIcon className="h-4 w-4" />}>
               Edit
@@ -221,8 +250,9 @@ function QuoteDetailPage() {
               onClick={handleSend}
               leftIcon={<PaperAirplaneIcon className="h-4 w-4" />}
               disabled={sendQuoteMutation.isPending}
+              aria-label="Send quote email"
             >
-              {sendQuoteMutation.isPending ? 'Sending...' : 'Send'}
+              {sendQuoteMutation.isPending ? 'Sending...' : 'Send Quote'}
             </Button>
           )}
           {canAcceptReject && (

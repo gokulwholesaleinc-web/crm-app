@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 from typing import Optional, List, Tuple
 from sqlalchemy import select, func, or_
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from src.quotes.models import Quote, QuoteLineItem, QuoteTemplate, ProductBundle, ProductBundleItem
 from src.quotes.schemas import (
@@ -12,6 +13,9 @@ from src.quotes.schemas import (
 from src.core.base_service import CRUDService, StatusTransitionMixin, BaseService
 from src.core.constants import DEFAULT_PAGE_SIZE
 from src.core.filtering import build_token_search
+from src.email.branded_templates import TenantBrandingHelper, render_quote_email
+from src.email.pdf_service import BrandedPDFGenerator
+from src.email.service import EmailService
 
 # Valid status transitions
 VALID_TRANSITIONS = {
@@ -229,6 +233,100 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
         await self.db.refresh(quote)
         self._recalculate_totals(quote)
         await self.db.flush()
+
+    async def send_quote_email(self, quote_id: int, user_id: int, attach_pdf: bool = False) -> Quote:
+        """Send branded quote email to the contact's email address and mark as sent.
+
+        If the quote has no contact with an email, the quote is still marked
+        as sent but no email is dispatched.
+        """
+        quote = await self.get_by_id(quote_id)
+        if not quote:
+            raise ValueError(f"Quote {quote_id} not found")
+
+        if quote.status not in self.valid_send_statuses:
+            raise ValueError(f"Cannot transition from '{quote.status}' to 'sent'")
+
+        # Send email only if quote has a contact with an email address
+        if quote.contact and quote.contact.email:
+            branding = await TenantBrandingHelper.get_branding_for_user(self.db, user_id)
+
+            quote_data = {
+                "quote_number": quote.quote_number,
+                "client_name": quote.contact.full_name,
+                "total": f"{float(quote.total):.2f}",
+                "currency": quote.currency,
+                "valid_until": str(quote.valid_until) if quote.valid_until else "",
+                "items": [
+                    {
+                        "description": item.description,
+                        "quantity": str(float(item.quantity)),
+                        "unit_price": f"{float(item.unit_price):.2f}",
+                        "total": f"{float(item.total):.2f}",
+                    }
+                    for item in quote.line_items
+                ],
+            }
+
+            subject, html_body = render_quote_email(branding, quote_data)
+
+            email_service = EmailService(self.db)
+            await email_service.queue_email(
+                to_email=quote.contact.email,
+                subject=subject,
+                body=html_body,
+                sent_by_id=user_id,
+                entity_type="quotes",
+                entity_id=quote.id,
+            )
+
+        quote.status = "sent"
+        quote.sent_at = datetime.now(timezone.utc)
+        await self.db.flush()
+        await self.db.refresh(quote)
+
+        return quote
+
+    async def generate_quote_pdf(self, quote_id: int, user_id: int) -> bytes:
+        """Generate branded quote PDF as HTML bytes."""
+        quote = await self.get_by_id(quote_id)
+        if not quote:
+            raise ValueError(f"Quote {quote_id} not found")
+
+        branding = await TenantBrandingHelper.get_branding_for_user(self.db, user_id)
+
+        client_name = ""
+        client_email = ""
+        if quote.contact:
+            client_name = quote.contact.full_name
+            client_email = quote.contact.email or ""
+
+        quote_data = {
+            "quote_number": quote.quote_number,
+            "date": str(quote.created_at.date()) if quote.created_at else "",
+            "valid_until": str(quote.valid_until) if quote.valid_until else "",
+            "client_name": client_name,
+            "client_email": client_email,
+            "client_address": "",
+            "items": [
+                {
+                    "description": item.description,
+                    "quantity": str(float(item.quantity)),
+                    "unit_price": f"{float(item.unit_price):.2f}",
+                    "total": f"{float(item.total):.2f}",
+                }
+                for item in quote.line_items
+            ],
+            "subtotal": f"{float(quote.subtotal):.2f}",
+            "discount": f"{float(quote.discount_value):.2f}" if quote.discount_value else "",
+            "tax": f"{float(quote.tax_amount):.2f}" if quote.tax_amount else "",
+            "total": f"{float(quote.total):.2f}",
+            "currency": quote.currency,
+            "terms": quote.terms_and_conditions or "",
+        }
+
+        generator = BrandedPDFGenerator()
+        return generator.generate_quote_pdf(quote_data, branding)
 
     async def add_bundle_to_quote(self, quote: Quote, bundle_id: int) -> Quote:
         """Add all items from a product bundle to a quote as line items."""
