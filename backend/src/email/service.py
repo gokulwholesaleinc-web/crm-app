@@ -1,49 +1,28 @@
 """Email service layer - handles sending, tracking, and queue management."""
 
-import os
 import re
-import smtplib
 from datetime import datetime, timezone
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from typing import Optional, List, Tuple, Dict
 
+import resend
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.config import settings
 from src.email.models import EmailQueue
 from src.email.branded_templates import TenantBrandingHelper, render_branded_email
 from src.core.constants import DEFAULT_PAGE_SIZE
 
 
-def get_smtp_config() -> dict:
-    """Read SMTP configuration from environment variables."""
-    return {
-        "host": os.getenv("SMTP_HOST", "localhost"),
-        "port": int(os.getenv("SMTP_PORT", "587")),
-        "user": os.getenv("SMTP_USER", ""),
-        "password": os.getenv("SMTP_PASSWORD", ""),
-        "from_email": os.getenv("SMTP_FROM", "noreply@crm.local"),
-        "use_tls": os.getenv("SMTP_USE_TLS", "true").lower() == "true",
-    }
-
-
-def send_email_smtp(to_email: str, subject: str, body: str) -> None:
-    """Send an email via SMTP. Raises on failure."""
-    config = get_smtp_config()
-
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = config["from_email"]
-    msg["To"] = to_email
-    msg.attach(MIMEText(body, "html"))
-
-    with smtplib.SMTP(config["host"], config["port"]) as server:
-        if config["use_tls"]:
-            server.starttls()
-        if config["user"] and config["password"]:
-            server.login(config["user"], config["password"])
-        server.sendmail(config["from_email"], [to_email], msg.as_string())
+def send_email(to_email: str, subject: str, body: str) -> None:
+    """Send an email via Resend. Raises on failure."""
+    resend.api_key = settings.RESEND_API_KEY
+    resend.Emails.send({
+        "from": settings.EMAIL_FROM,
+        "to": [to_email],
+        "subject": subject,
+        "html": body,
+    })
 
 
 def render_template(template: str, variables: Dict[str, str]) -> str:
@@ -96,7 +75,7 @@ class EmailService:
         """Attempt to send an email, updating status accordingly."""
         email.attempts += 1
         try:
-            send_email_smtp(email.to_email, email.subject, email.body)
+            send_email(email.to_email, email.subject, email.body)
             email.status = "sent"
             email.sent_at = datetime.now(timezone.utc)
         except Exception as exc:

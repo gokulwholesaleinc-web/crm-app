@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     BACKEND_CORS_ORIGINS: str = '["*"]'
 
+    # Resend Email
+    RESEND_API_KEY: str = ""
+    EMAIL_FROM: str = "onboarding@resend.dev"
+
     # Stripe
     STRIPE_SECRET_KEY: str = ""
     STRIPE_PUBLISHABLE_KEY: str = ""

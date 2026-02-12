@@ -14,7 +14,6 @@ export const adminKeys = {
   stats: () => [...adminKeys.all, 'stats'] as const,
   teamOverview: () => [...adminKeys.all, 'team-overview'] as const,
   activityFeed: (limit?: number) => [...adminKeys.all, 'activity-feed', { limit }] as const,
-  cacheStats: () => [...adminKeys.all, 'cache-stats'] as const,
 };
 
 export function useAdminUsers() {
@@ -93,33 +92,3 @@ export function useAssignUserRole() {
   });
 }
 
-export function useCacheStats() {
-  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
-  return useQuery({
-    queryKey: adminKeys.cacheStats(),
-    queryFn: () => adminApi.getCacheStats(),
-    staleTime: 10 * 1000,
-    refetchInterval: 30 * 1000,
-    enabled: isAuthenticated && !authLoading,
-  });
-}
-
-export function useClearAllCache() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: () => adminApi.clearAllCache(),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: adminKeys.cacheStats() });
-    },
-  });
-}
-
-export function useClearCachePattern() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (pattern: string) => adminApi.clearCachePattern(pattern),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: adminKeys.cacheStats() });
-    },
-  });
-}
