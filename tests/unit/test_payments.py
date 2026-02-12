@@ -651,3 +651,52 @@ class TestWebhookEndpoint:
             headers={"content-type": "application/json"},
         )
         assert response.status_code == 400
+
+
+class TestPaymentsUnauthorized:
+    """Test that all payment endpoints require authentication."""
+
+    @pytest.mark.asyncio
+    async def test_list_payments_unauthorized(self, client: AsyncClient):
+        response = await client.get("/api/payments")
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_get_payment_unauthorized(self, client: AsyncClient):
+        response = await client.get("/api/payments/1")
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_create_checkout_unauthorized(self, client: AsyncClient):
+        response = await client.post("/api/payments/create-checkout", json={})
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_create_payment_intent_unauthorized(self, client: AsyncClient):
+        response = await client.post("/api/payments/create-payment-intent", json={})
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_list_customers_unauthorized(self, client: AsyncClient):
+        response = await client.get("/api/payments/customers")
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_sync_customer_unauthorized(self, client: AsyncClient):
+        response = await client.post("/api/payments/customers/sync", json={})
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_list_products_unauthorized(self, client: AsyncClient):
+        response = await client.get("/api/payments/products")
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_create_product_unauthorized(self, client: AsyncClient):
+        response = await client.post("/api/payments/products", json={})
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_list_subscriptions_unauthorized(self, client: AsyncClient):
+        response = await client.get("/api/payments/subscriptions")
+        assert response.status_code == 401

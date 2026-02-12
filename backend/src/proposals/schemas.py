@@ -49,34 +49,7 @@ class ProposalUpdate(BaseModel):
     owner_id: Optional[int] = None
 
 
-class ContactBrief(BaseModel):
-    id: int
-    full_name: str
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class CompanyBrief(BaseModel):
-    id: int
-    name: str
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class OpportunityBrief(BaseModel):
-    id: int
-    name: str
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class QuoteBrief(BaseModel):
-    id: int
-    quote_number: str
-    title: str
-    total: float
-
-    model_config = ConfigDict(from_attributes=True)
+from src.core.schemas import ContactBrief, CompanyBrief, OpportunityBrief, QuoteBrief  # noqa: E402
 
 
 class ProposalViewResponse(BaseModel):

@@ -256,6 +256,21 @@ export { attachmentKeys, useAttachments, useUploadAttachment, useDeleteAttachmen
 // Dedup hooks
 export { useCheckDuplicates, useMergeEntities } from './useDedup';
 
+// Quote hooks
+export {
+  quoteKeys,
+  useQuotes,
+  useQuote,
+  useCreateQuote,
+  useUpdateQuote,
+  useDeleteQuote,
+  useSendQuote,
+  useAcceptQuote,
+  useRejectQuote,
+  useAddLineItem,
+  useRemoveLineItem,
+} from './useQuotes';
+
 // Payment hooks
 export {
   paymentKeys,

@@ -222,6 +222,21 @@ export { attachmentsApi } from './attachments';
 // Dedup API
 export { dedupApi } from './dedup';
 
+// Quotes API
+export { quotesApi } from './quotes';
+export {
+  listQuotes,
+  getQuote,
+  createQuote,
+  updateQuote,
+  deleteQuote,
+  sendQuote,
+  acceptQuote,
+  rejectQuote,
+  addLineItem,
+  removeLineItem,
+} from './quotes';
+
 // Payments API
 export { paymentsApi } from './payments';
 
@@ -267,6 +282,7 @@ import { assignmentApi as _assignmentApi } from './assignment';
 import { sequencesApi as _sequencesApi } from './sequences';
 import { attachmentsApi as _attachmentsApi } from './attachments';
 import { dedupApi as _dedupApi } from './dedup';
+import { quotesApi as _quotesApi } from './quotes';
 import { paymentsApi as _paymentsApi } from './payments';
 import { proposalsApi as _proposalsApi } from './proposals';
 
@@ -296,6 +312,7 @@ export const api = {
   sequences: _sequencesApi,
   attachments: _attachmentsApi,
   dedup: _dedupApi,
+  quotes: _quotesApi,
   payments: _paymentsApi,
   proposals: _proposalsApi,
 };

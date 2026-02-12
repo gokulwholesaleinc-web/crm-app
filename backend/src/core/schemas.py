@@ -17,6 +17,44 @@ class TagBrief(BaseModel):
         from_attributes = True
 
 
+class ContactBrief(BaseModel):
+    """Brief contact representation for related entity responses."""
+    id: int
+    full_name: str
+
+    class Config:
+        from_attributes = True
+
+
+class CompanyBrief(BaseModel):
+    """Brief company representation for related entity responses."""
+    id: int
+    name: str
+
+    class Config:
+        from_attributes = True
+
+
+class OpportunityBrief(BaseModel):
+    """Brief opportunity representation for related entity responses."""
+    id: int
+    name: str
+
+    class Config:
+        from_attributes = True
+
+
+class QuoteBrief(BaseModel):
+    """Brief quote representation for related entity responses."""
+    id: int
+    quote_number: str
+    title: str
+    total: float
+
+    class Config:
+        from_attributes = True
+
+
 class PaginatedResponse(BaseModel, Generic[T]):
     """Generic paginated response schema."""
     items: List[T]

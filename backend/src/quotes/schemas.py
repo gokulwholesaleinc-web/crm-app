@@ -72,25 +72,7 @@ class QuoteUpdate(BaseModel):
     owner_id: Optional[int] = None
 
 
-class ContactBrief(BaseModel):
-    id: int
-    full_name: str
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class CompanyBrief(BaseModel):
-    id: int
-    name: str
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class OpportunityBrief(BaseModel):
-    id: int
-    name: str
-
-    model_config = ConfigDict(from_attributes=True)
+from src.core.schemas import ContactBrief, CompanyBrief, OpportunityBrief  # noqa: E402
 
 
 class QuoteResponse(QuoteBase):
