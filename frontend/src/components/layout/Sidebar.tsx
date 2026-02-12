@@ -41,8 +41,10 @@ import {
   Bars2Icon,
   CheckIcon,
   ArrowPathIcon,
+  ShieldCheckIcon,
 } from '@heroicons/react/24/outline';
 import { useTenant } from '../../providers/TenantProvider';
+import { useAuthStore } from '../../store/authStore';
 
 export interface NavItem {
   id: string;
@@ -74,6 +76,7 @@ const DEFAULT_SECONDARY_NAVIGATION: NavItem[] = [
   { id: 'reports', name: 'Reports', href: '/reports', icon: ChartBarIcon },
   { id: 'ai-assistant', name: 'AI Assistant', href: '/ai-assistant', icon: SparklesIcon },
   { id: 'settings', name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
+  { id: 'admin', name: 'Admin', href: '/admin', icon: ShieldCheckIcon },
 ];
 
 const STORAGE_KEY_MAIN = 'crm-sidebar-order:v1';
@@ -273,6 +276,13 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
     applyOrder(DEFAULT_SECONDARY_NAVIGATION, readStoredOrder(STORAGE_KEY_SECONDARY))
   );
 
+  const ADMIN_ONLY_IDS = new Set(['admin']);
+  const { user } = useAuthStore();
+  const isAdminUser = user?.is_superuser || user?.role === 'admin';
+  const filteredSecondaryNav = isAdminUser
+    ? secondaryNav
+    : secondaryNav.filter(item => !ADMIN_ONLY_IDS.has(item.id));
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor)
@@ -326,7 +336,7 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
   }, []);
 
   const mainIds = mainNav.map(item => item.id);
-  const secondaryIds = secondaryNav.map(item => item.id);
+  const secondaryIds = filteredSecondaryNav.map(item => item.id);
 
   return (
     <aside
@@ -430,7 +440,7 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
             >
               <SortableContext items={secondaryIds} strategy={verticalListSortingStrategy}>
                 <div className="space-y-1">
-                  {secondaryNav.map(item => (
+                  {filteredSecondaryNav.map(item => (
                     <SortableNavItem
                       key={item.id}
                       item={item}
@@ -480,7 +490,7 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
             <div className="my-4 border-t border-gray-200 dark:border-gray-700" />
 
             <div className="space-y-1">
-              {secondaryNav.map(item => (
+              {filteredSecondaryNav.map(item => (
                 <StaticNavItem
                   key={item.id}
                   item={item}
@@ -520,6 +530,11 @@ export interface MobileSidebarProps {
 export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
   const location = useLocation();
   const { tenant } = useTenant();
+  const { user: mobileUser } = useAuthStore();
+  const isMobileAdmin = mobileUser?.is_superuser || mobileUser?.role === 'admin';
+  const mobileSecondaryNav = isMobileAdmin
+    ? DEFAULT_SECONDARY_NAVIGATION
+    : DEFAULT_SECONDARY_NAVIGATION.filter(item => item.id !== 'admin');
 
   // Close sidebar on route change
   useEffect(() => {
@@ -671,7 +686,7 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
 
           {/* Secondary Navigation */}
           <div className="space-y-1">
-            {DEFAULT_SECONDARY_NAVIGATION.map(renderMobileNavItem)}
+            {mobileSecondaryNav.map(renderMobileNavItem)}
           </div>
         </nav>
 
