@@ -19,12 +19,23 @@ from src.opportunities.models import Opportunity, PipelineStage
 from src.activities.models import Activity
 from src.campaigns.models import Campaign
 from src.core.models import Note, Tag, EntityTag
+from src.whitelabel.models import Tenant, TenantSettings, TenantUser
 
 
 async def seed_database(session: AsyncSession) -> None:
     """Run all seed operations. Idempotent."""
+    # Create default tenant first
+    tenant = await _seed_default_tenant(session)
+
     admin = await _seed_admin_user(session)
     demo = await _seed_demo_user(session)
+
+    # Link users to tenant
+    if tenant and admin:
+        await _link_user_to_tenant(session, admin, tenant, is_primary=True)
+    if tenant and demo:
+        await _link_user_to_tenant(session, demo, tenant, is_primary=True)
+
     if demo is None:
         # demo user already existed, skip data seeding
         await session.commit()
@@ -101,6 +112,68 @@ async def _seed_demo_user(session: AsyncSession) -> User | None:
     await session.refresh(user)
     print("Demo user created: demo@demo.com / demo123")
     return user
+
+
+# ---------------------------------------------------------------------------
+# Default Tenant
+# ---------------------------------------------------------------------------
+
+async def _seed_default_tenant(session: AsyncSession) -> Tenant:
+    """Create default tenant if it does not exist."""
+    result = await session.execute(select(Tenant).where(Tenant.slug == "default"))
+    existing = result.scalar_one_or_none()
+    if existing:
+        print("Default tenant already exists, skipping")
+        return existing
+
+    tenant = Tenant(
+        name="Default Organization",
+        slug="default",
+        is_active=True,
+        plan="professional",
+        max_users=50,
+        max_contacts=10000,
+    )
+    session.add(tenant)
+    await session.flush()
+    await session.refresh(tenant)
+
+    # Create tenant settings
+    settings = TenantSettings(
+        tenant_id=tenant.id,
+        company_name="CRM App",
+        primary_color="#6366f1",
+        secondary_color="#8b5cf6",
+        accent_color="#06b6d4",
+    )
+    session.add(settings)
+    await session.flush()
+
+    print("Default tenant created: default")
+    return tenant
+
+
+async def _link_user_to_tenant(
+    session: AsyncSession, user: User, tenant: Tenant, is_primary: bool = False
+) -> None:
+    """Link a user to a tenant if not already linked."""
+    result = await session.execute(
+        select(TenantUser).where(
+            TenantUser.user_id == user.id, TenantUser.tenant_id == tenant.id
+        )
+    )
+    existing = result.scalar_one_or_none()
+    if existing:
+        return
+
+    tenant_user = TenantUser(
+        user_id=user.id,
+        tenant_id=tenant.id,
+        role="admin",
+        is_primary=is_primary,
+    )
+    session.add(tenant_user)
+    await session.flush()
 
 
 # ---------------------------------------------------------------------------
