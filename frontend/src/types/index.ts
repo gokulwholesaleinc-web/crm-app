@@ -63,9 +63,22 @@ export interface LoginRequest {
   password: string;
 }
 
+export interface TenantInfo {
+  tenant_id: number;
+  tenant_slug: string;
+  company_name: string | null;
+  role: string;
+  is_primary: boolean;
+  primary_color: string | null;
+  secondary_color: string | null;
+  accent_color: string | null;
+  logo_url: string | null;
+}
+
 export interface Token {
   access_token: string;
   token_type: string;
+  tenants?: TenantInfo[] | null;
 }
 
 // =============================================================================
@@ -574,6 +587,52 @@ export interface QuoteFilters {
   opportunity_id?: number;
   owner_id?: number;
 }
+
+// =============================================================================
+// Product Bundle Types
+// =============================================================================
+
+export interface ProductBundleItem {
+  id: number;
+  bundle_id: number;
+  description: string;
+  quantity: number;
+  unit_price: number;
+  sort_order: number;
+}
+
+export interface ProductBundleItemCreate {
+  description: string;
+  quantity: number;
+  unit_price: number;
+  sort_order: number;
+}
+
+export interface ProductBundle {
+  id: number;
+  name: string;
+  description: string | null;
+  is_active: boolean;
+  items: ProductBundleItem[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProductBundleCreate {
+  name: string;
+  description?: string | null;
+  is_active?: boolean;
+  items?: ProductBundleItemCreate[];
+}
+
+export interface ProductBundleUpdate {
+  name?: string;
+  description?: string | null;
+  is_active?: boolean;
+  items?: ProductBundleItemCreate[];
+}
+
+export type ProductBundleListResponse = PaginatedResponse<ProductBundle>;
 
 // =============================================================================
 // Activity Types
@@ -1454,6 +1513,7 @@ export interface PaymentBase {
   amount: number;
   currency: string;
   status: string;
+  payment_method?: string | null;
   customer_id?: number | null;
   opportunity_id?: number | null;
   quote_id?: number | null;
@@ -1477,6 +1537,8 @@ export interface Payment extends PaymentBase {
   refund_amount: number | null;
   metadata_json: Record<string, unknown> | null;
   customer?: StripeCustomerBrief | null;
+  opportunity?: { id: number; name: string } | null;
+  quote?: { id: number; title: string } | null;
   created_at: string;
   updated_at: string;
 }
@@ -1488,6 +1550,7 @@ export interface PaymentFilters {
   page_size?: number;
   status?: string;
   customer_id?: number;
+  opportunity_id?: number;
   owner_id?: number;
 }
 
