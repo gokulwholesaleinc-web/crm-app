@@ -1123,7 +1123,9 @@ class QueryProcessor:
             query = query.where(Quote.status == args["status"])
 
         if args.get("search_term"):
-            query = query.where(Quote.title.ilike(f"%{args['search_term']}%"))
+            search_condition = build_token_search(args["search_term"], Quote.title)
+            if search_condition is not None:
+                query = query.where(search_condition)
 
         result = await self.db.execute(query)
         quotes = result.scalars().all()
@@ -1185,7 +1187,9 @@ class QueryProcessor:
             query = query.where(Proposal.status == args["status"])
 
         if args.get("search_term"):
-            query = query.where(Proposal.title.ilike(f"%{args['search_term']}%"))
+            search_condition = build_token_search(args["search_term"], Proposal.title)
+            if search_condition is not None:
+                query = query.where(search_condition)
 
         result = await self.db.execute(query)
         proposals = result.scalars().all()
