@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { TrashIcon, PlusIcon } from '@heroicons/react/24/outline';
+import { TrashIcon, PlusIcon, CubeIcon } from '@heroicons/react/24/outline';
 import { Button } from '../../components/ui';
 import { useContacts } from '../../hooks/useContacts';
 import { useCompanies } from '../../hooks/useCompanies';
 import { useOpportunities, useOpportunity } from '../../hooks/useOpportunities';
-import type { QuoteCreate, QuoteLineItemCreate } from '../../types';
+import { useBundles } from '../../hooks/useQuotes';
+import type { QuoteCreate, QuoteLineItemCreate, ProductBundle } from '../../types';
 
 interface QuoteFormProps {
   onSubmit: (data: QuoteCreate) => void;
@@ -70,6 +71,35 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
   const [lineItems, setLineItems] = useState<QuoteLineItemCreate[]>(
     initialData?.line_items ?? [{ ...EMPTY_LINE_ITEM }]
   );
+
+  const [showBundleMenu, setShowBundleMenu] = useState(false);
+  const bundleMenuRef = useRef<HTMLDivElement>(null);
+  const { data: bundlesData } = useBundles({ is_active: true });
+  const activeBundles = bundlesData?.items ?? [];
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (bundleMenuRef.current && !bundleMenuRef.current.contains(event.target as Node)) {
+        setShowBundleMenu(false);
+      }
+    }
+    if (showBundleMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showBundleMenu]);
+
+  const addBundleItems = (bundle: ProductBundle) => {
+    const newItems: QuoteLineItemCreate[] = bundle.items.map((item, idx) => ({
+      description: item.description,
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      discount: 0,
+      sort_order: lineItems.length + idx,
+    }));
+    setLineItems((curr) => [...curr.filter((i) => i.description.trim() !== '' || curr.length === 1), ...newItems]);
+    setShowBundleMenu(false);
+  };
 
   const addLineItem = () => {
     setLineItems((curr) => [...curr, { ...EMPTY_LINE_ITEM, sort_order: curr.length }]);
@@ -312,14 +342,47 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
       <div>
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Line Items</h3>
-          <button
-            type="button"
-            onClick={addLineItem}
-            className="inline-flex items-center text-sm text-primary-600 hover:text-primary-900 dark:hover:text-primary-300"
-          >
-            <PlusIcon className="h-4 w-4 mr-1" aria-hidden="true" />
-            Add Item
-          </button>
+          <div className="flex items-center gap-2">
+            {activeBundles.length > 0 && (
+              <div className="relative" ref={bundleMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowBundleMenu(!showBundleMenu)}
+                  className="inline-flex items-center text-sm text-primary-600 hover:text-primary-900 dark:hover:text-primary-300"
+                >
+                  <CubeIcon className="h-4 w-4 mr-1" aria-hidden="true" />
+                  Add Bundle
+                </button>
+                {showBundleMenu && (
+                  <div className="absolute right-0 z-10 mt-1 w-56 origin-top-right rounded-md bg-white dark:bg-gray-800 shadow-lg ring-1 ring-black/5 dark:ring-gray-700">
+                    <div className="py-1">
+                      {activeBundles.map((bundle: ProductBundle) => (
+                        <button
+                          key={bundle.id}
+                          type="button"
+                          onClick={() => addBundleItems(bundle)}
+                          className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                        >
+                          <span className="font-medium">{bundle.name}</span>
+                          <span className="ml-1 text-gray-400 dark:text-gray-500">
+                            ({bundle.items.length} item{bundle.items.length !== 1 ? 's' : ''})
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={addLineItem}
+              className="inline-flex items-center text-sm text-primary-600 hover:text-primary-900 dark:hover:text-primary-300"
+            >
+              <PlusIcon className="h-4 w-4 mr-1" aria-hidden="true" />
+              Add Item
+            </button>
+          </div>
         </div>
 
         <div className="space-y-3">
