@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { SparklesIcon } from '@heroicons/react/24/outline';
-import { Button } from '../../components/ui';
+import { Button, SearchableSelect } from '../../components/ui';
 import { useOpportunities } from '../../hooks/useOpportunities';
 import { useGenerateProposal } from '../../hooks/useProposals';
 import { showSuccess, showError } from '../../utils/toast';
@@ -12,11 +12,22 @@ interface AIProposalGeneratorProps {
 
 export function AIProposalGenerator({ onClose }: AIProposalGeneratorProps) {
   const navigate = useNavigate();
-  const [selectedOpportunityId, setSelectedOpportunityId] = useState<number | ''>('');
+  const [selectedOpportunityId, setSelectedOpportunityId] = useState<number | null>(null);
   const { data: opportunitiesData, isLoading: loadingOpps } = useOpportunities({ page_size: 100 });
   const generateMutation = useGenerateProposal();
 
   const opportunities = opportunitiesData?.items ?? [];
+
+  const opportunityOptions = useMemo(
+    () =>
+      opportunities.map((opp) => {
+        let label = opp.name;
+        if (opp.company) label += ` - ${opp.company.name}`;
+        if (opp.amount) label += ` ($${opp.amount.toLocaleString()})`;
+        return { value: opp.id, label };
+      }),
+    [opportunities]
+  );
 
   const handleGenerate = async () => {
     if (!selectedOpportunityId) return;
