@@ -52,6 +52,7 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
       }
     }
   }, [urlOpportunity]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const [executiveSummary, setExecutiveSummary] = useState(initialData?.executive_summary ?? '');
   const [scopeOfWork, setScopeOfWork] = useState(initialData?.scope_of_work ?? '');
   const [pricingSection, setPricingSection] = useState(initialData?.pricing_section ?? '');

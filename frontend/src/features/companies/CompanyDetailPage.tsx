@@ -468,21 +468,21 @@ export function CompanyDetailPage() {
 
       {/* Opportunities Tab */}
       {activeTab === 'opportunities' && companyId && (
-        <div className="bg-white shadow rounded-lg overflow-hidden">
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden border border-transparent dark:border-gray-700">
           {companyOpportunities.length === 0 ? (
             <div className="text-center py-12 px-4">
-              <p className="text-sm text-gray-500">No opportunities for this company.</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">No opportunities for this company.</p>
               <Link
                 to={`/opportunities?company_id=${companyId}`}
-                className="mt-2 inline-block text-sm text-primary-600 hover:text-primary-900"
+                className="mt-2 inline-block text-sm text-primary-600 hover:text-primary-900 dark:hover:text-primary-300"
               >
                 View Opportunities
               </Link>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-900">
                   <tr>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stage</th>
@@ -490,21 +490,21 @@ export function CompanyDetailPage() {
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                   {companyOpportunities.map((opp: Opportunity) => (
-                    <tr key={opp.id} className="hover:bg-gray-50">
+                    <tr key={opp.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <Link to={`/opportunities/${opp.id}`} className="text-primary-600 hover:text-primary-900">
+                        <Link to={`/opportunities/${opp.id}`} className="text-primary-600 hover:text-primary-900 dark:hover:text-primary-300">
                           {opp.name}
                         </Link>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {opp.pipeline_stage?.name ?? '-'}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900 dark:text-gray-100" style={{ fontVariantNumeric: 'tabular-nums' }}>
                         {opp.amount ? formatCurrency(opp.amount) : '-'}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {formatDate(opp.created_at)}
                       </td>
                     </tr>
@@ -518,21 +518,21 @@ export function CompanyDetailPage() {
 
       {/* Quotes Tab */}
       {activeTab === 'quotes' && companyId && (
-        <div className="bg-white shadow rounded-lg overflow-hidden">
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden border border-transparent dark:border-gray-700">
           {companyQuotes.length === 0 ? (
             <div className="text-center py-12 px-4">
-              <p className="text-sm text-gray-500">No quotes for this company.</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">No quotes for this company.</p>
               <Link
                 to={`/quotes?company_id=${companyId}`}
-                className="mt-2 inline-block text-sm text-primary-600 hover:text-primary-900"
+                className="mt-2 inline-block text-sm text-primary-600 hover:text-primary-900 dark:hover:text-primary-300"
               >
                 Create a Quote
               </Link>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-900">
                   <tr>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quote</th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
@@ -540,21 +540,21 @@ export function CompanyDetailPage() {
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                   {companyQuotes.map((quote: Quote) => (
-                    <tr key={quote.id} className="hover:bg-gray-50">
+                    <tr key={quote.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <Link to={`/quotes/${quote.id}`} className="text-primary-600 hover:text-primary-900">
+                        <Link to={`/quotes/${quote.id}`} className="text-primary-600 hover:text-primary-900 dark:hover:text-primary-300">
                           {quote.title} ({quote.quote_number})
                         </Link>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <StatusBadge status={quote.status as StatusType} size="sm" showDot={false} />
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900 dark:text-gray-100" style={{ fontVariantNumeric: 'tabular-nums' }}>
                         {formatCurrency(quote.total)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {formatDate(quote.created_at)}
                       </td>
                     </tr>
@@ -568,39 +568,39 @@ export function CompanyDetailPage() {
 
       {/* Proposals Tab */}
       {activeTab === 'proposals' && companyId && (
-        <div className="bg-white shadow rounded-lg overflow-hidden">
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden border border-transparent dark:border-gray-700">
           {companyProposals.length === 0 ? (
             <div className="text-center py-12 px-4">
-              <p className="text-sm text-gray-500">No proposals for this company.</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">No proposals for this company.</p>
               <Link
                 to="/proposals"
-                className="mt-2 inline-block text-sm text-primary-600 hover:text-primary-900"
+                className="mt-2 inline-block text-sm text-primary-600 hover:text-primary-900 dark:hover:text-primary-300"
               >
                 View Proposals
               </Link>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-900">
                   <tr>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Proposal</th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                   {companyProposals.map((proposal: Proposal) => (
-                    <tr key={proposal.id} className="hover:bg-gray-50">
+                    <tr key={proposal.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <Link to={`/proposals/${proposal.id}`} className="text-primary-600 hover:text-primary-900">
+                        <Link to={`/proposals/${proposal.id}`} className="text-primary-600 hover:text-primary-900 dark:hover:text-primary-300">
                           {proposal.title} ({proposal.proposal_number})
                         </Link>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <StatusBadge status={proposal.status as StatusType} size="sm" showDot={false} />
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {formatDate(proposal.created_at)}
                       </td>
                     </tr>

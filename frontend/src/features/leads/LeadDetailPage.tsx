@@ -423,16 +423,16 @@ function LeadDetailPage() {
               {/* Converted Entity Links */}
               {(lead.converted_contact_id || lead.converted_opportunity_id) && (
                 <>
-                  <div className="sm:col-span-2 pt-4 border-t border-gray-200">
-                    <dt className="text-sm font-medium text-gray-900 mb-2">Converted Entities</dt>
+                  <div className="sm:col-span-2 pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <dt className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">Converted Entities</dt>
                   </div>
                   {lead.converted_contact_id && (
                     <div>
-                      <dt className="text-sm font-medium text-gray-500">Contact</dt>
+                      <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Contact</dt>
                       <dd className="mt-1 text-sm">
                         <Link
                           to={`/contacts/${lead.converted_contact_id}`}
-                          className="text-primary-600 hover:text-primary-900"
+                          className="text-primary-600 hover:text-primary-900 dark:hover:text-primary-300"
                         >
                           View Contact #{lead.converted_contact_id}
                         </Link>
@@ -441,11 +441,11 @@ function LeadDetailPage() {
                   )}
                   {lead.converted_opportunity_id && (
                     <div>
-                      <dt className="text-sm font-medium text-gray-500">Opportunity</dt>
+                      <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Opportunity</dt>
                       <dd className="mt-1 text-sm">
                         <Link
                           to={`/opportunities/${lead.converted_opportunity_id}`}
-                          className="text-primary-600 hover:text-primary-900"
+                          className="text-primary-600 hover:text-primary-900 dark:hover:text-primary-300"
                         >
                           View Opportunity #{lead.converted_opportunity_id}
                         </Link>
