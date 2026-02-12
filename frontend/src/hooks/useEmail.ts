@@ -3,7 +3,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { emailApi, SendEmailPayload, SendTemplateEmailPayload } from '../api/email';
+import { emailApi, SendEmailPayload, SendTemplateEmailPayload, SendCampaignEmailPayload } from '../api/email';
 
 export const emailKeys = {
   all: ['emails'] as const,
@@ -48,6 +48,16 @@ export function useSendTemplateEmail() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: SendTemplateEmailPayload) => emailApi.sendTemplate(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: emailKeys.all });
+    },
+  });
+}
+
+export function useSendCampaignEmail() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: SendCampaignEmailPayload) => emailApi.sendCampaign(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: emailKeys.all });
     },

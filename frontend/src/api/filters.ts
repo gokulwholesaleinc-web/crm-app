@@ -44,6 +44,16 @@ export const createSavedFilter = async (filter: SavedFilterCreate): Promise<Save
   return data;
 };
 
+export const getSavedFilter = async (id: number): Promise<SavedFilter> => {
+  const { data } = await apiClient.get(`/api/filters/${id}`);
+  return data;
+};
+
+export const updateSavedFilter = async (id: number, filter: Partial<SavedFilterCreate>): Promise<SavedFilter> => {
+  const { data } = await apiClient.put(`/api/filters/${id}`, filter);
+  return data;
+};
+
 export const deleteSavedFilter = async (id: number): Promise<void> => {
   await apiClient.delete(`/api/filters/${id}`);
 };
@@ -51,5 +61,7 @@ export const deleteSavedFilter = async (id: number): Promise<void> => {
 export const filtersApi = {
   listSavedFilters,
   createSavedFilter,
+  getSavedFilter,
+  updateSavedFilter,
   deleteSavedFilter,
 };

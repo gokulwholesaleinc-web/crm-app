@@ -49,12 +49,19 @@ export interface EmailListResponse {
   pages: number;
 }
 
+export interface SendCampaignEmailPayload {
+  campaign_id: number;
+}
+
 export const emailApi = {
   send: (data: SendEmailPayload) =>
     apiClient.post<EmailQueueItem>('/api/email/send', data).then((r) => r.data),
 
   sendTemplate: (data: SendTemplateEmailPayload) =>
     apiClient.post<EmailQueueItem>('/api/email/send-template', data).then((r) => r.data),
+
+  sendCampaign: (data: SendCampaignEmailPayload) =>
+    apiClient.post<{ queued: number }>('/api/email/send-campaign', data).then((r) => r.data),
 
   list: (params?: { page?: number; page_size?: number; entity_type?: string; entity_id?: number; status?: string }) =>
     apiClient.get<EmailListResponse>('/api/email', { params }).then((r) => r.data),

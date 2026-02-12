@@ -6,6 +6,7 @@ const NotesList = lazy(() => import('../../components/shared/NotesList'));
 const AttachmentList = lazy(() => import('../../components/shared/AttachmentList'));
 const AuditTimeline = lazy(() => import('../../components/shared/AuditTimeline'));
 const CommentSection = lazy(() => import('../../components/shared/CommentSection'));
+const SharePanel = lazy(() => import('../../components/shared/SharePanel'));
 import { EmailComposeModal, EmailHistory } from '../../components/email';
 import { ConvertLeadModal } from './components/ConvertLeadModal';
 import { LeadForm, LeadFormData } from './components/LeadForm';
@@ -17,7 +18,7 @@ import { useTimeline } from '../../hooks/useActivities';
 import type { LeadUpdate } from '../../types';
 import clsx from 'clsx';
 
-type TabType = 'details' | 'activities' | 'notes' | 'emails' | 'attachments' | 'comments' | 'history';
+type TabType = 'details' | 'activities' | 'notes' | 'emails' | 'attachments' | 'comments' | 'history' | 'sharing';
 
 function LeadDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -172,6 +173,7 @@ function LeadDetailPage() {
     { id: 'attachments', name: 'Attachments' },
     { id: 'comments', name: 'Comments' },
     { id: 'history', name: 'History' },
+    { id: 'sharing', name: 'Sharing' },
   ];
 
   return (
@@ -505,6 +507,13 @@ function LeadDetailPage() {
       {activeTab === 'history' && leadId && (
         <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
           <AuditTimeline entityType="leads" entityId={leadId} />
+        </Suspense>
+      )}
+
+      {/* Sharing Tab */}
+      {activeTab === 'sharing' && leadId && (
+        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+          <SharePanel entityType="leads" entityId={leadId} />
         </Suspense>
       )}
 

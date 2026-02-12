@@ -21,6 +21,7 @@ const NotesList = lazy(() => import('../../components/shared/NotesList'));
 const AttachmentList = lazy(() => import('../../components/shared/AttachmentList'));
 const AuditTimeline = lazy(() => import('../../components/shared/AuditTimeline'));
 const CommentSection = lazy(() => import('../../components/shared/CommentSection'));
+const SharePanel = lazy(() => import('../../components/shared/SharePanel'));
 import { CompanyForm } from './components/CompanyForm';
 import { useCompany, useUpdateCompany, useDeleteCompany } from '../../hooks/useCompanies';
 import { useContacts } from '../../hooks/useContacts';
@@ -29,7 +30,7 @@ import { getStatusColor, formatStatusLabel } from '../../utils/statusColors';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import type { CompanyUpdate, Contact } from '../../types';
 
-type TabType = 'overview' | 'activities' | 'notes' | 'attachments' | 'comments' | 'history';
+type TabType = 'overview' | 'activities' | 'notes' | 'attachments' | 'comments' | 'history' | 'sharing';
 
 function DetailItem({
   icon: Icon,
@@ -194,6 +195,7 @@ export function CompanyDetailPage() {
     { id: 'attachments', name: 'Attachments' },
     { id: 'comments', name: 'Comments' },
     { id: 'history', name: 'History' },
+    { id: 'sharing', name: 'Sharing' },
   ];
 
   return (
@@ -517,6 +519,13 @@ export function CompanyDetailPage() {
       {activeTab === 'history' && companyId && (
         <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
           <AuditTimeline entityType="companies" entityId={companyId} />
+        </Suspense>
+      )}
+
+      {/* Sharing Tab */}
+      {activeTab === 'sharing' && companyId && (
+        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+          <SharePanel entityType="companies" entityId={companyId} />
         </Suspense>
       )}
 

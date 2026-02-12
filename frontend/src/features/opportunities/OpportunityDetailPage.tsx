@@ -6,6 +6,7 @@ const NotesList = lazy(() => import('../../components/shared/NotesList'));
 const AttachmentList = lazy(() => import('../../components/shared/AttachmentList'));
 const AuditTimeline = lazy(() => import('../../components/shared/AuditTimeline'));
 const CommentSection = lazy(() => import('../../components/shared/CommentSection'));
+const SharePanel = lazy(() => import('../../components/shared/SharePanel'));
 import { OpportunityForm, OpportunityFormData } from './components/OpportunityForm';
 import { AIInsightsCard, NextBestActionCard } from '../../components/ai';
 import { useOpportunity, useDeleteOpportunity, useUpdateOpportunity, usePipelineStages } from '../../hooks/useOpportunities';
@@ -20,7 +21,7 @@ import { getStatusBadgeClasses } from '../../utils';
 import type { OpportunityUpdate, Quote, Proposal, Payment } from '../../types';
 import clsx from 'clsx';
 
-type TabType = 'details' | 'activities' | 'quotes' | 'proposals' | 'payments' | 'notes' | 'attachments' | 'comments' | 'history';
+type TabType = 'details' | 'activities' | 'quotes' | 'proposals' | 'payments' | 'notes' | 'attachments' | 'comments' | 'history' | 'sharing';
 
 function OpportunityDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -177,6 +178,7 @@ function OpportunityDetailPage() {
     { id: 'attachments', name: 'Attachments' },
     { id: 'comments', name: 'Comments' },
     { id: 'history', name: 'History' },
+    { id: 'sharing', name: 'Sharing' },
   ];
 
   return (
@@ -649,6 +651,13 @@ function OpportunityDetailPage() {
       {activeTab === 'history' && opportunityId && (
         <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
           <AuditTimeline entityType="opportunities" entityId={opportunityId} />
+        </Suspense>
+      )}
+
+      {/* Sharing Tab */}
+      {activeTab === 'sharing' && opportunityId && (
+        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+          <SharePanel entityType="opportunities" entityId={opportunityId} />
         </Suspense>
       )}
 

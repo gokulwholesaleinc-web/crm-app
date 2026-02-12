@@ -222,6 +222,9 @@ export { attachmentsApi } from './attachments';
 // Dedup API
 export { dedupApi } from './dedup';
 
+// Sharing API
+export { sharingApi } from './sharing';
+
 // Quotes API
 export { quotesApi } from './quotes';
 export {
@@ -282,6 +285,7 @@ import { assignmentApi as _assignmentApi } from './assignment';
 import { sequencesApi as _sequencesApi } from './sequences';
 import { attachmentsApi as _attachmentsApi } from './attachments';
 import { dedupApi as _dedupApi } from './dedup';
+import { sharingApi as _sharingApi } from './sharing';
 import { quotesApi as _quotesApi } from './quotes';
 import { paymentsApi as _paymentsApi } from './payments';
 import { proposalsApi as _proposalsApi } from './proposals';
@@ -312,6 +316,7 @@ export const api = {
   sequences: _sequencesApi,
   attachments: _attachmentsApi,
   dedup: _dedupApi,
+  sharing: _sharingApi,
   quotes: _quotesApi,
   payments: _paymentsApi,
   proposals: _proposalsApi,

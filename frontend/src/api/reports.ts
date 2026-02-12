@@ -107,6 +107,11 @@ export const getSavedReport = async (id: number): Promise<SavedReport> => {
   return data;
 };
 
+export const updateSavedReport = async (id: number, report: Partial<SavedReportCreate>): Promise<SavedReport> => {
+  const { data } = await apiClient.patch(`/api/reports/${id}`, report);
+  return data;
+};
+
 export const deleteSavedReport = async (id: number): Promise<void> => {
   await apiClient.delete(`/api/reports/${id}`);
 };
@@ -118,5 +123,6 @@ export const reportsApi = {
   listSavedReports,
   createSavedReport,
   getSavedReport,
+  updateSavedReport,
   deleteSavedReport,
 };

@@ -23,6 +23,7 @@ import { PipelineStagesSection } from './components/PipelineStagesSection';
 import { LeadSourcesSection } from './components/LeadSourcesSection';
 import { WebhooksSection } from './components/WebhooksSection';
 import { AssignmentRulesSection } from './components/AssignmentRulesSection';
+import { RolesSection } from './components/RolesSection';
 
 function SettingsPage() {
   const { user, isLoading } = useAuthStore();
@@ -153,6 +154,9 @@ function SettingsPage() {
 
       {/* Webhooks Section */}
       <WebhooksSection />
+
+      {/* Roles & Permissions Section */}
+      <RolesSection />
 
       {/* Lead Auto-Assignment Section */}
       <AssignmentRulesSection />

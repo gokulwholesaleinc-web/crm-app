@@ -42,6 +42,7 @@ const PaymentDetailPage = lazy(() => import('../features/payments/PaymentDetail'
 // Proposals
 const ProposalsPage = lazy(() => import('../features/proposals/ProposalsPage'));
 const ProposalDetailPage = lazy(() => import('../features/proposals/ProposalDetail'));
+const PublicProposalView = lazy(() => import('../features/proposals/PublicProposalView'));
 
 // Activities
 const ActivitiesPage = lazy(() => import('../features/activities/ActivitiesPage'));
@@ -71,12 +72,16 @@ const PipelinePage = lazy(() => import('../features/pipeline/PipelinePage'));
 // Settings
 const SettingsPage = lazy(() => import('../features/settings/SettingsPage'));
 
+// Duplicates
+const DuplicatesPage = lazy(() => import('../features/settings/DuplicatesPage'));
+
 function AppRoutes() {
   return (
     <Routes>
       {/* Public routes */}
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/proposals/public/:token" element={<PublicProposalView />} />
 
       {/* Protected routes */}
       <Route
@@ -308,6 +313,16 @@ function AppRoutes() {
         element={
           <PrivateRoute>
             <SettingsPage />
+          </PrivateRoute>
+        }
+      />
+
+      {/* Duplicates */}
+      <Route
+        path="/duplicates"
+        element={
+          <PrivateRoute>
+            <DuplicatesPage />
           </PrivateRoute>
         }
       />

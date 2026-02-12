@@ -206,7 +206,7 @@ export { reportKeys, useReportTemplates, useSavedReports, useSavedReport, useExe
 export { usePermissions, useRoles, useMyPermissions, useAssignRole, roleKeys } from './usePermissions';
 
 // Email hooks
-export { emailKeys, useEmailList, useEntityEmails, useSendEmail, useSendTemplateEmail } from './useEmail';
+export { emailKeys, useEmailList, useEntityEmails, useSendEmail, useSendTemplateEmail, useSendCampaignEmail } from './useEmail';
 
 // Notification hooks
 export { notificationKeys, useNotifications, useUnreadCount, useMarkNotificationRead, useMarkAllNotificationsRead } from './useNotifications';
@@ -306,6 +306,9 @@ export { useTheme } from './useTheme';
 
 // Page title hook
 export { usePageTitle } from './usePageTitle';
+
+// Sharing hooks
+export { sharingKeys, useEntityShares, useShareEntity, useRevokeShare } from './useSharing';
 
 // Auth-aware query helpers
 export { useAuthQuery, useAuthEnabled } from './useAuthQuery';

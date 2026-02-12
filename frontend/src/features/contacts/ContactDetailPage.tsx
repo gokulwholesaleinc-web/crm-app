@@ -6,16 +6,21 @@ const NotesList = lazy(() => import('../../components/shared/NotesList'));
 const AttachmentList = lazy(() => import('../../components/shared/AttachmentList'));
 const AuditTimeline = lazy(() => import('../../components/shared/AuditTimeline'));
 const CommentSection = lazy(() => import('../../components/shared/CommentSection'));
+const SharePanel = lazy(() => import('../../components/shared/SharePanel'));
 import { EmailComposeModal, EmailHistory } from '../../components/email';
 import { ContactForm, ContactFormData } from './components/ContactForm';
 import { NextBestActionCard } from '../../components/ai';
 import { useContact, useDeleteContact, useUpdateContact } from '../../hooks/useContacts';
 import { useTimeline } from '../../hooks/useActivities';
-import { formatDate, formatPhoneNumber } from '../../utils/formatters';
-import type { ContactUpdate } from '../../types';
+import { useQuotes } from '../../hooks/useQuotes';
+import { useProposals } from '../../hooks/useProposals';
+import { formatDate, formatPhoneNumber, formatCurrency } from '../../utils/formatters';
+import { StatusBadge } from '../../components/ui';
+import type { StatusType } from '../../components/ui/Badge';
+import type { ContactUpdate, Quote, Proposal } from '../../types';
 import clsx from 'clsx';
 
-type TabType = 'details' | 'activities' | 'notes' | 'emails' | 'attachments' | 'comments' | 'history';
+type TabType = 'details' | 'activities' | 'notes' | 'emails' | 'quotes' | 'proposals' | 'attachments' | 'comments' | 'history' | 'sharing';
 
 function ContactDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -39,6 +44,16 @@ function ContactDetailPage() {
   );
 
   const activities = timelineData?.items || [];
+
+  // Fetch quotes/proposals for this contact - only when on those tabs
+  const { data: quotesData } = useQuotes(
+    activeTab === 'quotes' && contactId ? { contact_id: contactId } : undefined
+  );
+  const { data: proposalsData } = useProposals(
+    activeTab === 'proposals' && contactId ? { contact_id: contactId } : undefined
+  );
+  const quotes = quotesData?.items ?? [];
+  const proposals = proposalsData?.items ?? [];
 
   const handleEditSubmit = async (data: ContactFormData) => {
     if (!contactId) return;
@@ -117,9 +132,12 @@ function ContactDetailPage() {
     { id: 'activities', name: 'Activities' },
     { id: 'notes', name: 'Notes' },
     { id: 'emails', name: 'Emails' },
+    { id: 'quotes', name: 'Quotes' },
+    { id: 'proposals', name: 'Proposals' },
     { id: 'attachments', name: 'Attachments' },
     { id: 'comments', name: 'Comments' },
     { id: 'history', name: 'History' },
+    { id: 'sharing', name: 'Sharing' },
   ];
 
   return (
@@ -368,6 +386,102 @@ function ContactDetailPage() {
         </div>
       )}
 
+      {/* Quotes Tab */}
+      {activeTab === 'quotes' && contactId && (
+        <div className="bg-white shadow rounded-lg overflow-hidden">
+          {quotes.length === 0 ? (
+            <div className="text-center py-12 px-4">
+              <p className="text-sm text-gray-500">No quotes for this contact.</p>
+              <Link
+                to={`/quotes/new?contact_id=${contactId}`}
+                className="mt-2 inline-block text-sm text-primary-600 hover:text-primary-900"
+              >
+                Create a Quote
+              </Link>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quote</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {quotes.map((quote: Quote) => (
+                    <tr key={quote.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <Link to={`/quotes/${quote.id}`} className="text-primary-600 hover:text-primary-900">
+                          {quote.title} ({quote.quote_number})
+                        </Link>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <StatusBadge status={quote.status as StatusType} size="sm" showDot={false} />
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                        {formatCurrency(quote.total)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatDate(quote.created_at)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Proposals Tab */}
+      {activeTab === 'proposals' && contactId && (
+        <div className="bg-white shadow rounded-lg overflow-hidden">
+          {proposals.length === 0 ? (
+            <div className="text-center py-12 px-4">
+              <p className="text-sm text-gray-500">No proposals for this contact.</p>
+              <Link
+                to="/proposals"
+                className="mt-2 inline-block text-sm text-primary-600 hover:text-primary-900"
+              >
+                View Proposals
+              </Link>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Proposal</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {proposals.map((proposal: Proposal) => (
+                    <tr key={proposal.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <Link to={`/proposals/${proposal.id}`} className="text-primary-600 hover:text-primary-900">
+                          {proposal.title} ({proposal.proposal_number})
+                        </Link>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <StatusBadge status={proposal.status as StatusType} size="sm" showDot={false} />
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatDate(proposal.created_at)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Attachments Tab */}
       {activeTab === 'attachments' && contactId && (
         <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
@@ -386,6 +500,13 @@ function ContactDetailPage() {
       {activeTab === 'history' && contactId && (
         <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
           <AuditTimeline entityType="contacts" entityId={contactId} />
+        </Suspense>
+      )}
+
+      {/* Sharing Tab */}
+      {activeTab === 'sharing' && contactId && (
+        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+          <SharePanel entityType="contacts" entityId={contactId} />
         </Suspense>
       )}
 
