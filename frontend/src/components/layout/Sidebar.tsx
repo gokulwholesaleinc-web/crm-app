@@ -42,6 +42,7 @@ import {
   CheckIcon,
   ArrowPathIcon,
 } from '@heroicons/react/24/outline';
+import { useTenant } from '../../providers/TenantProvider';
 
 export interface NavItem {
   id: string;
@@ -262,6 +263,7 @@ export interface SidebarProps {
 
 export function Sidebar({ collapsed = false, className }: SidebarProps) {
   const location = useLocation();
+  const { tenant } = useTenant();
   const [editMode, setEditMode] = useState(false);
 
   const [mainNav, setMainNav] = useState<NavItem[]>(() =>
@@ -341,12 +343,32 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
           collapsed ? 'justify-center' : 'justify-start'
         )}
       >
-        <div className="flex items-center">
-          <div className="h-8 w-8 bg-primary-500 rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold text-lg">C</span>
-          </div>
+        <div className="flex items-center min-w-0">
+          {tenant?.logo_url ? (
+            <img
+              src={tenant.logo_url}
+              alt={tenant.company_name || 'Logo'}
+              width={32}
+              height={32}
+              className="h-8 w-8 rounded-lg object-contain flex-shrink-0"
+            />
+          ) : (
+            <div
+              className={clsx(
+                'h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0',
+                !tenant?.primary_color && 'bg-primary-500'
+              )}
+              style={tenant?.primary_color ? { backgroundColor: tenant.primary_color } : undefined}
+            >
+              <span className="text-white font-bold text-lg">
+                {tenant?.company_name?.[0]?.toUpperCase() || 'C'}
+              </span>
+            </div>
+          )}
           {!collapsed && (
-            <span className="ml-2 text-xl font-bold text-gray-900 dark:text-gray-100">CRM</span>
+            <span className="ml-2 text-xl font-bold text-gray-900 dark:text-gray-100 truncate">
+              {tenant?.company_name || 'CRM'}
+            </span>
           )}
         </div>
       </div>
@@ -475,7 +497,7 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
       {!collapsed && (
         <div className="px-4 py-4 border-t border-gray-200 dark:border-gray-700">
           <div className="text-xs text-gray-500 dark:text-gray-400">
-            <p>CRM Application v1.0</p>
+            <p>{tenant?.footer_text || 'CRM Application v1.0'}</p>
           </div>
         </div>
       )}
@@ -497,6 +519,7 @@ export interface MobileSidebarProps {
 
 export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
   const location = useLocation();
+  const { tenant } = useTenant();
 
   // Close sidebar on route change
   useEffect(() => {
@@ -601,11 +624,31 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
       >
         {/* Header with close button */}
         <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200 dark:border-gray-700">
-          <div className="flex items-center">
-            <div className="h-8 w-8 bg-primary-500 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-lg">C</span>
-            </div>
-            <span className="ml-2 text-xl font-bold text-gray-900 dark:text-gray-100">CRM</span>
+          <div className="flex items-center min-w-0">
+            {tenant?.logo_url ? (
+              <img
+                src={tenant.logo_url}
+                alt={tenant.company_name || 'Logo'}
+                width={32}
+                height={32}
+                className="h-8 w-8 rounded-lg object-contain flex-shrink-0"
+              />
+            ) : (
+              <div
+                className={clsx(
+                  'h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0',
+                  !tenant?.primary_color && 'bg-primary-500'
+                )}
+                style={tenant?.primary_color ? { backgroundColor: tenant.primary_color } : undefined}
+              >
+                <span className="text-white font-bold text-lg">
+                  {tenant?.company_name?.[0]?.toUpperCase() || 'C'}
+                </span>
+              </div>
+            )}
+            <span className="ml-2 text-xl font-bold text-gray-900 dark:text-gray-100 truncate">
+              {tenant?.company_name || 'CRM'}
+            </span>
           </div>
           <button
             type="button"
@@ -635,7 +678,7 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
         {/* Footer */}
         <div className="px-4 py-4 border-t border-gray-200 dark:border-gray-700 safe-area-inset-bottom">
           <div className="text-xs text-gray-500 dark:text-gray-400">
-            <p>CRM Application v1.0</p>
+            <p>{tenant?.footer_text || 'CRM Application v1.0'}</p>
           </div>
         </div>
       </div>
