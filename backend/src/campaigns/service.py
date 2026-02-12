@@ -15,6 +15,7 @@ from src.campaigns.schemas import (
 )
 from src.core.base_service import CRUDService, BaseService
 from src.core.constants import DEFAULT_PAGE_SIZE
+from src.core.filtering import build_token_search
 
 
 class CampaignService(CRUDService[Campaign, CampaignCreate, CampaignUpdate]):
@@ -38,7 +39,9 @@ class CampaignService(CRUDService[Campaign, CampaignCreate, CampaignUpdate]):
         query = select(Campaign)
 
         if search:
-            query = query.where(Campaign.name.ilike(f"%{search}%"))
+            search_condition = build_token_search(search, Campaign.name)
+            if search_condition is not None:
+                query = query.where(search_condition)
 
         if campaign_type:
             query = query.where(Campaign.campaign_type == campaign_type)

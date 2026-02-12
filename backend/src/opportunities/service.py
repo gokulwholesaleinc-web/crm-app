@@ -1,10 +1,10 @@
 """Opportunity service layer."""
 
 from typing import Optional, List, Tuple, Any, Dict
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
 from src.opportunities.models import Opportunity, PipelineStage
-from src.core.filtering import apply_filters_to_query
+from src.core.filtering import apply_filters_to_query, build_token_search
 from src.opportunities.schemas import (
     OpportunityCreate,
     OpportunityUpdate,
@@ -59,7 +59,9 @@ class OpportunityService(
             query = apply_filters_to_query(query, Opportunity, filters)
 
         if search:
-            query = query.where(Opportunity.name.ilike(f"%{search}%"))
+            search_condition = build_token_search(search, Opportunity.name)
+            if search_condition is not None:
+                query = query.where(search_condition)
 
         if pipeline_stage_id:
             query = query.where(Opportunity.pipeline_stage_id == pipeline_stage_id)

@@ -4,7 +4,7 @@ from typing import Optional, List, Tuple, Any, Dict
 from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
 from src.leads.models import Lead, LeadSource
-from src.core.filtering import apply_filters_to_query
+from src.core.filtering import apply_filters_to_query, build_token_search
 from src.leads.schemas import LeadCreate, LeadUpdate, LeadSourceCreate
 from src.leads.scoring import calculate_lead_score
 from src.core.base_service import CRUDService, TaggableServiceMixin
@@ -44,13 +44,9 @@ class LeadService(
             query = apply_filters_to_query(query, Lead, filters)
 
         if search:
-            search_filter = or_(
-                Lead.first_name.ilike(f"%{search}%"),
-                Lead.last_name.ilike(f"%{search}%"),
-                Lead.email.ilike(f"%{search}%"),
-                Lead.company_name.ilike(f"%{search}%"),
-            )
-            query = query.where(search_filter)
+            search_condition = build_token_search(search, Lead.first_name, Lead.last_name, Lead.email, Lead.company_name)
+            if search_condition is not None:
+                query = query.where(search_condition)
 
         if status:
             query = query.where(Lead.status == status)

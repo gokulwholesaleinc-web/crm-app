@@ -3,7 +3,7 @@
 from typing import Optional, List, Tuple, Any, Dict
 from sqlalchemy import select, func, or_
 from src.companies.models import Company
-from src.core.filtering import apply_filters_to_query
+from src.core.filtering import apply_filters_to_query, build_token_search
 from src.companies.schemas import CompanyCreate, CompanyUpdate
 from src.contacts.models import Contact
 from src.core.base_service import CRUDService, TaggableServiceMixin
@@ -38,12 +38,9 @@ class CompanyService(
             query = apply_filters_to_query(query, Company, filters)
 
         if search:
-            search_filter = or_(
-                Company.name.ilike(f"%{search}%"),
-                Company.email.ilike(f"%{search}%"),
-                Company.website.ilike(f"%{search}%"),
-            )
-            query = query.where(search_filter)
+            search_condition = build_token_search(search, Company.name, Company.email, Company.website)
+            if search_condition is not None:
+                query = query.where(search_condition)
 
         if status:
             query = query.where(Company.status == status)

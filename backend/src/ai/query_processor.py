@@ -8,6 +8,7 @@ from sqlalchemy import select, func, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from openai import AsyncOpenAI
 from src.config import settings
+from src.core.filtering import build_token_search
 from src.contacts.models import Contact
 from src.companies.models import Company
 from src.leads.models import Lead
@@ -23,6 +24,7 @@ from src.notes.schemas import NoteCreate
 from src.notes.service import NoteService
 from src.ai.action_safety import classify_action, requires_confirmation, get_confirmation_description, ActionRisk
 from src.ai.models import AIActionLog, AIConversation, AIUserPreferences
+from src.ai.learning_service import AILearningService
 
 # Tiered memory settings
 WORKING_MEMORY_SIZE = 20
@@ -628,13 +630,9 @@ class QueryProcessor:
         query = select(Contact).limit(10)
 
         if search_term:
-            query = query.where(
-                or_(
-                    Contact.first_name.ilike(f"%{search_term}%"),
-                    Contact.last_name.ilike(f"%{search_term}%"),
-                    Contact.email.ilike(f"%{search_term}%"),
-                )
-            )
+            search_condition = build_token_search(search_term, Contact.first_name, Contact.last_name, Contact.email)
+            if search_condition is not None:
+                query = query.where(search_condition)
 
         result = await self.db.execute(query)
         contacts = result.scalars().all()
@@ -663,13 +661,9 @@ class QueryProcessor:
         query = select(Lead).limit(10)
 
         if search_term:
-            query = query.where(
-                or_(
-                    Lead.first_name.ilike(f"%{search_term}%"),
-                    Lead.last_name.ilike(f"%{search_term}%"),
-                    Lead.company_name.ilike(f"%{search_term}%"),
-                )
-            )
+            search_condition = build_token_search(search_term, Lead.first_name, Lead.last_name, Lead.company_name)
+            if search_condition is not None:
+                query = query.where(search_condition)
 
         if status:
             query = query.where(Lead.status == status)

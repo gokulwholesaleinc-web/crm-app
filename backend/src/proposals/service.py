@@ -8,6 +8,7 @@ from src.proposals.models import Proposal, ProposalTemplate, ProposalView
 from src.proposals.schemas import ProposalCreate, ProposalUpdate
 from src.core.base_service import CRUDService, StatusTransitionMixin
 from src.core.constants import DEFAULT_PAGE_SIZE
+from src.core.filtering import build_token_search
 
 # Valid status transitions
 VALID_TRANSITIONS = {
@@ -73,12 +74,9 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         )
 
         if search:
-            query = query.where(
-                or_(
-                    Proposal.title.ilike(f"%{search}%"),
-                    Proposal.proposal_number.ilike(f"%{search}%"),
-                )
-            )
+            search_condition = build_token_search(search, Proposal.title, Proposal.proposal_number)
+            if search_condition is not None:
+                query = query.where(search_condition)
 
         if status:
             query = query.where(Proposal.status == status)

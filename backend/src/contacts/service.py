@@ -4,7 +4,7 @@ from typing import Optional, List, Tuple, Any, Dict
 from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
 from src.contacts.models import Contact
-from src.core.filtering import apply_filters_to_query
+from src.core.filtering import apply_filters_to_query, build_token_search
 from src.contacts.schemas import ContactCreate, ContactUpdate
 from src.core.base_service import CRUDService, TaggableServiceMixin
 from src.core.constants import ENTITY_TYPE_CONTACTS, DEFAULT_PAGE_SIZE
@@ -43,12 +43,9 @@ class ContactService(
             query = apply_filters_to_query(query, Contact, filters)
 
         if search:
-            search_filter = or_(
-                Contact.first_name.ilike(f"%{search}%"),
-                Contact.last_name.ilike(f"%{search}%"),
-                Contact.email.ilike(f"%{search}%"),
-            )
-            query = query.where(search_filter)
+            search_condition = build_token_search(search, Contact.first_name, Contact.last_name, Contact.email)
+            if search_condition is not None:
+                query = query.where(search_condition)
 
         if company_id:
             query = query.where(Contact.company_id == company_id)
