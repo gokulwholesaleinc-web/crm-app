@@ -5,6 +5,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { authApi } from '../api/auth';
 import { useAuthStore, User as StoreUser } from '../store/authStore';
+import { clearTenantSlugOnLogout } from '../providers/TenantProvider';
 import type { User, UserCreate, UserUpdate, LoginRequest } from '../types';
 
 // Helper to convert types/index.ts User to store User type
@@ -105,6 +106,7 @@ export function useLogout() {
   return useMutation({
     mutationFn: async () => {
       authApi.logout();
+      clearTenantSlugOnLogout();
       storeLogout();
     },
     onSuccess: () => {
