@@ -26,6 +26,8 @@ from src.proposals.schemas import (
     AIGenerateRequest,
 )
 from src.proposals.service import ProposalService, ProposalTemplateService
+from src.audit.utils import audit_entity_create, audit_entity_update, audit_entity_delete, snapshot_entity
+from src.events.service import emit, PROPOSAL_SENT, PROPOSAL_ACCEPTED
 
 logger = logging.getLogger(__name__)
 
@@ -78,12 +80,17 @@ async def list_proposals(
 @router.post("", response_model=ProposalResponse, status_code=HTTPStatus.CREATED)
 async def create_proposal(
     proposal_data: ProposalCreate,
+    request: Request,
     current_user: CurrentUser,
     db: DBSession,
 ):
     """Create a new proposal."""
     service = ProposalService(db)
     proposal = await service.create(proposal_data, current_user.id)
+
+    ip_address = request.client.host if request.client else None
+    await audit_entity_create(db, "proposal", proposal.id, current_user.id, ip_address)
+
     return ProposalResponse.model_validate(proposal)
 
 
@@ -191,6 +198,7 @@ async def get_proposal(
 async def update_proposal(
     proposal_id: int,
     proposal_data: ProposalUpdate,
+    request: Request,
     current_user: CurrentUser,
     db: DBSession,
 ):
@@ -198,13 +206,23 @@ async def update_proposal(
     service = ProposalService(db)
     proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
     check_ownership(proposal, current_user, EntityNames.PROPOSAL)
+
+    update_fields = list(proposal_data.model_dump(exclude_unset=True).keys())
+    old_data = snapshot_entity(proposal, update_fields)
+
     updated_proposal = await service.update(proposal, proposal_data, current_user.id)
+
+    new_data = snapshot_entity(updated_proposal, update_fields)
+    ip_address = request.client.host if request.client else None
+    await audit_entity_update(db, "proposal", updated_proposal.id, current_user.id, old_data, new_data, ip_address)
+
     return ProposalResponse.model_validate(updated_proposal)
 
 
 @router.delete("/{proposal_id}", status_code=HTTPStatus.NO_CONTENT)
 async def delete_proposal(
     proposal_id: int,
+    request: Request,
     current_user: CurrentUser,
     db: DBSession,
 ):
@@ -212,6 +230,10 @@ async def delete_proposal(
     service = ProposalService(db)
     proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
     check_ownership(proposal, current_user, EntityNames.PROPOSAL)
+
+    ip_address = request.client.host if request.client else None
+    await audit_entity_delete(db, "proposal", proposal.id, current_user.id, ip_address)
+
     await service.delete(proposal)
 
 
@@ -233,6 +255,14 @@ async def send_proposal(
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
     # Refresh to return updated state
     proposal = await service.get_by_id(proposal_id)
+
+    await emit(PROPOSAL_SENT, {
+        "entity_id": proposal.id,
+        "entity_type": "proposal",
+        "user_id": current_user.id,
+        "data": {"proposal_number": proposal.proposal_number, "status": proposal.status},
+    })
+
     return ProposalResponse.model_validate(proposal)
 
 
@@ -272,6 +302,14 @@ async def accept_proposal(
         proposal = await service.mark_accepted(proposal)
     except ValueError as e:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
+
+    await emit(PROPOSAL_ACCEPTED, {
+        "entity_id": proposal.id,
+        "entity_type": "proposal",
+        "user_id": current_user.id,
+        "data": {"proposal_number": proposal.proposal_number, "status": proposal.status},
+    })
+
     return ProposalResponse.model_validate(proposal)
 
 

@@ -2,7 +2,7 @@
 
 import logging
 from typing import Annotated, Optional, List
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response
 from src.auth.models import User
 from src.core.constants import HTTPStatus, EntityNames, ErrorMessages, ENTITY_TYPE_LEADS
@@ -42,6 +42,8 @@ from src.ai.embedding_hooks import (
     delete_entity_embedding,
     build_lead_embedding_content,
 )
+from src.audit.utils import audit_entity_create, audit_entity_update, audit_entity_delete, snapshot_entity
+from src.events.service import emit, LEAD_CREATED, LEAD_UPDATED
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +117,7 @@ async def list_leads(
 @router.post("", response_model=LeadResponse, status_code=HTTPStatus.CREATED)
 async def create_lead(
     lead_data: LeadCreate,
+    request: Request,
     current_user: Annotated[User, Depends(require_permission("leads", "create"))],
     db: DBSession,
 ):
@@ -128,6 +131,16 @@ async def create_lead(
         await store_entity_embedding(db, "lead", lead.id, content)
     except Exception as e:
         logger.warning("Failed to store embedding: %s", e)
+
+    ip_address = request.client.host if request.client else None
+    await audit_entity_create(db, "lead", lead.id, current_user.id, ip_address)
+
+    await emit(LEAD_CREATED, {
+        "entity_id": lead.id,
+        "entity_type": "lead",
+        "user_id": current_user.id,
+        "data": {"first_name": lead.first_name, "last_name": lead.last_name, "email": lead.email, "status": lead.status},
+    })
 
     return await _build_lead_response(service, lead)
 
@@ -153,6 +166,7 @@ async def get_lead(
 async def update_lead(
     lead_id: int,
     lead_data: LeadUpdate,
+    request: Request,
     current_user: CurrentUser,
     db: DBSession,
 ):
@@ -160,6 +174,10 @@ async def update_lead(
     service = LeadService(db)
     lead = await get_entity_or_404(service, lead_id, EntityNames.LEAD)
     check_ownership(lead, current_user, EntityNames.LEAD)
+
+    update_fields = list(lead_data.model_dump(exclude_unset=True).keys())
+    old_data = snapshot_entity(lead, update_fields)
+
     updated_lead = await service.update(lead, lead_data, current_user.id)
 
     # Update embedding for semantic search
@@ -169,12 +187,24 @@ async def update_lead(
     except Exception as e:
         logger.warning("Failed to store embedding: %s", e)
 
+    new_data = snapshot_entity(updated_lead, update_fields)
+    ip_address = request.client.host if request.client else None
+    await audit_entity_update(db, "lead", updated_lead.id, current_user.id, old_data, new_data, ip_address)
+
+    await emit(LEAD_UPDATED, {
+        "entity_id": updated_lead.id,
+        "entity_type": "lead",
+        "user_id": current_user.id,
+        "data": {"first_name": updated_lead.first_name, "last_name": updated_lead.last_name, "email": updated_lead.email, "status": updated_lead.status},
+    })
+
     return await _build_lead_response(service, updated_lead)
 
 
 @router.delete("/{lead_id}", status_code=HTTPStatus.NO_CONTENT)
 async def delete_lead(
     lead_id: int,
+    request: Request,
     current_user: CurrentUser,
     db: DBSession,
 ):
@@ -182,6 +212,9 @@ async def delete_lead(
     service = LeadService(db)
     lead = await get_entity_or_404(service, lead_id, EntityNames.LEAD)
     check_ownership(lead, current_user, EntityNames.LEAD)
+
+    ip_address = request.client.host if request.client else None
+    await audit_entity_delete(db, "lead", lead.id, current_user.id, ip_address)
 
     # Delete embedding before deleting entity
     await delete_entity_embedding(db, "lead", lead.id)

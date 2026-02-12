@@ -2,7 +2,7 @@
 
 import logging
 from typing import Annotated, Optional, List
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 from src.core.constants import HTTPStatus, EntityNames, ENTITY_TYPE_OPPORTUNITIES
 from src.core.router_utils import (
@@ -41,6 +41,13 @@ from src.ai.embedding_hooks import (
     store_entity_embedding,
     delete_entity_embedding,
     build_opportunity_embedding_content,
+)
+from src.audit.utils import audit_entity_create, audit_entity_update, audit_entity_delete, snapshot_entity
+from src.events.service import (
+    emit,
+    OPPORTUNITY_CREATED,
+    OPPORTUNITY_UPDATED,
+    OPPORTUNITY_STAGE_CHANGED,
 )
 
 logger = logging.getLogger(__name__)
@@ -257,6 +264,7 @@ async def list_opportunities(
 @router.post("", response_model=OpportunityResponse, status_code=HTTPStatus.CREATED)
 async def create_opportunity(
     opp_data: OpportunityCreate,
+    request: Request,
     current_user: CurrentUser,
     db: DBSession,
 ):
@@ -270,6 +278,16 @@ async def create_opportunity(
         await store_entity_embedding(db, "opportunity", opportunity.id, content)
     except Exception as e:
         logger.warning("Failed to store embedding: %s", e)
+
+    ip_address = request.client.host if request.client else None
+    await audit_entity_create(db, "opportunity", opportunity.id, current_user.id, ip_address)
+
+    await emit(OPPORTUNITY_CREATED, {
+        "entity_id": opportunity.id,
+        "entity_type": "opportunity",
+        "user_id": current_user.id,
+        "data": {"name": opportunity.name, "amount": opportunity.amount, "pipeline_stage_id": opportunity.pipeline_stage_id},
+    })
 
     return await _build_opportunity_response(service, opportunity)
 
@@ -297,6 +315,7 @@ async def get_opportunity(
 async def update_opportunity(
     opportunity_id: int,
     opp_data: OpportunityUpdate,
+    request: Request,
     current_user: CurrentUser,
     db: DBSession,
 ):
@@ -306,6 +325,11 @@ async def update_opportunity(
         service, opportunity_id, EntityNames.OPPORTUNITY
     )
     check_ownership(opportunity, current_user, EntityNames.OPPORTUNITY)
+    old_stage_id = opportunity.pipeline_stage_id
+
+    update_fields = list(opp_data.model_dump(exclude_unset=True).keys())
+    old_data = snapshot_entity(opportunity, update_fields)
+
     updated_opp = await service.update(opportunity, opp_data, current_user.id)
 
     # Update embedding for semantic search
@@ -315,12 +339,32 @@ async def update_opportunity(
     except Exception as e:
         logger.warning("Failed to store embedding: %s", e)
 
+    new_data = snapshot_entity(updated_opp, update_fields)
+    ip_address = request.client.host if request.client else None
+    await audit_entity_update(db, "opportunity", updated_opp.id, current_user.id, old_data, new_data, ip_address)
+
+    await emit(OPPORTUNITY_UPDATED, {
+        "entity_id": updated_opp.id,
+        "entity_type": "opportunity",
+        "user_id": current_user.id,
+        "data": {"name": updated_opp.name, "amount": updated_opp.amount, "pipeline_stage_id": updated_opp.pipeline_stage_id},
+    })
+
+    if updated_opp.pipeline_stage_id != old_stage_id:
+        await emit(OPPORTUNITY_STAGE_CHANGED, {
+            "entity_id": updated_opp.id,
+            "entity_type": "opportunity",
+            "user_id": current_user.id,
+            "data": {"name": updated_opp.name, "old_stage_id": old_stage_id, "new_stage_id": updated_opp.pipeline_stage_id},
+        })
+
     return await _build_opportunity_response(service, updated_opp)
 
 
 @router.delete("/{opportunity_id}", status_code=HTTPStatus.NO_CONTENT)
 async def delete_opportunity(
     opportunity_id: int,
+    request: Request,
     current_user: CurrentUser,
     db: DBSession,
 ):
@@ -330,6 +374,9 @@ async def delete_opportunity(
         service, opportunity_id, EntityNames.OPPORTUNITY
     )
     check_ownership(opportunity, current_user, EntityNames.OPPORTUNITY)
+
+    ip_address = request.client.host if request.client else None
+    await audit_entity_delete(db, "opportunity", opportunity.id, current_user.id, ip_address)
 
     # Delete embedding before deleting entity
     await delete_entity_embedding(db, "opportunity", opportunity.id)
