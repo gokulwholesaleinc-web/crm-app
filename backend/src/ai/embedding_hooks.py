@@ -108,7 +108,9 @@ async def store_entity_embedding(
     This function is designed to be non-blocking - it will not raise exceptions
     that would disrupt the main CRUD operation.
     """
-    if not settings.OPENAI_API_KEY:
+    import os
+    api_key = settings.OPENAI_API_KEY or os.environ.get("OPENAI_API_KEY", "")
+    if not api_key:
         logger.debug(f"Skipping embedding for {entity_type}:{entity_id} - no OpenAI API key")
         return
 
@@ -140,7 +142,8 @@ async def delete_entity_embedding(
     This function is designed to be non-blocking - it will not raise exceptions
     that would disrupt the main CRUD operation.
     """
-    if not settings.OPENAI_API_KEY:
+    import os
+    if not (settings.OPENAI_API_KEY or os.environ.get("OPENAI_API_KEY", "")):
         return
 
     try:

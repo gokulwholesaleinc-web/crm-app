@@ -17,7 +17,9 @@ class InsightsGenerator:
 
     def __init__(self, db: AsyncSession):
         self.db = db
-        self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY) if settings.OPENAI_API_KEY else None
+        import os
+        api_key = settings.OPENAI_API_KEY or os.environ.get("OPENAI_API_KEY", "")
+        self.client = AsyncOpenAI(api_key=api_key) if api_key else None
 
     async def get_lead_insights(self, lead_id: int) -> Dict[str, Any]:
         """Get AI insights for a specific lead."""
