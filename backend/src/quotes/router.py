@@ -30,6 +30,8 @@ from src.quotes.schemas import (
     ProductBundleListResponse,
 )
 from src.quotes.service import QuoteService, ProductBundleService
+from src.audit.utils import audit_entity_create, audit_entity_update, audit_entity_delete, snapshot_entity
+from src.events.service import emit, QUOTE_SENT, QUOTE_ACCEPTED
 
 logger = logging.getLogger(__name__)
 
@@ -82,12 +84,17 @@ async def list_quotes(
 @router.post("", response_model=QuoteResponse, status_code=HTTPStatus.CREATED)
 async def create_quote(
     quote_data: QuoteCreate,
+    request: Request,
     current_user: CurrentUser,
     db: DBSession,
 ):
     """Create a new quote."""
     service = QuoteService(db)
     quote = await service.create(quote_data, current_user.id)
+
+    ip_address = request.client.host if request.client else None
+    await audit_entity_create(db, "quote", quote.id, current_user.id, ip_address)
+
     return QuoteResponse.model_validate(quote)
 
 
@@ -314,6 +321,7 @@ async def get_quote(
 async def update_quote(
     quote_id: int,
     quote_data: QuoteUpdate,
+    request: Request,
     current_user: CurrentUser,
     db: DBSession,
 ):
@@ -321,13 +329,23 @@ async def update_quote(
     service = QuoteService(db)
     quote = await get_entity_or_404(service, quote_id, EntityNames.QUOTE)
     check_ownership(quote, current_user, EntityNames.QUOTE)
+
+    update_fields = list(quote_data.model_dump(exclude_unset=True).keys())
+    old_data = snapshot_entity(quote, update_fields)
+
     updated_quote = await service.update(quote, quote_data, current_user.id)
+
+    new_data = snapshot_entity(updated_quote, update_fields)
+    ip_address = request.client.host if request.client else None
+    await audit_entity_update(db, "quote", updated_quote.id, current_user.id, old_data, new_data, ip_address)
+
     return QuoteResponse.model_validate(updated_quote)
 
 
 @router.delete("/{quote_id}", status_code=HTTPStatus.NO_CONTENT)
 async def delete_quote(
     quote_id: int,
+    request: Request,
     current_user: CurrentUser,
     db: DBSession,
 ):
@@ -335,6 +353,10 @@ async def delete_quote(
     service = QuoteService(db)
     quote = await get_entity_or_404(service, quote_id, EntityNames.QUOTE)
     check_ownership(quote, current_user, EntityNames.QUOTE)
+
+    ip_address = request.client.host if request.client else None
+    await audit_entity_delete(db, "quote", quote.id, current_user.id, ip_address)
+
     await service.delete(quote)
 
 
@@ -353,6 +375,14 @@ async def send_quote(
         quote = await service.send_quote_email(quote_id, current_user.id, attach_pdf=attach_pdf)
     except ValueError as e:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
+
+    await emit(QUOTE_SENT, {
+        "entity_id": quote.id,
+        "entity_type": "quote",
+        "user_id": current_user.id,
+        "data": {"quote_number": quote.quote_number, "status": quote.status},
+    })
+
     return QuoteResponse.model_validate(quote)
 
 
@@ -395,6 +425,14 @@ async def accept_quote(
         quote = await service.mark_accepted(quote)
     except ValueError as e:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
+
+    await emit(QUOTE_ACCEPTED, {
+        "entity_id": quote.id,
+        "entity_type": "quote",
+        "user_id": current_user.id,
+        "data": {"quote_number": quote.quote_number, "status": quote.status},
+    })
+
     return QuoteResponse.model_validate(quote)
 
 

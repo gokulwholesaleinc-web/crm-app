@@ -1,7 +1,7 @@
 """Activity API routes."""
 
 from typing import Annotated, Optional, List
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from src.core.constants import HTTPStatus, EntityNames, ENTITY_TYPE_ACTIVITIES
 from src.core.router_utils import (
     DBSession,
@@ -23,6 +23,8 @@ from src.activities.schemas import (
 )
 from src.activities.service import ActivityService
 from src.activities.timeline import ActivityTimeline
+from src.audit.utils import audit_entity_create, audit_entity_update, audit_entity_delete, snapshot_entity
+from src.events.service import emit, ACTIVITY_CREATED
 
 router = APIRouter(prefix="/api/activities", tags=["activities"])
 
@@ -156,12 +158,24 @@ async def list_activities(
 @router.post("", response_model=ActivityResponse, status_code=HTTPStatus.CREATED)
 async def create_activity(
     activity_data: ActivityCreate,
+    request: Request,
     current_user: CurrentUser,
     db: DBSession,
 ):
     """Create a new activity."""
     service = ActivityService(db)
     activity = await service.create(activity_data, current_user.id)
+
+    ip_address = request.client.host if request.client else None
+    await audit_entity_create(db, "activity", activity.id, current_user.id, ip_address)
+
+    await emit(ACTIVITY_CREATED, {
+        "entity_id": activity.id,
+        "entity_type": "activity",
+        "user_id": current_user.id,
+        "data": {"activity_type": activity.activity_type, "subject": activity.subject},
+    })
+
     return ActivityResponse.model_validate(activity)
 
 
@@ -278,6 +292,7 @@ async def get_activity(
 async def update_activity(
     activity_id: int,
     activity_data: ActivityUpdate,
+    request: Request,
     current_user: CurrentUser,
     db: DBSession,
 ):
@@ -285,7 +300,16 @@ async def update_activity(
     service = ActivityService(db)
     activity = await get_entity_or_404(service, activity_id, EntityNames.ACTIVITY)
     check_ownership(activity, current_user, EntityNames.ACTIVITY)
+
+    update_fields = list(activity_data.model_dump(exclude_unset=True).keys())
+    old_data = snapshot_entity(activity, update_fields)
+
     updated_activity = await service.update(activity, activity_data, current_user.id)
+
+    new_data = snapshot_entity(updated_activity, update_fields)
+    ip_address = request.client.host if request.client else None
+    await audit_entity_update(db, "activity", updated_activity.id, current_user.id, old_data, new_data, ip_address)
+
     return ActivityResponse.model_validate(updated_activity)
 
 
@@ -306,6 +330,7 @@ async def complete_activity(
 @router.delete("/{activity_id}", status_code=HTTPStatus.NO_CONTENT)
 async def delete_activity(
     activity_id: int,
+    request: Request,
     current_user: CurrentUser,
     db: DBSession,
 ):
@@ -313,4 +338,8 @@ async def delete_activity(
     service = ActivityService(db)
     activity = await get_entity_or_404(service, activity_id, EntityNames.ACTIVITY)
     check_ownership(activity, current_user, EntityNames.ACTIVITY)
+
+    ip_address = request.client.host if request.client else None
+    await audit_entity_delete(db, "activity", activity.id, current_user.id, ip_address)
+
     await service.delete(activity)

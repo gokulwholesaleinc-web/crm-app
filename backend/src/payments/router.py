@@ -35,6 +35,7 @@ from src.payments.service import (
     StripeCustomerService,
     SubscriptionService,
 )
+from src.events.service import emit, PAYMENT_RECEIVED
 
 logger = logging.getLogger(__name__)
 
@@ -181,12 +182,21 @@ async def stripe_webhook(request: Request, db: DBSession):
     service = PaymentService(db)
     try:
         result = await service.process_webhook(payload, sig_header)
-        return result
     except ValueError as e:
         raise HTTPException(
             status_code=HTTPStatus.BAD_REQUEST,
             detail=str(e),
         )
+
+    if result.get("event_type") in ("checkout.session.completed", "payment_intent.succeeded"):
+        await emit(PAYMENT_RECEIVED, {
+            "entity_id": None,
+            "entity_type": "payment",
+            "user_id": None,
+            "data": {"event_type": result["event_type"], "event_id": result.get("event_id")},
+        })
+
+    return result
 
 
 # =============================================================================

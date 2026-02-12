@@ -2,7 +2,7 @@
 
 import logging
 from typing import Annotated, Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from src.core.constants import HTTPStatus, EntityNames, ENTITY_TYPE_COMPANIES
 from src.core.router_utils import (
     DBSession,
@@ -26,6 +26,8 @@ from src.ai.embedding_hooks import (
     delete_entity_embedding,
     build_company_embedding_content,
 )
+from src.audit.utils import audit_entity_create, audit_entity_update, audit_entity_delete, snapshot_entity
+from src.events.service import emit, COMPANY_CREATED, COMPANY_UPDATED
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +99,7 @@ async def list_companies(
 @router.post("", response_model=CompanyResponse, status_code=HTTPStatus.CREATED)
 async def create_company(
     company_data: CompanyCreate,
+    request: Request,
     current_user: CurrentUser,
     db: DBSession,
 ):
@@ -110,6 +113,16 @@ async def create_company(
         await store_entity_embedding(db, "company", company.id, content)
     except Exception as e:
         logger.warning("Failed to store embedding: %s", e)
+
+    ip_address = request.client.host if request.client else None
+    await audit_entity_create(db, "company", company.id, current_user.id, ip_address)
+
+    await emit(COMPANY_CREATED, {
+        "entity_id": company.id,
+        "entity_type": "company",
+        "user_id": current_user.id,
+        "data": {"name": company.name, "industry": company.industry, "status": company.status},
+    })
 
     # New company has no contacts, so pass include_contact_count=False to avoid query
     # and manually set contact_count to 0
@@ -140,6 +153,7 @@ async def get_company(
 async def update_company(
     company_id: int,
     company_data: CompanyUpdate,
+    request: Request,
     current_user: CurrentUser,
     db: DBSession,
 ):
@@ -147,6 +161,10 @@ async def update_company(
     service = CompanyService(db)
     company = await get_entity_or_404(service, company_id, EntityNames.COMPANY)
     check_ownership(company, current_user, EntityNames.COMPANY)
+
+    update_fields = list(company_data.model_dump(exclude_unset=True).keys())
+    old_data = snapshot_entity(company, update_fields)
+
     updated_company = await service.update(company, company_data, current_user.id)
 
     # Update embedding for semantic search
@@ -156,12 +174,24 @@ async def update_company(
     except Exception as e:
         logger.warning("Failed to store embedding: %s", e)
 
+    new_data = snapshot_entity(updated_company, update_fields)
+    ip_address = request.client.host if request.client else None
+    await audit_entity_update(db, "company", updated_company.id, current_user.id, old_data, new_data, ip_address)
+
+    await emit(COMPANY_UPDATED, {
+        "entity_id": updated_company.id,
+        "entity_type": "company",
+        "user_id": current_user.id,
+        "data": {"name": updated_company.name, "industry": updated_company.industry, "status": updated_company.status},
+    })
+
     return await _build_company_response(service, updated_company)
 
 
 @router.delete("/{company_id}", status_code=HTTPStatus.NO_CONTENT)
 async def delete_company(
     company_id: int,
+    request: Request,
     current_user: CurrentUser,
     db: DBSession,
 ):
@@ -169,6 +199,9 @@ async def delete_company(
     service = CompanyService(db)
     company = await get_entity_or_404(service, company_id, EntityNames.COMPANY)
     check_ownership(company, current_user, EntityNames.COMPANY)
+
+    ip_address = request.client.host if request.client else None
+    await audit_entity_delete(db, "company", company.id, current_user.id, ip_address)
 
     # Delete embedding before deleting entity
     await delete_entity_embedding(db, "company", company.id)

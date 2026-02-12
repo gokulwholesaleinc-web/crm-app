@@ -2,7 +2,7 @@
 
 import logging
 from typing import Annotated, Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from src.core.constants import HTTPStatus, EntityNames, ENTITY_TYPE_CONTACTS
 from src.core.router_utils import (
     DBSession,
@@ -26,6 +26,8 @@ from src.ai.embedding_hooks import (
     delete_entity_embedding,
     build_contact_embedding_content,
 )
+from src.audit.utils import audit_entity_create, audit_entity_update, audit_entity_delete, snapshot_entity
+from src.events.service import emit, CONTACT_CREATED, CONTACT_UPDATED
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +95,7 @@ async def list_contacts(
 @router.post("", response_model=ContactResponse, status_code=HTTPStatus.CREATED)
 async def create_contact(
     contact_data: ContactCreate,
+    request: Request,
     current_user: CurrentUser,
     db: DBSession,
 ):
@@ -107,6 +110,16 @@ async def create_contact(
         await store_entity_embedding(db, "contact", contact.id, content)
     except Exception as e:
         logger.warning("Failed to store embedding: %s", e)
+
+    ip_address = request.client.host if request.client else None
+    await audit_entity_create(db, "contact", contact.id, current_user.id, ip_address)
+
+    await emit(CONTACT_CREATED, {
+        "entity_id": contact.id,
+        "entity_type": "contact",
+        "user_id": current_user.id,
+        "data": {"first_name": contact.first_name, "last_name": contact.last_name, "email": contact.email, "status": contact.status},
+    })
 
     return await _build_contact_response(service, contact)
 
@@ -132,6 +145,7 @@ async def get_contact(
 async def update_contact(
     contact_id: int,
     contact_data: ContactUpdate,
+    request: Request,
     current_user: CurrentUser,
     db: DBSession,
 ):
@@ -139,6 +153,10 @@ async def update_contact(
     service = ContactService(db)
     contact = await get_entity_or_404(service, contact_id, EntityNames.CONTACT)
     check_ownership(contact, current_user, EntityNames.CONTACT)
+
+    update_fields = list(contact_data.model_dump(exclude_unset=True).keys())
+    old_data = snapshot_entity(contact, update_fields)
+
     updated_contact = await service.update(contact, contact_data, current_user.id)
 
     # Update embedding for semantic search
@@ -149,12 +167,24 @@ async def update_contact(
     except Exception as e:
         logger.warning("Failed to store embedding: %s", e)
 
+    new_data = snapshot_entity(updated_contact, update_fields)
+    ip_address = request.client.host if request.client else None
+    await audit_entity_update(db, "contact", updated_contact.id, current_user.id, old_data, new_data, ip_address)
+
+    await emit(CONTACT_UPDATED, {
+        "entity_id": updated_contact.id,
+        "entity_type": "contact",
+        "user_id": current_user.id,
+        "data": {"first_name": updated_contact.first_name, "last_name": updated_contact.last_name, "email": updated_contact.email, "status": updated_contact.status},
+    })
+
     return await _build_contact_response(service, updated_contact)
 
 
 @router.delete("/{contact_id}", status_code=HTTPStatus.NO_CONTENT)
 async def delete_contact(
     contact_id: int,
+    request: Request,
     current_user: CurrentUser,
     db: DBSession,
 ):
@@ -162,6 +192,9 @@ async def delete_contact(
     service = ContactService(db)
     contact = await get_entity_or_404(service, contact_id, EntityNames.CONTACT)
     check_ownership(contact, current_user, EntityNames.CONTACT)
+
+    ip_address = request.client.host if request.client else None
+    await audit_entity_delete(db, "contact", contact.id, current_user.id, ip_address)
 
     # Delete embedding before deleting entity
     await delete_entity_embedding(db, "contact", contact.id)
