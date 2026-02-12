@@ -11,6 +11,7 @@ from src.quotes.schemas import (
 )
 from src.core.base_service import CRUDService, StatusTransitionMixin, BaseService
 from src.core.constants import DEFAULT_PAGE_SIZE
+from src.core.filtering import build_token_search
 
 # Valid status transitions
 VALID_TRANSITIONS = {
@@ -101,12 +102,9 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
         )
 
         if search:
-            query = query.where(
-                or_(
-                    Quote.title.ilike(f"%{search}%"),
-                    Quote.quote_number.ilike(f"%{search}%"),
-                )
-            )
+            search_condition = build_token_search(search, Quote.title, Quote.quote_number)
+            if search_condition is not None:
+                query = query.where(search_condition)
 
         if status:
             query = query.where(Quote.status == status)
@@ -287,7 +285,9 @@ class ProductBundleService(BaseService[ProductBundle]):
         query = select(ProductBundle).options(selectinload(ProductBundle.items))
 
         if search:
-            query = query.where(ProductBundle.name.ilike(f"%{search}%"))
+            search_condition = build_token_search(search, ProductBundle.name)
+            if search_condition is not None:
+                query = query.where(search_condition)
         if is_active is not None:
             query = query.where(ProductBundle.is_active == is_active)
 
