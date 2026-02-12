@@ -97,6 +97,14 @@ export const listSubscriptions = async (params: { page?: number; page_size?: num
   return response.data;
 };
 
+/**
+ * Cancel a subscription
+ */
+export const cancelSubscription = async (subscriptionId: number): Promise<SubscriptionItem> => {
+  const response = await apiClient.post<SubscriptionItem>(`${PAYMENTS_BASE}/subscriptions/${subscriptionId}/cancel`);
+  return response.data;
+};
+
 export const paymentsApi = {
   list: listPayments,
   get: getPayment,
@@ -107,6 +115,7 @@ export const paymentsApi = {
   listProducts,
   createProduct,
   listSubscriptions,
+  cancelSubscription,
 };
 
 export default paymentsApi;

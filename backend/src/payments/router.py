@@ -312,6 +312,41 @@ async def list_subscriptions(
     )
 
 
+@router.get("/subscriptions/{subscription_id}", response_model=SubscriptionResponse)
+async def get_subscription(
+    subscription_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Get a subscription by ID."""
+    service = SubscriptionService(db)
+    subscription = await service.get_by_id(subscription_id)
+    if not subscription:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail="Subscription not found",
+        )
+    return SubscriptionResponse.model_validate(subscription)
+
+
+@router.post("/subscriptions/{subscription_id}/cancel", response_model=SubscriptionResponse)
+async def cancel_subscription(
+    subscription_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Cancel a subscription."""
+    service = SubscriptionService(db)
+    subscription = await service.get_by_id(subscription_id)
+    if not subscription:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail="Subscription not found",
+        )
+    subscription = await service.cancel(subscription)
+    return SubscriptionResponse.model_validate(subscription)
+
+
 # =============================================================================
 # Payment Detail Endpoint (MUST be last - path param catches all)
 # =============================================================================

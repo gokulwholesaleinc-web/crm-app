@@ -108,6 +108,18 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
 
         return payments, total
 
+    # Mapping from quote recurring_interval to Stripe interval
+    INTERVAL_MAP = {
+        "monthly": "month",
+        "quarterly": "month",
+        "yearly": "year",
+    }
+    INTERVAL_COUNT_MAP = {
+        "monthly": 1,
+        "quarterly": 3,
+        "yearly": 1,
+    }
+
     async def create_checkout_session(
         self,
         amount: float,
@@ -119,6 +131,9 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         quote_id: Optional[int] = None,
     ) -> dict:
         """Create a Stripe Checkout Session.
+
+        If the linked quote has payment_type="subscription", creates a
+        subscription-mode checkout session using the quote's recurring_interval.
 
         Returns dict with checkout_session_id and checkout_url,
         or raises ValueError if Stripe is not configured.
@@ -137,18 +152,44 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             if customer:
                 stripe_customer_id = customer.stripe_customer_id
 
+        # Check if quote is subscription type
+        is_subscription = False
+        recurring_interval = None
+        if quote_id:
+            from src.quotes.models import Quote
+            quote_result = await self.db.execute(
+                select(Quote).where(Quote.id == quote_id)
+            )
+            quote = quote_result.scalar_one_or_none()
+            if quote and quote.payment_type == "subscription":
+                is_subscription = True
+                recurring_interval = quote.recurring_interval
+
+        # Build price_data based on payment type
+        price_data: dict = {
+            "currency": currency.lower(),
+            "product_data": {"name": f"Payment - {currency} {amount}"},
+            "unit_amount": int(amount * 100),
+        }
+
+        if is_subscription and recurring_interval:
+            stripe_interval = self.INTERVAL_MAP.get(recurring_interval, "month")
+            interval_count = self.INTERVAL_COUNT_MAP.get(recurring_interval, 1)
+            price_data["recurring"] = {
+                "interval": stripe_interval,
+                "interval_count": interval_count,
+            }
+
+        checkout_mode = "subscription" if is_subscription else "payment"
+
         # Create Stripe checkout session
         session = stripe.checkout.Session.create(
             payment_method_types=["card"],
             line_items=[{
-                "price_data": {
-                    "currency": currency.lower(),
-                    "product_data": {"name": f"Payment - {currency} {amount}"},
-                    "unit_amount": int(amount * 100),
-                },
+                "price_data": price_data,
                 "quantity": 1,
             }],
-            mode="payment",
+            mode=checkout_mode,
             success_url=success_url,
             cancel_url=cancel_url,
             customer=stripe_customer_id,
@@ -601,3 +642,25 @@ class SubscriptionService:
         subscriptions = list(result.scalars().all())
 
         return subscriptions, total
+
+    async def cancel(self, subscription: Subscription) -> Subscription:
+        """Cancel a subscription.
+
+        If Stripe is configured, cancels on Stripe.
+        Otherwise marks the local record as canceled.
+        """
+        stripe = _get_stripe()
+        if stripe and subscription.stripe_subscription_id and not subscription.stripe_subscription_id.startswith("local_"):
+            try:
+                stripe.Subscription.modify(
+                    subscription.stripe_subscription_id,
+                    cancel_at_period_end=True,
+                )
+            except Exception:
+                logger.warning("Failed to cancel subscription on Stripe: %s", subscription.stripe_subscription_id)
+
+        subscription.status = "canceled"
+        subscription.cancel_at_period_end = True
+        await self.db.flush()
+        await self.db.refresh(subscription)
+        return subscription

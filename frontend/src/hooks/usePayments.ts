@@ -159,3 +159,17 @@ export function useSubscriptions(params?: { page?: number; page_size?: number; s
     queryFn: () => paymentsApi.listSubscriptions(params),
   });
 }
+
+/**
+ * Hook to cancel a subscription
+ */
+export function useCancelSubscription() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (subscriptionId: number) => paymentsApi.cancelSubscription(subscriptionId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [subscriptionQueryKey, 'list'] });
+    },
+  });
+}
