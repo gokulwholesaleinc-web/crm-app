@@ -140,6 +140,19 @@ export function useSalesFunnel() {
 }
 
 /**
+ * Hook to fetch sales pipeline KPIs
+ */
+export function useSalesKpis() {
+  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+  return useQuery({
+    queryKey: dashboardKeys.chart('sales-kpis'),
+    queryFn: () => dashboardApi.getSalesKpis(),
+    staleTime: 60 * 1000,
+    enabled: isAuthenticated && !authLoading,
+  });
+}
+
+/**
  * Combined hook to get all chart data
  */
 export function useCharts() {

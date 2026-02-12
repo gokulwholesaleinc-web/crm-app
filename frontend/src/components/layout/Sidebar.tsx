@@ -19,6 +19,7 @@ import {
   Cog6ToothIcon,
   XMarkIcon,
   QueueListIcon,
+  ViewColumnsIcon,
 } from '@heroicons/react/24/outline';
 
 export interface NavItem {
@@ -34,6 +35,7 @@ const mainNavigation: NavItem[] = [
   { name: 'Companies', href: '/companies', icon: BuildingOfficeIcon },
   { name: 'Leads', href: '/leads', icon: FunnelIcon },
   { name: 'Opportunities', href: '/opportunities', icon: CurrencyDollarIcon },
+  { name: 'Pipeline', href: '/pipeline', icon: ViewColumnsIcon },
   { name: 'Quotes', href: '/quotes', icon: DocumentTextIcon },
   { name: 'Proposals', href: '/proposals', icon: DocumentDuplicateIcon },
   { name: 'Payments', href: '/payments', icon: CreditCardIcon },

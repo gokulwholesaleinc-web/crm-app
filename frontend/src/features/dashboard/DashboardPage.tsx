@@ -5,7 +5,7 @@ import { SkeletonCard, SkeletonChart } from '../../components/ui/Skeleton';
 import { ErrorEmptyState } from '../../components/ui/EmptyState';
 import { DashboardRecommendations } from '../../components/ai/DashboardRecommendations';
 import { formatCurrency, formatDate } from '../../utils';
-import { useDashboard, usePipelineFunnelChart, useLeadsBySourceChart, useSalesFunnel } from '../../hooks/useDashboard';
+import { useDashboard, usePipelineFunnelChart, useLeadsBySourceChart, useSalesFunnel, useSalesKpis } from '../../hooks/useDashboard';
 import { useUserTimeline } from '../../hooks/useActivities';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import type { NumberCardData, ChartDataPoint } from '../../types';
@@ -30,6 +30,7 @@ function DashboardPage() {
   const { data: leadsBySourceData } = useLeadsBySourceChart();
   const { data: timelineData } = useUserTimeline();
   const { data: funnelData } = useSalesFunnel();
+  const { data: salesKpis } = useSalesKpis();
 
   const isLoading = isLoadingDashboard;
   const error = dashboardError instanceof Error ? dashboardError.message : dashboardError ? String(dashboardError) : null;
@@ -189,6 +190,48 @@ function DashboardPage() {
           }
         />
       </div>
+
+      {/* Sales Pipeline KPIs */}
+      {salesKpis && (
+        <div className="grid grid-cols-1 gap-3 sm:gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          <NumberCard
+            title="Quotes Sent"
+            value={salesKpis.quotes_sent}
+            icon={
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            }
+          />
+          <NumberCard
+            title="Proposals Sent"
+            value={salesKpis.proposals_sent}
+            icon={
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+            }
+          />
+          <NumberCard
+            title="Payments Collected"
+            value={formatCurrency(salesKpis.payments_collected_total)}
+            icon={
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            }
+          />
+          <NumberCard
+            title="Quote Conversion"
+            value={`${salesKpis.quote_to_payment_conversion_rate}%`}
+            icon={
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+              </svg>
+            }
+          />
+        </div>
+      )}
 
       {/* AI Suggestions */}
       <DashboardRecommendations maxItems={3} />

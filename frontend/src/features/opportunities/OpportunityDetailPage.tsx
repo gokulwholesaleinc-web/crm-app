@@ -12,12 +12,15 @@ import { useOpportunity, useDeleteOpportunity, useUpdateOpportunity, usePipeline
 import { useContacts } from '../../hooks/useContacts';
 import { useCompanies } from '../../hooks/useCompanies';
 import { useTimeline } from '../../hooks/useActivities';
+import { useQuotes } from '../../hooks/useQuotes';
+import { useProposals } from '../../hooks/useProposals';
+import { usePayments } from '../../hooks/usePayments';
 import { formatCurrency, formatDate, formatPercentage } from '../../utils/formatters';
 import { getStatusBadgeClasses } from '../../utils';
-import type { OpportunityUpdate } from '../../types';
+import type { OpportunityUpdate, Quote, Proposal, Payment } from '../../types';
 import clsx from 'clsx';
 
-type TabType = 'details' | 'activities' | 'notes' | 'attachments' | 'comments' | 'history';
+type TabType = 'details' | 'activities' | 'quotes' | 'proposals' | 'payments' | 'notes' | 'attachments' | 'comments' | 'history';
 
 function OpportunityDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -42,7 +45,28 @@ function OpportunityDetailPage() {
     shouldFetchActivities ? opportunityId! : 0
   );
 
+  // Fetch quotes for this opportunity
+  const shouldFetchQuotes = activeTab === 'quotes' && !!opportunityId;
+  const { data: quotesData, isLoading: isLoadingQuotes } = useQuotes(
+    shouldFetchQuotes ? { opportunity_id: opportunityId, page_size: 50 } : undefined
+  );
+
+  // Fetch proposals for this opportunity
+  const shouldFetchProposals = activeTab === 'proposals' && !!opportunityId;
+  const { data: proposalsData, isLoading: isLoadingProposals } = useProposals(
+    shouldFetchProposals ? { opportunity_id: opportunityId, page_size: 50 } : undefined
+  );
+
+  // Fetch payments for this opportunity
+  const shouldFetchPayments = activeTab === 'payments' && !!opportunityId;
+  const { data: paymentsData, isLoading: isLoadingPayments } = usePayments(
+    shouldFetchPayments ? { opportunity_id: opportunityId, page_size: 50 } : undefined
+  );
+
   const activities = timelineData?.items || [];
+  const quotes = quotesData?.items ?? [];
+  const proposals = proposalsData?.items ?? [];
+  const payments = paymentsData?.items ?? [];
 
   const handleEditSubmit = async (data: OpportunityFormData) => {
     if (!opportunityId) return;
@@ -146,6 +170,9 @@ function OpportunityDetailPage() {
   const tabs: { id: TabType; name: string }[] = [
     { id: 'details', name: 'Details' },
     { id: 'activities', name: 'Activities' },
+    { id: 'quotes', name: 'Quotes' },
+    { id: 'proposals', name: 'Proposals' },
+    { id: 'payments', name: 'Payments' },
     { id: 'notes', name: 'Notes' },
     { id: 'attachments', name: 'Attachments' },
     { id: 'comments', name: 'Comments' },
@@ -210,6 +237,34 @@ function OpportunityDetailPage() {
             Delete
           </Button>
         </div>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="flex flex-wrap gap-2">
+        <Link to={`/quotes?opportunity_id=${opportunity.id}`}>
+          <Button variant="secondary" className="text-sm">
+            <svg className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Create Quote
+          </Button>
+        </Link>
+        <Link to={`/proposals?opportunity_id=${opportunity.id}`}>
+          <Button variant="secondary" className="text-sm">
+            <svg className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+            Generate Proposal
+          </Button>
+        </Link>
+        <Link to="/payments">
+          <Button variant="secondary" className="text-sm">
+            <svg className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+            </svg>
+            Collect Payment
+          </Button>
+        </Link>
       </div>
 
       {/* AI Suggestions */}
@@ -427,6 +482,141 @@ function OpportunityDetailPage() {
                       <p className="text-xs text-gray-500 mt-1">
                         {formatDate(activity.created_at)}
                       </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Quotes Tab */}
+      {activeTab === 'quotes' && (
+        <div className="bg-white shadow rounded-lg">
+          <div className="px-4 py-5 sm:p-6">
+            {isLoadingQuotes ? (
+              <div className="flex items-center justify-center py-4">
+                <Spinner />
+              </div>
+            ) : quotes.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-4">
+                No quotes linked to this opportunity.
+              </p>
+            ) : (
+              <ul className="divide-y divide-gray-200">
+                {quotes.map((quote: Quote) => (
+                  <li key={quote.id} className="py-3 flex items-center justify-between">
+                    <div className="min-w-0 flex-1">
+                      <Link
+                        to={`/quotes/${quote.id}`}
+                        className="text-sm font-medium text-primary-600 hover:text-primary-500"
+                      >
+                        {quote.title}
+                      </Link>
+                      <p className="text-xs text-gray-500">{quote.quote_number} - {formatDate(quote.created_at)}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-medium text-gray-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                        {formatCurrency(quote.total, quote.currency)}
+                      </span>
+                      <span className={clsx(
+                        'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
+                        quote.status === 'accepted' ? 'bg-green-100 text-green-800' :
+                        quote.status === 'sent' ? 'bg-blue-100 text-blue-800' :
+                        quote.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                        'bg-gray-100 text-gray-800'
+                      )}>
+                        {quote.status.charAt(0).toUpperCase() + quote.status.slice(1)}
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Proposals Tab */}
+      {activeTab === 'proposals' && (
+        <div className="bg-white shadow rounded-lg">
+          <div className="px-4 py-5 sm:p-6">
+            {isLoadingProposals ? (
+              <div className="flex items-center justify-center py-4">
+                <Spinner />
+              </div>
+            ) : proposals.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-4">
+                No proposals linked to this opportunity.
+              </p>
+            ) : (
+              <ul className="divide-y divide-gray-200">
+                {proposals.map((proposal: Proposal) => (
+                  <li key={proposal.id} className="py-3 flex items-center justify-between">
+                    <div className="min-w-0 flex-1">
+                      <Link
+                        to={`/proposals/${proposal.id}`}
+                        className="text-sm font-medium text-primary-600 hover:text-primary-500"
+                      >
+                        {proposal.title}
+                      </Link>
+                      <p className="text-xs text-gray-500">{proposal.proposal_number} - {formatDate(proposal.created_at)}</p>
+                    </div>
+                    <span className={clsx(
+                      'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
+                      proposal.status === 'accepted' ? 'bg-green-100 text-green-800' :
+                      proposal.status === 'sent' ? 'bg-blue-100 text-blue-800' :
+                      proposal.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                      'bg-gray-100 text-gray-800'
+                    )}>
+                      {proposal.status.charAt(0).toUpperCase() + proposal.status.slice(1)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Payments Tab */}
+      {activeTab === 'payments' && (
+        <div className="bg-white shadow rounded-lg">
+          <div className="px-4 py-5 sm:p-6">
+            {isLoadingPayments ? (
+              <div className="flex items-center justify-center py-4">
+                <Spinner />
+              </div>
+            ) : payments.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-4">
+                No payments linked to this opportunity.
+              </p>
+            ) : (
+              <ul className="divide-y divide-gray-200">
+                {payments.map((payment: Payment) => (
+                  <li key={payment.id} className="py-3 flex items-center justify-between">
+                    <div className="min-w-0 flex-1">
+                      <Link
+                        to={`/payments/${payment.id}`}
+                        className="text-sm font-medium text-primary-600 hover:text-primary-500"
+                      >
+                        Payment #{payment.id}
+                      </Link>
+                      <p className="text-xs text-gray-500">{formatDate(payment.created_at)}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-medium text-gray-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                        {formatCurrency(payment.amount, payment.currency)}
+                      </span>
+                      <span className={clsx(
+                        'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
+                        payment.status === 'succeeded' ? 'bg-green-100 text-green-800' :
+                        payment.status === 'failed' ? 'bg-red-100 text-red-800' :
+                        'bg-yellow-100 text-yellow-800'
+                      )}>
+                        {payment.status.charAt(0).toUpperCase() + payment.status.slice(1)}
+                      </span>
                     </div>
                   </li>
                 ))}

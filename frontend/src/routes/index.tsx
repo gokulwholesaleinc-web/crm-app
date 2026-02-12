@@ -65,6 +65,9 @@ const ImportExportPage = lazy(() => import('../features/import-export/ImportExpo
 // Sequences
 const SequencesPage = lazy(() => import('../features/sequences/SequencesPage'));
 
+// Pipeline
+const PipelinePage = lazy(() => import('../features/pipeline/PipelinePage'));
+
 // Settings
 const SettingsPage = lazy(() => import('../features/settings/SettingsPage'));
 
@@ -285,6 +288,16 @@ function AppRoutes() {
         element={
           <PrivateRoute>
             <SequencesPage />
+          </PrivateRoute>
+        }
+      />
+
+      {/* Pipeline */}
+      <Route
+        path="/pipeline"
+        element={
+          <PrivateRoute>
+            <PipelinePage />
           </PrivateRoute>
         }
       />

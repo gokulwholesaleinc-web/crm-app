@@ -191,18 +191,100 @@ async def get_conversion_rates_chart(
 
 
 # =========================================================================
-# Multi-Currency endpoints
+# Sales Pipeline KPIs
 # =========================================================================
 
 from typing import Optional
+from pydantic import BaseModel
 from fastapi import Query
-from sqlalchemy import select
+from sqlalchemy import select, func
+from src.quotes.models import Quote
+from src.proposals.models import Proposal
+from src.payments.models import Payment
 from src.core.currencies import (
     get_supported_currencies_list,
     get_base_currency,
     convert_amount,
 )
 from src.opportunities.models import Opportunity, PipelineStage
+
+
+class SalesKPIResponse(BaseModel):
+    quotes_sent: int
+    proposals_sent: int
+    payments_collected_total: float
+    payments_collected_count: int
+    quote_to_payment_conversion_rate: float
+
+
+@router.get("/sales-kpis", response_model=SalesKPIResponse)
+async def get_sales_kpis(
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Get sales pipeline KPIs: quotes sent, proposals sent, payments collected, conversion rate."""
+    # Quotes sent (status != draft)
+    quotes_sent_result = await db.execute(
+        select(func.count(Quote.id)).where(
+            Quote.owner_id == current_user.id,
+            Quote.status != "draft",
+        )
+    )
+    quotes_sent = quotes_sent_result.scalar() or 0
+
+    # Proposals sent (status != draft)
+    proposals_sent_result = await db.execute(
+        select(func.count(Proposal.id)).where(
+            Proposal.created_by_id == current_user.id,
+            Proposal.status != "draft",
+        )
+    )
+    proposals_sent = proposals_sent_result.scalar() or 0
+
+    # Payments collected (succeeded)
+    payments_result = await db.execute(
+        select(
+            func.count(Payment.id),
+            func.coalesce(func.sum(Payment.amount), 0),
+        ).where(
+            Payment.status == "succeeded",
+        )
+    )
+    row = payments_result.one()
+    payments_collected_count = row[0] or 0
+    payments_collected_total = float(row[1] or 0)
+
+    # Quote-to-payment conversion rate
+    total_quotes_result = await db.execute(
+        select(func.count(Quote.id)).where(
+            Quote.owner_id == current_user.id,
+        )
+    )
+    total_quotes = total_quotes_result.scalar() or 0
+
+    # Quotes that led to a payment (accepted quotes)
+    accepted_quotes_result = await db.execute(
+        select(func.count(Quote.id)).where(
+            Quote.owner_id == current_user.id,
+            Quote.status == "accepted",
+        )
+    )
+    accepted_quotes = accepted_quotes_result.scalar() or 0
+
+    conversion_rate = round((accepted_quotes / total_quotes) * 100, 1) if total_quotes > 0 else 0.0
+
+    return SalesKPIResponse(
+        quotes_sent=quotes_sent,
+        proposals_sent=proposals_sent,
+        payments_collected_total=payments_collected_total,
+        payments_collected_count=payments_collected_count,
+        quote_to_payment_conversion_rate=conversion_rate,
+    )
+
+
+# =========================================================================
+# Multi-Currency endpoints
+# =========================================================================
 
 
 @router.get("/currencies")

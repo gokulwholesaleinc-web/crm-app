@@ -21,6 +21,13 @@ ACTIVITY_CREATED = "activity.created"
 COMPANY_CREATED = "company.created"
 COMPANY_UPDATED = "company.updated"
 
+# Sales pipeline events
+QUOTE_SENT = "quote.sent"
+QUOTE_ACCEPTED = "quote.accepted"
+PROPOSAL_SENT = "proposal.sent"
+PROPOSAL_ACCEPTED = "proposal.accepted"
+PAYMENT_RECEIVED = "payment.received"
+
 # Registry: event_type -> list of async handler functions
 _handlers: Dict[str, List[Callable]] = {}
 

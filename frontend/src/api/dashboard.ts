@@ -118,6 +118,23 @@ export const getSalesFunnel = async (): Promise<SalesFunnelResponse> => {
 };
 
 // =============================================================================
+// Sales KPIs
+// =============================================================================
+
+export interface SalesKPIResponse {
+  quotes_sent: number;
+  proposals_sent: number;
+  payments_collected_total: number;
+  payments_collected_count: number;
+  quote_to_payment_conversion_rate: number;
+}
+
+export const getSalesKpis = async (): Promise<SalesKPIResponse> => {
+  const response = await apiClient.get<SalesKPIResponse>(`${DASHBOARD_BASE}/sales-kpis`);
+  return response.data;
+};
+
+// =============================================================================
 // Multi-Currency
 // =============================================================================
 
@@ -177,6 +194,8 @@ export const dashboardApi = {
   getNewLeadsTrendChart,
   getConversionRatesChart,
   getSalesFunnel,
+  // Sales KPIs
+  getSalesKpis,
   // Multi-Currency
   getCurrencies,
   getConvertedRevenue,
