@@ -50,7 +50,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             className={clsx(
               'block w-full rounded-lg border shadow-sm transition-colors duration-200',
               'placeholder:text-gray-400 dark:placeholder:text-gray-500',
-              'focus:outline-none focus:ring-2 focus:ring-offset-0',
+              'focus-visible:outline-none focus:ring-2 focus:ring-offset-0',
               'disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed dark:disabled:bg-gray-800',
               leftIcon ? 'pl-10' : 'pl-3',
               rightIcon ? 'pr-10' : 'pr-3',
