@@ -36,9 +36,29 @@ export function BrandingSection() {
     footer_text: '',
   });
 
-  // Don't show if no tenant context
+  // Show informational message when no tenant is configured
   if (!tenantSlug) {
-    return null;
+    return (
+      <Card>
+        <CardHeader
+          title="Branding"
+          description="Customize your organization's appearance"
+        />
+        <CardBody className="p-4 sm:p-6">
+          <div className="flex items-start gap-3">
+            <SwatchIcon className="h-6 w-6 text-gray-400 dark:text-gray-500 flex-shrink-0 mt-0.5" aria-hidden="true" />
+            <div>
+              <p className="text-sm text-gray-700 dark:text-gray-300">
+                White-label branding is available for tenant accounts.
+              </p>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Once your account is associated with a tenant, you can customize your logo, colors, and company name here.
+              </p>
+            </div>
+          </div>
+        </CardBody>
+      </Card>
+    );
   }
 
   const startEditing = () => {

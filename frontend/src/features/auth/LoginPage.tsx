@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { authApi } from '../../api/auth';
 import { useAuthStore } from '../../store/authStore';
+import { setTenantSlugOnLogin, useTenant } from '../../providers/TenantProvider';
 import type { LoginRequest } from '../../types';
 
 function LoginPage() {
@@ -11,6 +12,7 @@ function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { login: storeLogin } = useAuthStore();
+  const { tenant } = useTenant();
 
   const {
     register,
@@ -40,6 +42,14 @@ function LoginPage() {
       // Get user profile after successful login
       const user = await authApi.getMe();
 
+      // Save tenant slug from login response
+      if (tokenResult.tenants && tokenResult.tenants.length > 0) {
+        const primaryTenant = tokenResult.tenants.find(t => t.is_primary) ?? tokenResult.tenants[0];
+        if (primaryTenant) {
+          setTenantSlugOnLogin(primaryTenant.tenant_slug);
+        }
+      }
+
       // Update auth store with user and token
       storeLogin(user, tokenResult.access_token);
 
@@ -59,8 +69,30 @@ function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-8 sm:py-12 px-4 sm:px-6 lg:px-8">
       <div className="w-full max-w-md space-y-6 sm:space-y-8">
         <div>
+          {tenant?.logo_url ? (
+            <div className="flex justify-center mb-4">
+              <img
+                src={tenant.logo_url}
+                alt={tenant.company_name || 'Company logo'}
+                width={64}
+                height={64}
+                className="h-16 w-auto object-contain"
+              />
+            </div>
+          ) : (
+            <div className="flex justify-center mb-4">
+              <div
+                className="h-12 w-12 rounded-lg flex items-center justify-center"
+                style={{ backgroundColor: tenant?.primary_color || '#6366f1' }}
+              >
+                <span className="text-white font-bold text-xl">
+                  {tenant?.company_name?.[0]?.toUpperCase() || 'C'}
+                </span>
+              </div>
+            </div>
+          )}
           <h2 className="mt-4 sm:mt-6 text-center text-2xl sm:text-3xl font-extrabold text-gray-900 dark:text-gray-100">
-            Sign in to your account
+            {tenant?.company_name ? `Sign in to ${tenant.company_name}` : 'Sign in to your account'}
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
             Or{' '}
