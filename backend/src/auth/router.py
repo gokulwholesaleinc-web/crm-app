@@ -3,6 +3,7 @@
 from typing import Annotated, List
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy import select
 from src.core.constants import HTTPStatus, ErrorMessages, EntityNames
 from src.core.router_utils import DBSession, CurrentUser, raise_bad_request
 from src.auth.models import User
@@ -12,14 +13,48 @@ from src.auth.schemas import (
     UserResponse,
     Token,
     LoginRequest,
+    TenantInfo,
 )
 from src.auth.service import AuthService
 from src.auth.security import create_access_token
 from src.auth.dependencies import get_current_active_user, get_current_superuser
+from src.whitelabel.models import TenantUser, Tenant, TenantSettings
 
 from src.core.rate_limit import limiter
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+
+async def _get_user_tenant_info(db, user_id: int) -> list | None:
+    """Fetch tenant memberships for a user and return as TenantInfo dicts.
+
+    Uses a join query since TenantUser does not have a relationship to Tenant.
+    """
+    result = await db.execute(
+        select(TenantUser, Tenant, TenantSettings)
+        .join(Tenant, TenantUser.tenant_id == Tenant.id)
+        .outerjoin(TenantSettings, TenantSettings.tenant_id == Tenant.id)
+        .where(TenantUser.user_id == user_id)
+    )
+    rows = result.all()
+    if not rows:
+        return None
+    tenants = []
+    for tu, tenant, settings in rows:
+        tenants.append(
+            TenantInfo(
+                tenant_id=tenant.id,
+                tenant_slug=tenant.slug,
+                company_name=settings.company_name if settings else tenant.name,
+                role=tu.role,
+                is_primary=tu.is_primary,
+                primary_color=settings.primary_color if settings else None,
+                secondary_color=settings.secondary_color if settings else None,
+                accent_color=settings.accent_color if settings else None,
+                logo_url=settings.logo_url if settings else None,
+            ).model_dump()
+        )
+    return tenants
 
 
 @router.post("/register", response_model=UserResponse, status_code=HTTPStatus.CREATED)
@@ -60,7 +95,8 @@ async def login(
         )
 
     access_token = create_access_token(data={"sub": str(user.id)})
-    return Token(access_token=access_token)
+    tenants = await _get_user_tenant_info(db, user.id)
+    return Token(access_token=access_token, tenants=tenants)
 
 
 @router.post("/login/json", response_model=Token)
@@ -83,7 +119,8 @@ async def login_json(
             )
 
         access_token = create_access_token(data={"sub": str(user.id)})
-        return Token(access_token=access_token)
+        tenants = await _get_user_tenant_info(db, user.id)
+        return Token(access_token=access_token, tenants=tenants)
     except HTTPException:
         raise
     except Exception as e:

@@ -1,5 +1,5 @@
 /**
- * Settings page with user profile, AI preferences, pipeline stage management,
+ * Settings page with user profile, branding, AI preferences, pipeline stage management,
  * lead source management, and account settings sections.
  */
 
@@ -17,6 +17,7 @@ import {
   PencilSquareIcon,
 } from '@heroicons/react/24/outline';
 import { EditProfileModal } from './components/EditProfileModal';
+import { BrandingSection } from './components/BrandingSection';
 import { AIPreferencesSection } from './components/AIPreferencesSection';
 import { PipelineStagesSection } from './components/PipelineStagesSection';
 import { LeadSourcesSection } from './components/LeadSourcesSection';
@@ -39,8 +40,8 @@ function SettingsPage() {
     <div className="space-y-4 sm:space-y-6">
       {/* Page Header */}
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Settings</h1>
-        <p className="mt-1 text-xs sm:text-sm text-gray-500">
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Settings</h1>
+        <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
           Manage your account settings and preferences
         </p>
       </div>
@@ -73,43 +74,43 @@ function SettingsPage() {
             <div className="flex-1 space-y-4">
               <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="block text-xs sm:text-sm font-medium text-gray-500">
+                  <label className="block text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">
                     Full Name
                   </label>
-                  <p className="mt-1 text-sm text-gray-900">
+                  <p className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                     {user?.full_name || 'Not set'}
                   </p>
                 </div>
                 <div>
-                  <label className="block text-xs sm:text-sm font-medium text-gray-500">
+                  <label className="block text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">
                     Email
                   </label>
-                  <p className="mt-1 text-sm text-gray-900 break-all">
+                  <p className="mt-1 text-sm text-gray-900 dark:text-gray-100 break-all">
                     {user?.email || 'Not set'}
                   </p>
                 </div>
                 <div>
-                  <label className="block text-xs sm:text-sm font-medium text-gray-500">
+                  <label className="block text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">
                     Phone
                   </label>
-                  <p className="mt-1 text-sm text-gray-900">
+                  <p className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                     {user?.phone || 'Not set'}
                   </p>
                 </div>
                 <div>
-                  <label className="block text-xs sm:text-sm font-medium text-gray-500">
+                  <label className="block text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">
                     Job Title
                   </label>
-                  <p className="mt-1 text-sm text-gray-900">
+                  <p className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                     {user?.job_title || 'Not set'}
                   </p>
                 </div>
               </div>
               <div>
-                <label className="block text-xs sm:text-sm font-medium text-gray-500">
+                <label className="block text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">
                   Member Since
                 </label>
-                <p className="mt-1 text-sm text-gray-900">
+                <p className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   {user?.created_at
                     ? new Date(user.created_at).toLocaleDateString(undefined, {
                         year: 'numeric',
@@ -138,6 +139,9 @@ function SettingsPage() {
         />
       )}
 
+      {/* Branding Section (white-label) */}
+      <BrandingSection />
+
       {/* AI Preferences Section */}
       <AIPreferencesSection />
 
@@ -160,24 +164,24 @@ function SettingsPage() {
           description="Manage your account preferences"
         />
         <CardBody className="p-4 sm:p-6">
-          <div className="divide-y divide-gray-200">
+          <div className="divide-y divide-gray-200 dark:divide-gray-700">
             {/* Notification Settings */}
             <div className="py-3 sm:py-4 first:pt-0 last:pb-0">
               <div className="flex items-start sm:items-center gap-3 sm:space-x-4">
                 <div className="flex-shrink-0">
-                  <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                    <BellIcon className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
+                  <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                    <BellIcon className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 dark:text-blue-400" />
                   </div>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900">
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
                     Notifications
                   </p>
-                  <p className="text-xs sm:text-sm text-gray-500">
+                  <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
                     Configure email and push notification preferences
                   </p>
                 </div>
-                <div className="text-xs sm:text-sm text-gray-400 flex-shrink-0">Coming soon</div>
+                <div className="text-xs sm:text-sm text-gray-400 dark:text-gray-500 flex-shrink-0">Coming soon</div>
               </div>
             </div>
 
@@ -185,19 +189,19 @@ function SettingsPage() {
             <div className="py-3 sm:py-4 first:pt-0 last:pb-0">
               <div className="flex items-start sm:items-center gap-3 sm:space-x-4">
                 <div className="flex-shrink-0">
-                  <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-lg bg-green-100 flex items-center justify-center">
-                    <ShieldCheckIcon className="h-4 w-4 sm:h-5 sm:w-5 text-green-600" />
+                  <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                    <ShieldCheckIcon className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 dark:text-green-400" />
                   </div>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900">
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
                     Security
                   </p>
-                  <p className="text-xs sm:text-sm text-gray-500">
+                  <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
                     Password, two-factor authentication, and sessions
                   </p>
                 </div>
-                <div className="text-xs sm:text-sm text-gray-400 flex-shrink-0">Coming soon</div>
+                <div className="text-xs sm:text-sm text-gray-400 dark:text-gray-500 flex-shrink-0">Coming soon</div>
               </div>
             </div>
 
@@ -205,39 +209,39 @@ function SettingsPage() {
             <div className="py-3 sm:py-4 first:pt-0 last:pb-0">
               <div className="flex items-start sm:items-center gap-3 sm:space-x-4">
                 <div className="flex-shrink-0">
-                  <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-lg bg-purple-100 flex items-center justify-center">
-                    <Cog6ToothIcon className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600" />
+                  <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                    <Cog6ToothIcon className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600 dark:text-purple-400" />
                   </div>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900">
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
                     Preferences
                   </p>
-                  <p className="text-xs sm:text-sm text-gray-500">
+                  <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
                     Language, timezone, and display settings
                   </p>
                 </div>
-                <div className="text-xs sm:text-sm text-gray-400 flex-shrink-0">Coming soon</div>
+                <div className="text-xs sm:text-sm text-gray-400 dark:text-gray-500 flex-shrink-0">Coming soon</div>
               </div>
             </div>
 
             {/* Profile Settings */}
             <button
               type="button"
-              className="w-full py-3 sm:py-4 first:pt-0 last:pb-0 text-left hover:bg-gray-50 -mx-4 sm:-mx-6 px-4 sm:px-6 transition-colors"
+              className="w-full py-3 sm:py-4 first:pt-0 last:pb-0 text-left hover:bg-gray-50 dark:hover:bg-gray-700 -mx-4 sm:-mx-6 px-4 sm:px-6 transition-colors"
               onClick={() => setIsEditModalOpen(true)}
             >
               <div className="flex items-start sm:items-center gap-3 sm:space-x-4">
                 <div className="flex-shrink-0">
-                  <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-lg bg-orange-100 flex items-center justify-center">
-                    <UserCircleIcon className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600" />
+                  <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
+                    <UserCircleIcon className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600 dark:text-orange-400" />
                   </div>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900">
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
                     Edit Profile
                   </p>
-                  <p className="text-xs sm:text-sm text-gray-500">
+                  <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
                     Update your personal information and avatar
                   </p>
                 </div>
@@ -258,8 +262,8 @@ function SettingsPage() {
         />
         <CardBody className="p-4 sm:p-6">
           <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-3">
-            <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
-              <p className="text-xs sm:text-sm font-medium text-gray-500">Status</p>
+            <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 sm:p-4">
+              <p className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">Status</p>
               <p className="mt-1 flex items-center text-sm">
                 <span
                   className={`inline-block h-2 w-2 rounded-full mr-2 ${
@@ -269,15 +273,15 @@ function SettingsPage() {
                 {user?.is_active ? 'Active' : 'Inactive'}
               </p>
             </div>
-            <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
-              <p className="text-xs sm:text-sm font-medium text-gray-500">Role</p>
-              <p className="mt-1 text-sm text-gray-900">
+            <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 sm:p-4">
+              <p className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">Role</p>
+              <p className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                 {user?.is_superuser ? 'Administrator' : 'User'}
               </p>
             </div>
-            <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
-              <p className="text-xs sm:text-sm font-medium text-gray-500">Last Login</p>
-              <p className="mt-1 text-sm text-gray-900">
+            <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 sm:p-4">
+              <p className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">Last Login</p>
+              <p className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                 {user?.last_login
                   ? new Date(user.last_login).toLocaleDateString(undefined, {
                       year: 'numeric',

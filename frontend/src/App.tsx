@@ -11,6 +11,7 @@ import AppRoutes from './routes';
 import { Spinner } from './components/ui/Spinner';
 import { useAuthStore } from './store/authStore';
 import { useTheme } from './hooks/useTheme';
+import { TenantProvider } from './providers/TenantProvider';
 
 // Configure QueryClient with sensible defaults
 const queryClient = new QueryClient({
@@ -63,42 +64,44 @@ function ThemeInitializer() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeInitializer />
-      <AuthEventHandler />
-      <BrowserRouter
-        future={{
-          v7_startTransition: true,
-          v7_relativeSplatPath: true,
-        }}
-      >
-        <Suspense fallback={<PageLoader />}>
-          <AppRoutes />
-        </Suspense>
-        <div aria-live="polite" aria-atomic="true">
-          <Toaster
-            position="top-right"
-            toastOptions={{
-            duration: 4000,
-            style: {
-              background: '#363636',
-              color: '#fff',
-            },
-            success: {
-              duration: 3000,
+      <TenantProvider>
+        <ThemeInitializer />
+        <AuthEventHandler />
+        <BrowserRouter
+          future={{
+            v7_startTransition: true,
+            v7_relativeSplatPath: true,
+          }}
+        >
+          <Suspense fallback={<PageLoader />}>
+            <AppRoutes />
+          </Suspense>
+          <div aria-live="polite" aria-atomic="true">
+            <Toaster
+              position="top-right"
+              toastOptions={{
+              duration: 4000,
               style: {
-                background: '#10B981',
+                background: '#363636',
+                color: '#fff',
               },
-            },
-            error: {
-              duration: 5000,
-              style: {
-                background: '#EF4444',
+              success: {
+                duration: 3000,
+                style: {
+                  background: '#10B981',
+                },
               },
-            },
-            }}
-          />
-        </div>
-      </BrowserRouter>
+              error: {
+                duration: 5000,
+                style: {
+                  background: '#EF4444',
+                },
+              },
+              }}
+            />
+          </div>
+        </BrowserRouter>
+      </TenantProvider>
     </QueryClientProvider>
   );
 }

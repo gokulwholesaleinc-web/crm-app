@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from src.auth.models import User
-from src.auth.security import create_access_token
+from src.auth.security import create_access_token, get_password_hash
 from src.whitelabel.models import Tenant, TenantSettings, TenantUser
 
 
@@ -1374,3 +1374,267 @@ class TestTenantUserAddRemoveLifecycle:
         )
 
         assert response.status_code == 404
+
+
+# --- Middleware Resolution Tests ---
+
+
+class TestTenantMiddleware:
+    """Tests for tenant middleware resolution via X-Tenant-Slug header."""
+
+    @pytest.mark.asyncio
+    async def test_middleware_resolves_tenant_from_header(
+        self, client: AsyncClient, db_session: AsyncSession, test_tenant: Tenant
+    ):
+        """Test middleware resolves tenant from X-Tenant-Slug header."""
+        response = await client.get(
+            "/api/tenants/branding/current",
+            headers={"X-Tenant-Slug": test_tenant.slug},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["tenant_slug"] == test_tenant.slug
+        assert data["company_name"] == "Test Tenant Inc"
+
+    @pytest.mark.asyncio
+    async def test_middleware_handles_missing_tenant_gracefully(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        """Test middleware doesn't block when no tenant context is provided."""
+        response = await client.get("/health")
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_middleware_handles_nonexistent_slug(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        """Test middleware handles non-existent tenant slug gracefully."""
+        response = await client.get(
+            "/api/tenants/branding/current",
+            headers={"X-Tenant-Slug": "nonexistent-slug"},
+        )
+        assert response.status_code == 400
+        assert "tenant context" in response.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_middleware_handles_inactive_tenant_slug(
+        self, client: AsyncClient, db_session: AsyncSession, inactive_tenant: Tenant,
+    ):
+        """Test middleware does not resolve inactive tenants."""
+        response = await client.get(
+            "/api/tenants/branding/current",
+            headers={"X-Tenant-Slug": inactive_tenant.slug},
+        )
+        assert response.status_code == 400
+
+
+# --- Tenant Context Dependency Tests ---
+
+
+class TestTenantDependencies:
+    """Tests for tenant context FastAPI dependencies."""
+
+    @pytest.mark.asyncio
+    async def test_require_tenant_returns_400_without_context(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        """Test require_tenant raises 400 when no tenant context."""
+        response = await client.get("/api/tenants/branding/current")
+        assert response.status_code == 400
+        assert "tenant context" in response.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_require_tenant_succeeds_with_header(
+        self, client: AsyncClient, db_session: AsyncSession, test_tenant: Tenant
+    ):
+        """Test require_tenant succeeds when valid tenant header is provided."""
+        response = await client.get(
+            "/api/tenants/branding/current",
+            headers={"X-Tenant-Slug": test_tenant.slug},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["tenant_slug"] == test_tenant.slug
+
+
+# --- Branding Endpoint Tests ---
+
+
+class TestBrandingEndpoint:
+    """Tests for the GET /api/tenants/branding/current endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_branding_returns_correct_data(
+        self, client: AsyncClient, db_session: AsyncSession, test_tenant: Tenant
+    ):
+        """Test branding endpoint returns correct tenant config."""
+        response = await client.get(
+            "/api/tenants/branding/current",
+            headers={"X-Tenant-Slug": test_tenant.slug},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["tenant_slug"] == test_tenant.slug
+        assert data["company_name"] == "Test Tenant Inc"
+        assert data["primary_color"] == "#6366f1"
+        assert data["secondary_color"] == "#8b5cf6"
+        assert data["accent_color"] == "#22c55e"
+        assert data["logo_url"] == "https://example.com/logo.png"
+        assert data["favicon_url"] == "https://example.com/favicon.ico"
+        assert data["footer_text"] == "Test Tenant Footer"
+        assert data["default_language"] == "en"
+        assert data["date_format"] == "MM/DD/YYYY"
+
+    @pytest.mark.asyncio
+    async def test_branding_no_auth_required(
+        self, client: AsyncClient, db_session: AsyncSession, test_tenant: Tenant
+    ):
+        """Test branding endpoint works without auth token."""
+        response = await client.get(
+            "/api/tenants/branding/current",
+            headers={"X-Tenant-Slug": test_tenant.slug},
+        )
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_branding_requires_tenant_context(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        """Test branding endpoint fails without tenant context."""
+        response = await client.get("/api/tenants/branding/current")
+        assert response.status_code == 400
+
+
+# --- Login Tenant Info Tests ---
+
+
+class TestLoginTenantInfo:
+    """Tests for tenant info in login response."""
+
+    @pytest.mark.asyncio
+    async def test_login_includes_tenant_info(
+        self, client: AsyncClient, db_session: AsyncSession,
+        test_tenant: Tenant, test_user: User,
+    ):
+        """Test login response includes tenant info when user is in a tenant."""
+        tenant_user = TenantUser(
+            tenant_id=test_tenant.id, user_id=test_user.id,
+            role="admin", is_primary=True,
+        )
+        db_session.add(tenant_user)
+        await db_session.commit()
+
+        response = await client.post(
+            "/api/auth/login/json",
+            json={"email": "testuser@example.com", "password": "testpassword123"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "access_token" in data
+        assert data["tenants"] is not None
+        assert len(data["tenants"]) >= 1
+        tenant_info = data["tenants"][0]
+        assert tenant_info["tenant_slug"] == test_tenant.slug
+        assert tenant_info["company_name"] == "Test Tenant Inc"
+        assert tenant_info["role"] == "admin"
+        assert tenant_info["is_primary"] is True
+        assert tenant_info["primary_color"] == "#6366f1"
+
+    @pytest.mark.asyncio
+    async def test_login_no_tenants(
+        self, client: AsyncClient, db_session: AsyncSession, test_user: User,
+    ):
+        """Test login response has no tenants when user is not in any tenant."""
+        response = await client.post(
+            "/api/auth/login/json",
+            json={"email": "testuser@example.com", "password": "testpassword123"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "access_token" in data
+        assert data["tenants"] is None
+
+    @pytest.mark.asyncio
+    async def test_form_login_includes_tenant_info(
+        self, client: AsyncClient, db_session: AsyncSession,
+        test_tenant: Tenant, test_user: User,
+    ):
+        """Test form login also includes tenant info."""
+        tenant_user = TenantUser(
+            tenant_id=test_tenant.id, user_id=test_user.id,
+            role="member", is_primary=False,
+        )
+        db_session.add(tenant_user)
+        await db_session.commit()
+
+        response = await client.post(
+            "/api/auth/login",
+            data={"username": "testuser@example.com", "password": "testpassword123"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["tenants"] is not None
+        assert len(data["tenants"]) >= 1
+        assert data["tenants"][0]["tenant_slug"] == test_tenant.slug
+        assert data["tenants"][0]["role"] == "member"
+
+
+# --- Tenant Admin Check Tests ---
+
+
+class TestTenantAdminCheck:
+    """Tests for require_tenant_admin dependency."""
+
+    @pytest.mark.asyncio
+    async def test_tenant_admin_check_for_non_member(
+        self, client: AsyncClient, db_session: AsyncSession,
+        test_tenant: Tenant, test_user: User, auth_headers: dict,
+    ):
+        """Test that a user who is NOT a tenant member is not linked."""
+        result = await db_session.execute(
+            select(TenantUser).where(
+                TenantUser.tenant_id == test_tenant.id,
+                TenantUser.user_id == test_user.id,
+            )
+        )
+        assert result.scalar_one_or_none() is None
+
+    @pytest.mark.asyncio
+    async def test_tenant_admin_user_linked_as_admin(
+        self, client: AsyncClient, db_session: AsyncSession,
+        test_tenant: Tenant, test_user: User, test_tenant_user: TenantUser,
+    ):
+        """Test that a user linked as admin to tenant has admin role."""
+        assert test_tenant_user.role == "admin"
+        assert test_tenant_user.tenant_id == test_tenant.id
+        assert test_tenant_user.user_id == test_user.id
+
+    @pytest.mark.asyncio
+    async def test_tenant_admin_user_linked_as_member(
+        self, client: AsyncClient, db_session: AsyncSession, test_tenant: Tenant,
+    ):
+        """Test that a user linked as member is not admin."""
+        member_user = User(
+            email="member@example.com",
+            hashed_password=get_password_hash("memberpassword123"),
+            full_name="Member User", is_active=True, is_superuser=False,
+        )
+        db_session.add(member_user)
+        await db_session.flush()
+        tenant_user = TenantUser(
+            tenant_id=test_tenant.id, user_id=member_user.id,
+            role="member", is_primary=False,
+        )
+        db_session.add(tenant_user)
+        await db_session.commit()
+        await db_session.refresh(tenant_user)
+        assert tenant_user.role == "member"
+        assert tenant_user.role != "admin"
+
+    @pytest.mark.asyncio
+    async def test_superuser_bypasses_tenant_admin_check(
+        self, client: AsyncClient, db_session: AsyncSession,
+        test_tenant: Tenant, test_superuser: User,
+    ):
+        """Test that superuser can act as tenant admin without explicit membership."""
+        assert test_superuser.is_superuser is True

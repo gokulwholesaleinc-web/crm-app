@@ -3,14 +3,20 @@
 @tailwind components;
 @tailwind utilities;
 
-/* CSS Variables for theme customization */
+/* CSS Variables for theme customization (white-label branding) */
 :root {
-  --color-primary: 59 130 246; /* blue-500 */
-  --color-primary-dark: 37 99 235; /* blue-600 */
-  --color-secondary: 107 114 128; /* gray-500 */
+  --color-primary: 99 102 241; /* indigo-500 - overridden by TenantProvider */
+  --color-primary-dark: 79 70 229; /* indigo-600 */
+  --color-secondary: 139 92 246; /* violet-500 - overridden by TenantProvider */
+  --color-accent: 34 197 94; /* green-500 - overridden by TenantProvider */
   --color-success: 16 185 129; /* emerald-500 */
   --color-warning: 245 158 11; /* amber-500 */
   --color-danger: 239 68 68; /* red-500 */
+
+  /* Brand hex values for direct usage (set by TenantProvider) */
+  --brand-primary: #6366f1;
+  --brand-secondary: #8b5cf6;
+  --brand-accent: #22c55e;
 }
 
 /* Base styles */
@@ -51,9 +57,10 @@
     @apply text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors;
   }
 
-  /* Focus styles for accessibility */
+  /* Focus styles for accessibility - uses brand primary color */
   *:focus-visible {
-    @apply outline-none ring-2 ring-blue-500 ring-offset-2 dark:ring-offset-gray-900;
+    @apply outline-none ring-2 ring-offset-2 dark:ring-offset-gray-900;
+    --tw-ring-color: rgb(var(--color-primary));
   }
 }
 
@@ -180,6 +187,23 @@
 
   .page-description {
     @apply mt-2 text-sm text-gray-600 dark:text-gray-400;
+  }
+
+  /* Brand utility classes for white-label theming */
+  .brand-bg-primary {
+    background-color: var(--brand-primary);
+  }
+
+  .brand-text-primary {
+    color: var(--brand-primary);
+  }
+
+  .brand-border-primary {
+    border-color: var(--brand-primary);
+  }
+
+  .brand-bg-accent {
+    background-color: var(--brand-accent);
   }
 }
 

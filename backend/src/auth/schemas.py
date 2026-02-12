@@ -35,9 +35,23 @@ class UserResponse(UserBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class TenantInfo(BaseModel):
+    """Tenant information included in login response."""
+    tenant_id: int
+    tenant_slug: str
+    company_name: Optional[str] = None
+    role: str
+    is_primary: bool = False
+    primary_color: Optional[str] = None
+    secondary_color: Optional[str] = None
+    accent_color: Optional[str] = None
+    logo_url: Optional[str] = None
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    tenants: Optional[list] = None
 
 
 class TokenData(BaseModel):

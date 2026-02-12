@@ -1,7 +1,7 @@
 """White-label/tenant API routes."""
 
 from typing import Annotated, List, Any
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from src.core.constants import (
     HTTPStatus,
     EntityNames,
@@ -25,6 +25,7 @@ from src.whitelabel.schemas import (
     PublicTenantConfig,
 )
 from src.whitelabel.service import TenantService, TenantSettingsService, TenantUserService
+from src.whitelabel.dependencies import get_current_tenant, require_tenant
 
 router = APIRouter(prefix="/api/tenants", tags=["tenants"])
 
@@ -50,6 +51,19 @@ def _build_public_tenant_config(tenant: Tenant) -> PublicTenantConfig:
         date_format=settings.date_format if settings else DEFAULT_DATE_FORMAT,
         custom_css=settings.custom_css if settings else None,
     )
+
+
+# Branding endpoint using middleware-resolved tenant context
+@router.get("/branding/current", response_model=PublicTenantConfig)
+async def get_current_branding(
+    tenant: Tenant = Depends(require_tenant),
+):
+    """Get branding config for the current tenant (resolved via middleware).
+
+    No auth required. Tenant is resolved from X-Tenant-Slug header
+    or Host domain by the TenantMiddleware + require_tenant dependency.
+    """
+    return _build_public_tenant_config(tenant)
 
 
 # Public endpoint to get tenant config by slug/domain
