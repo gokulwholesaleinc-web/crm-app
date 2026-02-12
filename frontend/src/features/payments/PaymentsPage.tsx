@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Button } from '../../components/ui';
+import { StatusBadge, PaginationBar } from '../../components/ui';
+import type { StatusType } from '../../components/ui/Badge';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { usePayments } from '../../hooks/usePayments';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import type { Payment } from '../../types';
-import clsx from 'clsx';
 
 const statusOptions = [
   { value: '', label: 'All Statuses' },
@@ -15,13 +15,6 @@ const statusOptions = [
   { value: 'failed', label: 'Failed' },
   { value: 'refunded', label: 'Refunded' },
 ];
-
-const STATUS_BADGE_CLASSES: Record<string, string> = {
-  pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
-  succeeded: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
-  failed: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
-  refunded: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
-};
 
 function PaymentsPage() {
   usePageTitle('Payments');
@@ -131,9 +124,7 @@ function PaymentsPage() {
                         {payment.customer?.name ?? payment.customer?.email ?? 'No customer'}
                       </p>
                     </div>
-                    <span className={clsx('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0', STATUS_BADGE_CLASSES[payment.status] ?? STATUS_BADGE_CLASSES.pending)}>
-                      {payment.status.charAt(0).toUpperCase() + payment.status.slice(1)}
-                    </span>
+                    <StatusBadge status={payment.status as StatusType} size="sm" showDot={false} className="flex-shrink-0" />
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="font-medium text-gray-900 dark:text-gray-100" style={{ fontVariantNumeric: 'tabular-nums' }}>
@@ -185,9 +176,7 @@ function PaymentsPage() {
                         {payment.customer?.name ?? payment.customer?.email ?? '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={clsx('inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium', STATUS_BADGE_CLASSES[payment.status] ?? STATUS_BADGE_CLASSES.pending)}>
-                          {payment.status.charAt(0).toUpperCase() + payment.status.slice(1)}
-                        </span>
+                        <StatusBadge status={payment.status as StatusType} size="sm" showDot={false} />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900 dark:text-gray-100" style={{ fontVariantNumeric: 'tabular-nums' }}>
                         {formatCurrency(payment.amount, payment.currency)}
@@ -210,58 +199,13 @@ function PaymentsPage() {
             </div>
 
             {/* Pagination */}
-            <div className="bg-white dark:bg-gray-800 px-4 py-3 flex items-center justify-between border-t border-gray-200 dark:border-gray-700 sm:px-6">
-              <div className="flex-1 flex justify-between sm:hidden">
-                <Button
-                  variant="secondary"
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                >
-                  Previous
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                >
-                  Next
-                </Button>
-              </div>
-              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-                <p className="text-sm text-gray-700 dark:text-gray-300">
-                  Showing{' '}
-                  <span className="font-medium">{total > 0 ? (currentPage - 1) * pageSize + 1 : 0}</span>{' '}
-                  to{' '}
-                  <span className="font-medium">{Math.min(currentPage * pageSize, total)}</span>{' '}
-                  of <span className="font-medium">{total}</span> results
-                </p>
-                <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-                  <button
-                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
-                    className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <span className="sr-only">Previous</span>
-                    <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-                      <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                  </button>
-                  <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Page {currentPage} of {totalPages}
-                  </span>
-                  <button
-                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={currentPage === totalPages}
-                    className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <span className="sr-only">Next</span>
-                    <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-                      <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                    </svg>
-                  </button>
-                </nav>
-              </div>
-            </div>
+            <PaginationBar
+              page={currentPage}
+              pages={totalPages}
+              total={total}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+            />
           </>
         )}
       </div>

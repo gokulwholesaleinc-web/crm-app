@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 from typing import Optional, List, TYPE_CHECKING
-from sqlalchemy import String, Integer, ForeignKey, Text, Float, Date, DateTime, JSON
+from sqlalchemy import String, Integer, ForeignKey, Text, Numeric, Date, DateTime, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.database import Base
 from src.core.mixins.auditable import AuditableMixin
@@ -52,13 +52,13 @@ class Quote(Base, AuditableMixin):
 
     # Discount
     discount_type: Mapped[Optional[str]] = mapped_column(String(20))  # percent or fixed
-    discount_value: Mapped[float] = mapped_column(Float, default=0)
+    discount_value: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
 
     # Financials (calculated from line items)
-    subtotal: Mapped[float] = mapped_column(Float, default=0)
-    tax_rate: Mapped[float] = mapped_column(Float, default=0)
-    tax_amount: Mapped[float] = mapped_column(Float, default=0)
-    total: Mapped[float] = mapped_column(Float, default=0)
+    subtotal: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
+    tax_rate: Mapped[float] = mapped_column(Numeric(5, 4), default=0)
+    tax_amount: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
+    total: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
 
     # Terms
     terms_and_conditions: Mapped[Optional[str]] = mapped_column(Text)
@@ -110,10 +110,10 @@ class QuoteLineItem(Base):
         index=True,
     )
     description: Mapped[str] = mapped_column(String(500), nullable=False)
-    quantity: Mapped[float] = mapped_column(Float, default=1)
-    unit_price: Mapped[float] = mapped_column(Float, default=0)
-    discount: Mapped[float] = mapped_column(Float, default=0)
-    total: Mapped[float] = mapped_column(Float, default=0)
+    quantity: Mapped[float] = mapped_column(Numeric(10, 2), default=1)
+    unit_price: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
+    discount: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
+    total: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
 
     # ORM relationship

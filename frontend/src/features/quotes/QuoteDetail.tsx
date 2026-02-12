@@ -9,7 +9,8 @@ import {
   TrashIcon,
   PencilIcon,
 } from '@heroicons/react/24/outline';
-import { Button, Modal, ConfirmDialog } from '../../components/ui';
+import { Button, Modal, ConfirmDialog, StatusBadge } from '../../components/ui';
+import type { StatusType } from '../../components/ui/Badge';
 import {
   useQuote,
   useUpdateQuote,
@@ -24,16 +25,6 @@ import { formatCurrency, formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { showSuccess, showError } from '../../utils/toast';
 import type { QuoteUpdate, QuoteLineItemCreate } from '../../types';
-import clsx from 'clsx';
-
-const STATUS_BADGE_CLASSES: Record<string, string> = {
-  draft: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
-  sent: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
-  viewed: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
-  accepted: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
-  rejected: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
-  expired: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
-};
 
 function QuoteDetailPage() {
   const { id } = useParams();
@@ -196,9 +187,7 @@ function QuoteDetailPage() {
               <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">
                 {quote.title}
               </h1>
-              <span className={clsx('inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium', STATUS_BADGE_CLASSES[quote.status] ?? STATUS_BADGE_CLASSES.draft)}>
-                {quote.status.charAt(0).toUpperCase() + quote.status.slice(1)}
-              </span>
+              <StatusBadge status={quote.status as StatusType} size="sm" showDot={false} />
             </div>
             <p className="text-sm text-gray-500 dark:text-gray-400">{quote.quote_number}</p>
           </div>

@@ -42,6 +42,10 @@ export type { AvatarProps, AvatarGroupProps, AvatarSize } from './Avatar';
 export { EmptyState, NoResultsEmptyState, ErrorEmptyState } from './EmptyState';
 export type { EmptyStateProps, EmptyStateVariant } from './EmptyState';
 
+// Pagination
+export { PaginationBar } from './Pagination';
+export type { PaginationBarProps } from './Pagination';
+
 // Skeleton
 export {
   Skeleton,
