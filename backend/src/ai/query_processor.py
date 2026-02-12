@@ -3,7 +3,7 @@
 import json
 import uuid
 from typing import Dict, Any, List, Optional
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 from sqlalchemy import select, func, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from openai import AsyncOpenAI
@@ -1838,9 +1838,10 @@ class QueryProcessor:
     # =========================================================================
 
     async def _create_and_send_quote(self, args: Dict[str, Any], user_id: int) -> Dict[str, Any]:
-        """Create a quote with line items and optionally send it."""
+        """Create a quote with line items and optionally send it via public link."""
         from src.quotes.service import QuoteService
         from src.quotes.schemas import QuoteCreate, QuoteLineItemCreate
+        import os
 
         valid_days = args.get("valid_days", 30)
         valid_until = (date.today() + timedelta(days=valid_days))
@@ -1865,6 +1866,9 @@ class QueryProcessor:
         service = QuoteService(self.db)
         quote = await service.create(quote_data, user_id)
 
+        base_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        public_url = f"{base_url}/quotes/public/{quote.quote_number}"
+
         result = {
             "success": True,
             "quote_id": quote.id,
@@ -1872,18 +1876,22 @@ class QueryProcessor:
             "total": float(quote.total) if quote.total else 0,
             "status": quote.status,
             "valid_until": valid_until.isoformat(),
+            "public_url": public_url,
             "message": f"Quote '{quote.quote_number}' created successfully.",
         }
 
         if args.get("send_immediately"):
             send_result = await self._send_quote_email(quote, user_id)
             result["email_sent"] = send_result.get("success", False)
-            result["message"] += f" Email {'sent' if send_result.get('success') else 'failed'}."
+            result["status"] = "sent" if send_result.get("success") else result["status"]
+            result["message"] += f" Email {'sent with public link' if send_result.get('success') else 'failed'}."
 
         return result
 
     async def _send_quote_email(self, quote, user_id: int) -> Dict[str, Any]:
-        """Send a quote email using branded templates."""
+        """Send a quote email with public link using branded templates."""
+        import os
+
         if not quote.contact_id:
             return {"success": False, "error": "No contact associated with quote."}
 
@@ -1898,6 +1906,11 @@ class QueryProcessor:
         from src.email.service import EmailService
 
         branding = await TenantBrandingHelper.get_branding_for_user(self.db, user_id)
+
+        # Build public view URL for the CTA button in the email
+        base_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        view_url = f"{base_url}/quotes/public/{quote.quote_number}"
+
         quote_data = {
             "quote_number": quote.quote_number,
             "client_name": contact.full_name,
@@ -1913,6 +1926,7 @@ class QueryProcessor:
                 }
                 for li in (quote.line_items or [])
             ],
+            "view_url": view_url,
         }
         subject, html_body = render_quote_email(branding, quote_data)
 
@@ -1925,6 +1939,13 @@ class QueryProcessor:
             entity_type="quotes",
             entity_id=quote.id,
         )
+
+        # Transition quote status to sent
+        if quote.status == "draft":
+            quote.status = "sent"
+            quote.sent_at = datetime.now(timezone.utc)
+            await self.db.flush()
+
         return {"success": True}
 
     async def _resend_quote(self, args: Dict[str, Any], user_id: int) -> Dict[str, Any]:

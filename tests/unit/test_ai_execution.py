@@ -376,7 +376,7 @@ class TestCreateAndSendQuote:
         test_contact: Contact,
         test_opportunity: Opportunity,
     ):
-        """Test creating a quote with line items."""
+        """Test creating a quote with line items returns public URL."""
         processor = QueryProcessor(db_session)
         result = await processor._execute_function(
             "create_and_send_quote",
@@ -398,6 +398,8 @@ class TestCreateAndSendQuote:
         assert result["quote_id"] is not None
         assert result["quote_number"] is not None
         assert result["total"] == 13000.0
+        assert "public_url" in result
+        assert f"/quotes/public/{result['quote_number']}" in result["public_url"]
 
         # Verify quote in DB
         quote_result = await db_session.execute(
@@ -415,7 +417,7 @@ class TestCreateAndSendQuote:
         test_user: User,
         test_contact: Contact,
     ):
-        """Test creating a quote without line items."""
+        """Test creating a quote without line items still returns public URL."""
         processor = QueryProcessor(db_session)
         result = await processor._execute_function(
             "create_and_send_quote",
@@ -428,6 +430,43 @@ class TestCreateAndSendQuote:
 
         assert result["success"] is True
         assert result["quote_id"] is not None
+        assert "public_url" in result
+
+    @pytest.mark.asyncio
+    async def test_create_and_send_quote_immediately(
+        self,
+        db_session: AsyncSession,
+        test_user: User,
+        test_contact: Contact,
+    ):
+        """Test creating a quote and sending immediately sends email with public link."""
+        processor = QueryProcessor(db_session)
+        result = await processor._execute_function(
+            "create_and_send_quote",
+            {
+                "title": "Urgent Quote",
+                "contact_id": test_contact.id,
+                "line_items": [
+                    {"description": "Service", "quantity": 1, "unit_price": 2000},
+                ],
+                "send_immediately": True,
+            },
+            test_user.id,
+        )
+
+        assert result["success"] is True
+        assert result["email_sent"] is True
+        assert result["status"] == "sent"
+        assert "public link" in result["message"]
+
+        # Verify quote status transitioned to sent in DB
+        quote_result = await db_session.execute(
+            select(Quote).where(Quote.id == result["quote_id"])
+        )
+        quote = quote_result.scalar_one_or_none()
+        assert quote is not None
+        assert quote.status == "sent"
+        assert quote.sent_at is not None
 
 
 class TestCreatePaymentLink:
