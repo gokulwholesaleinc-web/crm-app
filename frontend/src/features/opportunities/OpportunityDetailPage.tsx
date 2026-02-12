@@ -145,16 +145,16 @@ function OpportunityDetailPage() {
 
   if (errorMessage || !opportunity) {
     return (
-      <div className="rounded-md bg-red-50 p-4">
+      <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-4">
         <div className="flex">
           <div className="ml-3">
-            <h3 className="text-sm font-medium text-red-800">
+            <h3 className="text-sm font-medium text-red-800 dark:text-red-300">
               {errorMessage || 'Opportunity not found'}
             </h3>
             <div className="mt-4">
               <Link
                 to="/opportunities"
-                className="text-red-600 hover:text-red-500"
+                className="text-red-600 hover:text-red-500 dark:text-red-400 dark:hover:text-red-300"
               >
                 Back to opportunities
               </Link>
@@ -188,13 +188,15 @@ function OpportunityDetailPage() {
         <div className="flex items-center space-x-4">
           <Link
             to="/opportunities"
-            className="text-gray-400 hover:text-gray-500 flex-shrink-0"
+            className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 flex-shrink-0"
+            aria-label="Back to opportunities"
           >
             <svg
               className="h-6 w-6"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
+              aria-hidden="true"
             >
               <path
                 strokeLinecap="round"
@@ -205,7 +207,7 @@ function OpportunityDetailPage() {
             </svg>
           </Link>
           <div className="min-w-0">
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">
               {opportunity.name}
             </h1>
             <div className="flex flex-wrap items-center gap-2 mt-1">
@@ -215,7 +217,7 @@ function OpportunityDetailPage() {
                 {opportunity.pipeline_stage?.name || stageName}
               </span>
               {opportunity.company?.name && (
-                <span className="text-sm text-gray-500">
+                <span className="text-sm text-gray-500 dark:text-gray-400">
                   {opportunity.company.name}
                 </span>
               )}
@@ -279,7 +281,7 @@ function OpportunityDetailPage() {
       />
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 overflow-x-auto">
+      <div className="border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
         <nav className="-mb-px flex space-x-4 sm:space-x-8 min-w-max px-1">
           {tabs.map((tab) => (
             <button
@@ -288,8 +290,8 @@ function OpportunityDetailPage() {
               className={clsx(
                 'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex-shrink-0',
                 activeTab === tab.id
-                  ? 'border-primary-500 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
               )}
             >
               {tab.name}
@@ -300,12 +302,12 @@ function OpportunityDetailPage() {
 
       {/* Tab Content */}
       {activeTab === 'details' && (
-        <div className="bg-white shadow rounded-lg">
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
           <div className="p-4 sm:p-6">
             <dl className="grid grid-cols-1 gap-4 sm:gap-x-4 sm:gap-y-6 sm:grid-cols-2">
               <div>
-                <dt className="text-sm font-medium text-gray-500">Value</dt>
-                <dd className="mt-1 text-sm text-gray-900">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Value</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   {opportunity.amount
                     ? formatCurrency(opportunity.amount)
                     : '-'}
@@ -313,10 +315,10 @@ function OpportunityDetailPage() {
               </div>
 
               <div>
-                <dt className="text-sm font-medium text-gray-500">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">
                   Probability
                 </dt>
-                <dd className="mt-1 text-sm text-gray-900">
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   {opportunity.probability != null
                     ? formatPercentage(opportunity.probability)
                     : '-'}
@@ -324,10 +326,10 @@ function OpportunityDetailPage() {
               </div>
 
               <div>
-                <dt className="text-sm font-medium text-gray-500">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">
                   Weighted Value
                 </dt>
-                <dd className="mt-1 text-sm text-gray-900">
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   {opportunity.weighted_amount
                     ? formatCurrency(opportunity.weighted_amount)
                     : '-'}
@@ -335,7 +337,7 @@ function OpportunityDetailPage() {
               </div>
 
               <div>
-                <dt className="text-sm font-medium text-gray-500">Stage</dt>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Stage</dt>
                 <dd className="mt-1">
                   <span
                     className={getStatusBadgeClasses(stageName, 'opportunity')}
@@ -346,28 +348,28 @@ function OpportunityDetailPage() {
               </div>
 
               <div>
-                <dt className="text-sm font-medium text-gray-500">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">
                   Expected Close Date
                 </dt>
-                <dd className="mt-1 text-sm text-gray-900">
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   {formatDate(opportunity.expected_close_date) || '-'}
                 </dd>
               </div>
 
               {opportunity.actual_close_date && (
                 <div>
-                  <dt className="text-sm font-medium text-gray-500">
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">
                     Actual Close Date
                   </dt>
-                  <dd className="mt-1 text-sm text-gray-900">
+                  <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                     {formatDate(opportunity.actual_close_date)}
                   </dd>
                 </div>
               )}
 
               <div>
-                <dt className="text-sm font-medium text-gray-500">Contact</dt>
-                <dd className="mt-1 text-sm text-gray-900">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Contact</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   {opportunity.contact ? (
                     <Link
                       to={`/contacts/${opportunity.contact.id}`}
@@ -382,8 +384,8 @@ function OpportunityDetailPage() {
               </div>
 
               <div>
-                <dt className="text-sm font-medium text-gray-500">Company</dt>
-                <dd className="mt-1 text-sm text-gray-900">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Company</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   {opportunity.company ? (
                     <Link
                       to={`/companies/${opportunity.company.id}`}
@@ -398,23 +400,23 @@ function OpportunityDetailPage() {
               </div>
 
               <div className="sm:col-span-2">
-                <dt className="text-sm font-medium text-gray-500">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">
                   Description
                 </dt>
-                <dd className="mt-1 text-sm text-gray-900">
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   {opportunity.description || 'No description'}
                 </dd>
               </div>
 
               {opportunity.loss_reason && (
                 <div className="sm:col-span-2">
-                  <dt className="text-sm font-medium text-gray-500">
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">
                     Loss Reason
                   </dt>
-                  <dd className="mt-1 text-sm text-gray-900">
+                  <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                     {opportunity.loss_reason}
                     {opportunity.loss_notes && (
-                      <p className="mt-1 text-gray-600">
+                      <p className="mt-1 text-gray-600 dark:text-gray-400">
                         {opportunity.loss_notes}
                       </p>
                     )}
@@ -423,17 +425,17 @@ function OpportunityDetailPage() {
               )}
 
               <div>
-                <dt className="text-sm font-medium text-gray-500">Created</dt>
-                <dd className="mt-1 text-sm text-gray-900">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Created</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   {formatDate(opportunity.created_at)}
                 </dd>
               </div>
 
               <div>
-                <dt className="text-sm font-medium text-gray-500">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">
                   Last Updated
                 </dt>
-                <dd className="mt-1 text-sm text-gray-900">
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   {formatDate(opportunity.updated_at)}
                 </dd>
               </div>
@@ -443,14 +445,14 @@ function OpportunityDetailPage() {
       )}
 
       {activeTab === 'activities' && (
-        <div className="bg-white shadow rounded-lg">
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
           <div className="px-4 py-5 sm:p-6">
             {isLoadingActivities ? (
               <div className="flex items-center justify-center py-4">
                 <Spinner />
               </div>
             ) : activities.length === 0 ? (
-              <p className="text-sm text-gray-500 text-center py-4">
+              <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
                 No activities recorded yet.
               </p>
             ) : (
@@ -458,7 +460,7 @@ function OpportunityDetailPage() {
                 {activities.map((activity) => (
                   <li
                     key={activity.id}
-                    className="flex items-start space-x-3 pb-4 border-b border-gray-100 last:border-0"
+                    className="flex items-start space-x-3 pb-4 border-b border-gray-100 dark:border-gray-700 last:border-0"
                   >
                     <div className="flex-shrink-0">
                       <div className="h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center">
@@ -478,10 +480,10 @@ function OpportunityDetailPage() {
                       </div>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-900">
+                      <p className="text-sm text-gray-900 dark:text-gray-100">
                         {activity.subject}
                       </p>
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                         {formatDate(activity.created_at)}
                       </p>
                     </div>
@@ -495,18 +497,18 @@ function OpportunityDetailPage() {
 
       {/* Quotes Tab */}
       {activeTab === 'quotes' && (
-        <div className="bg-white shadow rounded-lg">
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
           <div className="px-4 py-5 sm:p-6">
             {isLoadingQuotes ? (
               <div className="flex items-center justify-center py-4">
                 <Spinner />
               </div>
             ) : quotes.length === 0 ? (
-              <p className="text-sm text-gray-500 text-center py-4">
+              <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
                 No quotes linked to this opportunity.
               </p>
             ) : (
-              <ul className="divide-y divide-gray-200">
+              <ul className="divide-y divide-gray-200 dark:divide-gray-700">
                 {quotes.map((quote: Quote) => (
                   <li key={quote.id} className="py-3 flex items-center justify-between">
                     <div className="min-w-0 flex-1">
@@ -516,10 +518,10 @@ function OpportunityDetailPage() {
                       >
                         {quote.title}
                       </Link>
-                      <p className="text-xs text-gray-500">{quote.quote_number} - {formatDate(quote.created_at)}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{quote.quote_number} - {formatDate(quote.created_at)}</p>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="text-sm font-medium text-gray-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                      <span className="text-sm font-medium text-gray-900 dark:text-gray-100" style={{ fontVariantNumeric: 'tabular-nums' }}>
                         {formatCurrency(quote.total, quote.currency)}
                       </span>
                       <span className={clsx(
@@ -542,18 +544,18 @@ function OpportunityDetailPage() {
 
       {/* Proposals Tab */}
       {activeTab === 'proposals' && (
-        <div className="bg-white shadow rounded-lg">
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
           <div className="px-4 py-5 sm:p-6">
             {isLoadingProposals ? (
               <div className="flex items-center justify-center py-4">
                 <Spinner />
               </div>
             ) : proposals.length === 0 ? (
-              <p className="text-sm text-gray-500 text-center py-4">
+              <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
                 No proposals linked to this opportunity.
               </p>
             ) : (
-              <ul className="divide-y divide-gray-200">
+              <ul className="divide-y divide-gray-200 dark:divide-gray-700">
                 {proposals.map((proposal: Proposal) => (
                   <li key={proposal.id} className="py-3 flex items-center justify-between">
                     <div className="min-w-0 flex-1">
@@ -563,7 +565,7 @@ function OpportunityDetailPage() {
                       >
                         {proposal.title}
                       </Link>
-                      <p className="text-xs text-gray-500">{proposal.proposal_number} - {formatDate(proposal.created_at)}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{proposal.proposal_number} - {formatDate(proposal.created_at)}</p>
                     </div>
                     <span className={clsx(
                       'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
@@ -584,18 +586,18 @@ function OpportunityDetailPage() {
 
       {/* Payments Tab */}
       {activeTab === 'payments' && (
-        <div className="bg-white shadow rounded-lg">
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
           <div className="px-4 py-5 sm:p-6">
             {isLoadingPayments ? (
               <div className="flex items-center justify-center py-4">
                 <Spinner />
               </div>
             ) : payments.length === 0 ? (
-              <p className="text-sm text-gray-500 text-center py-4">
+              <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
                 No payments linked to this opportunity.
               </p>
             ) : (
-              <ul className="divide-y divide-gray-200">
+              <ul className="divide-y divide-gray-200 dark:divide-gray-700">
                 {payments.map((payment: Payment) => (
                   <li key={payment.id} className="py-3 flex items-center justify-between">
                     <div className="min-w-0 flex-1">
@@ -605,10 +607,10 @@ function OpportunityDetailPage() {
                       >
                         Payment #{payment.id}
                       </Link>
-                      <p className="text-xs text-gray-500">{formatDate(payment.created_at)}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{formatDate(payment.created_at)}</p>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="text-sm font-medium text-gray-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                      <span className="text-sm font-medium text-gray-900 dark:text-gray-100" style={{ fontVariantNumeric: 'tabular-nums' }}>
                         {formatCurrency(payment.amount, payment.currency)}
                       </span>
                       <span className={clsx(

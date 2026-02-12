@@ -72,6 +72,9 @@ const PipelinePage = lazy(() => import('../features/pipeline/PipelinePage'));
 // Settings
 const SettingsPage = lazy(() => import('../features/settings/SettingsPage'));
 
+// Admin
+const AdminDashboardPage = lazy(() => import('../features/admin/AdminDashboard'));
+
 // Duplicates
 const DuplicatesPage = lazy(() => import('../features/settings/DuplicatesPage'));
 
@@ -313,6 +316,16 @@ function AppRoutes() {
         element={
           <PrivateRoute>
             <SettingsPage />
+          </PrivateRoute>
+        }
+      />
+
+      {/* Admin */}
+      <Route
+        path="/admin"
+        element={
+          <PrivateRoute>
+            <AdminDashboardPage />
           </PrivateRoute>
         }
       />

@@ -2,7 +2,7 @@
  * Activity display card with type-specific icons
  */
 
-import { format, formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import clsx from 'clsx';
 import {
   PhoneIcon,
@@ -70,7 +70,13 @@ export function ActivityCard({
   const formatDate = (dateString: string | null | undefined) => {
     if (!dateString) return null;
     try {
-      return format(new Date(dateString), 'MMM d, yyyy h:mm a');
+      return new Intl.DateTimeFormat(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      }).format(new Date(dateString));
     } catch {
       return dateString;
     }

@@ -47,6 +47,7 @@ from src.core.sharing_router import router as sharing_router
 from src.quotes.router import router as quotes_router
 from src.payments.router import router as payments_router
 from src.proposals.router import router as proposals_router
+from src.admin.router import router as admin_router  # noqa: F401
 
 
 async def _init_database():
@@ -78,7 +79,7 @@ async def _init_database():
         from src.webhooks.models import Webhook, WebhookDelivery
         from src.assignment.models import AssignmentRule
         from src.sequences.models import Sequence, SequenceEnrollment
-        from src.quotes.models import Quote, QuoteLineItem, QuoteTemplate
+        from src.quotes.models import Quote, QuoteLineItem, QuoteTemplate, ProductBundle, ProductBundleItem
         from src.payments.models import StripeCustomer, Product, Price, Payment, Subscription
         from src.proposals.models import Proposal, ProposalTemplate, ProposalView
 
@@ -180,6 +181,7 @@ app.include_router(sharing_router)
 app.include_router(quotes_router)
 app.include_router(payments_router)
 app.include_router(proposals_router)
+app.include_router(admin_router)
 
 
 # Register webhook event handler with event system

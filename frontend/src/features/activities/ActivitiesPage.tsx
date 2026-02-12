@@ -223,9 +223,9 @@ export function ActivitiesPage() {
                   ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400'
                   : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-600 dark:hover:text-gray-300'
               )}
-              title="List view"
+              aria-label="List view"
             >
-              <ListBulletIcon className="h-5 w-5" />
+              <ListBulletIcon className="h-5 w-5" aria-hidden="true" />
             </button>
             <button
               onClick={() => setViewMode('timeline')}
@@ -235,9 +235,9 @@ export function ActivitiesPage() {
                   ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400'
                   : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-600 dark:hover:text-gray-300'
               )}
-              title="Timeline view"
+              aria-label="Timeline view"
             >
-              <ClockIcon className="h-5 w-5" />
+              <ClockIcon className="h-5 w-5" aria-hidden="true" />
             </button>
             <button
               onClick={() => setViewMode('calendar')}
@@ -247,9 +247,9 @@ export function ActivitiesPage() {
                   ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400'
                   : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-600 dark:hover:text-gray-300'
               )}
-              title="Calendar view"
+              aria-label="Calendar view"
             >
-              <CalendarIcon className="h-5 w-5" />
+              <CalendarIcon className="h-5 w-5" aria-hidden="true" />
             </button>
           </div>
           <Button
