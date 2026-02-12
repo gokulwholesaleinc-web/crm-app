@@ -52,7 +52,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             className={clsx(
               'block w-full rounded-lg border shadow-sm transition-colors duration-200',
               'appearance-none bg-white dark:bg-gray-700',
-              'focus:outline-none focus:ring-2 focus:ring-offset-0',
+              'focus-visible:outline-none focus:ring-2 focus:ring-offset-0',
               'disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed dark:disabled:bg-gray-800',
               'pl-3 pr-10 py-2 text-sm',
               hasError

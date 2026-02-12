@@ -60,7 +60,7 @@ export function Layout({
         <main
           id="main-content"
           className={clsx(
-            'flex-1 overflow-y-auto focus:outline-none',
+            'flex-1 overflow-y-auto focus-visible:outline-none',
             className
           )}
         >

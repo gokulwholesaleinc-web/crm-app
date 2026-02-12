@@ -107,7 +107,6 @@ async def login_json(
     db: DBSession,
 ):
     """Login with JSON body and get access token."""
-    import traceback
     try:
         service = AuthService(db)
         user = await service.authenticate_user(login_data.email, login_data.password)
@@ -123,12 +122,10 @@ async def login_json(
         return Token(access_token=access_token, tenants=tenants)
     except HTTPException:
         raise
-    except Exception as e:
-        print(f"LOGIN ERROR: {type(e).__name__}: {e}")
-        traceback.print_exc()
+    except Exception:
         raise HTTPException(
             status_code=500,
-            detail=f"Internal error: {type(e).__name__}: {e}",
+            detail="Internal server error",
         )
 
 

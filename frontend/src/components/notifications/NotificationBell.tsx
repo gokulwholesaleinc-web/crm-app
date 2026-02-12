@@ -110,7 +110,7 @@ export function NotificationBell() {
       <button
         ref={buttonRef}
         type="button"
-        className="relative p-2 rounded-lg text-gray-500 hover:text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
+        className="relative p-2 rounded-lg text-gray-500 hover:text-gray-600 hover:bg-gray-100 focus-visible:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
         onClick={() => setIsOpen(!isOpen)}
         aria-label="View notifications"
       >
@@ -134,7 +134,7 @@ export function NotificationBell() {
       >
         <div
           ref={panelRef}
-          className="absolute right-0 z-50 mt-2 w-80 sm:w-96 origin-top-right rounded-lg bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none"
+          className="absolute right-0 z-50 mt-2 w-80 sm:w-96 origin-top-right rounded-lg bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus-visible:outline-none"
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">

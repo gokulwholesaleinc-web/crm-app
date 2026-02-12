@@ -56,7 +56,7 @@ export const FormSelect = forwardRef<HTMLSelectElement, FormSelectProps>(
           className={clsx(
             'block w-full rounded-md shadow-sm text-base sm:text-sm',
             'py-2.5 sm:py-2 px-3', // Better touch targets on mobile
-            'focus:outline-none focus:ring-2 sm:focus:ring-1',
+            'focus-visible:outline-none focus:ring-2 sm:focus:ring-1',
             'disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed',
             hasError
               ? 'border-red-300 text-red-900 focus:border-red-500 focus:ring-red-500'
