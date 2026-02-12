@@ -28,10 +28,7 @@ from src.admin.schemas import (
     SystemStats,
     TeamMemberOverview,
     ActivityFeedEntry,
-    CacheStatsResponse,
-    CacheClearResponse,
 )
-from src.core.cache import app_cache
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -342,39 +339,3 @@ async def assign_role(
         last_login=user.last_login,
         created_at=user.created_at if hasattr(user, "created_at") else None,
     )
-
-
-# ---------------------------------------------------------------------------
-# Cache Management Endpoints
-# ---------------------------------------------------------------------------
-
-
-@router.get("/cache/stats", response_model=CacheStatsResponse)
-async def get_cache_stats(
-    current_user: CurrentUser,
-):
-    """View cache statistics (admin only)."""
-    _require_admin(current_user)
-    stats = await app_cache.stats()
-    return CacheStatsResponse(**stats)
-
-
-@router.post("/cache/clear", response_model=CacheClearResponse)
-async def clear_cache(
-    current_user: CurrentUser,
-):
-    """Clear entire cache (admin only)."""
-    _require_admin(current_user)
-    count = await app_cache.clear()
-    return CacheClearResponse(cleared_count=count, message=f"Cleared {count} cache entries")
-
-
-@router.delete("/cache/{pattern}")
-async def clear_cache_pattern(
-    pattern: str,
-    current_user: CurrentUser,
-):
-    """Clear specific cache pattern (admin only). E.g., 'dashboard*'."""
-    _require_admin(current_user)
-    count = await app_cache.delete_pattern(pattern)
-    return {"cleared_count": count, "pattern": pattern, "message": f"Cleared {count} entries matching '{pattern}'"}

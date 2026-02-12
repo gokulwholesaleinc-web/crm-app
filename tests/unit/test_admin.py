@@ -475,3 +475,49 @@ class TestAdminRoleAccess:
 
         response = await client.get("/api/admin/stats", headers=headers)
         assert response.status_code == 200
+
+
+class TestCacheEndpointsRemoved:
+    """Verify that admin cache management endpoints no longer exist."""
+
+    @pytest.mark.asyncio
+    async def test_cache_stats_endpoint_removed(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_headers: dict,
+        test_superuser: User,
+    ):
+        """GET /api/admin/cache/stats should no longer be routable."""
+        response = await client.get("/api/admin/cache/stats", headers=admin_headers)
+        assert response.status_code in (404, 405)
+
+    @pytest.mark.asyncio
+    async def test_cache_clear_endpoint_removed(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_headers: dict,
+        test_superuser: User,
+    ):
+        """POST /api/admin/cache/clear should no longer be routable."""
+        response = await client.post("/api/admin/cache/clear", headers=admin_headers)
+        assert response.status_code in (404, 405)
+
+    @pytest.mark.asyncio
+    async def test_cache_pattern_delete_endpoint_removed(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_headers: dict,
+        test_superuser: User,
+    ):
+        """DELETE /api/admin/cache/{pattern} should no longer be routable."""
+        response = await client.delete("/api/admin/cache/dashboard*", headers=admin_headers)
+        assert response.status_code in (404, 405)
+
+    def test_cache_schemas_not_in_admin_schemas(self):
+        """CacheStatsResponse and CacheClearResponse should not exist in admin schemas."""
+        from src.admin import schemas
+        assert not hasattr(schemas, "CacheStatsResponse")
+        assert not hasattr(schemas, "CacheClearResponse")
