@@ -211,6 +211,44 @@ class TestQuotesList:
         assert any(q["id"] == test_quote.id for q in data["items"])
 
     @pytest.mark.asyncio
+    async def test_list_quotes_token_search(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_quote: Quote,
+    ):
+        """Token-based search: 'test quo' matches 'Test Quote'."""
+        response = await client.get(
+            "/api/quotes",
+            headers=auth_headers,
+            params={"search": "test quo"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert any(q["id"] == test_quote.id for q in data["items"])
+
+    @pytest.mark.asyncio
+    async def test_list_quotes_token_search_no_match(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_quote: Quote,
+    ):
+        """Token-based search: 'test xyz' should not match 'Test Quote'."""
+        response = await client.get(
+            "/api/quotes",
+            headers=auth_headers,
+            params={"search": "test xyz"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert not any(q["id"] == test_quote.id for q in data["items"])
+
+    @pytest.mark.asyncio
     async def test_list_quotes_filter_by_status(
         self,
         client: AsyncClient,

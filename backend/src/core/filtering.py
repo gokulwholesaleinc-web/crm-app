@@ -120,3 +120,33 @@ def apply_filters_to_query(query, model: Type, filters: Optional[Dict[str, Any]]
     if condition is not None:
         query = query.where(condition)
     return query
+
+
+def build_token_search(search: str, *columns):
+    """Build a token-based search condition for SQLAlchemy.
+
+    Splits the search query into space-separated tokens and requires each
+    token to match at least one of the given columns (via ilike). All tokens
+    must match for a row to be included.
+
+    Example: "john sm" matches any row where one column contains "john" AND
+    one column contains "sm" (e.g. first_name="John", last_name="Smith").
+
+    Args:
+        search: The search query string (e.g. "john sm")
+        *columns: SQLAlchemy model columns to search against
+
+    Returns:
+        SQLAlchemy AND condition, or None if search is empty/whitespace.
+    """
+    tokens = search.strip().split()
+    if not tokens:
+        return None
+
+    token_conditions = []
+    for token in tokens:
+        pattern = f"%{token}%"
+        column_matches = [col.ilike(pattern) for col in columns]
+        token_conditions.append(or_(*column_matches))
+
+    return and_(*token_conditions)

@@ -151,6 +151,31 @@ class TestBundlesList:
         assert data["items"][0]["name"] == "Starter Pack"
 
     @pytest.mark.asyncio
+    async def test_list_bundles_search_token(
+        self, client: AsyncClient, bundle_auth_headers: dict, test_bundle: ProductBundle
+    ):
+        """Token-based search: 'star pa' matches 'Starter Pack'."""
+        response = await client.get(
+            "/api/quotes/bundles?search=star+pa", headers=bundle_auth_headers
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 1
+        assert data["items"][0]["name"] == "Starter Pack"
+
+    @pytest.mark.asyncio
+    async def test_list_bundles_search_token_no_match(
+        self, client: AsyncClient, bundle_auth_headers: dict, test_bundle: ProductBundle
+    ):
+        """Token-based search: 'star xyz' should not match 'Starter Pack'."""
+        response = await client.get(
+            "/api/quotes/bundles?search=star+xyz", headers=bundle_auth_headers
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 0
+
+    @pytest.mark.asyncio
     async def test_list_bundles_unauthenticated(self, client: AsyncClient):
         """Unauthenticated request returns 401."""
         response = await client.get("/api/quotes/bundles")
