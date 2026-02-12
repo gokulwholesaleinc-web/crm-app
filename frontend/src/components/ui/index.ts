@@ -46,6 +46,10 @@ export type { EmptyStateProps, EmptyStateVariant } from './EmptyState';
 export { PaginationBar } from './Pagination';
 export type { PaginationBarProps } from './Pagination';
 
+// SearchableSelect
+export { SearchableSelect } from './SearchableSelect';
+export type { SearchableSelectProps, SearchableSelectOption } from './SearchableSelect';
+
 // Skeleton
 export {
   Skeleton,

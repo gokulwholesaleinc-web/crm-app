@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Button } from '../../components/ui';
+import { Button, SearchableSelect } from '../../components/ui';
 import { useContacts } from '../../hooks/useContacts';
 import { useCompanies } from '../../hooks/useCompanies';
 import { useOpportunities, useOpportunity } from '../../hooks/useOpportunities';
@@ -40,6 +40,23 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
   const companies = companiesData?.items ?? [];
   const opportunities = opportunitiesData?.items ?? [];
   const quotes = quotesData?.items ?? [];
+
+  const opportunityOptions = useMemo(
+    () => opportunities.map((o) => ({ value: o.id, label: o.name })),
+    [opportunities]
+  );
+  const quoteOptions = useMemo(
+    () => quotes.map((q) => ({ value: q.id, label: `${q.title} (${q.quote_number})` })),
+    [quotes]
+  );
+  const contactOptions = useMemo(
+    () => contacts.map((c) => ({ value: c.id, label: c.full_name })),
+    [contacts]
+  );
+  const companyOptions = useMemo(
+    () => companies.map((c) => ({ value: c.id, label: c.name })),
+    [companies]
+  );
 
   // Auto-fill contact/company from URL opportunity
   useEffect(() => {
@@ -203,78 +220,49 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
       <div className="space-y-4">
         <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Related Records</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="proposal-opportunity" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Opportunity
-            </label>
-            <select
-              id="proposal-opportunity"
-              value={opportunityId ?? ''}
-              onChange={(e) => {
-                const val = e.target.value ? parseInt(e.target.value, 10) : null;
-                setOpportunityId(val);
-                if (val) {
-                  const opp = opportunities.find((o) => o.id === val);
-                  if (opp?.contact_id) setContactId(opp.contact_id);
-                  if (opp?.company_id) setCompanyId(opp.company_id);
-                }
-              }}
-              className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
-            >
-              <option value="">-- None --</option>
-              {opportunities.map((opp) => (
-                <option key={opp.id} value={opp.id}>{opp.name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="proposal-quote" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Quote
-            </label>
-            <select
-              id="proposal-quote"
-              value={quoteId ?? ''}
-              onChange={(e) => setQuoteId(e.target.value ? parseInt(e.target.value, 10) : null)}
-              className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
-            >
-              <option value="">-- None --</option>
-              {quotes.map((q) => (
-                <option key={q.id} value={q.id}>{q.title} ({q.quote_number})</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="proposal-contact" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Contact
-            </label>
-            <select
-              id="proposal-contact"
-              value={contactId ?? ''}
-              onChange={(e) => setContactId(e.target.value ? parseInt(e.target.value, 10) : null)}
-              className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
-            >
-              <option value="">-- None --</option>
-              {contacts.map((c) => (
-                <option key={c.id} value={c.id}>{c.full_name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="proposal-company" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Company
-            </label>
-            <select
-              id="proposal-company"
-              value={companyId ?? ''}
-              onChange={(e) => setCompanyId(e.target.value ? parseInt(e.target.value, 10) : null)}
-              className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
-            >
-              <option value="">-- None --</option>
-              {companies.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </div>
+          <SearchableSelect
+            label="Opportunity"
+            id="proposal-opportunity"
+            name="opportunity_id"
+            value={opportunityId}
+            onChange={(val) => {
+              setOpportunityId(val);
+              if (val) {
+                const opp = opportunities.find((o) => o.id === val);
+                if (opp?.contact_id) setContactId(opp.contact_id);
+                if (opp?.company_id) setCompanyId(opp.company_id);
+              }
+            }}
+            options={opportunityOptions}
+            placeholder="Search opportunities..."
+          />
+          <SearchableSelect
+            label="Quote"
+            id="proposal-quote"
+            name="quote_id"
+            value={quoteId}
+            onChange={setQuoteId}
+            options={quoteOptions}
+            placeholder="Search quotes..."
+          />
+          <SearchableSelect
+            label="Contact"
+            id="proposal-contact"
+            name="contact_id"
+            value={contactId}
+            onChange={setContactId}
+            options={contactOptions}
+            placeholder="Search contacts..."
+          />
+          <SearchableSelect
+            label="Company"
+            id="proposal-company"
+            name="company_id"
+            value={companyId}
+            onChange={setCompanyId}
+            options={companyOptions}
+            placeholder="Search companies..."
+          />
         </div>
       </div>
 
