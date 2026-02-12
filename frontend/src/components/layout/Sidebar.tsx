@@ -9,6 +9,7 @@ import {
   CurrencyDollarIcon,
   DocumentTextIcon,
   DocumentDuplicateIcon,
+  CreditCardIcon,
   CalendarIcon,
   MegaphoneIcon,
   BoltIcon,
@@ -35,6 +36,7 @@ const mainNavigation: NavItem[] = [
   { name: 'Opportunities', href: '/opportunities', icon: CurrencyDollarIcon },
   { name: 'Quotes', href: '/quotes', icon: DocumentTextIcon },
   { name: 'Proposals', href: '/proposals', icon: DocumentDuplicateIcon },
+  { name: 'Payments', href: '/payments', icon: CreditCardIcon },
   { name: 'Activities', href: '/activities', icon: CalendarIcon },
   { name: 'Campaigns', href: '/campaigns', icon: MegaphoneIcon },
 ];

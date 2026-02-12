@@ -25,6 +25,9 @@ email-validator==2.1.0
 # OpenAI for AI assistant
 openai==1.10.0
 
+# Stripe payments
+stripe==8.0.0
+
 # Utilities
 python-dateutil==2.8.2
 httpx==0.26.0

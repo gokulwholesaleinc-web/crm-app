@@ -256,6 +256,20 @@ export { attachmentKeys, useAttachments, useUploadAttachment, useDeleteAttachmen
 // Dedup hooks
 export { useCheckDuplicates, useMergeEntities } from './useDedup';
 
+// Payment hooks
+export {
+  paymentKeys,
+  usePayments,
+  usePayment,
+  useCreateCheckout,
+  useCreatePaymentIntent,
+  useStripeCustomers,
+  useSyncCustomer,
+  useProducts,
+  useCreateProduct,
+  useSubscriptions,
+} from './usePayments';
+
 // Proposal hooks
 export {
   proposalKeys,

@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     BACKEND_CORS_ORIGINS: str = '["*"]'
 
+    # Stripe
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_PUBLISHABLE_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
+
     # Seed data (set to true in .env for initial setup, false for production)
     SEED_ON_STARTUP: bool = False
 
