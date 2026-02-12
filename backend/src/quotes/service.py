@@ -6,7 +6,7 @@ from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
 from src.quotes.models import Quote, QuoteLineItem, QuoteTemplate
 from src.quotes.schemas import QuoteCreate, QuoteUpdate, QuoteLineItemCreate
-from src.core.base_service import CRUDService
+from src.core.base_service import CRUDService, StatusTransitionMixin
 from src.core.constants import DEFAULT_PAGE_SIZE
 
 # Valid status transitions
@@ -20,7 +20,7 @@ VALID_TRANSITIONS = {
 }
 
 
-class QuoteService(CRUDService[Quote, QuoteCreate, QuoteUpdate]):
+class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteUpdate]):
     """Service for Quote CRUD operations."""
 
     model = Quote
@@ -184,41 +184,6 @@ class QuoteService(CRUDService[Quote, QuoteCreate, QuoteUpdate]):
         await self.db.flush()
         await self.db.refresh(quote)
 
-        return quote
-
-    def validate_status_transition(self, current_status: str, new_status: str) -> bool:
-        """Check if a status transition is valid."""
-        allowed = VALID_TRANSITIONS.get(current_status, [])
-        return new_status in allowed
-
-    async def mark_sent(self, quote: Quote) -> Quote:
-        """Mark a quote as sent."""
-        if not self.validate_status_transition(quote.status, "sent"):
-            raise ValueError(f"Cannot transition from '{quote.status}' to 'sent'")
-        quote.status = "sent"
-        quote.sent_at = datetime.now(timezone.utc)
-        await self.db.flush()
-        await self.db.refresh(quote)
-        return quote
-
-    async def mark_accepted(self, quote: Quote) -> Quote:
-        """Mark a quote as accepted."""
-        if not self.validate_status_transition(quote.status, "accepted"):
-            raise ValueError(f"Cannot transition from '{quote.status}' to 'accepted'")
-        quote.status = "accepted"
-        quote.accepted_at = datetime.now(timezone.utc)
-        await self.db.flush()
-        await self.db.refresh(quote)
-        return quote
-
-    async def mark_rejected(self, quote: Quote) -> Quote:
-        """Mark a quote as rejected."""
-        if not self.validate_status_transition(quote.status, "rejected"):
-            raise ValueError(f"Cannot transition from '{quote.status}' to 'rejected'")
-        quote.status = "rejected"
-        quote.rejected_at = datetime.now(timezone.utc)
-        await self.db.flush()
-        await self.db.refresh(quote)
         return quote
 
     async def add_line_item(self, quote: Quote, data: QuoteLineItemCreate) -> QuoteLineItem:

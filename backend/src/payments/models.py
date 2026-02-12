@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING
-from sqlalchemy import String, Integer, ForeignKey, Float, DateTime, Boolean
+from sqlalchemy import String, Integer, ForeignKey, Numeric, DateTime, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.database import Base
 from src.core.mixins.auditable import AuditableMixin, TimestampMixin
@@ -88,7 +88,7 @@ class Price(Base, TimestampMixin):
     stripe_price_id: Mapped[Optional[str]] = mapped_column(
         String(255), unique=True, index=True
     )
-    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    amount: Mapped[float] = mapped_column(Numeric(precision=12, scale=2), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), default="USD")
     recurring_interval: Mapped[Optional[str]] = mapped_column(String(20))  # "month" or "year"
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -129,7 +129,7 @@ class Payment(Base, AuditableMixin):
     )
 
     # Payment details
-    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    amount: Mapped[float] = mapped_column(Numeric(precision=12, scale=2), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), default="USD")
     status: Mapped[str] = mapped_column(
         String(20), default="pending", nullable=False

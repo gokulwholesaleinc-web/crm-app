@@ -1,16 +1,10 @@
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
+import { StatusBadge } from '../../components/ui';
+import type { StatusType } from '../../components/ui/Badge';
 import { usePayment } from '../../hooks/usePayments';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
-import clsx from 'clsx';
-
-const STATUS_BADGE_CLASSES: Record<string, string> = {
-  pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
-  succeeded: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
-  failed: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
-  refunded: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
-};
 
 function PaymentDetailPage() {
   const { id } = useParams();
@@ -59,9 +53,7 @@ function PaymentDetailPage() {
               <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">
                 Payment #{payment.id}
               </h1>
-              <span className={clsx('inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium', STATUS_BADGE_CLASSES[payment.status] ?? STATUS_BADGE_CLASSES.pending)}>
-                {payment.status.charAt(0).toUpperCase() + payment.status.slice(1)}
-              </span>
+              <StatusBadge status={payment.status as StatusType} size="sm" showDot={false} />
             </div>
             {payment.stripe_payment_intent_id && (
               <p className="text-sm text-gray-500 dark:text-gray-400">{payment.stripe_payment_intent_id}</p>

@@ -1,5 +1,6 @@
 """Base service classes for DRY service layer implementation."""
 
+from datetime import datetime, timezone
 from typing import TypeVar, Generic, Optional, List, Tuple, Type, Any, Dict
 from collections import defaultdict
 from sqlalchemy import select, func
@@ -153,6 +154,54 @@ class CRUDService(BaseService[ModelType], Generic[ModelType, CreateSchemaType, U
         """Delete a record."""
         await self.db.delete(instance)
         await self.db.flush()
+
+
+
+class StatusTransitionMixin:
+    """
+    Mixin providing status transition methods for entities with
+    draft -> sent -> accepted/rejected workflows (quotes, proposals).
+
+    Requires:
+    - self.db: AsyncSession
+    - Subclass may override class attributes to customize valid statuses.
+    """
+
+    db: AsyncSession
+
+    valid_send_statuses: list = ["draft"]
+    valid_accept_statuses: list = ["sent", "viewed"]
+    valid_reject_statuses: list = ["sent", "viewed"]
+
+    async def mark_sent(self, instance):
+        """Mark an entity as sent."""
+        if instance.status not in self.valid_send_statuses:
+            raise ValueError(f"Cannot transition from '{instance.status}' to 'sent'")
+        instance.status = "sent"
+        instance.sent_at = datetime.now(timezone.utc)
+        await self.db.flush()
+        await self.db.refresh(instance)
+        return instance
+
+    async def mark_accepted(self, instance):
+        """Mark an entity as accepted."""
+        if instance.status not in self.valid_accept_statuses:
+            raise ValueError(f"Cannot transition from '{instance.status}' to 'accepted'")
+        instance.status = "accepted"
+        instance.accepted_at = datetime.now(timezone.utc)
+        await self.db.flush()
+        await self.db.refresh(instance)
+        return instance
+
+    async def mark_rejected(self, instance):
+        """Mark an entity as rejected."""
+        if instance.status not in self.valid_reject_statuses:
+            raise ValueError(f"Cannot transition from '{instance.status}' to 'rejected'")
+        instance.status = "rejected"
+        instance.rejected_at = datetime.now(timezone.utc)
+        await self.db.flush()
+        await self.db.refresh(instance)
+        return instance
 
 
 class TaggableServiceMixin:

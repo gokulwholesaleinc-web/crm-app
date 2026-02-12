@@ -6,7 +6,7 @@ from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
 from src.proposals.models import Proposal, ProposalTemplate, ProposalView
 from src.proposals.schemas import ProposalCreate, ProposalUpdate
-from src.core.base_service import CRUDService
+from src.core.base_service import CRUDService, StatusTransitionMixin
 from src.core.constants import DEFAULT_PAGE_SIZE
 
 # Valid status transitions
@@ -19,7 +19,7 @@ VALID_TRANSITIONS = {
 }
 
 
-class ProposalService(CRUDService[Proposal, ProposalCreate, ProposalUpdate]):
+class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreate, ProposalUpdate]):
     """Service for Proposal CRUD operations."""
 
     model = Proposal
@@ -125,41 +125,6 @@ class ProposalService(CRUDService[Proposal, ProposalCreate, ProposalUpdate]):
         await self.db.flush()
         await self.db.refresh(proposal)
 
-        return proposal
-
-    def validate_status_transition(self, current_status: str, new_status: str) -> bool:
-        """Check if a status transition is valid."""
-        allowed = VALID_TRANSITIONS.get(current_status, [])
-        return new_status in allowed
-
-    async def mark_sent(self, proposal: Proposal) -> Proposal:
-        """Mark a proposal as sent."""
-        if not self.validate_status_transition(proposal.status, "sent"):
-            raise ValueError(f"Cannot transition from '{proposal.status}' to 'sent'")
-        proposal.status = "sent"
-        proposal.sent_at = datetime.now(timezone.utc)
-        await self.db.flush()
-        await self.db.refresh(proposal)
-        return proposal
-
-    async def mark_accepted(self, proposal: Proposal) -> Proposal:
-        """Mark a proposal as accepted."""
-        if not self.validate_status_transition(proposal.status, "accepted"):
-            raise ValueError(f"Cannot transition from '{proposal.status}' to 'accepted'")
-        proposal.status = "accepted"
-        proposal.accepted_at = datetime.now(timezone.utc)
-        await self.db.flush()
-        await self.db.refresh(proposal)
-        return proposal
-
-    async def mark_rejected(self, proposal: Proposal) -> Proposal:
-        """Mark a proposal as rejected."""
-        if not self.validate_status_transition(proposal.status, "rejected"):
-            raise ValueError(f"Cannot transition from '{proposal.status}' to 'rejected'")
-        proposal.status = "rejected"
-        proposal.rejected_at = datetime.now(timezone.utc)
-        await self.db.flush()
-        await self.db.refresh(proposal)
         return proposal
 
     async def record_view(

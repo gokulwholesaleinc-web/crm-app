@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from typing import Optional, List
+from decimal import Decimal
 from pydantic import BaseModel, ConfigDict
 
 
@@ -64,7 +65,7 @@ class PriceResponse(BaseModel):
     id: int
     product_id: int
     stripe_price_id: Optional[str] = None
-    amount: float
+    amount: Decimal
     currency: str
     recurring_interval: Optional[str] = None
     is_active: bool
@@ -102,7 +103,7 @@ class ProductListResponse(BaseModel):
 
 class PriceCreate(BaseModel):
     product_id: int
-    amount: float
+    amount: Decimal
     currency: str = "USD"
     recurring_interval: Optional[str] = None
     stripe_price_id: Optional[str] = None
@@ -114,7 +115,7 @@ class PriceCreate(BaseModel):
 # =============================================================================
 
 class PaymentBase(BaseModel):
-    amount: float
+    amount: Decimal
     currency: str = "USD"
     customer_id: Optional[int] = None
     opportunity_id: Optional[int] = None
@@ -218,7 +219,7 @@ class SubscriptionListResponse(BaseModel):
 
 class CreateCheckoutRequest(BaseModel):
     quote_id: Optional[int] = None
-    amount: Optional[float] = None
+    amount: Optional[Decimal] = None
     currency: str = "USD"
     success_url: str
     cancel_url: str
@@ -231,7 +232,7 @@ class CreateCheckoutResponse(BaseModel):
 
 
 class CreatePaymentIntentRequest(BaseModel):
-    amount: float
+    amount: Decimal
     currency: str = "USD"
     customer_id: Optional[int] = None
     opportunity_id: Optional[int] = None

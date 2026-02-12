@@ -89,7 +89,16 @@ export type StatusType =
   | 'closed_lost'
   | 'pending'
   | 'completed'
-  | 'cancelled';
+  | 'cancelled'
+  | 'draft'
+  | 'sent'
+  | 'viewed'
+  | 'accepted'
+  | 'rejected'
+  | 'expired'
+  | 'succeeded'
+  | 'failed'
+  | 'refunded';
 
 const statusConfig: Record<StatusType, { variant: BadgeVariant; label: string }> = {
   new: { variant: 'blue', label: 'New' },
@@ -102,6 +111,15 @@ const statusConfig: Record<StatusType, { variant: BadgeVariant; label: string }>
   pending: { variant: 'yellow', label: 'Pending' },
   completed: { variant: 'green', label: 'Completed' },
   cancelled: { variant: 'gray', label: 'Cancelled' },
+  draft: { variant: 'gray', label: 'Draft' },
+  sent: { variant: 'blue', label: 'Sent' },
+  viewed: { variant: 'yellow', label: 'Viewed' },
+  accepted: { variant: 'green', label: 'Accepted' },
+  rejected: { variant: 'red', label: 'Rejected' },
+  expired: { variant: 'gray', label: 'Expired' },
+  succeeded: { variant: 'green', label: 'Succeeded' },
+  failed: { variant: 'red', label: 'Failed' },
+  refunded: { variant: 'purple', label: 'Refunded' },
 };
 
 export interface StatusBadgeProps {
