@@ -47,6 +47,8 @@ function ScoreIndicator({ score }: { score: number }) {
   );
 }
 
+const INITIAL_DELETE_CONFIRM = { isOpen: false, lead: null } as const;
+
 function LeadsPage() {
   usePageTitle('Leads');
   const [searchQuery, setSearchQuery] = useState('');
@@ -54,10 +56,7 @@ function LeadsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; lead: Lead | null }>({
-    isOpen: false,
-    lead: null,
-  });
+  const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; lead: Lead | null }>(INITIAL_DELETE_CONFIRM);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const pageSize = 10;
 
@@ -76,7 +75,7 @@ function LeadsPage() {
   const createLeadMutation = useCreateLead();
   const updateLeadMutation = useUpdateLead();
   const deleteLeadMutation = useDeleteLead();
-  const { data: usersData } = useUsers();
+  const { data: usersData } = useUsers(0, 100, { enabled: selectedIds.length > 0 });
   const queryClient = useQueryClient();
 
   const bulkUpdateMutation = useMutation({
@@ -114,7 +113,7 @@ function LeadsPage() {
     if (!deleteConfirm.lead) return;
     try {
       await deleteLeadMutation.mutateAsync(deleteConfirm.lead.id);
-      setDeleteConfirm({ isOpen: false, lead: null });
+      setDeleteConfirm(INITIAL_DELETE_CONFIRM);
       showSuccess('Lead deleted successfully');
     } catch (err) {
       showError('Failed to delete lead');
@@ -122,7 +121,7 @@ function LeadsPage() {
   };
 
   const handleDeleteCancel = () => {
-    setDeleteConfirm({ isOpen: false, lead: null });
+    setDeleteConfirm(INITIAL_DELETE_CONFIRM);
   };
 
   const handleEdit = (lead: Lead) => {

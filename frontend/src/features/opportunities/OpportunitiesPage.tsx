@@ -44,8 +44,9 @@ function OpportunitiesPage() {
   } = useOpportunities();
 
   const { data: pipelineStages } = usePipelineStages();
-  const { data: contactsData } = useContacts({ page_size: 25 });
-  const { data: companiesData } = useCompanies({ page_size: 25 });
+  const isModalOpen = showForm || !!editingOpportunity;
+  const { data: contactsData } = useContacts({ page_size: 25 }, { enabled: isModalOpen });
+  const { data: companiesData } = useCompanies({ page_size: 25 }, { enabled: isModalOpen });
 
   const moveOpportunityMutation = useMoveOpportunity();
   const createOpportunityMutation = useCreateOpportunity();

@@ -3,8 +3,8 @@
  * Uses TanStack Query for data fetching and caching.
  */
 
-import { useQuery } from '@tanstack/react-query';
-import { createEntityHooks, createQueryKeys } from './useEntityCRUD';
+import { useQuery, UseQueryOptions } from '@tanstack/react-query';
+import { createEntityHooks, createQueryKeys, PaginatedResponse } from './useEntityCRUD';
 import { companiesApi } from '../api/companies';
 import type { Company, CompanyCreate, CompanyUpdate, CompanyFilters } from '../types';
 
@@ -32,8 +32,11 @@ const companyEntityHooks = createEntityHooks<
 /**
  * Hook to fetch a paginated list of companies
  */
-export function useCompanies(filters?: CompanyFilters) {
-  return companyEntityHooks.useList(filters);
+export function useCompanies(
+  filters?: CompanyFilters,
+  options?: Omit<UseQueryOptions<PaginatedResponse<Company>>, 'queryKey' | 'queryFn'>
+) {
+  return companyEntityHooks.useList(filters, options);
 }
 
 /**

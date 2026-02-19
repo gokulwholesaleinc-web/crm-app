@@ -6,16 +6,25 @@ a user can access based on their role:
 - sales_rep/viewer: see only own records + shared records
 """
 
-from typing import Annotated, Optional, List
+import time
+import logging
+from typing import Annotated, Any, Optional, List
 from dataclasses import dataclass, field
 from fastapi import Depends
+import sqlalchemy.exc
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from src.database import get_db
 from src.auth.dependencies import get_current_active_user
 from src.auth.models import User
 from src.roles.models import RoleName
+
+# Cache data scope per user to avoid repeated role + shared entity queries
+_scope_cache: dict[int, tuple[float, Any]] = {}
+_SCOPE_CACHE_TTL = 60  # seconds
 
 
 @dataclass
@@ -67,16 +76,24 @@ async def get_data_scope(
             # data_scope.owner_id is None for admin/manager
             # data_scope.owner_id is user.id for sales_rep/viewer
     """
+    # Check cache first
+    now = time.monotonic()
+    cached = _scope_cache.get(current_user.id)
+    if cached and (now - cached[0]) < _SCOPE_CACHE_TTL:
+        return cached[1]
+
     from src.roles.service import RoleService
 
     # Superusers see everything
     if current_user.is_superuser:
-        return DataScope(
+        scope = DataScope(
             user_id=current_user.id,
             role_name=RoleName.ADMIN.value,
             owner_id=None,
             is_scoped=False,
         )
+        _scope_cache[current_user.id] = (now, scope)
+        return scope
 
     # Determine role
     role_service = RoleService(db)
@@ -84,12 +101,14 @@ async def get_data_scope(
 
     # Admin and manager see all records
     if role_name in (RoleName.ADMIN.value, RoleName.MANAGER.value):
-        return DataScope(
+        scope = DataScope(
             user_id=current_user.id,
             role_name=role_name,
             owner_id=None,
             is_scoped=False,
         )
+        _scope_cache[current_user.id] = (now, scope)
+        return scope
 
     # Sales rep and viewer: load shared entity IDs
     shared = {}
@@ -101,17 +120,19 @@ async def get_data_scope(
         )
         for entity_type, entity_id in result.all():
             shared.setdefault(entity_type, []).append(entity_id)
-    except Exception:
+    except (ImportError, sqlalchemy.exc.ProgrammingError, sqlalchemy.exc.OperationalError) as exc:
         # EntityShare table may not exist yet during migrations
-        pass
+        logger.debug("Could not load shared entities: %s", exc)
 
-    return DataScope(
+    scope = DataScope(
         user_id=current_user.id,
         role_name=role_name,
         owner_id=current_user.id,
         is_scoped=True,
         shared_entity_ids=shared,
     )
+    _scope_cache[current_user.id] = (now, scope)
+    return scope
 
 
 def check_record_access_or_shared(

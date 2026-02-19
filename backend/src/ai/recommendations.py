@@ -1,5 +1,6 @@
 """AI-powered recommendations for CRM actions."""
 
+import asyncio
 from typing import Dict, Any, List
 from datetime import datetime, timedelta
 from sqlalchemy import select, func, and_, or_
@@ -19,23 +20,15 @@ class RecommendationEngine:
 
     async def get_recommendations(self, user_id: int) -> List[Dict[str, Any]]:
         """Get prioritized recommendations for the user."""
-        recommendations = []
+        # Run all 4 checks in parallel
+        overdue_recs, stale_lead_recs, at_risk_recs, hot_lead_recs = await asyncio.gather(
+            self._check_overdue_tasks(user_id),
+            self._check_stale_leads(user_id),
+            self._check_at_risk_deals(user_id),
+            self._check_hot_leads_no_activity(user_id),
+        )
 
-        # Check for overdue tasks
-        overdue_recs = await self._check_overdue_tasks(user_id)
-        recommendations.extend(overdue_recs)
-
-        # Check for stale leads
-        stale_lead_recs = await self._check_stale_leads(user_id)
-        recommendations.extend(stale_lead_recs)
-
-        # Check for deals at risk
-        at_risk_recs = await self._check_at_risk_deals(user_id)
-        recommendations.extend(at_risk_recs)
-
-        # Check for hot leads without follow-up
-        hot_lead_recs = await self._check_hot_leads_no_activity(user_id)
-        recommendations.extend(hot_lead_recs)
+        recommendations = overdue_recs + stale_lead_recs + at_risk_recs + hot_lead_recs
 
         # Sort by priority
         priority_order = {"high": 0, "medium": 1, "low": 2}
@@ -156,19 +149,23 @@ class RecommendationEngine:
         )
 
         hot_leads = result.scalars().all()
+        if not hot_leads:
+            return []
+
+        # Batch check: get recent activity counts for all hot leads in one query
+        lead_ids = [lead.id for lead in hot_leads]
+        activity_result = await self.db.execute(
+            select(Activity.entity_id, func.count(Activity.id).label("cnt"))
+            .where(Activity.entity_type == "leads")
+            .where(Activity.entity_id.in_(lead_ids))
+            .where(Activity.created_at > cutoff)
+            .group_by(Activity.entity_id)
+        )
+        active_lead_ids = {row.entity_id for row in activity_result.all()}
+
         recommendations = []
-
         for lead in hot_leads:
-            # Check for recent activity
-            activity_result = await self.db.execute(
-                select(func.count(Activity.id))
-                .where(Activity.entity_type == "leads")
-                .where(Activity.entity_id == lead.id)
-                .where(Activity.created_at > cutoff)
-            )
-            recent_count = activity_result.scalar() or 0
-
-            if recent_count == 0:
+            if lead.id not in active_lead_ids:
                 recommendations.append({
                     "type": "hot_lead_no_activity",
                     "priority": "medium",

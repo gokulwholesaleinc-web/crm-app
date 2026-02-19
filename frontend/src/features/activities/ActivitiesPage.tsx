@@ -56,16 +56,15 @@ const statusOptions = [
   { value: 'completed', label: 'Completed' },
 ];
 
+const INITIAL_DELETE_CONFIRM = { isOpen: false, activity: null } as const;
+
 export function ActivitiesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [showFilters, setShowFilters] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; activity: Activity | null }>({
-    isOpen: false,
-    activity: null,
-  });
+  const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; activity: Activity | null }>(INITIAL_DELETE_CONFIRM);
 
   // Get filter values from URL params
   const filters: ActivityFilters = useMemo(
@@ -84,10 +83,14 @@ export function ActivitiesPage() {
     [searchParams]
   );
 
-  // Fetch activities
-  const { data: activitiesData, isLoading: isLoadingList } = useActivities(filters);
+  // Fetch activities - only fetch the active view's data
+  const { data: activitiesData, isLoading: isLoadingList } = useActivities(
+    filters,
+    { enabled: viewMode !== 'timeline' }
+  );
   const { data: timelineData, isLoading: isLoadingTimeline } = useUserTimeline(
-    filters.activity_type
+    filters.activity_type,
+    { enabled: viewMode === 'timeline' }
   );
 
   // Mutations
@@ -126,14 +129,14 @@ export function ActivitiesPage() {
     if (!deleteConfirm.activity) return;
     try {
       await deleteActivity.mutateAsync(deleteConfirm.activity.id);
-      setDeleteConfirm({ isOpen: false, activity: null });
+      setDeleteConfirm(INITIAL_DELETE_CONFIRM);
     } catch (error) {
       console.error('Failed to delete activity:', error);
     }
   };
 
   const handleDeleteCancel = () => {
-    setDeleteConfirm({ isOpen: false, activity: null });
+    setDeleteConfirm(INITIAL_DELETE_CONFIRM);
   };
 
   const handleEdit = (activity: Activity) => {

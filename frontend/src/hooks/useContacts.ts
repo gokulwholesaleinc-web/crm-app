@@ -3,8 +3,8 @@
  * Uses TanStack Query for data fetching and caching.
  */
 
-import { useQuery } from '@tanstack/react-query';
-import { createEntityHooks, createQueryKeys } from './useEntityCRUD';
+import { useQuery, UseQueryOptions } from '@tanstack/react-query';
+import { createEntityHooks, createQueryKeys, PaginatedResponse } from './useEntityCRUD';
 import { contactsApi } from '../api/contacts';
 import type { Contact, ContactCreate, ContactUpdate, ContactFilters } from '../types';
 
@@ -32,8 +32,11 @@ const contactEntityHooks = createEntityHooks<
 /**
  * Hook to fetch a paginated list of contacts
  */
-export function useContacts(filters?: ContactFilters) {
-  return contactEntityHooks.useList(filters);
+export function useContacts(
+  filters?: ContactFilters,
+  options?: Omit<UseQueryOptions<PaginatedResponse<Contact>>, 'queryKey' | 'queryFn'>
+) {
+  return contactEntityHooks.useList(filters, options);
 }
 
 /**
