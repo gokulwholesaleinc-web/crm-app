@@ -18,5 +18,5 @@ export const CACHE_TIMES = {
   DASHBOARD: { staleTime: 60 * 1000, gcTime: 5 * 60 * 1000 },
 
   /** Real-time - always fresh (0 stale) */
-  REALTIME: { staleTime: 0, gcTime: 60 * 1000 },
+  REALTIME: { staleTime: 10 * 1000, gcTime: 60 * 1000 },
 } as const;

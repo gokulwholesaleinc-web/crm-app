@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PlusIcon } from '@heroicons/react/24/outline';
 import { Button, Spinner, Modal } from '../../components/ui';
@@ -8,7 +8,8 @@ import {
 } from './components/KanbanBoard/KanbanBoard';
 import { Opportunity as KanbanOpportunity } from './components/KanbanBoard/KanbanCard';
 import { OpportunityForm, OpportunityFormData } from './components/OpportunityForm';
-import { AIInsightsCard, NextBestActionCard } from '../../components/ai';
+const AIInsightsCard = lazy(() => import('../../components/ai').then(m => ({ default: m.AIInsightsCard })));
+const NextBestActionCard = lazy(() => import('../../components/ai').then(m => ({ default: m.NextBestActionCard })));
 import { useOpportunities, useMoveOpportunity, usePipelineStages, useCreateOpportunity, useUpdateOpportunity } from '../../hooks/useOpportunities';
 import { useContacts } from '../../hooks/useContacts';
 import { useCompanies } from '../../hooks/useCompanies';
@@ -43,8 +44,8 @@ function OpportunitiesPage() {
   } = useOpportunities();
 
   const { data: pipelineStages } = usePipelineStages();
-  const { data: contactsData } = useContacts({ page_size: 100 });
-  const { data: companiesData } = useCompanies({ page_size: 100 });
+  const { data: contactsData } = useContacts({ page_size: 25 });
+  const { data: companiesData } = useCompanies({ page_size: 25 });
 
   const moveOpportunityMutation = useMoveOpportunity();
   const createOpportunityMutation = useCreateOpportunity();
@@ -458,21 +459,20 @@ function OpportunitiesPage() {
         <div className="space-y-6">
           {/* AI Insights Section - Only show when editing an existing opportunity */}
           {editingOpportunity && (
-            <div className="space-y-4">
-              {/* Next Best Action */}
-              <NextBestActionCard
-                entityType="opportunity"
-                entityId={editingOpportunity.id}
-              />
-
-              {/* AI Insights Card */}
-              <AIInsightsCard
-                entityType="opportunity"
-                entityId={editingOpportunity.id}
-                entityName={editingOpportunity.name}
-                variant="inline"
-              />
-            </div>
+            <Suspense fallback={<div className="animate-pulse h-32 bg-gray-100 dark:bg-gray-700 rounded-lg" />}>
+              <div className="space-y-4">
+                <NextBestActionCard
+                  entityType="opportunity"
+                  entityId={editingOpportunity.id}
+                />
+                <AIInsightsCard
+                  entityType="opportunity"
+                  entityId={editingOpportunity.id}
+                  entityName={editingOpportunity.name}
+                  variant="inline"
+                />
+              </div>
+            </Suspense>
           )}
 
           <OpportunityForm

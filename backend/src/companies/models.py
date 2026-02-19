@@ -1,7 +1,7 @@
 """Company model for CRM accounts."""
 
 from typing import Optional, List, TYPE_CHECKING
-from sqlalchemy import String, Integer, ForeignKey, Text, BigInteger
+from sqlalchemy import String, Integer, ForeignKey, Text, BigInteger, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.database import Base
 from src.core.mixins.auditable import AuditableMixin
@@ -61,4 +61,8 @@ class Company(Base, AuditableMixin):
         "Contact",
         back_populates="company",
         lazy="dynamic",
+    )
+
+    __table_args__ = (
+        Index("ix_companies_owner_created", "owner_id", "created_at"),
     )

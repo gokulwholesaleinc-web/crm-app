@@ -147,19 +147,23 @@ class CampaignMemberService(BaseService[CampaignMember]):
         member_ids: List[int],
     ) -> int:
         """Add multiple members to a campaign."""
+        if not member_ids:
+            return 0
+
+        # Batch check: fetch all existing member_ids in one query
+        result = await self.db.execute(
+            select(CampaignMember.member_id).where(
+                CampaignMember.campaign_id == campaign_id,
+                CampaignMember.member_type == member_type,
+                CampaignMember.member_id.in_(member_ids),
+            )
+        )
+        existing_ids = set(result.scalars().all())
+
+        # Only add members that don't already exist
         added = 0
         for member_id in member_ids:
-            # Check if already exists
-            result = await self.db.execute(
-                select(CampaignMember).where(
-                    CampaignMember.campaign_id == campaign_id,
-                    CampaignMember.member_type == member_type,
-                    CampaignMember.member_id == member_id,
-                )
-            )
-            existing = result.scalar_one_or_none()
-
-            if not existing:
+            if member_id not in existing_ids:
                 member = CampaignMember(
                     campaign_id=campaign_id,
                     member_type=member_type,

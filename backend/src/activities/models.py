@@ -80,4 +80,5 @@ class Activity(Base, AuditableMixin):
         Index("ix_activities_entity", "entity_type", "entity_id"),
         Index("ix_activities_scheduled", "scheduled_at"),
         Index("ix_activities_due", "due_date"),
+        Index("ix_activities_owner_created", "owner_id", "created_at"),
     )

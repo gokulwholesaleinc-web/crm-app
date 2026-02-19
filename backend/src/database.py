@@ -1,9 +1,13 @@
+import logging
 import ssl as ssl_module
 
+import sqlalchemy.exc
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy import MetaData
 from src.config import settings
+
+logger = logging.getLogger(__name__)
 
 # Naming convention for constraints
 convention = {
@@ -27,16 +31,17 @@ _connect_args: dict = {}
 _is_remote = "localhost" not in _db_url and "127.0.0.1" not in _db_url and "db:" not in _db_url
 if _is_remote:
     _ssl_ctx = ssl_module.create_default_context()
-    _ssl_ctx.check_hostname = False
-    _ssl_ctx.verify_mode = ssl_module.CERT_NONE
+    if not settings.DATABASE_SSL_VERIFY:
+        _ssl_ctx.check_hostname = False
+        _ssl_ctx.verify_mode = ssl_module.CERT_NONE
     _connect_args["ssl"] = _ssl_ctx
 
 # Create async engine
 engine = create_async_engine(
     _db_url,
-    echo=settings.DEBUG,
+    echo=False,
     future=True,
-    pool_size=10,
+    pool_size=5,
     max_overflow=20,
     pool_pre_ping=True,
     pool_recycle=3600,
@@ -57,7 +62,8 @@ async def get_db() -> AsyncSession:
         try:
             yield session
             await session.commit()
-        except Exception:
+        except (OSError, sqlalchemy.exc.SQLAlchemyError) as exc:
+            logger.error("Database session error, rolling back: %s", exc)
             await session.rollback()
             raise
         finally:
