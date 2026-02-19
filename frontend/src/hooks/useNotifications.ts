@@ -29,7 +29,7 @@ export function useUnreadCount() {
     queryKey: notificationKeys.unreadCount,
     queryFn: () => notificationsApi.getUnreadCount(),
     ...CACHE_TIMES.REALTIME,
-    refetchInterval: 30000,
+    refetchInterval: 60000,
   });
 }
 

@@ -1,11 +1,10 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import basicSsl from '@vitejs/plugin-basic-ssl';
 import path from 'path';
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react(), basicSsl()],
+  plugins: [react()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -20,7 +19,7 @@ export default defineConfig({
   server: {
     port: 3000,
     host: '0.0.0.0',
-    https: true,
+    https: false,
     allowedHosts: true,
     proxy: {
       '/api': {
@@ -42,6 +41,10 @@ export default defineConfig({
           vendor: ['react', 'react-dom', 'react-router-dom'],
           query: ['@tanstack/react-query'],
           headlessui: ['@headlessui/react'],
+          axios: ['axios'],
+          'date-fns': ['date-fns'],
+          dndkit: ['@dnd-kit/core', '@dnd-kit/sortable', '@dnd-kit/utilities'],
+          recharts: ['recharts'],
         },
       },
     },

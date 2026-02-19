@@ -44,6 +44,7 @@ interface TenantContextValue {
 // --- Storage Keys ---
 
 const TENANT_SLUG_KEY = 'crm_tenant_slug:v1';
+const TENANT_CONFIG_KEY = 'crm_tenant_config:v1';
 
 // --- Context ---
 
@@ -68,6 +69,17 @@ function hexToRgb(hex: string): string {
   return `${r} ${g} ${b}`;
 }
 
+function darkenRgb(hex: string, factor = 0.8): string {
+  const cleaned = hex.replace('#', '');
+  const r = Math.round(parseInt(cleaned.substring(0, 2), 16) * factor);
+  const g = Math.round(parseInt(cleaned.substring(2, 4), 16) * factor);
+  const b = Math.round(parseInt(cleaned.substring(4, 6), 16) * factor);
+  if (isNaN(r) || isNaN(g) || isNaN(b)) {
+    return '';
+  }
+  return `${r} ${g} ${b}`;
+}
+
 // --- Helper: apply CSS custom properties ---
 
 function applyBrandingToDOM(config: TenantConfig | null) {
@@ -76,6 +88,7 @@ function applyBrandingToDOM(config: TenantConfig | null) {
   if (!config) {
     // Reset to defaults
     root.style.removeProperty('--color-primary');
+    root.style.removeProperty('--color-primary-dark');
     root.style.removeProperty('--color-secondary');
     root.style.removeProperty('--color-accent');
     root.style.removeProperty('--brand-primary');
@@ -89,7 +102,10 @@ function applyBrandingToDOM(config: TenantConfig | null) {
   const secondaryRgb = hexToRgb(config.secondary_color);
   const accentRgb = hexToRgb(config.accent_color);
 
-  if (primaryRgb) root.style.setProperty('--color-primary', primaryRgb);
+  if (primaryRgb) {
+    root.style.setProperty('--color-primary', primaryRgb);
+    root.style.setProperty('--color-primary-dark', darkenRgb(config.primary_color));
+  }
   if (secondaryRgb) root.style.setProperty('--color-secondary', secondaryRgb);
   if (accentRgb) root.style.setProperty('--color-accent', accentRgb);
 
@@ -154,18 +170,38 @@ export function TenantProvider({ children }: TenantProviderProps) {
 
   const queryClient = useQueryClient();
 
+  const cachedConfig = (() => {
+    try {
+      const cached = localStorage.getItem(TENANT_CONFIG_KEY);
+      return cached ? JSON.parse(cached) as TenantConfig : undefined;
+    } catch {
+      return undefined;
+    }
+  })();
+
   const { data: tenant, isLoading } = useQuery({
     queryKey: ['tenant', 'config', storedSlug],
     queryFn: () => fetchTenantConfig(storedSlug!),
     enabled: !!storedSlug,
-    staleTime: 10 * 60 * 1000, // 10 minutes
+    staleTime: 10 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
     retry: 1,
+    placeholderData: cachedConfig,
   });
 
   // Apply branding when tenant config changes
   useEffect(() => {
     applyBrandingToDOM(tenant ?? null);
+  }, [tenant]);
+
+  useEffect(() => {
+    if (tenant) {
+      try {
+        localStorage.setItem(TENANT_CONFIG_KEY, JSON.stringify(tenant));
+      } catch {
+        // localStorage not available
+      }
+    }
   }, [tenant]);
 
   // Cleanup on unmount

@@ -1,5 +1,6 @@
 """Dashboard API routes."""
 
+import asyncio
 from typing import List
 from fastapi import APIRouter
 from fastapi.responses import Response
@@ -32,14 +33,14 @@ async def get_dashboard(
 
     # Get charts
     chart_generator = ChartDataGenerator(db, user_id=current_user.id)
-    charts_data = [
-        await chart_generator.get_pipeline_funnel(),
-        await chart_generator.get_leads_by_status(),
-        await chart_generator.get_leads_by_source(),
-        await chart_generator.get_revenue_trend(),
-        await chart_generator.get_activities_by_type(),
-        await chart_generator.get_new_leads_trend(),
-    ]
+    charts_data = list(await asyncio.gather(
+        chart_generator.get_pipeline_funnel(),
+        chart_generator.get_leads_by_status(),
+        chart_generator.get_leads_by_source(),
+        chart_generator.get_revenue_trend(),
+        chart_generator.get_activities_by_type(),
+        chart_generator.get_new_leads_trend(),
+    ))
 
     # Convert to response format
     number_cards = [NumberCardData(**kpi) for kpi in kpis]
@@ -74,10 +75,12 @@ async def get_kpis(
 async def get_pipeline_funnel_chart(
     current_user: CurrentUser,
     db: DBSession,
+    response: Response,
 ):
     """Get pipeline funnel chart data."""
     generator = ChartDataGenerator(db, user_id=current_user.id)
     data = await generator.get_pipeline_funnel()
+    response.headers["Cache-Control"] = "private, max-age=60"
     return ChartData(
         type=data["type"],
         title=data["title"],
@@ -89,10 +92,12 @@ async def get_pipeline_funnel_chart(
 async def get_leads_by_status_chart(
     current_user: CurrentUser,
     db: DBSession,
+    response: Response,
 ):
     """Get leads by status chart data."""
     generator = ChartDataGenerator(db, user_id=current_user.id)
     data = await generator.get_leads_by_status()
+    response.headers["Cache-Control"] = "private, max-age=60"
     return ChartData(
         type=data["type"],
         title=data["title"],
@@ -104,10 +109,12 @@ async def get_leads_by_status_chart(
 async def get_leads_by_source_chart(
     current_user: CurrentUser,
     db: DBSession,
+    response: Response,
 ):
     """Get leads by source chart data."""
     generator = ChartDataGenerator(db, user_id=current_user.id)
     data = await generator.get_leads_by_source()
+    response.headers["Cache-Control"] = "private, max-age=60"
     return ChartData(
         type=data["type"],
         title=data["title"],
@@ -119,11 +126,13 @@ async def get_leads_by_source_chart(
 async def get_revenue_trend_chart(
     current_user: CurrentUser,
     db: DBSession,
+    response: Response,
     months: int = 6,
 ):
     """Get monthly revenue trend chart data."""
     generator = ChartDataGenerator(db, user_id=current_user.id)
     data = await generator.get_revenue_trend(months=months)
+    response.headers["Cache-Control"] = "private, max-age=60"
     return ChartData(
         type=data["type"],
         title=data["title"],
@@ -135,11 +144,13 @@ async def get_revenue_trend_chart(
 async def get_activities_chart(
     current_user: CurrentUser,
     db: DBSession,
+    response: Response,
     days: int = 30,
 ):
     """Get activities by type chart data."""
     generator = ChartDataGenerator(db, user_id=current_user.id)
     data = await generator.get_activities_by_type(days=days)
+    response.headers["Cache-Control"] = "private, max-age=60"
     return ChartData(
         type=data["type"],
         title=data["title"],
@@ -151,11 +162,13 @@ async def get_activities_chart(
 async def get_new_leads_trend_chart(
     current_user: CurrentUser,
     db: DBSession,
+    response: Response,
     weeks: int = 8,
 ):
     """Get new leads trend chart data."""
     generator = ChartDataGenerator(db, user_id=current_user.id)
     data = await generator.get_new_leads_trend(weeks=weeks)
+    response.headers["Cache-Control"] = "private, max-age=60"
     return ChartData(
         type=data["type"],
         title=data["title"],
@@ -312,7 +325,10 @@ async def get_converted_revenue(
     result = await db.execute(
         select(Opportunity)
         .join(PipelineStage)
-        .where(Opportunity.owner_id == current_user.id)
+        .where(
+            Opportunity.owner_id == current_user.id,
+            Opportunity.amount.isnot(None),
+        )
     )
     opportunities = result.scalars().all()
 
@@ -323,9 +339,6 @@ async def get_converted_revenue(
     won_deal_count = 0
 
     for opp in opportunities:
-        if opp.amount is None:
-            continue
-
         converted = convert_amount(opp.amount, opp.currency or "USD", target_currency)
         stage = opp.pipeline_stage
 

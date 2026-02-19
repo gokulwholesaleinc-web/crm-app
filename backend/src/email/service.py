@@ -1,5 +1,6 @@
 """Email service layer - handles sending, tracking, and queue management."""
 
+import asyncio
 import re
 from datetime import datetime, timezone
 from typing import Optional, List, Tuple, Dict
@@ -75,7 +76,7 @@ class EmailService:
         """Attempt to send an email, updating status accordingly."""
         email.attempts += 1
         try:
-            send_email(email.to_email, email.subject, email.body)
+            await asyncio.to_thread(send_email, email.to_email, email.subject, email.body)
             email.status = "sent"
             email.sent_at = datetime.now(timezone.utc)
         except Exception as exc:

@@ -2,7 +2,7 @@
 
 from datetime import date
 from typing import Optional, TYPE_CHECKING
-from sqlalchemy import String, Integer, ForeignKey, Text, Float, Date, Boolean
+from sqlalchemy import String, Integer, ForeignKey, Text, Float, Date, Boolean, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.database import Base
 from src.core.mixins.auditable import AuditableMixin
@@ -94,6 +94,10 @@ class Opportunity(Base, AuditableMixin):
     company: Mapped[Optional["Company"]] = relationship(
         "Company",
         lazy="joined",
+    )
+
+    __table_args__ = (
+        Index("ix_opportunities_owner_created", "owner_id", "created_at"),
     )
 
     @property

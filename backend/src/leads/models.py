@@ -1,7 +1,7 @@
 """Lead model for CRM lead management."""
 
 from typing import Optional
-from sqlalchemy import String, Integer, ForeignKey, Text, Float, Enum as SQLEnum
+from sqlalchemy import String, Integer, ForeignKey, Text, Float, Enum as SQLEnum, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.database import Base
 from src.core.mixins.auditable import AuditableMixin
@@ -100,6 +100,10 @@ class Lead(Base, AuditableMixin):
 
     # Relationships
     source: Mapped[Optional["LeadSource"]] = relationship("LeadSource", lazy="joined")
+
+    __table_args__ = (
+        Index("ix_leads_owner_created", "owner_id", "created_at"),
+    )
 
     @property
     def full_name(self) -> str:

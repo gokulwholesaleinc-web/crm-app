@@ -73,4 +73,5 @@ class Contact(Base, AuditableMixin):
 
     __table_args__ = (
         Index("ix_contacts_name", "first_name", "last_name"),
+        Index("ix_contacts_owner_created", "owner_id", "created_at"),
     )

@@ -5,19 +5,23 @@ import { SkeletonCard, SkeletonChart } from '../../components/ui/Skeleton';
 import { ErrorEmptyState } from '../../components/ui/EmptyState';
 import { DashboardRecommendations } from '../../components/ai/DashboardRecommendations';
 import { formatCurrency, formatDate } from '../../utils';
-import { useDashboard, usePipelineFunnelChart, useLeadsBySourceChart, useSalesFunnel, useSalesKpis } from '../../hooks/useDashboard';
+import { useKPIs, usePipelineFunnelChart, useLeadsBySourceChart, useSalesFunnel, useSalesKpis } from '../../hooks/useDashboard';
 import { useUserTimeline } from '../../hooks/useActivities';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import type { NumberCardData, ChartDataPoint } from '../../types';
 
-// Helper to find number card by id
-function findCardValue(cards: NumberCardData[], id: string): number {
-  const card = cards.find(c => c.id === id);
+// Build a Map for O(1) lookups by card id
+function buildCardMap(cards: NumberCardData[]): Map<string, NumberCardData> {
+  return new Map(cards.map(c => [c.id, c]));
+}
+
+function findCardValue(cardMap: Map<string, NumberCardData>, id: string): number {
+  const card = cardMap.get(id);
   return typeof card?.value === 'number' ? card.value : 0;
 }
 
-function findCardChange(cards: NumberCardData[], id: string): number {
-  const card = cards.find(c => c.id === id);
+function findCardChange(cardMap: Map<string, NumberCardData>, id: string): number {
+  const card = cardMap.get(id);
   return card?.change ?? 0;
 }
 
@@ -25,7 +29,7 @@ function DashboardPage() {
   usePageTitle('Dashboard');
 
   // Use hooks for data fetching
-  const { data: dashboardData, isLoading: isLoadingDashboard, error: dashboardError } = useDashboard();
+  const { data: kpiCards, isLoading: isLoadingDashboard, error: dashboardError } = useKPIs();
   const { data: pipelineData } = usePipelineFunnelChart();
   const { data: leadsBySourceData } = useLeadsBySourceChart();
   const { data: timelineData } = useUserTimeline();
@@ -36,19 +40,18 @@ function DashboardPage() {
   const error = dashboardError instanceof Error ? dashboardError.message : dashboardError ? String(dashboardError) : null;
 
   // Extract number cards from dashboard response
-  const numberCards = dashboardData?.number_cards ?? [];
-  // Note: charts from dashboardData can be used for additional visualizations if needed
-
+  const numberCards = kpiCards ?? [];
+  const cardMap = buildCardMap(numberCards);
   // Map data to expected format using number cards
-  const data = dashboardData ? {
-    totalContacts: findCardValue(numberCards, 'total_contacts'),
-    totalLeads: findCardValue(numberCards, 'total_leads'),
-    totalOpportunities: findCardValue(numberCards, 'open_opportunities'),
-    totalRevenue: findCardValue(numberCards, 'total_revenue'),
-    contactsTrend: findCardChange(numberCards, 'total_contacts'),
-    leadsTrend: findCardChange(numberCards, 'total_leads'),
-    opportunitiesTrend: findCardChange(numberCards, 'open_opportunities'),
-    revenueTrend: findCardChange(numberCards, 'total_revenue'),
+  const data = kpiCards ? {
+    totalContacts: findCardValue(cardMap, 'total_contacts'),
+    totalLeads: findCardValue(cardMap, 'total_leads'),
+    totalOpportunities: findCardValue(cardMap, 'open_opportunities'),
+    totalRevenue: findCardValue(cardMap, 'total_revenue'),
+    contactsTrend: findCardChange(cardMap, 'total_contacts'),
+    leadsTrend: findCardChange(cardMap, 'total_leads'),
+    opportunitiesTrend: findCardChange(cardMap, 'open_opportunities'),
+    revenueTrend: findCardChange(cardMap, 'total_revenue'),
     recentActivities: (timelineData?.items ?? []).slice(0, 10).map(item => ({
       id: item.id,
       description: item.subject || item.description || 'Activity',

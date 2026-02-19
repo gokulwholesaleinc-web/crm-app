@@ -2,7 +2,7 @@
 
 import logging
 from typing import Annotated, Optional
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from src.core.constants import HTTPStatus, EntityNames, ENTITY_TYPE_CONTACTS
 from src.core.router_utils import (
     DBSession,
@@ -32,6 +32,18 @@ from src.notifications.service import notify_on_assignment
 
 logger = logging.getLogger(__name__)
 
+
+async def _store_embedding_in_background(entity_type: str, entity_id: int, content: str):
+    """Store embedding in a background task with its own DB session."""
+    from src.database import async_session_maker
+    async with async_session_maker() as session:
+        try:
+            await store_entity_embedding(session, entity_type, entity_id, content)
+            await session.commit()
+        except Exception as e:
+            logger.warning("Background embedding storage failed for %s/%s: %s", entity_type, entity_id, e)
+
+
 router = APIRouter(prefix="/api/contacts", tags=["contacts"])
 
 
@@ -59,7 +71,13 @@ async def list_contacts(
 ):
     """List contacts with pagination and filters."""
     import json as _json
-    parsed_filters = _json.loads(filters) if filters else None
+    from fastapi import HTTPException
+    parsed_filters = None
+    if filters:
+        try:
+            parsed_filters = _json.loads(filters)
+        except _json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid JSON filter format")
 
     if data_scope.can_see_all():
         effective_owner_id = owner_id
@@ -80,9 +98,15 @@ async def list_contacts(
         shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_CONTACTS),
     )
 
-    contact_responses = [
-        await _build_contact_response(service, contact) for contact in contacts
-    ]
+    # Bulk-load tags in a single query to avoid N+1
+    entity_ids = [contact.id for contact in contacts]
+    tags_map = await service.get_tags_for_entities(entity_ids)
+
+    contact_responses = []
+    for contact in contacts:
+        response_dict = ContactResponse.model_validate(contact).model_dump()
+        response_dict["tags"] = [TagBrief.model_validate(t) for t in tags_map.get(contact.id, [])]
+        contact_responses.append(ContactResponse(**response_dict))
 
     return ContactListResponse(
         items=contact_responses,
@@ -99,18 +123,19 @@ async def create_contact(
     request: Request,
     current_user: CurrentUser,
     db: DBSession,
+    background_tasks: BackgroundTasks,
 ):
     """Create a new contact."""
     service = ContactService(db)
     contact = await service.create(contact_data, current_user.id)
 
-    # Generate embedding for semantic search
+    # Generate embedding for semantic search (background)
     try:
         company_name = contact.company.name if contact.company else None
         content = build_contact_embedding_content(contact, company_name)
-        await store_entity_embedding(db, "contact", contact.id, content)
+        background_tasks.add_task(_store_embedding_in_background, "contact", contact.id, content)
     except Exception as e:
-        logger.warning("Failed to store embedding: %s", e)
+        logger.warning("Failed to prepare embedding: %s", e)
 
     ip_address = request.client.host if request.client else None
     await audit_entity_create(db, "contact", contact.id, current_user.id, ip_address)
@@ -152,6 +177,7 @@ async def update_contact(
     request: Request,
     current_user: CurrentUser,
     db: DBSession,
+    background_tasks: BackgroundTasks,
 ):
     """Update a contact."""
     service = ContactService(db)
@@ -165,13 +191,13 @@ async def update_contact(
 
     updated_contact = await service.update(contact, contact_data, current_user.id)
 
-    # Update embedding for semantic search
+    # Update embedding for semantic search (background)
     try:
         company_name = updated_contact.company.name if updated_contact.company else None
         content = build_contact_embedding_content(updated_contact, company_name)
-        await store_entity_embedding(db, "contact", updated_contact.id, content)
+        background_tasks.add_task(_store_embedding_in_background, "contact", updated_contact.id, content)
     except Exception as e:
-        logger.warning("Failed to store embedding: %s", e)
+        logger.warning("Failed to prepare embedding: %s", e)
 
     new_data = snapshot_entity(updated_contact, update_fields)
     ip_address = request.client.host if request.client else None
