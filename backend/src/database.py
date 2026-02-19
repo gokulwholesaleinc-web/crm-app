@@ -28,7 +28,7 @@ class Base(DeclarativeBase):
 # Enable SSL for remote database hosts (e.g. NeonDB)
 _db_url = settings.db_url
 _connect_args: dict = {}
-_is_remote = "localhost" not in _db_url and "127.0.0.1" not in _db_url and "db:" not in _db_url
+_is_remote = "localhost" not in _db_url and "127.0.0.1" not in _db_url and "db:" not in _db_url and "helium" not in _db_url
 if _is_remote:
     _ssl_ctx = ssl_module.create_default_context()
     if not settings.DATABASE_SSL_VERIFY:

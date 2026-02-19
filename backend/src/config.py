@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     STRIPE_PUBLISHABLE_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
 
+    # Database SSL
+    DATABASE_SSL_VERIFY: bool = False
+
     # Seed data (set to true in .env for initial setup, false for production)
     SEED_ON_STARTUP: bool = False
 
