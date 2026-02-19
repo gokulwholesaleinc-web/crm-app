@@ -1,6 +1,5 @@
 """AI-powered recommendations for CRM actions."""
 
-import asyncio
 from typing import Dict, Any, List
 from datetime import datetime, timedelta
 from sqlalchemy import select, func, and_, or_
@@ -20,15 +19,11 @@ class RecommendationEngine:
 
     async def get_recommendations(self, user_id: int) -> List[Dict[str, Any]]:
         """Get prioritized recommendations for the user."""
-        # Run all 4 checks in parallel
-        overdue_recs, stale_lead_recs, at_risk_recs, hot_lead_recs = await asyncio.gather(
-            self._check_overdue_tasks(user_id),
-            self._check_stale_leads(user_id),
-            self._check_at_risk_deals(user_id),
-            self._check_hot_leads_no_activity(user_id),
-        )
-
-        recommendations = overdue_recs + stale_lead_recs + at_risk_recs + hot_lead_recs
+        recommendations = []
+        recommendations.extend(await self._check_overdue_tasks(user_id))
+        recommendations.extend(await self._check_stale_leads(user_id))
+        recommendations.extend(await self._check_at_risk_deals(user_id))
+        recommendations.extend(await self._check_hot_leads_no_activity(user_id))
 
         # Sort by priority
         priority_order = {"high": 0, "medium": 1, "low": 2}

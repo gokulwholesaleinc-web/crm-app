@@ -1,6 +1,5 @@
 """Dashboard number cards data generators."""
 
-import asyncio
 from datetime import datetime, timedelta, date
 from typing import Dict, Any, List, Optional
 from sqlalchemy import select, func, and_
@@ -24,20 +23,20 @@ class NumberCardGenerator:
         # Use passed user_id or fall back to instance user_id
         if user_id and not self.user_id:
             self.user_id = user_id
-        kpis = await asyncio.gather(
-            self.get_total_contacts(),
-            self.get_total_leads(),
-            self.get_open_opportunities(),
-            self.get_total_revenue(),
-            self.get_total_companies(),
-            self.get_open_leads(),
-            self.get_pipeline_value(),
-            self.get_won_this_month(),
-            self.get_tasks_due_today(self.user_id),
-            self.get_new_leads_this_week(),
-            self.get_conversion_rate(),
-        )
-        return list(kpis)
+        kpis = [
+            await self.get_total_contacts(),
+            await self.get_total_leads(),
+            await self.get_open_opportunities(),
+            await self.get_total_revenue(),
+            await self.get_total_companies(),
+            await self.get_open_leads(),
+            await self.get_pipeline_value(),
+            await self.get_won_this_month(),
+            await self.get_tasks_due_today(self.user_id),
+            await self.get_new_leads_this_week(),
+            await self.get_conversion_rate(),
+        ]
+        return kpis
 
     async def get_total_contacts(self) -> Dict[str, Any]:
         """Get total active contacts count."""

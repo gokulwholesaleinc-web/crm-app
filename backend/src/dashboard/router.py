@@ -1,6 +1,5 @@
 """Dashboard API routes."""
 
-import asyncio
 from typing import List
 from fastapi import APIRouter
 from fastapi.responses import Response
@@ -33,14 +32,14 @@ async def get_dashboard(
 
     # Get charts
     chart_generator = ChartDataGenerator(db, user_id=current_user.id)
-    charts_data = list(await asyncio.gather(
-        chart_generator.get_pipeline_funnel(),
-        chart_generator.get_leads_by_status(),
-        chart_generator.get_leads_by_source(),
-        chart_generator.get_revenue_trend(),
-        chart_generator.get_activities_by_type(),
-        chart_generator.get_new_leads_trend(),
-    ))
+    charts_data = [
+        await chart_generator.get_pipeline_funnel(),
+        await chart_generator.get_leads_by_status(),
+        await chart_generator.get_leads_by_source(),
+        await chart_generator.get_revenue_trend(),
+        await chart_generator.get_activities_by_type(),
+        await chart_generator.get_new_leads_trend(),
+    ]
 
     # Convert to response format
     number_cards = [NumberCardData(**kpi) for kpi in kpis]
@@ -242,44 +241,36 @@ async def get_sales_kpis(
     response: Response,
 ):
     """Get sales pipeline KPIs: quotes sent, proposals sent, payments collected, conversion rate."""
-    (
-        quotes_sent_result,
-        proposals_sent_result,
-        payments_result,
-        total_quotes_result,
-        accepted_quotes_result,
-    ) = await asyncio.gather(
-        db.execute(
-            select(func.count(Quote.id)).where(
-                Quote.owner_id == current_user.id,
-                Quote.status != "draft",
-            )
-        ),
-        db.execute(
-            select(func.count(Proposal.id)).where(
-                Proposal.created_by_id == current_user.id,
-                Proposal.status != "draft",
-            )
-        ),
-        db.execute(
-            select(
-                func.count(Payment.id),
-                func.coalesce(func.sum(Payment.amount), 0),
-            ).where(
-                Payment.status == "succeeded",
-            )
-        ),
-        db.execute(
-            select(func.count(Quote.id)).where(
-                Quote.owner_id == current_user.id,
-            )
-        ),
-        db.execute(
-            select(func.count(Quote.id)).where(
-                Quote.owner_id == current_user.id,
-                Quote.status == "accepted",
-            )
-        ),
+    quotes_sent_result = await db.execute(
+        select(func.count(Quote.id)).where(
+            Quote.owner_id == current_user.id,
+            Quote.status != "draft",
+        )
+    )
+    proposals_sent_result = await db.execute(
+        select(func.count(Proposal.id)).where(
+            Proposal.created_by_id == current_user.id,
+            Proposal.status != "draft",
+        )
+    )
+    payments_result = await db.execute(
+        select(
+            func.count(Payment.id),
+            func.coalesce(func.sum(Payment.amount), 0),
+        ).where(
+            Payment.status == "succeeded",
+        )
+    )
+    total_quotes_result = await db.execute(
+        select(func.count(Quote.id)).where(
+            Quote.owner_id == current_user.id,
+        )
+    )
+    accepted_quotes_result = await db.execute(
+        select(func.count(Quote.id)).where(
+            Quote.owner_id == current_user.id,
+            Quote.status == "accepted",
+        )
     )
 
     quotes_sent = quotes_sent_result.scalar() or 0
