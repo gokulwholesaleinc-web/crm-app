@@ -147,18 +147,29 @@ async def get_daily_summary(
     )
 
 
+_recs_cache: dict[int, tuple[float, "RecommendationsResponse"]] = {}
+_RECS_CACHE_TTL = 60
+
+
 @router.get("/recommendations", response_model=RecommendationsResponse)
 async def get_recommendations(
     current_user: CurrentUser,
     db: DBSession,
 ):
     """Get prioritized action recommendations."""
+    import time
+    cached = _recs_cache.get(current_user.id)
+    if cached and (time.monotonic() - cached[0]) < _RECS_CACHE_TTL:
+        return cached[1]
+
     engine = RecommendationEngine(db)
     recs = await engine.get_recommendations(current_user.id)
 
-    return RecommendationsResponse(
+    result = RecommendationsResponse(
         recommendations=[Recommendation(**r) for r in recs]
     )
+    _recs_cache[current_user.id] = (time.monotonic(), result)
+    return result
 
 
 @router.get("/next-action/{entity_type}/{entity_id}", response_model=NextBestAction)

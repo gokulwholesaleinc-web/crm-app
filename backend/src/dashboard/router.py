@@ -1,6 +1,7 @@
 """Dashboard API routes."""
 
-from typing import List
+import time
+from typing import Any, List
 from fastapi import APIRouter
 from fastapi.responses import Response
 from src.core.router_utils import DBSession, CurrentUser
@@ -18,6 +19,21 @@ from src.dashboard.charts import ChartDataGenerator
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
+# Result-level cache for expensive dashboard queries (keyed by user_id)
+_dashboard_cache: dict[str, tuple[float, Any]] = {}
+_DASHBOARD_CACHE_TTL = 60  # seconds
+
+
+def _get_cached(key: str) -> Any | None:
+    cached = _dashboard_cache.get(key)
+    if cached and (time.monotonic() - cached[0]) < _DASHBOARD_CACHE_TTL:
+        return cached[1]
+    return None
+
+
+def _set_cached(key: str, value: Any) -> None:
+    _dashboard_cache[key] = (time.monotonic(), value)
+
 
 @router.get("", response_model=DashboardResponse)
 async def get_dashboard(
@@ -26,6 +42,12 @@ async def get_dashboard(
     response: Response,
 ):
     """Get full dashboard data including KPIs and charts."""
+    cache_key = f"dashboard:{current_user.id}"
+    cached = _get_cached(cache_key)
+    if cached is not None:
+        response.headers["Cache-Control"] = "private, max-age=60"
+        return cached
+
     # Get KPIs
     kpi_generator = NumberCardGenerator(db, user_id=current_user.id)
     kpis = await kpi_generator.get_all_kpis(user_id=current_user.id)
@@ -52,11 +74,13 @@ async def get_dashboard(
         for c in charts_data
     ]
 
-    response.headers["Cache-Control"] = "private, max-age=60"
-    return DashboardResponse(
+    result = DashboardResponse(
         number_cards=number_cards,
         charts=charts,
     )
+    _set_cached(cache_key, result)
+    response.headers["Cache-Control"] = "private, max-age=60"
+    return result
 
 
 @router.get("/kpis", response_model=List[NumberCardData])
@@ -66,10 +90,18 @@ async def get_kpis(
     response: Response,
 ):
     """Get KPI number cards only."""
+    cache_key = f"kpis:{current_user.id}"
+    cached = _get_cached(cache_key)
+    if cached is not None:
+        response.headers["Cache-Control"] = "private, max-age=60"
+        return cached
+
     generator = NumberCardGenerator(db, user_id=current_user.id)
     kpis = await generator.get_all_kpis(user_id=current_user.id)
+    result = [NumberCardData(**kpi) for kpi in kpis]
+    _set_cached(cache_key, result)
     response.headers["Cache-Control"] = "private, max-age=60"
-    return [NumberCardData(**kpi) for kpi in kpis]
+    return result
 
 
 @router.get("/charts/pipeline-funnel", response_model=ChartData)
@@ -79,14 +111,22 @@ async def get_pipeline_funnel_chart(
     response: Response,
 ):
     """Get pipeline funnel chart data."""
+    cache_key = f"pipeline-funnel:{current_user.id}"
+    cached = _get_cached(cache_key)
+    if cached is not None:
+        response.headers["Cache-Control"] = "private, max-age=60"
+        return cached
+
     generator = ChartDataGenerator(db, user_id=current_user.id)
     data = await generator.get_pipeline_funnel()
-    response.headers["Cache-Control"] = "private, max-age=60"
-    return ChartData(
+    result = ChartData(
         type=data["type"],
         title=data["title"],
         data=[ChartDataPoint(**d) for d in data["data"]],
     )
+    _set_cached(cache_key, result)
+    response.headers["Cache-Control"] = "private, max-age=60"
+    return result
 
 
 @router.get("/charts/leads-by-status", response_model=ChartData)
@@ -96,14 +136,22 @@ async def get_leads_by_status_chart(
     response: Response,
 ):
     """Get leads by status chart data."""
+    cache_key = f"leads-by-status:{current_user.id}"
+    cached = _get_cached(cache_key)
+    if cached is not None:
+        response.headers["Cache-Control"] = "private, max-age=60"
+        return cached
+
     generator = ChartDataGenerator(db, user_id=current_user.id)
     data = await generator.get_leads_by_status()
-    response.headers["Cache-Control"] = "private, max-age=60"
-    return ChartData(
+    result = ChartData(
         type=data["type"],
         title=data["title"],
         data=[ChartDataPoint(**d) for d in data["data"]],
     )
+    _set_cached(cache_key, result)
+    response.headers["Cache-Control"] = "private, max-age=60"
+    return result
 
 
 @router.get("/charts/leads-by-source", response_model=ChartData)
@@ -113,14 +161,22 @@ async def get_leads_by_source_chart(
     response: Response,
 ):
     """Get leads by source chart data."""
+    cache_key = f"leads-by-source:{current_user.id}"
+    cached = _get_cached(cache_key)
+    if cached is not None:
+        response.headers["Cache-Control"] = "private, max-age=60"
+        return cached
+
     generator = ChartDataGenerator(db, user_id=current_user.id)
     data = await generator.get_leads_by_source()
-    response.headers["Cache-Control"] = "private, max-age=60"
-    return ChartData(
+    result = ChartData(
         type=data["type"],
         title=data["title"],
         data=[ChartDataPoint(**d) for d in data["data"]],
     )
+    _set_cached(cache_key, result)
+    response.headers["Cache-Control"] = "private, max-age=60"
+    return result
 
 
 @router.get("/charts/revenue-trend", response_model=ChartData)
@@ -131,14 +187,22 @@ async def get_revenue_trend_chart(
     months: int = 6,
 ):
     """Get monthly revenue trend chart data."""
+    cache_key = f"revenue-trend:{current_user.id}:{months}"
+    cached = _get_cached(cache_key)
+    if cached is not None:
+        response.headers["Cache-Control"] = "private, max-age=60"
+        return cached
+
     generator = ChartDataGenerator(db, user_id=current_user.id)
     data = await generator.get_revenue_trend(months=months)
-    response.headers["Cache-Control"] = "private, max-age=60"
-    return ChartData(
+    result = ChartData(
         type=data["type"],
         title=data["title"],
         data=[ChartDataPoint(**d) for d in data["data"]],
     )
+    _set_cached(cache_key, result)
+    response.headers["Cache-Control"] = "private, max-age=60"
+    return result
 
 
 @router.get("/charts/activities", response_model=ChartData)
@@ -149,14 +213,22 @@ async def get_activities_chart(
     days: int = 30,
 ):
     """Get activities by type chart data."""
+    cache_key = f"activities:{current_user.id}:{days}"
+    cached = _get_cached(cache_key)
+    if cached is not None:
+        response.headers["Cache-Control"] = "private, max-age=60"
+        return cached
+
     generator = ChartDataGenerator(db, user_id=current_user.id)
     data = await generator.get_activities_by_type(days=days)
-    response.headers["Cache-Control"] = "private, max-age=60"
-    return ChartData(
+    result = ChartData(
         type=data["type"],
         title=data["title"],
         data=[ChartDataPoint(**d) for d in data["data"]],
     )
+    _set_cached(cache_key, result)
+    response.headers["Cache-Control"] = "private, max-age=60"
+    return result
 
 
 @router.get("/charts/new-leads-trend", response_model=ChartData)
@@ -167,14 +239,22 @@ async def get_new_leads_trend_chart(
     weeks: int = 8,
 ):
     """Get new leads trend chart data."""
+    cache_key = f"new-leads-trend:{current_user.id}:{weeks}"
+    cached = _get_cached(cache_key)
+    if cached is not None:
+        response.headers["Cache-Control"] = "private, max-age=60"
+        return cached
+
     generator = ChartDataGenerator(db, user_id=current_user.id)
     data = await generator.get_new_leads_trend(weeks=weeks)
-    response.headers["Cache-Control"] = "private, max-age=60"
-    return ChartData(
+    result = ChartData(
         type=data["type"],
         title=data["title"],
         data=[ChartDataPoint(**d) for d in data["data"]],
     )
+    _set_cached(cache_key, result)
+    response.headers["Cache-Control"] = "private, max-age=60"
+    return result
 
 
 @router.get("/funnel", response_model=SalesFunnelResponse)
@@ -183,13 +263,20 @@ async def get_sales_funnel(
     db: DBSession,
 ):
     """Get sales funnel data with lead counts, conversion rates, and avg time in stage."""
+    cache_key = f"funnel:{current_user.id}"
+    cached = _get_cached(cache_key)
+    if cached is not None:
+        return cached
+
     generator = ChartDataGenerator(db, user_id=current_user.id)
     data = await generator.get_sales_funnel()
-    return SalesFunnelResponse(
+    result = SalesFunnelResponse(
         stages=[FunnelStage(**s) for s in data["stages"]],
         conversions=[FunnelConversion(**c) for c in data["conversions"]],
         avg_days_in_stage=data["avg_days_in_stage"],
     )
+    _set_cached(cache_key, result)
+    return result
 
 
 @router.get("/charts/conversion-rates", response_model=ChartData)
@@ -198,13 +285,20 @@ async def get_conversion_rates_chart(
     db: DBSession,
 ):
     """Get conversion rates chart data."""
+    cache_key = f"conversion-rates:{current_user.id}"
+    cached = _get_cached(cache_key)
+    if cached is not None:
+        return cached
+
     generator = ChartDataGenerator(db, user_id=current_user.id)
     data = await generator.get_conversion_rates()
-    return ChartData(
+    result = ChartData(
         type=data["type"],
         title=data["title"],
         data=[ChartDataPoint(**d) for d in data["data"]],
     )
+    _set_cached(cache_key, result)
+    return result
 
 
 # =========================================================================
@@ -241,6 +335,12 @@ async def get_sales_kpis(
     response: Response,
 ):
     """Get sales pipeline KPIs: quotes sent, proposals sent, payments collected, conversion rate."""
+    cache_key = f"sales-kpis:{current_user.id}"
+    cached = _get_cached(cache_key)
+    if cached is not None:
+        response.headers["Cache-Control"] = "private, max-age=60"
+        return cached
+
     quotes_sent_result = await db.execute(
         select(func.count(Quote.id)).where(
             Quote.owner_id == current_user.id,
@@ -285,14 +385,16 @@ async def get_sales_kpis(
 
     conversion_rate = round((accepted_quotes / total_quotes) * 100, 1) if total_quotes > 0 else 0.0
 
-    response.headers["Cache-Control"] = "private, max-age=60"
-    return SalesKPIResponse(
+    result = SalesKPIResponse(
         quotes_sent=quotes_sent,
         proposals_sent=proposals_sent,
         payments_collected_total=payments_collected_total,
         payments_collected_count=payments_collected_count,
         quote_to_payment_conversion_rate=conversion_rate,
     )
+    _set_cached(cache_key, result)
+    response.headers["Cache-Control"] = "private, max-age=60"
+    return result
 
 
 # =========================================================================
@@ -318,6 +420,11 @@ async def get_converted_revenue(
     target_currency: str = Query("USD", description="Target currency for conversion"),
 ):
     """Get pipeline revenue converted to a target currency."""
+    cache_key = f"revenue-converted:{current_user.id}:{target_currency}"
+    cached = _get_cached(cache_key)
+    if cached is not None:
+        return cached
+
     # Fetch opportunities owned by current user with their pipeline stages
     result = await db.execute(
         select(Opportunity)
@@ -348,7 +455,7 @@ async def get_converted_revenue(
             prob = opp.probability if opp.probability is not None else stage.probability
             weighted_pipeline_value += converted * (prob / 100)
 
-    return {
+    revenue_result = {
         "target_currency": target_currency,
         "total_pipeline_value": round(total_pipeline_value, 2),
         "total_revenue": round(total_revenue, 2),
@@ -356,3 +463,5 @@ async def get_converted_revenue(
         "open_deal_count": open_deal_count,
         "won_deal_count": won_deal_count,
     }
+    _set_cached(cache_key, revenue_result)
+    return revenue_result
