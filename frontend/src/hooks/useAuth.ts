@@ -135,10 +135,11 @@ export function useUpdateProfile() {
 /**
  * Hook to fetch all users (for dropdowns, assignments, etc.)
  */
-export function useUsers(skip = 0, limit = 100) {
+export function useUsers(skip = 0, limit = 100, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: authKeys.users(skip, limit),
     queryFn: () => authApi.listUsers(skip, limit),
     staleTime: 10 * 60 * 1000, // 10 minutes
+    ...options,
   });
 }

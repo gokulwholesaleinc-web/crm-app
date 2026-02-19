@@ -64,10 +64,12 @@ async def get_dashboard(
 async def get_kpis(
     current_user: CurrentUser,
     db: DBSession,
+    response: Response,
 ):
     """Get KPI number cards only."""
     generator = NumberCardGenerator(db, user_id=current_user.id)
     kpis = await generator.get_all_kpis(user_id=current_user.id)
+    response.headers["Cache-Control"] = "private, max-age=60"
     return [NumberCardData(**kpi) for kpi in kpis]
 
 
@@ -237,58 +239,62 @@ class SalesKPIResponse(BaseModel):
 async def get_sales_kpis(
     current_user: CurrentUser,
     db: DBSession,
+    response: Response,
 ):
     """Get sales pipeline KPIs: quotes sent, proposals sent, payments collected, conversion rate."""
-    # Quotes sent (status != draft)
-    quotes_sent_result = await db.execute(
-        select(func.count(Quote.id)).where(
-            Quote.owner_id == current_user.id,
-            Quote.status != "draft",
-        )
+    (
+        quotes_sent_result,
+        proposals_sent_result,
+        payments_result,
+        total_quotes_result,
+        accepted_quotes_result,
+    ) = await asyncio.gather(
+        db.execute(
+            select(func.count(Quote.id)).where(
+                Quote.owner_id == current_user.id,
+                Quote.status != "draft",
+            )
+        ),
+        db.execute(
+            select(func.count(Proposal.id)).where(
+                Proposal.created_by_id == current_user.id,
+                Proposal.status != "draft",
+            )
+        ),
+        db.execute(
+            select(
+                func.count(Payment.id),
+                func.coalesce(func.sum(Payment.amount), 0),
+            ).where(
+                Payment.status == "succeeded",
+            )
+        ),
+        db.execute(
+            select(func.count(Quote.id)).where(
+                Quote.owner_id == current_user.id,
+            )
+        ),
+        db.execute(
+            select(func.count(Quote.id)).where(
+                Quote.owner_id == current_user.id,
+                Quote.status == "accepted",
+            )
+        ),
     )
-    quotes_sent = quotes_sent_result.scalar() or 0
 
-    # Proposals sent (status != draft)
-    proposals_sent_result = await db.execute(
-        select(func.count(Proposal.id)).where(
-            Proposal.created_by_id == current_user.id,
-            Proposal.status != "draft",
-        )
-    )
+    quotes_sent = quotes_sent_result.scalar() or 0
     proposals_sent = proposals_sent_result.scalar() or 0
 
-    # Payments collected (succeeded)
-    payments_result = await db.execute(
-        select(
-            func.count(Payment.id),
-            func.coalesce(func.sum(Payment.amount), 0),
-        ).where(
-            Payment.status == "succeeded",
-        )
-    )
     row = payments_result.one()
     payments_collected_count = row[0] or 0
     payments_collected_total = float(row[1] or 0)
 
-    # Quote-to-payment conversion rate
-    total_quotes_result = await db.execute(
-        select(func.count(Quote.id)).where(
-            Quote.owner_id == current_user.id,
-        )
-    )
     total_quotes = total_quotes_result.scalar() or 0
-
-    # Quotes that led to a payment (accepted quotes)
-    accepted_quotes_result = await db.execute(
-        select(func.count(Quote.id)).where(
-            Quote.owner_id == current_user.id,
-            Quote.status == "accepted",
-        )
-    )
     accepted_quotes = accepted_quotes_result.scalar() or 0
 
     conversion_rate = round((accepted_quotes / total_quotes) * 100, 1) if total_quotes > 0 else 0.0
 
+    response.headers["Cache-Control"] = "private, max-age=60"
     return SalesKPIResponse(
         quotes_sent=quotes_sent,
         proposals_sent=proposals_sent,

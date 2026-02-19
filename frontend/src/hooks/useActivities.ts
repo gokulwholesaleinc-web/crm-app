@@ -3,8 +3,8 @@
  * Uses TanStack Query for data fetching and caching.
  */
 
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { createEntityHooks, createQueryKeys } from './useEntityCRUD';
+import { useMutation, useQueryClient, UseQueryOptions } from '@tanstack/react-query';
+import { createEntityHooks, createQueryKeys, PaginatedResponse } from './useEntityCRUD';
 import { useAuthQuery } from './useAuthQuery';
 import { activitiesApi } from '../api/activities';
 import type {
@@ -43,8 +43,11 @@ const activityEntityHooks = createEntityHooks<
 /**
  * Hook to fetch a paginated list of activities
  */
-export function useActivities(filters?: ActivityFilters) {
-  return activityEntityHooks.useList(filters);
+export function useActivities(
+  filters?: ActivityFilters,
+  options?: Omit<UseQueryOptions<PaginatedResponse<Activity>>, 'queryKey' | 'queryFn'>
+) {
+  return activityEntityHooks.useList(filters, options);
 }
 
 /**
@@ -116,10 +119,14 @@ export function useTimeline(entityType: string, entityId: number, activityTypes?
 /**
  * Hook to fetch user's timeline
  */
-export function useUserTimeline(activityTypes?: string) {
+export function useUserTimeline(
+  activityTypes?: string,
+  options?: { enabled?: boolean }
+) {
   return useAuthQuery({
     queryKey: ['activities', 'user-timeline', activityTypes],
     queryFn: () => activitiesApi.getUserTimeline(50, true, activityTypes),
+    ...options,
   });
 }
 

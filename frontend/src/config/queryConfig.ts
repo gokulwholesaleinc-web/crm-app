@@ -14,8 +14,8 @@ export const CACHE_TIMES = {
   /** Entity detail - needs freshness (30 sec stale, 5 min cache) */
   DETAIL: { staleTime: 30 * 1000, gcTime: 5 * 60 * 1000 },
 
-  /** Dashboard - moderate (1 min stale, 5 min cache) */
-  DASHBOARD: { staleTime: 60 * 1000, gcTime: 5 * 60 * 1000 },
+  /** Dashboard - moderate (5 min stale, 10 min cache) */
+  DASHBOARD: { staleTime: 5 * 60 * 1000, gcTime: 10 * 60 * 1000 },
 
   /** Real-time - always fresh (0 stale) */
   REALTIME: { staleTime: 10 * 1000, gcTime: 60 * 1000 },

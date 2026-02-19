@@ -286,21 +286,22 @@ class ChartDataGenerator:
             })
 
         # Average days in each stage (approximate via created_at to updated_at)
-        avg_days = {}
-        for stage in funnel_stages:
-            stage_filters = [Lead.status == stage]
-            if self.user_id:
-                stage_filters.append(Lead.owner_id == self.user_id)
-            avg_result = await self.db.execute(
-                select(
-                    func.avg(
-                        func.extract("epoch", Lead.updated_at - Lead.created_at) / 86400
-                    ).label("avg_days")
-                )
-                .where(and_(*stage_filters))
+        avg_filters = [Lead.status.in_(funnel_stages)]
+        if self.user_id:
+            avg_filters.append(Lead.owner_id == self.user_id)
+        avg_result = await self.db.execute(
+            select(
+                Lead.status,
+                func.avg(
+                    func.extract("epoch", Lead.updated_at - Lead.created_at) / 86400
+                ).label("avg_days"),
             )
-            row = avg_result.first()
-            avg_days[stage] = round(float(row.avg_days), 1) if row and row.avg_days else None
+            .where(and_(*avg_filters))
+            .group_by(Lead.status)
+        )
+        avg_days = {}
+        for row in avg_result.all():
+            avg_days[row.status] = round(float(row.avg_days), 1) if row.avg_days else None
 
         return {
             "stages": stages,

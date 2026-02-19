@@ -1,6 +1,7 @@
 """Authentication dependencies for FastAPI."""
 
-from typing import Annotated
+import time
+from typing import Annotated, Any
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +11,9 @@ from src.auth.security import decode_token
 from src.auth.service import AuthService
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+
+_user_cache: dict[int, tuple[float, Any]] = {}
+_USER_CACHE_TTL = 60  # seconds
 
 
 async def get_current_user(
@@ -36,11 +40,17 @@ async def get_current_user(
     except (ValueError, TypeError):
         raise credentials_exception
 
+    now = time.monotonic()
+    cached = _user_cache.get(user_id)
+    if cached and (now - cached[0]) < _USER_CACHE_TTL:
+        return cached[1]
+
     service = AuthService(db)
     user = await service.get_user_by_id(user_id)
     if user is None:
         raise credentials_exception
 
+    _user_cache[user_id] = (now, user)
     return user
 
 
