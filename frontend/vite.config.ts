@@ -43,7 +43,6 @@ export default defineConfig({
           axios: ['axios'],
           'date-fns': ['date-fns'],
           dndkit: ['@dnd-kit/core', '@dnd-kit/sortable', '@dnd-kit/utilities'],
-          recharts: ['recharts'],
         },
       },
     },
