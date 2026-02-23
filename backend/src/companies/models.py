@@ -46,6 +46,9 @@ class Company(Base, AuditableMixin):
     description: Mapped[Optional[str]] = mapped_column(Text)
     logo_url: Mapped[Optional[str]] = mapped_column(String(500))
 
+    # Segment
+    segment: Mapped[Optional[str]] = mapped_column(String(100), index=True, nullable=True)
+
     # Status
     status: Mapped[str] = mapped_column(String(20), default="prospect")  # prospect, customer, churned
 

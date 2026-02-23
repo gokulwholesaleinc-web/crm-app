@@ -13,6 +13,7 @@ class AttachmentResponse(BaseModel):
     mime_type: str
     entity_type: str
     entity_id: int
+    category: str | None = None
     uploaded_by: int | None = None
     created_at: datetime
 
