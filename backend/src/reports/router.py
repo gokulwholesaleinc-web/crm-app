@@ -1,12 +1,16 @@
 """Custom Reports API routes."""
 
 import json
+import logging
+import os
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, or_
+from openai import AsyncOpenAI
 import io
 
+from src.config import settings
 from src.core.router_utils import DBSession, CurrentUser
 from src.core.constants import HTTPStatus
 from src.reports.models import SavedReport
@@ -17,8 +21,13 @@ from src.reports.schemas import (
     SavedReportCreate,
     SavedReportUpdate,
     SavedReportResponse,
+    AIReportGenerateRequest,
+    AIReportGenerateResponse,
+    ScheduleUpdateRequest,
 )
-from src.reports.service import ReportExecutor, REPORT_TEMPLATES
+from src.reports.service import ReportExecutor, REPORT_TEMPLATES, ENTITY_MODEL_MAP, NUMERIC_FIELDS
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
@@ -62,6 +71,88 @@ async def list_report_templates(
     return [ReportTemplate(**t) for t in REPORT_TEMPLATES]
 
 
+@router.post("/ai-generate", response_model=AIReportGenerateResponse)
+async def ai_generate_report(
+    request: AIReportGenerateRequest,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Use AI to parse a natural language prompt into a report definition, execute it, and return results."""
+    api_key = settings.OPENAI_API_KEY or os.environ.get("OPENAI_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=400, detail="AI features are not configured. Set OPENAI_API_KEY.")
+
+    client = AsyncOpenAI(api_key=api_key)
+
+    entity_types = list(ENTITY_MODEL_MAP.keys())
+    numeric_fields_info = json.dumps(NUMERIC_FIELDS, indent=2)
+
+    system_prompt = f"""You are a CRM report generator. Parse the user's request into a JSON report definition.
+
+Available entity types: {entity_types}
+Available metrics: count, sum, avg, min, max
+Available date groupings: day, week, month, quarter, year
+Available chart types: bar, line, pie, table
+
+Numeric fields per entity (required for sum/avg/min/max):
+{numeric_fields_info}
+
+Respond ONLY with a JSON object matching this schema:
+{{
+    "entity_type": "<string>",
+    "metric": "<string>",
+    "metric_field": "<string or null>",
+    "group_by": "<string or null>",
+    "date_group": "<string or null>",
+    "filters": null,
+    "chart_type": "<string>"
+}}
+
+Choose the most appropriate entity_type, metric, grouping, and chart_type based on the user's request.
+If the user mentions "revenue" or "money", use opportunities with sum of amount.
+If the user mentions "payments", use payments with sum of amount.
+If the user mentions "contracts", use contracts entity.
+Default to count metric if no aggregation is implied.
+Default to bar chart if no chart preference is stated."""
+
+    try:
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": request.prompt},
+            ],
+            temperature=0,
+            response_format={"type": "json_object"},
+        )
+
+        content = response.choices[0].message.content
+        parsed = json.loads(content)
+
+        definition = ReportDefinition(
+            entity_type=parsed.get("entity_type", "opportunities"),
+            metric=parsed.get("metric", "count"),
+            metric_field=parsed.get("metric_field"),
+            group_by=parsed.get("group_by"),
+            date_group=parsed.get("date_group"),
+            filters=parsed.get("filters"),
+            chart_type=parsed.get("chart_type", "bar"),
+        )
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="AI returned invalid JSON. Please try rephrasing your request.")
+    except Exception as exc:
+        logger.error(f"AI report generation error: {exc}")
+        raise HTTPException(status_code=400, detail=f"Failed to generate report: {str(exc)}")
+
+    executor = ReportExecutor(db, user_id=current_user.id)
+    try:
+        result = await executor.execute(definition)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return AIReportGenerateResponse(definition=definition, result=result)
+
+
 # Saved report CRUD
 @router.get("", response_model=List[SavedReportResponse])
 async def list_saved_reports(
@@ -87,6 +178,7 @@ async def list_saved_reports(
     for r in reports:
         data = SavedReportResponse.model_validate(r).model_dump()
         data["filters"] = json.loads(r.filters) if r.filters and isinstance(r.filters, str) else r.filters
+        data["recipients"] = json.loads(r.recipients) if r.recipients and isinstance(r.recipients, str) else r.recipients
         responses.append(SavedReportResponse(**data))
     return responses
 
@@ -110,6 +202,8 @@ async def create_saved_report(
         chart_type=data.chart_type,
         created_by_id=current_user.id,
         is_public=data.is_public,
+        schedule=data.schedule,
+        recipients=json.dumps(data.recipients) if data.recipients else None,
     )
     db.add(report)
     await db.flush()
@@ -128,6 +222,8 @@ async def create_saved_report(
         "chart_type": report.chart_type,
         "created_by_id": report.created_by_id,
         "is_public": report.is_public,
+        "schedule": report.schedule,
+        "recipients": data.recipients,
         "created_at": report.created_at,
         "updated_at": report.updated_at,
     }
@@ -157,6 +253,7 @@ async def get_saved_report(
 
     resp = SavedReportResponse.model_validate(report).model_dump()
     resp["filters"] = json.loads(report.filters) if report.filters and isinstance(report.filters, str) else report.filters
+    resp["recipients"] = json.loads(report.recipients) if report.recipients and isinstance(report.recipients, str) else report.recipients
     return SavedReportResponse(**resp)
 
 
@@ -197,12 +294,48 @@ async def update_saved_report(
         report.chart_type = data.chart_type
     if data.is_public is not None:
         report.is_public = data.is_public
+    if data.schedule is not None:
+        report.schedule = data.schedule
+    if data.recipients is not None:
+        report.recipients = json.dumps(data.recipients)
 
     await db.flush()
     await db.refresh(report)
 
     resp = SavedReportResponse.model_validate(report).model_dump()
     resp["filters"] = json.loads(report.filters) if report.filters and isinstance(report.filters, str) else report.filters
+    resp["recipients"] = json.loads(report.recipients) if report.recipients and isinstance(report.recipients, str) else report.recipients
+    return SavedReportResponse(**resp)
+
+
+@router.patch("/{report_id}/schedule", response_model=SavedReportResponse)
+async def update_report_schedule(
+    report_id: int,
+    data: ScheduleUpdateRequest,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Set schedule and recipients on a saved report."""
+    result = await db.execute(
+        select(SavedReport).where(
+            SavedReport.id == report_id,
+            SavedReport.created_by_id == current_user.id,
+        )
+    )
+    report = result.scalar_one_or_none()
+    if not report:
+        from src.core.router_utils import raise_not_found
+        raise_not_found("Report", report_id)
+
+    report.schedule = data.schedule
+    report.recipients = json.dumps(data.recipients) if data.recipients else None
+
+    await db.flush()
+    await db.refresh(report)
+
+    resp = SavedReportResponse.model_validate(report).model_dump()
+    resp["filters"] = json.loads(report.filters) if report.filters and isinstance(report.filters, str) else report.filters
+    resp["recipients"] = json.loads(report.recipients) if report.recipients and isinstance(report.recipients, str) else report.recipients
     return SavedReportResponse(**resp)
 
 

@@ -1,519 +1,366 @@
 /**
- * Reports page with CRM analytics and reporting.
+ * Reports page with custom reports, templates, AI generation, and saved reports.
  */
 
 import { useState } from 'react';
-import { Card, CardHeader, CardBody } from '../../components/ui/Card';
+import { Card, CardBody } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Spinner } from '../../components/ui/Spinner';
-import { formatCurrency, formatDate } from '../../utils';
-import { useDashboard, usePipelineFunnelChart, useLeadsBySourceChart, useConversionRatesChart } from '../../hooks/useDashboard';
-import { exportContacts, exportCompanies, exportLeads, downloadBlob, generateExportFilename } from '../../api/importExport';
+import { Modal, ModalFooter } from '../../components/ui/Modal';
+import { ReportChart } from './components/ReportChart';
+import { ReportBuilder } from './components/ReportBuilder';
 import {
+  useReportTemplates,
+  useSavedReports,
+  useExecuteReport,
+  useDeleteSavedReport,
+  useAIGenerateReport,
+} from '../../hooks/useReports';
+import type { ReportDefinition, ReportResult, ReportTemplate, SavedReport } from '../../api/reports';
+import {
+  PlusIcon,
+  SparklesIcon,
+  TrashIcon,
+  PlayIcon,
+  ClockIcon,
   ChartBarIcon,
-  ArrowDownTrayIcon,
-  FunnelIcon,
-  UserGroupIcon,
-  CurrencyDollarIcon,
-  ArrowTrendingUpIcon,
+  DocumentTextIcon,
 } from '@heroicons/react/24/outline';
-import type { ChartDataPoint, NumberCardData } from '../../types';
 
-type ReportType = 'pipeline' | 'leads' | 'conversion' | 'revenue';
-
-interface ReportCardProps {
-  title: string;
-  description: string;
-  icon: React.ReactNode;
-  isActive: boolean;
-  onClick: () => void;
-}
-
-function ReportCard({ title, description, icon, isActive, onClick }: ReportCardProps) {
-  return (
-    <button
-      onClick={onClick}
-      className={`w-full text-left p-4 rounded-lg border-2 transition-colors ${
-        isActive
-          ? 'border-primary-500 bg-primary-50'
-          : 'border-gray-200 hover:border-gray-300 bg-white'
-      }`}
-    >
-      <div className="flex items-start gap-3">
-        <div className={`p-2 rounded-lg ${isActive ? 'bg-primary-100 text-primary-600' : 'bg-gray-100 text-gray-600'}`}>
-          {icon}
-        </div>
-        <div>
-          <h3 className={`font-medium ${isActive ? 'text-primary-700' : 'text-gray-900'}`}>
-            {title}
-          </h3>
-          <p className="text-sm text-gray-500 mt-1">{description}</p>
-        </div>
-      </div>
-    </button>
-  );
-}
-
-type ExportType = 'contacts' | 'companies' | 'leads' | 'opportunities';
+type ViewMode = 'list' | 'builder' | 'viewing';
 
 function ReportsPage() {
-  const [activeReport, setActiveReport] = useState<ReportType>('pipeline');
-  const [exportLoading, setExportLoading] = useState<ExportType | null>(null);
-  const [exportError, setExportError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [aiModalOpen, setAiModalOpen] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [activeResult, setActiveResult] = useState<{ definition: ReportDefinition; result: ReportResult } | null>(null);
+  const [builderInitial, setBuilderInitial] = useState<Partial<ReportDefinition> | undefined>(undefined);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
-  const { data: dashboardData, isLoading: dashboardLoading } = useDashboard();
-  const { data: pipelineData, isLoading: pipelineLoading } = usePipelineFunnelChart();
-  const { data: leadsData, isLoading: leadsLoading } = useLeadsBySourceChart();
-  const { data: conversionData, isLoading: conversionLoading } = useConversionRatesChart();
+  const { data: templates, isLoading: templatesLoading } = useReportTemplates();
+  const { data: savedReports, isLoading: reportsLoading } = useSavedReports();
+  const executeReport = useExecuteReport();
+  const deleteReport = useDeleteSavedReport();
+  const aiGenerate = useAIGenerateReport();
 
-  const isLoading = dashboardLoading || pipelineLoading || leadsLoading || conversionLoading;
-
-  /**
-   * Handle export for different entity types
-   */
-  const handleExport = async (type: ExportType) => {
-    setExportLoading(type);
-    setExportError(null);
-
+  const handleRunTemplate = async (template: ReportTemplate) => {
+    const definition: ReportDefinition = {
+      entity_type: template.entity_type,
+      metric: template.metric,
+      metric_field: template.metric_field ?? null,
+      group_by: template.group_by ?? null,
+      date_group: template.date_group ?? null,
+      filters: template.filters ?? null,
+      chart_type: template.chart_type,
+    };
     try {
-      let blob: Blob;
-
-      switch (type) {
-        case 'contacts':
-          blob = await exportContacts();
-          break;
-        case 'companies':
-          blob = await exportCompanies();
-          break;
-        case 'leads':
-          blob = await exportLeads();
-          break;
-        case 'opportunities':
-          // For opportunities, we export the pipeline data (which includes opportunities)
-          // Currently there's no separate opportunities export, so we'll use leads
-          blob = await exportLeads();
-          break;
-        default:
-          throw new Error(`Unknown export type: ${type}`);
-      }
-
-      const filename = generateExportFilename(type);
-      downloadBlob(blob, filename);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Export failed. Please try again.';
-      setExportError(errorMessage);
-      console.error(`Export ${type} failed:`, error);
-    } finally {
-      setExportLoading(null);
+      const result = await executeReport.mutateAsync(definition);
+      setActiveResult({ definition, result });
+      setViewMode('viewing');
+    } catch {
+      // Error handled by mutation state
     }
   };
 
-  const reports = [
-    {
-      type: 'pipeline' as ReportType,
-      title: 'Pipeline Report',
-      description: 'Opportunities by stage with values',
-      icon: <FunnelIcon className="h-5 w-5" />,
-    },
-    {
-      type: 'leads' as ReportType,
-      title: 'Lead Sources',
-      description: 'Where your leads come from',
-      icon: <UserGroupIcon className="h-5 w-5" />,
-    },
-    {
-      type: 'conversion' as ReportType,
-      title: 'Conversion Rates',
-      description: 'Lead to opportunity conversion',
-      icon: <ArrowTrendingUpIcon className="h-5 w-5" />,
-    },
-    {
-      type: 'revenue' as ReportType,
-      title: 'Revenue Summary',
-      description: 'Total and projected revenue',
-      icon: <CurrencyDollarIcon className="h-5 w-5" />,
-    },
-  ];
+  const handleRunSaved = async (report: SavedReport) => {
+    const definition: ReportDefinition = {
+      entity_type: report.entity_type,
+      metric: report.metric,
+      metric_field: report.metric_field ?? null,
+      group_by: report.group_by ?? null,
+      date_group: report.date_group ?? null,
+      filters: report.filters ?? null,
+      chart_type: report.chart_type,
+    };
+    try {
+      const result = await executeReport.mutateAsync(definition);
+      setActiveResult({ definition, result });
+      setViewMode('viewing');
+    } catch {
+      // Error handled by mutation state
+    }
+  };
 
-  const renderReportContent = () => {
-    if (isLoading) {
-      return (
-        <div className="flex items-center justify-center h-64">
-          <Spinner size="lg" />
+  const handleAIGenerate = async () => {
+    if (!aiPrompt.trim()) return;
+    try {
+      const response = await aiGenerate.mutateAsync(aiPrompt);
+      setActiveResult({ definition: response.definition, result: response.result });
+      setAiModalOpen(false);
+      setAiPrompt('');
+      setViewMode('viewing');
+    } catch {
+      // Error handled by mutation state
+    }
+  };
+
+  const handleOpenBuilder = (initial?: Partial<ReportDefinition>) => {
+    setBuilderInitial(initial);
+    setViewMode('builder');
+  };
+
+  const handleDeleteReport = async () => {
+    if (confirmDeleteId == null) return;
+    await deleteReport.mutateAsync(confirmDeleteId);
+    setConfirmDeleteId(null);
+  };
+
+  if (viewMode === 'builder') {
+    return (
+      <div className="space-y-4 sm:space-y-6">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Create Custom Report</h1>
+          <p className="mt-1 text-xs sm:text-sm text-gray-500">
+            Build a report step by step
+          </p>
         </div>
-      );
-    }
+        <Card>
+          <CardBody className="p-4 sm:p-6">
+            <ReportBuilder
+              onClose={() => setViewMode('list')}
+              onSaved={() => setViewMode('list')}
+              initialDefinition={builderInitial}
+            />
+          </CardBody>
+        </Card>
+      </div>
+    );
+  }
 
-    switch (activeReport) {
-      case 'pipeline':
-        return (
-          <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-4 sm:mb-6">
-              <h3 className="text-base sm:text-lg font-medium text-gray-900">Pipeline by Stage</h3>
-              <Button
-                variant="secondary"
-                size="sm"
-                className="self-start sm:self-auto"
-                onClick={() => handleExport('opportunities')}
-                disabled={exportLoading === 'opportunities'}
-              >
-                {exportLoading === 'opportunities' ? (
-                  <Spinner size="sm" className="mr-2" />
-                ) : (
-                  <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
-                )}
-                {exportLoading === 'opportunities' ? 'Exporting...' : 'Export CSV'}
-              </Button>
-            </div>
-            {/* Table with horizontal scroll on mobile */}
-            <div className="overflow-x-auto -mx-3 sm:mx-0">
-              <table className="min-w-full divide-y divide-gray-200" style={{ minWidth: '500px' }}>
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Stage
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Count
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Value
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      % of Total
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {(pipelineData?.data || []).map((item: ChartDataPoint, idx: number) => {
-                    const totalCount = (pipelineData?.data || []).reduce(
-                      (sum: number, i: ChartDataPoint) => sum + (typeof i.value === 'number' ? i.value : 0),
-                      0
-                    );
-                    const count = typeof item.value === 'number' ? item.value : 0;
-                    const percentage = totalCount > 0 ? ((count / totalCount) * 100).toFixed(1) : '0';
-                    return (
-                      <tr key={idx} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {item.label || `Stage ${idx + 1}`}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">
-                          {count}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">
-                          {formatCurrency(typeof item.value === 'number' ? item.value : 0)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">
-                          {percentage}%
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-                <tfoot className="bg-gray-50">
-                  <tr>
-                    <td className="px-6 py-3 text-sm font-medium text-gray-900">Total</td>
-                    <td className="px-6 py-3 text-sm font-medium text-gray-900 text-right">
-                      {(pipelineData?.data || []).reduce(
-                        (sum: number, i: ChartDataPoint) => sum + (typeof i.value === 'number' ? i.value : 0),
-                        0
-                      )}
-                    </td>
-                    <td className="px-6 py-3 text-sm font-medium text-gray-900 text-right">
-                      {formatCurrency(
-                        (pipelineData?.data || []).reduce(
-                          (sum: number, i: ChartDataPoint) => sum + (typeof i.value === 'number' ? i.value : 0),
-                          0
-                        )
-                      )}
-                    </td>
-                    <td className="px-6 py-3 text-sm font-medium text-gray-900 text-right">
-                      100%
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
+  if (viewMode === 'viewing' && activeResult) {
+    return (
+      <div className="space-y-4 sm:space-y-6">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Report Results</h1>
+            <p className="mt-1 text-xs sm:text-sm text-gray-500">
+              {activeResult.definition.entity_type} - {activeResult.definition.metric}
+              {activeResult.definition.metric_field ? `(${activeResult.definition.metric_field})` : ''}
+              {activeResult.definition.group_by ? ` by ${activeResult.definition.group_by}` : ''}
+              {activeResult.definition.date_group ? ` by ${activeResult.definition.date_group}` : ''}
+            </p>
           </div>
-        );
-
-      case 'leads':
-        return (
-          <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-4 sm:mb-6">
-              <h3 className="text-base sm:text-lg font-medium text-gray-900">Leads by Source</h3>
-              <Button
-                variant="secondary"
-                size="sm"
-                className="self-start sm:self-auto"
-                onClick={() => handleExport('leads')}
-                disabled={exportLoading === 'leads'}
-              >
-                {exportLoading === 'leads' ? (
-                  <Spinner size="sm" className="mr-2" />
-                ) : (
-                  <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
-                )}
-                {exportLoading === 'leads' ? 'Exporting...' : 'Export CSV'}
-              </Button>
-            </div>
-            {/* Table with horizontal scroll on mobile */}
-            <div className="overflow-x-auto -mx-3 sm:mx-0">
-              <table className="min-w-full divide-y divide-gray-200" style={{ minWidth: '400px' }}>
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Source
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Leads
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      % of Total
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {(leadsData?.data || []).map((item: ChartDataPoint, idx: number) => {
-                    const totalCount = (leadsData?.data || []).reduce(
-                      (sum: number, i: ChartDataPoint) => sum + (typeof i.value === 'number' ? i.value : 0),
-                      0
-                    );
-                    const count = typeof item.value === 'number' ? item.value : 0;
-                    const percentage = totalCount > 0 ? ((count / totalCount) * 100).toFixed(1) : '0';
-                    return (
-                      <tr key={idx} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {item.label || `Source ${idx + 1}`}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">
-                          {count}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">
-                          {percentage}%
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        );
-
-      case 'conversion':
-        return (
-          <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-4 sm:mb-6">
-              <h3 className="text-base sm:text-lg font-medium text-gray-900">Conversion Rates</h3>
-              <Button
-                variant="secondary"
-                size="sm"
-                className="self-start sm:self-auto"
-                onClick={() => handleExport('contacts')}
-                disabled={exportLoading === 'contacts'}
-              >
-                {exportLoading === 'contacts' ? (
-                  <Spinner size="sm" className="mr-2" />
-                ) : (
-                  <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
-                )}
-                {exportLoading === 'contacts' ? 'Exporting...' : 'Export CSV'}
-              </Button>
-            </div>
-            {/* Cards - full width on mobile, 3 columns on desktop */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-6">
-              {(conversionData?.data || []).map((item: ChartDataPoint, idx: number) => (
-                <Card key={idx}>
-                  <CardBody className="p-4 sm:p-6">
-                    <div className="text-center">
-                      <p className="text-xs sm:text-sm text-gray-500">{item.label || `Metric ${idx + 1}`}</p>
-                      <p className="text-2xl sm:text-3xl font-bold text-primary-600 mt-2">
-                        {typeof item.value === 'number' ? `${item.value.toFixed(1)}%` : item.value}
-                      </p>
-                    </div>
-                  </CardBody>
-                </Card>
-              ))}
-              {(!conversionData?.data || conversionData.data.length === 0) && (
-                <Card className="col-span-1 sm:col-span-2 md:col-span-3">
-                  <CardBody>
-                    <p className="text-center text-gray-500 text-sm">No conversion data available yet</p>
-                  </CardBody>
-                </Card>
-              )}
-            </div>
-          </div>
-        );
-
-      case 'revenue':
-        const numberCards = dashboardData?.number_cards || [];
-        const totalRevenueRaw = numberCards.find((c: NumberCardData) => c.id === 'total_revenue')?.value;
-        const totalRevenue = typeof totalRevenueRaw === 'number' ? totalRevenueRaw : 0;
-        const openOpportunitiesRaw = numberCards.find((c: NumberCardData) => c.id === 'open_opportunities')?.value;
-        const openOpportunities = typeof openOpportunitiesRaw === 'number' ? openOpportunitiesRaw : 0;
-
-        return (
-          <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-4 sm:mb-6">
-              <h3 className="text-base sm:text-lg font-medium text-gray-900">Revenue Summary</h3>
-              <Button
-                variant="secondary"
-                size="sm"
-                className="self-start sm:self-auto"
-                onClick={() => handleExport('companies')}
-                disabled={exportLoading === 'companies'}
-              >
-                {exportLoading === 'companies' ? (
-                  <Spinner size="sm" className="mr-2" />
-                ) : (
-                  <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
-                )}
-                {exportLoading === 'companies' ? 'Exporting...' : 'Export CSV'}
-              </Button>
-            </div>
-            {/* Revenue cards - full width on mobile */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6">
-              <Card>
-                <CardBody className="p-4 sm:p-6">
-                  <div className="text-center py-2 sm:py-4">
-                    <CurrencyDollarIcon className="h-10 w-10 sm:h-12 sm:w-12 text-green-500 mx-auto mb-2 sm:mb-3" />
-                    <p className="text-xs sm:text-sm text-gray-500">Total Revenue (Won)</p>
-                    <p className="text-2xl sm:text-3xl font-bold text-gray-900 mt-2">
-                      {formatCurrency(totalRevenue)}
-                    </p>
-                  </div>
-                </CardBody>
-              </Card>
-              <Card>
-                <CardBody className="p-4 sm:p-6">
-                  <div className="text-center py-2 sm:py-4">
-                    <FunnelIcon className="h-10 w-10 sm:h-12 sm:w-12 text-primary-500 mx-auto mb-2 sm:mb-3" />
-                    <p className="text-xs sm:text-sm text-gray-500">Open Opportunities</p>
-                    <p className="text-2xl sm:text-3xl font-bold text-gray-900 mt-2">
-                      {openOpportunities}
-                    </p>
-                  </div>
-                </CardBody>
-              </Card>
-            </div>
-            {/* Pipeline chart - full width on mobile */}
-            <Card>
-              <CardHeader title="Pipeline Value by Stage" />
-              <CardBody className="p-3 sm:p-6">
-                <div className="space-y-2 sm:space-y-3">
-                  {(pipelineData?.data || []).map((item: ChartDataPoint, idx: number) => {
-                    const maxValue = Math.max(
-                      ...(pipelineData?.data || []).map((i: ChartDataPoint) => typeof i.value === 'number' ? i.value : 0)
-                    );
-                    const value = typeof item.value === 'number' ? item.value : 0;
-                    const width = maxValue > 0 ? (value / maxValue) * 100 : 0;
-                    return (
-                      <div key={idx} className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
-                        <div className="w-full sm:w-32 text-xs sm:text-sm text-gray-600 truncate">
-                          {item.label || `Stage ${idx + 1}`}
-                        </div>
-                        <div className="flex items-center gap-2 sm:gap-4 flex-1">
-                          <div className="flex-1">
-                            <div className="h-3 sm:h-4 bg-gray-100 rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-primary-500 rounded-full"
-                                style={{ width: `${width}%` }}
-                              />
-                            </div>
-                          </div>
-                          <div className="w-20 sm:w-24 text-xs sm:text-sm text-gray-900 text-right font-medium">
-                            {formatCurrency(value)}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardBody>
-            </Card>
-          </div>
-        );
-
-      default:
-        return null;
-    }
-  };
+          <Button variant="secondary" size="sm" onClick={() => { setViewMode('list'); setActiveResult(null); }}>
+            Back to Reports
+          </Button>
+        </div>
+        <Card>
+          <CardBody className="p-4 sm:p-6">
+            <ReportChart
+              chartType={activeResult.result.chart_type}
+              data={activeResult.result.data}
+              total={activeResult.result.total}
+            />
+            {activeResult.result.total != null && (
+              <div className="mt-4 pt-4 border-t border-gray-200 text-sm font-medium text-gray-700">
+                Total: {activeResult.result.total.toLocaleString()}
+              </div>
+            )}
+          </CardBody>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 sm:space-y-6">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Reports</h1>
           <p className="mt-1 text-xs sm:text-sm text-gray-500">
-            Analyze your CRM data with detailed reports
+            Analyze your CRM data with custom and AI-powered reports
           </p>
         </div>
-        <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-500">
-          <ChartBarIcon className="h-4 w-4 sm:h-5 sm:w-5" />
-          <span>Last updated: {formatDate(new Date().toISOString())}</span>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" size="sm" onClick={() => setAiModalOpen(true)}>
+            <SparklesIcon className="h-4 w-4 mr-1.5" />
+            Generate with AI
+          </Button>
+          <Button size="sm" onClick={() => handleOpenBuilder()}>
+            <PlusIcon className="h-4 w-4 mr-1.5" />
+            Create Custom Report
+          </Button>
         </div>
       </div>
 
-      {/* Export error message */}
-      {exportError && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center justify-between">
-          <span className="text-sm">{exportError}</span>
-          <button
-            onClick={() => setExportError(null)}
-            className="text-red-500 hover:text-red-700 font-medium text-sm"
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-6">
-        {/* Report Selection - horizontal scroll on mobile, vertical on desktop */}
-        <div className="lg:col-span-1">
-          {/* Mobile: horizontal scrollable selector */}
-          <div className="flex lg:hidden gap-2 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-hide">
-            {reports.map((report) => (
-              <button
-                key={report.type}
-                onClick={() => setActiveReport(report.type)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-colors whitespace-nowrap flex-shrink-0 ${
-                  activeReport === report.type
-                    ? 'border-primary-500 bg-primary-50'
-                    : 'border-gray-200 hover:border-gray-300 bg-white'
-                }`}
-              >
-                <div className={`p-1.5 rounded-lg ${activeReport === report.type ? 'bg-primary-100 text-primary-600' : 'bg-gray-100 text-gray-600'}`}>
-                  {report.icon}
-                </div>
-                <span className={`text-sm font-medium ${activeReport === report.type ? 'text-primary-700' : 'text-gray-900'}`}>
-                  {report.title}
-                </span>
-              </button>
-            ))}
+      {/* My Reports Section */}
+      <section>
+        <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          <DocumentTextIcon className="h-5 w-5 text-gray-400" />
+          My Reports
+        </h2>
+        {reportsLoading ? (
+          <div className="flex items-center justify-center h-24">
+            <Spinner size="md" />
           </div>
-          {/* Desktop: vertical cards */}
-          <div className="hidden lg:block space-y-3">
-            {reports.map((report) => (
-              <ReportCard
-                key={report.type}
-                title={report.title}
-                description={report.description}
-                icon={report.icon}
-                isActive={activeReport === report.type}
-                onClick={() => setActiveReport(report.type)}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* Report Content - full width on mobile */}
-        <div className="lg:col-span-3">
+        ) : !savedReports || savedReports.length === 0 ? (
           <Card>
-            <CardBody className="p-3 sm:p-6">{renderReportContent()}</CardBody>
+            <CardBody className="p-6 text-center text-gray-500 text-sm">
+              No saved reports yet. Create one using the builder or AI generation.
+            </CardBody>
           </Card>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {savedReports.map((report) => (
+              <Card key={report.id} hover>
+                <CardBody className="p-4">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-sm font-medium text-gray-900 truncate">{report.name}</h3>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {report.entity_type} - {report.metric}
+                        {report.metric_field ? `(${report.metric_field})` : ''}
+                      </p>
+                    </div>
+                    {report.schedule && (
+                      <span className="flex-shrink-0 ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                        <ClockIcon className="h-3 w-3" />
+                        {report.schedule}
+                      </span>
+                    )}
+                  </div>
+                  {report.description && (
+                    <p className="text-xs text-gray-400 mb-3 line-clamp-2">{report.description}</p>
+                  )}
+                  <div className="flex items-center gap-2 mt-3">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => handleRunSaved(report)}
+                      disabled={executeReport.isPending}
+                    >
+                      <PlayIcon className="h-3.5 w-3.5 mr-1" />
+                      Run
+                    </Button>
+                    <button
+                      onClick={() => setConfirmDeleteId(report.id)}
+                      className="p-1.5 text-gray-400 hover:text-red-500 rounded-md hover:bg-red-50 transition-colors"
+                      aria-label={`Delete report ${report.name}`}
+                    >
+                      <TrashIcon className="h-4 w-4" />
+                    </button>
+                  </div>
+                </CardBody>
+              </Card>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Templates Section */}
+      <section>
+        <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          <ChartBarIcon className="h-5 w-5 text-gray-400" />
+          Report Templates
+        </h2>
+        {templatesLoading ? (
+          <div className="flex items-center justify-center h-24">
+            <Spinner size="md" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {(templates || []).map((template) => (
+              <Card key={template.id} hover>
+                <CardBody className="p-4">
+                  <h3 className="text-sm font-medium text-gray-900">{template.name}</h3>
+                  <p className="text-xs text-gray-500 mt-1">{template.description}</p>
+                  <div className="flex items-center gap-2 mt-3">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => handleRunTemplate(template)}
+                      disabled={executeReport.isPending}
+                    >
+                      <PlayIcon className="h-3.5 w-3.5 mr-1" />
+                      Run
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => handleOpenBuilder({
+                        entity_type: template.entity_type,
+                        metric: template.metric,
+                        metric_field: template.metric_field,
+                        group_by: template.group_by,
+                        date_group: template.date_group,
+                        chart_type: template.chart_type,
+                      })}
+                    >
+                      Customize
+                    </Button>
+                  </div>
+                </CardBody>
+              </Card>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* AI Generate Modal */}
+      <Modal
+        isOpen={aiModalOpen}
+        onClose={() => { setAiModalOpen(false); setAiPrompt(''); }}
+        title="Generate Report with AI"
+        description="Describe the report you want in plain language"
+        size="lg"
+      >
+        <div>
+          <textarea
+            aria-label="Report description"
+            value={aiPrompt}
+            onChange={(e) => setAiPrompt(e.target.value)}
+            placeholder="e.g., Show me monthly revenue for this year, or Count of leads by status..."
+            rows={4}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:border-primary-500 resize-none"
+            spellCheck={false}
+          />
+          {aiGenerate.isError && (
+            <p className="mt-2 text-sm text-red-600">
+              Failed to generate report. Please try rephrasing your request.
+            </p>
+          )}
         </div>
-      </div>
+        <ModalFooter>
+          <Button variant="secondary" size="sm" onClick={() => { setAiModalOpen(false); setAiPrompt(''); }}>
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleAIGenerate}
+            disabled={!aiPrompt.trim() || aiGenerate.isPending}
+          >
+            {aiGenerate.isPending ? <Spinner size="sm" className="mr-2" /> : <SparklesIcon className="h-4 w-4 mr-1.5" />}
+            Generate
+          </Button>
+        </ModalFooter>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={confirmDeleteId != null}
+        onClose={() => setConfirmDeleteId(null)}
+        title="Delete Report"
+        size="sm"
+      >
+        <p className="text-sm text-gray-600">
+          Are you sure you want to delete this report? This action cannot be undone.
+        </p>
+        <ModalFooter>
+          <Button variant="secondary" size="sm" onClick={() => setConfirmDeleteId(null)}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={handleDeleteReport}
+            disabled={deleteReport.isPending}
+          >
+            {deleteReport.isPending ? <Spinner size="sm" className="mr-2" /> : null}
+            Delete
+          </Button>
+        </ModalFooter>
+      </Modal>
     </div>
   );
 }

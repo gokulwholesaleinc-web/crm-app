@@ -12,6 +12,8 @@ from src.opportunities.models import Opportunity, PipelineStage
 from src.activities.models import Activity
 from src.campaigns.models import Campaign
 from src.companies.models import Company
+from src.payments.models import Payment
+from src.contracts.models import Contract
 from src.core.filtering import apply_filters_to_query
 from src.reports.schemas import ReportDataPoint, ReportResult, ReportDefinition
 
@@ -23,6 +25,8 @@ ENTITY_MODEL_MAP: Dict[str, Type] = {
     "activities": Activity,
     "campaigns": Campaign,
     "companies": Company,
+    "payments": Payment,
+    "contracts": Contract,
 }
 
 # Numeric fields per entity type (for sum/avg/min/max metrics)
@@ -34,6 +38,8 @@ NUMERIC_FIELDS: Dict[str, List[str]] = {
     "campaigns": ["budget_amount", "actual_cost", "expected_revenue", "actual_revenue",
                    "num_sent", "num_responses", "num_converted"],
     "companies": ["annual_revenue", "employee_count"],
+    "payments": ["amount"],
+    "contracts": ["value"],
 }
 
 
@@ -277,5 +283,44 @@ REPORT_TEMPLATES = [
         "metric": "count",
         "date_group": "month",
         "chart_type": "line",
+    },
+    {
+        "id": "payment_summary_by_month",
+        "name": "Payment Summary by Month",
+        "description": "Total payment amounts grouped by month",
+        "entity_type": "payments",
+        "metric": "sum",
+        "metric_field": "amount",
+        "date_group": "month",
+        "chart_type": "bar",
+    },
+    {
+        "id": "contracts_by_status",
+        "name": "Contracts by Status",
+        "description": "Contract count grouped by status",
+        "entity_type": "contracts",
+        "metric": "count",
+        "group_by": "status",
+        "chart_type": "pie",
+    },
+    {
+        "id": "revenue_by_source",
+        "name": "Revenue by Sales Source",
+        "description": "Total opportunity revenue grouped by source",
+        "entity_type": "opportunities",
+        "metric": "sum",
+        "metric_field": "amount",
+        "group_by": "source",
+        "chart_type": "bar",
+    },
+    {
+        "id": "pipeline_value_by_owner",
+        "name": "Pipeline Value by Owner",
+        "description": "Total opportunity value grouped by owner",
+        "entity_type": "opportunities",
+        "metric": "sum",
+        "metric_field": "amount",
+        "group_by": "owner_id",
+        "chart_type": "bar",
     },
 ]

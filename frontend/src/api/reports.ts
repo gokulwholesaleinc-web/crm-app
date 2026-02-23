@@ -42,6 +42,8 @@ export interface SavedReport {
   chart_type: string;
   created_by_id: number;
   is_public: boolean;
+  schedule?: string | null;
+  recipients?: string[] | null;
   created_at: string;
   updated_at: string;
 }
@@ -57,6 +59,8 @@ export interface SavedReportCreate {
   metric_field?: string | null;
   chart_type?: string;
   is_public?: boolean;
+  schedule?: string | null;
+  recipients?: string[] | null;
 }
 
 export interface ReportTemplate {
@@ -70,6 +74,16 @@ export interface ReportTemplate {
   date_group?: string | null;
   chart_type: string;
   filters?: Record<string, unknown> | null;
+}
+
+export interface AIReportGenerateResponse {
+  definition: ReportDefinition;
+  result: ReportResult;
+}
+
+export interface ScheduleUpdateRequest {
+  schedule?: string | null;
+  recipients?: string[] | null;
 }
 
 // API functions
@@ -116,6 +130,16 @@ export const deleteSavedReport = async (id: number): Promise<void> => {
   await apiClient.delete(`/api/reports/${id}`);
 };
 
+export const aiGenerateReport = async (prompt: string): Promise<AIReportGenerateResponse> => {
+  const { data } = await apiClient.post('/api/reports/ai-generate', { prompt });
+  return data;
+};
+
+export const updateReportSchedule = async (id: number, schedule: ScheduleUpdateRequest): Promise<SavedReport> => {
+  const { data } = await apiClient.patch(`/api/reports/${id}/schedule`, schedule);
+  return data;
+};
+
 export const reportsApi = {
   executeReport,
   exportReportCsv,
@@ -125,4 +149,6 @@ export const reportsApi = {
   getSavedReport,
   updateSavedReport,
   deleteSavedReport,
+  aiGenerateReport,
+  updateReportSchedule,
 };
