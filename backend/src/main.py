@@ -47,6 +47,7 @@ from src.core.sharing_router import router as sharing_router
 from src.quotes.router import router as quotes_router
 from src.payments.router import router as payments_router
 from src.proposals.router import router as proposals_router
+from src.contracts.router import router as contracts_router
 from src.admin.router import router as admin_router  # noqa: F401
 
 
@@ -82,6 +83,7 @@ async def _init_database():
         from src.quotes.models import Quote, QuoteLineItem, QuoteTemplate, ProductBundle, ProductBundleItem
         from src.payments.models import StripeCustomer, Product, Price, Payment, Subscription
         from src.proposals.models import Proposal, ProposalTemplate, ProposalView
+        from src.contracts.models import Contract
 
         from src.database import Base
         async with engine.begin() as conn:
@@ -181,6 +183,7 @@ app.include_router(sharing_router)
 app.include_router(quotes_router)
 app.include_router(payments_router)
 app.include_router(proposals_router)
+app.include_router(contracts_router)
 app.include_router(admin_router)
 
 
@@ -221,49 +224,50 @@ async def health_check():
     return {"status": "healthy"}
 
 
-@app.get("/api/debug/data-scope-check")
-async def debug_data_scope_check(current_user: CurrentUser):
-    """Check data ownership for the currently logged-in user."""
-    from sqlalchemy import select, func
-    from src.database import async_session_maker
-    from src.auth.models import User
-    from src.contacts.models import Contact
-    from src.companies.models import Company
-    from src.leads.models import Lead
-    from src.opportunities.models import Opportunity
-    from src.activities.models import Activity
-    from src.campaigns.models import Campaign
+if settings.DEBUG:
+    @app.get("/api/debug/data-scope-check")
+    async def debug_data_scope_check(current_user: CurrentUser):
+        """Check data ownership for the currently logged-in user."""
+        from sqlalchemy import select, func
+        from src.database import async_session_maker
+        from src.auth.models import User
+        from src.contacts.models import Contact
+        from src.companies.models import Company
+        from src.leads.models import Lead
+        from src.opportunities.models import Opportunity
+        from src.activities.models import Activity
+        from src.campaigns.models import Campaign
 
-    async with async_session_maker() as session:
-        # Get all users
-        users_result = await session.execute(
-            select(User.id, User.email, User.is_superuser)
-        )
-        users = [{"id": r.id, "email": r.email, "is_superuser": r.is_superuser} for r in users_result.all()]
-
-        # Count records per owner for each entity
-        entities = {
-            "contacts": Contact,
-            "companies": Company,
-            "leads": Lead,
-            "opportunities": Opportunity,
-            "activities": Activity,
-            "campaigns": Campaign,
-        }
-        ownership = {}
-        for name, model in entities.items():
-            result = await session.execute(
-                select(model.owner_id, func.count(model.id))
-                .group_by(model.owner_id)
+        async with async_session_maker() as session:
+            # Get all users
+            users_result = await session.execute(
+                select(User.id, User.email, User.is_superuser)
             )
-            ownership[name] = {str(r[0]): r[1] for r in result.all()}
+            users = [{"id": r.id, "email": r.email, "is_superuser": r.is_superuser} for r in users_result.all()]
 
-        return {
-            "current_user_id": current_user.id,
-            "current_user_email": current_user.email,
-            "users": users,
-            "records_by_owner": ownership,
-        }
+            # Count records per owner for each entity
+            entities = {
+                "contacts": Contact,
+                "companies": Company,
+                "leads": Lead,
+                "opportunities": Opportunity,
+                "activities": Activity,
+                "campaigns": Campaign,
+            }
+            ownership = {}
+            for name, model in entities.items():
+                result = await session.execute(
+                    select(model.owner_id, func.count(model.id))
+                    .group_by(model.owner_id)
+                )
+                ownership[name] = {str(r[0]): r[1] for r in result.all()}
+
+            return {
+                "current_user_id": current_user.id,
+                "current_user_email": current_user.email,
+                "users": users,
+                "records_by_owner": ownership,
+            }
 
 
 @app.post("/api/admin/reseed-demo-data")
