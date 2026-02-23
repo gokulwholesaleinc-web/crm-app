@@ -256,9 +256,9 @@ class TestDemoAccount:
 
     @pytest.mark.asyncio
     async def test_pipeline_stages_created(self, db_session: AsyncSession):
-        """Seed should create 6 pipeline stages."""
+        """Seed should create 14 pipeline stages (6 opportunity + 8 lead)."""
         count = (await db_session.execute(select(func.count(PipelineStage.id)))).scalar()
-        assert count == 6
+        assert count == 14
 
     @pytest.mark.asyncio
     async def test_lead_sources_created(self, db_session: AsyncSession):

@@ -61,7 +61,10 @@ class ChartDataGenerator:
                 Opportunity,
                 and_(*join_conditions),
             )
-            .where(PipelineStage.is_active == True)
+            .where(
+                PipelineStage.is_active == True,
+                PipelineStage.pipeline_type.in_(["opportunity", None]),
+            )
             .group_by(PipelineStage.id)
             .order_by(PipelineStage.order)
         )

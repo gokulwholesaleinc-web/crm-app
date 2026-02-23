@@ -76,8 +76,8 @@ function OpportunityDetailPage() {
         probability: data.probability,
         expected_close_date: data.expectedCloseDate || undefined,
         pipeline_stage_id: stage?.id,
-        contact_id: data.contactId ?? undefined,
-        company_id: data.companyId ?? undefined,
+        contact_id: data.contactId ? parseInt(data.contactId, 10) : undefined,
+        company_id: data.companyId ? parseInt(data.companyId, 10) : undefined,
         description: data.description,
       };
       await updateOpportunityMutation.mutateAsync({
@@ -100,8 +100,8 @@ function OpportunityDetailPage() {
         'qualification',
       probability: opportunity.probability ?? 0,
       expectedCloseDate: opportunity.expected_close_date ?? '',
-      contactId: opportunity.contact_id ?? null,
-      companyId: opportunity.company_id ?? null,
+      contactId: opportunity.contact_id != null ? String(opportunity.contact_id) : undefined,
+      companyId: opportunity.company_id != null ? String(opportunity.company_id) : undefined,
       description: opportunity.description ?? '',
     };
   };
@@ -558,7 +558,7 @@ function OpportunityDetailPage() {
                       proposal.status === 'rejected' ? 'bg-red-100 text-red-800' :
                       'bg-gray-100 text-gray-800'
                     )}>
-                      {proposal.status.charAt(0).toUpperCase() + proposal.status.slice(1)}
+                      {(proposal.status ?? 'draft').charAt(0).toUpperCase() + (proposal.status ?? 'draft').slice(1)}
                     </span>
                   </li>
                 ))}

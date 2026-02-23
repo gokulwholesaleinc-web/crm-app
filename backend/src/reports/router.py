@@ -29,6 +29,33 @@ from src.reports.service import ReportExecutor, REPORT_TEMPLATES, ENTITY_MODEL_M
 
 logger = logging.getLogger(__name__)
 
+
+def _report_to_response_dict(report: SavedReport) -> dict:
+    """Convert a SavedReport model to a dict suitable for SavedReportResponse.
+
+    Handles JSON string fields (filters, recipients) that need to be
+    deserialized before Pydantic validation.
+    """
+    resp = {
+        "id": report.id,
+        "name": report.name,
+        "description": report.description,
+        "entity_type": report.entity_type,
+        "filters": json.loads(report.filters) if report.filters and isinstance(report.filters, str) else report.filters,
+        "group_by": report.group_by,
+        "date_group": report.date_group,
+        "metric": report.metric,
+        "metric_field": report.metric_field,
+        "chart_type": report.chart_type,
+        "created_by_id": report.created_by_id,
+        "is_public": report.is_public,
+        "schedule": report.schedule,
+        "recipients": json.loads(report.recipients) if report.recipients and isinstance(report.recipients, str) else report.recipients,
+        "created_at": report.created_at,
+        "updated_at": report.updated_at,
+    }
+    return resp
+
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
 
@@ -251,9 +278,7 @@ async def get_saved_report(
         from src.core.router_utils import raise_not_found
         raise_not_found("Report", report_id)
 
-    resp = SavedReportResponse.model_validate(report).model_dump()
-    resp["filters"] = json.loads(report.filters) if report.filters and isinstance(report.filters, str) else report.filters
-    resp["recipients"] = json.loads(report.recipients) if report.recipients and isinstance(report.recipients, str) else report.recipients
+    resp = _report_to_response_dict(report)
     return SavedReportResponse(**resp)
 
 
@@ -302,9 +327,7 @@ async def update_saved_report(
     await db.flush()
     await db.refresh(report)
 
-    resp = SavedReportResponse.model_validate(report).model_dump()
-    resp["filters"] = json.loads(report.filters) if report.filters and isinstance(report.filters, str) else report.filters
-    resp["recipients"] = json.loads(report.recipients) if report.recipients and isinstance(report.recipients, str) else report.recipients
+    resp = _report_to_response_dict(report)
     return SavedReportResponse(**resp)
 
 
@@ -333,9 +356,7 @@ async def update_report_schedule(
     await db.flush()
     await db.refresh(report)
 
-    resp = SavedReportResponse.model_validate(report).model_dump()
-    resp["filters"] = json.loads(report.filters) if report.filters and isinstance(report.filters, str) else report.filters
-    resp["recipients"] = json.loads(report.recipients) if report.recipients and isinstance(report.recipients, str) else report.recipients
+    resp = _report_to_response_dict(report)
     return SavedReportResponse(**resp)
 
 

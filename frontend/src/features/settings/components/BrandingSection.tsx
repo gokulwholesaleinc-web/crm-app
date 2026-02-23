@@ -77,11 +77,7 @@ export function BrandingSection() {
   const updateBranding = useMutation({
     mutationFn: async (data: Partial<BrandingFormData>) => {
       // We need the tenant ID. Fetch tenant details to get it.
-      const tenantResp = await apiClient.get(`/api/tenants/config/${tenantSlug}`);
-      // Use the slug to find the actual tenant - we need to call the settings
-      // update via the config slug first to discover the tenant_id
-      // Actually, we need to hit the settings endpoint with the tenant ID
-      // Let's get the tenant by slug first
+      // Fetch tenant list to find the current tenant by slug
       const tenantListResp = await apiClient.get('/api/tenants', {
         params: { active_only: true },
       });

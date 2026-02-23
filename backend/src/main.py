@@ -18,7 +18,7 @@ from src.core.router_utils import CurrentUser
 from src.core.rate_limit import limiter
 from src.whitelabel.middleware import TenantMiddleware
 
-# Import routers (AI router deferred to avoid loading OpenAI SDK at startup)
+# Import routers
 from src.auth.router import router as auth_router
 from src.contacts.router import router as contacts_router
 from src.companies.router import router as companies_router
@@ -49,6 +49,7 @@ from src.payments.router import router as payments_router
 from src.proposals.router import router as proposals_router
 from src.contracts.router import router as contracts_router
 from src.admin.router import router as admin_router  # noqa: F401
+from src.ai.router import router as ai_router
 
 
 async def _init_database():
@@ -119,10 +120,6 @@ async def lifespan(app: FastAPI):
     print("Starting up CRM application...")
     await _init_database()
 
-    # Defer AI router import to avoid loading OpenAI SDK at module level
-    from src.ai.router import router as ai_router
-    app.include_router(ai_router)
-
     yield
 
     print("Shutting down CRM application...")
@@ -162,7 +159,7 @@ app.include_router(opportunities_router)
 app.include_router(activities_router)
 app.include_router(campaigns_router)
 app.include_router(dashboard_router)
-# ai_router included in lifespan() to defer OpenAI SDK import
+app.include_router(ai_router)
 app.include_router(whitelabel_router)
 app.include_router(import_export_router)
 app.include_router(notes_router)
@@ -330,6 +327,9 @@ if FRONTEND_DIST.exists():
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
         """Serve SPA for all non-API routes."""
+        # Never intercept API paths - let them 404 naturally
+        if full_path.startswith("api/"):
+            return JSONResponse(status_code=404, content={"detail": "Not Found"})
         file_path = FRONTEND_DIST / full_path
         if file_path.exists() and file_path.is_file():
             response = FileResponse(file_path)

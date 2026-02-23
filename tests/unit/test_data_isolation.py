@@ -533,6 +533,10 @@ class TestSharedRecordAccess:
         await db_session.delete(share)
         await db_session.commit()
 
+        # Invalidate scope cache so the revocation takes effect immediately
+        from src.core.data_scope import invalidate_scope_cache
+        invalidate_scope_cache(sales_rep_b.id)
+
         # Access should be denied
         response = await client.get(
             f"/api/leads/{rep_a_lead.id}", headers=_token(sales_rep_b),
