@@ -41,7 +41,7 @@ export const FormSelect = ({
     <div className="w-full">
       <label
         htmlFor={selectId}
-        className="block text-sm font-medium text-gray-700 mb-1.5 sm:mb-1"
+        className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-1"
       >
         {label}
         {required && <span className="text-red-500 ml-0.5">*</span>}
@@ -55,10 +55,10 @@ export const FormSelect = ({
           'block w-full rounded-md shadow-sm text-base sm:text-sm',
           'py-2.5 sm:py-2 px-3', // Better touch targets on mobile
           'focus-visible:outline-none focus:ring-2 sm:focus:ring-1',
-          'disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed',
+          'disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed dark:disabled:bg-gray-800 dark:disabled:text-gray-500',
           hasError
-            ? 'border-red-300 text-red-900 focus:border-red-500 focus:ring-red-500'
-            : 'border-gray-300 text-gray-900 focus:border-primary-500 focus:ring-primary-500',
+            ? 'border-red-300 dark:border-red-600 text-red-900 dark:text-red-300 focus:border-red-500 focus:ring-red-500'
+            : 'border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 focus:border-primary-500 focus:ring-primary-500',
           className
         )}
         aria-invalid={hasError}
@@ -93,7 +93,7 @@ export const FormSelect = ({
         </p>
       )}
       {!error && helperText && (
-        <p id={`${selectId}-helper`} className="mt-1.5 sm:mt-1 text-sm text-gray-500">
+        <p id={`${selectId}-helper`} className="mt-1.5 sm:mt-1 text-sm text-gray-500 dark:text-gray-400">
           {helperText}
         </p>
       )}
