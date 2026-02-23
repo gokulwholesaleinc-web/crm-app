@@ -1,4 +1,4 @@
-import { ButtonHTMLAttributes, forwardRef } from 'react';
+import { ButtonHTMLAttributes } from 'react';
 import clsx from 'clsx';
 import { Spinner } from './Spinner';
 
@@ -12,6 +12,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
   fullWidth?: boolean;
+  ref?: React.Ref<HTMLButtonElement>;
 }
 
 const variantStyles: Record<ButtonVariant, string> = {
@@ -37,64 +38,58 @@ const iconSizeStyles: Record<ButtonSize, string> = {
   lg: 'h-5 w-5',
 };
 
-export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  (
-    {
-      type = 'button',
-      variant = 'primary',
-      size = 'md',
-      isLoading = false,
-      leftIcon,
-      rightIcon,
-      fullWidth = false,
-      disabled,
-      className,
-      children,
-      ...props
-    },
-    ref
-  ) => {
-    const isDisabled = disabled || isLoading;
+export const Button = ({
+  type = 'button',
+  variant = 'primary',
+  size = 'md',
+  isLoading = false,
+  leftIcon,
+  rightIcon,
+  fullWidth = false,
+  disabled,
+  className,
+  children,
+  ref,
+  ...props
+}: ButtonProps) => {
+  const isDisabled = disabled || isLoading;
 
-    return (
-      <button
-        ref={ref}
-        type={type}
-        disabled={isDisabled}
-        className={clsx(
-          'inline-flex items-center justify-center font-medium rounded-lg transition-colors duration-200',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900',
-          'disabled:cursor-not-allowed',
-          variantStyles[variant],
-          sizeStyles[size],
-          fullWidth && 'w-full',
-          className
-        )}
-        {...props}
-      >
-        {isLoading ? (
-          <>
-            <Spinner size="sm" className="mr-2" />
-            <span>Loading...</span>
-          </>
-        ) : (
-          <>
-            {leftIcon && (
-              <span className={clsx('mr-2', iconSizeStyles[size])}>
-                {leftIcon}
-              </span>
-            )}
-            {children}
-            {rightIcon && (
-              <span className={clsx('ml-2', iconSizeStyles[size])}>
-                {rightIcon}
-              </span>
-            )}
-          </>
-        )}
-      </button>
-    );
-  }
-);
-
-Button.displayName = 'Button';
+  return (
+    <button
+      ref={ref}
+      type={type}
+      disabled={isDisabled}
+      className={clsx(
+        'inline-flex items-center justify-center font-medium rounded-lg transition-colors duration-200',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900',
+        'disabled:cursor-not-allowed',
+        variantStyles[variant],
+        sizeStyles[size],
+        fullWidth && 'w-full',
+        className
+      )}
+      {...props}
+    >
+      {isLoading ? (
+        <>
+          <Spinner size="sm" className="mr-2" />
+          <span>Loading...</span>
+        </>
+      ) : (
+        <>
+          {leftIcon && (
+            <span className={clsx('mr-2', iconSizeStyles[size])}>
+              {leftIcon}
+            </span>
+          )}
+          {children}
+          {rightIcon && (
+            <span className={clsx('ml-2', iconSizeStyles[size])}>
+              {rightIcon}
+            </span>
+          )}
+        </>
+      )}
+    </button>
+  );
+};

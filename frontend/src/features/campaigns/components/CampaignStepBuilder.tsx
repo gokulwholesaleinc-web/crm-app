@@ -32,7 +32,7 @@ export function CampaignStepBuilder({
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | ''>('');
   const [delayDays, setDelayDays] = useState<number>(0);
 
-  const sortedSteps = [...steps].sort((a, b) => a.step_order - b.step_order);
+  const sortedSteps = steps.toSorted((a, b) => a.step_order - b.step_order);
 
   const handleAddStep = async () => {
     if (!selectedTemplateId) return;

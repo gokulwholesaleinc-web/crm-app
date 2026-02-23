@@ -68,7 +68,7 @@ function CalendarView() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedActivity, setSelectedActivity] = useState<CalendarActivity | null>(null);
 
-  const today = useMemo(() => formatDateKey(new Date()), []);
+  const today = formatDateKey(new Date());
 
   // Calculate date range based on view
   const dateRange = useMemo(() => {

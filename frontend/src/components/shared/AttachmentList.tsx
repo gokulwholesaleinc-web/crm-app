@@ -174,6 +174,7 @@ export function AttachmentList({ entityType, entityId }: AttachmentListProps) {
       <div
         role="button"
         tabIndex={0}
+        aria-label="Upload area. Click or drag and drop files here"
         className={`bg-white shadow rounded-lg p-6 border-2 border-dashed transition-colors cursor-pointer ${
           isDragOver
             ? 'border-primary-400 bg-primary-50'

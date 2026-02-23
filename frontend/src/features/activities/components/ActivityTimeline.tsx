@@ -75,11 +75,11 @@ function groupByDate(items: TimelineItem[]): GroupedActivities[] {
     .map(([date, groupItems]) => ({
       date,
       dateLabel: formatDateHeader(date),
-      items: [...groupItems].sort(
+      items: groupItems.toSorted(
         (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       ),
     }))
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    .toSorted((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 }
 
 function TimelineEntry({

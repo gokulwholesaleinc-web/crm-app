@@ -23,9 +23,11 @@ interface BundleFormProps {
 }
 
 function BundleForm({ onSubmit, onCancel, isLoading, initialData }: BundleFormProps) {
-  const [name, setName] = useState(initialData?.name ?? '');
-  const [description, setDescription] = useState(initialData?.description ?? '');
-  const [isActive, setIsActive] = useState(initialData?.is_active ?? true);
+  const [formData, setFormData] = useState({
+    name: initialData?.name ?? '',
+    description: initialData?.description ?? '',
+    isActive: initialData?.is_active ?? true,
+  });
   const [items, setItems] = useState<ProductBundleItemCreate[]>(
     initialData?.items?.map((item) => ({
       description: item.description,
@@ -34,6 +36,10 @@ function BundleForm({ onSubmit, onCancel, isLoading, initialData }: BundleFormPr
       sort_order: item.sort_order,
     })) ?? [{ description: '', quantity: 1, unit_price: 0, sort_order: 0 }]
   );
+
+  const updateField = <K extends keyof typeof formData>(field: K, value: typeof formData[K]) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
 
   const addItem = () => {
     setItems((curr) => [...curr, { description: '', quantity: 1, unit_price: 0, sort_order: curr.length }]);
@@ -52,9 +58,9 @@ function BundleForm({ onSubmit, onCancel, isLoading, initialData }: BundleFormPr
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSubmit({
-      name,
-      description: description || undefined,
-      is_active: isActive,
+      name: formData.name,
+      description: formData.description || undefined,
+      is_active: formData.isActive,
       items: items.filter((item) => item.description.trim() !== ''),
     });
   };
@@ -69,8 +75,8 @@ function BundleForm({ onSubmit, onCancel, isLoading, initialData }: BundleFormPr
           type="text"
           id="bundle-name"
           required
-          value={name}
-          onChange={(e) => setName(e.target.value)}
+          value={formData.name}
+          onChange={(e) => updateField('name', e.target.value)}
           className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
           placeholder="Bundle name..."
         />
@@ -82,8 +88,8 @@ function BundleForm({ onSubmit, onCancel, isLoading, initialData }: BundleFormPr
         <input
           type="text"
           id="bundle-desc"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
+          value={formData.description}
+          onChange={(e) => updateField('description', e.target.value)}
           className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
           placeholder="Optional description..."
         />
@@ -92,8 +98,8 @@ function BundleForm({ onSubmit, onCancel, isLoading, initialData }: BundleFormPr
         <input
           type="checkbox"
           id="bundle-active"
-          checked={isActive}
-          onChange={(e) => setIsActive(e.target.checked)}
+          checked={formData.isActive}
+          onChange={(e) => updateField('isActive', e.target.checked)}
           className="h-4 w-4 rounded border-gray-300 text-primary-600 focus-visible:ring-primary-500"
         />
         <label htmlFor="bundle-active" className="text-sm text-gray-700 dark:text-gray-300">Active</label>
@@ -167,7 +173,7 @@ function BundleForm({ onSubmit, onCancel, isLoading, initialData }: BundleFormPr
 
       <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
         <Button type="button" variant="secondary" onClick={onCancel}>Cancel</Button>
-        <Button type="submit" disabled={isLoading || !name.trim()}>
+        <Button type="submit" disabled={isLoading || !formData.name.trim()}>
           {isLoading ? 'Saving...' : initialData ? 'Update Bundle' : 'Create Bundle'}
         </Button>
       </div>

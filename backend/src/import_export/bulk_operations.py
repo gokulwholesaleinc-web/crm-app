@@ -1,7 +1,7 @@
 """Bulk operations for mass updates and assignments."""
 
 from typing import List, Dict, Any, Optional
-from sqlalchemy import select, update
+from sqlalchemy import select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.leads.models import Lead
 from src.contacts.models import Contact
@@ -124,21 +124,22 @@ class BulkOperationsHandler:
         if not entity_ids:
             return {"success": False, "error": "No entity IDs provided"}
 
-        success_count = 0
-        error_count = 0
-        errors = []
+        # Find which IDs actually exist
+        result = await self.db.execute(
+            select(model.id).where(model.id.in_(entity_ids))
+        )
+        existing_ids = set(result.scalars().all())
 
-        for entity_id in entity_ids:
-            result = await self.db.execute(
-                select(model).where(model.id == entity_id)
+        # Batch delete all existing entities in a single query
+        if existing_ids:
+            await self.db.execute(
+                delete(model).where(model.id.in_(existing_ids))
             )
-            entity = result.scalar_one_or_none()
-            if entity:
-                await self.db.delete(entity)
-                success_count += 1
-            else:
-                error_count += 1
-                errors.append({"id": entity_id, "error": "Not found"})
+
+        success_count = len(existing_ids)
+        missing_ids = set(entity_ids) - existing_ids
+        error_count = len(missing_ids)
+        errors = [{"id": eid, "error": "Not found"} for eid in missing_ids]
 
         await self.db.flush()
 

@@ -2,7 +2,7 @@
 
 from typing import List, Dict, Any
 from pydantic import BaseModel
-from fastapi import APIRouter, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
 import io
 from src.core.constants import HTTPStatus
@@ -119,7 +119,12 @@ async def import_contacts(
         skip_errors=skip_errors,
     )
 
-    return result
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail={"imported": result.get("imported", 0), "errors": result.get("errors", [])},
+        )
+    return {"detail": "Import complete", "imported": result["imported"], "errors": result.get("errors", [])}
 
 
 @router.post("/import/companies")
@@ -139,7 +144,12 @@ async def import_companies(
         skip_errors=skip_errors,
     )
 
-    return result
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail={"imported": result.get("imported", 0), "errors": result.get("errors", [])},
+        )
+    return {"detail": "Import complete", "imported": result["imported"], "errors": result.get("errors", [])}
 
 
 @router.post("/import/leads")
@@ -159,7 +169,12 @@ async def import_leads(
         skip_errors=skip_errors,
     )
 
-    return result
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail={"imported": result.get("imported", 0), "errors": result.get("errors", [])},
+        )
+    return {"detail": "Import complete", "imported": result["imported"], "errors": result.get("errors", [])}
 
 
 # Template endpoints

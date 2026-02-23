@@ -44,15 +44,24 @@ export function AddMembersModal({
   const contacts = contactsData?.items ?? [];
   const leads = leadsData?.items ?? [];
 
-  // Filter out already added members
+  // Filter out already added members using Set for O(1) lookups
+  const existingContactIds = useMemo(
+    () => new Set(existingMemberIds.contacts),
+    [existingMemberIds.contacts]
+  );
+  const existingLeadIds = useMemo(
+    () => new Set(existingMemberIds.leads),
+    [existingMemberIds.leads]
+  );
+
   const availableContacts = useMemo(
-    () => contacts.filter((c) => !existingMemberIds.contacts.includes(c.id)),
-    [contacts, existingMemberIds.contacts]
+    () => contacts.filter((c) => !existingContactIds.has(c.id)),
+    [contacts, existingContactIds]
   );
 
   const availableLeads = useMemo(
-    () => leads.filter((l) => !existingMemberIds.leads.includes(l.id)),
-    [leads, existingMemberIds.leads]
+    () => leads.filter((l) => !existingLeadIds.has(l.id)),
+    [leads, existingLeadIds]
   );
 
   const currentItems = memberType === 'contact' ? availableContacts : availableLeads;

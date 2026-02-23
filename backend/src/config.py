@@ -1,7 +1,12 @@
-from pydantic_settings import BaseSettings
+import logging
 from typing import List
 import json
 import os
+
+from pydantic_settings import BaseSettings
+from pydantic import model_validator
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -9,7 +14,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = ""
 
     # JWT Authentication
-    SECRET_KEY: str = "dev-secret-key-change-in-production"  # Default for development
+    SECRET_KEY: str = "dev-secret-key-DO-NOT-USE-IN-PRODUCTION"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
@@ -18,7 +23,29 @@ class Settings(BaseSettings):
 
     # Application
     DEBUG: bool = False
-    BACKEND_CORS_ORIGINS: str = '["*"]'
+    BACKEND_CORS_ORIGINS: str = '["http://localhost:3000"]'
+
+    # Database SSL verification (set to "false" to disable SSL cert verification)
+    DATABASE_SSL_VERIFY: bool = True
+
+    @model_validator(mode="after")
+    def _validate_required_settings(self):
+        if not self.DEBUG and self.SECRET_KEY == "dev-secret-key-DO-NOT-USE-IN-PRODUCTION":
+            raise ValueError(
+                "SECRET_KEY must be set via environment variable in production. "
+                "Do not use the default dev key."
+            )
+        if not self.DEBUG:
+            if not self.DATABASE_URL and not os.getenv("PGHOST"):
+                raise ValueError(
+                    "DATABASE_URL (or PGHOST/PGPORT/PGUSER/PGPASSWORD/PGDATABASE) "
+                    "must be set in production."
+                )
+            if not self.OPENAI_API_KEY:
+                logger.warning(
+                    "OPENAI_API_KEY is not set; AI features will be disabled."
+                )
+        return self
 
     # Resend Email
     RESEND_API_KEY: str = ""

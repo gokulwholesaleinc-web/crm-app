@@ -1,11 +1,14 @@
 """Embedding service for RAG with pgvector."""
 
+import logging
 from typing import List, Optional, Dict, Any
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from openai import AsyncOpenAI
 from src.config import settings
 from src.ai.models import AIEmbedding
+
+logger = logging.getLogger(__name__)
 
 
 class EmbeddingService:
@@ -29,8 +32,8 @@ class EmbeddingService:
                 input=text,
             )
             return response.data[0].embedding
-        except Exception as e:
-            print(f"Error creating embedding: {e}")
+        except (OSError, RuntimeError) as e:
+            logger.error("Error creating embedding: %s", e)
             return None
 
     async def store_embedding(

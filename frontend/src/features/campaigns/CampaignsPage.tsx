@@ -186,16 +186,15 @@ function CampaignCard({
   );
 }
 
+const INITIAL_DELETE_CONFIRM = { isOpen: false, campaign: null } as const;
+
 export function CampaignsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [showFilters, setShowFilters] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; campaign: Campaign | null }>({
-    isOpen: false,
-    campaign: null,
-  });
+  const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; campaign: Campaign | null }>(INITIAL_DELETE_CONFIRM);
 
   // Get filter values from URL params
   const filters: CampaignFilters = useMemo(
@@ -238,14 +237,14 @@ export function CampaignsPage() {
     if (!deleteConfirm.campaign) return;
     try {
       await deleteCampaign.mutateAsync(deleteConfirm.campaign.id);
-      setDeleteConfirm({ isOpen: false, campaign: null });
+      setDeleteConfirm(INITIAL_DELETE_CONFIRM);
     } catch (error) {
       console.error('Failed to delete campaign:', error);
     }
   };
 
   const handleDeleteCancel = () => {
-    setDeleteConfirm({ isOpen: false, campaign: null });
+    setDeleteConfirm(INITIAL_DELETE_CONFIRM);
   };
 
   const handleEdit = (campaign: Campaign) => {
