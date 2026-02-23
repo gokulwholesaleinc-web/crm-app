@@ -124,7 +124,7 @@ async def import_contacts(
             status_code=HTTPStatus.BAD_REQUEST,
             detail={"imported": result.get("imported", 0), "errors": result.get("errors", [])},
         )
-    return {"detail": "Import complete", "imported": result["imported"], "errors": result.get("errors", [])}
+    return {"success": True, "detail": "Import complete", "imported": result["imported"], "errors": result.get("errors", [])}
 
 
 @router.post("/import/companies")
@@ -149,7 +149,7 @@ async def import_companies(
             status_code=HTTPStatus.BAD_REQUEST,
             detail={"imported": result.get("imported", 0), "errors": result.get("errors", [])},
         )
-    return {"detail": "Import complete", "imported": result["imported"], "errors": result.get("errors", [])}
+    return {"success": True, "detail": "Import complete", "imported": result["imported"], "errors": result.get("errors", [])}
 
 
 @router.post("/import/leads")
@@ -174,7 +174,7 @@ async def import_leads(
             status_code=HTTPStatus.BAD_REQUEST,
             detail={"imported": result.get("imported", 0), "errors": result.get("errors", [])},
         )
-    return {"detail": "Import complete", "imported": result["imported"], "errors": result.get("errors", [])}
+    return {"success": True, "detail": "Import complete", "imported": result["imported"], "errors": result.get("errors", [])}
 
 
 # Template endpoints

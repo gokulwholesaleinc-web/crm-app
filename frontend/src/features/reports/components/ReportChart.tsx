@@ -94,7 +94,7 @@ function LineChart({ data }: { data: ReportDataPoint[] }) {
                 {d.label}
               </span>
             ))
-          : [data[0], data[Math.floor(data.length / 2)], data[data.length - 1]].map((d, i) => (
+          : [data[0], data[Math.floor(data.length / 2)], data[data.length - 1]].filter((d): d is ReportDataPoint => Boolean(d)).map((d, i) => (
               <span key={i} className="truncate">
                 {d.label}
               </span>

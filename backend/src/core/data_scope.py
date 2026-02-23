@@ -61,6 +61,18 @@ class DataScope:
         return self.shared_entity_ids.get(entity_type, [])
 
 
+def invalidate_scope_cache(user_id: int = None) -> None:
+    """Invalidate the scope cache for a specific user or all users.
+
+    Call this when sharing permissions change (create, revoke, update)
+    so that the next request re-queries the database for shared entity IDs.
+    """
+    if user_id is not None:
+        _scope_cache.pop(user_id, None)
+    else:
+        _scope_cache.clear()
+
+
 async def get_data_scope(
     current_user: Annotated[User, Depends(get_current_active_user)],
     db: Annotated[AsyncSession, Depends(get_db)],

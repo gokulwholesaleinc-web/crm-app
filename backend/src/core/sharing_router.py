@@ -8,6 +8,7 @@ from sqlalchemy import select, delete
 from src.core.constants import HTTPStatus
 from src.core.router_utils import DBSession, CurrentUser, check_ownership
 from src.core.models import EntityShare
+from src.core.data_scope import invalidate_scope_cache
 
 router = APIRouter(prefix="/api/sharing", tags=["sharing"])
 
@@ -77,6 +78,8 @@ async def share_entity(
     db.add(share)
     await db.flush()
     await db.refresh(share)
+    # Invalidate scope cache so the shared-with user picks up the new share
+    invalidate_scope_cache(request.shared_with_user_id)
     return ShareResponse.model_validate(share)
 
 
@@ -130,5 +133,8 @@ async def revoke_share(
             detail="You do not have permission to revoke this share",
         )
 
+    shared_with_id = share.shared_with_user_id
     await db.delete(share)
     await db.flush()
+    # Invalidate scope cache so the shared-with user loses access immediately
+    invalidate_scope_cache(shared_with_id)

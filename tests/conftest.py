@@ -58,8 +58,25 @@ def clear_user_cache():
     """Clear the auth user cache before each test to prevent DetachedInstanceError."""
     from src.auth.dependencies import _user_cache
     _user_cache.clear()
+
+    # Clear dashboard result cache to prevent stale data between tests
+    from src.dashboard.router import _dashboard_cache
+    _dashboard_cache.clear()
+
+    # Clear data scope cache to prevent stale role/shared data between tests
+    from src.core.data_scope import _scope_cache
+    _scope_cache.clear()
+
+    # Clear all legacy cachetools caches (pipeline stages, tags, etc.)
+    from src.core.cache import invalidate_all_caches
+    invalidate_all_caches()
+
     yield
+
     _user_cache.clear()
+    _dashboard_cache.clear()
+    _scope_cache.clear()
+    invalidate_all_caches()
 
 
 @pytest.fixture(scope="session")
@@ -153,15 +170,6 @@ async def auth_headers(auth_token: str) -> dict:
 async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     """Create async test client."""
     from src.main import app
-
-    # Register AI router (normally done in lifespan which doesn't run in tests)
-    try:
-        from src.ai.router import router as ai_router
-        ai_paths = {r.path for r in app.routes if hasattr(r, 'path')}
-        if "/api/ai/chat" not in ai_paths:
-            app.include_router(ai_router)
-    except ImportError:
-        pass
 
     # Override the database dependency
     async def override_get_db():
@@ -266,6 +274,7 @@ async def test_pipeline_stage(db_session: AsyncSession) -> PipelineStage:
         is_won=False,
         is_lost=False,
         is_active=True,
+        pipeline_type="opportunity",
     )
     db_session.add(stage)
     await db_session.commit()
