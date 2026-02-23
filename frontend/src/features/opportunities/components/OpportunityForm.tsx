@@ -1,11 +1,12 @@
 import { useForm } from 'react-hook-form';
 import { Button } from '../../../components/ui/Button';
 import { FormInput, FormSelect, FormTextarea } from '../../../components/forms';
+import { usePipelineStages } from '../../../hooks/useOpportunities';
 
 export interface OpportunityFormData {
   name: string;
   value: number;
-  stage: string;
+  stage: number;
   probability?: number;
   expectedCloseDate?: string;
   contactId?: string;
@@ -24,13 +25,14 @@ export interface OpportunityFormProps {
   companies?: Array<{ id: string; name: string }>;
 }
 
-const opportunityStages = [
-  { value: 'qualification', label: 'Qualification', probability: 20 },
-  { value: 'needs_analysis', label: 'Needs Analysis', probability: 40 },
-  { value: 'proposal', label: 'Proposal', probability: 60 },
-  { value: 'negotiation', label: 'Negotiation', probability: 80 },
-  { value: 'closed_won', label: 'Closed Won', probability: 100 },
-  { value: 'closed_lost', label: 'Closed Lost', probability: 0 },
+// Fallback stages if API hasn't loaded yet
+const FALLBACK_STAGES = [
+  { value: 1, label: 'Prospecting', probability: 10 },
+  { value: 2, label: 'Qualification', probability: 20 },
+  { value: 3, label: 'Proposal', probability: 40 },
+  { value: 4, label: 'Negotiation', probability: 60 },
+  { value: 5, label: 'Closed Won', probability: 100 },
+  { value: 6, label: 'Closed Lost', probability: 0 },
 ];
 
 export function OpportunityForm({
@@ -42,6 +44,20 @@ export function OpportunityForm({
   contacts = [],
   companies = [],
 }: OpportunityFormProps) {
+  // Load actual pipeline stages from the API
+  const { data: pipelineStages } = usePipelineStages();
+
+  // Build stages list from API data or use fallbacks
+  const opportunityStages = pipelineStages
+    ? pipelineStages.map((s) => ({
+        value: s.id,
+        label: s.name,
+        probability: s.probability ?? 0,
+      }))
+    : FALLBACK_STAGES;
+
+  const defaultStageValue = opportunityStages[0]?.value ?? 1;
+
   const {
     register,
     handleSubmit,
@@ -52,8 +68,8 @@ export function OpportunityForm({
     defaultValues: {
       name: '',
       value: 0,
-      stage: 'qualification',
-      probability: 20,
+      stage: defaultStageValue,
+      probability: opportunityStages[0]?.probability ?? 10,
       expectedCloseDate: '',
       contactId: '',
       companyId: '',
@@ -67,8 +83,8 @@ export function OpportunityForm({
 
   // Update probability when stage changes
   const handleStageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const stage = e.target.value;
-    const stageInfo = opportunityStages.find((s) => s.value === stage);
+    const stageId = Number(e.target.value);
+    const stageInfo = opportunityStages.find((s) => s.value === stageId);
     if (stageInfo) {
       setValue('probability', stageInfo.probability);
     }
@@ -77,8 +93,8 @@ export function OpportunityForm({
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       {/* Basic Information */}
-      <div className="bg-white shadow rounded-lg p-6">
-        <h3 className="text-lg font-medium text-gray-900 mb-4">
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
           Opportunity Details
         </h3>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
@@ -87,7 +103,7 @@ export function OpportunityForm({
               label="Opportunity Name"
               name="name"
               required
-              placeholder="e.g., Acme Corp - Enterprise License"
+              placeholder="e.g., Acme Corp - Enterprise License..."
               register={register('name', {
                 required: 'Opportunity name is required',
               })}
@@ -118,14 +134,14 @@ export function OpportunityForm({
       </div>
 
       {/* Pipeline Stage */}
-      <div className="bg-white shadow rounded-lg p-6">
-        <h3 className="text-lg font-medium text-gray-900 mb-4">Pipeline Stage</h3>
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Pipeline Stage</h3>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
           <FormSelect
             label="Stage"
             name="stage"
             required
-            options={opportunityStages.map(s => ({ value: s.value, label: s.label }))}
+            options={opportunityStages.map(s => ({ value: String(s.value), label: s.label }))}
             register={register('stage', {
               required: 'Stage is required',
               onChange: handleStageChange,
@@ -151,7 +167,7 @@ export function OpportunityForm({
         <div className="mt-6">
           <div className="flex items-center justify-between">
             {opportunityStages
-              .filter((s) => s.value !== 'closed_lost')
+              .filter((s) => !s.label.toLowerCase().includes('lost'))
               .map((stage, index) => (
                 <div
                   key={stage.value}
@@ -159,16 +175,16 @@ export function OpportunityForm({
                 >
                   <div
                     className={`h-2 rounded-full ${
-                      selectedStage === stage.value
+                      Number(selectedStage) === stage.value
                         ? 'bg-primary-500'
                         : opportunityStages.findIndex(
-                            (s) => s.value === selectedStage
+                            (s) => s.value === Number(selectedStage)
                           ) > index
                         ? 'bg-primary-300'
-                        : 'bg-gray-200'
+                        : 'bg-gray-200 dark:bg-gray-600'
                     }`}
                   />
-                  <p className="mt-1 text-xs text-gray-500 text-center truncate">
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 text-center truncate">
                     {stage.label}
                   </p>
                 </div>
@@ -178,15 +194,15 @@ export function OpportunityForm({
       </div>
 
       {/* Related Records */}
-      <div className="bg-white shadow rounded-lg p-6">
-        <h3 className="text-lg font-medium text-gray-900 mb-4">
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
           Related Records
         </h3>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
           <FormSelect
             label="Primary Contact"
             name="contactId"
-            placeholder="Select a contact"
+            placeholder="Select a contact..."
             options={contacts.map((contact) => ({ value: contact.id, label: contact.name }))}
             register={register('contactId')}
           />
@@ -194,7 +210,7 @@ export function OpportunityForm({
           <FormSelect
             label="Company"
             name="companyId"
-            placeholder="Select a company"
+            placeholder="Select a company..."
             options={companies.map((company) => ({ value: company.id, label: company.name }))}
             register={register('companyId')}
           />
@@ -202,8 +218,8 @@ export function OpportunityForm({
       </div>
 
       {/* Description & Notes */}
-      <div className="bg-white shadow rounded-lg p-6">
-        <h3 className="text-lg font-medium text-gray-900 mb-4">
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
           Description & Notes
         </h3>
         <div className="space-y-4">

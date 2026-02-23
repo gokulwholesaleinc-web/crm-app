@@ -195,7 +195,7 @@ function OpportunityStageColumn({ stage }: { stage: KanbanStage }) {
           </span>
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-3" style={{ fontVariantNumeric: 'tabular-nums' }}>
-          {formatCurrency(stage.total_amount)}
+          {formatCurrency(stage.total_amount ?? 0, 'USD')}
         </p>
         <div className="space-y-2 max-h-[calc(100vh-18rem)] overflow-y-auto">
           {stage.opportunities.map((opp) => (

@@ -9,7 +9,7 @@ const CommentSection = lazy(() => import('../../components/shared/CommentSection
 const SharePanel = lazy(() => import('../../components/shared/SharePanel'));
 import { OpportunityForm, OpportunityFormData } from './components/OpportunityForm';
 import { AIInsightsCard, NextBestActionCard } from '../../components/ai';
-import { useOpportunity, useDeleteOpportunity, useUpdateOpportunity, usePipelineStages } from '../../hooks/useOpportunities';
+import { useOpportunity, useDeleteOpportunity, useUpdateOpportunity } from '../../hooks/useOpportunities';
 import { useTimeline } from '../../hooks/useActivities';
 import { useQuotes } from '../../hooks/useQuotes';
 import { useProposals } from '../../hooks/useProposals';
@@ -33,7 +33,6 @@ function OpportunityDetailPage() {
   const { data: opportunity, isLoading, error } = useOpportunity(opportunityId);
   const deleteOpportunityMutation = useDeleteOpportunity();
   const updateOpportunityMutation = useUpdateOpportunity();
-  const { data: pipelineStages } = usePipelineStages();
   // Fetch timeline/activities - only when on activities tab
   const shouldFetchActivities = activeTab === 'activities' && !!opportunityId;
   const { data: timelineData, isLoading: isLoadingActivities } = useTimeline(
@@ -67,15 +66,12 @@ function OpportunityDetailPage() {
   const handleEditSubmit = async (data: OpportunityFormData) => {
     if (!opportunityId) return;
     try {
-      const stage = pipelineStages?.find(
-        (s) => s.name.toLowerCase().replace(/\s+/g, '_') === data.stage
-      );
       const updateData: OpportunityUpdate = {
         name: data.name,
         amount: data.value,
         probability: data.probability,
         expected_close_date: data.expectedCloseDate || undefined,
-        pipeline_stage_id: stage?.id,
+        pipeline_stage_id: data.stage,
         contact_id: data.contactId ? parseInt(data.contactId, 10) : undefined,
         company_id: data.companyId ? parseInt(data.companyId, 10) : undefined,
         description: data.description,
@@ -95,9 +91,7 @@ function OpportunityDetailPage() {
     return {
       name: opportunity.name,
       value: opportunity.amount ?? 0,
-      stage:
-        opportunity.pipeline_stage?.name?.toLowerCase().replace(/\s+/g, '_') ??
-        'qualification',
+      stage: opportunity.pipeline_stage_id,
       probability: opportunity.probability ?? 0,
       expectedCloseDate: opportunity.expected_close_date ?? '',
       contactId: opportunity.contact_id != null ? String(opportunity.contact_id) : undefined,
@@ -293,7 +287,7 @@ function OpportunityDetailPage() {
                 <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Value</dt>
                 <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   {opportunity.amount
-                    ? formatCurrency(opportunity.amount)
+                    ? formatCurrency(opportunity.amount, opportunity.currency)
                     : '-'}
                 </dd>
               </div>
@@ -315,7 +309,7 @@ function OpportunityDetailPage() {
                 </dt>
                 <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   {opportunity.weighted_amount
-                    ? formatCurrency(opportunity.weighted_amount)
+                    ? formatCurrency(opportunity.weighted_amount, opportunity.currency)
                     : '-'}
                 </dd>
               </div>
