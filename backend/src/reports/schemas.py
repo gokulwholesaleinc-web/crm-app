@@ -44,6 +44,8 @@ class SavedReportCreate(BaseModel):
     metric_field: Optional[str] = None
     chart_type: str = "bar"
     is_public: bool = False
+    schedule: Optional[str] = None
+    recipients: Optional[List[str]] = None
 
 
 class SavedReportUpdate(BaseModel):
@@ -56,6 +58,8 @@ class SavedReportUpdate(BaseModel):
     metric_field: Optional[str] = None
     chart_type: Optional[str] = None
     is_public: Optional[bool] = None
+    schedule: Optional[str] = None
+    recipients: Optional[List[str]] = None
 
 
 class SavedReportResponse(BaseModel):
@@ -71,6 +75,8 @@ class SavedReportResponse(BaseModel):
     chart_type: str
     created_by_id: int
     is_public: bool
+    schedule: Optional[str] = None
+    recipients: Optional[List[str]] = None
     created_at: datetime
     updated_at: datetime
 
@@ -89,3 +95,20 @@ class ReportTemplate(BaseModel):
     date_group: Optional[str] = None
     chart_type: str
     filters: Optional[Dict[str, Any]] = None
+
+
+class AIReportGenerateRequest(BaseModel):
+    """Request to generate a report from a natural language prompt."""
+    prompt: str
+
+
+class AIReportGenerateResponse(BaseModel):
+    """Response from AI report generation."""
+    definition: ReportDefinition
+    result: ReportResult
+
+
+class ScheduleUpdateRequest(BaseModel):
+    """Request to update schedule on a saved report."""
+    schedule: Optional[str] = None  # daily/weekly/monthly or null to clear
+    recipients: Optional[List[str]] = None

@@ -63,11 +63,21 @@ export function Avatar({ src, name, size = 'md', className }: AvatarProps) {
   const initials = name ? getInitials(name) : '?';
   const bgColor = name ? getColorFromName(name) : 'bg-gray-400';
 
+  const sizePixels: Record<AvatarSize, number> = {
+    xs: 24,
+    sm: 32,
+    md: 40,
+    lg: 48,
+    xl: 64,
+  };
+
   if (src) {
     return (
       <img
         src={src}
         alt={name || 'Avatar'}
+        width={sizePixels[size]}
+        height={sizePixels[size]}
         className={clsx(
           'rounded-full object-cover',
           sizeStyles[size],

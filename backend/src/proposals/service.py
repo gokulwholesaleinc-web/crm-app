@@ -334,3 +334,15 @@ class ProposalTemplateService(CRUDService[ProposalTemplate, None, None]):
     model = ProposalTemplate
     create_exclude_fields = set()
     update_exclude_fields = set()
+
+    async def get_list(
+        self,
+        category: Optional[str] = None,
+    ) -> List[ProposalTemplate]:
+        """Get all templates, optionally filtered by category."""
+        query = select(ProposalTemplate)
+        if category:
+            query = query.where(ProposalTemplate.category == category)
+        query = query.order_by(ProposalTemplate.created_at.desc())
+        result = await self.db.execute(query)
+        return list(result.scalars().all())

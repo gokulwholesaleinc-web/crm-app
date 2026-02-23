@@ -29,11 +29,13 @@ export function useUploadAttachment() {
       file,
       entityType,
       entityId,
+      category,
     }: {
       file: File;
       entityType: string;
       entityId: number;
-    }) => attachmentsApi.upload(file, entityType, entityId),
+      category?: string;
+    }) => attachmentsApi.upload(file, entityType, entityId, category),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({
         queryKey: attachmentKeys.entity(variables.entityType, variables.entityId),

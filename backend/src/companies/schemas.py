@@ -25,6 +25,7 @@ class CompanyBase(BaseModel):
     twitter_handle: Optional[str] = None
     description: Optional[str] = None
     status: str = "prospect"
+    segment: Optional[str] = None
     owner_id: Optional[int] = None
 
 
@@ -51,6 +52,7 @@ class CompanyUpdate(BaseModel):
     twitter_handle: Optional[str] = None
     description: Optional[str] = None
     status: Optional[str] = None
+    segment: Optional[str] = None
     owner_id: Optional[int] = None
     tag_ids: Optional[List[int]] = None
 

@@ -44,13 +44,16 @@ async def seed_database(session: AsyncSession) -> None:
     # Seed pipeline stages first (needed by opportunities)
     stages = await _seed_pipeline_stages(session)
 
+    # Seed lead pipeline stages
+    lead_stages = await _seed_lead_pipeline_stages(session)
+
     # Seed lead sources
     lead_sources = await _seed_lead_sources(session)
 
     # Seed demo data linked to demo user
     companies = await _seed_companies(session, demo)
     contacts = await _seed_contacts(session, demo, companies)
-    leads = await _seed_leads(session, demo, lead_sources)
+    leads = await _seed_leads(session, demo, lead_sources, lead_stages)
     opportunities = await _seed_opportunities(session, demo, stages, contacts, companies)
     await _seed_activities(session, demo, contacts, leads, opportunities)
     campaigns = await _seed_campaigns(session, demo)
@@ -181,18 +184,32 @@ async def _link_user_to_tenant(
 # ---------------------------------------------------------------------------
 
 PIPELINE_STAGES = [
-    {"name": "Prospecting", "order": 1, "color": "#94a3b8", "probability": 10, "is_won": False, "is_lost": False},
-    {"name": "Qualification", "order": 2, "color": "#60a5fa", "probability": 20, "is_won": False, "is_lost": False},
-    {"name": "Proposal", "order": 3, "color": "#818cf8", "probability": 40, "is_won": False, "is_lost": False},
-    {"name": "Negotiation", "order": 4, "color": "#f59e0b", "probability": 60, "is_won": False, "is_lost": False},
-    {"name": "Closed Won", "order": 5, "color": "#22c55e", "probability": 100, "is_won": True, "is_lost": False},
-    {"name": "Closed Lost", "order": 6, "color": "#ef4444", "probability": 0, "is_won": False, "is_lost": True},
+    {"name": "Prospecting", "order": 1, "color": "#94a3b8", "probability": 10, "is_won": False, "is_lost": False, "pipeline_type": "opportunity"},
+    {"name": "Qualification", "order": 2, "color": "#60a5fa", "probability": 20, "is_won": False, "is_lost": False, "pipeline_type": "opportunity"},
+    {"name": "Proposal", "order": 3, "color": "#818cf8", "probability": 40, "is_won": False, "is_lost": False, "pipeline_type": "opportunity"},
+    {"name": "Negotiation", "order": 4, "color": "#f59e0b", "probability": 60, "is_won": False, "is_lost": False, "pipeline_type": "opportunity"},
+    {"name": "Closed Won", "order": 5, "color": "#22c55e", "probability": 100, "is_won": True, "is_lost": False, "pipeline_type": "opportunity"},
+    {"name": "Closed Lost", "order": 6, "color": "#ef4444", "probability": 0, "is_won": False, "is_lost": True, "pipeline_type": "opportunity"},
+]
+
+
+LEAD_PIPELINE_STAGES = [
+    {"name": "New", "order": 1, "probability": 10, "color": "#3b82f6", "pipeline_type": "lead"},
+    {"name": "Discovery", "order": 2, "probability": 20, "color": "#06b6d4", "pipeline_type": "lead"},
+    {"name": "Proposals On", "order": 3, "probability": 40, "color": "#8b5cf6", "pipeline_type": "lead"},
+    {"name": "Negotiations", "order": 4, "probability": 60, "color": "#f59e0b", "pipeline_type": "lead"},
+    {"name": "Scoping", "order": 5, "probability": 70, "color": "#10b981", "pipeline_type": "lead"},
+    {"name": "Stalling", "order": 6, "probability": 30, "color": "#ef4444", "pipeline_type": "lead"},
+    {"name": "Won", "order": 7, "probability": 100, "is_won": True, "color": "#22c55e", "pipeline_type": "lead"},
+    {"name": "Lost", "order": 8, "probability": 0, "is_lost": True, "color": "#6b7280", "pipeline_type": "lead"},
 ]
 
 
 async def _seed_pipeline_stages(session: AsyncSession) -> list[PipelineStage]:
-    """Create default pipeline stages if none exist."""
-    result = await session.execute(select(PipelineStage))
+    """Create default opportunity pipeline stages if none exist."""
+    result = await session.execute(
+        select(PipelineStage).where(PipelineStage.pipeline_type == "opportunity")
+    )
     existing = list(result.scalars().all())
     if existing:
         return existing
@@ -200,6 +217,27 @@ async def _seed_pipeline_stages(session: AsyncSession) -> list[PipelineStage]:
     stages = []
     for s in PIPELINE_STAGES:
         stage = PipelineStage(**s, is_active=True)
+        session.add(stage)
+        stages.append(stage)
+    await session.flush()
+    for s in stages:
+        await session.refresh(s)
+    return stages
+
+
+async def _seed_lead_pipeline_stages(session: AsyncSession) -> list[PipelineStage]:
+    """Create default lead pipeline stages if none exist."""
+    result = await session.execute(
+        select(PipelineStage).where(PipelineStage.pipeline_type == "lead")
+    )
+    existing = list(result.scalars().all())
+    if existing:
+        return existing
+
+    stages = []
+    for s in LEAD_PIPELINE_STAGES:
+        data = {"is_won": False, "is_lost": False, **s}
+        stage = PipelineStage(**data, is_active=True)
         session.add(stage)
         stages.append(stage)
     await session.flush()
@@ -495,15 +533,32 @@ LEADS_DATA = [
 ]
 
 
-async def _seed_leads(session: AsyncSession, demo_user: User, lead_sources: list[LeadSource]) -> list[Lead]:
+async def _seed_leads(session: AsyncSession, demo_user: User, lead_sources: list[LeadSource], lead_stages: list[PipelineStage] = None) -> list[Lead]:
     source_map = {s.name: s.id for s in lead_sources}
+
+    # Build status-to-stage mapping for lead pipeline stages
+    status_stage_map = {}
+    if lead_stages:
+        stage_name_map = {s.name.lower(): s.id for s in lead_stages}
+        status_stage_map = {
+            "new": stage_name_map.get("new"),
+            "contacted": stage_name_map.get("discovery"),
+            "qualified": stage_name_map.get("proposals on"),
+            "unqualified": stage_name_map.get("stalling"),
+            "converted": stage_name_map.get("won"),
+            "lost": stage_name_map.get("lost"),
+        }
+
     leads = []
     for raw in LEADS_DATA:
         data = dict(raw)
         source_name = data.pop("source_name")
+        status = data.get("status", "new")
+        pipeline_stage_id = status_stage_map.get(status)
         lead = Lead(
             **data,
             source_id=source_map.get(source_name),
+            pipeline_stage_id=pipeline_stage_id,
             owner_id=demo_user.id,
             created_by_id=demo_user.id,
         )

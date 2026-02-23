@@ -115,6 +115,13 @@ class CSVHandler:
             skip_errors=skip_errors,
         )
 
+    @staticmethod
+    def _sanitize_csv_value(value: str) -> str:
+        """Prefix dangerous cell values with a single quote to prevent CSV injection."""
+        if value and isinstance(value, str) and value[0] in ("=", "+", "-", "@"):
+            return "'" + value
+        return value
+
     def _to_csv(self, entities: List[Any], fields: List[str]) -> str:
         """Convert entities to CSV string."""
         output = io.StringIO()
@@ -128,7 +135,10 @@ class CSVHandler:
                 if value is not None:
                     if isinstance(value, datetime):
                         value = value.isoformat()
-                row[field] = value or ""
+                cell = value or ""
+                if isinstance(cell, str):
+                    cell = self._sanitize_csv_value(cell)
+                row[field] = cell
             writer.writerow(row)
 
         return output.getvalue()

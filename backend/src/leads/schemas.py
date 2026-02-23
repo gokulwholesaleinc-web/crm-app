@@ -45,10 +45,12 @@ class LeadBase(BaseModel):
     budget_amount: Optional[float] = None
     budget_currency: str = "USD"
     owner_id: Optional[int] = None
+    sales_code: Optional[str] = None
 
 
 class LeadCreate(LeadBase):
     status: str = "new"
+    pipeline_stage_id: Optional[int] = None
     tag_ids: Optional[List[int]] = None
 
 
@@ -65,6 +67,7 @@ class LeadUpdate(BaseModel):
     source_id: Optional[int] = None
     source_details: Optional[str] = None
     status: Optional[str] = None
+    pipeline_stage_id: Optional[int] = None
     address_line1: Optional[str] = None
     address_line2: Optional[str] = None
     city: Optional[str] = None
@@ -76,7 +79,20 @@ class LeadUpdate(BaseModel):
     budget_amount: Optional[float] = None
     budget_currency: Optional[str] = None
     owner_id: Optional[int] = None
+    sales_code: Optional[str] = None
     tag_ids: Optional[List[int]] = None
+
+
+class PipelineStageRef(BaseModel):
+    id: int
+    name: str
+    order: int = 0
+    color: str = "#6366f1"
+    probability: int = 0
+    is_won: bool = False
+    is_lost: bool = False
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class LeadResponse(LeadBase):
@@ -85,6 +101,8 @@ class LeadResponse(LeadBase):
     status: str
     score: int
     score_factors: Optional[str] = None
+    pipeline_stage_id: Optional[int] = None
+    pipeline_stage: Optional[PipelineStageRef] = None
     created_at: datetime
     updated_at: datetime
     source: Optional[LeadSourceResponse] = None
@@ -126,3 +144,37 @@ class ConversionResponse(BaseModel):
     company_id: Optional[int] = None
     opportunity_id: Optional[int] = None
     message: str
+
+
+# =============================================================================
+# Lead Kanban / Pipeline schemas
+# =============================================================================
+
+class KanbanLead(BaseModel):
+    id: int
+    first_name: str
+    last_name: str
+    full_name: str
+    email: Optional[str] = None
+    company_name: Optional[str] = None
+    score: int
+    owner_id: Optional[int] = None
+
+
+class KanbanLeadStage(BaseModel):
+    stage_id: int
+    stage_name: str
+    color: str
+    probability: int
+    is_won: bool
+    is_lost: bool
+    leads: List[KanbanLead]
+    count: int
+
+
+class LeadKanbanResponse(BaseModel):
+    stages: List[KanbanLeadStage]
+
+
+class MoveLeadRequest(BaseModel):
+    new_stage_id: int

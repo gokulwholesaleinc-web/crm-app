@@ -6,11 +6,12 @@ All endpoints require admin-level access (is_superuser or role=admin).
 from datetime import datetime, timedelta, timezone
 from typing import List
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query, Request
 from sqlalchemy import select, func, update
 from sqlalchemy.orm import load_only
 
 from src.core.constants import HTTPStatus
+from src.core.rate_limit import limiter
 from src.core.router_utils import DBSession, CurrentUser, raise_forbidden, raise_not_found
 from src.auth.models import User
 from src.contacts.models import Contact
@@ -46,14 +47,20 @@ def _require_admin(user: User) -> None:
 # GET /api/admin/users
 # ---------------------------------------------------------------------------
 @router.get("/users", response_model=List[AdminUserResponse])
+@limiter.limit("30/minute")
 async def list_admin_users(
+    request: Request,
     current_user: CurrentUser,
     db: DBSession,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=500),
 ):
-    """List all users with roles, status, last login and record counts."""
+    """List users with roles, status, last login and record counts."""
     _require_admin(current_user)
 
-    users_result = await db.execute(select(User).order_by(User.id))
+    users_result = await db.execute(
+        select(User).order_by(User.id).offset(skip).limit(limit)
+    )
     users = users_result.scalars().all()
 
     # Aggregate counts per owner
@@ -95,7 +102,9 @@ async def list_admin_users(
 # PATCH /api/admin/users/{id}
 # ---------------------------------------------------------------------------
 @router.patch("/users/{user_id}", response_model=AdminUserResponse)
+@limiter.limit("10/minute")
 async def update_admin_user(
+    request: Request,
     user_id: int,
     data: AdminUserUpdate,
     current_user: CurrentUser,
@@ -133,7 +142,9 @@ async def update_admin_user(
 # DELETE /api/admin/users/{id}  (soft-delete = deactivate)
 # ---------------------------------------------------------------------------
 @router.delete("/users/{user_id}")
+@limiter.limit("10/minute")
 async def deactivate_user(
+    request: Request,
     user_id: int,
     current_user: CurrentUser,
     db: DBSession,
@@ -155,7 +166,9 @@ async def deactivate_user(
 # GET /api/admin/stats
 # ---------------------------------------------------------------------------
 @router.get("/stats", response_model=SystemStats)
+@limiter.limit("30/minute")
 async def get_system_stats(
+    request: Request,
     current_user: CurrentUser,
     db: DBSession,
 ):
@@ -196,7 +209,9 @@ async def get_system_stats(
 # GET /api/admin/team-overview
 # ---------------------------------------------------------------------------
 @router.get("/team-overview", response_model=List[TeamMemberOverview])
+@limiter.limit("30/minute")
 async def get_team_overview(
+    request: Request,
     current_user: CurrentUser,
     db: DBSession,
 ):
@@ -261,17 +276,21 @@ async def get_team_overview(
 # GET /api/admin/activity-feed
 # ---------------------------------------------------------------------------
 @router.get("/activity-feed", response_model=List[ActivityFeedEntry])
+@limiter.limit("30/minute")
 async def get_activity_feed(
+    request: Request,
     current_user: CurrentUser,
     db: DBSession,
-    limit: int = 50,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=500),
 ):
-    """Recent audit log entries across all users (last N entries)."""
+    """Recent audit log entries across all users with pagination."""
     _require_admin(current_user)
 
     result = await db.execute(
         select(AuditLog)
         .order_by(AuditLog.timestamp.desc())
+        .offset(skip)
         .limit(limit)
     )
     logs = result.scalars().all()
@@ -304,7 +323,9 @@ async def get_activity_feed(
 # POST /api/admin/users/{id}/assign-role
 # ---------------------------------------------------------------------------
 @router.post("/users/{user_id}/assign-role", response_model=AdminUserResponse)
+@limiter.limit("10/minute")
 async def assign_role(
+    request: Request,
     user_id: int,
     data: AssignRoleRequest,
     current_user: CurrentUser,

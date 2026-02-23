@@ -8,6 +8,7 @@ import { reportsApi } from '../api/reports';
 import type {
   ReportDefinition,
   SavedReportCreate,
+  ScheduleUpdateRequest,
 } from '../api/reports';
 import { useAuthQuery } from './useAuthQuery';
 
@@ -87,6 +88,24 @@ export function useDeleteSavedReport() {
     onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: reportKeys.lists() });
       queryClient.removeQueries({ queryKey: reportKeys.detail(id) });
+    },
+  });
+}
+
+export function useAIGenerateReport() {
+  return useMutation({
+    mutationFn: (prompt: string) => reportsApi.aiGenerateReport(prompt),
+  });
+}
+
+export function useUpdateReportSchedule() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, ...schedule }: ScheduleUpdateRequest & { id: number }) =>
+      reportsApi.updateReportSchedule(id, schedule),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: reportKeys.lists() });
     },
   });
 }

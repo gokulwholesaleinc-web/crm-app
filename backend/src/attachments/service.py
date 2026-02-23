@@ -38,6 +38,7 @@ class AttachmentService:
         entity_type: str,
         entity_id: int,
         user_id: int,
+        category: Optional[str] = None,
     ) -> Attachment:
         """Upload a file and create an attachment record."""
         # Validate extension
@@ -76,6 +77,7 @@ class AttachmentService:
             entity_type=entity_type,
             entity_id=entity_id,
             uploaded_by=user_id,
+            category=category,
         )
         self.db.add(attachment)
         await self.db.flush()
@@ -86,14 +88,17 @@ class AttachmentService:
         self,
         entity_type: str,
         entity_id: int,
+        category: Optional[str] = None,
     ) -> Tuple[List[Attachment], int]:
-        """List all attachments for an entity."""
+        """List all attachments for an entity, optionally filtered by category."""
         query = (
             select(Attachment)
             .where(Attachment.entity_type == entity_type)
             .where(Attachment.entity_id == entity_id)
-            .order_by(Attachment.created_at.desc())
         )
+        if category:
+            query = query.where(Attachment.category == category)
+        query = query.order_by(Attachment.created_at.desc())
         result = await self.db.execute(query)
         items = list(result.scalars().all())
 
@@ -103,6 +108,8 @@ class AttachmentService:
             .where(Attachment.entity_type == entity_type)
             .where(Attachment.entity_id == entity_id)
         )
+        if category:
+            count_query = count_query.where(Attachment.category == category)
         count_result = await self.db.execute(count_query)
         total = count_result.scalar() or 0
 

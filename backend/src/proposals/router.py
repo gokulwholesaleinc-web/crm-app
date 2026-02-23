@@ -22,7 +22,9 @@ from src.proposals.schemas import (
     ProposalBranding,
     ProposalSendRequest,
     ProposalTemplateCreate,
+    ProposalTemplateUpdate,
     ProposalTemplateResponse,
+    CreateFromTemplateRequest,
     AIGenerateRequest,
 )
 from src.proposals.service import ProposalService, ProposalTemplateService
@@ -98,10 +100,11 @@ async def create_proposal(
 async def list_templates(
     current_user: CurrentUser,
     db: DBSession,
+    category: Optional[str] = None,
 ):
-    """List all proposal templates."""
+    """List all proposal templates, optionally filtered by category."""
     service = ProposalTemplateService(db)
-    templates, _ = await service.get_multi()
+    templates = await service.get_list(category=category)
     return [ProposalTemplateResponse.model_validate(t) for t in templates]
 
 
@@ -117,14 +120,151 @@ async def create_template(
     template = ProposalTemplate(
         name=template_data.name,
         description=template_data.description,
+        body=template_data.body,
+        legal_terms=template_data.legal_terms,
         category=template_data.category,
-        content_template=template_data.content_template,
+        is_default=template_data.is_default,
+        owner_id=current_user.id,
         created_by_id=current_user.id,
     )
     db.add(template)
     await db.flush()
     await db.refresh(template)
     return ProposalTemplateResponse.model_validate(template)
+
+
+@router.get("/templates/{template_id}", response_model=ProposalTemplateResponse)
+async def get_template(
+    template_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Get a proposal template by ID."""
+    service = ProposalTemplateService(db)
+    template = await service.get_by_id(template_id)
+    if not template:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Template not found")
+    return ProposalTemplateResponse.model_validate(template)
+
+
+@router.patch("/templates/{template_id}", response_model=ProposalTemplateResponse)
+async def update_template(
+    template_id: int,
+    template_data: ProposalTemplateUpdate,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Update a proposal template."""
+    service = ProposalTemplateService(db)
+    template = await service.get_by_id(template_id)
+    if not template:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Template not found")
+
+    update_data = template_data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(template, field, value)
+
+    await db.flush()
+    await db.refresh(template)
+    return ProposalTemplateResponse.model_validate(template)
+
+
+@router.delete("/templates/{template_id}", status_code=HTTPStatus.NO_CONTENT)
+async def delete_template(
+    template_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Delete a proposal template."""
+    service = ProposalTemplateService(db)
+    template = await service.get_by_id(template_id)
+    if not template:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Template not found")
+    await db.delete(template)
+    await db.flush()
+
+
+@router.post("/from-template", response_model=ProposalResponse, status_code=HTTPStatus.CREATED)
+async def create_proposal_from_template(
+    request_data: CreateFromTemplateRequest,
+    request: Request,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Create a new proposal from a template with merge variable replacement."""
+    service = ProposalService(db)
+    template_service = ProposalTemplateService(db)
+
+    template = await template_service.get_by_id(request_data.template_id)
+    if not template:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Template not found")
+
+    # Fetch contact
+    from src.contacts.models import Contact
+    from sqlalchemy import select
+    contact_result = await db.execute(
+        select(Contact).where(Contact.id == request_data.contact_id)
+    )
+    contact = contact_result.scalar_one_or_none()
+    if not contact:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Contact not found")
+
+    # Fetch company if provided
+    company = None
+    if request_data.company_id:
+        from src.companies.models import Company
+        company_result = await db.execute(
+            select(Company).where(Company.id == request_data.company_id)
+        )
+        company = company_result.scalar_one_or_none()
+        if not company:
+            raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Company not found")
+
+    # Build merge variables
+    from datetime import date
+    contact_name = f"{contact.first_name} {contact.last_name}"
+    company_name = company.name if company else ""
+    company_address_parts = []
+    if company:
+        for part in [company.address_line1, company.address_line2, company.city, company.state, company.postal_code, company.country]:
+            if part:
+                company_address_parts.append(part)
+    company_address = ", ".join(company_address_parts)
+
+    variables = {
+        "contact_name": contact_name,
+        "company_name": company_name,
+        "date": date.today().strftime("%B %d, %Y"),
+        "contact_email": contact.email or "",
+        "contact_phone": contact.phone or "",
+        "company_address": company_address,
+    }
+
+    # Merge custom variables
+    if request_data.custom_variables:
+        variables.update(request_data.custom_variables)
+
+    # Replace variables in body and legal_terms
+    filled_body = await service.substitute_template_variables(template.body, variables)
+    filled_legal_terms = None
+    if template.legal_terms:
+        filled_legal_terms = await service.substitute_template_variables(template.legal_terms, variables)
+
+    # Create proposal
+    proposal_data = ProposalCreate(
+        title=template.name,
+        content=filled_body,
+        terms=filled_legal_terms,
+        contact_id=request_data.contact_id,
+        company_id=request_data.company_id,
+        status="draft",
+    )
+    proposal = await service.create(proposal_data, current_user.id)
+
+    ip_address = request.client.host if request.client else None
+    await audit_entity_create(db, "proposal", proposal.id, current_user.id, ip_address)
+
+    return ProposalResponse.model_validate(proposal)
 
 
 @router.post("/generate", response_model=ProposalResponse, status_code=HTTPStatus.CREATED)

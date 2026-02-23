@@ -6,6 +6,7 @@ Provides async test database setup, test client, and user fixtures.
 
 import asyncio
 import sys
+import time
 from typing import AsyncGenerator, Generator
 
 import pytest
@@ -45,10 +46,20 @@ from src.sequences.models import Sequence, SequenceEnrollment
 from src.quotes.models import Quote, QuoteLineItem, QuoteTemplate, ProductBundle, ProductBundleItem
 from src.payments.models import StripeCustomer, Product, Price, Payment, Subscription
 from src.proposals.models import Proposal, ProposalTemplate, ProposalView
+from src.contracts.models import Contract
 
 
 # Test database URL - using SQLite in-memory for tests
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+
+@pytest.fixture(autouse=True)
+def clear_user_cache():
+    """Clear the auth user cache before each test to prevent DetachedInstanceError."""
+    from src.auth.dependencies import _user_cache
+    _user_cache.clear()
+    yield
+    _user_cache.clear()
 
 
 @pytest.fixture(scope="session")
@@ -588,3 +599,60 @@ async def manager_auth_headers(_manager_user: User) -> dict:
     """Create authorization headers for manager user."""
     token = create_access_token(data={"sub": str(_manager_user.id)})
     return {"Authorization": f"Bearer {token}"}
+
+
+# =============================================================================
+# Contract fixtures
+# =============================================================================
+
+@pytest_asyncio.fixture(scope="function")
+async def test_contract(
+    db_session: AsyncSession,
+    test_user: User,
+    test_contact: Contact,
+    test_company: Company,
+) -> Contract:
+    """Create a test contract linked to test_contact and test_company."""
+    from datetime import date, timedelta
+
+    contract = Contract(
+        title="Test Service Agreement",
+        scope="Provide consulting services for Q1",
+        value=25000.0,
+        currency="USD",
+        status="draft",
+        start_date=date.today(),
+        end_date=date.today() + timedelta(days=90),
+        contact_id=test_contact.id,
+        company_id=test_company.id,
+        owner_id=test_user.id,
+        created_by_id=test_user.id,
+    )
+    db_session.add(contract)
+    await db_session.commit()
+    await db_session.refresh(contract)
+    return contract
+
+
+# =============================================================================
+# Payment fixtures
+# =============================================================================
+
+@pytest_asyncio.fixture(scope="function")
+async def test_payment(
+    db_session: AsyncSession,
+    test_user: User,
+) -> Payment:
+    """Create a test payment record."""
+    payment = Payment(
+        amount=5000.0,
+        currency="USD",
+        status="succeeded",
+        payment_method="card",
+        owner_id=test_user.id,
+        created_by_id=test_user.id,
+    )
+    db_session.add(payment)
+    await db_session.commit()
+    await db_session.refresh(payment)
+    return payment

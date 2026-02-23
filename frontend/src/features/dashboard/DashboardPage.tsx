@@ -1,9 +1,11 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { NumberCard } from './components/NumberCard';
 import { ChartCard } from './components/ChartCard';
 import { SalesFunnelChart } from './components/SalesFunnelChart';
 import { SkeletonCard, SkeletonChart } from '../../components/ui/Skeleton';
 import { ErrorEmptyState } from '../../components/ui/EmptyState';
+import { DateRangePicker } from '../../components/ui/DateRangePicker';
+import type { DateRange } from '../../components/ui/DateRangePicker';
 const DashboardRecommendations = lazy(() => import('../../components/ai/DashboardRecommendations').then(m => ({ default: m.DashboardRecommendations })));
 import { formatCurrency, formatDate } from '../../utils';
 import { useKPIs, usePipelineFunnelChart, useLeadsBySourceChart, useSalesFunnel, useSalesKpis } from '../../hooks/useDashboard';
@@ -29,13 +31,15 @@ function findCardChange(cardMap: Map<string, NumberCardData>, id: string): numbe
 function DashboardPage() {
   usePageTitle('Dashboard');
 
-  // Use hooks for data fetching
-  const { data: kpiCards, isLoading: isLoadingDashboard, error: dashboardError } = useKPIs();
-  const { data: pipelineData } = usePipelineFunnelChart();
-  const { data: leadsBySourceData } = useLeadsBySourceChart();
+  const [dateRange, setDateRange] = useState<DateRange>({ dateFrom: null, dateTo: null });
+
+  // Use hooks for data fetching with date range
+  const { data: kpiCards, isLoading: isLoadingDashboard, error: dashboardError } = useKPIs(dateRange);
+  const { data: pipelineData } = usePipelineFunnelChart(dateRange);
+  const { data: leadsBySourceData } = useLeadsBySourceChart(dateRange);
   const { data: timelineData } = useUserTimeline();
-  const { data: funnelData } = useSalesFunnel();
-  const { data: salesKpis } = useSalesKpis();
+  const { data: funnelData } = useSalesFunnel(dateRange);
+  const { data: salesKpis } = useSalesKpis(dateRange);
 
   const error = dashboardError instanceof Error ? dashboardError.message : dashboardError ? String(dashboardError) : null;
 
@@ -67,11 +71,14 @@ function DashboardPage() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Dashboard</h1>
-        <p className="mt-0.5 sm:mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-          Overview of your CRM performance
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Dashboard</h1>
+          <p className="mt-0.5 sm:mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+            Overview of your CRM performance
+          </p>
+        </div>
+        <DateRangePicker onChange={(range) => setDateRange(range)} />
       </div>
 
       {/* KPI Cards */}

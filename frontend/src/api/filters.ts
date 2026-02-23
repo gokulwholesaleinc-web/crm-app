@@ -21,6 +21,7 @@ export interface SavedFilter {
   filters: FilterGroup;
   user_id: number;
   is_default: boolean;
+  is_public: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -30,6 +31,19 @@ export interface SavedFilterCreate {
   entity_type: string;
   filters: FilterGroup;
   is_default?: boolean;
+  is_public?: boolean;
+}
+
+export interface AggregateRequest {
+  entity_type: string;
+  filters: FilterGroup | Record<string, unknown>;
+  metrics: string[];
+}
+
+export interface AggregateResponse {
+  count: number;
+  metrics: Record<string, number>;
+  sample_entities: Record<string, unknown>[];
 }
 
 export const listSavedFilters = async (entityType?: string): Promise<SavedFilter[]> => {
@@ -58,10 +72,16 @@ export const deleteSavedFilter = async (id: number): Promise<void> => {
   await apiClient.delete(`/api/filters/${id}`);
 };
 
+export const aggregateFilters = async (request: AggregateRequest): Promise<AggregateResponse> => {
+  const { data } = await apiClient.post('/api/filters/aggregate', request);
+  return data;
+};
+
 export const filtersApi = {
   listSavedFilters,
   createSavedFilter,
   getSavedFilter,
   updateSavedFilter,
   deleteSavedFilter,
+  aggregateFilters,
 };

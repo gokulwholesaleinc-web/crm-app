@@ -11,6 +11,7 @@ export interface ContactFormData {
   phone?: string;
   company_id?: number | null;
   jobTitle?: string;
+  salesCode?: string;
   address?: string;
   city?: string;
   state?: string;
@@ -46,6 +47,7 @@ export function ContactForm({
       email: '',
       phone: '',
       jobTitle: '',
+      salesCode: '',
       address: '',
       city: '',
       state: '',
@@ -140,6 +142,13 @@ export function ContactForm({
             label="Job Title"
             name="jobTitle"
             register={register('jobTitle')}
+          />
+
+          <FormInput
+            label="Sales Code"
+            name="salesCode"
+            register={register('salesCode')}
+            placeholder="Enter sales code..."
           />
         </div>
       </div>

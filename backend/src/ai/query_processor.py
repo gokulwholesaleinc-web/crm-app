@@ -1,6 +1,7 @@
 """Natural language query processor for AI assistant."""
 
 import json
+import logging
 import uuid
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta, date, timezone
@@ -25,6 +26,8 @@ from src.notes.service import NoteService
 from src.ai.action_safety import classify_action, requires_confirmation, get_confirmation_description, ActionRisk
 from src.ai.models import AIActionLog, AIConversation, AIUserPreferences
 from src.ai.learning_service import AILearningService
+
+logger = logging.getLogger(__name__)
 
 # Tiered memory settings
 WORKING_MEMORY_SIZE = 20
@@ -390,7 +393,8 @@ class QueryProcessor:
                 max_tokens=300,
             )
             return response.choices[0].message.content
-        except Exception:
+        except (OSError, RuntimeError, KeyError) as exc:
+            logger.warning("Failed to summarize conversation: %s", exc)
             return None
 
     async def _save_conversation(

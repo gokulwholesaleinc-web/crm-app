@@ -1,14 +1,17 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { PlusIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, FunnelIcon, BookmarkIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { Button, Modal, ConfirmDialog } from '../../components/ui';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { ContactForm, ContactFormData } from './components/ContactForm';
+import { SmartListBuilder } from './components/SmartListBuilder';
 import { useContacts, useCreateContact, useUpdateContact, useDeleteContact } from '../../hooks/useContacts';
+import { useSavedFilters, useDeleteSavedFilter } from '../../hooks/useFilters';
 import { formatDate, formatPhoneNumber } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { showSuccess, showError } from '../../utils/toast';
 import type { Contact, ContactCreate, ContactUpdate } from '../../types';
+import type { FilterGroup } from '../../api/filters';
 
 function ContactsPage() {
   usePageTitle('Contacts');
@@ -17,11 +20,18 @@ function ContactsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  const [showSmartListBuilder, setShowSmartListBuilder] = useState(false);
+  const [activeFilters, setActiveFilters] = useState<FilterGroup | null>(null);
+  const [activeSmartListName, setActiveSmartListName] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; contact: Contact | null }>({
     isOpen: false,
     contact: null,
   });
   const pageSize = 10;
+
+  // Fetch saved smart lists
+  const { data: savedFilters } = useSavedFilters('contacts');
+  const deleteFilterMutation = useDeleteSavedFilter();
 
   // Handle URL query parameters for auto-opening form (e.g., from company detail page)
   useEffect(() => {
@@ -45,6 +55,7 @@ function ContactsPage() {
     page: currentPage,
     page_size: pageSize,
     search: searchQuery || undefined,
+    ...(activeFilters ? { filters: JSON.stringify(activeFilters) } : {}),
   });
 
   const createContactMutation = useCreateContact();
@@ -137,6 +148,25 @@ function ContactsPage() {
     };
   };
 
+  const handleApplySmartListFilters = (filters: FilterGroup) => {
+    setActiveFilters(filters);
+    setActiveSmartListName(null);
+    setCurrentPage(1);
+    setShowSmartListBuilder(false);
+  };
+
+  const handleSelectSavedFilter = (filter: { name: string; filters: FilterGroup }) => {
+    setActiveFilters(filter.filters);
+    setActiveSmartListName(filter.name);
+    setCurrentPage(1);
+  };
+
+  const handleClearFilters = () => {
+    setActiveFilters(null);
+    setActiveSmartListName(null);
+    setCurrentPage(1);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -147,14 +177,91 @@ function ContactsPage() {
             Manage your contacts and relationships
           </p>
         </div>
-        <Button
-          leftIcon={<PlusIcon className="h-5 w-5" />}
-          onClick={() => setShowForm(true)}
-          className="w-full sm:w-auto"
-        >
-          Add Contact
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="secondary"
+            leftIcon={<FunnelIcon className="h-5 w-5" />}
+            onClick={() => setShowSmartListBuilder(true)}
+            className="w-full sm:w-auto"
+          >
+            Build Smart List
+          </Button>
+          <Button
+            leftIcon={<PlusIcon className="h-5 w-5" />}
+            onClick={() => setShowForm(true)}
+            className="w-full sm:w-auto"
+          >
+            Add Contact
+          </Button>
+        </div>
       </div>
+
+      {/* Saved Smart Lists */}
+      {savedFilters && savedFilters.length > 0 && (
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4 border border-transparent dark:border-gray-700">
+          <div className="flex items-center gap-2 mb-3">
+            <BookmarkIcon className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Smart Lists</h3>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {savedFilters.map((filter) => (
+              <div key={filter.id} className="flex items-center gap-1">
+                <button
+                  onClick={() => handleSelectSavedFilter(filter)}
+                  className={`px-3 py-1.5 text-sm rounded-full border transition-colors ${
+                    activeSmartListName === filter.name
+                      ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-800 dark:text-primary-200 border-primary-300 dark:border-primary-700'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  {filter.name}
+                  {filter.is_public && (
+                    <span className="ml-1 text-xs text-gray-400">(shared)</span>
+                  )}
+                </button>
+                {filter.user_id && (
+                  <button
+                    onClick={async () => {
+                      try {
+                        await deleteFilterMutation.mutateAsync(filter.id);
+                        if (activeSmartListName === filter.name) {
+                          handleClearFilters();
+                        }
+                        showSuccess('Smart list deleted');
+                      } catch {
+                        showError('Failed to delete smart list');
+                      }
+                    }}
+                    className="p-0.5 text-gray-400 hover:text-red-500 rounded"
+                    aria-label={`Delete ${filter.name} smart list`}
+                  >
+                    <XMarkIcon className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Active Filter Banner */}
+      {activeFilters && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-lg">
+          <FunnelIcon className="h-4 w-4 text-primary-600 dark:text-primary-400" />
+          <span className="text-sm text-primary-800 dark:text-primary-200 font-medium">
+            {activeSmartListName ? `Smart List: ${activeSmartListName}` : 'Custom filters applied'}
+          </span>
+          <span className="text-sm text-primary-600 dark:text-primary-400">
+            ({total} result{total !== 1 ? 's' : ''})
+          </span>
+          <button
+            onClick={handleClearFilters}
+            className="ml-auto text-sm text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-200 font-medium"
+          >
+            Clear filters
+          </button>
+        </div>
+      )}
 
       {/* Search and Filters */}
       <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4 border border-transparent dark:border-gray-700">
@@ -243,9 +350,16 @@ function ContactsPage() {
             </svg>
             <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">No contacts</h3>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              Get started by creating a new contact.
+              {activeFilters
+                ? 'No contacts match the current filters.'
+                : 'Get started by creating a new contact.'}
             </p>
-            <div className="mt-6">
+            <div className="mt-6 flex justify-center gap-2">
+              {activeFilters && (
+                <Button variant="secondary" onClick={handleClearFilters}>
+                  Clear Filters
+                </Button>
+              )}
               <Button onClick={() => setShowForm(true)}>Add Contact</Button>
             </div>
           </div>
@@ -474,6 +588,20 @@ function ContactsPage() {
           </>
         )}
       </div>
+
+      {/* Smart List Builder Modal */}
+      <Modal
+        isOpen={showSmartListBuilder}
+        onClose={() => setShowSmartListBuilder(false)}
+        title="Build Smart List"
+        size="lg"
+      >
+        <SmartListBuilder
+          entityType="contacts"
+          onApplyFilters={handleApplySmartListFilters}
+          onClose={() => setShowSmartListBuilder(false)}
+        />
+      </Modal>
 
       {/* Form Modal */}
       <Modal

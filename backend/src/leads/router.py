@@ -2,8 +2,9 @@
 
 import logging
 from typing import Annotated, Optional, List
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
+from sqlalchemy import select
 from src.auth.models import User
 from src.core.constants import HTTPStatus, EntityNames, ErrorMessages, ENTITY_TYPE_LEADS
 from src.core.permissions import require_permission
@@ -33,10 +34,16 @@ from src.leads.schemas import (
     LeadConvertToOpportunityRequest,
     LeadFullConversionRequest,
     ConversionResponse,
+    KanbanLead,
+    KanbanLeadStage,
+    LeadKanbanResponse,
+    MoveLeadRequest,
     TagBrief,
 )
 from src.leads.service import LeadService
 from src.leads.conversion import LeadConverter
+from src.leads.models import Lead
+from src.opportunities.models import PipelineStage
 from src.ai.embedding_hooks import (
     store_entity_embedding,
     delete_entity_embedding,
@@ -81,7 +88,13 @@ async def list_leads(
     - Sales_rep/Viewer: see only own leads + shared leads
     """
     import json as _json
-    parsed_filters = _json.loads(filters) if filters else None
+    from fastapi import HTTPException
+    parsed_filters = None
+    if filters:
+        try:
+            parsed_filters = _json.loads(filters)
+        except _json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid JSON filter format")
 
     # Use data_scope to determine owner_id filter
     if data_scope.can_see_all():
@@ -104,7 +117,15 @@ async def list_leads(
         shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_LEADS),
     )
 
-    lead_responses = [await _build_lead_response(service, lead) for lead in leads]
+    # Bulk-load tags in a single query to avoid N+1
+    entity_ids = [lead.id for lead in leads]
+    tags_map = await service.get_tags_for_entities(entity_ids)
+
+    lead_responses = []
+    for lead in leads:
+        response_dict = LeadResponse.model_validate(lead).model_dump()
+        response_dict["tags"] = [TagBrief.model_validate(t) for t in tags_map.get(lead.id, [])]
+        lead_responses.append(LeadResponse(**response_dict))
 
     return LeadListResponse(
         items=lead_responses,
@@ -147,6 +168,170 @@ async def create_lead(
         await notify_on_assignment(db, lead.owner_id, "leads", lead.id, lead.full_name)
 
     return await _build_lead_response(service, lead)
+
+
+# =============================================================================
+# Lead Pipeline / Kanban endpoints (before parameterized routes)
+# =============================================================================
+
+@router.get("/pipeline-stages")
+async def get_lead_pipeline_stages(
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Get pipeline stages for leads (pipeline_type='lead')."""
+    from src.opportunities.schemas import PipelineStageResponse
+
+    result = await db.execute(
+        select(PipelineStage)
+        .where(PipelineStage.pipeline_type == "lead")
+        .where(PipelineStage.is_active == True)
+        .order_by(PipelineStage.order)
+    )
+    stages = result.scalars().all()
+    return [PipelineStageResponse.model_validate(s) for s in stages]
+
+
+@router.get("/kanban", response_model=LeadKanbanResponse)
+async def get_lead_kanban(
+    current_user: CurrentUser,
+    db: DBSession,
+    owner_id: Optional[int] = None,
+):
+    """Get Kanban board view of lead pipeline."""
+    effective_owner_id = owner_id if owner_id is not None else current_user.id
+
+    # Get all active lead pipeline stages
+    stages_result = await db.execute(
+        select(PipelineStage)
+        .where(PipelineStage.pipeline_type == "lead")
+        .where(PipelineStage.is_active == True)
+        .order_by(PipelineStage.order)
+    )
+    stages = stages_result.scalars().all()
+
+    kanban_stages = []
+    for stage in stages:
+        leads_query = (
+            select(Lead)
+            .where(Lead.pipeline_stage_id == stage.id)
+        )
+        if effective_owner_id:
+            leads_query = leads_query.where(Lead.owner_id == effective_owner_id)
+        leads_query = leads_query.order_by(Lead.score.desc())
+
+        leads_result = await db.execute(leads_query)
+        leads = leads_result.scalars().all()
+
+        kanban_leads = [
+            KanbanLead(
+                id=lead.id,
+                first_name=lead.first_name,
+                last_name=lead.last_name,
+                full_name=lead.full_name,
+                email=lead.email,
+                company_name=lead.company_name,
+                score=lead.score,
+                owner_id=lead.owner_id,
+            )
+            for lead in leads
+        ]
+
+        kanban_stages.append(
+            KanbanLeadStage(
+                stage_id=stage.id,
+                stage_name=stage.name,
+                color=stage.color,
+                probability=stage.probability,
+                is_won=stage.is_won,
+                is_lost=stage.is_lost,
+                leads=kanban_leads,
+                count=len(kanban_leads),
+            )
+        )
+
+    return LeadKanbanResponse(stages=kanban_stages)
+
+
+@router.post("/{lead_id}/move")
+async def move_lead(
+    lead_id: int,
+    request: MoveLeadRequest,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Move a lead to a different pipeline stage with status sync.
+
+    When moved to a Won stage, auto-converts the lead to Contact + Opportunity.
+    """
+    # Get the lead
+    service = LeadService(db)
+    lead = await get_entity_or_404(service, lead_id, EntityNames.LEAD)
+
+    # Verify the new stage exists and is a lead stage
+    stage_result = await db.execute(
+        select(PipelineStage).where(PipelineStage.id == request.new_stage_id)
+    )
+    stage = stage_result.scalar_one_or_none()
+
+    if not stage:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail=f"Pipeline stage {request.new_stage_id} not found",
+        )
+
+    # Move lead to new stage
+    lead.pipeline_stage_id = request.new_stage_id
+
+    # Sync status based on stage
+    if stage.is_won:
+        lead.status = "converted"
+    elif stage.is_lost:
+        lead.status = "lost"
+    else:
+        # Map by stage order
+        order_status_map = {1: "new", 2: "contacted", 3: "qualified", 4: "negotiation"}
+        lead.status = order_status_map.get(stage.order, "qualified")
+
+    await db.flush()
+    await db.refresh(lead)
+
+    # Auto-convert when moved to a Won stage
+    conversion_info = None
+    if stage.is_won and not lead.converted_contact_id and not lead.converted_opportunity_id:
+        # Find the first opportunity pipeline stage (order=1, pipeline_type="opportunity")
+        first_opp_stage_result = await db.execute(
+            select(PipelineStage)
+            .where(PipelineStage.pipeline_type == "opportunity")
+            .where(PipelineStage.is_active == True)
+            .order_by(PipelineStage.order)
+            .limit(1)
+        )
+        first_opp_stage = first_opp_stage_result.scalar_one_or_none()
+
+        if first_opp_stage:
+            converter = LeadConverter(db)
+            contact, company, opportunity = await converter.full_conversion(
+                lead=lead,
+                user_id=current_user.id,
+                pipeline_stage_id=first_opp_stage.id,
+                create_company=bool(lead.company_name),
+            )
+            await db.flush()
+            await db.refresh(lead)
+
+            conversion_info = {
+                "converted": True,
+                "contact_id": contact.id,
+                "company_id": company.id if company else None,
+                "opportunity_id": opportunity.id,
+            }
+
+    lead_response = await _build_lead_response(service, lead)
+    response_dict = lead_response.model_dump()
+    if conversion_info:
+        response_dict["conversion"] = conversion_info
+    return response_dict
 
 
 @router.get("/{lead_id}", response_model=LeadResponse)

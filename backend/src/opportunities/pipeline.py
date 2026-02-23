@@ -19,10 +19,11 @@ class PipelineManager:
 
         Returns list of stages with their opportunities.
         """
-        # Get all active stages ordered
+        # Get all active opportunity stages ordered
         stages_result = await self.db.execute(
             select(PipelineStage)
             .where(PipelineStage.is_active == True)
+            .where(PipelineStage.pipeline_type == "opportunity")
             .order_by(PipelineStage.order)
         )
         stages = stages_result.scalars().all()
@@ -86,7 +87,7 @@ class PipelineManager:
         if not opportunity:
             raise ValueError(ErrorMessages.not_found_with_id(EntityNames.OPPORTUNITY, opportunity_id))
 
-        # Verify stage exists
+        # Verify stage exists and is an opportunity stage
         stage_result = await self.db.execute(
             select(PipelineStage).where(PipelineStage.id == new_stage_id)
         )

@@ -20,6 +20,9 @@ class Attachment(Base):
     file_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
     mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
 
+    # Category for document organization
+    category: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+
     # Polymorphic link to any entity
     entity_type: Mapped[str] = mapped_column(String(50), nullable=False)
     entity_id: Mapped[int] = mapped_column(Integer, nullable=False)

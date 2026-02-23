@@ -177,8 +177,8 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
                     self.db, user_id
                 )
                 company_name = branding.get("company_name", "CRM")
-            except Exception:
-                pass
+            except (ImportError, LookupError, OSError) as exc:
+                logger.debug("Could not load tenant branding: %s", exc)
 
         # Build price_data based on payment type
         price_data: dict = {
@@ -431,7 +431,8 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             ).hexdigest()
 
             return hmac.compare_digest(expected, signature)
-        except Exception:
+        except (ValueError, KeyError, TypeError) as exc:
+            logger.warning("Webhook signature verification failed: %s", exc)
             return False
 
     async def send_payment_receipt(self, payment_id: int) -> None:
@@ -632,8 +633,8 @@ body {{ font-family: Arial, Helvetica, sans-serif; margin: 40px; color: #111827;
             # Send branded receipt email
             try:
                 await self.send_payment_receipt(payment.id)
-            except Exception:
-                logger.warning("Failed to send receipt for payment %s", payment.id)
+            except (OSError, RuntimeError) as exc:
+                logger.warning("Failed to send receipt for payment %s: %s", payment.id, exc)
 
     async def _handle_payment_succeeded(self, intent_obj: dict) -> None:
         """Handle payment_intent.succeeded event."""
@@ -657,8 +658,8 @@ body {{ font-family: Arial, Helvetica, sans-serif; margin: 40px; color: #111827;
             # Send branded receipt email
             try:
                 await self.send_payment_receipt(payment.id)
-            except Exception:
-                logger.warning("Failed to send receipt for payment %s", payment.id)
+            except (OSError, RuntimeError) as exc:
+                logger.warning("Failed to send receipt for payment %s: %s", payment.id, exc)
 
     async def _handle_payment_failed(self, intent_obj: dict) -> None:
         """Handle payment_intent.payment_failed event."""
@@ -861,8 +862,8 @@ class SubscriptionService:
                     subscription.stripe_subscription_id,
                     cancel_at_period_end=True,
                 )
-            except Exception:
-                logger.warning("Failed to cancel subscription on Stripe: %s", subscription.stripe_subscription_id)
+            except (OSError, RuntimeError) as exc:
+                logger.warning("Failed to cancel subscription on Stripe %s: %s", subscription.stripe_subscription_id, exc)
 
         subscription.status = "canceled"
         subscription.cancel_at_period_end = True

@@ -22,6 +22,7 @@ class SavedFilter(Base):
         index=True,
     )
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_public: Mapped[bool] = mapped_column(Boolean, default=False)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

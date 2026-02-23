@@ -11,6 +11,9 @@ import type {
   ProposalCreate,
   ProposalUpdate,
   ProposalFilters,
+  ProposalTemplateCreate,
+  ProposalTemplateUpdate,
+  CreateFromTemplateRequest,
   AIGenerateProposalRequest,
 } from '../types';
 
@@ -162,10 +165,21 @@ export function useGenerateProposal() {
 /**
  * Hook to fetch proposal templates
  */
-export function useProposalTemplates() {
+export function useProposalTemplates(category?: string) {
   return useAuthQuery({
-    queryKey: ['proposals', 'templates'],
-    queryFn: () => proposalsApi.listTemplates(),
+    queryKey: ['proposals', 'templates', category],
+    queryFn: () => proposalsApi.listTemplates(category),
+  });
+}
+
+/**
+ * Hook to fetch a single proposal template
+ */
+export function useProposalTemplate(id: number | undefined) {
+  return useAuthQuery({
+    queryKey: ['proposals', 'templates', id],
+    queryFn: () => proposalsApi.getTemplate(id!),
+    enabled: !!id,
   });
 }
 
@@ -176,9 +190,52 @@ export function useCreateProposalTemplate() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: proposalsApi.createTemplate,
+    mutationFn: (data: ProposalTemplateCreate) => proposalsApi.createTemplate(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['proposals', 'templates'] });
+    },
+  });
+}
+
+/**
+ * Hook to update a proposal template
+ */
+export function useUpdateProposalTemplate() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: ProposalTemplateUpdate }) =>
+      proposalsApi.updateTemplate(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['proposals', 'templates'] });
+    },
+  });
+}
+
+/**
+ * Hook to delete a proposal template
+ */
+export function useDeleteProposalTemplate() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: number) => proposalsApi.deleteTemplate(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['proposals', 'templates'] });
+    },
+  });
+}
+
+/**
+ * Hook to create a proposal from a template
+ */
+export function useCreateFromTemplate() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: CreateFromTemplateRequest) => proposalsApi.createFromTemplate(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: proposalKeys.lists() });
     },
   });
 }

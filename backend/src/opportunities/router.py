@@ -227,7 +227,13 @@ async def list_opportunities(
 ):
     """List opportunities with pagination and filters."""
     import json as _json
-    parsed_filters = _json.loads(filters) if filters else None
+    from fastapi import HTTPException
+    parsed_filters = None
+    if filters:
+        try:
+            parsed_filters = _json.loads(filters)
+        except _json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid JSON filter format")
 
     if data_scope.can_see_all():
         effective_owner_id = owner_id
@@ -249,9 +255,15 @@ async def list_opportunities(
         shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_OPPORTUNITIES),
     )
 
-    opp_responses = [
-        await _build_opportunity_response(service, opp) for opp in opportunities
-    ]
+    # Bulk-load tags in a single query to avoid N+1
+    entity_ids = [opp.id for opp in opportunities]
+    tags_map = await service.get_tags_for_entities(entity_ids)
+
+    opp_responses = []
+    for opp in opportunities:
+        response_dict = OpportunityResponse.model_validate(opp).model_dump()
+        response_dict["tags"] = [TagBrief.model_validate(t) for t in tags_map.get(opp.id, [])]
+        opp_responses.append(OpportunityResponse(**response_dict))
 
     return OpportunityListResponse(
         items=opp_responses,

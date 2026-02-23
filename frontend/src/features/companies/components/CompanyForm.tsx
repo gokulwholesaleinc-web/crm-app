@@ -36,6 +36,7 @@ interface FormValues {
   twitter_handle: string;
   description: string;
   status: string;
+  segment: string;
 }
 
 const statusOptions = [
@@ -66,6 +67,17 @@ const industryOptions = [
   { value: 'real_estate', label: 'Real Estate' },
   { value: 'consulting', label: 'Consulting' },
   { value: 'media', label: 'Media & Entertainment' },
+  { value: 'other', label: 'Other' },
+];
+
+const segmentOptions = [
+  { value: '', label: 'Select segment...' },
+  { value: 'retail', label: 'Retail' },
+  { value: 'food_producer', label: 'Food Producer' },
+  { value: 'technology', label: 'Technology' },
+  { value: 'healthcare', label: 'Healthcare' },
+  { value: 'education', label: 'Education' },
+  { value: 'manufacturing', label: 'Manufacturing' },
   { value: 'other', label: 'Other' },
 ];
 
@@ -103,6 +115,7 @@ export function CompanyForm({
       twitter_handle: company?.twitter_handle || '',
       description: company?.description || '',
       status: company?.status || 'prospect',
+      segment: company?.segment || '',
     },
   });
 
@@ -128,6 +141,7 @@ export function CompanyForm({
         twitter_handle: company.twitter_handle || '',
         description: company.description || '',
         status: company.status,
+        segment: company.segment || '',
       });
     }
   }, [company, reset]);
@@ -152,6 +166,7 @@ export function CompanyForm({
       twitter_handle: data.twitter_handle || undefined,
       description: data.description || undefined,
       status: data.status,
+      segment: data.segment || undefined,
     };
 
     await onSubmit(formattedData);
@@ -207,11 +222,20 @@ export function CompanyForm({
         />
       </div>
 
-      <Input
-        {...register('phone')}
-        label="Phone"
-        placeholder="+1 (555) 000-0000"
-      />
+      <div className="grid grid-cols-2 gap-4">
+        <Controller
+          name="segment"
+          control={control}
+          render={({ field }) => (
+            <Select {...field} label="Segment" options={segmentOptions} />
+          )}
+        />
+        <Input
+          {...register('phone')}
+          label="Phone"
+          placeholder="+1 (555) 000-0000"
+        />
+      </div>
 
       {/* Business Info */}
       <div className="border-t pt-4 mt-4">

@@ -60,6 +60,9 @@ class Contact(Base, AuditableMixin):
         index=True,
     )
 
+    # Sales code
+    sales_code: Mapped[Optional[str]] = mapped_column(String(100), index=True, nullable=True)
+
     # Relationships
     company: Mapped[Optional["Company"]] = relationship(
         "Company",

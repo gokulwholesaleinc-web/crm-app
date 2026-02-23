@@ -14,9 +14,17 @@ from src.activities.models import Activity
 class NumberCardGenerator:
     """Generates data for dashboard number cards."""
 
-    def __init__(self, db: AsyncSession, user_id: Optional[int] = None):
+    def __init__(
+        self,
+        db: AsyncSession,
+        user_id: Optional[int] = None,
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
+    ):
         self.db = db
         self.user_id = user_id
+        self.date_from = date_from
+        self.date_to = date_to
 
     async def get_all_kpis(self, user_id: Optional[int] = None) -> List[Dict[str, Any]]:
         """Get all KPI data for number cards."""
@@ -38,11 +46,20 @@ class NumberCardGenerator:
         ]
         return kpis
 
+    def _apply_date_filter(self, filters: list, date_column) -> list:
+        """Apply date_from/date_to filters to a filter list."""
+        if self.date_from:
+            filters.append(date_column >= datetime.combine(self.date_from, datetime.min.time()))
+        if self.date_to:
+            filters.append(date_column <= datetime.combine(self.date_to, datetime.max.time()))
+        return filters
+
     async def get_total_contacts(self) -> Dict[str, Any]:
         """Get total active contacts count."""
         filters = [Contact.status == "active"]
         if self.user_id:
             filters.append(Contact.owner_id == self.user_id)
+        self._apply_date_filter(filters, Contact.created_at)
         result = await self.db.execute(
             select(func.count(Contact.id)).where(and_(*filters))
         )
@@ -73,9 +90,13 @@ class NumberCardGenerator:
 
     async def get_total_leads(self) -> Dict[str, Any]:
         """Get total leads count (all statuses)."""
-        query = select(func.count(Lead.id))
+        filters = []
         if self.user_id:
-            query = query.where(Lead.owner_id == self.user_id)
+            filters.append(Lead.owner_id == self.user_id)
+        self._apply_date_filter(filters, Lead.created_at)
+        query = select(func.count(Lead.id))
+        if filters:
+            query = query.where(and_(*filters))
         result = await self.db.execute(query)
         count = result.scalar() or 0
 
@@ -109,6 +130,7 @@ class NumberCardGenerator:
         ]
         if self.user_id:
             filters.append(Opportunity.owner_id == self.user_id)
+        self._apply_date_filter(filters, Opportunity.created_at)
         result = await self.db.execute(
             select(func.count(Opportunity.id))
             .join(PipelineStage)
@@ -147,6 +169,7 @@ class NumberCardGenerator:
         filters = [PipelineStage.is_won == True]
         if self.user_id:
             filters.append(Opportunity.owner_id == self.user_id)
+        self._apply_date_filter(filters, Opportunity.created_at)
         result = await self.db.execute(
             select(func.sum(Opportunity.amount))
             .join(PipelineStage)
@@ -190,9 +213,13 @@ class NumberCardGenerator:
 
     async def get_total_companies(self) -> Dict[str, Any]:
         """Get total companies count."""
-        query = select(func.count(Company.id))
+        filters = []
         if self.user_id:
-            query = query.where(Company.owner_id == self.user_id)
+            filters.append(Company.owner_id == self.user_id)
+        self._apply_date_filter(filters, Company.created_at)
+        query = select(func.count(Company.id))
+        if filters:
+            query = query.where(and_(*filters))
         result = await self.db.execute(query)
         count = result.scalar() or 0
 
@@ -205,12 +232,32 @@ class NumberCardGenerator:
         }
 
     async def get_open_leads(self) -> Dict[str, Any]:
-        """Get count of open leads (not converted or lost)."""
-        filters = [Lead.status.in_(["new", "contacted", "qualified"])]
+        """Get count of open leads (not in won/lost pipeline stages, or status-based fallback)."""
+        from sqlalchemy import or_
+
+        base_query = select(func.count(Lead.id)).outerjoin(
+            PipelineStage, Lead.pipeline_stage_id == PipelineStage.id
+        )
+
+        open_condition = or_(
+            and_(
+                Lead.pipeline_stage_id.isnot(None),
+                PipelineStage.is_won == False,
+                PipelineStage.is_lost == False,
+            ),
+            and_(
+                Lead.pipeline_stage_id.is_(None),
+                Lead.status.in_(["new", "contacted", "qualified"]),
+            ),
+        )
+
+        filters = [open_condition]
         if self.user_id:
             filters.append(Lead.owner_id == self.user_id)
+        self._apply_date_filter(filters, Lead.created_at)
+
         result = await self.db.execute(
-            select(func.count(Lead.id)).where(and_(*filters))
+            base_query.where(and_(*filters))
         )
         count = result.scalar() or 0
 
@@ -230,6 +277,7 @@ class NumberCardGenerator:
         ]
         if self.user_id:
             filters.append(Opportunity.owner_id == self.user_id)
+        self._apply_date_filter(filters, Opportunity.created_at)
         result = await self.db.execute(
             select(func.sum(Opportunity.amount))
             .join(PipelineStage)
@@ -257,6 +305,7 @@ class NumberCardGenerator:
         ]
         if self.user_id:
             filters.append(Opportunity.owner_id == self.user_id)
+        self._apply_date_filter(filters, Opportunity.created_at)
         result = await self.db.execute(
             select(func.sum(Opportunity.amount))
             .join(PipelineStage)
@@ -277,23 +326,23 @@ class NumberCardGenerator:
         """Get count of tasks due today."""
         today = date.today()
 
-        query = select(func.count(Activity.id)).where(
-            and_(
-                Activity.activity_type == "task",
-                Activity.is_completed == False,
-                Activity.due_date == today,
-            )
-        )
+        filters = [
+            Activity.activity_type == "task",
+            Activity.is_completed == False,
+            Activity.due_date == today,
+        ]
+        self._apply_date_filter(filters, Activity.created_at)
 
         if user_id:
             from sqlalchemy import or_
-            query = query.where(
+            filters.append(
                 or_(
                     Activity.owner_id == user_id,
                     Activity.assigned_to_id == user_id,
                 )
             )
 
+        query = select(func.count(Activity.id)).where(and_(*filters))
         result = await self.db.execute(query)
         count = result.scalar() or 0
 
@@ -313,6 +362,7 @@ class NumberCardGenerator:
         filters = [Lead.created_at >= datetime.combine(week_start, datetime.min.time())]
         if self.user_id:
             filters.append(Lead.owner_id == self.user_id)
+        self._apply_date_filter(filters, Lead.created_at)
         result = await self.db.execute(
             select(func.count(Lead.id)).where(and_(*filters))
         )
@@ -349,6 +399,7 @@ class NumberCardGenerator:
         total_filters = [Lead.created_at < datetime.now() - timedelta(days=7)]
         if self.user_id:
             total_filters.append(Lead.owner_id == self.user_id)
+        self._apply_date_filter(total_filters, Lead.created_at)
         total_result = await self.db.execute(
             select(func.count(Lead.id)).where(and_(*total_filters))
         )
@@ -358,6 +409,7 @@ class NumberCardGenerator:
         converted_filters = [Lead.status == "converted"]
         if self.user_id:
             converted_filters.append(Lead.owner_id == self.user_id)
+        self._apply_date_filter(converted_filters, Lead.created_at)
         converted_result = await self.db.execute(
             select(func.count(Lead.id)).where(and_(*converted_filters))
         )

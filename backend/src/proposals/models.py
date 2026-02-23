@@ -106,14 +106,19 @@ class Proposal(Base, AuditableMixin):
 
 
 class ProposalTemplate(Base, AuditableMixin):
-    """Reusable proposal templates with variable placeholders."""
+    """Reusable proposal templates with merge variable placeholders."""
     __tablename__ = "proposal_templates"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text)
-    category: Mapped[Optional[str]] = mapped_column(String(100))
-    content_template: Mapped[Optional[str]] = mapped_column(Text)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    body: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    legal_terms: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    category: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    is_default: Mapped[bool] = mapped_column(default=False)
+    owner_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
 
 
 class ProposalView(Base):

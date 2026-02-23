@@ -25,6 +25,7 @@ class PipelineStage(Base):
     is_won: Mapped[bool] = mapped_column(Boolean, default=False)
     is_lost: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    pipeline_type: Mapped[str] = mapped_column(String(20), default="opportunity", index=True)
 
 
 class Opportunity(Base, AuditableMixin):

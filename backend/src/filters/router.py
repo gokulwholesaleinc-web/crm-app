@@ -1,16 +1,49 @@
 """Saved filters CRUD API routes."""
 
 import json
-from typing import List, Optional
+from typing import List, Optional, Any, Dict
 from fastapi import APIRouter, Query
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 
 from src.core.router_utils import DBSession, CurrentUser
 from src.core.constants import HTTPStatus
+from src.core.filtering import parse_filter_group, apply_filters_to_query
 from src.filters.models import SavedFilter
-from src.filters.schemas import SavedFilterCreate, SavedFilterUpdate, SavedFilterResponse
+from src.filters.schemas import (
+    SavedFilterCreate,
+    SavedFilterUpdate,
+    SavedFilterResponse,
+    AggregateRequest,
+    AggregateResponse,
+)
 
 router = APIRouter(prefix="/api/filters", tags=["filters"])
+
+# Entity type to model mapping
+ENTITY_MODEL_MAP = {}
+
+
+def _get_entity_model(entity_type: str):
+    """Lazily load and cache entity models to avoid circular imports."""
+    if not ENTITY_MODEL_MAP:
+        from src.contacts.models import Contact
+        from src.companies.models import Company
+        from src.leads.models import Lead
+        from src.opportunities.models import Opportunity
+        from src.activities.models import Activity
+
+        ENTITY_MODEL_MAP.update({
+            "contacts": Contact,
+            "companies": Company,
+            "leads": Lead,
+            "opportunities": Opportunity,
+            "activities": Activity,
+        })
+    model = ENTITY_MODEL_MAP.get(entity_type)
+    if not model:
+        from src.core.router_utils import raise_bad_request
+        raise_bad_request(f"Unknown entity type: {entity_type}")
+    return model
 
 
 def _filter_to_response(f: SavedFilter) -> SavedFilterResponse:
@@ -22,6 +55,7 @@ def _filter_to_response(f: SavedFilter) -> SavedFilterResponse:
         filters=json.loads(f.filters) if isinstance(f.filters, str) else f.filters,
         user_id=f.user_id,
         is_default=f.is_default,
+        is_public=f.is_public,
         created_at=f.created_at,
         updated_at=f.updated_at,
     )
@@ -33,8 +67,13 @@ async def list_saved_filters(
     db: DBSession,
     entity_type: Optional[str] = None,
 ):
-    """List saved filters for the current user."""
-    query = select(SavedFilter).where(SavedFilter.user_id == current_user.id)
+    """List saved filters for the current user and public filters."""
+    query = select(SavedFilter).where(
+        or_(
+            SavedFilter.user_id == current_user.id,
+            SavedFilter.is_public == True,
+        )
+    )
     if entity_type:
         query = query.where(SavedFilter.entity_type == entity_type)
     query = query.order_by(SavedFilter.name)
@@ -58,12 +97,91 @@ async def create_saved_filter(
         filters=json.dumps(data.filters),
         user_id=current_user.id,
         is_default=data.is_default,
+        is_public=data.is_public,
     )
     db.add(saved_filter)
     await db.flush()
     await db.refresh(saved_filter)
 
     return _filter_to_response(saved_filter)
+
+
+@router.post("/aggregate", response_model=AggregateResponse)
+async def aggregate_filters(
+    data: AggregateRequest,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Run aggregate queries against filtered entity data.
+
+    Supports metrics: count, sum:<field>, avg:<field>.
+    Returns count, computed metrics, and first 5 matching entities.
+    """
+    model = _get_entity_model(data.entity_type)
+
+    # Build the base filtered query for count
+    count_query = select(func.count()).select_from(model)
+    count_query = apply_filters_to_query(count_query, model, data.filters)
+    count_result = await db.execute(count_query)
+    count = count_result.scalar() or 0
+
+    # Compute metrics
+    metrics: Dict[str, Any] = {}
+    for metric in data.metrics:
+        if metric == "count":
+            metrics["count"] = count
+        elif ":" in metric:
+            agg_func_name, field_name = metric.split(":", 1)
+            column = getattr(model, field_name, None)
+            if column is None:
+                continue
+            if agg_func_name == "sum":
+                agg_query = select(func.sum(column)).select_from(model)
+            elif agg_func_name == "avg":
+                agg_query = select(func.avg(column)).select_from(model)
+            else:
+                continue
+            agg_query = apply_filters_to_query(agg_query, model, data.filters)
+            agg_result = await db.execute(agg_query)
+            value = agg_result.scalar()
+            metrics[metric] = float(value) if value is not None else 0
+
+    # Get sample entities (first 5)
+    sample_query = select(model)
+    sample_query = apply_filters_to_query(sample_query, model, data.filters)
+    sample_query = sample_query.limit(5)
+    sample_result = await db.execute(sample_query)
+    sample_entities = sample_result.scalars().all()
+
+    sample_dicts = []
+    for entity in sample_entities:
+        entity_dict: Dict[str, Any] = {"id": entity.id}
+        # Add common display fields
+        if hasattr(entity, "first_name"):
+            entity_dict["first_name"] = entity.first_name
+        if hasattr(entity, "last_name"):
+            entity_dict["last_name"] = entity.last_name
+        if hasattr(entity, "name"):
+            entity_dict["name"] = entity.name
+        if hasattr(entity, "email"):
+            entity_dict["email"] = entity.email
+        if hasattr(entity, "status"):
+            entity_dict["status"] = entity.status
+        if hasattr(entity, "company_name"):
+            entity_dict["company_name"] = entity.company_name
+        if hasattr(entity, "annual_revenue"):
+            entity_dict["annual_revenue"] = entity.annual_revenue
+        if hasattr(entity, "industry"):
+            entity_dict["industry"] = entity.industry
+        if hasattr(entity, "segment"):
+            entity_dict["segment"] = entity.segment
+        sample_dicts.append(entity_dict)
+
+    return AggregateResponse(
+        count=count,
+        metrics=metrics,
+        sample_entities=sample_dicts,
+    )
 
 
 @router.get("/{filter_id}", response_model=SavedFilterResponse)
@@ -112,6 +230,8 @@ async def update_saved_filter(
         saved_filter.filters = json.dumps(data.filters)
     if data.is_default is not None:
         saved_filter.is_default = data.is_default
+    if data.is_public is not None:
+        saved_filter.is_public = data.is_public
 
     await db.flush()
     await db.refresh(saved_filter)

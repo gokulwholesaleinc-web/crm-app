@@ -1,6 +1,7 @@
 """Attachment API routes for file upload, download, listing, and deletion."""
 
-from fastapi import APIRouter, UploadFile, File, Form
+from typing import Optional
+from fastapi import APIRouter, UploadFile, File, Form, Query
 from fastapi.responses import FileResponse
 
 from src.core.constants import HTTPStatus, EntityNames
@@ -18,11 +19,16 @@ async def upload_file(
     file: UploadFile = File(...),
     entity_type: str = Form(...),
     entity_id: int = Form(...),
+    category: Optional[str] = Form(None),
 ):
     """Upload a file attachment for an entity."""
     valid_entity_types = {"contacts", "companies", "leads", "opportunities"}
     if entity_type not in valid_entity_types:
         raise_bad_request(f"Invalid entity_type. Must be one of: {', '.join(sorted(valid_entity_types))}")
+
+    valid_categories = {"document", "contract", "image", "report", "other"}
+    if category and category not in valid_categories:
+        raise_bad_request(f"Invalid category. Must be one of: {', '.join(sorted(valid_categories))}")
 
     service = AttachmentService(db)
     try:
@@ -31,6 +37,7 @@ async def upload_file(
             entity_type=entity_type,
             entity_id=entity_id,
             user_id=current_user.id,
+            category=category,
         )
     except ValueError as e:
         raise_bad_request(str(e))
@@ -67,10 +74,11 @@ async def list_attachments(
     entity_id: int,
     current_user: CurrentUser,
     db: DBSession,
+    category: Optional[str] = Query(None),
 ):
-    """List all attachments for a given entity."""
+    """List all attachments for a given entity, optionally filtered by category."""
     service = AttachmentService(db)
-    items, total = await service.list_attachments(entity_type, entity_id)
+    items, total = await service.list_attachments(entity_type, entity_id, category=category)
     return AttachmentListResponse(
         items=[AttachmentResponse.model_validate(a) for a in items],
         total=total,

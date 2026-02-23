@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { PlusIcon, SparklesIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, SparklesIcon, DocumentDuplicateIcon } from '@heroicons/react/24/outline';
 import { Button, Modal, ConfirmDialog, StatusBadge, PaginationBar } from '../../components/ui';
 import type { StatusType } from '../../components/ui/Badge';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { ProposalForm } from './ProposalForm';
 import { AIProposalGenerator } from './AIProposalGenerator';
+import { TemplateGallery } from './TemplateGallery';
 import { useProposals, useCreateProposal, useDeleteProposal } from '../../hooks/useProposals';
 import { formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
@@ -21,9 +22,12 @@ const statusOptions = [
   { value: 'rejected', label: 'Rejected' },
 ];
 
+type TabType = 'proposals' | 'templates';
+
 function ProposalsPage() {
   usePageTitle('Proposals');
   const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<TabType>('proposals');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -120,6 +124,48 @@ function ProposalsPage() {
           </Button>
         </div>
       </div>
+
+      {/* Tab Bar */}
+      <div className="border-b border-gray-200 dark:border-gray-700">
+        <nav className="-mb-px flex gap-6" aria-label="Tabs">
+          <button
+            type="button"
+            onClick={() => setActiveTab('proposals')}
+            className={`whitespace-nowrap py-3 px-1 border-b-2 text-sm font-medium transition-colors ${
+              activeTab === 'proposals'
+                ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200'
+            }`}
+          >
+            Proposals
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('templates')}
+            className={`whitespace-nowrap py-3 px-1 border-b-2 text-sm font-medium transition-colors inline-flex items-center gap-1.5 ${
+              activeTab === 'templates'
+                ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200'
+            }`}
+          >
+            <DocumentDuplicateIcon className="h-4 w-4" />
+            Templates
+          </button>
+        </nav>
+      </div>
+
+      {/* Templates Tab */}
+      {activeTab === 'templates' && (
+        <TemplateGallery
+          onProposalCreated={(proposalId) => {
+            setActiveTab('proposals');
+            navigate(`/proposals/${proposalId}`);
+          }}
+        />
+      )}
+
+      {/* Proposals Tab: Search and Filters */}
+      {activeTab === 'proposals' && <>
 
       {/* Search and Filters */}
       <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4 border border-transparent dark:border-gray-700">
@@ -352,6 +398,8 @@ function ProposalsPage() {
           </>
         )}
       </div>
+
+      </>}
 
       {/* Create Form Modal */}
       <Modal

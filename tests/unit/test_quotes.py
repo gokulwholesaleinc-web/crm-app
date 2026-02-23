@@ -1079,3 +1079,137 @@ class TestFinancialCalculations:
         assert data["subtotal"] == 1000.0
         # fixed discount 200, total = 800
         assert data["total"] == 800.0
+
+
+# =============================================================================
+# Payment Type and Recurring Interval Tests
+# =============================================================================
+
+class TestQuotePaymentType:
+    """Tests for payment_type and recurring_interval columns."""
+
+    @pytest.mark.asyncio
+    async def test_create_one_time_quote(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+    ):
+        """Test creating a one-time payment quote (default)."""
+        response = await client.post(
+            "/api/quotes",
+            headers=auth_headers,
+            json={
+                "title": "One-Time Quote",
+                "currency": "USD",
+                "tax_rate": 0,
+                "discount_value": 0,
+                "line_items": [
+                    {"description": "Setup Fee", "quantity": 1, "unit_price": 500.0},
+                ],
+            },
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["payment_type"] == "one_time"
+        assert data["recurring_interval"] is None
+
+    @pytest.mark.asyncio
+    async def test_create_subscription_quote(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+    ):
+        """Test creating a subscription quote with recurring interval."""
+        response = await client.post(
+            "/api/quotes",
+            headers=auth_headers,
+            json={
+                "title": "Monthly SaaS Quote",
+                "currency": "USD",
+                "tax_rate": 0,
+                "discount_value": 0,
+                "payment_type": "subscription",
+                "recurring_interval": "monthly",
+                "line_items": [
+                    {"description": "SaaS License", "quantity": 1, "unit_price": 99.0},
+                ],
+            },
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["payment_type"] == "subscription"
+        assert data["recurring_interval"] == "monthly"
+
+    @pytest.mark.asyncio
+    async def test_subscription_requires_recurring_interval(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+    ):
+        """Test that subscription payment_type requires recurring_interval."""
+        response = await client.post(
+            "/api/quotes",
+            headers=auth_headers,
+            json={
+                "title": "Bad Sub Quote",
+                "currency": "USD",
+                "tax_rate": 0,
+                "discount_value": 0,
+                "payment_type": "subscription",
+            },
+        )
+
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_update_payment_type_to_subscription(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_quote: Quote,
+    ):
+        """Test updating a quote to subscription payment type."""
+        response = await client.patch(
+            f"/api/quotes/{test_quote.id}",
+            headers=auth_headers,
+            json={
+                "payment_type": "subscription",
+                "recurring_interval": "yearly",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["payment_type"] == "subscription"
+        assert data["recurring_interval"] == "yearly"
+
+    @pytest.mark.asyncio
+    async def test_esign_fields_present_in_response(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_quote: Quote,
+    ):
+        """Test that e-signature fields are present in the response."""
+        response = await client.get(
+            f"/api/quotes/{test_quote.id}",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "signer_name" in data
+        assert "signer_email" in data
+        assert "signed_at" in data
+        assert "rejection_reason" in data
+        assert data["signer_name"] is None
+        assert data["signer_email"] is None
+        assert data["signed_at"] is None
+        assert data["rejection_reason"] is None

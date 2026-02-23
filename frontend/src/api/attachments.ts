@@ -12,6 +12,7 @@ export interface AttachmentResponse {
   mime_type: string;
   entity_type: string;
   entity_id: number;
+  category: string | null;
   uploaded_by: number | null;
   created_at: string;
 }
@@ -27,11 +28,15 @@ export const uploadAttachment = async (
   file: File,
   entityType: string,
   entityId: number,
+  category?: string,
 ): Promise<AttachmentResponse> => {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('entity_type', entityType);
   formData.append('entity_id', String(entityId));
+  if (category) {
+    formData.append('category', category);
+  }
 
   const response = await apiClient.post<AttachmentResponse>(`${BASE}/upload`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
@@ -42,9 +47,12 @@ export const uploadAttachment = async (
 export const listAttachments = async (
   entityType: string,
   entityId: number,
+  category?: string,
 ): Promise<AttachmentListResponse> => {
+  const params = category ? { category } : {};
   const response = await apiClient.get<AttachmentListResponse>(
     `${BASE}/${entityType}/${entityId}`,
+    { params },
   );
   return response.data;
 };

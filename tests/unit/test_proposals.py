@@ -758,7 +758,7 @@ class TestProposalTemplates:
                 "name": "SaaS Template",
                 "description": "Template for SaaS proposals",
                 "category": "software",
-                "content_template": "Dear {{contact_name}},\n\nWe propose {{scope}}.",
+                "body": "Dear {{contact_name}},\n\nWe propose {{scope}}.",
             },
         )
 
@@ -766,7 +766,7 @@ class TestProposalTemplates:
         data = response.json()
         assert data["name"] == "SaaS Template"
         assert data["category"] == "software"
-        assert "{{contact_name}}" in data["content_template"]
+        assert "{{contact_name}}" in data["body"]
 
     @pytest.mark.asyncio
     async def test_list_templates(
@@ -781,7 +781,7 @@ class TestProposalTemplates:
             name="Test Template",
             description="A test template",
             category="general",
-            content_template="Hello {{name}}",
+            body="Hello {{name}}",
             created_by_id=1,
         )
         db_session.add(template)

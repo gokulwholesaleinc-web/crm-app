@@ -27,13 +27,26 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
   const [searchParams] = useSearchParams();
   const urlOpportunityId = searchParams.get('opportunity_id');
 
-  const [title, setTitle] = useState(initialData?.title ?? '');
-  const [description, setDescription] = useState(initialData?.description ?? '');
-  const [contactId, setContactId] = useState<number | null>(initialData?.contact_id ?? null);
-  const [companyId, setCompanyId] = useState<number | null>(initialData?.company_id ?? null);
-  const [opportunityId, setOpportunityId] = useState<number | null>(
-    initialData?.opportunity_id ?? (urlOpportunityId ? parseInt(urlOpportunityId, 10) : null)
-  );
+  const [formData, setFormData] = useState({
+    title: initialData?.title ?? '',
+    description: initialData?.description ?? '',
+    contactId: initialData?.contact_id ?? null as number | null,
+    companyId: initialData?.company_id ?? null as number | null,
+    opportunityId: initialData?.opportunity_id ?? (urlOpportunityId ? parseInt(urlOpportunityId, 10) : null) as number | null,
+    currency: initialData?.currency ?? 'USD',
+    validUntil: initialData?.valid_until ?? '',
+    discountType: initialData?.discount_type ?? '',
+    discountValue: initialData?.discount_value ?? 0,
+    taxRate: initialData?.tax_rate ?? 0,
+    termsAndConditions: initialData?.terms_and_conditions ?? '',
+    notes: initialData?.notes ?? '',
+    paymentType: initialData?.payment_type ?? 'one_time',
+    recurringInterval: initialData?.recurring_interval ?? '',
+  });
+
+  const updateField = <K extends keyof typeof formData>(field: K, value: typeof formData[K]) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
 
   // Fetch entity lists for dropdowns
   const { data: contactsData } = useContacts({ page_size: 100 });
@@ -63,24 +76,14 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
   // Auto-fill contact/company from URL opportunity
   useEffect(() => {
     if (urlOpportunity) {
-      if (urlOpportunity.contact_id && !contactId) {
-        setContactId(urlOpportunity.contact_id);
-      }
-      if (urlOpportunity.company_id && !companyId) {
-        setCompanyId(urlOpportunity.company_id);
-      }
+      setFormData((prev) => ({
+        ...prev,
+        contactId: urlOpportunity.contact_id && !prev.contactId ? urlOpportunity.contact_id : prev.contactId,
+        companyId: urlOpportunity.company_id && !prev.companyId ? urlOpportunity.company_id : prev.companyId,
+      }));
     }
   }, [urlOpportunity]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const [currency, setCurrency] = useState(initialData?.currency ?? 'USD');
-  const [validUntil, setValidUntil] = useState(initialData?.valid_until ?? '');
-  const [discountType, setDiscountType] = useState(initialData?.discount_type ?? '');
-  const [discountValue, setDiscountValue] = useState(initialData?.discount_value ?? 0);
-  const [taxRate, setTaxRate] = useState(initialData?.tax_rate ?? 0);
-  const [termsAndConditions, setTermsAndConditions] = useState(initialData?.terms_and_conditions ?? '');
-  const [notes, setNotes] = useState(initialData?.notes ?? '');
-  const [paymentType, setPaymentType] = useState(initialData?.payment_type ?? 'one_time');
-  const [recurringInterval, setRecurringInterval] = useState(initialData?.recurring_interval ?? '');
   const [lineItems, setLineItems] = useState<QuoteLineItemCreate[]>(
     initialData?.line_items ?? [{ ...EMPTY_LINE_ITEM }]
   );
@@ -133,34 +136,34 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
   };
 
   const subtotal = lineItems.reduce((sum, item) => sum + calculateItemTotal(item), 0);
-  const discountAmount = discountType === 'percent'
-    ? subtotal * (discountValue / 100)
-    : discountType === 'fixed'
-      ? discountValue
+  const discountAmount = formData.discountType === 'percent'
+    ? subtotal * (formData.discountValue / 100)
+    : formData.discountType === 'fixed'
+      ? formData.discountValue
       : 0;
   const afterDiscount = subtotal - discountAmount;
-  const taxAmount = afterDiscount * (taxRate / 100);
+  const taxAmount = afterDiscount * (formData.taxRate / 100);
   const total = afterDiscount + taxAmount;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
     const data: QuoteCreate = {
-      title,
-      description: description || null,
-      currency,
-      valid_until: validUntil || null,
-      discount_type: discountType || null,
-      discount_value: discountValue,
-      tax_rate: taxRate,
-      terms_and_conditions: termsAndConditions || null,
-      notes: notes || null,
+      title: formData.title,
+      description: formData.description || null,
+      currency: formData.currency,
+      valid_until: formData.validUntil || null,
+      discount_type: formData.discountType || null,
+      discount_value: formData.discountValue,
+      tax_rate: formData.taxRate,
+      terms_and_conditions: formData.termsAndConditions || null,
+      notes: formData.notes || null,
       status: 'draft',
-      contact_id: contactId,
-      company_id: companyId,
-      opportunity_id: opportunityId,
-      payment_type: paymentType,
-      recurring_interval: paymentType === 'subscription' ? recurringInterval : null,
+      contact_id: formData.contactId,
+      company_id: formData.companyId,
+      opportunity_id: formData.opportunityId,
+      payment_type: formData.paymentType,
+      recurring_interval: formData.paymentType === 'subscription' ? formData.recurringInterval : null,
       line_items: lineItems.filter((item) => item.description.trim() !== ''),
     };
 
@@ -179,8 +182,8 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
             type="text"
             id="quote-title"
             required
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            value={formData.title}
+            onChange={(e) => updateField('title', e.target.value)}
             className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
             placeholder="Quote title..."
           />
@@ -193,8 +196,8 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
           <textarea
             id="quote-description"
             rows={2}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            value={formData.description}
+            onChange={(e) => updateField('description', e.target.value)}
             className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
             placeholder="Optional description..."
           />
@@ -207,8 +210,8 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
             </label>
             <select
               id="quote-currency"
-              value={currency}
-              onChange={(e) => setCurrency(e.target.value)}
+              value={formData.currency}
+              onChange={(e) => updateField('currency', e.target.value)}
               className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
             >
               <option value="USD">USD</option>
@@ -225,8 +228,8 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
             <input
               type="date"
               id="quote-valid-until"
-              value={validUntil}
-              onChange={(e) => setValidUntil(e.target.value)}
+              value={formData.validUntil}
+              onChange={(e) => updateField('validUntil', e.target.value)}
               className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
             />
           </div>
@@ -243,10 +246,9 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
                 type="radio"
                 name="payment_type"
                 value="one_time"
-                checked={paymentType === 'one_time'}
+                checked={formData.paymentType === 'one_time'}
                 onChange={() => {
-                  setPaymentType('one_time');
-                  setRecurringInterval('');
+                  setFormData((prev) => ({ ...prev, paymentType: 'one_time', recurringInterval: '' }));
                 }}
                 className="text-primary-600 focus-visible:ring-primary-500"
               />
@@ -257,10 +259,9 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
                 type="radio"
                 name="payment_type"
                 value="subscription"
-                checked={paymentType === 'subscription'}
+                checked={formData.paymentType === 'subscription'}
                 onChange={() => {
-                  setPaymentType('subscription');
-                  if (!recurringInterval) setRecurringInterval('monthly');
+                  setFormData((prev) => ({ ...prev, paymentType: 'subscription', recurringInterval: prev.recurringInterval || 'monthly' }));
                 }}
                 className="text-primary-600 focus-visible:ring-primary-500"
               />
@@ -269,15 +270,15 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
           </div>
         </fieldset>
 
-        {paymentType === 'subscription' && (
+        {formData.paymentType === 'subscription' && (
           <div className="sm:w-1/2">
             <label htmlFor="quote-recurring-interval" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
               Billing Interval
             </label>
             <select
               id="quote-recurring-interval"
-              value={recurringInterval}
-              onChange={(e) => setRecurringInterval(e.target.value)}
+              value={formData.recurringInterval}
+              onChange={(e) => updateField('recurringInterval', e.target.value)}
               className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
             >
               <option value="monthly">Monthly</option>
@@ -296,14 +297,17 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
             label="Opportunity"
             id="quote-opportunity"
             name="opportunity_id"
-            value={opportunityId}
+            value={formData.opportunityId}
             onChange={(val) => {
-              setOpportunityId(val);
-              if (val) {
-                const opp = opportunities.find((o) => o.id === val);
-                if (opp?.contact_id) setContactId(opp.contact_id);
-                if (opp?.company_id) setCompanyId(opp.company_id);
-              }
+              setFormData((prev) => {
+                const updates: Partial<typeof prev> = { opportunityId: val };
+                if (val) {
+                  const opp = opportunities.find((o) => o.id === val);
+                  if (opp?.contact_id) updates.contactId = opp.contact_id;
+                  if (opp?.company_id) updates.companyId = opp.company_id;
+                }
+                return { ...prev, ...updates };
+              });
             }}
             options={opportunityOptions}
             placeholder="Search opportunities..."
@@ -312,8 +316,8 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
             label="Contact"
             id="quote-contact"
             name="contact_id"
-            value={contactId}
-            onChange={setContactId}
+            value={formData.contactId}
+            onChange={(val) => updateField('contactId', val)}
             options={contactOptions}
             placeholder="Search contacts..."
           />
@@ -321,8 +325,8 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
             label="Company"
             id="quote-company"
             name="company_id"
-            value={companyId}
-            onChange={setCompanyId}
+            value={formData.companyId}
+            onChange={(val) => updateField('companyId', val)}
             options={companyOptions}
             placeholder="Search companies..."
           />
@@ -456,8 +460,8 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
           </label>
           <select
             id="quote-discount-type"
-            value={discountType}
-            onChange={(e) => setDiscountType(e.target.value)}
+            value={formData.discountType}
+            onChange={(e) => updateField('discountType', e.target.value)}
             className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
           >
             <option value="">None</option>
@@ -472,8 +476,8 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
           <input
             type="number"
             id="quote-discount-value"
-            value={discountValue}
-            onChange={(e) => setDiscountValue(parseFloat(e.target.value) || 0)}
+            value={formData.discountValue}
+            onChange={(e) => updateField('discountValue', parseFloat(e.target.value) || 0)}
             min="0"
             step="any"
             className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
@@ -486,8 +490,8 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
           <input
             type="number"
             id="quote-tax-rate"
-            value={taxRate}
-            onChange={(e) => setTaxRate(parseFloat(e.target.value) || 0)}
+            value={formData.taxRate}
+            onChange={(e) => updateField('taxRate', parseFloat(e.target.value) || 0)}
             min="0"
             step="any"
             className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
@@ -509,7 +513,7 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
         )}
         {taxAmount > 0 && (
           <div className="flex justify-between text-gray-600 dark:text-gray-400">
-            <span>Tax ({taxRate}%)</span>
+            <span>Tax ({formData.taxRate}%)</span>
             <span>{taxAmount.toFixed(2)}</span>
           </div>
         )}
@@ -528,8 +532,8 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
           <textarea
             id="quote-terms"
             rows={3}
-            value={termsAndConditions}
-            onChange={(e) => setTermsAndConditions(e.target.value)}
+            value={formData.termsAndConditions}
+            onChange={(e) => updateField('termsAndConditions', e.target.value)}
             className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
             placeholder="Payment terms, delivery conditions..."
           />
@@ -541,8 +545,8 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
           <textarea
             id="quote-notes"
             rows={2}
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
+            value={formData.notes}
+            onChange={(e) => updateField('notes', e.target.value)}
             className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
             placeholder="Internal notes..."
           />
@@ -554,7 +558,7 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
         <Button type="button" variant="secondary" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" disabled={isLoading || !title.trim()}>
+        <Button type="submit" disabled={isLoading || !formData.title.trim()}>
           {isLoading ? 'Creating...' : 'Create Quote'}
         </Button>
       </div>
