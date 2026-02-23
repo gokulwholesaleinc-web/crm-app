@@ -1,9 +1,11 @@
 """Opportunity API routes."""
 
+import json as _json
 import logging
 from typing import Annotated, Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
+from sqlalchemy import select
 from src.core.constants import HTTPStatus, EntityNames, ENTITY_TYPE_OPPORTUNITIES
 from src.core.router_utils import (
     DBSession,
@@ -34,6 +36,7 @@ from src.opportunities.schemas import (
     PipelineSummaryResponse,
     TagBrief,
 )
+from src.opportunities.models import PipelineStage
 from src.opportunities.service import OpportunityService, PipelineStageService
 from src.opportunities.pipeline import PipelineManager
 from src.opportunities.forecasting import RevenueForecast
@@ -226,8 +229,6 @@ async def list_opportunities(
     filters: Optional[str] = None,
 ):
     """List opportunities with pagination and filters."""
-    import json as _json
-    from fastapi import HTTPException
     parsed_filters = None
     if filters:
         try:
@@ -282,6 +283,17 @@ async def create_opportunity(
     db: DBSession,
 ):
     """Create a new opportunity."""
+    # Validate stage type
+    stage_result = await db.execute(
+        select(PipelineStage).where(PipelineStage.id == opp_data.pipeline_stage_id)
+    )
+    stage = stage_result.scalar_one_or_none()
+    if not stage or stage.pipeline_type != "opportunity":
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid pipeline stage for opportunity",
+        )
+
     service = OpportunityService(db)
     opportunity = await service.create(opp_data, current_user.id)
 

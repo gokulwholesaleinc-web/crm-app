@@ -174,6 +174,7 @@ class KanbanLeadStage(BaseModel):
 
 class LeadKanbanResponse(BaseModel):
     stages: List[KanbanLeadStage]
+    message: Optional[str] = None
 
 
 class MoveLeadRequest(BaseModel):

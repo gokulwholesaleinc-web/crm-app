@@ -1,5 +1,6 @@
 """Lead API routes."""
 
+import json as _json
 import logging
 from typing import Annotated, Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -87,8 +88,6 @@ async def list_leads(
     - Admin/Manager: see all leads (or filter by owner_id if provided)
     - Sales_rep/Viewer: see only own leads + shared leads
     """
-    import json as _json
-    from fastapi import HTTPException
     parsed_filters = None
     if filters:
         try:
@@ -210,6 +209,12 @@ async def get_lead_kanban(
     )
     stages = stages_result.scalars().all()
 
+    if not stages:
+        return LeadKanbanResponse(
+            stages=[],
+            message="No lead pipeline stages configured. Run the seed script or contact admin.",
+        )
+
     kanban_stages = []
     for stage in stages:
         leads_query = (
@@ -278,6 +283,12 @@ async def move_lead(
         raise HTTPException(
             status_code=HTTPStatus.NOT_FOUND,
             detail=f"Pipeline stage {request.new_stage_id} not found",
+        )
+
+    if stage.pipeline_type != "lead":
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot move lead to a non-lead pipeline stage",
         )
 
     # Move lead to new stage
