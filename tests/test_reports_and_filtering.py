@@ -192,7 +192,7 @@ class TestReportTemplates:
     """Test pre-built report templates."""
 
     def test_templates_exist(self):
-        assert len(REPORT_TEMPLATES) == 6
+        assert len(REPORT_TEMPLATES) == 10
 
     def test_pipeline_by_stage_template(self):
         tmpl = next(t for t in REPORT_TEMPLATES if t["id"] == "pipeline_by_stage")
@@ -223,6 +223,30 @@ class TestReportTemplates:
     def test_deals_won_lost_template(self):
         tmpl = next(t for t in REPORT_TEMPLATES if t["id"] == "deals_won_lost")
         assert tmpl["entity_type"] == "opportunities"
+
+    def test_payment_summary_by_month_template(self):
+        tmpl = next(t for t in REPORT_TEMPLATES if t["id"] == "payment_summary_by_month")
+        assert tmpl["entity_type"] == "payments"
+        assert tmpl["metric"] == "sum"
+        assert tmpl["metric_field"] == "amount"
+        assert tmpl["date_group"] == "month"
+
+    def test_contracts_by_status_template(self):
+        tmpl = next(t for t in REPORT_TEMPLATES if t["id"] == "contracts_by_status")
+        assert tmpl["entity_type"] == "contracts"
+        assert tmpl["metric"] == "count"
+        assert tmpl["group_by"] == "status"
+
+    def test_revenue_by_source_template(self):
+        tmpl = next(t for t in REPORT_TEMPLATES if t["id"] == "revenue_by_source")
+        assert tmpl["entity_type"] == "opportunities"
+        assert tmpl["metric"] == "sum"
+        assert tmpl["metric_field"] == "amount"
+
+    def test_pipeline_value_by_owner_template(self):
+        tmpl = next(t for t in REPORT_TEMPLATES if t["id"] == "pipeline_value_by_owner")
+        assert tmpl["entity_type"] == "opportunities"
+        assert tmpl["group_by"] == "owner_id"
 
 
 # ============================================================
@@ -337,6 +361,121 @@ class TestReportExecution:
         assert isinstance(csv_content, str)
         assert "Total" in csv_content
         assert "new" in csv_content
+
+    async def test_count_payments(self, db_session, test_payment):
+        """Test counting payments entity type."""
+        executor = ReportExecutor(db_session)
+        definition = ReportDefinition(
+            entity_type="payments",
+            metric="count",
+        )
+        result = await executor.execute(definition)
+        assert result.total >= 1
+
+    async def test_sum_payment_amount(self, db_session, test_payment):
+        """Test summing payment amounts."""
+        executor = ReportExecutor(db_session)
+        definition = ReportDefinition(
+            entity_type="payments",
+            metric="sum",
+            metric_field="amount",
+        )
+        result = await executor.execute(definition)
+        assert result.total >= 5000.0
+
+    async def test_count_payments_by_status(self, db_session, test_payment):
+        """Test counting payments grouped by status."""
+        executor = ReportExecutor(db_session)
+        definition = ReportDefinition(
+            entity_type="payments",
+            metric="count",
+            group_by="status",
+        )
+        result = await executor.execute(definition)
+        assert result.total >= 1
+        assert len(result.data) >= 1
+
+    async def test_count_contracts(self, db_session, test_contract):
+        """Test counting contracts entity type."""
+        executor = ReportExecutor(db_session)
+        definition = ReportDefinition(
+            entity_type="contracts",
+            metric="count",
+        )
+        result = await executor.execute(definition)
+        assert result.total >= 1
+
+    async def test_sum_contract_value(self, db_session, test_contract):
+        """Test summing contract values."""
+        executor = ReportExecutor(db_session)
+        definition = ReportDefinition(
+            entity_type="contracts",
+            metric="sum",
+            metric_field="value",
+        )
+        result = await executor.execute(definition)
+        assert result.total >= 25000.0
+
+    async def test_count_contracts_by_status(self, db_session, test_contract):
+        """Test counting contracts grouped by status."""
+        executor = ReportExecutor(db_session)
+        definition = ReportDefinition(
+            entity_type="contracts",
+            metric="count",
+            group_by="status",
+        )
+        result = await executor.execute(definition)
+        assert result.total >= 1
+        assert len(result.data) >= 1
+        draft_dp = next((dp for dp in result.data if dp.label == "draft"), None)
+        assert draft_dp is not None
+        assert draft_dp.value >= 1
+
+
+# ============================================================
+# Saved report with schedule and recipients tests
+# ============================================================
+
+@pytest.mark.asyncio
+class TestSavedReportSchedule:
+    """Integration tests for saved report schedule and recipients."""
+
+    async def test_create_saved_report_with_schedule(self, db_session, test_user):
+        """Test creating a saved report with schedule and recipients."""
+        report = SavedReport(
+            name="Scheduled Report",
+            entity_type="leads",
+            metric="count",
+            chart_type="bar",
+            created_by_id=test_user.id,
+            schedule="weekly",
+            recipients=json.dumps(["test@example.com", "admin@example.com"]),
+        )
+        db_session.add(report)
+        await db_session.flush()
+        await db_session.refresh(report)
+
+        assert report.id > 0
+        assert report.schedule == "weekly"
+        parsed_recipients = json.loads(report.recipients)
+        assert len(parsed_recipients) == 2
+        assert "test@example.com" in parsed_recipients
+
+    async def test_saved_report_schedule_nullable(self, db_session, test_user):
+        """Test that schedule and recipients are nullable."""
+        report = SavedReport(
+            name="No Schedule Report",
+            entity_type="leads",
+            metric="count",
+            chart_type="bar",
+            created_by_id=test_user.id,
+        )
+        db_session.add(report)
+        await db_session.flush()
+        await db_session.refresh(report)
+
+        assert report.schedule is None
+        assert report.recipients is None
 
 
 # ============================================================
@@ -527,7 +666,7 @@ class TestReportsAPI:
         )
         assert response.status_code == 200
         data = response.json()
-        assert len(data) == 6
+        assert len(data) == 10
 
     async def test_saved_report_crud_endpoints(self, client, auth_headers):
         """Test full CRUD lifecycle for saved reports via API."""
@@ -580,6 +719,99 @@ class TestReportsAPI:
         """Test that report endpoints require authentication."""
         response = await client.get("/api/reports/templates")
         assert response.status_code in (401, 403)
+
+    async def test_execute_payments_report_endpoint(self, client, auth_headers, test_payment):
+        """Test executing a report on payments entity type."""
+        response = await client.post(
+            "/api/reports/execute",
+            json={
+                "entity_type": "payments",
+                "metric": "sum",
+                "metric_field": "amount",
+                "chart_type": "bar",
+            },
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] >= 5000.0
+
+    async def test_execute_contracts_report_endpoint(self, client, auth_headers, test_contract):
+        """Test executing a report on contracts entity type."""
+        response = await client.post(
+            "/api/reports/execute",
+            json={
+                "entity_type": "contracts",
+                "metric": "count",
+                "group_by": "status",
+                "chart_type": "pie",
+            },
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] >= 1
+        assert len(data["data"]) >= 1
+
+    async def test_create_report_with_schedule(self, client, auth_headers):
+        """Test creating a saved report with schedule and recipients."""
+        response = await client.post(
+            "/api/reports",
+            json={
+                "name": "Scheduled Payments Report",
+                "entity_type": "payments",
+                "metric": "sum",
+                "metric_field": "amount",
+                "chart_type": "bar",
+                "schedule": "weekly",
+                "recipients": ["user@example.com"],
+            },
+            headers=auth_headers,
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["schedule"] == "weekly"
+        assert data["recipients"] == ["user@example.com"]
+
+    async def test_update_report_schedule_endpoint(self, client, auth_headers):
+        """Test PATCH /api/reports/{id}/schedule."""
+        # Create a report first
+        create_response = await client.post(
+            "/api/reports",
+            json={
+                "name": "To Schedule",
+                "entity_type": "leads",
+                "metric": "count",
+                "chart_type": "bar",
+            },
+            headers=auth_headers,
+        )
+        report_id = create_response.json()["id"]
+
+        # Update schedule
+        response = await client.patch(
+            f"/api/reports/{report_id}/schedule",
+            json={
+                "schedule": "monthly",
+                "recipients": ["report@example.com", "admin@example.com"],
+            },
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["schedule"] == "monthly"
+        assert len(data["recipients"]) == 2
+
+    async def test_templates_include_new_entity_types(self, client, auth_headers):
+        """Test that templates include payment and contract templates."""
+        response = await client.get(
+            "/api/reports/templates",
+            headers=auth_headers,
+        )
+        data = response.json()
+        ids = [t["id"] for t in data]
+        assert "payment_summary_by_month" in ids
+        assert "contracts_by_status" in ids
 
 
 @pytest.mark.asyncio
@@ -760,3 +992,228 @@ class TestAdvancedFilterOnListEndpoints:
         )
         assert response.status_code == 200
         assert response.json()["total"] >= 1
+
+
+# ============================================================
+# Aggregate endpoint tests
+# ============================================================
+
+@pytest.mark.asyncio
+class TestAggregateEndpoint:
+    """Integration tests for the POST /api/filters/aggregate endpoint."""
+
+    async def test_aggregate_count_contacts(self, client, auth_headers, test_contact):
+        """Test aggregate endpoint returns correct count for contacts."""
+        response = await client.post(
+            "/api/filters/aggregate",
+            headers=auth_headers,
+            json={
+                "entity_type": "contacts",
+                "filters": {
+                    "operator": "and",
+                    "conditions": [{"field": "status", "op": "eq", "value": "active"}],
+                },
+                "metrics": ["count"],
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["count"] >= 1
+        assert data["metrics"]["count"] >= 1
+        assert isinstance(data["sample_entities"], list)
+
+    async def test_aggregate_sum_metric_leads(self, client, auth_headers, test_lead):
+        """Test aggregate endpoint with sum metric on lead budget amounts."""
+        response = await client.post(
+            "/api/filters/aggregate",
+            headers=auth_headers,
+            json={
+                "entity_type": "leads",
+                "filters": {
+                    "operator": "and",
+                    "conditions": [{"field": "status", "op": "eq", "value": "new"}],
+                },
+                "metrics": ["count", "sum:score"],
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["count"] >= 1
+        assert "sum:score" in data["metrics"]
+        assert data["metrics"]["sum:score"] >= 50  # test_lead has score=50
+
+    async def test_aggregate_returns_sample_entities(self, client, auth_headers, test_contact):
+        """Test that aggregate endpoint returns sample entities."""
+        response = await client.post(
+            "/api/filters/aggregate",
+            headers=auth_headers,
+            json={
+                "entity_type": "contacts",
+                "filters": {
+                    "operator": "and",
+                    "conditions": [{"field": "first_name", "op": "contains", "value": "John"}],
+                },
+                "metrics": ["count"],
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["sample_entities"]) >= 1
+        sample = data["sample_entities"][0]
+        assert "id" in sample
+        assert "first_name" in sample
+
+    async def test_aggregate_empty_results(self, client, auth_headers):
+        """Test aggregate with filters that match nothing."""
+        response = await client.post(
+            "/api/filters/aggregate",
+            headers=auth_headers,
+            json={
+                "entity_type": "contacts",
+                "filters": {
+                    "operator": "and",
+                    "conditions": [{"field": "first_name", "op": "eq", "value": "NONEXISTENTXYZ"}],
+                },
+                "metrics": ["count"],
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["count"] == 0
+        assert data["sample_entities"] == []
+
+    async def test_aggregate_leads_count(self, client, auth_headers, test_lead):
+        """Test aggregate endpoint works with leads entity type."""
+        response = await client.post(
+            "/api/filters/aggregate",
+            headers=auth_headers,
+            json={
+                "entity_type": "leads",
+                "filters": {
+                    "operator": "and",
+                    "conditions": [{"field": "status", "op": "eq", "value": "new"}],
+                },
+                "metrics": ["count"],
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["count"] >= 1
+
+    async def test_aggregate_invalid_entity_type(self, client, auth_headers):
+        """Test aggregate with invalid entity type returns 400."""
+        response = await client.post(
+            "/api/filters/aggregate",
+            headers=auth_headers,
+            json={
+                "entity_type": "nonexistent",
+                "filters": {"operator": "and", "conditions": []},
+                "metrics": ["count"],
+            },
+        )
+        assert response.status_code == 400
+
+    async def test_aggregate_unauthenticated(self, client):
+        """Test aggregate endpoint requires authentication."""
+        response = await client.post(
+            "/api/filters/aggregate",
+            json={
+                "entity_type": "contacts",
+                "filters": {"operator": "and", "conditions": []},
+                "metrics": ["count"],
+            },
+        )
+        assert response.status_code in (401, 403)
+
+
+# ============================================================
+# Saved filter is_public tests
+# ============================================================
+
+@pytest.mark.asyncio
+class TestSavedFilterIsPublic:
+    """Tests for the is_public field on saved filters."""
+
+    async def test_create_filter_with_is_public(self, client, auth_headers):
+        """Test creating a saved filter with is_public=True."""
+        response = await client.post(
+            "/api/filters",
+            headers=auth_headers,
+            json={
+                "name": "Public Smart List",
+                "entity_type": "contacts",
+                "filters": {
+                    "operator": "and",
+                    "conditions": [{"field": "status", "op": "eq", "value": "active"}],
+                },
+                "is_public": True,
+            },
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["is_public"] is True
+        assert data["name"] == "Public Smart List"
+
+    async def test_create_filter_default_is_public_false(self, client, auth_headers):
+        """Test that is_public defaults to False."""
+        response = await client.post(
+            "/api/filters",
+            headers=auth_headers,
+            json={
+                "name": "Private Filter",
+                "entity_type": "contacts",
+                "filters": {
+                    "operator": "and",
+                    "conditions": [{"field": "status", "op": "eq", "value": "active"}],
+                },
+            },
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["is_public"] is False
+
+    async def test_update_filter_is_public(self, client, auth_headers):
+        """Test updating the is_public flag on a saved filter."""
+        create_response = await client.post(
+            "/api/filters",
+            headers=auth_headers,
+            json={
+                "name": "Toggle Public",
+                "entity_type": "contacts",
+                "filters": {
+                    "operator": "and",
+                    "conditions": [{"field": "status", "op": "eq", "value": "active"}],
+                },
+                "is_public": False,
+            },
+        )
+        filter_id = create_response.json()["id"]
+
+        response = await client.patch(
+            f"/api/filters/{filter_id}",
+            headers=auth_headers,
+            json={"is_public": True},
+        )
+        assert response.status_code == 200
+        assert response.json()["is_public"] is True
+
+    async def test_saved_filter_is_public_in_db(self, db_session, test_user):
+        """Test is_public field persists correctly in the database."""
+        sf = SavedFilter(
+            name="DB Public Filter",
+            entity_type="contacts",
+            filters=json.dumps({"operator": "and", "conditions": []}),
+            user_id=test_user.id,
+            is_public=True,
+        )
+        db_session.add(sf)
+        await db_session.flush()
+        await db_session.refresh(sf)
+
+        assert sf.is_public is True
+
+        result = await db_session.execute(
+            select(SavedFilter).where(SavedFilter.id == sf.id)
+        )
+        fetched = result.scalar_one()
+        assert fetched.is_public is True

@@ -1,11 +1,12 @@
 /**
  * Saved Filters hooks using TanStack Query.
- * Provides hooks for listing, creating, and deleting saved filter presets.
+ * Provides hooks for listing, creating, deleting saved filter presets,
+ * and running aggregate queries against filtered data.
  */
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { filtersApi } from '../api/filters';
-import type { SavedFilterCreate } from '../api/filters';
+import type { SavedFilterCreate, AggregateRequest } from '../api/filters';
 import { useAuthQuery } from './useAuthQuery';
 
 // =============================================================================
@@ -52,5 +53,11 @@ export function useDeleteSavedFilter() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: filterKeys.lists() });
     },
+  });
+}
+
+export function useFilterAggregate() {
+  return useMutation({
+    mutationFn: (data: AggregateRequest) => filtersApi.aggregateFilters(data),
   });
 }
