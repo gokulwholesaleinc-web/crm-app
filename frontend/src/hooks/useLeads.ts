@@ -174,6 +174,67 @@ export function useCreateLeadSource() {
 }
 
 // =============================================================================
+// Lead Pipeline / Kanban Hooks
+// =============================================================================
+
+export const leadPipelineKeys = {
+  all: ['lead-pipeline'] as const,
+  stages: () => [...leadPipelineKeys.all, 'stages'] as const,
+  kanban: (ownerId?: number) => [...leadPipelineKeys.all, 'kanban', { ownerId }] as const,
+};
+
+/**
+ * Hook to fetch lead pipeline stages
+ */
+export function useLeadPipelineStages() {
+  return useQuery({
+    queryKey: leadPipelineKeys.stages(),
+    queryFn: () => leadsApi.getLeadPipelineStages(),
+    ...CACHE_TIMES.REFERENCE,
+  });
+}
+
+/**
+ * Hook to fetch lead Kanban board data
+ */
+export function useLeadKanban(ownerId?: number) {
+  return useQuery({
+    queryKey: leadPipelineKeys.kanban(ownerId),
+    queryFn: () => leadsApi.getLeadKanban(ownerId),
+  });
+}
+
+/**
+ * Hook to move a lead to a different pipeline stage
+ */
+export function useMoveLeadStage() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      leadId,
+      newStageId,
+    }: {
+      leadId: number;
+      newStageId: number;
+    }) => leadsApi.moveLeadStage(leadId, { new_stage_id: newStageId }),
+    onSuccess: (data, { leadId }) => {
+      queryClient.invalidateQueries({ queryKey: leadPipelineKeys.kanban() });
+      queryClient.invalidateQueries({ queryKey: leadKeys.detail(leadId) });
+      queryClient.invalidateQueries({ queryKey: leadKeys.lists() });
+      // If auto-conversion happened, invalidate opportunity and contact caches too
+      if (data.conversion) {
+        queryClient.invalidateQueries({ queryKey: opportunityKeys.lists() });
+        queryClient.invalidateQueries({ queryKey: contactKeys.lists() });
+        queryClient.invalidateQueries({ queryKey: companyKeys.lists() });
+        queryClient.invalidateQueries({ queryKey: ['unified-pipeline'] });
+        queryClient.invalidateQueries({ queryKey: ['pipeline'] });
+      }
+    },
+  });
+}
+
+// =============================================================================
 // Search Hook
 // =============================================================================
 

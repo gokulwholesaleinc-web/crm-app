@@ -15,6 +15,10 @@ import type {
   LeadConvertToOpportunityRequest,
   LeadFullConversionRequest,
   ConversionResponse,
+  PipelineStage,
+  LeadKanbanResponse,
+  MoveLeadRequest,
+  MoveLeadResponse,
 } from '../types';
 
 const LEADS_BASE = '/api/leads';
@@ -131,6 +135,42 @@ export const fullConversion = async (
   return response.data;
 };
 
+// =============================================================================
+// Lead Pipeline / Kanban
+// =============================================================================
+
+/**
+ * Get pipeline stages for leads
+ */
+export const getLeadPipelineStages = async (): Promise<PipelineStage[]> => {
+  const response = await apiClient.get<PipelineStage[]>(`${LEADS_BASE}/pipeline-stages`);
+  return response.data;
+};
+
+/**
+ * Get Kanban board view of lead pipeline
+ */
+export const getLeadKanban = async (ownerId?: number): Promise<LeadKanbanResponse> => {
+  const response = await apiClient.get<LeadKanbanResponse>(`${LEADS_BASE}/kanban`, {
+    params: ownerId ? { owner_id: ownerId } : {},
+  });
+  return response.data;
+};
+
+/**
+ * Move a lead to a different pipeline stage
+ */
+export const moveLeadStage = async (
+  leadId: number,
+  request: MoveLeadRequest
+): Promise<MoveLeadResponse> => {
+  const response = await apiClient.post<MoveLeadResponse>(
+    `${LEADS_BASE}/${leadId}/move`,
+    request
+  );
+  return response.data;
+};
+
 // Export all lead functions
 export const leadsApi = {
   list: listLeads,
@@ -145,6 +185,10 @@ export const leadsApi = {
   convertToContact,
   convertToOpportunity,
   fullConversion,
+  // Pipeline / Kanban
+  getLeadPipelineStages,
+  getLeadKanban,
+  moveLeadStage,
 };
 
 export default leadsApi;

@@ -16,6 +16,7 @@ import type {
   MoveOpportunityRequest,
   ForecastResponse,
   PipelineSummaryResponse,
+  UnifiedPipelineResponse,
 } from '../types';
 
 const OPPORTUNITIES_BASE = '/api/opportunities';
@@ -192,6 +193,20 @@ export const getPipelineSummary = async (
   return response.data;
 };
 
+// =============================================================================
+// Unified Pipeline
+// =============================================================================
+
+/**
+ * Get unified pipeline view (leads + opportunities)
+ */
+export const getUnifiedPipeline = async (ownerId?: number): Promise<UnifiedPipelineResponse> => {
+  const response = await apiClient.get<UnifiedPipelineResponse>('/api/dashboard/pipeline/unified', {
+    params: ownerId ? { owner_id: ownerId } : {},
+  });
+  return response.data;
+};
+
 // Export all opportunity functions
 export const opportunitiesApi = {
   // CRUD
@@ -211,6 +226,8 @@ export const opportunitiesApi = {
   // Forecasting
   getForecast,
   getPipelineSummary,
+  // Unified Pipeline
+  getUnifiedPipeline,
 };
 
 export default opportunitiesApi;

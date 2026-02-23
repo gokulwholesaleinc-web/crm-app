@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { PlusIcon } from '@heroicons/react/24/outline';
+import { Link, useNavigate } from 'react-router-dom';
+import { PlusIcon, ListBulletIcon, ViewColumnsIcon } from '@heroicons/react/24/outline';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button, Modal, ConfirmDialog } from '../../components/ui';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { LeadForm, LeadFormData } from './components/LeadForm';
+import { LeadKanbanBoard } from './components/LeadKanbanBoard';
 import { BulkActionToolbar } from './components/BulkActionToolbar';
 import { useLeads, useCreateLead, useUpdateLead, useDeleteLead, leadKeys } from '../../hooks/useLeads';
 import { useUsers } from '../../hooks/useAuth';
@@ -13,7 +14,7 @@ import { getStatusBadgeClasses, formatStatusLabel, getScoreColor } from '../../u
 import { formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { showSuccess, showError } from '../../utils/toast';
-import type { Lead, LeadCreate, LeadUpdate } from '../../types';
+import type { Lead, LeadCreate, LeadUpdate, KanbanLead } from '../../types';
 import clsx from 'clsx';
 
 const statusOptions = [
@@ -49,8 +50,12 @@ function ScoreIndicator({ score }: { score: number }) {
 
 const INITIAL_DELETE_CONFIRM = { isOpen: false, lead: null } as const;
 
+type ViewMode = 'list' | 'kanban';
+
 function LeadsPage() {
   usePageTitle('Leads');
+  const navigate = useNavigate();
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -141,6 +146,7 @@ function LeadsPage() {
           job_title: data.jobTitle,
           status: data.status,
           source_id: data.source_id ?? undefined,
+          pipeline_stage_id: data.pipeline_stage_id ?? undefined,
         };
         await updateLeadMutation.mutateAsync({
           id: editingLead.id,
@@ -157,6 +163,7 @@ function LeadsPage() {
           job_title: data.jobTitle,
           status: data.status,
           source_id: data.source_id ?? undefined,
+          pipeline_stage_id: data.pipeline_stage_id ?? undefined,
           budget_currency: 'USD', // Required field
         };
         await createLeadMutation.mutateAsync(createData);
@@ -199,6 +206,7 @@ function LeadsPage() {
       jobTitle: editingLead.job_title || '',
       source: editingLead.source?.name || 'website',
       source_id: editingLead.source?.id ?? null,
+      pipeline_stage_id: editingLead.pipeline_stage_id ?? null,
       status: editingLead.status,
       score: editingLead.score,
     };
@@ -214,15 +222,56 @@ function LeadsPage() {
             Track and manage your sales leads
           </p>
         </div>
-        <Button
-          leftIcon={<PlusIcon className="h-5 w-5" />}
-          onClick={() => setShowForm(true)}
-          className="w-full sm:w-auto"
-        >
-          Add Lead
-        </Button>
+        <div className="flex items-center gap-3">
+          {/* View Toggle */}
+          <div className="flex rounded-md border border-gray-300 dark:border-gray-600 overflow-hidden">
+            <button
+              onClick={() => setViewMode('list')}
+              className={clsx(
+                'flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors',
+                viewMode === 'list'
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600'
+              )}
+              aria-label="List view"
+            >
+              <ListBulletIcon className="h-4 w-4" />
+              <span className="hidden sm:inline">List</span>
+            </button>
+            <button
+              onClick={() => setViewMode('kanban')}
+              className={clsx(
+                'flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors border-l border-gray-300 dark:border-gray-600',
+                viewMode === 'kanban'
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600'
+              )}
+              aria-label="Kanban view"
+            >
+              <ViewColumnsIcon className="h-4 w-4" />
+              <span className="hidden sm:inline">Kanban</span>
+            </button>
+          </div>
+
+          <Button
+            leftIcon={<PlusIcon className="h-5 w-5" />}
+            onClick={() => setShowForm(true)}
+            className="w-full sm:w-auto"
+          >
+            Add Lead
+          </Button>
+        </div>
       </div>
 
+      {/* Kanban View */}
+      {viewMode === 'kanban' && (
+        <LeadKanbanBoard
+          onLeadClick={(lead: KanbanLead) => navigate(`/leads/${lead.id}`)}
+        />
+      )}
+
+      {/* List View Content */}
+      {viewMode === 'list' && <>
       {/* Search and Filters */}
       <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4 border border-transparent dark:border-gray-700">
         <form onSubmit={handleSearch} className="flex flex-col gap-3 sm:flex-row sm:gap-4">
@@ -605,6 +654,7 @@ function LeadsPage() {
         users={(usersData ?? []).map((u: { id: number; full_name: string }) => ({ id: u.id, full_name: u.full_name }))}
         statusOptions={statusOptions.filter((o) => o.value !== '')}
       />
+      </>}
 
       {/* Form Modal */}
       <Modal
