@@ -36,16 +36,14 @@ async def seed_database(session: AsyncSession) -> None:
     if tenant and demo:
         await _link_user_to_tenant(session, demo, tenant, is_primary=True)
 
+    # Always ensure pipeline stages exist (even for existing databases)
+    stages = await _seed_pipeline_stages(session)
+    lead_stages = await _seed_lead_pipeline_stages(session)
+
     if demo is None:
         # demo user already existed, skip data seeding
         await session.commit()
         return
-
-    # Seed pipeline stages first (needed by opportunities)
-    stages = await _seed_pipeline_stages(session)
-
-    # Seed lead pipeline stages
-    lead_stages = await _seed_lead_pipeline_stages(session)
 
     # Seed lead sources
     lead_sources = await _seed_lead_sources(session)
@@ -617,12 +615,16 @@ async def _seed_opportunities(
         contact_idx = data.pop("contact_idx")
         company_idx = data.pop("company_idx")
 
+        stage_id = stage_map.get(stage_name)
+        if not stage_id:
+            continue
+
         close_date = today + timedelta(days=days)
         actual_close = close_date if days < 0 else None
 
         opp = Opportunity(
             **data,
-            pipeline_stage_id=stage_map[stage_name],
+            pipeline_stage_id=stage_id,
             expected_close_date=close_date,
             actual_close_date=actual_close,
             currency="USD",
