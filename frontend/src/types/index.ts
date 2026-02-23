@@ -155,6 +155,7 @@ export interface ContactBase {
   description?: string | null;
   status: string;
   owner_id?: number | null;
+  sales_code?: string | null;
 }
 
 export interface ContactCreate extends ContactBase {
@@ -185,6 +186,7 @@ export interface ContactFilters {
   status?: string;
   owner_id?: number;
   tag_ids?: string;
+  filters?: string;
 }
 
 // =============================================================================
@@ -210,6 +212,7 @@ export interface CompanyBase {
   twitter_handle?: string | null;
   description?: string | null;
   status: string;
+  segment?: string | null;
   owner_id?: number | null;
 }
 
@@ -282,15 +285,18 @@ export interface LeadBase {
   budget_amount?: number | null;
   budget_currency: string;
   owner_id?: number | null;
+  sales_code?: string | null;
 }
 
 export interface LeadCreate extends LeadBase {
   status?: string;
+  pipeline_stage_id?: number | null;
   tag_ids?: number[] | null;
 }
 
 export interface LeadUpdate extends Partial<LeadBase> {
   status?: string;
+  pipeline_stage_id?: number | null;
   tag_ids?: number[] | null;
 }
 
@@ -300,6 +306,8 @@ export interface Lead extends LeadBase {
   status: string;
   score: number;
   score_factors?: string | null;
+  pipeline_stage_id?: number | null;
+  pipeline_stage?: PipelineStage | null;
   created_at: string;
   updated_at: string;
   source?: LeadSource | null;
@@ -344,6 +352,37 @@ export interface ConversionResponse {
   company_id?: number | null;
   opportunity_id?: number | null;
   message: string;
+}
+
+// Lead Kanban Types
+export interface KanbanLead {
+  id: number;
+  first_name: string;
+  last_name: string;
+  full_name: string;
+  email?: string | null;
+  company_name?: string | null;
+  score: number;
+  owner_id?: number | null;
+}
+
+export interface KanbanLeadStage {
+  stage_id: number;
+  stage_name: string;
+  color: string;
+  probability: number;
+  is_won: boolean;
+  is_lost: boolean;
+  leads: KanbanLead[];
+  count: number;
+}
+
+export interface LeadKanbanResponse {
+  stages: KanbanLeadStage[];
+}
+
+export interface MoveLeadRequest {
+  new_stage_id: number;
 }
 
 // =============================================================================
@@ -459,6 +498,42 @@ export interface KanbanResponse {
 
 export interface MoveOpportunityRequest {
   new_stage_id: number;
+}
+
+// Unified Pipeline Types
+export interface UnifiedPipelineItem {
+  id: number;
+  name: string;
+  entity_type: 'lead' | 'opportunity';
+  value: number | null;
+  owner_id: number | null;
+  company_name?: string | null;
+  contact_name?: string | null;
+  score?: number | null;
+}
+
+export interface UnifiedPipelineStage {
+  stage_id: number;
+  stage_name: string;
+  color: string;
+  entity_type: 'lead' | 'opportunity';
+  items: UnifiedPipelineItem[];
+  count: number;
+  total_value?: number;
+}
+
+export interface UnifiedPipelineResponse {
+  lead_stages: UnifiedPipelineStage[];
+  opportunity_stages: UnifiedPipelineStage[];
+}
+
+export interface MoveLeadResponse extends Lead {
+  conversion?: {
+    converted: boolean;
+    contact_id: number;
+    company_id: number | null;
+    opportunity_id: number;
+  } | null;
 }
 
 // Forecast Types
@@ -1760,17 +1835,38 @@ export interface ProposalTemplate {
   id: number;
   name: string;
   description?: string | null;
+  body: string;
+  legal_terms?: string | null;
   category?: string | null;
-  content_template?: string | null;
+  is_default: boolean;
+  owner_id?: number | null;
   created_at: string;
   updated_at: string;
 }
 
 export interface ProposalTemplateCreate {
   name: string;
+  body: string;
   description?: string | null;
+  legal_terms?: string | null;
   category?: string | null;
-  content_template?: string | null;
+  is_default?: boolean;
+}
+
+export interface ProposalTemplateUpdate {
+  name?: string | null;
+  body?: string | null;
+  description?: string | null;
+  legal_terms?: string | null;
+  category?: string | null;
+  is_default?: boolean | null;
+}
+
+export interface CreateFromTemplateRequest {
+  template_id: number;
+  contact_id: number;
+  company_id?: number | null;
+  custom_variables?: Record<string, string>;
 }
 
 export interface AIGenerateProposalRequest {
@@ -1835,4 +1931,63 @@ export interface ActivityFeedEntry {
   user_name?: string | null;
   timestamp: string;
   changes?: Record<string, unknown> | null;
+}
+
+// =============================================================================
+// Contract Types
+// =============================================================================
+
+export interface ContractCreate {
+  title: string;
+  contact_id?: number | null;
+  company_id?: number | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  scope?: string | null;
+  value?: number | null;
+  currency?: string;
+  status?: string;
+  owner_id?: number | null;
+}
+
+export interface ContractUpdate {
+  title?: string | null;
+  contact_id?: number | null;
+  company_id?: number | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  scope?: string | null;
+  value?: number | null;
+  currency?: string | null;
+  status?: string | null;
+  owner_id?: number | null;
+}
+
+export interface Contract {
+  id: number;
+  title: string;
+  contact_id?: number | null;
+  company_id?: number | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  scope?: string | null;
+  value?: number | null;
+  currency: string;
+  status: string;
+  owner_id?: number | null;
+  created_at: string;
+  updated_at: string;
+  contact?: ContactBrief | null;
+  company?: CompanyBrief | null;
+}
+
+export type ContractListResponse = PaginatedResponse<Contract>;
+
+export interface ContractFilters {
+  page?: number;
+  page_size?: number;
+  contact_id?: number;
+  company_id?: number;
+  status?: string;
+  owner_id?: number;
 }

@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { Button, SearchableSelect } from '../../../components/ui';
 import { FormInput, FormSelect, FormTextarea } from '../../../components/forms';
 import { useCompanies } from '../../../hooks/useCompanies';
-import { useLeadSources } from '../../../hooks/useLeads';
+import { useLeadSources, useLeadPipelineStages } from '../../../hooks/useLeads';
 
 export interface LeadFormData {
   firstName: string;
@@ -15,8 +15,10 @@ export interface LeadFormData {
   source: string;
   source_id?: number | null;
   company_id?: number | null;
+  pipeline_stage_id?: number | null;
   status: string;
   score?: number;
+  salesCode?: string;
   notes?: string;
 }
 
@@ -58,6 +60,7 @@ export function LeadForm({
       source: 'website',
       status: 'new',
       score: 0,
+      salesCode: '',
       notes: '',
       ...initialData,
     },
@@ -65,9 +68,11 @@ export function LeadForm({
 
   const [sourceId, setSourceId] = useState<number | null>(initialData?.source_id ?? null);
   const [companyId, setCompanyId] = useState<number | null>(initialData?.company_id ?? null);
+  const [pipelineStageId, setPipelineStageId] = useState<number | null>(initialData?.pipeline_stage_id ?? null);
 
   const { data: leadSourcesData } = useLeadSources();
   const { data: companiesData } = useCompanies({ page_size: 100 });
+  const { data: pipelineStagesData } = useLeadPipelineStages();
 
   const sourceOptions = useMemo(
     () => (leadSourcesData ?? []).map((s: { id: number; name: string }) => ({ value: s.id, label: s.name })),
@@ -79,8 +84,13 @@ export function LeadForm({
     [companiesData]
   );
 
+  const pipelineStageOptions = useMemo(
+    () => (pipelineStagesData ?? []).map((s: { id: number; name: string }) => ({ value: s.id, label: s.name })),
+    [pipelineStagesData]
+  );
+
   const onFormSubmit = (data: LeadFormData) => {
-    return onSubmit({ ...data, source_id: sourceId, company_id: companyId });
+    return onSubmit({ ...data, source_id: sourceId, company_id: companyId, pipeline_stage_id: pipelineStageId });
   };
 
   return (
@@ -191,6 +201,23 @@ export function LeadForm({
               required: 'Status is required',
             })}
             error={errors.status?.message}
+          />
+
+          <SearchableSelect
+            label="Pipeline Stage"
+            id="lead-pipeline-stage"
+            name="pipeline_stage_id"
+            value={pipelineStageId}
+            onChange={setPipelineStageId}
+            options={pipelineStageOptions}
+            placeholder="Select pipeline stage..."
+          />
+
+          <FormInput
+            label="Sales Code"
+            name="salesCode"
+            register={register('salesCode')}
+            placeholder="Enter sales code..."
           />
 
           <FormInput

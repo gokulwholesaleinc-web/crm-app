@@ -7,6 +7,9 @@ const AttachmentList = lazy(() => import('../../components/shared/AttachmentList
 const AuditTimeline = lazy(() => import('../../components/shared/AuditTimeline'));
 const CommentSection = lazy(() => import('../../components/shared/CommentSection'));
 const SharePanel = lazy(() => import('../../components/shared/SharePanel'));
+const ContractsList = lazy(() => import('../../components/shared/ContractsList'));
+const PaymentSummary = lazy(() => import('../../components/shared/PaymentSummary'));
+const DocumentsTab = lazy(() => import('../../components/shared/DocumentsTab'));
 import { EmailComposeModal, EmailHistory } from '../../components/email';
 import { ContactForm, ContactFormData } from './components/ContactForm';
 import { NextBestActionCard } from '../../components/ai';
@@ -20,7 +23,7 @@ import type { StatusType } from '../../components/ui/Badge';
 import type { ContactUpdate, Quote, Proposal } from '../../types';
 import clsx from 'clsx';
 
-type TabType = 'details' | 'activities' | 'notes' | 'emails' | 'quotes' | 'proposals' | 'attachments' | 'comments' | 'history' | 'sharing';
+type TabType = 'details' | 'activities' | 'notes' | 'emails' | 'contracts' | 'quotes' | 'proposals' | 'documents' | 'attachments' | 'comments' | 'history' | 'sharing';
 
 function ContactDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -133,8 +136,10 @@ function ContactDetailPage() {
     { id: 'activities', name: 'Activities' },
     { id: 'notes', name: 'Notes' },
     { id: 'emails', name: 'Emails' },
+    { id: 'contracts', name: 'Contracts' },
     { id: 'quotes', name: 'Quotes' },
     { id: 'proposals', name: 'Proposals' },
+    { id: 'documents', name: 'Documents' },
     { id: 'attachments', name: 'Attachments' },
     { id: 'comments', name: 'Comments' },
     { id: 'history', name: 'History' },
@@ -149,6 +154,7 @@ function ContactDetailPage() {
           <Link
             to="/contacts"
             className="text-gray-400 hover:text-gray-500 flex-shrink-0"
+            aria-label="Back to contacts"
           >
             <svg
               className="h-6 w-6"
@@ -225,7 +231,11 @@ function ContactDetailPage() {
       </div>
 
       {/* Tab Content */}
-      {activeTab === 'details' && (
+      {activeTab === 'details' && contactId && (
+        <>
+        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="h-20 bg-gray-200 rounded" /></div>}>
+          <PaymentSummary contactId={contactId} />
+        </Suspense>
         <div className="bg-white shadow rounded-lg">
           <div className="p-4 sm:p-6">
             <dl className="grid grid-cols-1 gap-4 sm:gap-x-4 sm:gap-y-6 sm:grid-cols-2">
@@ -268,6 +278,13 @@ function ContactDetailPage() {
                 <dt className="text-sm font-medium text-gray-500">Job Title</dt>
                 <dd className="mt-1 text-sm text-gray-900">
                   {contact.job_title || '-'}
+                </dd>
+              </div>
+
+              <div>
+                <dt className="text-sm font-medium text-gray-500">Sales Code</dt>
+                <dd className="mt-1 text-sm text-gray-900">
+                  {contact.sales_code || '-'}
                 </dd>
               </div>
 
@@ -320,6 +337,7 @@ function ContactDetailPage() {
             </dl>
           </div>
         </div>
+        </>
       )}
 
       {activeTab === 'activities' && (
@@ -385,6 +403,13 @@ function ContactDetailPage() {
             <EmailHistory entityType="contacts" entityId={contactId} />
           </div>
         </div>
+      )}
+
+      {/* Contracts Tab */}
+      {activeTab === 'contracts' && contactId && (
+        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+          <ContractsList entityType="contact" entityId={contactId} />
+        </Suspense>
       )}
 
       {/* Quotes Tab */}
@@ -481,6 +506,13 @@ function ContactDetailPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Documents Tab */}
+      {activeTab === 'documents' && contactId && (
+        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+          <DocumentsTab entityType="contacts" entityId={contactId} />
+        </Suspense>
       )}
 
       {/* Attachments Tab */}

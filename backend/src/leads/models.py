@@ -1,7 +1,7 @@
 """Lead model for CRM lead management."""
 
 from typing import Optional
-from sqlalchemy import String, Integer, ForeignKey, Text, Float, Enum as SQLEnum, Index
+from sqlalchemy import String, Integer, ForeignKey, Text, Float, Enum as SQLEnum, Index, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.database import Base
 from src.core.mixins.auditable import AuditableMixin
@@ -81,12 +81,23 @@ class Lead(Base, AuditableMixin):
     budget_amount: Mapped[Optional[float]] = mapped_column(Float)
     budget_currency: Mapped[str] = mapped_column(String(3), default="USD")
 
+    # Pipeline stage (for kanban board)
+    pipeline_stage_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("pipeline_stages.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     # Owner
     owner_id: Mapped[Optional[int]] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
         index=True,
     )
+
+    # Sales code
+    sales_code: Mapped[Optional[str]] = mapped_column(String(100), index=True, nullable=True)
 
     # Conversion tracking (ERPNext pattern)
     converted_contact_id: Mapped[Optional[int]] = mapped_column(
@@ -100,6 +111,7 @@ class Lead(Base, AuditableMixin):
 
     # Relationships
     source: Mapped[Optional["LeadSource"]] = relationship("LeadSource", lazy="joined")
+    pipeline_stage = relationship("PipelineStage", lazy="joined")
 
     __table_args__ = (
         Index("ix_leads_owner_created", "owner_id", "created_at"),

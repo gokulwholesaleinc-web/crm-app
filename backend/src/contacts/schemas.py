@@ -26,6 +26,7 @@ class ContactBase(BaseModel):
     description: Optional[str] = None
     status: str = "active"
     owner_id: Optional[int] = None
+    sales_code: Optional[str] = None
 
 
 class ContactCreate(ContactBase):
@@ -52,6 +53,7 @@ class ContactUpdate(BaseModel):
     description: Optional[str] = None
     status: Optional[str] = None
     owner_id: Optional[int] = None
+    sales_code: Optional[str] = None
     tag_ids: Optional[List[int]] = None
 
 

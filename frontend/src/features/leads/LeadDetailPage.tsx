@@ -181,7 +181,7 @@ function LeadDetailPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center space-x-3 sm:space-x-4">
-          <Link to="/leads" className="text-gray-400 hover:text-gray-500 p-1 -ml-1">
+          <Link to="/leads" className="text-gray-400 hover:text-gray-500 p-1 -ml-1" aria-label="Back to leads">
             <svg
               className="h-6 w-6"
               fill="none"
@@ -396,6 +396,13 @@ function LeadDetailPage() {
                 <dt className="text-sm font-medium text-gray-500">Source</dt>
                 <dd className="mt-1 text-sm text-gray-900">
                   {lead.source?.name ? formatStatusLabel(lead.source.name) : '-'}
+                </dd>
+              </div>
+
+              <div>
+                <dt className="text-sm font-medium text-gray-500">Sales Code</dt>
+                <dd className="mt-1 text-sm text-gray-900">
+                  {lead.sales_code || '-'}
                 </dd>
               </div>
 
