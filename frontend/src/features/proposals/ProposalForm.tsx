@@ -18,14 +18,24 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
   const [searchParams] = useSearchParams();
   const urlOpportunityId = searchParams.get('opportunity_id');
 
-  const [title, setTitle] = useState(initialData?.title ?? '');
-  const [content, setContent] = useState(initialData?.content ?? '');
-  const [opportunityId, setOpportunityId] = useState<number | null>(
-    initialData?.opportunity_id ?? (urlOpportunityId ? parseInt(urlOpportunityId, 10) : null)
-  );
-  const [contactId, setContactId] = useState<number | null>(initialData?.contact_id ?? null);
-  const [companyId, setCompanyId] = useState<number | null>(initialData?.company_id ?? null);
-  const [quoteId, setQuoteId] = useState<number | null>(initialData?.quote_id ?? null);
+  const [formData, setFormData] = useState({
+    title: initialData?.title ?? '',
+    content: initialData?.content ?? '',
+    opportunityId: initialData?.opportunity_id ?? (urlOpportunityId ? parseInt(urlOpportunityId, 10) : null) as number | null,
+    contactId: initialData?.contact_id ?? null as number | null,
+    companyId: initialData?.company_id ?? null as number | null,
+    quoteId: initialData?.quote_id ?? null as number | null,
+    executiveSummary: initialData?.executive_summary ?? '',
+    scopeOfWork: initialData?.scope_of_work ?? '',
+    pricingSection: initialData?.pricing_section ?? '',
+    timelineField: initialData?.timeline ?? '',
+    terms: initialData?.terms ?? '',
+    validUntil: initialData?.valid_until ?? '',
+  });
+
+  const updateField = <K extends keyof typeof formData>(field: K, value: typeof formData[K]) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
 
   // Fetch entity lists for dropdowns
   const { data: contactsData } = useContacts({ page_size: 100 });
@@ -61,39 +71,31 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
   // Auto-fill contact/company from URL opportunity
   useEffect(() => {
     if (urlOpportunity) {
-      if (urlOpportunity.contact_id && !contactId) {
-        setContactId(urlOpportunity.contact_id);
-      }
-      if (urlOpportunity.company_id && !companyId) {
-        setCompanyId(urlOpportunity.company_id);
-      }
+      setFormData((prev) => ({
+        ...prev,
+        contactId: urlOpportunity.contact_id && !prev.contactId ? urlOpportunity.contact_id : prev.contactId,
+        companyId: urlOpportunity.company_id && !prev.companyId ? urlOpportunity.company_id : prev.companyId,
+      }));
     }
   }, [urlOpportunity]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const [executiveSummary, setExecutiveSummary] = useState(initialData?.executive_summary ?? '');
-  const [scopeOfWork, setScopeOfWork] = useState(initialData?.scope_of_work ?? '');
-  const [pricingSection, setPricingSection] = useState(initialData?.pricing_section ?? '');
-  const [timelineField, setTimelineField] = useState(initialData?.timeline ?? '');
-  const [terms, setTerms] = useState(initialData?.terms ?? '');
-  const [validUntil, setValidUntil] = useState(initialData?.valid_until ?? '');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
     const data: ProposalCreate = {
-      title,
-      content: content || null,
-      executive_summary: executiveSummary || null,
-      scope_of_work: scopeOfWork || null,
-      pricing_section: pricingSection || null,
-      timeline: timelineField || null,
-      terms: terms || null,
-      valid_until: validUntil || null,
+      title: formData.title,
+      content: formData.content || null,
+      executive_summary: formData.executiveSummary || null,
+      scope_of_work: formData.scopeOfWork || null,
+      pricing_section: formData.pricingSection || null,
+      timeline: formData.timelineField || null,
+      terms: formData.terms || null,
+      valid_until: formData.validUntil || null,
       status: 'draft',
-      opportunity_id: opportunityId,
-      contact_id: contactId,
-      company_id: companyId,
-      quote_id: quoteId,
+      opportunity_id: formData.opportunityId,
+      contact_id: formData.contactId,
+      company_id: formData.companyId,
+      quote_id: formData.quoteId,
     };
 
     onSubmit(data);
@@ -110,8 +112,8 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
             type="text"
             id="proposal-title"
             required
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            value={formData.title}
+            onChange={(e) => updateField('title', e.target.value)}
             className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
             placeholder="Proposal title..."
           />
@@ -124,8 +126,8 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
           <textarea
             id="proposal-content"
             rows={3}
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
+            value={formData.content}
+            onChange={(e) => updateField('content', e.target.value)}
             className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
             placeholder="Overall proposal content..."
           />
@@ -138,8 +140,8 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
           <textarea
             id="proposal-exec-summary"
             rows={3}
-            value={executiveSummary}
-            onChange={(e) => setExecutiveSummary(e.target.value)}
+            value={formData.executiveSummary}
+            onChange={(e) => updateField('executiveSummary', e.target.value)}
             className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
             placeholder="Executive summary..."
           />
@@ -152,8 +154,8 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
           <textarea
             id="proposal-scope"
             rows={3}
-            value={scopeOfWork}
-            onChange={(e) => setScopeOfWork(e.target.value)}
+            value={formData.scopeOfWork}
+            onChange={(e) => updateField('scopeOfWork', e.target.value)}
             className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
             placeholder="Scope of work details..."
           />
@@ -166,8 +168,8 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
           <textarea
             id="proposal-pricing"
             rows={3}
-            value={pricingSection}
-            onChange={(e) => setPricingSection(e.target.value)}
+            value={formData.pricingSection}
+            onChange={(e) => updateField('pricingSection', e.target.value)}
             className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
             placeholder="Pricing details..."
           />
@@ -181,8 +183,8 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
             <textarea
               id="proposal-timeline"
               rows={2}
-              value={timelineField}
-              onChange={(e) => setTimelineField(e.target.value)}
+              value={formData.timelineField}
+              onChange={(e) => updateField('timelineField', e.target.value)}
               className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
               placeholder="Project timeline..."
             />
@@ -194,8 +196,8 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
             <input
               type="date"
               id="proposal-valid-until"
-              value={validUntil}
-              onChange={(e) => setValidUntil(e.target.value)}
+              value={formData.validUntil}
+              onChange={(e) => updateField('validUntil', e.target.value)}
               className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
             />
           </div>
@@ -208,8 +210,8 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
           <textarea
             id="proposal-terms"
             rows={2}
-            value={terms}
-            onChange={(e) => setTerms(e.target.value)}
+            value={formData.terms}
+            onChange={(e) => updateField('terms', e.target.value)}
             className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
             placeholder="Terms and conditions..."
           />
@@ -224,14 +226,17 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
             label="Opportunity"
             id="proposal-opportunity"
             name="opportunity_id"
-            value={opportunityId}
+            value={formData.opportunityId}
             onChange={(val) => {
-              setOpportunityId(val);
-              if (val) {
-                const opp = opportunities.find((o) => o.id === val);
-                if (opp?.contact_id) setContactId(opp.contact_id);
-                if (opp?.company_id) setCompanyId(opp.company_id);
-              }
+              setFormData((prev) => {
+                const updates: Partial<typeof prev> = { opportunityId: val };
+                if (val) {
+                  const opp = opportunities.find((o) => o.id === val);
+                  if (opp?.contact_id) updates.contactId = opp.contact_id;
+                  if (opp?.company_id) updates.companyId = opp.company_id;
+                }
+                return { ...prev, ...updates };
+              });
             }}
             options={opportunityOptions}
             placeholder="Search opportunities..."
@@ -240,8 +245,8 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
             label="Quote"
             id="proposal-quote"
             name="quote_id"
-            value={quoteId}
-            onChange={setQuoteId}
+            value={formData.quoteId}
+            onChange={(val) => updateField('quoteId', val)}
             options={quoteOptions}
             placeholder="Search quotes..."
           />
@@ -249,8 +254,8 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
             label="Contact"
             id="proposal-contact"
             name="contact_id"
-            value={contactId}
-            onChange={setContactId}
+            value={formData.contactId}
+            onChange={(val) => updateField('contactId', val)}
             options={contactOptions}
             placeholder="Search contacts..."
           />
@@ -258,8 +263,8 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
             label="Company"
             id="proposal-company"
             name="company_id"
-            value={companyId}
-            onChange={setCompanyId}
+            value={formData.companyId}
+            onChange={(val) => updateField('companyId', val)}
             options={companyOptions}
             placeholder="Search companies..."
           />
@@ -271,7 +276,7 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
         <Button type="button" variant="secondary" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" disabled={isLoading || !title.trim()}>
+        <Button type="submit" disabled={isLoading || !formData.title.trim()}>
           {isLoading ? 'Creating...' : 'Create Proposal'}
         </Button>
       </div>

@@ -138,25 +138,39 @@ class AIGenerateRequest(BaseModel):
 
 class ProposalTemplateCreate(BaseModel):
     name: str
+    body: str
     description: Optional[str] = None
+    legal_terms: Optional[str] = None
     category: Optional[str] = None
-    content_template: Optional[str] = None
+    is_default: bool = False
 
 
 class ProposalTemplateUpdate(BaseModel):
     name: Optional[str] = None
+    body: Optional[str] = None
     description: Optional[str] = None
+    legal_terms: Optional[str] = None
     category: Optional[str] = None
-    content_template: Optional[str] = None
+    is_default: Optional[bool] = None
 
 
 class ProposalTemplateResponse(BaseModel):
     id: int
     name: str
     description: Optional[str] = None
+    body: str
+    legal_terms: Optional[str] = None
     category: Optional[str] = None
-    content_template: Optional[str] = None
+    is_default: bool
+    owner_id: Optional[int] = None
     created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class CreateFromTemplateRequest(BaseModel):
+    template_id: int
+    contact_id: int
+    company_id: Optional[int] = None
+    custom_variables: Optional[dict] = None

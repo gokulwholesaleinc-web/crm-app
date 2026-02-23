@@ -11,6 +11,8 @@ import type {
   ProposalFilters,
   ProposalTemplate,
   ProposalTemplateCreate,
+  ProposalTemplateUpdate,
+  CreateFromTemplateRequest,
   AIGenerateProposalRequest,
 } from '../types';
 
@@ -95,8 +97,10 @@ export const generateProposal = async (data: AIGenerateProposalRequest): Promise
 /**
  * List proposal templates
  */
-export const listProposalTemplates = async (): Promise<ProposalTemplate[]> => {
-  const response = await apiClient.get<ProposalTemplate[]>(`${PROPOSALS_BASE}/templates`);
+export const listProposalTemplates = async (category?: string): Promise<ProposalTemplate[]> => {
+  const response = await apiClient.get<ProposalTemplate[]>(`${PROPOSALS_BASE}/templates`, {
+    params: category ? { category } : undefined,
+  });
   return response.data;
 };
 
@@ -105,6 +109,40 @@ export const listProposalTemplates = async (): Promise<ProposalTemplate[]> => {
  */
 export const createProposalTemplate = async (data: ProposalTemplateCreate): Promise<ProposalTemplate> => {
   const response = await apiClient.post<ProposalTemplate>(`${PROPOSALS_BASE}/templates`, data);
+  return response.data;
+};
+
+/**
+ * Get a proposal template by ID
+ */
+export const getProposalTemplate = async (id: number): Promise<ProposalTemplate> => {
+  const response = await apiClient.get<ProposalTemplate>(`${PROPOSALS_BASE}/templates/${id}`);
+  return response.data;
+};
+
+/**
+ * Update a proposal template
+ */
+export const updateProposalTemplate = async (
+  id: number,
+  data: ProposalTemplateUpdate
+): Promise<ProposalTemplate> => {
+  const response = await apiClient.patch<ProposalTemplate>(`${PROPOSALS_BASE}/templates/${id}`, data);
+  return response.data;
+};
+
+/**
+ * Delete a proposal template
+ */
+export const deleteProposalTemplate = async (id: number): Promise<void> => {
+  await apiClient.delete(`${PROPOSALS_BASE}/templates/${id}`);
+};
+
+/**
+ * Create a proposal from a template with merge variable replacement
+ */
+export const createFromTemplate = async (data: CreateFromTemplateRequest): Promise<Proposal> => {
+  const response = await apiClient.post<Proposal>(`${PROPOSALS_BASE}/from-template`, data);
   return response.data;
 };
 
@@ -145,6 +183,10 @@ export const proposalsApi = {
   generate: generateProposal,
   listTemplates: listProposalTemplates,
   createTemplate: createProposalTemplate,
+  getTemplate: getProposalTemplate,
+  updateTemplate: updateProposalTemplate,
+  deleteTemplate: deleteProposalTemplate,
+  createFromTemplate: createFromTemplate,
   downloadPDF: downloadProposalPDF,
 };
 
