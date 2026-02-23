@@ -16,12 +16,39 @@ from src.campaigns.models import Campaign
 class ChartDataGenerator:
     """Generates data for dashboard charts."""
 
-    def __init__(self, db: AsyncSession, user_id: Optional[int] = None):
+    def __init__(
+        self,
+        db: AsyncSession,
+        user_id: Optional[int] = None,
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
+    ):
         self.db = db
         self.user_id = user_id
+        self.date_from = date_from
+        self.date_to = date_to
+
+    def _apply_date_filter(self, filters: list, date_column) -> list:
+        """Apply date_from/date_to filters to a filter list."""
+        if self.date_from:
+            filters.append(date_column >= datetime.combine(self.date_from, datetime.min.time()))
+        if self.date_to:
+            filters.append(date_column <= datetime.combine(self.date_to, datetime.max.time()))
+        return filters
 
     async def get_pipeline_funnel(self) -> Dict[str, Any]:
         """Get pipeline funnel data."""
+        join_conditions = [Opportunity.pipeline_stage_id == PipelineStage.id]
+        if self.user_id:
+            join_conditions.append(Opportunity.owner_id == self.user_id)
+        if self.date_from:
+            join_conditions.append(
+                Opportunity.created_at >= datetime.combine(self.date_from, datetime.min.time())
+            )
+        if self.date_to:
+            join_conditions.append(
+                Opportunity.created_at <= datetime.combine(self.date_to, datetime.max.time())
+            )
         query = (
             select(
                 PipelineStage.name,
@@ -32,10 +59,7 @@ class ChartDataGenerator:
             )
             .outerjoin(
                 Opportunity,
-                and_(
-                    Opportunity.pipeline_stage_id == PipelineStage.id,
-                    Opportunity.owner_id == self.user_id if self.user_id else True,
-                ),
+                and_(*join_conditions),
             )
             .where(PipelineStage.is_active == True)
             .group_by(PipelineStage.id)
@@ -59,12 +83,16 @@ class ChartDataGenerator:
 
     async def get_leads_by_status(self) -> Dict[str, Any]:
         """Get leads grouped by status."""
+        filters = []
+        if self.user_id:
+            filters.append(Lead.owner_id == self.user_id)
+        self._apply_date_filter(filters, Lead.created_at)
         query = select(
             Lead.status,
             func.count(Lead.id).label("count"),
         )
-        if self.user_id:
-            query = query.where(Lead.owner_id == self.user_id)
+        if filters:
+            query = query.where(and_(*filters))
         query = query.group_by(Lead.status)
         result = await self.db.execute(query)
 
@@ -95,6 +123,17 @@ class ChartDataGenerator:
         """Get leads grouped by source."""
         from src.leads.models import LeadSource
 
+        join_conditions = [Lead.source_id == LeadSource.id]
+        if self.user_id:
+            join_conditions.append(Lead.owner_id == self.user_id)
+        if self.date_from:
+            join_conditions.append(
+                Lead.created_at >= datetime.combine(self.date_from, datetime.min.time())
+            )
+        if self.date_to:
+            join_conditions.append(
+                Lead.created_at <= datetime.combine(self.date_to, datetime.max.time())
+            )
         query = (
             select(
                 LeadSource.name,
@@ -102,10 +141,7 @@ class ChartDataGenerator:
             )
             .outerjoin(
                 Lead,
-                and_(
-                    Lead.source_id == LeadSource.id,
-                    Lead.owner_id == self.user_id if self.user_id else True,
-                ),
+                and_(*join_conditions),
             )
             .group_by(LeadSource.id)
             .order_by(func.count(Lead.id).desc())
@@ -139,6 +175,7 @@ class ChartDataGenerator:
         ]
         if self.user_id:
             filters.append(Opportunity.owner_id == self.user_id)
+        self._apply_date_filter(filters, Opportunity.created_at)
 
         result = await self.db.execute(
             select(
@@ -172,6 +209,7 @@ class ChartDataGenerator:
         filters = [Activity.created_at >= start_date]
         if self.user_id:
             filters.append(Activity.owner_id == self.user_id)
+        self._apply_date_filter(filters, Activity.created_at)
 
         result = await self.db.execute(
             select(
@@ -211,6 +249,7 @@ class ChartDataGenerator:
         filters = [Lead.created_at >= start_date]
         if self.user_id:
             filters.append(Lead.owner_id == self.user_id)
+        self._apply_date_filter(filters, Lead.created_at)
 
         week_col = func.date_trunc("week", Lead.created_at).label("week")
         result = await self.db.execute(
@@ -252,6 +291,7 @@ class ChartDataGenerator:
         filters = [Lead.status.in_(funnel_stages)]
         if self.user_id:
             filters.append(Lead.owner_id == self.user_id)
+        self._apply_date_filter(filters, Lead.created_at)
 
         result = await self.db.execute(
             select(
@@ -289,6 +329,7 @@ class ChartDataGenerator:
         avg_filters = [Lead.status.in_(funnel_stages)]
         if self.user_id:
             avg_filters.append(Lead.owner_id == self.user_id)
+        self._apply_date_filter(avg_filters, Lead.created_at)
         avg_result = await self.db.execute(
             select(
                 Lead.status,
@@ -311,29 +352,46 @@ class ChartDataGenerator:
 
     async def get_conversion_rates(self) -> Dict[str, Any]:
         """Get conversion rates across different stages."""
-        # Total leads
+        import asyncio
+
+        # Build base filters for date range
+        total_filters = []
+        if self.user_id:
+            total_filters.append(Lead.owner_id == self.user_id)
+        self._apply_date_filter(total_filters, Lead.created_at)
+
+        converted_filters = [Lead.status == "converted"]
+        if self.user_id:
+            converted_filters.append(Lead.owner_id == self.user_id)
+        self._apply_date_filter(converted_filters, Lead.created_at)
+
+        won_filters = [PipelineStage.is_won == True]
+        if self.user_id:
+            won_filters.append(Opportunity.owner_id == self.user_id)
+        self._apply_date_filter(won_filters, Opportunity.created_at)
+
+        # Build queries
         total_query = select(func.count(Lead.id))
-        if self.user_id:
-            total_query = total_query.where(Lead.owner_id == self.user_id)
-        total_leads = await self.db.execute(total_query)
-        total = total_leads.scalar() or 1
+        if total_filters:
+            total_query = total_query.where(and_(*total_filters))
 
-        # Converted leads
-        converted_query = select(func.count(Lead.id)).where(Lead.status == "converted")
-        if self.user_id:
-            converted_query = converted_query.where(Lead.owner_id == self.user_id)
-        converted = await self.db.execute(converted_query)
-        converted_count = converted.scalar() or 0
+        converted_query = select(func.count(Lead.id)).where(and_(*converted_filters))
 
-        # Won opportunities
         won_query = (
             select(func.count(Opportunity.id))
             .join(PipelineStage)
-            .where(PipelineStage.is_won == True)
+            .where(and_(*won_filters))
         )
-        if self.user_id:
-            won_query = won_query.where(Opportunity.owner_id == self.user_id)
-        won = await self.db.execute(won_query)
+
+        # Execute all 3 queries in parallel
+        total_leads, converted, won = await asyncio.gather(
+            self.db.execute(total_query),
+            self.db.execute(converted_query),
+            self.db.execute(won_query),
+        )
+
+        total = total_leads.scalar() or 1
+        converted_count = converted.scalar() or 0
         won_count = won.scalar() or 0
 
         data = [

@@ -16,19 +16,35 @@ const DASHBOARD_BASE = '/api/dashboard';
 // Dashboard
 // =============================================================================
 
+export interface DateRangeParams {
+  dateFrom?: string | null;
+  dateTo?: string | null;
+}
+
+function buildDateParams(dateRange?: DateRangeParams): Record<string, string> {
+  const params: Record<string, string> = {};
+  if (dateRange?.dateFrom) params.date_from = dateRange.dateFrom;
+  if (dateRange?.dateTo) params.date_to = dateRange.dateTo;
+  return params;
+}
+
 /**
  * Get full dashboard data including KPIs and charts
  */
-export const getDashboard = async (): Promise<DashboardResponse> => {
-  const response = await apiClient.get<DashboardResponse>(DASHBOARD_BASE);
+export const getDashboard = async (dateRange?: DateRangeParams): Promise<DashboardResponse> => {
+  const response = await apiClient.get<DashboardResponse>(DASHBOARD_BASE, {
+    params: buildDateParams(dateRange),
+  });
   return response.data;
 };
 
 /**
  * Get KPI number cards only
  */
-export const getKpis = async (): Promise<NumberCardData[]> => {
-  const response = await apiClient.get<NumberCardData[]>(`${DASHBOARD_BASE}/kpis`);
+export const getKpis = async (dateRange?: DateRangeParams): Promise<NumberCardData[]> => {
+  const response = await apiClient.get<NumberCardData[]>(`${DASHBOARD_BASE}/kpis`, {
+    params: buildDateParams(dateRange),
+  });
   return response.data;
 };
 
@@ -39,9 +55,10 @@ export const getKpis = async (): Promise<NumberCardData[]> => {
 /**
  * Get pipeline funnel chart data
  */
-export const getPipelineFunnelChart = async (): Promise<ChartData> => {
+export const getPipelineFunnelChart = async (dateRange?: DateRangeParams): Promise<ChartData> => {
   const response = await apiClient.get<ChartData>(
-    `${DASHBOARD_BASE}/charts/pipeline-funnel`
+    `${DASHBOARD_BASE}/charts/pipeline-funnel`,
+    { params: buildDateParams(dateRange) }
   );
   return response.data;
 };
@@ -49,9 +66,10 @@ export const getPipelineFunnelChart = async (): Promise<ChartData> => {
 /**
  * Get leads by status chart data
  */
-export const getLeadsByStatusChart = async (): Promise<ChartData> => {
+export const getLeadsByStatusChart = async (dateRange?: DateRangeParams): Promise<ChartData> => {
   const response = await apiClient.get<ChartData>(
-    `${DASHBOARD_BASE}/charts/leads-by-status`
+    `${DASHBOARD_BASE}/charts/leads-by-status`,
+    { params: buildDateParams(dateRange) }
   );
   return response.data;
 };
@@ -59,9 +77,10 @@ export const getLeadsByStatusChart = async (): Promise<ChartData> => {
 /**
  * Get leads by source chart data
  */
-export const getLeadsBySourceChart = async (): Promise<ChartData> => {
+export const getLeadsBySourceChart = async (dateRange?: DateRangeParams): Promise<ChartData> => {
   const response = await apiClient.get<ChartData>(
-    `${DASHBOARD_BASE}/charts/leads-by-source`
+    `${DASHBOARD_BASE}/charts/leads-by-source`,
+    { params: buildDateParams(dateRange) }
   );
   return response.data;
 };
@@ -69,10 +88,10 @@ export const getLeadsBySourceChart = async (): Promise<ChartData> => {
 /**
  * Get monthly revenue trend chart data
  */
-export const getRevenueTrendChart = async (months = 6): Promise<ChartData> => {
+export const getRevenueTrendChart = async (months = 6, dateRange?: DateRangeParams): Promise<ChartData> => {
   const response = await apiClient.get<ChartData>(
     `${DASHBOARD_BASE}/charts/revenue-trend`,
-    { params: { months } }
+    { params: { months, ...buildDateParams(dateRange) } }
   );
   return response.data;
 };
@@ -80,10 +99,10 @@ export const getRevenueTrendChart = async (months = 6): Promise<ChartData> => {
 /**
  * Get activities by type chart data
  */
-export const getActivitiesChart = async (days = 30): Promise<ChartData> => {
+export const getActivitiesChart = async (days = 30, dateRange?: DateRangeParams): Promise<ChartData> => {
   const response = await apiClient.get<ChartData>(
     `${DASHBOARD_BASE}/charts/activities`,
-    { params: { days } }
+    { params: { days, ...buildDateParams(dateRange) } }
   );
   return response.data;
 };
@@ -91,10 +110,10 @@ export const getActivitiesChart = async (days = 30): Promise<ChartData> => {
 /**
  * Get new leads trend chart data
  */
-export const getNewLeadsTrendChart = async (weeks = 8): Promise<ChartData> => {
+export const getNewLeadsTrendChart = async (weeks = 8, dateRange?: DateRangeParams): Promise<ChartData> => {
   const response = await apiClient.get<ChartData>(
     `${DASHBOARD_BASE}/charts/new-leads-trend`,
-    { params: { weeks } }
+    { params: { weeks, ...buildDateParams(dateRange) } }
   );
   return response.data;
 };
@@ -102,9 +121,10 @@ export const getNewLeadsTrendChart = async (weeks = 8): Promise<ChartData> => {
 /**
  * Get conversion rates chart data
  */
-export const getConversionRatesChart = async (): Promise<ChartData> => {
+export const getConversionRatesChart = async (dateRange?: DateRangeParams): Promise<ChartData> => {
   const response = await apiClient.get<ChartData>(
-    `${DASHBOARD_BASE}/charts/conversion-rates`
+    `${DASHBOARD_BASE}/charts/conversion-rates`,
+    { params: buildDateParams(dateRange) }
   );
   return response.data;
 };
@@ -112,8 +132,10 @@ export const getConversionRatesChart = async (): Promise<ChartData> => {
 /**
  * Get sales funnel data
  */
-export const getSalesFunnel = async (): Promise<SalesFunnelResponse> => {
-  const response = await apiClient.get<SalesFunnelResponse>(`${DASHBOARD_BASE}/funnel`);
+export const getSalesFunnel = async (dateRange?: DateRangeParams): Promise<SalesFunnelResponse> => {
+  const response = await apiClient.get<SalesFunnelResponse>(`${DASHBOARD_BASE}/funnel`, {
+    params: buildDateParams(dateRange),
+  });
   return response.data;
 };
 
@@ -129,8 +151,10 @@ export interface SalesKPIResponse {
   quote_to_payment_conversion_rate: number;
 }
 
-export const getSalesKpis = async (): Promise<SalesKPIResponse> => {
-  const response = await apiClient.get<SalesKPIResponse>(`${DASHBOARD_BASE}/sales-kpis`);
+export const getSalesKpis = async (dateRange?: DateRangeParams): Promise<SalesKPIResponse> => {
+  const response = await apiClient.get<SalesKPIResponse>(`${DASHBOARD_BASE}/sales-kpis`, {
+    params: buildDateParams(dateRange),
+  });
   return response.data;
 };
 
