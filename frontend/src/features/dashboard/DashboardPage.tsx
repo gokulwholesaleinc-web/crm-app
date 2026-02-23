@@ -166,7 +166,7 @@ function DashboardPage() {
 
             <NumberCard
               title="Total Revenue"
-              value={formatCurrency(data?.totalRevenue ?? 0)}
+              value={formatCurrency(data?.totalRevenue ?? 0, 'USD')}
               trend={{
                 value: data?.revenueTrend ?? 0,
                 isPositive: (data?.revenueTrend ?? 0) >= 0,
@@ -221,7 +221,7 @@ function DashboardPage() {
           />
           <NumberCard
             title="Payments Collected"
-            value={formatCurrency(salesKpis.payments_collected_total)}
+            value={formatCurrency(salesKpis.payments_collected_total, 'USD')}
             icon={
               <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -277,7 +277,7 @@ function DashboardPage() {
                       </div>
                     </div>
                     <div className="w-auto sm:w-20 text-right text-xs sm:text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">
-                      {count} ({formatCurrency(typeof value === 'number' ? value : 0)})
+                      {count} ({formatCurrency(typeof value === 'number' ? value : 0, 'USD')})
                     </div>
                   </div>
                 </div>
