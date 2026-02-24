@@ -2,7 +2,19 @@
 
 from datetime import datetime
 from typing import Optional, Dict, Any
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
+
+
+def _validate_url_field(v: Optional[str], field_name: str) -> Optional[str]:
+    """Validate a URL field: strip whitespace, enforce http(s) scheme, or allow None to clear."""
+    if v is None or v == '':
+        return None
+    v = v.strip()
+    if v == '':
+        return None
+    if not v.startswith(('http://', 'https://')):
+        raise ValueError(f'{field_name} must start with http:// or https://')
+    return v
 
 
 class TenantSettingsBase(BaseModel):
@@ -23,6 +35,16 @@ class TenantSettingsBase(BaseModel):
     default_timezone: str = "UTC"
     default_currency: str = "USD"
     date_format: str = "MM/DD/YYYY"
+
+    @field_validator('logo_url', mode='before')
+    @classmethod
+    def validate_logo_url(cls, v):
+        return _validate_url_field(v, 'Logo URL')
+
+    @field_validator('favicon_url', mode='before')
+    @classmethod
+    def validate_favicon_url(cls, v):
+        return _validate_url_field(v, 'Favicon URL')
 
 
 class TenantSettingsCreate(TenantSettingsBase):
@@ -47,6 +69,16 @@ class TenantSettingsUpdate(BaseModel):
     default_timezone: Optional[str] = None
     default_currency: Optional[str] = None
     date_format: Optional[str] = None
+
+    @field_validator('logo_url', mode='before')
+    @classmethod
+    def validate_logo_url(cls, v):
+        return _validate_url_field(v, 'Logo URL')
+
+    @field_validator('favicon_url', mode='before')
+    @classmethod
+    def validate_favicon_url(cls, v):
+        return _validate_url_field(v, 'Favicon URL')
 
 
 class TenantSettingsResponse(TenantSettingsBase):

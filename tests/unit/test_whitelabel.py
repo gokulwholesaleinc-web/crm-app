@@ -1638,3 +1638,242 @@ class TestTenantAdminCheck:
     ):
         """Test that superuser can act as tenant admin without explicit membership."""
         assert test_superuser.is_superuser is True
+
+
+# --- URL Validation Tests ---
+
+
+class TestUrlValidation:
+    """Tests for logo_url and favicon_url field validators on schemas."""
+
+    @pytest.mark.asyncio
+    async def test_update_settings_with_valid_https_logo_url(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_tenant: Tenant,
+    ):
+        """Test updating logo_url with a valid https URL succeeds."""
+        response = await client.patch(
+            f"/api/tenants/{test_tenant.id}/settings",
+            headers=auth_headers,
+            json={"logo_url": "https://example.com/new-logo.png"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["logo_url"] == "https://example.com/new-logo.png"
+
+    @pytest.mark.asyncio
+    async def test_update_settings_with_valid_http_logo_url(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_tenant: Tenant,
+    ):
+        """Test updating logo_url with a valid http URL succeeds."""
+        response = await client.patch(
+            f"/api/tenants/{test_tenant.id}/settings",
+            headers=auth_headers,
+            json={"logo_url": "http://example.com/logo.png"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["logo_url"] == "http://example.com/logo.png"
+
+    @pytest.mark.asyncio
+    async def test_update_settings_with_invalid_logo_url_rejected(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_tenant: Tenant,
+    ):
+        """Test updating logo_url with an invalid URL (no http/https) returns 422."""
+        response = await client.patch(
+            f"/api/tenants/{test_tenant.id}/settings",
+            headers=auth_headers,
+            json={"logo_url": "ftp://example.com/logo.png"},
+        )
+
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_update_settings_with_plain_string_logo_url_rejected(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_tenant: Tenant,
+    ):
+        """Test updating logo_url with a plain string (not a URL) returns 422."""
+        response = await client.patch(
+            f"/api/tenants/{test_tenant.id}/settings",
+            headers=auth_headers,
+            json={"logo_url": "not-a-url"},
+        )
+
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_update_settings_with_empty_string_logo_url_clears(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_tenant: Tenant,
+    ):
+        """Test updating logo_url with empty string clears the logo (returns None)."""
+        response = await client.patch(
+            f"/api/tenants/{test_tenant.id}/settings",
+            headers=auth_headers,
+            json={"logo_url": ""},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["logo_url"] is None
+
+    @pytest.mark.asyncio
+    async def test_update_settings_with_none_logo_url_clears(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_tenant: Tenant,
+    ):
+        """Test updating logo_url with None clears the logo."""
+        response = await client.patch(
+            f"/api/tenants/{test_tenant.id}/settings",
+            headers=auth_headers,
+            json={"logo_url": None},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["logo_url"] is None
+
+    @pytest.mark.asyncio
+    async def test_update_settings_with_whitespace_logo_url_stripped(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_tenant: Tenant,
+    ):
+        """Test updating logo_url with whitespace-padded URL strips whitespace."""
+        response = await client.patch(
+            f"/api/tenants/{test_tenant.id}/settings",
+            headers=auth_headers,
+            json={"logo_url": "  https://example.com/logo.png  "},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["logo_url"] == "https://example.com/logo.png"
+
+    @pytest.mark.asyncio
+    async def test_update_settings_with_invalid_favicon_url_rejected(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_tenant: Tenant,
+    ):
+        """Test updating favicon_url with an invalid URL returns 422."""
+        response = await client.patch(
+            f"/api/tenants/{test_tenant.id}/settings",
+            headers=auth_headers,
+            json={"favicon_url": "not-a-valid-url"},
+        )
+
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_update_settings_with_valid_favicon_url(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_tenant: Tenant,
+    ):
+        """Test updating favicon_url with a valid URL succeeds."""
+        response = await client.patch(
+            f"/api/tenants/{test_tenant.id}/settings",
+            headers=auth_headers,
+            json={"favicon_url": "https://example.com/favicon.ico"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["favicon_url"] == "https://example.com/favicon.ico"
+
+    @pytest.mark.asyncio
+    async def test_create_tenant_with_invalid_logo_url_rejected(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        superuser_headers: dict,
+    ):
+        """Test creating tenant with invalid logo_url in settings returns 422."""
+        response = await client.post(
+            "/api/tenants",
+            headers=superuser_headers,
+            json={
+                "name": "URL Validation Tenant",
+                "slug": "url-validation-tenant",
+                "settings": {
+                    "logo_url": "invalid-url",
+                },
+            },
+        )
+
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_create_tenant_with_valid_logo_url_succeeds(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        superuser_headers: dict,
+    ):
+        """Test creating tenant with valid logo_url in settings succeeds."""
+        response = await client.post(
+            "/api/tenants",
+            headers=superuser_headers,
+            json={
+                "name": "Valid URL Tenant",
+                "slug": "valid-url-tenant",
+                "settings": {
+                    "logo_url": "https://example.com/logo.png",
+                    "favicon_url": "https://example.com/favicon.ico",
+                },
+            },
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["settings"]["logo_url"] == "https://example.com/logo.png"
+        assert data["settings"]["favicon_url"] == "https://example.com/favicon.ico"
+
+    @pytest.mark.asyncio
+    async def test_whitespace_only_logo_url_clears(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_tenant: Tenant,
+    ):
+        """Test updating logo_url with whitespace-only string clears the logo."""
+        response = await client.patch(
+            f"/api/tenants/{test_tenant.id}/settings",
+            headers=auth_headers,
+            json={"logo_url": "   "},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["logo_url"] is None
