@@ -1,6 +1,6 @@
 /**
  * Branding settings section for tenant admins.
- * Allows updating company name, colors, and logo URL.
+ * Allows updating company name, colors, logo URL, and favicon URL.
  */
 
 import { useState } from 'react';
@@ -26,7 +26,8 @@ export function BrandingSection() {
   const { tenant, tenantSlug, refreshBranding } = useTenant();
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
-  const [logoError, setLogoError] = useState(false);
+  const [logoPreviewError, setLogoPreviewError] = useState(false);
+  const [faviconPreviewError, setFaviconPreviewError] = useState(false);
   const [formData, setFormData] = useState<BrandingFormData>({
     company_name: '',
     primary_color: '#6366f1',
@@ -72,13 +73,13 @@ export function BrandingSection() {
       favicon_url: tenant?.favicon_url ?? '',
       footer_text: tenant?.footer_text ?? '',
     });
+    setLogoPreviewError(false);
+    setFaviconPreviewError(false);
     setIsEditing(true);
   };
 
   const updateBranding = useMutation({
     mutationFn: async (data: Partial<BrandingFormData>) => {
-      // We need the tenant ID. Fetch tenant details to get it.
-      // Fetch tenant list to find the current tenant by slug
       const tenantListResp = await apiClient.get('/api/tenants', {
         params: { active_only: true },
       });
@@ -150,21 +151,40 @@ export function BrandingSection() {
                 Logo
               </label>
               {tenant?.logo_url ? (
-                <img
-                  src={tenant.logo_url}
-                  alt={`${tenant.company_name ?? 'Company'} logo`}
-                  className="mt-1 h-10 max-w-[160px] object-contain"
-                  width={160}
-                  height={40}
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                  }}
-                />
-              ) : null}
-              <p className={`mt-1 text-sm text-gray-500 dark:text-gray-400${tenant?.logo_url ? ' hidden' : ''}`}>
-                {tenant?.logo_url ? 'Failed to load image' : 'Not set'}
-              </p>
+                <div className="mt-1 flex items-center gap-3">
+                  <img
+                    src={tenant.logo_url}
+                    alt={tenant.company_name || 'Logo'}
+                    width={40}
+                    height={40}
+                    className="h-10 w-10 rounded-lg object-contain border border-gray-200 dark:border-gray-600"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                  <span className="text-xs text-gray-500 dark:text-gray-400 break-all">{tenant.logo_url}</span>
+                </div>
+              ) : (
+                <p className="mt-1 text-sm text-gray-900 dark:text-gray-100">Not set</p>
+              )}
+            </div>
+            <div>
+              <label className="block text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">
+                Favicon
+              </label>
+              {tenant?.favicon_url ? (
+                <div className="mt-1 flex items-center gap-3">
+                  <img
+                    src={tenant.favicon_url}
+                    alt="Favicon"
+                    width={20}
+                    height={20}
+                    className="h-5 w-5 object-contain"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                  <span className="text-xs text-gray-500 dark:text-gray-400 break-all">{tenant.favicon_url}</span>
+                </div>
+              ) : (
+                <p className="mt-1 text-sm text-gray-900 dark:text-gray-100">Not set</p>
+              )}
             </div>
             <div>
               <label className="block text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">
@@ -253,25 +273,23 @@ export function BrandingSection() {
                   value={formData.logo_url}
                   onChange={(e) => {
                     setFormData((prev) => ({ ...prev, logo_url: e.target.value }));
-                    setLogoError(false);
+                    setLogoPreviewError(false);
                   }}
                   placeholder="https://example.com/logo.png..."
                 />
                 {formData.logo_url && (
                   <div className="mt-2">
-                    {!logoError ? (
+                    {!logoPreviewError ? (
                       <img
                         src={formData.logo_url}
                         alt="Logo preview"
-                        className="h-10 max-w-[160px] object-contain rounded border border-gray-200 dark:border-gray-700"
-                        width={160}
+                        width={40}
                         height={40}
-                        onError={() => setLogoError(true)}
+                        className="h-10 w-10 rounded-lg object-contain border border-gray-200 dark:border-gray-600"
+                        onError={() => setLogoPreviewError(true)}
                       />
                     ) : (
-                      <p className="text-xs text-red-500 dark:text-red-400">
-                        Failed to load image
-                      </p>
+                      <p className="text-xs text-red-500 dark:text-red-400">Failed to load image</p>
                     )}
                   </div>
                 )}
@@ -287,11 +305,28 @@ export function BrandingSection() {
                   name="favicon_url"
                   autoComplete="url"
                   value={formData.favicon_url}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, favicon_url: e.target.value }))
-                  }
+                  onChange={(e) => {
+                    setFormData((prev) => ({ ...prev, favicon_url: e.target.value }));
+                    setFaviconPreviewError(false);
+                  }}
                   placeholder="https://example.com/favicon.ico..."
                 />
+                {formData.favicon_url && (
+                  <div className="mt-2">
+                    {!faviconPreviewError ? (
+                      <img
+                        src={formData.favicon_url}
+                        alt="Favicon preview"
+                        width={20}
+                        height={20}
+                        className="h-5 w-5 object-contain border border-gray-200 dark:border-gray-600 rounded"
+                        onError={() => setFaviconPreviewError(true)}
+                      />
+                    ) : (
+                      <p className="text-xs text-red-500 dark:text-red-400">Failed to load image</p>
+                    )}
+                  </div>
+                )}
               </div>
               <div>
                 <label htmlFor="branding-footer-text" className="form-label">
