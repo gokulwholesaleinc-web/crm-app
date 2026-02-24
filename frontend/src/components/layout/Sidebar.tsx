@@ -59,7 +59,6 @@ const DEFAULT_MAIN_NAVIGATION: NavItem[] = [
   { id: 'contacts', name: 'Contacts', href: '/contacts', icon: UserGroupIcon },
   { id: 'companies', name: 'Companies', href: '/companies', icon: BuildingOfficeIcon },
   { id: 'leads', name: 'Leads', href: '/leads', icon: FunnelIcon },
-  { id: 'opportunities', name: 'Opportunities', href: '/opportunities', icon: CurrencyDollarIcon },
   { id: 'pipeline', name: 'Pipeline', href: '/pipeline', icon: ViewColumnsIcon },
   { id: 'quotes', name: 'Quotes', href: '/quotes', icon: DocumentTextIcon },
   { id: 'proposals', name: 'Proposals', href: '/proposals', icon: DocumentDuplicateIcon },

@@ -27,8 +27,7 @@ const CompanyDetailPage = lazy(() => import('../features/companies/CompanyDetail
 const LeadsPage = lazy(() => import('../features/leads/LeadsPage'));
 const LeadDetailPage = lazy(() => import('../features/leads/LeadDetailPage'));
 
-// Opportunities
-const OpportunitiesPage = lazy(() => import('../features/opportunities/OpportunitiesPage'));
+// Opportunities (list redirects to Pipeline; detail page remains)
 const OpportunityDetailPage = lazy(() => import('../features/opportunities/OpportunityDetailPage'));
 
 // Quotes
@@ -152,15 +151,8 @@ function AppRoutes() {
         }
       />
 
-      {/* Opportunities */}
-      <Route
-        path="/opportunities"
-        element={
-          <PrivateRoute>
-            <OpportunitiesPage />
-          </PrivateRoute>
-        }
-      />
+      {/* Opportunities - redirect list to unified Pipeline page */}
+      <Route path="/opportunities" element={<Navigate to="/pipeline" replace />} />
       <Route
         path="/opportunities/:id"
         element={

@@ -294,6 +294,10 @@ async def create_opportunity(
             detail="Invalid pipeline stage for opportunity",
         )
 
+    # Default owner to current user if not provided
+    if opp_data.owner_id is None:
+        opp_data.owner_id = current_user.id
+
     service = OpportunityService(db)
     opportunity = await service.create(opp_data, current_user.id)
 
