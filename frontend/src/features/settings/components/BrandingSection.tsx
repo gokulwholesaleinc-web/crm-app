@@ -26,6 +26,7 @@ export function BrandingSection() {
   const { tenant, tenantSlug, refreshBranding } = useTenant();
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
+  const [logoError, setLogoError] = useState(false);
   const [formData, setFormData] = useState<BrandingFormData>({
     company_name: '',
     primary_color: '#6366f1',
@@ -96,7 +97,7 @@ export function BrandingSection() {
       toast.success('Branding updated successfully');
       setIsEditing(false);
       refreshBranding();
-      queryClient.invalidateQueries({ queryKey: ['tenant', 'config'] });
+      queryClient.invalidateQueries({ queryKey: ['tenant', 'config', tenantSlug] });
     },
     onError: () => {
       toast.error('Failed to update branding');
@@ -146,10 +147,23 @@ export function BrandingSection() {
             </div>
             <div>
               <label className="block text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">
-                Logo URL
+                Logo
               </label>
-              <p className="mt-1 text-sm text-gray-900 dark:text-gray-100 break-all">
-                {tenant?.logo_url || 'Not set'}
+              {tenant?.logo_url ? (
+                <img
+                  src={tenant.logo_url}
+                  alt={`${tenant.company_name ?? 'Company'} logo`}
+                  className="mt-1 h-10 max-w-[160px] object-contain"
+                  width={160}
+                  height={40}
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                  }}
+                />
+              ) : null}
+              <p className={`mt-1 text-sm text-gray-500 dark:text-gray-400${tenant?.logo_url ? ' hidden' : ''}`}>
+                {tenant?.logo_url ? 'Failed to load image' : 'Not set'}
               </p>
             </div>
             <div>
@@ -237,11 +251,30 @@ export function BrandingSection() {
                   name="logo_url"
                   autoComplete="url"
                   value={formData.logo_url}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, logo_url: e.target.value }))
-                  }
+                  onChange={(e) => {
+                    setFormData((prev) => ({ ...prev, logo_url: e.target.value }));
+                    setLogoError(false);
+                  }}
                   placeholder="https://example.com/logo.png..."
                 />
+                {formData.logo_url && (
+                  <div className="mt-2">
+                    {!logoError ? (
+                      <img
+                        src={formData.logo_url}
+                        alt="Logo preview"
+                        className="h-10 max-w-[160px] object-contain rounded border border-gray-200 dark:border-gray-700"
+                        width={160}
+                        height={40}
+                        onError={() => setLogoError(true)}
+                      />
+                    ) : (
+                      <p className="text-xs text-red-500 dark:text-red-400">
+                        Failed to load image
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
               <div>
                 <label htmlFor="branding-favicon-url" className="form-label">
