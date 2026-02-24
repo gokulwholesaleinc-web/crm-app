@@ -76,10 +76,15 @@ function PublicQuoteView() {
   const [actionDone, setActionDone] = useState<'accepted' | 'rejected' | null>(null);
 
   // E-sign modal state
+  const [logoError, setLogoError] = useState(false);
   const [showEsignModal, setShowEsignModal] = useState(false);
   const [signerName, setSignerName] = useState('');
   const [signerEmail, setSignerEmail] = useState('');
   const [esignError, setEsignError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLogoError(false);
+  }, [quote?.branding?.logo_url]);
 
   useEffect(() => {
     if (!quoteNumber) return;
@@ -210,7 +215,7 @@ function PublicQuoteView() {
       >
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
-            {branding.logo_url ? (
+            {branding.logo_url && !logoError ? (
               <img
                 src={branding.logo_url}
                 alt={companyDisplayName}
@@ -218,8 +223,18 @@ function PublicQuoteView() {
                 height={36}
                 className="rounded"
                 style={{ maxHeight: 36 }}
+                onError={() => setLogoError(true)}
               />
-            ) : null}
+            ) : (
+              <div
+                className="h-9 w-9 rounded flex items-center justify-center flex-shrink-0"
+                style={{ backgroundColor: branding.secondary_color }}
+              >
+                <span className="text-white font-bold text-lg">
+                  {companyDisplayName[0]?.toUpperCase() || 'Q'}
+                </span>
+              </div>
+            )}
             <span className="text-lg font-semibold text-white truncate">
               {companyDisplayName}
             </span>

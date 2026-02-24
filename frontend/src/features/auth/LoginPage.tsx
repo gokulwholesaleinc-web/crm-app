@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
@@ -14,6 +14,11 @@ function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const { login: storeLogin } = useAuthStore();
   const { tenant } = useTenant();
+  const [logoError, setLogoError] = useState(false);
+
+  useEffect(() => {
+    setLogoError(false);
+  }, [tenant?.logo_url]);
 
   const {
     register,
@@ -64,7 +69,7 @@ function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-8 sm:py-12 px-4 sm:px-6 lg:px-8">
       <div className="w-full max-w-md space-y-6 sm:space-y-8">
         <div>
-          {tenant?.logo_url ? (
+          {tenant?.logo_url && !logoError ? (
             <div className="flex justify-center mb-4">
               <img
                 src={tenant.logo_url}
@@ -72,6 +77,7 @@ function LoginPage() {
                 width={64}
                 height={64}
                 className="h-16 w-auto object-contain"
+                onError={() => setLogoError(true)}
               />
             </div>
           ) : (

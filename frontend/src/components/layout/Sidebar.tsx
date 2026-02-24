@@ -267,6 +267,11 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
   const location = useLocation();
   const { tenant } = useTenant();
   const [editMode, setEditMode] = useState(false);
+  const [logoError, setLogoError] = useState(false);
+
+  useEffect(() => {
+    setLogoError(false);
+  }, [tenant?.logo_url]);
 
   const [mainNav, setMainNav] = useState<NavItem[]>(() =>
     applyOrder(DEFAULT_MAIN_NAVIGATION, readStoredOrder(STORAGE_KEY_MAIN))
@@ -353,13 +358,14 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
         )}
       >
         <div className="flex items-center min-w-0">
-          {tenant?.logo_url ? (
+          {tenant?.logo_url && !logoError ? (
             <img
               src={tenant.logo_url}
               alt={tenant.company_name || 'Logo'}
               width={32}
               height={32}
               className="h-8 w-8 rounded-lg object-contain flex-shrink-0"
+              onError={() => setLogoError(true)}
             />
           ) : (
             <div
@@ -528,7 +534,12 @@ export interface MobileSidebarProps {
 export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
   const location = useLocation();
   const { tenant } = useTenant();
+  const [mobileLogoError, setMobileLogoError] = useState(false);
   const { user: mobileUser } = useAuthStore();
+
+  useEffect(() => {
+    setMobileLogoError(false);
+  }, [tenant?.logo_url]);
   const isMobileAdmin = mobileUser?.is_superuser || mobileUser?.role === 'admin';
   const mobileSecondaryNav = isMobileAdmin
     ? DEFAULT_SECONDARY_NAVIGATION
@@ -638,13 +649,14 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
         {/* Header with close button */}
         <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center min-w-0">
-            {tenant?.logo_url ? (
+            {tenant?.logo_url && !mobileLogoError ? (
               <img
                 src={tenant.logo_url}
                 alt={tenant.company_name || 'Logo'}
                 width={32}
                 height={32}
                 className="h-8 w-8 rounded-lg object-contain flex-shrink-0"
+                onError={() => setMobileLogoError(true)}
               />
             ) : (
               <div
