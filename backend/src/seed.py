@@ -192,14 +192,12 @@ PIPELINE_STAGES = [
 
 
 LEAD_PIPELINE_STAGES = [
-    {"name": "New", "order": 1, "probability": 10, "color": "#3b82f6", "pipeline_type": "lead"},
-    {"name": "Discovery", "order": 2, "probability": 20, "color": "#06b6d4", "pipeline_type": "lead"},
-    {"name": "Proposals On", "order": 3, "probability": 40, "color": "#8b5cf6", "pipeline_type": "lead"},
-    {"name": "Negotiations", "order": 4, "probability": 60, "color": "#f59e0b", "pipeline_type": "lead"},
-    {"name": "Scoping", "order": 5, "probability": 70, "color": "#10b981", "pipeline_type": "lead"},
-    {"name": "Stalling", "order": 6, "probability": 30, "color": "#ef4444", "pipeline_type": "lead"},
-    {"name": "Won", "order": 7, "probability": 100, "is_won": True, "color": "#22c55e", "pipeline_type": "lead"},
-    {"name": "Lost", "order": 8, "probability": 0, "is_lost": True, "color": "#6b7280", "pipeline_type": "lead"},
+    {"name": "New",          "order": 1, "probability": 5,   "color": "#94a3b8", "pipeline_type": "lead"},
+    {"name": "Contacted",    "order": 2, "probability": 15,  "color": "#3b82f6", "pipeline_type": "lead"},
+    {"name": "Engaged",      "order": 3, "probability": 30,  "color": "#06b6d4", "pipeline_type": "lead"},
+    {"name": "Qualified",    "order": 4, "probability": 60,  "color": "#8b5cf6", "pipeline_type": "lead"},
+    {"name": "Converted",    "order": 5, "probability": 100, "is_won": True,  "color": "#22c55e", "pipeline_type": "lead"},
+    {"name": "Disqualified", "order": 6, "probability": 0,   "is_lost": True, "color": "#6b7280", "pipeline_type": "lead"},
 ]
 
 
