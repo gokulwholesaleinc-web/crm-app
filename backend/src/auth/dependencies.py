@@ -5,6 +5,7 @@ from typing import Annotated, Any
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import make_transient
 from src.database import get_db
 from src.auth.models import User
 from src.auth.security import decode_token
@@ -50,6 +51,9 @@ async def get_current_user(
     if user is None:
         raise credentials_exception
 
+    # Detach from session before caching to prevent DetachedInstanceError
+    db.expunge(user)
+    make_transient(user)
     _user_cache[user_id] = (now, user)
     return user
 
