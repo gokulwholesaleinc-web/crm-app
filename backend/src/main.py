@@ -118,7 +118,7 @@ async def _init_database():
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup/shutdown events."""
     print("Starting up CRM application...")
-    await _init_database()
+    asyncio.create_task(_init_database())
 
     yield
 

@@ -1,4 +1,5 @@
 import logging
+import os
 import ssl as ssl_module
 
 import sqlalchemy.exc
@@ -9,7 +10,6 @@ from src.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Naming convention for constraints
 convention = {
     "ix": "ix_%(column_0_label)s",
     "uq": "uq_%(table_name)s_%(column_0_name)s",
@@ -25,30 +25,38 @@ class Base(DeclarativeBase):
     metadata = metadata
 
 
-# Enable SSL for remote database hosts (e.g. NeonDB)
 _db_url = settings.db_url
 _connect_args: dict = {}
-_is_remote = "localhost" not in _db_url and "127.0.0.1" not in _db_url and "db:" not in _db_url and "helium" not in _db_url
-if _is_remote:
+
+_LOCAL_HOSTS = {"localhost", "127.0.0.1", "db", "postgres", "postgresql"}
+_pghost = os.getenv("PGHOST", "")
+
+def _is_local_db(url: str) -> bool:
+    for host in _LOCAL_HOSTS:
+        if host in url:
+            return True
+    if _pghost and not any(c == '.' for c in _pghost):
+        return True
+    return False
+
+if not _is_local_db(_db_url):
     _ssl_ctx = ssl_module.create_default_context()
     if not settings.DATABASE_SSL_VERIFY:
         _ssl_ctx.check_hostname = False
         _ssl_ctx.verify_mode = ssl_module.CERT_NONE
     _connect_args["ssl"] = _ssl_ctx
 
-# Create async engine
 engine = create_async_engine(
     _db_url,
     echo=False,
     future=True,
-    pool_size=20,
-    max_overflow=10,
+    pool_size=5,
+    max_overflow=20,
     pool_pre_ping=True,
     pool_recycle=3600,
     connect_args=_connect_args,
 )
 
-# Create async session factory
 async_session_maker = async_sessionmaker(
     engine,
     class_=AsyncSession,
@@ -73,6 +81,5 @@ async def get_db() -> AsyncSession:
 async def init_db():
     """Initialize database tables."""
     async with engine.begin() as conn:
-        # Enable pgvector extension
         await conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
         await conn.run_sync(Base.metadata.create_all)
