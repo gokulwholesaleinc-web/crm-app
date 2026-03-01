@@ -83,6 +83,12 @@ async def run_migrations():
             # saved_reports
             ("ALTER TABLE saved_reports ADD COLUMN IF NOT EXISTS schedule VARCHAR(20)", "saved_reports.schedule"),
             ("ALTER TABLE saved_reports ADD COLUMN IF NOT EXISTS recipients TEXT", "saved_reports.recipients"),
+            # leads.pipeline_stage_id (FK to pipeline_stages)
+            ("ALTER TABLE leads ADD COLUMN IF NOT EXISTS pipeline_stage_id INTEGER REFERENCES pipeline_stages(id) ON DELETE SET NULL", "leads.pipeline_stage_id"),
+            ("CREATE INDEX IF NOT EXISTS ix_leads_pipeline_stage_id ON leads(pipeline_stage_id)", "index leads.pipeline_stage_id"),
+            # pipeline_stages.pipeline_type
+            ("ALTER TABLE pipeline_stages ADD COLUMN IF NOT EXISTS pipeline_type VARCHAR(20) DEFAULT 'opportunity'", "pipeline_stages.pipeline_type"),
+            ("CREATE INDEX IF NOT EXISTS ix_pipeline_stages_pipeline_type ON pipeline_stages(pipeline_type)", "index pipeline_stages.pipeline_type"),
         ]
 
         for sql, desc in column_migrations:
@@ -91,6 +97,19 @@ async def run_migrations():
                 print(f"   ✅ {desc}")
             except Exception as e:
                 print(f"   ⚠️  {desc}: {e}")
+
+        # Migration 2b: Set pipeline_type for lead-type stages
+        print("📋 Migration 2b: Backfill pipeline_type for lead stages...")
+        try:
+            updated = await conn.execute("""
+                UPDATE pipeline_stages
+                SET pipeline_type = 'lead'
+                WHERE LOWER(name) IN ('new', 'contacted', 'qualified', 'nurturing', 'unqualified', 'converted')
+                AND pipeline_type != 'lead'
+            """)
+            print(f"   ✅ Updated {updated.split()[-1]} pipeline stages to pipeline_type='lead'")
+        except Exception as e:
+            print(f"   ⚠️  pipeline_type backfill: {e}")
 
         # Migration 3: Verify critical tables exist
         print("📋 Migration 3: Verify critical tables...")
