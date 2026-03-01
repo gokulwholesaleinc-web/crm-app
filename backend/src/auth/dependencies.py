@@ -73,8 +73,8 @@ async def get_current_active_user(
 async def get_current_superuser(
     current_user: Annotated[User, Depends(get_current_active_user)],
 ) -> User:
-    """Ensure the current user is a superuser."""
-    if not current_user.is_superuser:
+    """Ensure the current user is a superuser or has admin role."""
+    if not current_user.is_superuser and current_user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough privileges",

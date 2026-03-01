@@ -36,17 +36,64 @@ async def run_migrations():
             ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'sales_rep' NOT NULL
         """)
 
-        # Set admin users to admin role
+        # Set admin users to admin role and superuser
         updated = await conn.execute("""
             UPDATE users
-            SET role = 'admin'
-            WHERE (email IN ('admin@admin.com', 'harsh@test.com') OR is_superuser = true)
-            AND role != 'admin'
+            SET role = 'admin', is_superuser = true
+            WHERE email IN ('admin@admin.com', 'harsh@test.com')
+            AND (role != 'admin' OR is_superuser = false)
         """)
         print(f"   ✅ Role column exists, {updated.split()[-1]} users updated to admin")
 
-        # Migration 2: Verify critical tables exist
-        print("📋 Migration 2: Verify critical tables...")
+        # Ensure admin users have admin role mapping in user_roles
+        await conn.execute("""
+            INSERT INTO user_roles (user_id, role_id, created_at, updated_at)
+            SELECT u.id, r.id, NOW(), NOW()
+            FROM users u, roles r
+            WHERE u.email IN ('admin@admin.com', 'harsh@test.com')
+            AND r.name = 'admin'
+            AND NOT EXISTS (
+                SELECT 1 FROM user_roles ur WHERE ur.user_id = u.id AND ur.role_id = r.id
+            )
+        """)
+        print("   ✅ Admin user_roles mappings verified")
+
+        # Migration 2: Add missing columns to existing tables
+        # (Base.metadata.create_all only creates new tables, not new columns)
+        print("📋 Migration 2: Add missing columns to existing tables...")
+        column_migrations = [
+            # leads
+            ("ALTER TABLE leads ADD COLUMN IF NOT EXISTS sales_code VARCHAR(100)", "leads.sales_code"),
+            ("CREATE INDEX IF NOT EXISTS ix_leads_sales_code ON leads(sales_code)", "index leads.sales_code"),
+            # contacts
+            ("ALTER TABLE contacts ADD COLUMN IF NOT EXISTS sales_code VARCHAR(100)", "contacts.sales_code"),
+            ("CREATE INDEX IF NOT EXISTS ix_contacts_sales_code ON contacts(sales_code)", "index contacts.sales_code"),
+            # companies
+            ("ALTER TABLE companies ADD COLUMN IF NOT EXISTS segment VARCHAR(100)", "companies.segment"),
+            ("CREATE INDEX IF NOT EXISTS ix_companies_segment ON companies(segment)", "index companies.segment"),
+            # proposal_templates
+            ("ALTER TABLE proposal_templates ADD COLUMN IF NOT EXISTS body TEXT NOT NULL DEFAULT ''", "proposal_templates.body"),
+            ("ALTER TABLE proposal_templates ADD COLUMN IF NOT EXISTS legal_terms TEXT", "proposal_templates.legal_terms"),
+            ("ALTER TABLE proposal_templates ADD COLUMN IF NOT EXISTS is_default BOOLEAN DEFAULT FALSE", "proposal_templates.is_default"),
+            ("ALTER TABLE proposal_templates ADD COLUMN IF NOT EXISTS owner_id INTEGER REFERENCES users(id) ON DELETE SET NULL", "proposal_templates.owner_id"),
+            # attachments
+            ("ALTER TABLE attachments ADD COLUMN IF NOT EXISTS category VARCHAR(50)", "attachments.category"),
+            # saved_filters
+            ("ALTER TABLE saved_filters ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT FALSE", "saved_filters.is_public"),
+            # saved_reports
+            ("ALTER TABLE saved_reports ADD COLUMN IF NOT EXISTS schedule VARCHAR(20)", "saved_reports.schedule"),
+            ("ALTER TABLE saved_reports ADD COLUMN IF NOT EXISTS recipients TEXT", "saved_reports.recipients"),
+        ]
+
+        for sql, desc in column_migrations:
+            try:
+                await conn.execute(sql)
+                print(f"   ✅ {desc}")
+            except Exception as e:
+                print(f"   ⚠️  {desc}: {e}")
+
+        # Migration 3: Verify critical tables exist
+        print("📋 Migration 3: Verify critical tables...")
         tables_to_check = [
             'users', 'tenants', 'tenant_users', 'tenant_settings',
             'leads', 'lead_sources', 'contacts', 'companies',
@@ -72,8 +119,8 @@ async def run_migrations():
         else:
             print(f"   ✅ All {len(tables_to_check)} critical tables exist")
 
-        # Migration 3: Verify lead_sources and pipeline_stages have data
-        print("📋 Migration 3: Verify reference data...")
+        # Migration 4: Verify lead_sources and pipeline_stages have data
+        print("📋 Migration 4: Verify reference data...")
 
         lead_sources_count = await conn.fetchval("SELECT COUNT(*) FROM lead_sources")
         pipeline_stages_count = await conn.fetchval("SELECT COUNT(*) FROM pipeline_stages")

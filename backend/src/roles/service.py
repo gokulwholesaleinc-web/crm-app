@@ -86,10 +86,22 @@ class RoleService:
         return result.scalar_one_or_none()
 
     async def get_user_role_name(self, user_id: int) -> str:
-        """Get the role name for a user. Returns 'sales_rep' as default."""
+        """Get the role name for a user.
+
+        Checks user_roles table first, falls back to the role column
+        on the users table, then defaults to 'sales_rep'.
+        """
         user_role = await self.get_user_role(user_id)
         if user_role and user_role.role:
             return user_role.role.name
+        # Fallback: check the role column on the users table
+        from src.auth.models import User
+        result = await self.db.execute(
+            select(User.role).where(User.id == user_id)
+        )
+        user_role_col = result.scalar_one_or_none()
+        if user_role_col and user_role_col in (r.value for r in RoleName):
+            return user_role_col
         return RoleName.SALES_REP.value
 
     async def get_user_permissions(self, user_id: int) -> dict:
