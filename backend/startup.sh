@@ -5,6 +5,10 @@ echo "Starting CRM App..."
 if [ -f "migrate_production.py" ]; then
     echo "Running database migrations..."
     python3 migrate_production.py
+    if [ $? -ne 0 ]; then
+        echo "❌ Migration failed! Aborting startup."
+        exit 1
+    fi
     echo "Migrations completed"
 fi
 
