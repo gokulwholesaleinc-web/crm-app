@@ -148,10 +148,10 @@ function LeadDetailPage() {
 
   if (errorMessage || !lead) {
     return (
-      <div className="rounded-md bg-red-50 p-4">
+      <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-4">
         <div className="flex">
           <div className="ml-3">
-            <h3 className="text-sm font-medium text-red-800">
+            <h3 className="text-sm font-medium text-red-800 dark:text-red-300">
               {errorMessage || 'Lead not found'}
             </h3>
             <div className="mt-4">
@@ -181,7 +181,7 @@ function LeadDetailPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center space-x-3 sm:space-x-4">
-          <Link to="/leads" className="text-gray-400 hover:text-gray-500 p-1 -ml-1" aria-label="Back to leads">
+          <Link to="/leads" className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 p-1 -ml-1" aria-label="Back to leads">
             <svg
               className="h-6 w-6"
               fill="none"
@@ -197,11 +197,11 @@ function LeadDetailPage() {
             </svg>
           </Link>
           <div className="min-w-0">
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">
               {lead.first_name} {lead.last_name}
             </h1>
             {lead.job_title && lead.company_name && (
-              <p className="text-sm text-gray-500 truncate">
+              <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
                 {lead.job_title} at {lead.company_name}
               </p>
             )}
@@ -261,11 +261,11 @@ function LeadDetailPage() {
       <NextBestActionCard entityType="lead" entityId={lead.id} />
 
       {/* Lead Score Card */}
-      <div className="bg-white shadow rounded-lg p-4 sm:p-6">
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4 sm:p-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h3 className="text-lg font-medium text-gray-900">Lead Score</h3>
-            <p className="text-sm text-gray-500">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Lead Score</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
               Based on engagement and fit criteria
             </p>
           </div>
@@ -279,7 +279,7 @@ function LeadDetailPage() {
               >
                 {lead.score}
               </div>
-              <div className="text-xs sm:text-sm text-gray-500">out of 100</div>
+              <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">out of 100</div>
             </div>
             <div className="w-24 h-24 sm:w-32 sm:h-32 relative flex-shrink-0">
               <svg className="w-full h-full transform -rotate-90" viewBox="0 0 128 128">
@@ -290,7 +290,7 @@ function LeadDetailPage() {
                   stroke="currentColor"
                   strokeWidth="8"
                   fill="none"
-                  className="text-gray-200"
+                  className="text-gray-200 dark:text-gray-700"
                 />
                 <circle
                   cx="64"
@@ -314,7 +314,7 @@ function LeadDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 overflow-x-auto">
+      <div className="border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
         <nav className="-mb-px flex space-x-4 sm:space-x-8 min-w-max px-1">
           {tabs.map((tab) => (
             <button
@@ -323,8 +323,8 @@ function LeadDetailPage() {
               className={clsx(
                 'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex-shrink-0',
                 activeTab === tab.id
-                  ? 'border-primary-500 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
               )}
             >
               {tab.name}
@@ -335,15 +335,15 @@ function LeadDetailPage() {
 
       {/* Tab Content */}
       {activeTab === 'details' && (
-        <div className="bg-white shadow rounded-lg">
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
           <div className="px-4 py-5 sm:p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
               Lead Details
             </h3>
             <dl className="grid grid-cols-1 gap-4 sm:gap-x-4 sm:gap-y-6 sm:grid-cols-2">
               <div>
-                <dt className="text-sm font-medium text-gray-500">Email</dt>
-                <dd className="mt-1 text-sm text-gray-900 break-all">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Email</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100 break-all">
                   <a
                     href={`mailto:${lead.email}`}
                     className="text-primary-600 hover:text-primary-500"
@@ -354,8 +354,8 @@ function LeadDetailPage() {
               </div>
 
               <div>
-                <dt className="text-sm font-medium text-gray-500">Phone</dt>
-                <dd className="mt-1 text-sm text-gray-900">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Phone</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   {lead.phone ? (
                     <a
                       href={`tel:${lead.phone}`}
@@ -370,21 +370,21 @@ function LeadDetailPage() {
               </div>
 
               <div>
-                <dt className="text-sm font-medium text-gray-500">Company</dt>
-                <dd className="mt-1 text-sm text-gray-900 break-words">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Company</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100 break-words">
                   {lead.company_name || '-'}
                 </dd>
               </div>
 
               <div>
-                <dt className="text-sm font-medium text-gray-500">Job Title</dt>
-                <dd className="mt-1 text-sm text-gray-900 break-words">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Job Title</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100 break-words">
                   {lead.job_title || '-'}
                 </dd>
               </div>
 
               <div>
-                <dt className="text-sm font-medium text-gray-500">Status</dt>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Status</dt>
                 <dd className="mt-1">
                   <span className={getStatusBadgeClasses(lead.status, 'lead')}>
                     {formatStatusLabel(lead.status)}
@@ -393,36 +393,36 @@ function LeadDetailPage() {
               </div>
 
               <div>
-                <dt className="text-sm font-medium text-gray-500">Source</dt>
-                <dd className="mt-1 text-sm text-gray-900">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Source</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   {lead.source?.name ? formatStatusLabel(lead.source.name) : '-'}
                 </dd>
               </div>
 
               <div>
-                <dt className="text-sm font-medium text-gray-500">Sales Code</dt>
-                <dd className="mt-1 text-sm text-gray-900">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Sales Code</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   {lead.sales_code || '-'}
                 </dd>
               </div>
 
               <div className="sm:col-span-2">
-                <dt className="text-sm font-medium text-gray-500">Description</dt>
-                <dd className="mt-1 text-sm text-gray-900 break-words">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Description</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100 break-words">
                   {lead.description || 'No description'}
                 </dd>
               </div>
 
               <div>
-                <dt className="text-sm font-medium text-gray-500">Created</dt>
-                <dd className="mt-1 text-sm text-gray-900">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Created</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   {formatDate(lead.created_at)}
                 </dd>
               </div>
 
               <div>
-                <dt className="text-sm font-medium text-gray-500">Last Updated</dt>
-                <dd className="mt-1 text-sm text-gray-900">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Last Updated</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   {formatDate(lead.updated_at)}
                 </dd>
               </div>
@@ -467,14 +467,14 @@ function LeadDetailPage() {
       )}
 
       {activeTab === 'activities' && (
-        <div className="bg-white shadow rounded-lg">
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
           <div className="px-4 py-5 sm:p-6">
             {isLoadingActivities ? (
               <div className="flex items-center justify-center py-4">
                 <Spinner />
               </div>
             ) : activities.length === 0 ? (
-              <p className="text-sm text-gray-500 text-center py-4">
+              <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
                 No activities recorded yet.
               </p>
             ) : (
@@ -482,12 +482,12 @@ function LeadDetailPage() {
                 {activities.map((activity) => (
                   <li
                     key={activity.id}
-                    className="flex items-start space-x-3 pb-4 border-b border-gray-100 last:border-0"
+                    className="flex items-start space-x-3 pb-4 border-b border-gray-100 dark:border-gray-700 last:border-0"
                   >
                     <div className="flex-shrink-0">
-                      <div className="h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center">
+                      <div className="h-8 w-8 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
                         <svg
-                          className="h-4 w-4 text-primary-600"
+                          className="h-4 w-4 text-primary-600 dark:text-primary-400"
                           fill="none"
                           viewBox="0 0 24 24"
                           stroke="currentColor"
@@ -502,10 +502,10 @@ function LeadDetailPage() {
                       </div>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-900">
+                      <p className="text-sm text-gray-900 dark:text-gray-100">
                         {activity.subject}
                       </p>
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                         {formatDate(activity.created_at)}
                       </p>
                     </div>
@@ -518,13 +518,13 @@ function LeadDetailPage() {
       )}
 
       {activeTab === 'notes' && leadId && (
-        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
           <NotesList entityType="lead" entityId={leadId} />
         </Suspense>
       )}
 
       {activeTab === 'emails' && leadId && (
-        <div className="bg-white shadow rounded-lg">
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
           <div className="px-4 py-5 sm:p-6">
             <EmailHistory entityType="leads" entityId={leadId} />
           </div>
@@ -533,28 +533,28 @@ function LeadDetailPage() {
 
       {/* Attachments Tab */}
       {activeTab === 'attachments' && leadId && (
-        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
           <AttachmentList entityType="leads" entityId={leadId} />
         </Suspense>
       )}
 
       {/* Comments Tab */}
       {activeTab === 'comments' && leadId && (
-        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
           <CommentSection entityType="leads" entityId={leadId} />
         </Suspense>
       )}
 
       {/* History Tab */}
       {activeTab === 'history' && leadId && (
-        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
           <AuditTimeline entityType="leads" entityId={leadId} />
         </Suspense>
       )}
 
       {/* Sharing Tab */}
       {activeTab === 'sharing' && leadId && (
-        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
           <SharePanel entityType="leads" entityId={leadId} />
         </Suspense>
       )}

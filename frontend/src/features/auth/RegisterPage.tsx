@@ -202,7 +202,7 @@ function RegisterPage() {
               name="terms"
               type="checkbox"
               required
-              className="h-4 w-4 mt-0.5 sm:mt-0 text-primary-600 focus-visible:ring-primary-500 border-gray-300 rounded"
+              className="h-4 w-4 mt-0.5 sm:mt-0 text-primary-600 focus-visible:ring-primary-500 border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded"
             />
             <label htmlFor="terms" className="ml-2 block text-xs sm:text-sm text-gray-900 dark:text-gray-300">
               I agree to the{' '}

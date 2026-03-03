@@ -88,7 +88,7 @@ export function Header({
           <div className="relative w-full">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <MagnifyingGlassIcon
-                className="h-5 w-5 text-gray-400"
+                className="h-5 w-5 text-gray-400 dark:text-gray-500"
                 aria-hidden="true"
               />
             </div>
@@ -121,7 +121,7 @@ export function Header({
             <div className="flex-1 relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <MagnifyingGlassIcon
-                  className="h-5 w-5 text-gray-400"
+                  className="h-5 w-5 text-gray-400 dark:text-gray-500"
                   aria-hidden="true"
                 />
               </div>
@@ -193,7 +193,7 @@ export function Header({
                   {user?.name || 'User'}
                 </span>
                 <ChevronDownIcon
-                  className="ml-1 h-4 w-4 text-gray-400"
+                  className="ml-1 h-4 w-4 text-gray-400 dark:text-gray-500"
                   aria-hidden="true"
                 />
               </div>
@@ -227,7 +227,7 @@ export function Header({
                     )}
                   >
                     <UserCircleIcon
-                      className="mr-3 h-5 w-5 text-gray-400"
+                      className="mr-3 h-5 w-5 text-gray-400 dark:text-gray-500"
                       aria-hidden="true"
                     />
                     Your Profile
@@ -244,7 +244,7 @@ export function Header({
                     )}
                   >
                     <Cog6ToothIcon
-                      className="mr-3 h-5 w-5 text-gray-400"
+                      className="mr-3 h-5 w-5 text-gray-400 dark:text-gray-500"
                       aria-hidden="true"
                     />
                     Settings
@@ -262,7 +262,7 @@ export function Header({
                     )}
                   >
                     <ArrowRightOnRectangleIcon
-                      className="mr-3 h-5 w-5 text-gray-400"
+                      className="mr-3 h-5 w-5 text-gray-400 dark:text-gray-500"
                       aria-hidden="true"
                     />
                     Sign out

@@ -72,7 +72,7 @@ function CampaignCard({
 
   return (
     <div
-      className="bg-white rounded-lg shadow-sm border p-5 hover:shadow-md transition-shadow cursor-pointer"
+      className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-5 hover:shadow-md transition-shadow cursor-pointer"
       onClick={onClick}
       role="button"
       tabIndex={0}
@@ -90,13 +90,13 @@ function CampaignCard({
             >
               {formatStatusLabel(campaign.status)}
             </span>
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-gray-500 dark:text-gray-400">
               {typeLabels[campaign.campaign_type] || campaign.campaign_type}
             </span>
           </div>
-          <h3 className="text-lg font-semibold text-gray-900 truncate">{campaign.name}</h3>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">{campaign.name}</h3>
           {campaign.description && (
-            <p className="text-sm text-gray-600 mt-1 line-clamp-2">{campaign.description}</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">{campaign.description}</p>
           )}
         </div>
         <div className="flex items-center gap-1 ml-4">
@@ -105,7 +105,7 @@ function CampaignCard({
               e.stopPropagation();
               onEdit();
             }}
-            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
             aria-label="Edit campaign"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -122,7 +122,7 @@ function CampaignCard({
               e.stopPropagation();
               onDelete();
             }}
-            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-red-500"
+            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-red-500"
             aria-label="Delete campaign"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -138,7 +138,7 @@ function CampaignCard({
       </div>
 
       {/* Dates */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 mt-4 text-xs text-gray-500">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 mt-4 text-xs text-gray-500 dark:text-gray-400">
         {campaign.start_date && (
           <span>Start: {formatDate(campaign.start_date, 'long')}</span>
         )}
@@ -148,38 +148,38 @@ function CampaignCard({
       </div>
 
       {/* Metrics */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mt-4 pt-4 border-t">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
         <div className="text-center">
           <div className="flex items-center justify-center gap-1 text-gray-400 mb-1">
             <UsersIcon className="h-4 w-4" />
           </div>
-          <div className="text-lg font-semibold text-gray-900">{campaign.num_sent}</div>
-          <div className="text-xs text-gray-500">Sent</div>
+          <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">{campaign.num_sent}</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">Sent</div>
         </div>
         <div className="text-center">
           <div className="flex items-center justify-center gap-1 text-gray-400 mb-1">
             <ChartBarIcon className="h-4 w-4" />
           </div>
-          <div className="text-lg font-semibold text-gray-900">{campaign.num_responses}</div>
-          <div className="text-xs text-gray-500">Responses</div>
+          <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">{campaign.num_responses}</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">Responses</div>
         </div>
         <div className="text-center">
           <div className="flex items-center justify-center gap-1 text-gray-400 mb-1">
             <ChartBarIcon className="h-4 w-4" />
           </div>
-          <div className="text-lg font-semibold text-gray-900">
+          <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
             {formatPercentage(campaign.response_rate, 1)}
           </div>
-          <div className="text-xs text-gray-500">Response Rate</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">Response Rate</div>
         </div>
         <div className="text-center">
           <div className="flex items-center justify-center gap-1 text-gray-400 mb-1">
             <CurrencyDollarIcon className="h-4 w-4" />
           </div>
-          <div className="text-lg font-semibold text-gray-900">
+          <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
             {formatCurrency(campaign.actual_revenue, campaign.budget_currency)}
           </div>
-          <div className="text-xs text-gray-500">Revenue</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">Revenue</div>
         </div>
       </div>
     </div>
@@ -278,8 +278,8 @@ export function CampaignsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Campaigns</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Campaigns</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Manage marketing campaigns and track their performance
           </p>
         </div>
@@ -305,7 +305,7 @@ export function CampaignsPage() {
         </Button>
 
         {campaignsData && (
-          <div className="text-sm text-gray-500 text-center sm:text-right">
+          <div className="text-sm text-gray-500 dark:text-gray-400 text-center sm:text-right">
             Showing {campaigns.length} of {campaignsData.total} campaigns
           </div>
         )}
@@ -313,7 +313,7 @@ export function CampaignsPage() {
 
       {/* Filters Panel */}
       {showFilters && (
-        <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
+        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 sm:p-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
             <Select
               label="Status"
@@ -339,8 +339,8 @@ export function CampaignsPage() {
       ) : campaigns.length === 0 ? (
         <div className="text-center py-12">
           <MegaphoneIcon className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">No campaigns</h3>
-          <p className="mt-1 text-sm text-gray-500">
+          <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">No campaigns</h3>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             Get started by creating a new campaign.
           </p>
           <div className="mt-6">
@@ -377,7 +377,7 @@ export function CampaignsPage() {
                 >
                   Previous
                 </Button>
-                <span className="text-sm text-gray-600 whitespace-nowrap">
+                <span className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
                   Page {filters.page} of {campaignsData.pages}
                 </span>
                 <Button

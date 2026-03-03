@@ -56,12 +56,12 @@ function SharePanel({ entityType, entityId }: SharePanelProps) {
   const availableUsers = users?.filter((u) => !sharedUserIds.has(u.id)) || [];
 
   return (
-    <div className="bg-white shadow rounded-lg">
+    <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
       <div className="px-4 py-5 sm:p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <ShareIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
-            <h3 className="text-base font-medium text-gray-900">Shared With</h3>
+            <h3 className="text-base font-medium text-gray-900 dark:text-gray-100">Shared With</h3>
           </div>
           <Button
             variant="secondary"
@@ -75,16 +75,16 @@ function SharePanel({ entityType, entityId }: SharePanelProps) {
 
         {/* Share form */}
         {showForm && (
-          <div className="mb-4 p-3 bg-gray-50 rounded-lg space-y-3">
+          <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg space-y-3">
             <div>
-              <label htmlFor="share-user" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="share-user" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 User
               </label>
               <select
                 id="share-user"
                 value={selectedUserId}
                 onChange={(e) => setSelectedUserId(Number(e.target.value))}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
+                className="block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm bg-white dark:bg-gray-600 dark:text-gray-100"
               >
                 <option value={0}>Select a user...</option>
                 {availableUsers.map((u) => (
@@ -95,14 +95,14 @@ function SharePanel({ entityType, entityId }: SharePanelProps) {
               </select>
             </div>
             <div>
-              <label htmlFor="share-permission" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="share-permission" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Permission
               </label>
               <select
                 id="share-permission"
                 value={permission}
                 onChange={(e) => setPermission(e.target.value as 'view' | 'edit')}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
+                className="block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm bg-white dark:bg-gray-600 dark:text-gray-100"
               >
                 <option value="view">View</option>
                 <option value="edit">Edit</option>
@@ -134,20 +134,20 @@ function SharePanel({ entityType, entityId }: SharePanelProps) {
             <Spinner size="sm" />
           </div>
         ) : shares.length === 0 ? (
-          <p className="text-sm text-gray-500 text-center py-4">
+          <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
             Not shared with anyone yet.
           </p>
         ) : (
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-gray-100 dark:divide-gray-700">
             {shares.map((share) => {
               const sharedUser = users?.find((u) => u.id === share.shared_with_user_id);
               return (
                 <li key={share.id} className="flex items-center justify-between py-3">
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                       {sharedUser?.full_name || `User #${share.shared_with_user_id}`}
                     </p>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
                       {share.permission_level === 'edit' ? 'Can edit' : 'Can view'}
                     </p>
                   </div>

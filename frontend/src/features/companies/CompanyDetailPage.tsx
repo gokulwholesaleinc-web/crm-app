@@ -56,8 +56,8 @@ function DetailItem({
     <div className="flex items-start gap-3 py-2">
       <Icon className="h-5 w-5 text-gray-400 mt-0.5" />
       <div>
-        <p className="text-xs text-gray-500">{label}</p>
-        <p className={clsx('text-sm text-gray-900', link && 'hover:text-primary-600')}>{value}</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
+        <p className={clsx('text-sm text-gray-900 dark:text-gray-100', link && 'hover:text-primary-600')}>{value}</p>
       </div>
     </div>
   );
@@ -77,7 +77,7 @@ function ContactRow({ contact }: { contact: Contact }) {
   return (
     <Link
       to={`/contacts/${contact.id}`}
-      className="flex flex-col gap-2 p-3 rounded-lg hover:bg-gray-50 transition-colors sm:flex-row sm:items-center sm:gap-4"
+      className="flex flex-col gap-2 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors sm:flex-row sm:items-center sm:gap-4"
     >
       <div className="flex items-center gap-3 sm:gap-4">
         {contact.avatar_url ? (
@@ -89,22 +89,22 @@ function ContactRow({ contact }: { contact: Contact }) {
             className="h-10 w-10 rounded-full object-cover flex-shrink-0"
           />
         ) : (
-          <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
-            <span className="text-sm font-medium text-gray-600">
+          <div className="h-10 w-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
+            <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
               {contact.first_name[0]}
               {contact.last_name[0]}
             </span>
           </div>
         )}
         <div className="min-w-0">
-          <p className="text-sm font-medium text-gray-900 truncate">{contact.full_name}</p>
-          <p className="text-xs text-gray-500 truncate">
+          <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{contact.full_name}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
             {contact.job_title || 'No title'}
             {contact.department && ` - ${contact.department}`}
           </p>
         </div>
       </div>
-      <div className="text-xs text-gray-500 pl-13 sm:pl-0 sm:ml-auto sm:text-right">
+      <div className="text-xs text-gray-500 dark:text-gray-400 pl-13 sm:pl-0 sm:ml-auto sm:text-right">
         {contact.email && (
           <p className="truncate">{contact.email}</p>
         )}
@@ -190,7 +190,7 @@ export function CompanyDetailPage() {
   if (!company) {
     return (
       <div className="text-center py-12">
-        <p className="text-gray-500">Company not found</p>
+        <p className="text-gray-500 dark:text-gray-400">Company not found</p>
         <Button variant="secondary" className="mt-4" onClick={() => navigate('/companies')}>
           Back to Companies
         </Button>
@@ -234,7 +234,7 @@ export function CompanyDetailPage() {
         <div className="flex items-start gap-3 sm:gap-4">
           <button
             onClick={() => navigate('/companies')}
-            className="p-2 rounded-lg hover:bg-gray-100 transition-colors flex-shrink-0"
+            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex-shrink-0"
             aria-label="Back to companies"
           >
             <ArrowLeftIcon className="h-5 w-5 text-gray-500" />
@@ -249,12 +249,12 @@ export function CompanyDetailPage() {
                 className="h-12 w-12 sm:h-16 sm:w-16 rounded-lg object-cover flex-shrink-0"
               />
             ) : (
-              <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+              <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
                 <BuildingOffice2Icon className="h-6 w-6 sm:h-8 sm:w-8 text-gray-400" />
               </div>
             )}
             <div className="min-w-0">
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{company.name}</h1>
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">{company.name}</h1>
               <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1">
                 <span
                   className={clsx(
@@ -266,7 +266,7 @@ export function CompanyDetailPage() {
                   {formatStatusLabel(company.status)}
                 </span>
                 {company.industry && (
-                  <span className="text-sm text-gray-500 capitalize">{company.industry}</span>
+                  <span className="text-sm text-gray-500 dark:text-gray-400 capitalize">{company.industry}</span>
                 )}
               </div>
             </div>
@@ -283,7 +283,7 @@ export function CompanyDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 overflow-x-auto">
+      <div className="border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
         <nav className="-mb-px flex space-x-4 sm:space-x-8 min-w-max px-1">
           {tabs.map((tab) => (
             <button
@@ -292,8 +292,8 @@ export function CompanyDetailPage() {
               className={clsx(
                 'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex-shrink-0',
                 activeTab === tab.id
-                  ? 'border-primary-500 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
               )}
             >
               {tab.name}
@@ -309,16 +309,16 @@ export function CompanyDetailPage() {
           <div className="space-y-6 lg:col-span-2">
             {/* Description */}
             {company.description && (
-              <div className="bg-white rounded-lg shadow-sm border p-6">
-                <h3 className="text-sm font-medium text-gray-900 mb-2">About</h3>
-                <p className="text-sm text-gray-600 whitespace-pre-wrap">{company.description}</p>
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 p-6">
+                <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">About</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap">{company.description}</p>
               </div>
             )}
 
             {/* Contacts */}
-            <div className="bg-white rounded-lg shadow-sm border">
-              <div className="px-4 py-4 border-b flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-                <h3 className="text-lg font-semibold text-gray-900">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700">
+              <div className="px-4 py-4 border-b dark:border-gray-700 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                   Contacts ({contacts.length})
                 </h3>
                 <Button
@@ -335,12 +335,12 @@ export function CompanyDetailPage() {
                   <Spinner />
                 </div>
               ) : contacts.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
                   <UsersIcon className="mx-auto h-8 w-8 text-gray-400 mb-2" />
                   <p>No contacts associated with this company</p>
                 </div>
               ) : (
-                <div className="divide-y">
+                <div className="divide-y dark:divide-gray-700">
                   {contacts.map((contact) => (
                     <ContactRow key={contact.id} contact={contact} />
                   ))}
@@ -352,8 +352,8 @@ export function CompanyDetailPage() {
           {/* Sidebar */}
           <div className="space-y-6">
             {/* Contact Info */}
-            <div className="bg-white rounded-lg shadow-sm border p-6">
-              <h3 className="text-sm font-medium text-gray-900 mb-4">Contact Information</h3>
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 p-6">
+              <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">Contact Information</h3>
               <div className="space-y-1">
                 <DetailItem
                   icon={GlobeAltIcon}
@@ -380,29 +380,29 @@ export function CompanyDetailPage() {
             </div>
 
             {/* Business Info */}
-            <div className="bg-white rounded-lg shadow-sm border p-6">
-              <h3 className="text-sm font-medium text-gray-900 mb-4">Business Details</h3>
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 p-6">
+              <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">Business Details</h3>
               <div className="space-y-3">
                 {company.annual_revenue && (
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-500">Annual Revenue</span>
-                    <span className="text-sm font-medium text-gray-900">
+                    <span className="text-sm text-gray-500 dark:text-gray-400">Annual Revenue</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
                       {formatCurrency(company.annual_revenue)}
                     </span>
                   </div>
                 )}
                 {company.employee_count && (
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-500">Employees</span>
-                    <span className="text-sm font-medium text-gray-900">
+                    <span className="text-sm text-gray-500 dark:text-gray-400">Employees</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
                       {company.employee_count.toLocaleString()}
                     </span>
                   </div>
                 )}
                 {company.company_size && (
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-500">Company Size</span>
-                    <span className="text-sm font-medium text-gray-900">{company.company_size}</span>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">Company Size</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{company.company_size}</span>
                   </div>
                 )}
               </div>
@@ -410,15 +410,15 @@ export function CompanyDetailPage() {
 
             {/* Social Links */}
             {(company.linkedin_url || company.twitter_handle) && (
-              <div className="bg-white rounded-lg shadow-sm border p-6">
-                <h3 className="text-sm font-medium text-gray-900 mb-4">Social Links</h3>
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 p-6">
+                <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">Social Links</h3>
                 <div className="space-y-2">
                   {company.linkedin_url && (
                     <a
                       href={company.linkedin_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600"
+                      className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400"
                     >
                       <LinkIcon className="h-4 w-4" />
                       LinkedIn
@@ -429,7 +429,7 @@ export function CompanyDetailPage() {
                       href={`https://twitter.com/${company.twitter_handle.replace('@', '')}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600"
+                      className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400"
                     >
                       <LinkIcon className="h-4 w-4" />
                       {company.twitter_handle}
@@ -441,13 +441,13 @@ export function CompanyDetailPage() {
 
             {/* Tags */}
             {company.tags && company.tags.length > 0 && (
-              <div className="bg-white rounded-lg shadow-sm border p-6">
-                <h3 className="text-sm font-medium text-gray-900 mb-4">Tags</h3>
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 p-6">
+                <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">Tags</h3>
                 <div className="flex flex-wrap gap-2">
                   {company.tags.map((tag) => (
                     <span
                       key={tag.id}
-                      className="text-xs px-2.5 py-1 rounded-full bg-gray-100 text-gray-600"
+                      className="text-xs px-2.5 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
                       style={
                         tag.color ? { backgroundColor: `${tag.color}20`, color: tag.color } : undefined
                       }
@@ -460,16 +460,16 @@ export function CompanyDetailPage() {
             )}
 
             {/* Timestamps */}
-            <div className="bg-white rounded-lg shadow-sm border p-6">
-              <h3 className="text-sm font-medium text-gray-900 mb-4">Record Info</h3>
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 p-6">
+              <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">Record Info</h3>
               <div className="space-y-2 text-sm">
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-500">Created</span>
-                  <span className="text-gray-900">{formatDate(company.created_at, 'long')}</span>
+                  <span className="text-gray-500 dark:text-gray-400">Created</span>
+                  <span className="text-gray-900 dark:text-gray-100">{formatDate(company.created_at, 'long')}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-500">Last Updated</span>
-                  <span className="text-gray-900">{formatDate(company.updated_at, 'long')}</span>
+                  <span className="text-gray-500 dark:text-gray-400">Last Updated</span>
+                  <span className="text-gray-900 dark:text-gray-100">{formatDate(company.updated_at, 'long')}</span>
                 </div>
               </div>
             </div>
@@ -495,10 +495,10 @@ export function CompanyDetailPage() {
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead className="bg-gray-50 dark:bg-gray-900">
                   <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stage</th>
-                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Name</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Stage</th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Amount</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -529,7 +529,7 @@ export function CompanyDetailPage() {
 
       {/* Contracts Tab */}
       {activeTab === 'contracts' && companyId && (
-        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
           <ContractsList entityType="company" entityId={companyId} />
         </Suspense>
       )}
@@ -552,10 +552,10 @@ export function CompanyDetailPage() {
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead className="bg-gray-50 dark:bg-gray-900">
                   <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quote</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Quote</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Total</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -602,9 +602,9 @@ export function CompanyDetailPage() {
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead className="bg-gray-50 dark:bg-gray-900">
                   <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Proposal</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Proposal</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -631,14 +631,14 @@ export function CompanyDetailPage() {
       )}
 
       {activeTab === 'activities' && (
-        <div className="bg-white shadow rounded-lg">
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
           <div className="px-4 py-5 sm:p-6">
             {isLoadingActivities ? (
               <div className="flex items-center justify-center py-4">
                 <Spinner />
               </div>
             ) : activities.length === 0 ? (
-              <p className="text-sm text-gray-500 text-center py-4">
+              <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
                 No activities recorded yet.
               </p>
             ) : (
@@ -646,12 +646,12 @@ export function CompanyDetailPage() {
                 {activities.map((activity) => (
                   <li
                     key={activity.id}
-                    className="flex items-start space-x-3 pb-4 border-b border-gray-100 last:border-0"
+                    className="flex items-start space-x-3 pb-4 border-b border-gray-100 dark:border-gray-700 last:border-0"
                   >
                     <div className="flex-shrink-0">
-                      <div className="h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center">
+                      <div className="h-8 w-8 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
                         <svg
-                          className="h-4 w-4 text-primary-600"
+                          className="h-4 w-4 text-primary-600 dark:text-primary-400"
                           fill="none"
                           viewBox="0 0 24 24"
                           stroke="currentColor"
@@ -666,10 +666,10 @@ export function CompanyDetailPage() {
                       </div>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-900">
+                      <p className="text-sm text-gray-900 dark:text-gray-100">
                         {activity.subject}
                       </p>
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                         {formatDate(activity.created_at)}
                       </p>
                     </div>
@@ -682,48 +682,48 @@ export function CompanyDetailPage() {
       )}
 
       {activeTab === 'notes' && companyId && (
-        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
           <NotesList entityType="company" entityId={companyId} />
         </Suspense>
       )}
 
       {activeTab === 'attachments' && companyId && (
-        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
           <AttachmentList entityType="companies" entityId={companyId} />
         </Suspense>
       )}
 
       {/* Comments Tab */}
       {activeTab === 'comments' && companyId && (
-        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
           <CommentSection entityType="companies" entityId={companyId} />
         </Suspense>
       )}
 
       {/* Meta/Social Tab */}
       {activeTab === 'meta' && companyId && (
-        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
           <MetaTab companyId={companyId} />
         </Suspense>
       )}
 
       {/* Expenses Tab */}
       {activeTab === 'expenses' && companyId && (
-        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
           <ExpensesTab companyId={companyId} />
         </Suspense>
       )}
 
       {/* History Tab */}
       {activeTab === 'history' && companyId && (
-        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
           <AuditTimeline entityType="companies" entityId={companyId} />
         </Suspense>
       )}
 
       {/* Sharing Tab */}
       {activeTab === 'sharing' && companyId && (
-        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
           <SharePanel entityType="companies" entityId={companyId} />
         </Suspense>
       )}

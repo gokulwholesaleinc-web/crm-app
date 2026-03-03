@@ -37,26 +37,26 @@ export function DuplicateWarningModal({
       size="lg"
     >
       <div className="space-y-4">
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-gray-600 dark:text-gray-400">
           We found {duplicates.length} potential duplicate{duplicates.length !== 1 ? 's' : ''}.
           Please review before creating a new {entityLabel}.
         </p>
 
-        <div className="divide-y divide-gray-100 border border-gray-200 rounded-lg overflow-hidden">
+        <div className="divide-y divide-gray-100 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
           {duplicates.map((dup) => (
             <div
               key={dup.id}
-              className="flex items-center justify-between p-4 hover:bg-gray-50"
+              className="flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-700"
             >
               <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">
+                <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                   {dup.display_name}
                 </p>
-                <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                <div className="flex items-center gap-3 mt-1 text-xs text-gray-500 dark:text-gray-400">
                   {dup.email && <span>{dup.email}</span>}
                   {dup.phone && <span>{dup.phone}</span>}
                 </div>
-                <p className="mt-1 text-xs text-amber-600 font-medium">
+                <p className="mt-1 text-xs text-amber-600 dark:text-amber-400 font-medium">
                   {dup.match_reason}
                 </p>
               </div>

@@ -126,13 +126,13 @@ export function AvatarGroup({
           src={avatar.src}
           name={avatar.name}
           size={size}
-          className="ring-2 ring-white"
+          className="ring-2 ring-white dark:ring-gray-800"
         />
       ))}
       {remainingCount > 0 && (
         <div
           className={clsx(
-            'rounded-full flex items-center justify-center font-medium bg-gray-200 text-gray-600 ring-2 ring-white',
+            'rounded-full flex items-center justify-center font-medium bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 ring-2 ring-white dark:ring-gray-800',
             sizeStyles[size]
           )}
         >

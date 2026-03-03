@@ -161,8 +161,8 @@ function StaticNavItem({
               className={clsx(
                 'ml-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium rounded-full',
                 isActive
-                  ? 'bg-primary-100 text-primary-700'
-                  : 'bg-gray-100 text-gray-600'
+                  ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
               )}
             >
               {item.badge}
@@ -613,8 +613,8 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
           className={clsx(
             'ml-2 inline-flex items-center justify-center px-2.5 py-1 text-xs font-medium rounded-full',
             isActive(item.href)
-              ? 'bg-primary-100 text-primary-700'
-              : 'bg-gray-100 text-gray-600'
+              ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
+              : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
           )}
         >
           {item.badge}

@@ -281,7 +281,7 @@ function ProposalsPage() {
                     <div className="min-w-0 flex-1">
                       <Link
                         to={`/proposals/${proposal.id}`}
-                        className="text-sm font-medium text-primary-600 hover:text-primary-900 block truncate"
+                        className="text-sm font-medium text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300 block truncate"
                       >
                         {proposal.title}
                       </Link>
@@ -319,19 +319,19 @@ function ProposalsPage() {
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead className="bg-gray-50 dark:bg-gray-900">
                   <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Proposal
                     </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Contact / Company
                     </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Status
                     </th>
-                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" style={{ fontVariantNumeric: 'tabular-nums' }}>
                       Views
                     </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Created
                     </th>
                     <th scope="col" className="relative px-6 py-3">
@@ -345,7 +345,7 @@ function ProposalsPage() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <Link
                           to={`/proposals/${proposal.id}`}
-                          className="text-sm font-medium text-primary-600 hover:text-primary-900"
+                          className="text-sm font-medium text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300"
                         >
                           {proposal.title}
                         </Link>
@@ -369,13 +369,13 @@ function ProposalsPage() {
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <Link
                           to={`/proposals/${proposal.id}`}
-                          className="text-primary-600 hover:text-primary-900 mr-4"
+                          className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300 mr-4"
                         >
                           View
                         </Link>
                         <button
                           onClick={() => handleDeleteClick(proposal)}
-                          className="text-red-600 hover:text-red-900"
+                          className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
                           disabled={deleteProposalMutation.isPending}
                         >
                           Delete

@@ -109,8 +109,8 @@ function ReportsPage() {
     return (
       <div className="space-y-4 sm:space-y-6">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Create Custom Report</h1>
-          <p className="mt-1 text-xs sm:text-sm text-gray-500">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Create Custom Report</h1>
+          <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
             Build a report step by step
           </p>
         </div>
@@ -132,8 +132,8 @@ function ReportsPage() {
       <div className="space-y-4 sm:space-y-6">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Report Results</h1>
-            <p className="mt-1 text-xs sm:text-sm text-gray-500">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Report Results</h1>
+            <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
               {activeResult.definition.entity_type} - {activeResult.definition.metric}
               {activeResult.definition.metric_field ? `(${activeResult.definition.metric_field})` : ''}
               {activeResult.definition.group_by ? ` by ${activeResult.definition.group_by}` : ''}
@@ -152,7 +152,7 @@ function ReportsPage() {
               total={activeResult.result.total}
             />
             {activeResult.result.total != null && (
-              <div className="mt-4 pt-4 border-t border-gray-200 text-sm font-medium text-gray-700">
+              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300">
                 Total: {activeResult.result.total.toLocaleString()}
               </div>
             )}
@@ -167,8 +167,8 @@ function ReportsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Reports</h1>
-          <p className="mt-1 text-xs sm:text-sm text-gray-500">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Reports</h1>
+          <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
             Analyze your CRM data with custom and AI-powered reports
           </p>
         </div>
@@ -186,7 +186,7 @@ function ReportsPage() {
 
       {/* My Reports Section */}
       <section>
-        <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
           <DocumentTextIcon className="h-5 w-5 text-gray-400" />
           My Reports
         </h2>
@@ -196,7 +196,7 @@ function ReportsPage() {
           </div>
         ) : !savedReports || savedReports.length === 0 ? (
           <Card>
-            <CardBody className="p-6 text-center text-gray-500 text-sm">
+            <CardBody className="p-6 text-center text-gray-500 dark:text-gray-400 text-sm">
               No saved reports yet. Create one using the builder or AI generation.
             </CardBody>
           </Card>
@@ -207,21 +207,21 @@ function ReportsPage() {
                 <CardBody className="p-4">
                   <div className="flex items-start justify-between mb-2">
                     <div className="min-w-0 flex-1">
-                      <h3 className="text-sm font-medium text-gray-900 truncate">{report.name}</h3>
-                      <p className="text-xs text-gray-500 mt-0.5">
+                      <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{report.name}</h3>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                         {report.entity_type} - {report.metric}
                         {report.metric_field ? `(${report.metric_field})` : ''}
                       </p>
                     </div>
                     {report.schedule && (
-                      <span className="flex-shrink-0 ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                      <span className="flex-shrink-0 ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
                         <ClockIcon className="h-3 w-3" />
                         {report.schedule}
                       </span>
                     )}
                   </div>
                   {report.description && (
-                    <p className="text-xs text-gray-400 mb-3 line-clamp-2">{report.description}</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mb-3 line-clamp-2">{report.description}</p>
                   )}
                   <div className="flex items-center gap-2 mt-3">
                     <Button
@@ -235,7 +235,7 @@ function ReportsPage() {
                     </Button>
                     <button
                       onClick={() => setConfirmDeleteId(report.id)}
-                      className="p-1.5 text-gray-400 hover:text-red-500 rounded-md hover:bg-red-50 transition-colors"
+                      className="p-1.5 text-gray-400 hover:text-red-500 rounded-md hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
                       aria-label={`Delete report ${report.name}`}
                     >
                       <TrashIcon className="h-4 w-4" />
@@ -250,7 +250,7 @@ function ReportsPage() {
 
       {/* Templates Section */}
       <section>
-        <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
           <ChartBarIcon className="h-5 w-5 text-gray-400" />
           Report Templates
         </h2>
@@ -263,8 +263,8 @@ function ReportsPage() {
             {(templates || []).map((template) => (
               <Card key={template.id} hover>
                 <CardBody className="p-4">
-                  <h3 className="text-sm font-medium text-gray-900">{template.name}</h3>
-                  <p className="text-xs text-gray-500 mt-1">{template.description}</p>
+                  <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">{template.name}</h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{template.description}</p>
                   <div className="flex items-center gap-2 mt-3">
                     <Button
                       variant="secondary"
@@ -312,7 +312,7 @@ function ReportsPage() {
             onChange={(e) => setAiPrompt(e.target.value)}
             placeholder="e.g., Show me monthly revenue for this year, or Count of leads by status..."
             rows={4}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:border-primary-500 resize-none"
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400 rounded-lg text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:border-primary-500 resize-none"
             spellCheck={false}
           />
           {aiGenerate.isError && (
@@ -343,7 +343,7 @@ function ReportsPage() {
         title="Delete Report"
         size="sm"
       >
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-gray-600 dark:text-gray-400">
           Are you sure you want to delete this report? This action cannot be undone.
         </p>
         <ModalFooter>

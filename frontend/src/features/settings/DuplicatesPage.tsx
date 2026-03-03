@@ -145,17 +145,17 @@ function DuplicatesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-medium text-gray-900">Duplicate Detection</h2>
-        <p className="mt-1 text-sm text-gray-500">
+        <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100">Duplicate Detection</h2>
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
           Scan for and merge duplicate records to keep your CRM data clean.
         </p>
       </div>
 
       {/* Controls */}
-      <div className="bg-white shadow rounded-lg p-4 sm:p-6">
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4 sm:p-6">
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-end">
           <div>
-            <label htmlFor="entity-type" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="entity-type" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
               Entity Type
             </label>
             <select
@@ -165,7 +165,7 @@ function DuplicatesPage() {
                 setSelectedEntityType(e.target.value as EntityType);
                 setDuplicateGroups([]);
               }}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
+              className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
             >
               <option value="contacts">Contacts</option>
               <option value="companies">Companies</option>
@@ -182,31 +182,31 @@ function DuplicatesPage() {
       {scanning && (
         <div className="flex items-center justify-center py-8">
           <Spinner size="lg" />
-          <span className="ml-3 text-sm text-gray-500">Scanning for duplicates...</span>
+          <span className="ml-3 text-sm text-gray-500 dark:text-gray-400">Scanning for duplicates...</span>
         </div>
       )}
 
       {!scanning && duplicateGroups.length > 0 && (
         <div className="space-y-4">
-          <h3 className="text-sm font-medium text-gray-700">
+          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
             Found {duplicateGroups.length} potential duplicate group{duplicateGroups.length !== 1 ? 's' : ''}
           </h3>
           {duplicateGroups.map((group, idx) => (
-            <div key={idx} className="bg-white shadow rounded-lg overflow-hidden">
-              <div className="p-4 bg-amber-50 border-b border-amber-200">
-                <p className="text-sm font-medium text-amber-800">
+            <div key={idx} className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
+              <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-700">
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
                   Duplicate Group: {group.source.display_name}
                 </p>
               </div>
-              <div className="divide-y divide-gray-100">
+              <div className="divide-y divide-gray-100 dark:divide-gray-700">
                 {/* Primary record */}
                 <div className="p-4 flex items-center justify-between">
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900">
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
                       {group.source.display_name}
-                      <span className="ml-2 text-xs text-green-600 font-normal">(Primary)</span>
+                      <span className="ml-2 text-xs text-green-600 dark:text-green-400 font-normal">(Primary)</span>
                     </p>
-                    <p className="text-xs text-gray-500 mt-1">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                       {group.source.email} {group.source.phone ? `| ${group.source.phone}` : ''}
                     </p>
                   </div>
@@ -219,15 +219,15 @@ function DuplicatesPage() {
                 </div>
                 {/* Duplicate matches */}
                 {group.matches.map((match) => (
-                  <div key={match.id} className="p-4 flex items-center justify-between bg-gray-50">
+                  <div key={match.id} className="p-4 flex items-center justify-between bg-gray-50 dark:bg-gray-900">
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-900">
+                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
                         {match.display_name}
                       </p>
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                         {match.email} {match.phone ? `| ${match.phone}` : ''}
                       </p>
-                      <p className="text-xs text-amber-600 mt-1">{match.match_reason}</p>
+                      <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">{match.match_reason}</p>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0 ml-4">
                       <Button

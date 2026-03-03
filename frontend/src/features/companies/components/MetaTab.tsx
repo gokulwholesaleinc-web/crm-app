@@ -25,11 +25,11 @@ export default function MetaTab({ companyId }: MetaTabProps) {
   return (
     <div className="space-y-6">
       {/* Sync Form */}
-      <div className="bg-white rounded-lg shadow-sm border p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Sync Meta Page</h3>
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Sync Meta Page</h3>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <div className="flex-1">
-            <label htmlFor="meta-page-id" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="meta-page-id" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Facebook Page ID
             </label>
             <input
@@ -38,7 +38,7 @@ export default function MetaTab({ companyId }: MetaTabProps) {
               value={pageId}
               onChange={(e) => setPageId(e.target.value)}
               placeholder="Enter page ID..."
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
               spellCheck={false}
             />
           </div>
@@ -68,15 +68,15 @@ export default function MetaTab({ companyId }: MetaTabProps) {
           <Spinner />
         </div>
       ) : error ? (
-        <div className="bg-white rounded-lg shadow-sm border p-6 text-center">
-          <p className="text-sm text-gray-500">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 p-6 text-center">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
             No Meta data found for this company. Use the sync form above to connect a Facebook page.
           </p>
         </div>
       ) : meta ? (
-        <div className="bg-white rounded-lg shadow-sm border p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
-            <h3 className="text-lg font-semibold text-gray-900">Page Data</h3>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Page Data</h3>
             <Button variant="secondary" size="sm" onClick={handleExport} disabled={exportMutation.isPending}>
               {exportMutation.isPending ? 'Exporting...' : 'Export CSV'}
             </Button>
@@ -85,25 +85,25 @@ export default function MetaTab({ companyId }: MetaTabProps) {
           <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {meta.page_name && (
               <div>
-                <dt className="text-sm font-medium text-gray-500">Page Name</dt>
-                <dd className="mt-1 text-sm text-gray-900">{meta.page_name}</dd>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Page Name</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">{meta.page_name}</dd>
               </div>
             )}
             {meta.page_id && (
               <div>
-                <dt className="text-sm font-medium text-gray-500">Page ID</dt>
-                <dd className="mt-1 text-sm text-gray-900">{meta.page_id}</dd>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Page ID</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">{meta.page_id}</dd>
               </div>
             )}
             {meta.category && (
               <div>
-                <dt className="text-sm font-medium text-gray-500">Category</dt>
-                <dd className="mt-1 text-sm text-gray-900">{meta.category}</dd>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Category</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">{meta.category}</dd>
               </div>
             )}
             {meta.followers_count != null && (
               <div>
-                <dt className="text-sm font-medium text-gray-500">Followers</dt>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Followers</dt>
                 <dd className="mt-1 text-sm text-gray-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
                   {meta.followers_count.toLocaleString()}
                 </dd>
@@ -111,7 +111,7 @@ export default function MetaTab({ companyId }: MetaTabProps) {
             )}
             {meta.likes_count != null && (
               <div>
-                <dt className="text-sm font-medium text-gray-500">Likes</dt>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Likes</dt>
                 <dd className="mt-1 text-sm text-gray-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
                   {meta.likes_count.toLocaleString()}
                 </dd>
@@ -119,8 +119,8 @@ export default function MetaTab({ companyId }: MetaTabProps) {
             )}
             {meta.website && (
               <div>
-                <dt className="text-sm font-medium text-gray-500">Website</dt>
-                <dd className="mt-1 text-sm text-gray-900">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Website</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   <a
                     href={meta.website}
                     target="_blank"
@@ -134,14 +134,14 @@ export default function MetaTab({ companyId }: MetaTabProps) {
             )}
             {meta.about && (
               <div className="sm:col-span-2">
-                <dt className="text-sm font-medium text-gray-500">About</dt>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">About</dt>
                 <dd className="mt-1 text-sm text-gray-900 whitespace-pre-wrap">{meta.about}</dd>
               </div>
             )}
             {meta.last_synced_at && (
               <div>
-                <dt className="text-sm font-medium text-gray-500">Last Synced</dt>
-                <dd className="mt-1 text-sm text-gray-900">{formatDate(meta.last_synced_at, 'long')}</dd>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Last Synced</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">{formatDate(meta.last_synced_at, 'long')}</dd>
               </div>
             )}
           </dl>

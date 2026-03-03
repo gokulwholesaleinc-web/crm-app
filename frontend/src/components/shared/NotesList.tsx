@@ -132,7 +132,7 @@ export function NotesList({ entityType, entityId }: NotesListProps) {
     return parts.map((part, i) => {
       if (part.startsWith('@')) {
         return (
-          <span key={i} className="text-primary-600 font-medium">
+          <span key={i} className="text-primary-600 dark:text-primary-400 font-medium">
             {part}
           </span>
         );
@@ -154,7 +154,7 @@ export function NotesList({ entityType, entityId }: NotesListProps) {
 
   if (error) {
     return (
-      <div className="bg-white shadow rounded-lg p-4">
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4">
         <p className="text-sm text-red-500 text-center py-4">
           Failed to load notes. Please try again.
         </p>
@@ -165,7 +165,7 @@ export function NotesList({ entityType, entityId }: NotesListProps) {
   return (
     <div className="space-y-4">
       {/* Add Note Form */}
-      <div className="bg-white shadow rounded-lg p-4">
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4">
         <div className="relative">
           <label htmlFor="new-note" className="sr-only">
             Add a note
@@ -177,19 +177,19 @@ export function NotesList({ entityType, entityId }: NotesListProps) {
             value={newNote}
             onChange={handleNoteChange}
             onKeyDown={handleKeyDown}
-            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
+            className="block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm bg-white dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400"
             placeholder="Add a note... Use @name to mention someone (Ctrl+Enter to submit)"
           />
 
           {/* @mention dropdown */}
           {showMentions && filteredUsers.length > 0 && (
-            <div className="absolute z-10 mt-1 w-64 bg-white border border-gray-200 rounded-md shadow-lg max-h-40 overflow-y-auto">
+            <div className="absolute z-10 mt-1 w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-40 overflow-y-auto">
               {filteredUsers.slice(0, 8).map((user) => (
                 <button
                   key={user.id}
                   type="button"
                   onClick={() => insertMention(user)}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 focus-visible:bg-gray-100 focus-visible:outline-none"
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 focus-visible:bg-gray-100 dark:focus-visible:bg-gray-700 focus-visible:outline-none dark:text-gray-100"
                 >
                   <span className="font-medium">{user.full_name}</span>
                   <span className="text-gray-400 ml-2">{user.email}</span>
@@ -211,14 +211,14 @@ export function NotesList({ entityType, entityId }: NotesListProps) {
       </div>
 
       {/* Notes List */}
-      <div className="bg-white shadow rounded-lg">
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
         <div className="px-4 py-5 sm:p-6">
           {isLoading ? (
             <div className="flex items-center justify-center py-4">
               <Spinner />
             </div>
           ) : notes.length === 0 ? (
-            <p className="text-sm text-gray-500 text-center py-4">
+            <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
               No notes yet. Add your first note above.
             </p>
           ) : (
@@ -226,14 +226,14 @@ export function NotesList({ entityType, entityId }: NotesListProps) {
               {notes.map((note) => (
                 <li
                   key={note.id}
-                  className="group relative pb-4 border-b border-gray-100 last:border-0 last:pb-0"
+                  className="group relative pb-4 border-b border-gray-100 dark:border-gray-700 last:border-0 last:pb-0"
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1 min-w-0 pr-4">
-                      <p className="text-sm text-gray-900 whitespace-pre-wrap break-words">
+                      <p className="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap break-words">
                         {renderNoteContent(note.content)}
                       </p>
-                      <div className="mt-2 flex items-center gap-2 text-xs text-gray-500">
+                      <div className="mt-2 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                         {note.author_name && (
                           <>
                             <span className="font-medium">{note.author_name}</span>

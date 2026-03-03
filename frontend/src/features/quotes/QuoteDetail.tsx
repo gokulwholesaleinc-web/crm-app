@@ -80,7 +80,7 @@ function QuoteDetailPage() {
     return (
       <div className="text-center py-12">
         <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Quote not found</h3>
-        <Link to="/quotes" className="mt-2 text-primary-600 hover:text-primary-900">
+        <Link to="/quotes" className="mt-2 text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300">
           Back to Quotes
         </Link>
       </div>
@@ -349,11 +349,11 @@ function QuoteDetailPage() {
                 <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                   <thead className="bg-gray-50 dark:bg-gray-900">
                     <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-                      <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Qty</th>
-                      <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Unit Price</th>
-                      <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Discount</th>
-                      <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Description</th>
+                      <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Qty</th>
+                      <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Unit Price</th>
+                      <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Discount</th>
+                      <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Total</th>
                       {isDraft && (
                         <th scope="col" className="px-4 py-3 w-10">
                           <span className="sr-only">Actions</span>
@@ -494,7 +494,7 @@ function QuoteDetailPage() {
                 <div>
                   <dt className="text-xs text-gray-500 dark:text-gray-400">Contact</dt>
                   <dd className="text-sm font-medium">
-                    <Link to={`/contacts/${quote.contact.id}`} className="text-primary-600 hover:text-primary-900">
+                    <Link to={`/contacts/${quote.contact.id}`} className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300">
                       {quote.contact.full_name}
                     </Link>
                   </dd>
@@ -504,7 +504,7 @@ function QuoteDetailPage() {
                 <div>
                   <dt className="text-xs text-gray-500 dark:text-gray-400">Company</dt>
                   <dd className="text-sm font-medium">
-                    <Link to={`/companies/${quote.company.id}`} className="text-primary-600 hover:text-primary-900">
+                    <Link to={`/companies/${quote.company.id}`} className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300">
                       {quote.company.name}
                     </Link>
                   </dd>
@@ -514,7 +514,7 @@ function QuoteDetailPage() {
                 <div>
                   <dt className="text-xs text-gray-500 dark:text-gray-400">Opportunity</dt>
                   <dd className="text-sm font-medium">
-                    <Link to={`/opportunities/${quote.opportunity.id}`} className="text-primary-600 hover:text-primary-900">
+                    <Link to={`/opportunities/${quote.opportunity.id}`} className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300">
                       {quote.opportunity.name}
                     </Link>
                   </dd>

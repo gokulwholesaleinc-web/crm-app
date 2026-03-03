@@ -374,34 +374,34 @@ function ContactsPage() {
                       to={`/contacts/${contact.id}`}
                       className="flex-1 min-w-0"
                     >
-                      <p className="text-sm font-medium text-primary-600 hover:text-primary-900 truncate">
+                      <p className="text-sm font-medium text-primary-600 hover:text-primary-900 dark:hover:text-primary-300 truncate">
                         {contact.first_name} {contact.last_name}
                       </p>
                       {contact.job_title && (
-                        <p className="text-sm text-gray-500 truncate">{contact.job_title}</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{contact.job_title}</p>
                       )}
                     </Link>
                     <div className="flex items-center gap-2 ml-2 flex-shrink-0">
                       <button
                         onClick={() => handleEdit(contact)}
-                        className="p-2 text-primary-600 hover:text-primary-900 hover:bg-gray-100 rounded-md"
+                        className="p-2 text-primary-600 hover:text-primary-900 dark:hover:text-primary-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md"
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => handleDeleteClick(contact)}
-                        className="p-2 text-red-600 hover:text-red-900 hover:bg-gray-100 rounded-md"
+                        className="p-2 text-red-600 hover:text-red-900 dark:hover:text-red-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md"
                         disabled={deleteContactMutation.isPending}
                       >
                         Delete
                       </button>
                     </div>
                   </div>
-                  <div className="mt-2 space-y-1 text-sm text-gray-500">
+                  <div className="mt-2 space-y-1 text-sm text-gray-500 dark:text-gray-400">
                     {contact.email && <p className="truncate">{contact.email}</p>}
                     {contact.company?.name && <p className="truncate">Company: {contact.company.name}</p>}
                     {contact.phone && <p>{formatPhoneNumber(contact.phone)}</p>}
-                    <p className="text-xs text-gray-400">Created: {formatDate(contact.created_at)}</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500">Created: {formatDate(contact.created_at)}</p>
                   </div>
                 </div>
               ))}
@@ -453,36 +453,36 @@ function ContactsPage() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <Link
                           to={`/contacts/${contact.id}`}
-                          className="text-sm font-medium text-primary-600 hover:text-primary-900"
+                          className="text-sm font-medium text-primary-600 hover:text-primary-900 dark:hover:text-primary-300"
                         >
                           {contact.first_name} {contact.last_name}
                         </Link>
                         {contact.job_title && (
-                          <p className="text-sm text-gray-500">{contact.job_title}</p>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">{contact.job_title}</p>
                         )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {contact.email || '-'}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {contact.company?.name || '-'}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {formatPhoneNumber(contact.phone)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {formatDate(contact.created_at)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button
                           onClick={() => handleEdit(contact)}
-                          className="text-primary-600 hover:text-primary-900 mr-4"
+                          className="text-primary-600 hover:text-primary-900 dark:hover:text-primary-300 mr-4"
                         >
                           Edit
                         </button>
                         <button
                           onClick={() => handleDeleteClick(contact)}
-                          className="text-red-600 hover:text-red-900"
+                          className="text-red-600 hover:text-red-900 dark:hover:text-red-300"
                           disabled={deleteContactMutation.isPending}
                         >
                           Delete

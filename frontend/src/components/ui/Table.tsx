@@ -62,25 +62,25 @@ export function Table<T>({
         ) : isActive && sortDirection === 'desc' ? (
           <ChevronDownIcon className="h-4 w-4 text-primary-500" />
         ) : (
-          <ChevronUpIcon className="h-4 w-4 text-gray-300 group-hover:text-gray-400" />
+          <ChevronUpIcon className="h-4 w-4 text-gray-300 dark:text-gray-600 group-hover:text-gray-400" />
         )}
       </span>
     );
   };
 
   return (
-    <div className={clsx('overflow-hidden shadow ring-1 ring-black ring-opacity-5 rounded-lg', className)}>
+    <div className={clsx('overflow-hidden shadow ring-1 ring-black ring-opacity-5 dark:ring-gray-700 rounded-lg', className)}>
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+          <thead className="bg-gray-50 dark:bg-gray-900">
             <tr>
               {columns.map((column) => (
                 <th
                   key={column.key}
                   scope="col"
                   className={clsx(
-                    'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider',
-                    column.sortable && 'cursor-pointer select-none group hover:bg-gray-100',
+                    'px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider',
+                    column.sortable && 'cursor-pointer select-none group hover:bg-gray-100 dark:hover:bg-gray-800',
                     column.headerClassName
                   )}
                   onClick={
@@ -97,12 +97,12 @@ export function Table<T>({
               ))}
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
             {isLoading ? (
               <tr>
                 <td
                   colSpan={columns.length}
-                  className="px-6 py-12 text-center text-sm text-gray-500"
+                  className="px-6 py-12 text-center text-sm text-gray-500 dark:text-gray-400"
                 >
                   <div className="flex items-center justify-center">
                     <svg
@@ -133,19 +133,19 @@ export function Table<T>({
               <tr>
                 <td
                   colSpan={columns.length}
-                  className="px-6 py-12 text-center text-sm text-gray-500"
+                  className="px-6 py-12 text-center text-sm text-gray-500 dark:text-gray-400"
                 >
                   {emptyMessage}
                 </td>
               </tr>
             ) : (
               data.map((row) => (
-                <tr key={keyExtractor(row)} className="hover:bg-gray-50 transition-colors">
+                <tr key={keyExtractor(row)} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                   {columns.map((column) => (
                     <td
                       key={column.key}
                       className={clsx(
-                        'px-6 py-4 whitespace-nowrap text-sm text-gray-900',
+                        'px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100',
                         column.className
                       )}
                     >
@@ -181,7 +181,7 @@ export function Pagination({
   return (
     <div
       className={clsx(
-        'flex items-center justify-between px-4 py-3 bg-white border-t border-gray-200',
+        'flex items-center justify-between px-4 py-3 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700',
         className
       )}
     >
@@ -192,8 +192,8 @@ export function Pagination({
           className={clsx(
             'relative inline-flex items-center px-4 py-2 text-sm font-medium rounded-md',
             canGoPrevious
-              ? 'text-gray-700 bg-white hover:bg-gray-50 border border-gray-300'
-              : 'text-gray-400 bg-gray-100 cursor-not-allowed'
+              ? 'text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 border border-gray-300 dark:border-gray-600'
+              : 'text-gray-400 bg-gray-100 dark:bg-gray-800 cursor-not-allowed'
           )}
         >
           Previous
@@ -204,8 +204,8 @@ export function Pagination({
           className={clsx(
             'relative inline-flex items-center px-4 py-2 ml-3 text-sm font-medium rounded-md',
             canGoNext
-              ? 'text-gray-700 bg-white hover:bg-gray-50 border border-gray-300'
-              : 'text-gray-400 bg-gray-100 cursor-not-allowed'
+              ? 'text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 border border-gray-300 dark:border-gray-600'
+              : 'text-gray-400 bg-gray-100 dark:bg-gray-800 cursor-not-allowed'
           )}
         >
           Next
@@ -213,7 +213,7 @@ export function Pagination({
       </div>
       <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
         <div>
-          <p className="text-sm text-gray-700">
+          <p className="text-sm text-gray-700 dark:text-gray-300">
             Showing <span className="font-medium">{startItem}</span> to{' '}
             <span className="font-medium">{endItem}</span> of{' '}
             <span className="font-medium">{totalItems}</span> results
@@ -228,10 +228,10 @@ export function Pagination({
               onClick={() => onPageChange(currentPage - 1)}
               disabled={!canGoPrevious}
               className={clsx(
-                'relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium',
+                'relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-medium',
                 canGoPrevious
-                  ? 'text-gray-500 hover:bg-gray-50'
-                  : 'text-gray-300 cursor-not-allowed'
+                  ? 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-600'
+                  : 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
               )}
             >
               <span className="sr-only">Previous</span>
@@ -252,7 +252,7 @@ export function Pagination({
                 return (
                   <Fragment key={page}>
                     {showEllipsis && (
-                      <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
+                      <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300">
                         ...
                       </span>
                     )}
@@ -261,8 +261,8 @@ export function Pagination({
                       className={clsx(
                         'relative inline-flex items-center px-4 py-2 border text-sm font-medium',
                         page === currentPage
-                          ? 'z-10 bg-primary-50 border-primary-500 text-primary-600'
-                          : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                          ? 'z-10 bg-primary-50 dark:bg-primary-900/30 border-primary-500 text-primary-600 dark:text-primary-400'
+                          : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-600'
                       )}
                     >
                       {page}
@@ -274,10 +274,10 @@ export function Pagination({
               onClick={() => onPageChange(currentPage + 1)}
               disabled={!canGoNext}
               className={clsx(
-                'relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium',
+                'relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-medium',
                 canGoNext
-                  ? 'text-gray-500 hover:bg-gray-50'
-                  : 'text-gray-300 cursor-not-allowed'
+                  ? 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-600'
+                  : 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
               )}
             >
               <span className="sr-only">Next</span>

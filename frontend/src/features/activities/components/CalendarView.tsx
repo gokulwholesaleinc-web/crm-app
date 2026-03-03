@@ -190,7 +190,7 @@ function CalendarView() {
                   </button>
                 ))}
                 {dayActivities.length > 3 && (
-                  <span className="text-xs text-gray-500 pl-1">+{dayActivities.length - 3} more</span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400 pl-1">+{dayActivities.length - 3} more</span>
                 )}
               </div>
             </div>
@@ -278,7 +278,7 @@ function CalendarView() {
               >
                 <div className="flex items-center justify-between">
                   <span className="font-medium">{act.subject}</span>
-                  <span className="text-xs capitalize px-2 py-0.5 rounded-full bg-white/50">
+                  <span className="text-xs capitalize px-2 py-0.5 rounded-full bg-white/50 dark:bg-black/20">
                     {act.activity_type}
                   </span>
                 </div>
@@ -352,15 +352,15 @@ function CalendarView() {
             ))}
           </div>
           {/* Legend */}
-          <div className="hidden sm:flex items-center gap-2 ml-4 text-xs">
+          <div className="hidden sm:flex items-center gap-2 ml-4 text-xs text-gray-700 dark:text-gray-300">
             <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded bg-blue-200 border border-blue-300" />Call
+              <span className="w-3 h-3 rounded bg-blue-200 dark:bg-blue-800 border border-blue-300 dark:border-blue-700" />Call
             </span>
             <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded bg-green-200 border border-green-300" />Meeting
+              <span className="w-3 h-3 rounded bg-green-200 dark:bg-green-800 border border-green-300 dark:border-green-700" />Meeting
             </span>
             <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded bg-orange-200 border border-orange-300" />Task
+              <span className="w-3 h-3 rounded bg-orange-200 dark:bg-orange-800 border border-orange-300 dark:border-orange-700" />Task
             </span>
           </div>
         </div>
@@ -392,40 +392,40 @@ function CalendarView() {
           <div className="space-y-4 p-4">
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <span className="font-medium text-gray-500">Type</span>
-                <p className="capitalize">{selectedActivity.activity_type}</p>
+                <span className="font-medium text-gray-500 dark:text-gray-400">Type</span>
+                <p className="capitalize text-gray-900 dark:text-gray-100">{selectedActivity.activity_type}</p>
               </div>
               <div>
-                <span className="font-medium text-gray-500">Priority</span>
-                <p className="capitalize">{selectedActivity.priority}</p>
+                <span className="font-medium text-gray-500 dark:text-gray-400">Priority</span>
+                <p className="capitalize text-gray-900 dark:text-gray-100">{selectedActivity.priority}</p>
               </div>
               <div>
-                <span className="font-medium text-gray-500">Status</span>
-                <p>{selectedActivity.is_completed ? 'Completed' : 'Open'}</p>
+                <span className="font-medium text-gray-500 dark:text-gray-400">Status</span>
+                <p className="text-gray-900 dark:text-gray-100">{selectedActivity.is_completed ? 'Completed' : 'Open'}</p>
               </div>
               {selectedActivity.scheduled_at && (
                 <div>
-                  <span className="font-medium text-gray-500">Scheduled</span>
-                  <p>{new Date(selectedActivity.scheduled_at).toLocaleString()}</p>
+                  <span className="font-medium text-gray-500 dark:text-gray-400">Scheduled</span>
+                  <p className="text-gray-900 dark:text-gray-100">{new Date(selectedActivity.scheduled_at).toLocaleString()}</p>
                 </div>
               )}
               {selectedActivity.due_date && (
                 <div>
-                  <span className="font-medium text-gray-500">Due Date</span>
-                  <p>{new Date(selectedActivity.due_date).toLocaleDateString()}</p>
+                  <span className="font-medium text-gray-500 dark:text-gray-400">Due Date</span>
+                  <p className="text-gray-900 dark:text-gray-100">{new Date(selectedActivity.due_date).toLocaleDateString()}</p>
                 </div>
               )}
               {selectedActivity.meeting_location && (
                 <div>
-                  <span className="font-medium text-gray-500">Location</span>
-                  <p>{selectedActivity.meeting_location}</p>
+                  <span className="font-medium text-gray-500 dark:text-gray-400">Location</span>
+                  <p className="text-gray-900 dark:text-gray-100">{selectedActivity.meeting_location}</p>
                 </div>
               )}
             </div>
             {selectedActivity.description && (
               <div className="text-sm">
-                <span className="font-medium text-gray-500">Description</span>
-                <p className="mt-1 text-gray-700">{selectedActivity.description}</p>
+                <span className="font-medium text-gray-500 dark:text-gray-400">Description</span>
+                <p className="mt-1 text-gray-700 dark:text-gray-300">{selectedActivity.description}</p>
               </div>
             )}
           </div>

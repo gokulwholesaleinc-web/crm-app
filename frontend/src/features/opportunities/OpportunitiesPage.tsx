@@ -436,7 +436,7 @@ function OpportunitiesPage() {
                               handleEdit(fullOpportunity);
                             }
                           }}
-                          className="text-primary-600 hover:text-primary-900"
+                          className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300"
                         >
                           Edit
                         </button>

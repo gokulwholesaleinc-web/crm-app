@@ -50,7 +50,7 @@ function WorkflowCard({
   onToggle: () => void;
 }) {
   return (
-    <div className="bg-white rounded-lg shadow-sm border p-5 hover:shadow-md transition-shadow">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-5 hover:shadow-md transition-shadow">
       <div className="flex items-start justify-between">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
@@ -58,26 +58,26 @@ function WorkflowCard({
               className={clsx(
                 'text-xs font-medium px-2 py-0.5 rounded-full',
                 workflow.is_active
-                  ? 'bg-green-100 text-green-700'
-                  : 'bg-gray-100 text-gray-600'
+                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                  : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
               )}
             >
               {workflow.is_active ? 'Active' : 'Inactive'}
             </span>
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-gray-500 dark:text-gray-400">
               {formatStatusLabel(workflow.trigger_entity)}
             </span>
           </div>
-          <h3 className="text-lg font-semibold text-gray-900 truncate">{workflow.name}</h3>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">{workflow.name}</h3>
           {workflow.description && (
-            <p className="text-sm text-gray-600 mt-1 line-clamp-2">{workflow.description}</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">{workflow.description}</p>
           )}
         </div>
         <div className="flex items-center gap-1 ml-4">
           <button
             onClick={onToggle}
             className={clsx(
-              'p-1.5 rounded-lg hover:bg-gray-100',
+              'p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700',
               workflow.is_active
                 ? 'text-yellow-500 hover:text-yellow-600'
                 : 'text-green-500 hover:text-green-600'
@@ -92,7 +92,7 @@ function WorkflowCard({
           </button>
           <button
             onClick={onEdit}
-            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
             aria-label="Edit workflow"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -106,7 +106,7 @@ function WorkflowCard({
           </button>
           <button
             onClick={onDelete}
-            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-red-500"
+            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-red-500"
             aria-label="Delete workflow"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -122,15 +122,15 @@ function WorkflowCard({
       </div>
 
       {/* Trigger info */}
-      <div className="flex items-center gap-4 mt-4 text-xs text-gray-500">
+      <div className="flex items-center gap-4 mt-4 text-xs text-gray-500 dark:text-gray-400">
         <span>
-          Trigger: <span className="font-medium text-gray-700">{formatStatusLabel(workflow.trigger_event)}</span>
+          Trigger: <span className="font-medium text-gray-700 dark:text-gray-300">{formatStatusLabel(workflow.trigger_event)}</span>
         </span>
         <span>Created: {formatDate(workflow.created_at)}</span>
       </div>
 
       {/* Conditions / Actions summary */}
-      <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+      <div className="flex items-center gap-4 mt-2 text-xs text-gray-500 dark:text-gray-400">
         {workflow.conditions && (
           <span className="inline-flex items-center gap-1">
             <FunnelIcon className="h-3.5 w-3.5" />
@@ -228,8 +228,8 @@ export function WorkflowsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Workflows</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Workflows</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Automate actions based on triggers and conditions
           </p>
         </div>
@@ -254,14 +254,14 @@ export function WorkflowsPage() {
           Filters
         </Button>
 
-        <div className="text-sm text-gray-500 text-center sm:text-right">
+        <div className="text-sm text-gray-500 dark:text-gray-400 text-center sm:text-right">
           {workflowList.length} workflow{workflowList.length !== 1 ? 's' : ''}
         </div>
       </div>
 
       {/* Filters Panel */}
       {showFilters && (
-        <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
+        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 sm:p-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
             <Select
               label="Entity"
@@ -287,8 +287,8 @@ export function WorkflowsPage() {
       ) : workflowList.length === 0 ? (
         <div className="text-center py-12">
           <BoltIcon className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">No workflows</h3>
-          <p className="mt-1 text-sm text-gray-500">
+          <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">No workflows</h3>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             Get started by creating a new workflow rule.
           </p>
           <div className="mt-6">

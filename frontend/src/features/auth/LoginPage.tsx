@@ -185,7 +185,7 @@ function LoginPage() {
                 id="remember-me"
                 name="remember-me"
                 type="checkbox"
-                className="h-4 w-4 text-primary-600 focus-visible:ring-primary-500 border-gray-300 rounded"
+                className="h-4 w-4 text-primary-600 focus-visible:ring-primary-500 border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded"
               />
               <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900 dark:text-gray-300">
                 Remember me

@@ -46,9 +46,9 @@ const STEP_TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }
 };
 
 const STEP_TYPE_COLORS: Record<string, string> = {
-  email: 'bg-blue-100 text-blue-700',
-  wait: 'bg-yellow-100 text-yellow-700',
-  task: 'bg-purple-100 text-purple-700',
+  email: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  wait: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+  task: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
 };
 
 function StepBuilder({
@@ -88,18 +88,18 @@ function StepBuilder({
         return (
           <div
             key={index}
-            className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg"
+            className="flex items-start gap-3 p-3 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800"
           >
             <div
               className={`flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center ${
-                STEP_TYPE_COLORS[step.type] || 'bg-gray-100 text-gray-600'
+                STEP_TYPE_COLORS[step.type] || 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
               }`}
             >
               <Icon className="h-4 w-4" aria-hidden="true" />
             </div>
             <div className="flex-1 space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-900">
+                <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
                   Step {index + 1}: {step.type.charAt(0).toUpperCase() + step.type.slice(1)}
                 </span>
                 <button
@@ -113,7 +113,7 @@ function StepBuilder({
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-xs text-gray-500">Delay (days)</label>
+                  <label className="block text-xs text-gray-500 dark:text-gray-400">Delay (days)</label>
                   <input
                     type="number"
                     min="0"
@@ -121,12 +121,12 @@ function StepBuilder({
                     onChange={(e) =>
                       updateStep(index, { delay_days: parseInt(e.target.value, 10) || 0 })
                     }
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
+                    className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
                   />
                 </div>
                 {step.type === 'email' && (
                   <div>
-                    <label className="block text-xs text-gray-500">Template ID</label>
+                    <label className="block text-xs text-gray-500 dark:text-gray-400">Template ID</label>
                     <input
                       type="number"
                       min="1"
@@ -136,20 +136,20 @@ function StepBuilder({
                           template_id: e.target.value ? parseInt(e.target.value, 10) : undefined,
                         })
                       }
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
+                      className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
                     />
                   </div>
                 )}
                 {step.type === 'task' && (
                   <div>
-                    <label className="block text-xs text-gray-500">Task Description</label>
+                    <label className="block text-xs text-gray-500 dark:text-gray-400">Task Description</label>
                     <input
                       type="text"
                       value={step.task_description || ''}
                       onChange={(e) =>
                         updateStep(index, { task_description: e.target.value })
                       }
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
+                      className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
                     />
                   </div>
                 )}
@@ -215,7 +215,7 @@ function SequenceForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label htmlFor="seq-name" className="block text-sm font-medium text-gray-700">
+        <label htmlFor="seq-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
           Name
         </label>
         <input
@@ -224,11 +224,11 @@ function SequenceForm({
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+          className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
         />
       </div>
       <div>
-        <label htmlFor="seq-desc" className="block text-sm font-medium text-gray-700">
+        <label htmlFor="seq-desc" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
           Description
         </label>
         <textarea
@@ -236,11 +236,11 @@ function SequenceForm({
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           rows={2}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+          className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
         />
       </div>
       <div>
-        <span className="block text-sm font-medium text-gray-700 mb-2">Steps</span>
+        <span className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Steps</span>
         <StepBuilder steps={steps} onChange={setSteps} />
       </div>
       <div className="flex items-center gap-2">
@@ -249,9 +249,9 @@ function SequenceForm({
           type="checkbox"
           checked={isActive}
           onChange={(e) => setIsActive(e.target.checked)}
-          className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+          className="rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-primary-600 focus:ring-primary-500"
         />
-        <label htmlFor="seq-active" className="text-sm text-gray-700">
+        <label htmlFor="seq-active" className="text-sm text-gray-700 dark:text-gray-300">
           Active
         </label>
       </div>
@@ -274,14 +274,14 @@ function EnrollmentList({ sequenceId }: { sequenceId: number }) {
 
   if (isLoading) return <Spinner size="sm" />;
   if (!enrollments?.length) {
-    return <p className="text-sm text-gray-500">No enrollments yet.</p>;
+    return <p className="text-sm text-gray-500 dark:text-gray-400">No enrollments yet.</p>;
   }
 
   const statusColors: Record<string, string> = {
-    active: 'bg-green-100 text-green-700',
-    paused: 'bg-yellow-100 text-yellow-700',
-    completed: 'bg-blue-100 text-blue-700',
-    cancelled: 'bg-gray-100 text-gray-700',
+    active: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+    paused: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+    completed: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+    cancelled: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400',
   };
 
   return (
@@ -289,15 +289,15 @@ function EnrollmentList({ sequenceId }: { sequenceId: number }) {
       {enrollments.map((e) => (
         <div
           key={e.id}
-          className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+          className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
         >
           <div>
-            <p className="text-sm text-gray-900">
+            <p className="text-sm text-gray-900 dark:text-gray-100">
               Contact #{e.contact_id} - Step {e.current_step}
             </p>
             <span
               className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                statusColors[e.status] || 'bg-gray-100 text-gray-600'
+                statusColors[e.status] || 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
               }`}
             >
               {e.status}
@@ -354,8 +354,8 @@ function EnrollModal({
   };
 
   return (
-    <div className="p-4 border border-gray-200 rounded-lg bg-white">
-      <h4 className="text-sm font-medium text-gray-900 mb-3">Enroll Contact</h4>
+    <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800">
+      <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">Enroll Contact</h4>
       <form onSubmit={handleSubmit} className="flex gap-2">
         <div className="flex-1">
           <label htmlFor="enroll-contact-id" className="sr-only">
@@ -369,7 +369,7 @@ function EnrollModal({
             onChange={(e) => setContactId(e.target.value)}
             placeholder="Contact ID"
             required
-            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+            className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
           />
         </div>
         <Button type="submit" size="sm" disabled={enrollMutation.isPending}>
@@ -412,10 +412,10 @@ function SequencesPage() {
     <div className="space-y-4 sm:space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">
             Sales Sequences
           </h1>
-          <p className="mt-1 text-xs sm:text-sm text-gray-500">
+          <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
             Automate multi-step outreach to contacts
           </p>
         </div>
@@ -462,7 +462,7 @@ function SequencesPage() {
       ) : !sequences?.length ? (
         <Card>
           <CardBody className="p-8 text-center">
-            <p className="text-gray-500">
+            <p className="text-gray-500 dark:text-gray-400">
               No sequences yet. Create your first sequence to start automating outreach.
             </p>
           </CardBody>
@@ -489,17 +489,17 @@ function SequencesPage() {
                     <div className="flex items-center gap-3">
                       <span
                         className={`inline-block h-2.5 w-2.5 rounded-full ${
-                          seq.is_active ? 'bg-green-500' : 'bg-gray-300'
+                          seq.is_active ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
                         }`}
                       />
                       <div>
-                        <h3 className="text-sm font-medium text-gray-900">
+                        <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">
                           {seq.name}
                         </h3>
                         {seq.description && (
-                          <p className="text-xs text-gray-500">{seq.description}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{seq.description}</p>
                         )}
-                        <p className="text-xs text-gray-400">
+                        <p className="text-xs text-gray-400 dark:text-gray-500">
                           {seq.steps.length} step{seq.steps.length !== 1 ? 's' : ''}
                         </p>
                       </div>
@@ -558,11 +558,11 @@ function SequencesPage() {
                         return (
                           <div key={i} className="flex items-center gap-1 flex-shrink-0">
                             {i > 0 && (
-                              <div className="w-4 h-px bg-gray-300" />
+                              <div className="w-4 h-px bg-gray-300 dark:bg-gray-600" />
                             )}
                             <div
                               className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${
-                                STEP_TYPE_COLORS[step.type] || 'bg-gray-100 text-gray-600'
+                                STEP_TYPE_COLORS[step.type] || 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
                               }`}
                             >
                               <Icon className="h-3 w-3" aria-hidden="true" />
@@ -585,8 +585,8 @@ function SequencesPage() {
                   )}
 
                   {expandedId === seq.id && (
-                    <div className="border-t border-gray-200 p-4 sm:px-6">
-                      <h4 className="text-sm font-medium text-gray-700 mb-3">
+                    <div className="border-t border-gray-200 dark:border-gray-700 p-4 sm:px-6">
+                      <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
                         Enrollments
                       </h4>
                       <EnrollmentList sequenceId={seq.id} />
@@ -600,8 +600,8 @@ function SequencesPage() {
       )}
 
       {processMutation.isSuccess && processMutation.data && (
-        <div className="fixed bottom-4 right-4 bg-green-50 border border-green-200 rounded-lg p-3 shadow-lg">
-          <p className="text-sm text-green-800">
+        <div className="fixed bottom-4 right-4 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg p-3 shadow-lg">
+          <p className="text-sm text-green-800 dark:text-green-300">
             Processed {processMutation.data.processed} due step
             {processMutation.data.processed !== 1 ? 's' : ''}.
           </p>

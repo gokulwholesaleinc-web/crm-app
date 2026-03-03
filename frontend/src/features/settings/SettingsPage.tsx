@@ -268,7 +268,7 @@ function SettingsPage() {
           <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-3">
             <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 sm:p-4">
               <p className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">Status</p>
-              <p className="mt-1 flex items-center text-sm">
+              <p className="mt-1 flex items-center text-sm text-gray-900 dark:text-gray-100">
                 <span
                   className={`inline-block h-2 w-2 rounded-full mr-2 ${
                     user?.is_active ? 'bg-green-500' : 'bg-red-500'

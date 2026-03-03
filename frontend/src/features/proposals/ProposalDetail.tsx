@@ -63,7 +63,7 @@ function ProposalDetailPage() {
     return (
       <div className="text-center py-12">
         <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Proposal not found</h3>
-        <Link to="/proposals" className="mt-2 text-primary-600 hover:text-primary-900">
+        <Link to="/proposals" className="mt-2 text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300">
           Back to Proposals
         </Link>
       </div>
@@ -323,7 +323,7 @@ function ProposalDetailPage() {
                 <div>
                   <dt className="text-xs text-gray-500 dark:text-gray-400">Contact</dt>
                   <dd className="text-sm font-medium">
-                    <Link to={`/contacts/${proposal.contact.id}`} className="text-primary-600 hover:text-primary-900">
+                    <Link to={`/contacts/${proposal.contact.id}`} className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300">
                       {proposal.contact.full_name}
                     </Link>
                   </dd>
@@ -333,7 +333,7 @@ function ProposalDetailPage() {
                 <div>
                   <dt className="text-xs text-gray-500 dark:text-gray-400">Company</dt>
                   <dd className="text-sm font-medium">
-                    <Link to={`/companies/${proposal.company.id}`} className="text-primary-600 hover:text-primary-900">
+                    <Link to={`/companies/${proposal.company.id}`} className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300">
                       {proposal.company.name}
                     </Link>
                   </dd>
@@ -343,7 +343,7 @@ function ProposalDetailPage() {
                 <div>
                   <dt className="text-xs text-gray-500 dark:text-gray-400">Opportunity</dt>
                   <dd className="text-sm font-medium">
-                    <Link to={`/opportunities/${proposal.opportunity.id}`} className="text-primary-600 hover:text-primary-900">
+                    <Link to={`/opportunities/${proposal.opportunity.id}`} className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300">
                       {proposal.opportunity.name}
                     </Link>
                   </dd>
@@ -353,7 +353,7 @@ function ProposalDetailPage() {
                 <div>
                   <dt className="text-xs text-gray-500 dark:text-gray-400">Quote</dt>
                   <dd className="text-sm font-medium">
-                    <Link to={`/quotes/${proposal.quote.id}`} className="text-primary-600 hover:text-primary-900">
+                    <Link to={`/quotes/${proposal.quote.id}`} className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300">
                       {proposal.quote.title} ({proposal.quote.quote_number})
                     </Link>
                   </dd>

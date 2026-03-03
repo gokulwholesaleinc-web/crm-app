@@ -160,7 +160,7 @@ export function AttachmentList({ entityType, entityId }: AttachmentListProps) {
 
   if (error) {
     return (
-      <div className="bg-white shadow rounded-lg p-4">
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4">
         <p className="text-sm text-red-500 text-center py-4">
           Failed to load attachments.
         </p>
@@ -175,10 +175,10 @@ export function AttachmentList({ entityType, entityId }: AttachmentListProps) {
         role="button"
         tabIndex={0}
         aria-label="Upload area. Click or drag and drop files here"
-        className={`bg-white shadow rounded-lg p-6 border-2 border-dashed transition-colors cursor-pointer ${
+        className={`bg-white dark:bg-gray-800 shadow rounded-lg p-6 border-2 border-dashed transition-colors cursor-pointer ${
           isDragOver
-            ? 'border-primary-400 bg-primary-50'
-            : 'border-gray-300 hover:border-gray-400'
+            ? 'border-primary-400 bg-primary-50 dark:bg-primary-900/20'
+            : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
         }`}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
@@ -205,12 +205,12 @@ export function AttachmentList({ entityType, entityId }: AttachmentListProps) {
               d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
             />
           </svg>
-          <p className="mt-2 text-sm text-gray-600">
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
             {uploadMutation.isPending
               ? 'Uploading...'
               : 'Drag and drop files here, or click to browse'}
           </p>
-          <p className="mt-1 text-xs text-gray-400">
+          <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
             PDF, DOCX, XLSX, CSV, PNG, JPG, GIF, TXT (max 10MB)
           </p>
         </div>
@@ -225,32 +225,32 @@ export function AttachmentList({ entityType, entityId }: AttachmentListProps) {
       </div>
 
       {/* Attachment List */}
-      <div className="bg-white shadow rounded-lg">
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
         <div className="px-4 py-5 sm:p-6">
           {isLoading ? (
             <div className="flex items-center justify-center py-4">
               <Spinner />
             </div>
           ) : attachments.length === 0 ? (
-            <p className="text-sm text-gray-500 text-center py-4">
+            <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
               No files attached yet.
             </p>
           ) : (
-            <ul className="divide-y divide-gray-100">
+            <ul className="divide-y divide-gray-100 dark:divide-gray-700">
               {attachments.map((attachment) => (
                 <li
                   key={attachment.id}
                   className="group flex items-center justify-between py-3"
                 >
                   <div className="flex items-center min-w-0 gap-3">
-                    <span className="flex-shrink-0 inline-flex items-center justify-center h-10 w-10 rounded-lg bg-gray-100 text-xs font-bold text-gray-600">
+                    <span className="flex-shrink-0 inline-flex items-center justify-center h-10 w-10 rounded-lg bg-gray-100 dark:bg-gray-700 text-xs font-bold text-gray-600 dark:text-gray-300">
                       {getFileTypeLabel(attachment.mime_type)}
                     </span>
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">
+                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                         {attachment.original_filename}
                       </p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
                         {formatFileSize(attachment.file_size)} - {formatDate(attachment.created_at)}
                       </p>
                     </div>

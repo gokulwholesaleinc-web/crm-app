@@ -268,7 +268,7 @@ export function ActivitiesPage() {
         </div>
 
         {viewMode === 'list' && activitiesData && (
-          <div className="text-xs sm:text-sm text-gray-500 text-center sm:text-right">
+          <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 text-center sm:text-right">
             Showing {activities.length} of {activitiesData.total} activities
           </div>
         )}

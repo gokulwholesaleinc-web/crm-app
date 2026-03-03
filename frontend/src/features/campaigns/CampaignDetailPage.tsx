@@ -30,12 +30,12 @@ import { formatCurrency, formatDate } from '../../utils/formatters';
 import type { CampaignUpdate, CampaignMember } from '../../types';
 
 // Member status colors (specific to campaign members, not part of centralized status colors)
-const defaultMemberStatusColor = { bg: 'bg-gray-100', text: 'text-gray-700' };
+const defaultMemberStatusColor = { bg: 'bg-gray-100 dark:bg-gray-700', text: 'text-gray-700 dark:text-gray-300' };
 const memberStatusColors: Record<string, { bg: string; text: string }> = {
   pending: defaultMemberStatusColor,
-  sent: { bg: 'bg-blue-100', text: 'text-blue-700' },
-  responded: { bg: 'bg-green-100', text: 'text-green-700' },
-  converted: { bg: 'bg-purple-100', text: 'text-purple-700' },
+  sent: { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-400' },
+  responded: { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-700 dark:text-green-400' },
+  converted: { bg: 'bg-purple-100 dark:bg-purple-900/30', text: 'text-purple-700 dark:text-purple-400' },
 };
 
 function StatCard({
@@ -50,15 +50,15 @@ function StatCard({
   subValue?: string;
 }) {
   return (
-    <div className="bg-white rounded-lg shadow-sm border p-3 sm:p-4">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-3 sm:p-4">
       <div className="flex items-center gap-2 sm:gap-3">
-        <div className="p-1.5 sm:p-2 bg-gray-100 rounded-lg flex-shrink-0">
-          <Icon className="h-4 w-4 sm:h-5 sm:w-5 text-gray-600" />
+        <div className="p-1.5 sm:p-2 bg-gray-100 dark:bg-gray-700 rounded-lg flex-shrink-0">
+          <Icon className="h-4 w-4 sm:h-5 sm:w-5 text-gray-600 dark:text-gray-400" />
         </div>
         <div className="min-w-0">
-          <p className="text-xs sm:text-sm text-gray-500 truncate">{label}</p>
-          <p className="text-lg sm:text-xl font-semibold text-gray-900">{value}</p>
-          {subValue && <p className="text-xs text-gray-500 truncate">{subValue}</p>}
+          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">{label}</p>
+          <p className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-gray-100">{value}</p>
+          {subValue && <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{subValue}</p>}
         </div>
       </div>
     </div>
@@ -75,8 +75,8 @@ function MemberRow({
   const statusStyle = memberStatusColors[member.status] ?? defaultMemberStatusColor;
 
   return (
-    <tr className="hover:bg-gray-50">
-      <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+    <tr className="hover:bg-gray-50 dark:hover:bg-gray-700">
+      <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">
         {member.member_type === 'contact' ? 'Contact' : 'Lead'} #{member.member_id}
       </td>
       <td className="px-4 py-3">
@@ -90,9 +90,9 @@ function MemberRow({
           {member.status.charAt(0).toUpperCase() + member.status.slice(1)}
         </span>
       </td>
-      <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{formatDate(member.sent_at, 'short')}</td>
-      <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{formatDate(member.responded_at, 'short')}</td>
-      <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{formatDate(member.converted_at, 'short')}</td>
+      <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">{formatDate(member.sent_at, 'short')}</td>
+      <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">{formatDate(member.responded_at, 'short')}</td>
+      <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">{formatDate(member.converted_at, 'short')}</td>
       <td className="px-4 py-3 text-right">
         <button
           onClick={onRemove}
@@ -116,10 +116,10 @@ function MemberCard({
   const statusStyle = memberStatusColors[member.status] ?? defaultMemberStatusColor;
 
   return (
-    <div className="bg-white border rounded-lg p-4">
+    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <p className="font-medium text-gray-900 truncate">
+          <p className="font-medium text-gray-900 dark:text-gray-100 truncate">
             {member.member_type === 'contact' ? 'Contact' : 'Lead'} #{member.member_id}
           </p>
           <span
@@ -142,16 +142,16 @@ function MemberCard({
       </div>
       <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
         <div>
-          <p className="text-gray-500">Sent</p>
-          <p className="text-gray-900">{formatDate(member.sent_at, 'short') || '-'}</p>
+          <p className="text-gray-500 dark:text-gray-400">Sent</p>
+          <p className="text-gray-900 dark:text-gray-100">{formatDate(member.sent_at, 'short') || '-'}</p>
         </div>
         <div>
-          <p className="text-gray-500">Responded</p>
-          <p className="text-gray-900">{formatDate(member.responded_at, 'short') || '-'}</p>
+          <p className="text-gray-500 dark:text-gray-400">Responded</p>
+          <p className="text-gray-900 dark:text-gray-100">{formatDate(member.responded_at, 'short') || '-'}</p>
         </div>
         <div>
-          <p className="text-gray-500">Converted</p>
-          <p className="text-gray-900">{formatDate(member.converted_at, 'short') || '-'}</p>
+          <p className="text-gray-500 dark:text-gray-400">Converted</p>
+          <p className="text-gray-900 dark:text-gray-100">{formatDate(member.converted_at, 'short') || '-'}</p>
         </div>
       </div>
     </div>
@@ -261,7 +261,7 @@ export function CampaignDetailPage() {
   if (!campaign) {
     return (
       <div className="text-center py-12">
-        <p className="text-gray-500">Campaign not found</p>
+        <p className="text-gray-500 dark:text-gray-400">Campaign not found</p>
         <Button variant="secondary" className="mt-4" onClick={() => navigate('/campaigns')}>
           Back to Campaigns
         </Button>
@@ -277,13 +277,13 @@ export function CampaignDetailPage() {
       <div className="flex flex-col sm:flex-row sm:items-start gap-4">
         <button
           onClick={() => navigate('/campaigns')}
-          className="p-2 rounded-lg hover:bg-gray-100 transition-colors self-start"
+          className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors self-start"
         >
-          <ArrowLeftIcon className="h-5 w-5 text-gray-500" />
+          <ArrowLeftIcon className="h-5 w-5 text-gray-500 dark:text-gray-400" />
         </button>
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 break-words">{campaign.name}</h1>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 break-words">{campaign.name}</h1>
             <span
               className={clsx(
                 'text-xs sm:text-sm font-medium px-2 sm:px-3 py-0.5 sm:py-1 rounded-full whitespace-nowrap',
@@ -295,7 +295,7 @@ export function CampaignDetailPage() {
             </span>
           </div>
           {campaign.description && (
-            <p className="text-sm sm:text-base text-gray-600 mt-1">{campaign.description}</p>
+            <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-1">{campaign.description}</p>
           )}
         </div>
         <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -310,21 +310,21 @@ export function CampaignDetailPage() {
 
       {/* Campaign Details */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <div className="bg-white rounded-lg shadow-sm border p-3 sm:p-4">
-          <p className="text-xs sm:text-sm text-gray-500">Campaign Type</p>
-          <p className="text-base sm:text-lg font-medium text-gray-900 capitalize">{campaign.campaign_type}</p>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-3 sm:p-4">
+          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Campaign Type</p>
+          <p className="text-base sm:text-lg font-medium text-gray-900 dark:text-gray-100 capitalize">{campaign.campaign_type}</p>
         </div>
-        <div className="bg-white rounded-lg shadow-sm border p-3 sm:p-4">
-          <p className="text-xs sm:text-sm text-gray-500">Start Date</p>
-          <p className="text-base sm:text-lg font-medium text-gray-900">{formatDate(campaign.start_date, 'long')}</p>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-3 sm:p-4">
+          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Start Date</p>
+          <p className="text-base sm:text-lg font-medium text-gray-900 dark:text-gray-100">{formatDate(campaign.start_date, 'long')}</p>
         </div>
-        <div className="bg-white rounded-lg shadow-sm border p-3 sm:p-4">
-          <p className="text-xs sm:text-sm text-gray-500">End Date</p>
-          <p className="text-base sm:text-lg font-medium text-gray-900">{formatDate(campaign.end_date, 'long')}</p>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-3 sm:p-4">
+          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">End Date</p>
+          <p className="text-base sm:text-lg font-medium text-gray-900 dark:text-gray-100">{formatDate(campaign.end_date, 'long')}</p>
         </div>
-        <div className="bg-white rounded-lg shadow-sm border p-3 sm:p-4">
-          <p className="text-xs sm:text-sm text-gray-500">Budget</p>
-          <p className="text-base sm:text-lg font-medium text-gray-900">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-3 sm:p-4">
+          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Budget</p>
+          <p className="text-base sm:text-lg font-medium text-gray-900 dark:text-gray-100">
             {formatCurrency(campaign.budget_amount, campaign.budget_currency)}
           </p>
         </div>
@@ -359,8 +359,8 @@ export function CampaignDetailPage() {
 
       {/* Funnel Stats */}
       {stats && (
-        <div className="bg-white rounded-lg shadow-sm border p-4 sm:p-6">
-          <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Campaign Funnel</h3>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
+          <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Campaign Funnel</h3>
           {/* Desktop: horizontal funnel */}
           <div className="hidden sm:flex items-center justify-between">
             {[
@@ -381,10 +381,10 @@ export function CampaignDetailPage() {
                           : 'polygon(10% 0, 90% 0, 100% 50%, 90% 100%, 10% 100%, 0 50%)',
                     }}
                   >
-                    <span className="text-lg font-bold text-gray-800">{stage.value}</span>
+                    <span className="text-lg font-bold text-gray-800 dark:text-gray-200">{stage.value}</span>
                   </div>
                 </div>
-                <span className="text-sm text-gray-600 mt-2">{stage.label}</span>
+                <span className="text-sm text-gray-600 dark:text-gray-400 mt-2">{stage.label}</span>
               </div>
             ))}
           </div>
@@ -397,8 +397,8 @@ export function CampaignDetailPage() {
               { label: 'Converted', value: stats.converted, color: 'bg-purple-200' },
             ].map((stage) => (
               <div key={stage.label} className={clsx('rounded-lg p-3 text-center', stage.color)}>
-                <span className="text-lg font-bold text-gray-800 block">{stage.value}</span>
-                <span className="text-xs text-gray-600">{stage.label}</span>
+                <span className="text-lg font-bold text-gray-800 dark:text-gray-200 block">{stage.value}</span>
+                <span className="text-xs text-gray-600 dark:text-gray-400">{stage.label}</span>
               </div>
             ))}
           </div>
@@ -406,9 +406,9 @@ export function CampaignDetailPage() {
       )}
 
       {/* Members */}
-      <div className="bg-white rounded-lg shadow-sm border">
-        <div className="px-4 sm:px-6 py-4 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <h3 className="text-base sm:text-lg font-semibold text-gray-900">Campaign Members</h3>
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">Campaign Members</h3>
           <Button
             size="sm"
             leftIcon={<PlusIcon className="h-4 w-4" />}
@@ -423,7 +423,7 @@ export function CampaignDetailPage() {
             <Spinner />
           </div>
         ) : !members || members.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">
+          <div className="text-center py-12 text-gray-500 dark:text-gray-400">
             <UsersIcon className="mx-auto h-12 w-12 text-gray-400 mb-2" />
             <p>No members in this campaign yet</p>
           </div>
@@ -441,28 +441,28 @@ export function CampaignDetailPage() {
             </div>
             {/* Desktop: Table view */}
             <div className="hidden sm:block overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-900">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                       Member
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                       Status
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                       Sent
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                       Responded
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                       Converted
                     </th>
                     <th className="px-4 py-3"></th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                   {members.map((member) => (
                     <MemberRow
                       key={member.id}

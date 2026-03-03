@@ -112,19 +112,19 @@ function CommentInput({
         value={content}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
-        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
+        className="block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm bg-white dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400"
         placeholder={placeholder}
       />
 
       {/* @mention dropdown */}
       {showMentions && filteredUsers.length > 0 && (
-        <div className="absolute z-10 mt-1 w-64 bg-white border border-gray-200 rounded-md shadow-lg max-h-40 overflow-y-auto">
+        <div className="absolute z-10 mt-1 w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-40 overflow-y-auto">
           {filteredUsers.slice(0, 8).map((user) => (
             <button
               key={user.id}
               type="button"
               onClick={() => insertMention(user)}
-              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 focus-visible:bg-gray-100 focus-visible:outline-none"
+              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 focus-visible:bg-gray-100 dark:focus-visible:bg-gray-700 focus-visible:outline-none dark:text-gray-100"
             >
               <span className="font-medium">{user.full_name}</span>
               <span className="text-gray-400 ml-2">{user.email}</span>
@@ -135,12 +135,12 @@ function CommentInput({
 
       <div className="mt-3 flex items-center justify-between">
         {showInternalToggle ? (
-          <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer">
+          <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 cursor-pointer">
             <input
               type="checkbox"
               checked={isInternal}
               onChange={(e) => setIsInternal(e.target.checked)}
-              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500 dark:bg-gray-700"
             />
             Internal only (hidden from external users)
           </label>
@@ -188,7 +188,7 @@ function CommentItem({
     return parts.map((part, i) => {
       if (part.startsWith('@')) {
         return (
-          <span key={i} className="text-primary-600 font-medium">
+          <span key={i} className="text-primary-600 dark:text-primary-400 font-medium">
             {part}
           </span>
         );
@@ -201,18 +201,18 @@ function CommentItem({
     <div
       className={clsx(
         'relative',
-        depth > 0 && 'ml-6 pl-4 border-l-2 border-gray-100'
+        depth > 0 && 'ml-6 pl-4 border-l-2 border-gray-100 dark:border-gray-700'
       )}
     >
       <div className="group py-3">
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-gray-900">
+              <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
                 {comment.user_name || 'Unknown User'}
               </span>
               {comment.is_internal && (
-                <span className="inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800">
+                <span className="inline-flex items-center rounded-full bg-yellow-100 dark:bg-yellow-900/30 px-2 py-0.5 text-xs font-medium text-yellow-800 dark:text-yellow-300">
                   Internal
                 </span>
               )}
@@ -220,7 +220,7 @@ function CommentItem({
                 {formatDate(comment.created_at)}
               </time>
             </div>
-            <p className="mt-1 text-sm text-gray-700 whitespace-pre-wrap break-words">
+            <p className="mt-1 text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words">
               {renderContent(comment.content)}
             </p>
             <div className="mt-2 flex items-center gap-3">
@@ -228,7 +228,7 @@ function CommentItem({
                 <button
                   type="button"
                   onClick={() => onReply(comment.id)}
-                  className="text-xs text-gray-400 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
+                  className="text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
                 >
                   Reply
                 </button>
@@ -358,7 +358,7 @@ export function CommentSection({ entityType, entityId }: CommentSectionProps) {
 
   if (error) {
     return (
-      <div className="bg-white shadow rounded-lg p-4">
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4">
         <p className="text-sm text-red-500 text-center py-4">
           Failed to load comments. Please try again.
         </p>
@@ -369,7 +369,7 @@ export function CommentSection({ entityType, entityId }: CommentSectionProps) {
   return (
     <div className="space-y-4">
       {/* Add Comment Form */}
-      <div className="bg-white shadow rounded-lg p-4">
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4">
         <CommentInput
           onSubmit={handleAddComment}
           isLoading={createCommentMutation.isPending}
@@ -378,18 +378,18 @@ export function CommentSection({ entityType, entityId }: CommentSectionProps) {
       </div>
 
       {/* Comments List */}
-      <div className="bg-white shadow rounded-lg">
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
         <div className="px-4 py-5 sm:p-6">
           {isLoading ? (
             <div className="flex items-center justify-center py-4">
               <Spinner />
             </div>
           ) : comments.length === 0 ? (
-            <p className="text-sm text-gray-500 text-center py-4">
+            <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
               No comments yet. Start the conversation above.
             </p>
           ) : (
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-gray-100 dark:divide-gray-700">
               {comments.map((comment) => (
                 <div key={comment.id}>
                   <CommentItem
@@ -403,13 +403,13 @@ export function CommentSection({ entityType, entityId }: CommentSectionProps) {
 
                   {/* Inline reply form */}
                   {replyingTo === comment.id && (
-                    <div className="ml-6 pl-4 border-l-2 border-primary-200 py-2">
-                      <p className="text-xs text-gray-500 mb-2">
+                    <div className="ml-6 pl-4 border-l-2 border-primary-200 dark:border-primary-700 py-2">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
                         Replying to {comment.user_name || 'Unknown User'}
                         <button
                           type="button"
                           onClick={() => setReplyingTo(null)}
-                          className="ml-2 text-gray-400 hover:text-gray-600 focus-visible:outline-none"
+                          className="ml-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 focus-visible:outline-none"
                         >
                           Cancel
                         </button>

@@ -50,12 +50,12 @@ function formatDate(dateStr: string): string {
 
 function getCategoryBadgeColor(category: string | null): string {
   switch (category) {
-    case 'document': return 'bg-blue-100 text-blue-700';
-    case 'contract': return 'bg-purple-100 text-purple-700';
-    case 'image': return 'bg-green-100 text-green-700';
-    case 'report': return 'bg-yellow-100 text-yellow-700';
-    case 'other': return 'bg-gray-100 text-gray-700';
-    default: return 'bg-gray-100 text-gray-500';
+    case 'document': return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300';
+    case 'contract': return 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300';
+    case 'image': return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300';
+    case 'report': return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300';
+    case 'other': return 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
+    default: return 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400';
   }
 }
 
@@ -164,7 +164,7 @@ export function DocumentsTab({ entityType, entityId }: DocumentsTabProps) {
 
   if (error) {
     return (
-      <div className="bg-white shadow rounded-lg p-4">
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4">
         <p className="text-sm text-red-500 text-center py-4">
           Failed to load documents.
         </p>
@@ -175,15 +175,15 @@ export function DocumentsTab({ entityType, entityId }: DocumentsTabProps) {
   return (
     <div className="space-y-4">
       {/* Upload Bar */}
-      <div className="bg-white shadow rounded-lg px-4 py-3 flex items-center gap-3 flex-wrap">
-        <label htmlFor="upload-category" className="text-sm font-medium text-gray-700">
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg px-4 py-3 flex items-center gap-3 flex-wrap">
+        <label htmlFor="upload-category" className="text-sm font-medium text-gray-700 dark:text-gray-300">
           Category:
         </label>
         <select
           id="upload-category"
           value={uploadCategory}
           onChange={(e) => setUploadCategory(e.target.value)}
-          className="rounded-md border-gray-300 text-sm shadow-sm focus:border-primary-500 focus:ring-primary-500"
+          className="rounded-md border-gray-300 dark:border-gray-600 text-sm shadow-sm focus:border-primary-500 focus:ring-primary-500 bg-white dark:bg-gray-700 dark:text-gray-100"
         >
           {UPLOAD_CATEGORIES.map((cat) => (
             <option key={cat.value} value={cat.value}>
@@ -213,8 +213,8 @@ export function DocumentsTab({ entityType, entityId }: DocumentsTabProps) {
       </div>
 
       {/* Category Filter Tabs */}
-      <div className="bg-white shadow rounded-lg">
-        <div className="border-b border-gray-200 px-4">
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
+        <div className="border-b border-gray-200 dark:border-gray-700 px-4">
           <nav className="-mb-px flex space-x-6 overflow-x-auto" aria-label="Document categories">
             {CATEGORY_TABS.map((tab) => {
               const count = tab.id === 'all'
@@ -226,13 +226,13 @@ export function DocumentsTab({ entityType, entityId }: DocumentsTabProps) {
                   onClick={() => setActiveFilter(tab.id)}
                   className={`whitespace-nowrap py-3 px-1 border-b-2 text-sm font-medium ${
                     activeFilter === tab.id
-                      ? 'border-primary-500 text-primary-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                      : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
                   }`}
                 >
                   {tab.label}
                   {count > 0 && (
-                    <span className="ml-1.5 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+                    <span className="ml-1.5 rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs text-gray-600 dark:text-gray-300">
                       {count}
                     </span>
                   )}
@@ -248,13 +248,13 @@ export function DocumentsTab({ entityType, entityId }: DocumentsTabProps) {
               <Spinner />
             </div>
           ) : filteredAttachments.length === 0 ? (
-            <p className="text-sm text-gray-500 text-center py-4">
+            <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
               {activeFilter === 'all'
                 ? 'No documents attached yet.'
                 : `No ${activeFilter} files found.`}
             </p>
           ) : (
-            <ul className="divide-y divide-gray-100">
+            <ul className="divide-y divide-gray-100 dark:divide-gray-700">
               {filteredAttachments.map((attachment) => (
                 <li
                   key={attachment.id}
@@ -262,15 +262,15 @@ export function DocumentsTab({ entityType, entityId }: DocumentsTabProps) {
                 >
                   <div className="flex items-center min-w-0 gap-3">
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">
+                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                         {attachment.original_filename}
                       </p>
                       <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-xs text-gray-500">
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
                           {formatFileSize(attachment.file_size)}
                         </span>
-                        <span className="text-xs text-gray-400">-</span>
-                        <span className="text-xs text-gray-500">
+                        <span className="text-xs text-gray-400 dark:text-gray-500">-</span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
                           {formatDate(attachment.created_at)}
                         </span>
                         {attachment.category && (

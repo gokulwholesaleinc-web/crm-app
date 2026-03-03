@@ -53,7 +53,7 @@ function PaymentDetailPage() {
     return (
       <div className="text-center py-12">
         <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Payment not found</h3>
-        <Link to="/payments" className="mt-2 text-primary-600 hover:text-primary-900">
+        <Link to="/payments" className="mt-2 text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300">
           Back to Payments
         </Link>
       </div>
@@ -211,7 +211,7 @@ function PaymentDetailPage() {
                 <div>
                   <dt className="text-xs text-gray-500 dark:text-gray-400">Opportunity</dt>
                   <dd className="text-sm font-medium">
-                    <Link to={`/opportunities/${payment.opportunity.id}`} className="text-primary-600 hover:text-primary-900">
+                    <Link to={`/opportunities/${payment.opportunity.id}`} className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300">
                       {payment.opportunity.name}
                     </Link>
                   </dd>
@@ -221,7 +221,7 @@ function PaymentDetailPage() {
                 <div>
                   <dt className="text-xs text-gray-500 dark:text-gray-400">Quote</dt>
                   <dd className="text-sm font-medium">
-                    <Link to={`/quotes/${payment.quote.id}`} className="text-primary-600 hover:text-primary-900">
+                    <Link to={`/quotes/${payment.quote.id}`} className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300">
                       {payment.quote.title}
                     </Link>
                   </dd>

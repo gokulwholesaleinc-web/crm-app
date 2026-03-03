@@ -42,7 +42,7 @@ export function PaymentSummary({ contactId }: PaymentSummaryProps) {
 
   if (isLoading) {
     return (
-      <div className="bg-white shadow rounded-lg p-6">
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
         <div className="flex items-center justify-center py-4">
           <Spinner />
         </div>
@@ -52,7 +52,7 @@ export function PaymentSummary({ contactId }: PaymentSummaryProps) {
 
   if (error) {
     return (
-      <div className="bg-white shadow rounded-lg p-6">
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
         <p className="text-sm text-red-500 text-center">
           Failed to load payment summary.
         </p>
@@ -63,35 +63,35 @@ export function PaymentSummary({ contactId }: PaymentSummaryProps) {
   if (!data) return null;
 
   return (
-    <div className="bg-white shadow rounded-lg overflow-hidden">
-      <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
-        <h3 className="text-base font-semibold text-gray-900">
+    <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
+      <div className="px-4 py-5 sm:px-6 border-b border-gray-200 dark:border-gray-700">
+        <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">
           Payment Summary
         </h3>
       </div>
       <div className="px-4 py-5 sm:p-6">
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           <div>
-            <dt className="text-sm font-medium text-gray-500">Total Paid</dt>
+            <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Paid</dt>
             <dd
-              className="mt-1 text-lg font-semibold text-gray-900"
+              className="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100"
               style={{ fontVariantNumeric: 'tabular-nums' }}
             >
               {formatCurrency(data.total_paid)}
             </dd>
           </div>
           <div>
-            <dt className="text-sm font-medium text-gray-500">Payments</dt>
+            <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Payments</dt>
             <dd
-              className="mt-1 text-lg font-semibold text-gray-900"
+              className="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100"
               style={{ fontVariantNumeric: 'tabular-nums' }}
             >
               {data.payment_count}
             </dd>
           </div>
           <div>
-            <dt className="text-sm font-medium text-gray-500">On-Time Rate</dt>
-            <dd className="mt-1 text-lg font-semibold text-gray-900">
+            <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">On-Time Rate</dt>
+            <dd className="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100">
               <span
                 className={
                   data.on_time_rate >= 90
@@ -106,9 +106,9 @@ export function PaymentSummary({ contactId }: PaymentSummaryProps) {
             </dd>
           </div>
           <div>
-            <dt className="text-sm font-medium text-gray-500">Late Payments</dt>
+            <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Late Payments</dt>
             <dd
-              className="mt-1 text-lg font-semibold text-gray-900"
+              className="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100"
               style={{ fontVariantNumeric: 'tabular-nums' }}
             >
               <span className={data.late_payments > 0 ? 'text-red-600' : ''}>
@@ -117,8 +117,8 @@ export function PaymentSummary({ contactId }: PaymentSummaryProps) {
             </dd>
           </div>
           <div>
-            <dt className="text-sm font-medium text-gray-500">Last Payment</dt>
-            <dd className="mt-1 text-lg font-semibold text-gray-900">
+            <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Last Payment</dt>
+            <dd className="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100">
               {data.last_payment_date
                 ? formatDate(data.last_payment_date)
                 : 'N/A'}

@@ -112,7 +112,7 @@ export function AIAssistantPage() {
           </div>
           <div>
             <h1 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100">AI Assistant</h1>
-            <p className="text-xs sm:text-sm text-gray-500 hidden sm:block">
+            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 hidden sm:block">
               Your intelligent CRM companion
             </p>
           </div>

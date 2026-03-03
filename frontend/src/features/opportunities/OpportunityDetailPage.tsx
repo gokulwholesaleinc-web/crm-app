@@ -351,7 +351,7 @@ function OpportunityDetailPage() {
                   {opportunity.contact ? (
                     <Link
                       to={`/contacts/${opportunity.contact.id}`}
-                      className="text-primary-600 hover:text-primary-500"
+                      className="text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300"
                     >
                       {opportunity.contact.full_name}
                     </Link>
@@ -367,7 +367,7 @@ function OpportunityDetailPage() {
                   {opportunity.company ? (
                     <Link
                       to={`/companies/${opportunity.company.id}`}
-                      className="text-primary-600 hover:text-primary-500"
+                      className="text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300"
                     >
                       {opportunity.company.name}
                     </Link>
@@ -441,7 +441,7 @@ function OpportunityDetailPage() {
                     className="flex items-start space-x-3 pb-4 border-b border-gray-100 dark:border-gray-700 last:border-0"
                   >
                     <div className="flex-shrink-0">
-                      <div className="h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center">
+                      <div className="h-8 w-8 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
                         <svg
                           className="h-4 w-4 text-primary-600"
                           fill="none"
@@ -504,10 +504,10 @@ function OpportunityDetailPage() {
                       </span>
                       <span className={clsx(
                         'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
-                        quote.status === 'accepted' ? 'bg-green-100 text-green-800' :
-                        quote.status === 'sent' ? 'bg-blue-100 text-blue-800' :
-                        quote.status === 'rejected' ? 'bg-red-100 text-red-800' :
-                        'bg-gray-100 text-gray-800'
+                        quote.status === 'accepted' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
+                        quote.status === 'sent' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' :
+                        quote.status === 'rejected' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' :
+                        'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
                       )}>
                         {quote.status.charAt(0).toUpperCase() + quote.status.slice(1)}
                       </span>
@@ -547,10 +547,10 @@ function OpportunityDetailPage() {
                     </div>
                     <span className={clsx(
                       'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
-                      proposal.status === 'accepted' ? 'bg-green-100 text-green-800' :
-                      proposal.status === 'sent' ? 'bg-blue-100 text-blue-800' :
-                      proposal.status === 'rejected' ? 'bg-red-100 text-red-800' :
-                      'bg-gray-100 text-gray-800'
+                      proposal.status === 'accepted' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
+                      proposal.status === 'sent' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' :
+                      proposal.status === 'rejected' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' :
+                      'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
                     )}>
                       {(proposal.status ?? 'draft').charAt(0).toUpperCase() + (proposal.status ?? 'draft').slice(1)}
                     </span>
@@ -593,9 +593,9 @@ function OpportunityDetailPage() {
                       </span>
                       <span className={clsx(
                         'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
-                        payment.status === 'succeeded' ? 'bg-green-100 text-green-800' :
-                        payment.status === 'failed' ? 'bg-red-100 text-red-800' :
-                        'bg-yellow-100 text-yellow-800'
+                        payment.status === 'succeeded' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
+                        payment.status === 'failed' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' :
+                        'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
                       )}>
                         {payment.status.charAt(0).toUpperCase() + payment.status.slice(1)}
                       </span>
@@ -609,34 +609,34 @@ function OpportunityDetailPage() {
       )}
 
       {activeTab === 'notes' && opportunityId && (
-        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
           <NotesList entityType="opportunity" entityId={opportunityId} />
         </Suspense>
       )}
 
       {activeTab === 'attachments' && opportunityId && (
-        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
           <AttachmentList entityType="opportunities" entityId={opportunityId} />
         </Suspense>
       )}
 
       {/* Comments Tab */}
       {activeTab === 'comments' && opportunityId && (
-        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
           <CommentSection entityType="opportunities" entityId={opportunityId} />
         </Suspense>
       )}
 
       {/* History Tab */}
       {activeTab === 'history' && opportunityId && (
-        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
           <AuditTimeline entityType="opportunities" entityId={opportunityId} />
         </Suspense>
       )}
 
       {/* Sharing Tab */}
       {activeTab === 'sharing' && opportunityId && (
-        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
           <SharePanel entityType="opportunities" entityId={opportunityId} />
         </Suspense>
       )}

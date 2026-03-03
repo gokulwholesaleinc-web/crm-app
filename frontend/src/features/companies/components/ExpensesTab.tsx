@@ -103,28 +103,28 @@ export default function ExpensesTab({ companyId }: ExpensesTabProps) {
       {/* Totals Summary */}
       {totals && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div className="bg-white rounded-lg shadow-sm border p-4">
-            <p className="text-sm text-gray-500">Total Expenses</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1" style={{ fontVariantNumeric: 'tabular-nums' }}>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 p-4">
+            <p className="text-sm text-gray-500 dark:text-gray-400">Total Expenses</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1" style={{ fontVariantNumeric: 'tabular-nums' }}>
               {formatCurrencyWithCents(totals.total_amount, totals.currency)}
             </p>
           </div>
-          <div className="bg-white rounded-lg shadow-sm border p-4">
-            <p className="text-sm text-gray-500">Number of Expenses</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1" style={{ fontVariantNumeric: 'tabular-nums' }}>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 p-4">
+            <p className="text-sm text-gray-500 dark:text-gray-400">Number of Expenses</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1" style={{ fontVariantNumeric: 'tabular-nums' }}>
               {totals.count}
             </p>
           </div>
-          <div className="bg-white rounded-lg shadow-sm border p-4">
-            <p className="text-sm text-gray-500">Categories</p>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 p-4">
+            <p className="text-sm text-gray-500 dark:text-gray-400">Categories</p>
             <div className="mt-1 space-y-1">
               {Object.entries(totals.by_category).length === 0 ? (
-                <p className="text-sm text-gray-400">No expenses yet</p>
+                <p className="text-sm text-gray-400 dark:text-gray-500">No expenses yet</p>
               ) : (
                 Object.entries(totals.by_category).map(([cat, amount]) => (
                   <div key={cat} className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600 truncate">{cat}</span>
-                    <span className="text-gray-900 font-medium" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    <span className="text-gray-600 dark:text-gray-400 truncate">{cat}</span>
+                    <span className="text-gray-900 dark:text-gray-100 font-medium" style={{ fontVariantNumeric: 'tabular-nums' }}>
                       {formatCurrencyWithCents(amount, totals.currency)}
                     </span>
                   </div>
@@ -138,7 +138,7 @@ export default function ExpensesTab({ companyId }: ExpensesTabProps) {
       {/* Controls */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <label htmlFor="expense-category-filter" className="text-sm font-medium text-gray-700">
+          <label htmlFor="expense-category-filter" className="text-sm font-medium text-gray-700 dark:text-gray-300">
             Category:
           </label>
           <select
@@ -148,7 +148,7 @@ export default function ExpensesTab({ companyId }: ExpensesTabProps) {
               setCategoryFilter(e.target.value || undefined);
               setPage(1);
             }}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+            className="rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 px-3 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
           >
             <option value="">All Categories</option>
             {CATEGORIES.map((cat) => (
@@ -164,51 +164,51 @@ export default function ExpensesTab({ companyId }: ExpensesTabProps) {
       </div>
 
       {/* Expenses Table */}
-      <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 overflow-hidden">
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <Spinner />
           </div>
         ) : expenses.length === 0 ? (
           <div className="text-center py-12 px-4">
-            <p className="text-sm text-gray-500">No expenses found.</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">No expenses found.</p>
           </div>
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-900">
                   <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Date
                     </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Description
                     </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Category
                     </th>
-                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Amount
                     </th>
-                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                   {expenses.map((expense) => (
-                    <tr key={expense.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <tr key={expense.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                         {expense.expense_date}
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-900 max-w-xs truncate">
+                      <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100 max-w-xs truncate">
                         {expense.description}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {expense.category ?? '-'}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900 dark:text-gray-100" style={{ fontVariantNumeric: 'tabular-nums' }}>
                         {formatCurrencyWithCents(expense.amount, expense.currency)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
@@ -254,7 +254,7 @@ export default function ExpensesTab({ companyId }: ExpensesTabProps) {
       <Modal isOpen={showAddForm} onClose={() => setShowAddForm(false)} title="Add Expense" size="md">
         <div className="space-y-4">
           <div>
-            <label htmlFor="expense-amount" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="expense-amount" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Amount
             </label>
             <input
@@ -265,18 +265,18 @@ export default function ExpensesTab({ companyId }: ExpensesTabProps) {
               value={formAmount}
               onChange={(e) => setFormAmount(e.target.value)}
               placeholder="0.00"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
             />
           </div>
           <div>
-            <label htmlFor="expense-currency" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="expense-currency" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Currency
             </label>
             <select
               id="expense-currency"
               value={formCurrency}
               onChange={(e) => setFormCurrency(e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
             >
               <option value="USD">USD</option>
               <option value="EUR">EUR</option>
@@ -284,7 +284,7 @@ export default function ExpensesTab({ companyId }: ExpensesTabProps) {
             </select>
           </div>
           <div>
-            <label htmlFor="expense-description" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="expense-description" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Description
             </label>
             <input
@@ -293,11 +293,11 @@ export default function ExpensesTab({ companyId }: ExpensesTabProps) {
               value={formDescription}
               onChange={(e) => setFormDescription(e.target.value)}
               placeholder="Enter description..."
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
             />
           </div>
           <div>
-            <label htmlFor="expense-date" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="expense-date" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Date
             </label>
             <input
@@ -305,18 +305,18 @@ export default function ExpensesTab({ companyId }: ExpensesTabProps) {
               type="date"
               value={formDate}
               onChange={(e) => setFormDate(e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
             />
           </div>
           <div>
-            <label htmlFor="expense-category" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="expense-category" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Category
             </label>
             <select
               id="expense-category"
               value={formCategory}
               onChange={(e) => setFormCategory(e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
             >
               <option value="">No category</option>
               {CATEGORIES.map((cat) => (

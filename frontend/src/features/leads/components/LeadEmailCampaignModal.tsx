@@ -45,13 +45,13 @@ export function LeadEmailCampaignModal({ isOpen, onClose, selectedLeadIds }: Lea
     <Modal isOpen={isOpen} onClose={onClose} title="Send Email Campaign" size="lg">
       <div className="space-y-4">
         <div>
-          <p className="text-sm text-gray-500 mb-4">
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
             Send personalized emails to {selectedLeadIds.length} selected lead{selectedLeadIds.length !== 1 ? 's' : ''}.
           </p>
         </div>
 
         <div>
-          <label htmlFor="campaign-subject" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="campaign-subject" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
             Subject
           </label>
           <input
@@ -59,13 +59,13 @@ export function LeadEmailCampaignModal({ isOpen, onClose, selectedLeadIds }: Lea
             type="text"
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
+            className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
             placeholder="e.g., Special offer for {{first_name}}..."
           />
         </div>
 
         <div>
-          <label htmlFor="campaign-body" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="campaign-body" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
             Email Body
           </label>
           <textarea
@@ -73,18 +73,18 @@ export function LeadEmailCampaignModal({ isOpen, onClose, selectedLeadIds }: Lea
             rows={6}
             value={bodyTemplate}
             onChange={(e) => setBodyTemplate(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
+            className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
             placeholder="Hi {{first_name}},&#10;&#10;We have an exciting offer for you..."
           />
-          <p className="mt-1 text-xs text-gray-400">
+          <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
             Available placeholders: {'{{first_name}}'}, {'{{last_name}}'}, {'{{full_name}}'}, {'{{email}}'}, {'{{company_name}}'}
           </p>
         </div>
 
         {bodyTemplate.trim() && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Preview</label>
-            <div className="rounded-md border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 whitespace-pre-wrap">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Preview</label>
+            <div className="rounded-md border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 p-3 text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
               {preview}
             </div>
           </div>

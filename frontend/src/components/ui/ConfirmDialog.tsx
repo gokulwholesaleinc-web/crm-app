@@ -17,18 +17,18 @@ export interface ConfirmDialogProps {
 
 const variantStyles = {
   danger: {
-    icon: 'bg-red-100',
-    iconColor: 'text-red-600',
+    icon: 'bg-red-100 dark:bg-red-900/30',
+    iconColor: 'text-red-600 dark:text-red-400',
     button: 'danger' as const,
   },
   warning: {
-    icon: 'bg-yellow-100',
-    iconColor: 'text-yellow-600',
+    icon: 'bg-yellow-100 dark:bg-yellow-900/30',
+    iconColor: 'text-yellow-600 dark:text-yellow-400',
     button: 'primary' as const,
   },
   info: {
-    icon: 'bg-blue-100',
-    iconColor: 'text-blue-600',
+    icon: 'bg-blue-100 dark:bg-blue-900/30',
+    iconColor: 'text-blue-600 dark:text-blue-400',
     button: 'primary' as const,
   },
 };

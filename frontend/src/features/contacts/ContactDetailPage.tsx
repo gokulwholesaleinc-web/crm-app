@@ -114,10 +114,10 @@ function ContactDetailPage() {
 
   if (errorMessage || !contact) {
     return (
-      <div className="rounded-md bg-red-50 p-4">
+      <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-4">
         <div className="flex">
           <div className="ml-3">
-            <h3 className="text-sm font-medium text-red-800">
+            <h3 className="text-sm font-medium text-red-800 dark:text-red-300">
               {errorMessage || 'Contact not found'}
             </h3>
             <div className="mt-4">
@@ -152,7 +152,7 @@ function ContactDetailPage() {
         <div className="flex items-center space-x-4">
           <Link
             to="/contacts"
-            className="text-gray-400 hover:text-gray-500 flex-shrink-0"
+            className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 flex-shrink-0"
             aria-label="Back to contacts"
           >
             <svg
@@ -170,11 +170,11 @@ function ContactDetailPage() {
             </svg>
           </Link>
           <div className="min-w-0">
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">
               {contact.first_name} {contact.last_name}
             </h1>
             {contact.job_title && contact.company?.name && (
-              <p className="text-sm text-gray-500 truncate">
+              <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
                 {contact.job_title} at {contact.company.name}
               </p>
             )}
@@ -210,7 +210,7 @@ function ContactDetailPage() {
       <NextBestActionCard entityType="contact" entityId={contact.id} />
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 overflow-x-auto">
+      <div className="border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
         <nav className="-mb-px flex space-x-4 sm:space-x-8 min-w-max px-1">
           {tabs.map((tab) => (
             <button
@@ -219,8 +219,8 @@ function ContactDetailPage() {
               className={clsx(
                 'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex-shrink-0',
                 activeTab === tab.id
-                  ? 'border-primary-500 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
               )}
             >
               {tab.name}
@@ -232,15 +232,15 @@ function ContactDetailPage() {
       {/* Tab Content */}
       {activeTab === 'details' && contactId && (
         <>
-        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="h-20 bg-gray-200 rounded" /></div>}>
+        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="h-20 bg-gray-200 dark:bg-gray-700 rounded" /></div>}>
           <PaymentSummary contactId={contactId} />
         </Suspense>
-        <div className="bg-white shadow rounded-lg">
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
           <div className="p-4 sm:p-6">
             <dl className="grid grid-cols-1 gap-4 sm:gap-x-4 sm:gap-y-6 sm:grid-cols-2">
               <div>
-                <dt className="text-sm font-medium text-gray-500">Email</dt>
-                <dd className="mt-1 text-sm text-gray-900">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Email</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   <a
                     href={`mailto:${contact.email}`}
                     className="text-primary-600 hover:text-primary-500"
@@ -251,8 +251,8 @@ function ContactDetailPage() {
               </div>
 
               <div>
-                <dt className="text-sm font-medium text-gray-500">Phone</dt>
-                <dd className="mt-1 text-sm text-gray-900">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Phone</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   {contact.phone ? (
                     <a
                       href={`tel:${contact.phone}`}
@@ -267,29 +267,29 @@ function ContactDetailPage() {
               </div>
 
               <div>
-                <dt className="text-sm font-medium text-gray-500">Company</dt>
-                <dd className="mt-1 text-sm text-gray-900">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Company</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   {contact.company?.name || '-'}
                 </dd>
               </div>
 
               <div>
-                <dt className="text-sm font-medium text-gray-500">Job Title</dt>
-                <dd className="mt-1 text-sm text-gray-900">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Job Title</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   {contact.job_title || '-'}
                 </dd>
               </div>
 
               <div>
-                <dt className="text-sm font-medium text-gray-500">Sales Code</dt>
-                <dd className="mt-1 text-sm text-gray-900">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Sales Code</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   {contact.sales_code || '-'}
                 </dd>
               </div>
 
               <div className="sm:col-span-2">
-                <dt className="text-sm font-medium text-gray-500">Address</dt>
-                <dd className="mt-1 text-sm text-gray-900">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Address</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   {contact.address_line1 ? (
                     <>
                       {contact.address_line1}
@@ -312,24 +312,24 @@ function ContactDetailPage() {
               </div>
 
               <div className="sm:col-span-2">
-                <dt className="text-sm font-medium text-gray-500">Notes</dt>
-                <dd className="mt-1 text-sm text-gray-900">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Notes</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   {contact.description || 'No notes'}
                 </dd>
               </div>
 
               <div>
-                <dt className="text-sm font-medium text-gray-500">Created</dt>
-                <dd className="mt-1 text-sm text-gray-900">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Created</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   {formatDate(contact.created_at)}
                 </dd>
               </div>
 
               <div>
-                <dt className="text-sm font-medium text-gray-500">
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">
                   Last Updated
                 </dt>
-                <dd className="mt-1 text-sm text-gray-900">
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   {formatDate(contact.updated_at)}
                 </dd>
               </div>
@@ -340,14 +340,14 @@ function ContactDetailPage() {
       )}
 
       {activeTab === 'activities' && (
-        <div className="bg-white shadow rounded-lg">
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
           <div className="px-4 py-5 sm:p-6">
             {isLoadingActivities ? (
               <div className="flex items-center justify-center py-4">
                 <Spinner />
               </div>
             ) : activities.length === 0 ? (
-              <p className="text-sm text-gray-500 text-center py-4">
+              <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
                 No activities recorded yet.
               </p>
             ) : (
@@ -355,12 +355,12 @@ function ContactDetailPage() {
                 {activities.map((activity) => (
                   <li
                     key={activity.id}
-                    className="flex items-start space-x-3 pb-4 border-b border-gray-100 last:border-0"
+                    className="flex items-start space-x-3 pb-4 border-b border-gray-100 dark:border-gray-700 last:border-0"
                   >
                     <div className="flex-shrink-0">
-                      <div className="h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center">
+                      <div className="h-8 w-8 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
                         <svg
-                          className="h-4 w-4 text-primary-600"
+                          className="h-4 w-4 text-primary-600 dark:text-primary-400"
                           fill="none"
                           viewBox="0 0 24 24"
                           stroke="currentColor"
@@ -375,10 +375,10 @@ function ContactDetailPage() {
                       </div>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-900">
+                      <p className="text-sm text-gray-900 dark:text-gray-100">
                         {activity.subject}
                       </p>
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                         {formatDate(activity.created_at)}
                       </p>
                     </div>
@@ -391,13 +391,13 @@ function ContactDetailPage() {
       )}
 
       {activeTab === 'notes' && contactId && (
-        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
           <NotesList entityType="contact" entityId={contactId} />
         </Suspense>
       )}
 
       {activeTab === 'emails' && contactId && (
-        <div className="bg-white shadow rounded-lg">
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
           <div className="px-4 py-5 sm:p-6">
             <EmailHistory entityType="contacts" entityId={contactId} />
           </div>
@@ -406,50 +406,50 @@ function ContactDetailPage() {
 
       {/* Contracts Tab */}
       {activeTab === 'contracts' && contactId && (
-        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
           <ContractsList entityType="contact" entityId={contactId} />
         </Suspense>
       )}
 
       {/* Quotes Tab */}
       {activeTab === 'quotes' && contactId && (
-        <div className="bg-white shadow rounded-lg overflow-hidden">
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden border border-transparent dark:border-gray-700">
           {quotes.length === 0 ? (
             <div className="text-center py-12 px-4">
-              <p className="text-sm text-gray-500">No quotes for this contact.</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">No quotes for this contact.</p>
               <Link
                 to={`/quotes/new?contact_id=${contactId}`}
-                className="mt-2 inline-block text-sm text-primary-600 hover:text-primary-900"
+                className="mt-2 inline-block text-sm text-primary-600 hover:text-primary-900 dark:hover:text-primary-300"
               >
                 Create a Quote
               </Link>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-900">
                   <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quote</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Quote</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Total</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                   {quotes.map((quote: Quote) => (
-                    <tr key={quote.id} className="hover:bg-gray-50">
+                    <tr key={quote.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <Link to={`/quotes/${quote.id}`} className="text-primary-600 hover:text-primary-900">
+                        <Link to={`/quotes/${quote.id}`} className="text-primary-600 hover:text-primary-900 dark:hover:text-primary-300">
                           {quote.title} ({quote.quote_number})
                         </Link>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <StatusBadge status={quote.status as StatusType} size="sm" showDot={false} />
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900 dark:text-gray-100" style={{ fontVariantNumeric: 'tabular-nums' }}>
                         {formatCurrency(quote.total)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {formatDate(quote.created_at)}
                       </td>
                     </tr>
@@ -463,39 +463,39 @@ function ContactDetailPage() {
 
       {/* Proposals Tab */}
       {activeTab === 'proposals' && contactId && (
-        <div className="bg-white shadow rounded-lg overflow-hidden">
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden border border-transparent dark:border-gray-700">
           {proposals.length === 0 ? (
             <div className="text-center py-12 px-4">
-              <p className="text-sm text-gray-500">No proposals for this contact.</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">No proposals for this contact.</p>
               <Link
                 to="/proposals"
-                className="mt-2 inline-block text-sm text-primary-600 hover:text-primary-900"
+                className="mt-2 inline-block text-sm text-primary-600 hover:text-primary-900 dark:hover:text-primary-300"
               >
                 View Proposals
               </Link>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-900">
                   <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Proposal</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Proposal</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                   {proposals.map((proposal: Proposal) => (
-                    <tr key={proposal.id} className="hover:bg-gray-50">
+                    <tr key={proposal.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <Link to={`/proposals/${proposal.id}`} className="text-primary-600 hover:text-primary-900">
+                        <Link to={`/proposals/${proposal.id}`} className="text-primary-600 hover:text-primary-900 dark:hover:text-primary-300">
                           {proposal.title} ({proposal.proposal_number})
                         </Link>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <StatusBadge status={proposal.status as StatusType} size="sm" showDot={false} />
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {formatDate(proposal.created_at)}
                       </td>
                     </tr>
@@ -509,28 +509,28 @@ function ContactDetailPage() {
 
       {/* Documents Tab */}
       {activeTab === 'documents' && contactId && (
-        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
           <DocumentsTab entityType="contacts" entityId={contactId} />
         </Suspense>
       )}
 
       {/* Attachments Tab */}
       {activeTab === 'attachments' && contactId && (
-        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
           <AttachmentList entityType="contacts" entityId={contactId} />
         </Suspense>
       )}
 
       {/* History Tab */}
       {activeTab === 'history' && contactId && (
-        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
           <AuditTimeline entityType="contacts" entityId={contactId} />
         </Suspense>
       )}
 
       {/* Sharing Tab */}
       {activeTab === 'sharing' && contactId && (
-        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
           <SharePanel entityType="contacts" entityId={contactId} />
         </Suspense>
       )}

@@ -37,14 +37,14 @@ interface ExportCardProps {
 
 function ExportCard({ title, description, onExport, onTemplate, isExporting }: ExportCardProps) {
   return (
-    <div className="bg-white rounded-lg shadow-sm border p-5">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-5">
       <div className="flex items-start gap-3">
-        <div className="p-2 bg-blue-50 rounded-lg">
-          <ArrowDownTrayIcon className="h-6 w-6 text-blue-600" />
+        <div className="p-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
+          <ArrowDownTrayIcon className="h-6 w-6 text-blue-600 dark:text-blue-400" />
         </div>
         <div className="flex-1">
-          <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
-          <p className="text-sm text-gray-500 mt-1">{description}</p>
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{description}</p>
           <div className="flex flex-col sm:flex-row gap-2 mt-3">
             <Button
               size="sm"
@@ -92,14 +92,14 @@ function ImportSection({ entityType, label, onImport, status, result, error }: I
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border p-5">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-5">
       <div className="flex items-start gap-3">
-        <div className="p-2 bg-green-50 rounded-lg">
-          <ArrowUpTrayIcon className="h-6 w-6 text-green-600" />
+        <div className="p-2 bg-green-50 dark:bg-green-900/30 rounded-lg">
+          <ArrowUpTrayIcon className="h-6 w-6 text-green-600 dark:text-green-400" />
         </div>
         <div className="flex-1">
-          <h3 className="text-sm font-semibold text-gray-900">Import {label}</h3>
-          <p className="text-sm text-gray-500 mt-1">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Import {label}</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Upload a CSV file to import {label.toLowerCase()}
           </p>
 
@@ -125,19 +125,19 @@ function ImportSection({ entityType, label, onImport, status, result, error }: I
 
           {/* Result */}
           {status === 'success' && result && (
-            <div className="mt-3 p-3 bg-green-50 rounded-md">
+            <div className="mt-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-md">
               <div className="flex items-center gap-2">
-                <CheckCircleIcon className="h-5 w-5 text-green-600" />
-                <span className="text-sm font-medium text-green-800">
+                <CheckCircleIcon className="h-5 w-5 text-green-600 dark:text-green-400" />
+                <span className="text-sm font-medium text-green-800 dark:text-green-300">
                   Successfully imported {result.imported_count} record{result.imported_count !== 1 ? 's' : ''}
                 </span>
               </div>
               {result.errors.length > 0 && (
                 <div className="mt-2">
-                  <p className="text-xs font-medium text-yellow-700">
+                  <p className="text-xs font-medium text-yellow-700 dark:text-yellow-400">
                     {result.errors.length} warning{result.errors.length !== 1 ? 's' : ''}:
                   </p>
-                  <ul className="mt-1 text-xs text-yellow-600 list-disc list-inside max-h-24 overflow-y-auto">
+                  <ul className="mt-1 text-xs text-yellow-600 dark:text-yellow-400 list-disc list-inside max-h-24 overflow-y-auto">
                     {result.errors.map((err, i) => (
                       <li key={i}>{err}</li>
                     ))}
@@ -148,10 +148,10 @@ function ImportSection({ entityType, label, onImport, status, result, error }: I
           )}
 
           {status === 'error' && error && (
-            <div className="mt-3 p-3 bg-red-50 rounded-md">
+            <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 rounded-md">
               <div className="flex items-center gap-2">
-                <ExclamationTriangleIcon className="h-5 w-5 text-red-600" />
-                <span className="text-sm font-medium text-red-800">{error}</span>
+                <ExclamationTriangleIcon className="h-5 w-5 text-red-600 dark:text-red-400" />
+                <span className="text-sm font-medium text-red-800 dark:text-red-300">{error}</span>
               </div>
             </div>
           )}
@@ -246,15 +246,15 @@ export function ImportExportPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Import / Export</h1>
-        <p className="text-sm text-gray-500 mt-1">
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Import / Export</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
           Import and export your CRM data as CSV files
         </p>
       </div>
 
       {/* Export Section */}
       <div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-3">Export Data</h2>
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">Export Data</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {entityConfigs.map((config) => (
             <ExportCard
@@ -272,7 +272,7 @@ export function ImportExportPage() {
 
       {/* Import Section */}
       <div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-3">Import Data</h2>
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">Import Data</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {entityConfigs.map((config) => (
             <ImportSection
