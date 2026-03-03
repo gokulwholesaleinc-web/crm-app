@@ -22,12 +22,13 @@ import {
 import type { Opportunity, OpportunityCreate, OpportunityUpdate } from '../../types';
 
 const defaultStages: KanbanStage[] = [
-  { id: 'qualification', title: 'Qualification', color: 'blue' },
-  { id: 'needs_analysis', title: 'Needs Analysis', color: 'yellow' },
+  { id: 'discovery', title: 'Discovery', color: 'cyan' },
   { id: 'proposal', title: 'Proposal', color: 'purple' },
   { id: 'negotiation', title: 'Negotiation', color: 'orange' },
-  { id: 'closed_won', title: 'Closed Won', color: 'green' },
-  { id: 'closed_lost', title: 'Closed Lost', color: 'red' },
+  { id: 'scoping', title: 'Scoping', color: 'green' },
+  { id: 'stalling', title: 'Stalling', color: 'red' },
+  { id: 'won', title: 'Won', color: 'green' },
+  { id: 'lost', title: 'Lost', color: 'gray' },
 ];
 
 function OpportunitiesPage() {

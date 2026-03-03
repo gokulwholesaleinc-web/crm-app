@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from src.core.models import Note
 from src.auth.models import User
+from src.comments.service import parse_mentions
 from src.notes.schemas import NoteCreate, NoteUpdate
 from src.core.constants import DEFAULT_PAGE_SIZE
 
@@ -103,6 +104,9 @@ class NoteService:
             )
             author_name = user_result.scalar_one_or_none()
 
+        # Parse @mentions and notify
+        await self._process_mentions(note, user_id)
+
         return {
             "id": note.id,
             "content": note.content,
@@ -113,6 +117,45 @@ class NoteService:
             "updated_at": note.updated_at,
             "author_name": author_name,
         }
+
+    async def _process_mentions(self, note: Note, author_id: int) -> None:
+        """Parse @mentions from note content and create notifications + emails."""
+        from src.notifications.service import NotificationService
+        from src.email.service import EmailService
+
+        usernames = parse_mentions(note.content)
+        if not usernames:
+            return
+
+        for username in usernames:
+            full_name = username.replace('.', ' ')
+            user_result = await self.db.execute(
+                select(User).where(func.lower(User.full_name) == func.lower(full_name))
+            )
+            mentioned_user = user_result.scalar_one_or_none()
+            if not mentioned_user or mentioned_user.id == author_id:
+                continue
+
+            notif_service = NotificationService(self.db)
+            await notif_service.create_notification(
+                user_id=mentioned_user.id,
+                type="mention",
+                title="You were mentioned in a note",
+                message=f"You were mentioned in a note: {note.content[:100]}",
+                entity_type=note.entity_type,
+                entity_id=note.entity_id,
+            )
+
+            if mentioned_user.email:
+                email_service = EmailService(self.db)
+                await email_service.queue_email(
+                    to_email=mentioned_user.email,
+                    subject="You were mentioned in a note",
+                    body=f"<p>You were mentioned in a note:</p><blockquote>{note.content}</blockquote>",
+                    sent_by_id=author_id,
+                    entity_type=note.entity_type,
+                    entity_id=note.entity_id,
+                )
 
     async def update(self, note: Note, data: NoteUpdate, user_id: int) -> dict:
         """Update a note."""

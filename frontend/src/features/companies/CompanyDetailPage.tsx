@@ -24,6 +24,8 @@ const AuditTimeline = lazy(() => import('../../components/shared/AuditTimeline')
 const CommentSection = lazy(() => import('../../components/shared/CommentSection'));
 const SharePanel = lazy(() => import('../../components/shared/SharePanel'));
 const ContractsList = lazy(() => import('../../components/shared/ContractsList'));
+const MetaTab = lazy(() => import('./components/MetaTab'));
+const ExpensesTab = lazy(() => import('./components/ExpensesTab'));
 import { CompanyForm } from './components/CompanyForm';
 import { useCompany, useUpdateCompany, useDeleteCompany } from '../../hooks/useCompanies';
 import { useContacts } from '../../hooks/useContacts';
@@ -35,7 +37,7 @@ import { getStatusColor, formatStatusLabel } from '../../utils/statusColors';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import type { CompanyUpdate, Contact, Opportunity, Quote, Proposal } from '../../types';
 
-type TabType = 'overview' | 'opportunities' | 'contracts' | 'quotes' | 'proposals' | 'activities' | 'notes' | 'attachments' | 'comments' | 'history' | 'sharing';
+type TabType = 'overview' | 'opportunities' | 'contracts' | 'quotes' | 'proposals' | 'activities' | 'notes' | 'attachments' | 'comments' | 'history' | 'sharing' | 'meta' | 'expenses';
 
 function DetailItem({
   icon: Icon,
@@ -219,6 +221,8 @@ export function CompanyDetailPage() {
     { id: 'notes', name: 'Notes' },
     { id: 'attachments', name: 'Attachments' },
     { id: 'comments', name: 'Comments' },
+    { id: 'meta', name: 'Meta/Social' },
+    { id: 'expenses', name: 'Expenses' },
     { id: 'history', name: 'History' },
     { id: 'sharing', name: 'Sharing' },
   ];
@@ -693,6 +697,20 @@ export function CompanyDetailPage() {
       {activeTab === 'comments' && companyId && (
         <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
           <CommentSection entityType="companies" entityId={companyId} />
+        </Suspense>
+      )}
+
+      {/* Meta/Social Tab */}
+      {activeTab === 'meta' && companyId && (
+        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+          <MetaTab companyId={companyId} />
+        </Suspense>
+      )}
+
+      {/* Expenses Tab */}
+      {activeTab === 'expenses' && companyId && (
+        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
+          <ExpensesTab companyId={companyId} />
         </Suspense>
       )}
 

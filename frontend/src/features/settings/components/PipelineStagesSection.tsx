@@ -108,7 +108,7 @@ function StageModal({ isOpen, onClose, title, initialData, onSubmit, isPending, 
           required
           register={register('name', { required: 'Stage name is required' })}
           error={errors.name?.message}
-          placeholder="e.g., Qualification"
+          placeholder="e.g., Discovery"
         />
 
         <FormInput

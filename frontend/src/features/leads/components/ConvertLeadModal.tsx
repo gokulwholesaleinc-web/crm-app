@@ -20,11 +20,13 @@ interface ConvertLeadModalProps {
 }
 
 const opportunityStages = [
-  { value: 'qualification', label: 'Qualification' },
+  { value: 'discovery', label: 'Discovery' },
   { value: 'proposal', label: 'Proposal' },
   { value: 'negotiation', label: 'Negotiation' },
-  { value: 'closed_won', label: 'Closed Won' },
-  { value: 'closed_lost', label: 'Closed Lost' },
+  { value: 'scoping', label: 'Scoping' },
+  { value: 'stalling', label: 'Stalling' },
+  { value: 'won', label: 'Won' },
+  { value: 'lost', label: 'Lost' },
 ];
 
 export function ConvertLeadModal({

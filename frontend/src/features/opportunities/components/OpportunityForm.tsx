@@ -27,12 +27,13 @@ export interface OpportunityFormProps {
 
 // Fallback stages if API hasn't loaded yet
 const FALLBACK_STAGES = [
-  { value: 1, label: 'Prospecting', probability: 10 },
-  { value: 2, label: 'Qualification', probability: 20 },
-  { value: 3, label: 'Proposal', probability: 40 },
-  { value: 4, label: 'Negotiation', probability: 60 },
-  { value: 5, label: 'Closed Won', probability: 100 },
-  { value: 6, label: 'Closed Lost', probability: 0 },
+  { value: 1, label: 'Discovery', probability: 10 },
+  { value: 2, label: 'Proposal', probability: 30 },
+  { value: 3, label: 'Negotiation', probability: 50 },
+  { value: 4, label: 'Scoping', probability: 70 },
+  { value: 5, label: 'Stalling', probability: 20 },
+  { value: 6, label: 'Won', probability: 100 },
+  { value: 7, label: 'Lost', probability: 0 },
 ];
 
 export function OpportunityForm({

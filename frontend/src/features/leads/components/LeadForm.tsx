@@ -35,7 +35,8 @@ const leadStatuses = [
   { value: 'contacted', label: 'Contacted' },
   { value: 'qualified', label: 'Qualified' },
   { value: 'unqualified', label: 'Unqualified' },
-  { value: 'nurturing', label: 'Nurturing' },
+  { value: 'converted', label: 'Converted' },
+  { value: 'lost', label: 'Lost' },
 ];
 
 export function LeadForm({

@@ -171,6 +171,27 @@ export const moveLeadStage = async (
   return response.data;
 };
 
+// =============================================================================
+// Email Campaigns
+// =============================================================================
+
+export interface SendCampaignRequest {
+  lead_ids: number[];
+  subject: string;
+  body_template: string;
+}
+
+export interface SendCampaignResponse {
+  sent_count: number;
+  errors: Array<{ lead_id: number; error: string }>;
+  total_requested: number;
+}
+
+export const sendCampaign = async (data: SendCampaignRequest): Promise<SendCampaignResponse> => {
+  const response = await apiClient.post<SendCampaignResponse>(`${LEADS_BASE}/send-campaign`, data);
+  return response.data;
+};
+
 // Export all lead functions
 export const leadsApi = {
   list: listLeads,
@@ -189,6 +210,8 @@ export const leadsApi = {
   getLeadPipelineStages,
   getLeadKanban,
   moveLeadStage,
+  // Email Campaigns
+  sendCampaign,
 };
 
 export default leadsApi;

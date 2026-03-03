@@ -56,6 +56,7 @@ async def list_payments(
     status: Optional[str] = None,
     customer_id: Optional[int] = None,
     owner_id: Optional[int] = None,
+    search: Optional[str] = None,
 ):
     """List payments with pagination and filters."""
     if data_scope.can_see_all():
@@ -72,6 +73,7 @@ async def list_payments(
         customer_id=customer_id,
         owner_id=effective_owner_id,
         shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_PAYMENTS),
+        search=search,
     )
 
     return PaymentListResponse(

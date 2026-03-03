@@ -7,6 +7,7 @@ import { SkeletonTable } from '../../components/ui/Skeleton';
 import { LeadForm, LeadFormData } from './components/LeadForm';
 import { LeadKanbanBoard } from './components/LeadKanbanBoard';
 import { BulkActionToolbar } from './components/BulkActionToolbar';
+import { LeadEmailCampaignModal } from './components/LeadEmailCampaignModal';
 import { useLeads, useCreateLead, useUpdateLead, useDeleteLead, leadKeys } from '../../hooks/useLeads';
 import { useUsers } from '../../hooks/useAuth';
 import { bulkUpdate, bulkAssign } from '../../api/importExport';
@@ -23,7 +24,8 @@ const statusOptions = [
   { value: 'contacted', label: 'Contacted' },
   { value: 'qualified', label: 'Qualified' },
   { value: 'unqualified', label: 'Unqualified' },
-  { value: 'nurturing', label: 'Nurturing' },
+  { value: 'converted', label: 'Converted' },
+  { value: 'lost', label: 'Lost' },
 ];
 
 function ScoreIndicator({ score }: { score: number }) {
@@ -63,6 +65,7 @@ function LeadsPage() {
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; lead: Lead | null }>(INITIAL_DELETE_CONFIRM);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [showCampaignModal, setShowCampaignModal] = useState(false);
   const pageSize = 10;
 
   // Use the hooks for data fetching
@@ -252,6 +255,15 @@ function LeadsPage() {
               <span className="hidden sm:inline">Kanban</span>
             </button>
           </div>
+
+          {selectedIds.length > 0 && (
+            <Button
+              variant="secondary"
+              onClick={() => setShowCampaignModal(true)}
+            >
+              Send Email ({selectedIds.length})
+            </Button>
+          )}
 
           <Button
             leftIcon={<PlusIcon className="h-5 w-5" />}
@@ -686,6 +698,13 @@ function LeadsPage() {
         cancelLabel="Cancel"
         variant="danger"
         isLoading={deleteLeadMutation.isPending}
+      />
+
+      {/* Email Campaign Modal */}
+      <LeadEmailCampaignModal
+        isOpen={showCampaignModal}
+        onClose={() => setShowCampaignModal(false)}
+        selectedLeadIds={selectedIds}
       />
     </div>
   );

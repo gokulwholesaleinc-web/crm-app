@@ -3,11 +3,13 @@
  * Displays notes with add, edit, and delete functionality.
  */
 
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { Button, Spinner, ConfirmDialog } from '../ui';
 import { useEntityNotes, useCreateNote, useDeleteNote } from '../../hooks/useNotes';
+import { useUsers } from '../../hooks/useAuth';
 import { formatDate } from '../../utils/formatters';
 import { useUIStore } from '../../store/uiStore';
+import type { User } from '../../types';
 
 interface NotesListProps {
   entityType: string;
@@ -17,11 +19,22 @@ interface NotesListProps {
 export function NotesList({ entityType, entityId }: NotesListProps) {
   const [newNote, setNewNote] = useState('');
   const [noteToDelete, setNoteToDelete] = useState<{ id: number; content: string } | null>(null);
+  const [showMentions, setShowMentions] = useState(false);
+  const [mentionFilter, setMentionFilter] = useState('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const addToast = useUIStore((state) => state.addToast);
 
   // Fetch notes for the entity
   const { data: notesData, isLoading, error } = useEntityNotes(entityType, entityId);
   const notes = notesData?.items || [];
+
+  // Fetch users for @mention autocomplete
+  const { data: usersData } = useUsers();
+  const users: User[] = usersData ?? [];
+
+  const filteredUsers = users.filter((u) =>
+    u.full_name.toLowerCase().includes(mentionFilter.toLowerCase())
+  );
 
   // Mutations
   const createNoteMutation = useCreateNote();
@@ -75,11 +88,67 @@ export function NotesList({ entityType, entityId }: NotesListProps) {
     }
   };
 
+  const handleNoteChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    setNewNote(value);
+
+    const cursorPos = e.target.selectionStart;
+    const textBeforeCursor = value.substring(0, cursorPos);
+    const atMatch = textBeforeCursor.match(/@(\w*)$/);
+
+    if (atMatch) {
+      setShowMentions(true);
+      setMentionFilter(atMatch[1] ?? '');
+    } else {
+      setShowMentions(false);
+      setMentionFilter('');
+    }
+  };
+
+  const insertMention = (user: User) => {
+    if (!textareaRef.current) return;
+
+    const cursorPos = textareaRef.current.selectionStart;
+    const textBeforeCursor = newNote.substring(0, cursorPos);
+    const textAfterCursor = newNote.substring(cursorPos);
+    const atIndex = textBeforeCursor.lastIndexOf('@');
+
+    if (atIndex >= 0) {
+      const mentionName = user.full_name.replace(/\s+/g, '.');
+      const updated =
+        textBeforeCursor.substring(0, atIndex) +
+        `@${mentionName} ` +
+        textAfterCursor;
+      setNewNote(updated);
+    }
+
+    setShowMentions(false);
+    setMentionFilter('');
+    textareaRef.current.focus();
+  };
+
+  const renderNoteContent = useCallback((text: string) => {
+    const parts = text.split(/(@\w+(?:\.\w+)*)/g);
+    return parts.map((part, i) => {
+      if (part.startsWith('@')) {
+        return (
+          <span key={i} className="text-primary-600 font-medium">
+            {part}
+          </span>
+        );
+      }
+      return part;
+    });
+  }, []);
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Submit on Ctrl/Cmd + Enter
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       e.preventDefault();
       handleAddNote();
+    }
+    if (e.key === 'Escape') {
+      setShowMentions(false);
     }
   };
 
@@ -97,18 +166,38 @@ export function NotesList({ entityType, entityId }: NotesListProps) {
     <div className="space-y-4">
       {/* Add Note Form */}
       <div className="bg-white shadow rounded-lg p-4">
-        <label htmlFor="new-note" className="sr-only">
-          Add a note
-        </label>
-        <textarea
-          id="new-note"
-          rows={3}
-          value={newNote}
-          onChange={(e) => setNewNote(e.target.value)}
-          onKeyDown={handleKeyDown}
-          className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
-          placeholder="Add a note... (Ctrl+Enter to submit)"
-        />
+        <div className="relative">
+          <label htmlFor="new-note" className="sr-only">
+            Add a note
+          </label>
+          <textarea
+            id="new-note"
+            ref={textareaRef}
+            rows={3}
+            value={newNote}
+            onChange={handleNoteChange}
+            onKeyDown={handleKeyDown}
+            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
+            placeholder="Add a note... Use @name to mention someone (Ctrl+Enter to submit)"
+          />
+
+          {/* @mention dropdown */}
+          {showMentions && filteredUsers.length > 0 && (
+            <div className="absolute z-10 mt-1 w-64 bg-white border border-gray-200 rounded-md shadow-lg max-h-40 overflow-y-auto">
+              {filteredUsers.slice(0, 8).map((user) => (
+                <button
+                  key={user.id}
+                  type="button"
+                  onClick={() => insertMention(user)}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 focus-visible:bg-gray-100 focus-visible:outline-none"
+                >
+                  <span className="font-medium">{user.full_name}</span>
+                  <span className="text-gray-400 ml-2">{user.email}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="mt-3 flex justify-end">
           <Button
             disabled={!newNote.trim() || createNoteMutation.isPending}
@@ -142,7 +231,7 @@ export function NotesList({ entityType, entityId }: NotesListProps) {
                   <div className="flex items-start justify-between">
                     <div className="flex-1 min-w-0 pr-4">
                       <p className="text-sm text-gray-900 whitespace-pre-wrap break-words">
-                        {note.content}
+                        {renderNoteContent(note.content)}
                       </p>
                       <div className="mt-2 flex items-center gap-2 text-xs text-gray-500">
                         {note.author_name && (

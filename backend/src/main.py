@@ -50,6 +50,8 @@ from src.proposals.router import router as proposals_router
 from src.contracts.router import router as contracts_router
 from src.admin.router import router as admin_router  # noqa: F401
 from src.ai.router import router as ai_router
+from src.meta.router import router as meta_router
+from src.expenses.router import router as expenses_router
 
 
 async def _init_database():
@@ -85,6 +87,8 @@ async def _init_database():
         from src.payments.models import StripeCustomer, Product, Price, Payment, Subscription
         from src.proposals.models import Proposal, ProposalTemplate, ProposalView
         from src.contracts.models import Contract
+        from src.meta.models import CompanyMetaData
+        from src.expenses.models import Expense
 
         from src.database import Base
         async with engine.begin() as conn:
@@ -182,6 +186,8 @@ app.include_router(payments_router)
 app.include_router(proposals_router)
 app.include_router(contracts_router)
 app.include_router(admin_router)
+app.include_router(meta_router)
+app.include_router(expenses_router)
 
 
 # Register webhook event handler with event system

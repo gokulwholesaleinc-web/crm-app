@@ -24,6 +24,7 @@ function PaymentsPage() {
   usePageTitle('Payments');
   const [activeTab, setActiveTab] = useState<Tab>('All Payments');
   const [statusFilter, setStatusFilter] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [subPage, setSubPage] = useState(1);
   const pageSize = 20;
@@ -36,6 +37,7 @@ function PaymentsPage() {
     page: currentPage,
     page_size: pageSize,
     status: statusFilter || undefined,
+    search: searchQuery || undefined,
   });
 
   const {
@@ -105,6 +107,20 @@ function PaymentsPage() {
       {activeTab === 'All Payments' && (
         <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4 border border-transparent dark:border-gray-700">
           <div className="flex flex-col gap-3 sm:flex-row sm:gap-4 sm:items-center">
+            <div className="flex-1 sm:flex-none sm:w-64">
+              <label htmlFor="payment-search" className="sr-only">Search payments</label>
+              <input
+                id="payment-search"
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
+                placeholder="Search by customer, amount, status..."
+                className="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 py-2.5 sm:py-2 text-base sm:text-sm"
+              />
+            </div>
             <div className="flex-1 sm:flex-none sm:w-48">
               <label htmlFor="payment-status-filter" className="sr-only">Filter by status</label>
               <select

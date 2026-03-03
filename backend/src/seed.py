@@ -182,22 +182,24 @@ async def _link_user_to_tenant(
 # ---------------------------------------------------------------------------
 
 PIPELINE_STAGES = [
-    {"name": "Prospecting", "order": 1, "color": "#94a3b8", "probability": 10, "is_won": False, "is_lost": False, "pipeline_type": "opportunity"},
-    {"name": "Qualification", "order": 2, "color": "#60a5fa", "probability": 20, "is_won": False, "is_lost": False, "pipeline_type": "opportunity"},
-    {"name": "Proposal", "order": 3, "color": "#818cf8", "probability": 40, "is_won": False, "is_lost": False, "pipeline_type": "opportunity"},
-    {"name": "Negotiation", "order": 4, "color": "#f59e0b", "probability": 60, "is_won": False, "is_lost": False, "pipeline_type": "opportunity"},
-    {"name": "Closed Won", "order": 5, "color": "#22c55e", "probability": 100, "is_won": True, "is_lost": False, "pipeline_type": "opportunity"},
-    {"name": "Closed Lost", "order": 6, "color": "#ef4444", "probability": 0, "is_won": False, "is_lost": True, "pipeline_type": "opportunity"},
+    {"name": "Discovery",    "order": 1, "color": "#06b6d4", "probability": 10, "is_won": False, "is_lost": False, "pipeline_type": "opportunity"},
+    {"name": "Proposal",     "order": 2, "color": "#818cf8", "probability": 30, "is_won": False, "is_lost": False, "pipeline_type": "opportunity"},
+    {"name": "Negotiation",  "order": 3, "color": "#f59e0b", "probability": 50, "is_won": False, "is_lost": False, "pipeline_type": "opportunity"},
+    {"name": "Scoping",      "order": 4, "color": "#10b981", "probability": 70, "is_won": False, "is_lost": False, "pipeline_type": "opportunity"},
+    {"name": "Stalling",     "order": 5, "color": "#ef4444", "probability": 20, "is_won": False, "is_lost": False, "pipeline_type": "opportunity"},
+    {"name": "Won",          "order": 6, "color": "#22c55e", "probability": 100, "is_won": True,  "is_lost": False, "pipeline_type": "opportunity"},
+    {"name": "Lost",         "order": 7, "color": "#6b7280", "probability": 0,   "is_won": False, "is_lost": True,  "pipeline_type": "opportunity"},
 ]
 
 
 LEAD_PIPELINE_STAGES = [
-    {"name": "New",          "order": 1, "probability": 5,   "color": "#94a3b8", "pipeline_type": "lead"},
-    {"name": "Contacted",    "order": 2, "probability": 15,  "color": "#3b82f6", "pipeline_type": "lead"},
-    {"name": "Engaged",      "order": 3, "probability": 30,  "color": "#06b6d4", "pipeline_type": "lead"},
-    {"name": "Qualified",    "order": 4, "probability": 60,  "color": "#8b5cf6", "pipeline_type": "lead"},
-    {"name": "Converted",    "order": 5, "probability": 100, "is_won": True,  "color": "#22c55e", "pipeline_type": "lead"},
-    {"name": "Disqualified", "order": 6, "probability": 0,   "is_lost": True, "color": "#6b7280", "pipeline_type": "lead"},
+    {"name": "Discovery",    "order": 1, "color": "#06b6d4", "probability": 10, "is_won": False, "is_lost": False, "pipeline_type": "lead"},
+    {"name": "Proposal",     "order": 2, "color": "#818cf8", "probability": 30, "is_won": False, "is_lost": False, "pipeline_type": "lead"},
+    {"name": "Negotiation",  "order": 3, "color": "#f59e0b", "probability": 50, "is_won": False, "is_lost": False, "pipeline_type": "lead"},
+    {"name": "Scoping",      "order": 4, "color": "#10b981", "probability": 70, "is_won": False, "is_lost": False, "pipeline_type": "lead"},
+    {"name": "Stalling",     "order": 5, "color": "#ef4444", "probability": 20, "is_won": False, "is_lost": False, "pipeline_type": "lead"},
+    {"name": "Won",          "order": 6, "color": "#22c55e", "probability": 100, "is_won": True,  "is_lost": False, "pipeline_type": "lead"},
+    {"name": "Lost",         "order": 7, "color": "#6b7280", "probability": 0,   "is_won": False, "is_lost": True,  "pipeline_type": "lead"},
 ]
 
 
@@ -537,9 +539,9 @@ async def _seed_leads(session: AsyncSession, demo_user: User, lead_sources: list
     if lead_stages:
         stage_name_map = {s.name.lower(): s.id for s in lead_stages}
         status_stage_map = {
-            "new": stage_name_map.get("new"),
+            "new": stage_name_map.get("discovery"),
             "contacted": stage_name_map.get("discovery"),
-            "qualified": stage_name_map.get("proposals on"),
+            "qualified": stage_name_map.get("proposal"),
             "unqualified": stage_name_map.get("stalling"),
             "converted": stage_name_map.get("won"),
             "lost": stage_name_map.get("lost"),
@@ -575,24 +577,24 @@ def _today():
 
 
 OPPORTUNITIES_DATA = [
-    # Prospecting
-    {"name": "Summit Financial Group - CRM Implementation", "amount": 125000, "probability": 10, "stage_name": "Prospecting", "days_to_close": 90, "contact_idx": 5, "company_idx": 2, "description": "Full CRM rollout for wealth management division."},
-    {"name": "Meridian Corp - Supply Chain Dashboard", "amount": 85000, "probability": 15, "stage_name": "Prospecting", "days_to_close": 75, "contact_idx": 16, "company_idx": 7, "description": "Custom analytics dashboard for supply chain visibility."},
-    # Qualification
-    {"name": "Vertex Solutions - Consulting Platform", "amount": 62000, "probability": 25, "stage_name": "Qualification", "days_to_close": 60, "contact_idx": 12, "company_idx": 5, "description": "Client engagement and project management platform."},
-    {"name": "Nova Retail - E-commerce Integration", "amount": 38000, "probability": 20, "stage_name": "Qualification", "days_to_close": 45, "contact_idx": 8, "company_idx": 3, "description": "Integrate CRM with Shopify and inventory systems."},
+    # Discovery
+    {"name": "Summit Financial Group - CRM Implementation", "amount": 125000, "probability": 10, "stage_name": "Discovery", "days_to_close": 90, "contact_idx": 5, "company_idx": 2, "description": "Full CRM rollout for wealth management division."},
+    {"name": "Meridian Corp - Supply Chain Dashboard", "amount": 85000, "probability": 15, "stage_name": "Discovery", "days_to_close": 75, "contact_idx": 16, "company_idx": 7, "description": "Custom analytics dashboard for supply chain visibility."},
     # Proposal
-    {"name": "Acme Technologies - Enterprise License", "amount": 250000, "probability": 45, "stage_name": "Proposal", "days_to_close": 30, "contact_idx": 0, "company_idx": 0, "description": "Enterprise-wide license for 120 users with premium support."},
-    {"name": "Cascade Analytics - Data Platform Upgrade", "amount": 48000, "probability": 40, "stage_name": "Proposal", "days_to_close": 35, "contact_idx": 14, "company_idx": 6, "description": "Upgrade to advanced analytics tier with AI features."},
+    {"name": "Vertex Solutions - Consulting Platform", "amount": 62000, "probability": 30, "stage_name": "Proposal", "days_to_close": 60, "contact_idx": 12, "company_idx": 5, "description": "Client engagement and project management platform."},
+    {"name": "Nova Retail - E-commerce Integration", "amount": 38000, "probability": 30, "stage_name": "Proposal", "days_to_close": 45, "contact_idx": 8, "company_idx": 3, "description": "Integrate CRM with Shopify and inventory systems."},
     # Negotiation
-    {"name": "Horizon Healthcare - Platform Migration", "amount": 320000, "probability": 65, "stage_name": "Negotiation", "days_to_close": 15, "contact_idx": 3, "company_idx": 1, "description": "Full platform migration from legacy system. 3-year contract."},
-    {"name": "Brightpath Education - LMS Integration", "amount": 55000, "probability": 60, "stage_name": "Negotiation", "days_to_close": 20, "contact_idx": 18, "company_idx": 8, "description": "Integrate CRM with their learning management system."},
-    # Closed Won (past dates)
-    {"name": "Pinnacle Software - Development Tools", "amount": 42000, "probability": 100, "stage_name": "Closed Won", "days_to_close": -15, "contact_idx": 10, "company_idx": 4, "description": "Annual license for development and CI/CD tools."},
-    {"name": "Acme Technologies - Training Package", "amount": 18000, "probability": 100, "stage_name": "Closed Won", "days_to_close": -30, "contact_idx": 2, "company_idx": 0, "description": "Staff training program for new platform rollout."},
-    # Closed Lost
-    {"name": "Meridian Corp - Factory Automation", "amount": 475000, "probability": 0, "stage_name": "Closed Lost", "days_to_close": -10, "contact_idx": 17, "company_idx": 7, "description": "Lost to competitor. Price was primary factor."},
-    {"name": "Nova Retail - POS Integration", "amount": 5500, "probability": 0, "stage_name": "Closed Lost", "days_to_close": -25, "contact_idx": 9, "company_idx": 3, "description": "Project deprioritized due to budget constraints."},
+    {"name": "Acme Technologies - Enterprise License", "amount": 250000, "probability": 50, "stage_name": "Negotiation", "days_to_close": 30, "contact_idx": 0, "company_idx": 0, "description": "Enterprise-wide license for 120 users with premium support."},
+    {"name": "Cascade Analytics - Data Platform Upgrade", "amount": 48000, "probability": 50, "stage_name": "Negotiation", "days_to_close": 35, "contact_idx": 14, "company_idx": 6, "description": "Upgrade to advanced analytics tier with AI features."},
+    # Scoping
+    {"name": "Horizon Healthcare - Platform Migration", "amount": 320000, "probability": 70, "stage_name": "Scoping", "days_to_close": 15, "contact_idx": 3, "company_idx": 1, "description": "Full platform migration from legacy system. 3-year contract."},
+    {"name": "Brightpath Education - LMS Integration", "amount": 55000, "probability": 70, "stage_name": "Scoping", "days_to_close": 20, "contact_idx": 18, "company_idx": 8, "description": "Integrate CRM with their learning management system."},
+    # Won (past dates)
+    {"name": "Pinnacle Software - Development Tools", "amount": 42000, "probability": 100, "stage_name": "Won", "days_to_close": -15, "contact_idx": 10, "company_idx": 4, "description": "Annual license for development and CI/CD tools."},
+    {"name": "Acme Technologies - Training Package", "amount": 18000, "probability": 100, "stage_name": "Won", "days_to_close": -30, "contact_idx": 2, "company_idx": 0, "description": "Staff training program for new platform rollout."},
+    # Lost
+    {"name": "Meridian Corp - Factory Automation", "amount": 475000, "probability": 0, "stage_name": "Lost", "days_to_close": -10, "contact_idx": 17, "company_idx": 7, "description": "Lost to competitor. Price was primary factor."},
+    {"name": "Nova Retail - POS Integration", "amount": 5500, "probability": 0, "stage_name": "Lost", "days_to_close": -25, "contact_idx": 9, "company_idx": 3, "description": "Project deprioritized due to budget constraints."},
 ]
 
 
@@ -630,7 +632,7 @@ async def _seed_opportunities(
             company_id=companies[company_idx].id,
             owner_id=demo_user.id,
             created_by_id=demo_user.id,
-            loss_reason="Price" if stage_name == "Closed Lost" and "competitor" in data.get("description", "").lower() else ("Budget" if stage_name == "Closed Lost" else None),
+            loss_reason="Price" if stage_name == "Lost" and "competitor" in data.get("description", "").lower() else ("Budget" if stage_name == "Lost" else None),
         )
         session.add(opp)
         opportunities.append(opp)

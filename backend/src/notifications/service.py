@@ -149,6 +149,26 @@ async def notify_on_stage_change(
     )
 
 
+async def notify_on_mention(
+    db: AsyncSession,
+    mentioned_user_id: int,
+    author_name: str,
+    entity_type: str,
+    entity_id: int,
+    content_snippet: str,
+) -> Notification:
+    """Create a notification when a user is @mentioned."""
+    service = NotificationService(db)
+    return await service.create_notification(
+        user_id=mentioned_user_id,
+        type="mention",
+        title=f"{author_name} mentioned you",
+        message=content_snippet[:200],
+        entity_type=entity_type,
+        entity_id=entity_id,
+    )
+
+
 async def notify_on_activity_due(
     db: AsyncSession,
     user_id: int,

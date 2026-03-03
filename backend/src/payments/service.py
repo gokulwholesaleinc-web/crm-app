@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from html import escape
 from typing import Optional, List, Tuple
 
-from sqlalchemy import select, func, or_
+from sqlalchemy import select, func, or_, String
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -74,6 +74,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         customer_id: Optional[int] = None,
         owner_id: Optional[int] = None,
         shared_entity_ids: Optional[List[int]] = None,
+        search: Optional[str] = None,
     ) -> Tuple[List[Payment], int]:
         """Get paginated list of payments with filters."""
         query = (
@@ -98,6 +99,17 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
                 )
             else:
                 query = query.where(Payment.owner_id == owner_id)
+
+        if search:
+            search_term = f"%{search}%"
+            query = query.join(Payment.customer, isouter=True).where(
+                or_(
+                    StripeCustomer.name.ilike(search_term),
+                    StripeCustomer.email.ilike(search_term),
+                    func.cast(Payment.amount, String).like(search_term),
+                    Payment.status.ilike(search_term),
+                )
+            )
 
         count_query = select(func.count()).select_from(query.subquery())
         total_result = await self.db.execute(count_query)

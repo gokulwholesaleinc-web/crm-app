@@ -179,3 +179,9 @@ class LeadKanbanResponse(BaseModel):
 
 class MoveLeadRequest(BaseModel):
     new_stage_id: int
+
+
+class SendCampaignRequest(BaseModel):
+    lead_ids: List[int]
+    subject: str
+    body_template: str  # Supports {{first_name}} placeholder

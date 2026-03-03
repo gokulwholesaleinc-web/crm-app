@@ -85,8 +85,11 @@ export type StatusType =
   | 'in_progress'
   | 'qualified'
   | 'converted'
-  | 'closed_won'
-  | 'closed_lost'
+  | 'won'
+  | 'lost'
+  | 'discovery'
+  | 'scoping'
+  | 'stalling'
   | 'pending'
   | 'completed'
   | 'cancelled'
@@ -106,8 +109,11 @@ const statusConfig: Record<StatusType, { variant: BadgeVariant; label: string }>
   in_progress: { variant: 'yellow', label: 'In Progress' },
   qualified: { variant: 'indigo', label: 'Qualified' },
   converted: { variant: 'green', label: 'Converted' },
-  closed_won: { variant: 'green', label: 'Closed Won' },
-  closed_lost: { variant: 'red', label: 'Closed Lost' },
+  won: { variant: 'green', label: 'Won' },
+  lost: { variant: 'red', label: 'Lost' },
+  discovery: { variant: 'blue', label: 'Discovery' },
+  scoping: { variant: 'green', label: 'Scoping' },
+  stalling: { variant: 'yellow', label: 'Stalling' },
   pending: { variant: 'yellow', label: 'Pending' },
   completed: { variant: 'green', label: 'Completed' },
   cancelled: { variant: 'gray', label: 'Cancelled' },

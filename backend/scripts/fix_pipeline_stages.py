@@ -16,21 +16,20 @@ from src.database import engine
 
 
 LEAD_STAGES = [
-    {"name": "New", "order": 1, "color": "#3b82f6", "probability": 10, "is_won": False, "is_lost": False},
-    {"name": "Discovery", "order": 2, "color": "#06b6d4", "probability": 20, "is_won": False, "is_lost": False},
-    {"name": "Proposals On", "order": 3, "color": "#8b5cf6", "probability": 40, "is_won": False, "is_lost": False},
-    {"name": "Negotiations", "order": 4, "color": "#f59e0b", "probability": 60, "is_won": False, "is_lost": False},
-    {"name": "Scoping", "order": 5, "color": "#10b981", "probability": 70, "is_won": False, "is_lost": False},
-    {"name": "Stalling", "order": 6, "color": "#ef4444", "probability": 30, "is_won": False, "is_lost": False},
-    {"name": "Won", "order": 7, "color": "#22c55e", "probability": 100, "is_won": True, "is_lost": False},
-    {"name": "Lost", "order": 8, "color": "#6b7280", "probability": 0, "is_won": False, "is_lost": True},
+    {"name": "Discovery",    "order": 1, "color": "#06b6d4", "probability": 10, "is_won": False, "is_lost": False},
+    {"name": "Proposal",     "order": 2, "color": "#818cf8", "probability": 30, "is_won": False, "is_lost": False},
+    {"name": "Negotiation",  "order": 3, "color": "#f59e0b", "probability": 50, "is_won": False, "is_lost": False},
+    {"name": "Scoping",      "order": 4, "color": "#10b981", "probability": 70, "is_won": False, "is_lost": False},
+    {"name": "Stalling",     "order": 5, "color": "#ef4444", "probability": 20, "is_won": False, "is_lost": False},
+    {"name": "Won",          "order": 6, "color": "#22c55e", "probability": 100, "is_won": True, "is_lost": False},
+    {"name": "Lost",         "order": 7, "color": "#6b7280", "probability": 0, "is_won": False, "is_lost": True},
 ]
 
 STATUS_TO_STAGE = {
-    "new": "New",
+    "new": "Discovery",
     "contacted": "Discovery",
-    "qualified": "Proposals On",
-    "negotiation": "Negotiations",
+    "qualified": "Proposal",
+    "negotiation": "Negotiation",
     "converted": "Won",
     "lost": "Lost",
 }

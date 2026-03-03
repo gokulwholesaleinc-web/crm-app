@@ -6,6 +6,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { createEntityHooks, createQueryKeys } from './useEntityCRUD';
 import { leadsApi } from '../api/leads';
+import type { SendCampaignRequest } from '../api/leads';
 import { contactKeys } from './useContacts';
 import { companyKeys } from './useCompanies';
 import { opportunityKeys } from './useOpportunities';
@@ -230,6 +231,20 @@ export function useMoveLeadStage() {
         queryClient.invalidateQueries({ queryKey: ['unified-pipeline'] });
         queryClient.invalidateQueries({ queryKey: ['pipeline'] });
       }
+    },
+  });
+}
+
+// =============================================================================
+// Email Campaign Hooks
+// =============================================================================
+
+export function useSendCampaign() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: SendCampaignRequest) => leadsApi.sendCampaign(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: leadKeys.lists() });
     },
   });
 }

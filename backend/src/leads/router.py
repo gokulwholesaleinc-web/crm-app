@@ -39,6 +39,7 @@ from src.leads.schemas import (
     KanbanLeadStage,
     LeadKanbanResponse,
     MoveLeadRequest,
+    SendCampaignRequest,
     TagBrief,
 )
 from src.leads.service import LeadService
@@ -256,6 +257,53 @@ async def get_lead_kanban(
         )
 
     return LeadKanbanResponse(stages=kanban_stages)
+
+
+@router.post("/send-campaign")
+async def send_campaign(
+    request_data: SendCampaignRequest,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Send personalized email campaign to selected leads."""
+    from src.email.service import EmailService, render_template
+
+    email_service = EmailService(db)
+    sent_count = 0
+    errors = []
+
+    for lead_id in request_data.lead_ids:
+        service = LeadService(db)
+        lead = await service.get_by_id(lead_id)
+        if not lead or not lead.email:
+            errors.append({"lead_id": lead_id, "error": "Lead not found or no email"})
+            continue
+
+        variables = {
+            "first_name": lead.first_name,
+            "last_name": lead.last_name,
+            "full_name": lead.full_name,
+            "email": lead.email or "",
+            "company_name": lead.company_name or "",
+        }
+        body = render_template(request_data.body_template, variables)
+        subject = render_template(request_data.subject, variables)
+
+        await email_service.queue_email(
+            to_email=lead.email,
+            subject=subject,
+            body=body,
+            sent_by_id=current_user.id,
+            entity_type="leads",
+            entity_id=lead.id,
+        )
+        sent_count += 1
+
+    return {
+        "sent_count": sent_count,
+        "errors": errors,
+        "total_requested": len(request_data.lead_ids),
+    }
 
 
 @router.post("/{lead_id}/move")

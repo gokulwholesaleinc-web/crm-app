@@ -9,10 +9,13 @@ interface SalesFunnelChartProps {
 }
 
 const stageLabels: Record<string, string> = {
-  new: 'New',
-  contacted: 'Contacted',
-  qualified: 'Qualified',
-  converted: 'Converted',
+  discovery: 'Discovery',
+  proposal: 'Proposal',
+  negotiation: 'Negotiation',
+  scoping: 'Scoping',
+  stalling: 'Stalling',
+  won: 'Won',
+  lost: 'Lost',
 };
 
 export function SalesFunnelChart({ data }: SalesFunnelChartProps) {

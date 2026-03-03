@@ -1681,6 +1681,7 @@ export interface PaymentFilters {
   customer_id?: number;
   opportunity_id?: number;
   owner_id?: number;
+  search?: string;
 }
 
 export interface ProductPrice {

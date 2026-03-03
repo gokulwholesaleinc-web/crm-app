@@ -47,6 +47,8 @@ from src.quotes.models import Quote, QuoteLineItem, QuoteTemplate, ProductBundle
 from src.payments.models import StripeCustomer, Product, Price, Payment, Subscription
 from src.proposals.models import Proposal, ProposalTemplate, ProposalView
 from src.contracts.models import Contract
+from src.meta.models import CompanyMetaData
+from src.expenses.models import Expense
 
 
 # Test database URL - using SQLite in-memory for tests

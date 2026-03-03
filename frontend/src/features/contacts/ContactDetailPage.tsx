@@ -5,7 +5,7 @@ import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 const NotesList = lazy(() => import('../../components/shared/NotesList'));
 const AttachmentList = lazy(() => import('../../components/shared/AttachmentList'));
 const AuditTimeline = lazy(() => import('../../components/shared/AuditTimeline'));
-const CommentSection = lazy(() => import('../../components/shared/CommentSection'));
+
 const SharePanel = lazy(() => import('../../components/shared/SharePanel'));
 const ContractsList = lazy(() => import('../../components/shared/ContractsList'));
 const PaymentSummary = lazy(() => import('../../components/shared/PaymentSummary'));
@@ -23,7 +23,7 @@ import type { StatusType } from '../../components/ui/Badge';
 import type { ContactUpdate, Quote, Proposal } from '../../types';
 import clsx from 'clsx';
 
-type TabType = 'details' | 'activities' | 'notes' | 'emails' | 'contracts' | 'quotes' | 'proposals' | 'documents' | 'attachments' | 'comments' | 'history' | 'sharing';
+type TabType = 'details' | 'activities' | 'notes' | 'emails' | 'contracts' | 'quotes' | 'proposals' | 'documents' | 'attachments' | 'history' | 'sharing';
 
 function ContactDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -141,7 +141,6 @@ function ContactDetailPage() {
     { id: 'proposals', name: 'Proposals' },
     { id: 'documents', name: 'Documents' },
     { id: 'attachments', name: 'Attachments' },
-    { id: 'comments', name: 'Comments' },
     { id: 'history', name: 'History' },
     { id: 'sharing', name: 'Sharing' },
   ];
@@ -519,13 +518,6 @@ function ContactDetailPage() {
       {activeTab === 'attachments' && contactId && (
         <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
           <AttachmentList entityType="contacts" entityId={contactId} />
-        </Suspense>
-      )}
-
-      {/* Comments Tab */}
-      {activeTab === 'comments' && contactId && (
-        <Suspense fallback={<div className="bg-white shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 rounded" /><div className="h-3 bg-gray-200 rounded w-5/6" /></div></div>}>
-          <CommentSection entityType="contacts" entityId={contactId} />
         </Suspense>
       )}
 

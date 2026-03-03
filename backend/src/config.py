@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     STRIPE_PUBLISHABLE_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
 
+    META_ACCESS_TOKEN: str = ""
+
     SEED_ON_STARTUP: bool = False
 
     @property
