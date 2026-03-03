@@ -9,7 +9,7 @@ import {
   useUploadReceipt,
 } from '../../../hooks/useExpenses';
 import { formatCurrencyWithCents } from '../../../utils/formatters';
-import { TrashIcon, PaperClipIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import { TrashIcon, PaperClipIcon, ArrowDownTrayIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 import { PaperClipIcon as PaperClipSolidIcon } from '@heroicons/react/24/solid';
 
 interface ExpensesTabProps {
@@ -223,10 +223,16 @@ export default function ExpensesTab({ companyId }: ExpensesTabProps) {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-center text-sm">
                         {expense.receipt_attachment_id ? (
-                          <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400" title="Receipt attached">
+                          <a
+                            href={`/api/attachments/${expense.receipt_attachment_id}/download`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300 transition-colors"
+                            title="View receipt"
+                          >
                             <PaperClipSolidIcon className="h-4 w-4" />
-                            <span className="text-xs">Attached</span>
-                          </span>
+                            <span className="text-xs underline">View</span>
+                          </a>
                         ) : (
                           <button
                             onClick={() => handleReceiptClick(expense.id)}
@@ -241,16 +247,27 @@ export default function ExpensesTab({ companyId }: ExpensesTabProps) {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
                         <div className="flex items-center justify-end gap-2">
-                          {expense.receipt_attachment_id && (
-                            <button
-                              onClick={() => handleReceiptClick(expense.id)}
-                              className="p-1.5 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 rounded transition-colors"
-                              aria-label={`Replace receipt for ${expense.description}`}
-                              title="Replace receipt"
-                            >
-                              <ArrowDownTrayIcon className="h-4 w-4" />
-                            </button>
-                          )}
+                          {expense.receipt_attachment_id ? (
+                            <>
+                              <a
+                                href={`/api/attachments/${expense.receipt_attachment_id}/download`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-1.5 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 rounded transition-colors"
+                                title="Download receipt"
+                              >
+                                <ArrowDownTrayIcon className="h-4 w-4" />
+                              </a>
+                              <button
+                                onClick={() => handleReceiptClick(expense.id)}
+                                className="p-1.5 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 rounded transition-colors"
+                                aria-label={`Replace receipt for ${expense.description}`}
+                                title="Replace receipt"
+                              >
+                                <ArrowPathIcon className="h-4 w-4" />
+                              </button>
+                            </>
+                          ) : null}
                           <button
                             onClick={() => handleDelete(expense.id)}
                             className="p-1.5 text-gray-400 hover:text-red-600 rounded transition-colors"
