@@ -129,10 +129,10 @@ class NoteService:
 
         for username in usernames:
             full_name = username.replace('.', ' ')
-            # Normalize whitespace: match even if DB has extra spaces
+            # Normalize whitespace: collapse double spaces to single (works on SQLite + PostgreSQL)
             user_result = await self.db.execute(
                 select(User).where(
-                    func.lower(func.regexp_replace(User.full_name, r'\s+', ' ', 'g'))
+                    func.lower(func.replace(func.trim(User.full_name), '  ', ' '))
                     == func.lower(full_name)
                 )
             )

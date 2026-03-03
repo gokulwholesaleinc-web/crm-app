@@ -8,7 +8,7 @@ import { authApi } from '../../api/auth';
 import toast from 'react-hot-toast';
 import type { AdminUser } from '../../types';
 import type { Column } from '../../components/ui/Table';
-import { XMarkIcon } from '@heroicons/react/24/outline';
+import { PencilSquareIcon, XMarkIcon } from '@heroicons/react/24/outline';
 
 const ROLE_OPTIONS = ['admin', 'manager', 'sales_rep', 'viewer'] as const;
 
@@ -25,6 +25,11 @@ interface QuickAddFormData {
   email: string;
   password: string;
   role: string;
+}
+
+interface EditUserFormData {
+  full_name: string;
+  email: string;
 }
 
 const INITIAL_FORM: QuickAddFormData = {
@@ -46,6 +51,9 @@ export default function UserManagement() {
   const [addForm, setAddForm] = useState<QuickAddFormData>(INITIAL_FORM);
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
+  const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
+  const [editForm, setEditForm] = useState<EditUserFormData>({ full_name: '', email: '' });
+  const [editError, setEditError] = useState<string | null>(null);
 
   const handleQuickAdd = useCallback(async () => {
     if (!addForm.full_name || !addForm.email || !addForm.password) {
@@ -74,6 +82,35 @@ export default function UserManagement() {
       setAddLoading(false);
     }
   }, [addForm, assignRole, refetch]);
+
+  const handleOpenEdit = useCallback((user: AdminUser) => {
+    setEditingUser(user);
+    setEditForm({ full_name: user.full_name, email: user.email });
+    setEditError(null);
+  }, []);
+
+  const handleSaveEdit = useCallback(async () => {
+    if (!editingUser) return;
+    if (!editForm.full_name.trim() || !editForm.email.trim()) {
+      setEditError('Name and email are required');
+      return;
+    }
+    const updates: Record<string, string> = {};
+    if (editForm.full_name !== editingUser.full_name) updates.full_name = editForm.full_name;
+    if (editForm.email !== editingUser.email) updates.email = editForm.email;
+    if (Object.keys(updates).length === 0) {
+      setEditingUser(null);
+      return;
+    }
+    try {
+      await updateUser.mutateAsync({ userId: editingUser.id, data: updates });
+      toast.success('User updated successfully');
+      setEditingUser(null);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to update user';
+      setEditError(msg);
+    }
+  }, [editingUser, editForm, updateUser]);
 
   const handleSort = useCallback((column: string) => {
     setSortDirection((prev) =>
@@ -119,9 +156,19 @@ export default function UserManagement() {
       header: 'Name',
       sortable: true,
       render: (row) => (
-        <div className="min-w-0">
-          <p className="font-medium text-gray-900 dark:text-gray-100 truncate">{row.full_name}</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{row.email}</p>
+        <div className="min-w-0 flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="font-medium text-gray-900 dark:text-gray-100 truncate">{row.full_name}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{row.email}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => handleOpenEdit(row)}
+            className="flex-shrink-0 p-1 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+            aria-label={`Edit ${row.full_name}`}
+          >
+            <PencilSquareIcon className="h-4 w-4" aria-hidden="true" />
+          </button>
         </div>
       ),
     },
@@ -352,6 +399,89 @@ export default function UserManagement() {
               </Button>
               <Button onClick={handleQuickAdd} disabled={addLoading}>
                 {addLoading ? 'Creating...' : 'Create User'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Edit User Modal */}
+      {editingUser && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setEditingUser(null);
+          }}
+        >
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                Edit User
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingUser(null)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                aria-label="Close modal"
+              >
+                <XMarkIcon className="h-5 w-5" aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="px-6 py-4 space-y-4">
+              {editError && (
+                <p className="text-sm text-red-600 dark:text-red-400" role="alert">
+                  {editError}
+                </p>
+              )}
+
+              <div>
+                <label
+                  htmlFor="edit-user-name"
+                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                >
+                  Full Name
+                </label>
+                <input
+                  id="edit-user-name"
+                  type="text"
+                  value={editForm.full_name}
+                  onChange={(e) => setEditForm((f) => ({ ...f, full_name: e.target.value }))}
+                  autoComplete="name"
+                  className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="edit-user-email"
+                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                >
+                  Email
+                </label>
+                <input
+                  id="edit-user-email"
+                  type="email"
+                  value={editForm.email}
+                  onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
+                  autoComplete="email"
+                  spellCheck={false}
+                  className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setEditingUser(null);
+                  setEditError(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleSaveEdit} disabled={updateUser.isPending}>
+                {updateUser.isPending ? 'Saving...' : 'Save Changes'}
               </Button>
             </div>
           </div>

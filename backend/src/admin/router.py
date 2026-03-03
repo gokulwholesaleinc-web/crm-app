@@ -110,7 +110,7 @@ async def update_admin_user(
     current_user: CurrentUser,
     db: DBSession,
 ):
-    """Update a user's role or active status."""
+    """Update a user's role, active status, email, or full name."""
     _require_admin(current_user)
 
     result = await db.execute(select(User).where(User.id == user_id))
@@ -122,6 +122,19 @@ async def update_admin_user(
         user.role = data.role
     if data.is_active is not None:
         user.is_active = data.is_active
+    if data.email is not None:
+        # Check email uniqueness
+        existing = await db.execute(
+            select(User.id).where(User.email == data.email, User.id != user_id)
+        )
+        if existing.scalar_one_or_none() is not None:
+            raise HTTPException(
+                status_code=HTTPStatus.CONFLICT,
+                detail="Email already in use by another user",
+            )
+        user.email = data.email
+    if data.full_name is not None:
+        user.full_name = data.full_name
 
     await db.commit()
     await db.refresh(user)

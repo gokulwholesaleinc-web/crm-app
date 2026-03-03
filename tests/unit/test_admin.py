@@ -166,6 +166,63 @@ class TestAdminUpdateUser:
         assert response.status_code == 403
 
 
+    @pytest.mark.asyncio
+    async def test_update_user_email(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_headers: dict,
+        test_superuser: User,
+        test_user: User,
+    ):
+        """Admin can update a user's email."""
+        response = await client.patch(
+            f"/api/admin/users/{test_user.id}",
+            json={"email": "newemail@example.com"},
+            headers=admin_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["email"] == "newemail@example.com"
+
+    @pytest.mark.asyncio
+    async def test_update_user_full_name(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_headers: dict,
+        test_superuser: User,
+        test_user: User,
+    ):
+        """Admin can update a user's full name."""
+        response = await client.patch(
+            f"/api/admin/users/{test_user.id}",
+            json={"full_name": "New Name"},
+            headers=admin_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["full_name"] == "New Name"
+
+    @pytest.mark.asyncio
+    async def test_update_user_email_duplicate_rejected(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_headers: dict,
+        test_superuser: User,
+        test_user: User,
+    ):
+        """Updating email to one already in use returns 409."""
+        response = await client.patch(
+            f"/api/admin/users/{test_user.id}",
+            json={"email": test_superuser.email},
+            headers=admin_headers,
+        )
+        assert response.status_code == 409
+        assert "already in use" in response.json()["detail"].lower()
+
+
 class TestAdminDeleteUser:
     """Tests for DELETE /api/admin/users/{id} (soft-delete)."""
 

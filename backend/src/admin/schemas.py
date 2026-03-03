@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 
 class AdminUserResponse(BaseModel):
@@ -26,6 +26,8 @@ class AdminUserUpdate(BaseModel):
     """Fields an admin can update on a user."""
     role: Optional[str] = None
     is_active: Optional[bool] = None
+    email: Optional[EmailStr] = None
+    full_name: Optional[str] = None
 
 
 class AssignRoleRequest(BaseModel):

@@ -12,12 +12,17 @@ import { Spinner } from '../ui/Spinner';
 
 function getEntityRoute(entityType: string | null, entityId: number | null): string | null {
   if (!entityType || !entityId) return null;
+  // Handle both singular and plural entity types (notes use singular, assignments use plural)
   const routes: Record<string, string> = {
+    contact: `/contacts/${entityId}`,
     contacts: `/contacts/${entityId}`,
+    lead: `/leads/${entityId}`,
     leads: `/leads/${entityId}`,
+    opportunity: `/opportunities/${entityId}`,
     opportunities: `/opportunities/${entityId}`,
-    activities: `/activities`,
+    company: `/companies/${entityId}`,
     companies: `/companies/${entityId}`,
+    activities: `/activities`,
   };
   return routes[entityType] ?? null;
 }
@@ -110,7 +115,7 @@ export function NotificationBell() {
       <button
         ref={buttonRef}
         type="button"
-        className="relative p-2 rounded-lg text-gray-500 hover:text-gray-600 hover:bg-gray-100 focus-visible:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
+        className="relative p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 focus-visible:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
         onClick={() => setIsOpen(!isOpen)}
         aria-label="View notifications"
       >
@@ -134,11 +139,11 @@ export function NotificationBell() {
       >
         <div
           ref={panelRef}
-          className="absolute right-0 z-50 mt-2 w-80 sm:w-96 origin-top-right rounded-lg bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus-visible:outline-none"
+          className="absolute right-0 z-50 mt-2 w-80 sm:w-96 origin-top-right rounded-lg bg-white dark:bg-gray-800 shadow-lg ring-1 ring-black ring-opacity-5 dark:ring-gray-700 focus-visible:outline-none"
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-            <h3 className="text-sm font-semibold text-gray-900">Notifications</h3>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Notifications</h3>
             {unreadCount > 0 && (
               <button
                 type="button"
@@ -160,8 +165,8 @@ export function NotificationBell() {
               </div>
             ) : notifications.length === 0 ? (
               <div className="py-8 text-center">
-                <BellIcon className="mx-auto h-8 w-8 text-gray-300" aria-hidden="true" />
-                <p className="mt-2 text-sm text-gray-500">No notifications yet</p>
+                <BellIcon className="mx-auto h-8 w-8 text-gray-300 dark:text-gray-600" aria-hidden="true" />
+                <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">No notifications yet</p>
               </div>
             ) : (
               <ul role="list">
@@ -170,8 +175,8 @@ export function NotificationBell() {
                     <button
                       type="button"
                       onClick={() => handleNotificationClick(notification)}
-                      className={`w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors ${
-                        !notification.is_read ? 'bg-primary-50/50' : ''
+                      className={`w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
+                        !notification.is_read ? 'bg-primary-50/50 dark:bg-primary-900/20' : ''
                       }`}
                     >
                       <div className="flex items-start gap-3">
@@ -179,13 +184,13 @@ export function NotificationBell() {
                           <span className="mt-1.5 h-2 w-2 rounded-full bg-primary-500 flex-shrink-0" />
                         )}
                         <div className={`min-w-0 flex-1 ${notification.is_read ? 'ml-5' : ''}`}>
-                          <p className="text-sm font-medium text-gray-900 truncate">
+                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                             {notification.title}
                           </p>
-                          <p className="text-sm text-gray-600 line-clamp-2">
+                          <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
                             {notification.message}
                           </p>
-                          <p className="text-xs text-gray-400 mt-1">
+                          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
                             {formatTimeAgo(notification.created_at)}
                           </p>
                         </div>

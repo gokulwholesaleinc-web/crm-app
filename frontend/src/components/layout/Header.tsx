@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { Menu, Transition } from '@headlessui/react';
 import {
   Bars3Icon,
-  BellIcon,
   MagnifyingGlassIcon,
   ChevronDownIcon,
   UserCircleIcon,
@@ -16,6 +15,7 @@ import {
 import clsx from 'clsx';
 import { Avatar } from '../ui/Avatar';
 import { useTheme } from '../../hooks/useTheme';
+import { NotificationBell } from '../notifications/NotificationBell';
 
 export interface User {
   id: string;
@@ -165,18 +165,7 @@ export function Header({
         </button>
 
         {/* Notifications */}
-        <button
-          type="button"
-          className="relative p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 focus-visible:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
-          aria-label="View notifications"
-        >
-          <BellIcon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />
-          {notifications > 0 && (
-            <span className="absolute top-0.5 right-0.5 sm:top-1 sm:right-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-xs font-bold leading-none text-white bg-red-500 rounded-full">
-              {notifications > 99 ? '99+' : notifications}
-            </span>
-          )}
-        </button>
+        <NotificationBell />
 
         {/* User Menu - touch-friendly with larger tap targets */}
         <Menu as="div" className="relative">

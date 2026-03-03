@@ -1895,6 +1895,8 @@ export interface AdminUser {
 export interface AdminUserUpdate {
   role?: string;
   is_active?: boolean;
+  email?: string;
+  full_name?: string;
 }
 
 export interface AssignRoleRequest {
