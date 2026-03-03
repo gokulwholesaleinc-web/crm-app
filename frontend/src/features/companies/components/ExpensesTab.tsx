@@ -9,7 +9,8 @@ import {
   useUploadReceipt,
 } from '../../../hooks/useExpenses';
 import { formatCurrencyWithCents } from '../../../utils/formatters';
-import { TrashIcon, PaperClipIcon } from '@heroicons/react/24/outline';
+import { TrashIcon, PaperClipIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import { PaperClipIcon as PaperClipSolidIcon } from '@heroicons/react/24/solid';
 
 interface ExpensesTabProps {
   companyId: number;
@@ -34,8 +35,10 @@ export default function ExpensesTab({ companyId }: ExpensesTabProps) {
   const [formDate, setFormDate] = useState('');
   const [formCategory, setFormCategory] = useState('');
   const [formCurrency, setFormCurrency] = useState('USD');
+  const [formReceiptFile, setFormReceiptFile] = useState<File | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const receiptFormRef = useRef<HTMLInputElement>(null);
   const [uploadExpenseId, setUploadExpenseId] = useState<number | null>(null);
 
   const resetForm = () => {
@@ -44,6 +47,7 @@ export default function ExpensesTab({ companyId }: ExpensesTabProps) {
     setFormDate('');
     setFormCategory('');
     setFormCurrency('USD');
+    setFormReceiptFile(null);
   };
 
   const handleCreate = () => {
@@ -60,7 +64,10 @@ export default function ExpensesTab({ companyId }: ExpensesTabProps) {
         category: formCategory || undefined,
       },
       {
-        onSuccess: () => {
+        onSuccess: (newExpense) => {
+          if (formReceiptFile) {
+            uploadMutation.mutate({ expenseId: newExpense.id, file: formReceiptFile });
+          }
           resetForm();
           setShowAddForm(false);
         },
@@ -191,6 +198,9 @@ export default function ExpensesTab({ companyId }: ExpensesTabProps) {
                     <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Amount
                     </th>
+                    <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Receipt
+                    </th>
                     <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Actions
                     </th>
@@ -211,16 +221,36 @@ export default function ExpensesTab({ companyId }: ExpensesTabProps) {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900 dark:text-gray-100" style={{ fontVariantNumeric: 'tabular-nums' }}>
                         {formatCurrencyWithCents(expense.amount, expense.currency)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                        <div className="flex items-center justify-end gap-2">
+                      <td className="px-6 py-4 whitespace-nowrap text-center text-sm">
+                        {expense.receipt_attachment_id ? (
+                          <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400" title="Receipt attached">
+                            <PaperClipSolidIcon className="h-4 w-4" />
+                            <span className="text-xs">Attached</span>
+                          </span>
+                        ) : (
                           <button
                             onClick={() => handleReceiptClick(expense.id)}
-                            className="p-1.5 text-gray-400 hover:text-primary-600 rounded transition-colors"
+                            className="inline-flex items-center gap-1 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
                             aria-label={`Upload receipt for ${expense.description}`}
                             title="Upload receipt"
                           >
                             <PaperClipIcon className="h-4 w-4" />
+                            <span className="text-xs">Upload</span>
                           </button>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                        <div className="flex items-center justify-end gap-2">
+                          {expense.receipt_attachment_id && (
+                            <button
+                              onClick={() => handleReceiptClick(expense.id)}
+                              className="p-1.5 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 rounded transition-colors"
+                              aria-label={`Replace receipt for ${expense.description}`}
+                              title="Replace receipt"
+                            >
+                              <ArrowDownTrayIcon className="h-4 w-4" />
+                            </button>
+                          )}
                           <button
                             onClick={() => handleDelete(expense.id)}
                             className="p-1.5 text-gray-400 hover:text-red-600 rounded transition-colors"
@@ -326,8 +356,36 @@ export default function ExpensesTab({ companyId }: ExpensesTabProps) {
               ))}
             </select>
           </div>
+          <div>
+            <label htmlFor="expense-receipt" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Receipt (optional)
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                ref={receiptFormRef}
+                id="expense-receipt"
+                type="file"
+                accept=".pdf,.png,.jpg,.jpeg,.gif"
+                onChange={(e) => setFormReceiptFile(e.target.files?.[0] ?? null)}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => receiptFormRef.current?.click()}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+              >
+                <PaperClipIcon className="h-4 w-4" />
+                {formReceiptFile ? 'Change file' : 'Attach receipt'}
+              </button>
+              {formReceiptFile && (
+                <span className="text-sm text-gray-600 dark:text-gray-400 truncate max-w-[200px]">
+                  {formReceiptFile.name}
+                </span>
+              )}
+            </div>
+          </div>
           <div className="flex items-center justify-end gap-3 pt-2">
-            <Button variant="secondary" onClick={() => setShowAddForm(false)}>
+            <Button variant="secondary" onClick={() => { resetForm(); setShowAddForm(false); }}>
               Cancel
             </Button>
             <Button

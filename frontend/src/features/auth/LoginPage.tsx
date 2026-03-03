@@ -7,6 +7,20 @@ import { useAuthStore } from '../../store/authStore';
 import { setTenantSlugOnLogin, useTenant } from '../../providers/TenantProvider';
 import type { LoginRequest } from '../../types';
 
+const REMEMBER_KEY = 'crm-remember:v1';
+
+function getSavedCredentials(): { email: string; password: string } | null {
+  try {
+    const raw = localStorage.getItem(REMEMBER_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(atob(raw));
+    if (parsed.email && parsed.password) return parsed;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function LoginPage() {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
@@ -15,6 +29,8 @@ function LoginPage() {
   const { login: storeLogin } = useAuthStore();
   const { tenant } = useTenant();
   const [logoError, setLogoError] = useState(false);
+  const saved = useState(() => getSavedCredentials())[0];
+  const [rememberMe, setRememberMe] = useState(saved !== null);
 
   useEffect(() => {
     setLogoError(false);
@@ -26,8 +42,8 @@ function LoginPage() {
     formState: { errors },
   } = useForm<LoginRequest>({
     defaultValues: {
-      email: '',
-      password: '',
+      email: saved?.email ?? '',
+      password: saved?.password ?? '',
     },
   });
 
@@ -36,13 +52,9 @@ function LoginPage() {
     setError(null);
 
     try {
-      // Use the auth API module which calls /api/auth/login/json
       const tokenResult = await authApi.login(data);
-
-      // Get user profile after successful login
       const user = await authApi.getMe();
 
-      // Save tenant slug from login response
       if (tokenResult.tenants && tokenResult.tenants.length > 0) {
         const primaryTenant = tokenResult.tenants.find(t => t.is_primary) ?? tokenResult.tenants[0];
         if (primaryTenant) {
@@ -50,7 +62,14 @@ function LoginPage() {
         }
       }
 
-      // Update auth store with user and token
+      if (rememberMe) {
+        try {
+          localStorage.setItem(REMEMBER_KEY, btoa(JSON.stringify({ email: data.email, password: data.password })));
+        } catch { /* storage full or blocked */ }
+      } else {
+        localStorage.removeItem(REMEMBER_KEY);
+      }
+
       storeLogin(user, tokenResult.access_token);
 
       navigate('/');
@@ -185,6 +204,8 @@ function LoginPage() {
                 id="remember-me"
                 name="remember-me"
                 type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
                 className="h-4 w-4 text-primary-600 focus-visible:ring-primary-500 border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded"
               />
               <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900 dark:text-gray-300">

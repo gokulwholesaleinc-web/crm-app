@@ -21,22 +21,19 @@ export function DashboardRecommendations({ maxItems = 3 }: DashboardRecommendati
   // Don't render anything on error (non-intrusive)
   if (error) return null;
 
-  // Don't render if loading is done and there's nothing to show
-  if (!isLoading && recommendations.length === 0) return null;
-
   return (
-    <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b bg-gradient-to-r from-purple-50 to-indigo-50">
+      <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b dark:border-gray-700 bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20">
         <div className="flex items-center gap-2">
-          <SparklesIcon className="h-5 w-5 text-purple-600" />
-          <h3 className="text-sm sm:text-base font-semibold text-gray-900">
+          <SparklesIcon className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+          <h3 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-gray-100">
             AI Suggestions
           </h3>
         </div>
         <Link
           to="/ai-assistant"
-          className="flex items-center gap-1 text-xs sm:text-sm text-purple-600 hover:text-purple-800 font-medium transition-colors"
+          className="flex items-center gap-1 text-xs sm:text-sm text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300 font-medium transition-colors"
         >
           View all
           <ArrowRightIcon className="h-3.5 w-3.5" />
@@ -48,6 +45,11 @@ export function DashboardRecommendations({ maxItems = 3 }: DashboardRecommendati
         {isLoading ? (
           <div className="flex items-center justify-center py-6">
             <Spinner size="md" />
+          </div>
+        ) : recommendations.length === 0 ? (
+          <div className="text-center py-4">
+            <SparklesIcon className="mx-auto h-8 w-8 text-gray-300 dark:text-gray-600 mb-2" />
+            <p className="text-sm text-gray-500 dark:text-gray-400">No suggestions right now. All caught up!</p>
           </div>
         ) : (
           <div className="space-y-3">

@@ -21,7 +21,6 @@ import type { StatusType } from '../../components/ui/Badge';
 const NotesList = lazy(() => import('../../components/shared/NotesList'));
 const AttachmentList = lazy(() => import('../../components/shared/AttachmentList'));
 const AuditTimeline = lazy(() => import('../../components/shared/AuditTimeline'));
-const CommentSection = lazy(() => import('../../components/shared/CommentSection'));
 const SharePanel = lazy(() => import('../../components/shared/SharePanel'));
 const ContractsList = lazy(() => import('../../components/shared/ContractsList'));
 const MetaTab = lazy(() => import('./components/MetaTab'));
@@ -37,7 +36,7 @@ import { getStatusColor, formatStatusLabel } from '../../utils/statusColors';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import type { CompanyUpdate, Contact, Opportunity, Quote, Proposal } from '../../types';
 
-type TabType = 'overview' | 'opportunities' | 'contracts' | 'quotes' | 'proposals' | 'activities' | 'notes' | 'attachments' | 'comments' | 'history' | 'sharing' | 'meta' | 'expenses';
+type TabType = 'overview' | 'opportunities' | 'contracts' | 'quotes' | 'proposals' | 'activities' | 'notes' | 'attachments' | 'history' | 'sharing' | 'meta' | 'expenses';
 
 function DetailItem({
   icon: Icon,
@@ -220,7 +219,6 @@ export function CompanyDetailPage() {
     { id: 'activities', name: 'Activities' },
     { id: 'notes', name: 'Notes' },
     { id: 'attachments', name: 'Attachments' },
-    { id: 'comments', name: 'Comments' },
     { id: 'meta', name: 'Meta/Social' },
     { id: 'expenses', name: 'Expenses' },
     { id: 'history', name: 'History' },
@@ -690,13 +688,6 @@ export function CompanyDetailPage() {
       {activeTab === 'attachments' && companyId && (
         <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
           <AttachmentList entityType="companies" entityId={companyId} />
-        </Suspense>
-      )}
-
-      {/* Comments Tab */}
-      {activeTab === 'comments' && companyId && (
-        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
-          <CommentSection entityType="companies" entityId={companyId} />
         </Suspense>
       )}
 
