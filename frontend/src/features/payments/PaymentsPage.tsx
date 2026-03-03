@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { StatusBadge, PaginationBar, Button } from '../../components/ui';
 import type { StatusType } from '../../components/ui/Badge';
 import { SkeletonTable } from '../../components/ui/Skeleton';
@@ -22,9 +22,10 @@ const statusOptions = [
 
 function PaymentsPage() {
   usePageTitle('Payments');
+  const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<Tab>('All Payments');
   const [statusFilter, setStatusFilter] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
   const [currentPage, setCurrentPage] = useState(1);
   const [subPage, setSubPage] = useState(1);
   const pageSize = 20;

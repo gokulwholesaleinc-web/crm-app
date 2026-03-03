@@ -240,11 +240,6 @@ export function CompaniesPage() {
     setSearchParams(newParams);
   };
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    updateFilter('search', searchQuery);
-  };
-
   const handleDeleteClick = (company: Company) => {
     setDeleteConfirm({ isOpen: true, company });
   };
@@ -310,14 +305,17 @@ export function CompaniesPage() {
 
       {/* Search and Filters */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-        <form onSubmit={handleSearch} className="flex-1 sm:max-w-md">
+        <div className="flex-1 sm:max-w-md">
           <Input
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              updateFilter('search', e.target.value);
+            }}
             placeholder="Search companies..."
             leftIcon={<MagnifyingGlassIcon className="h-5 w-5" />}
           />
-        </form>
+        </div>
         <div className="flex items-center justify-between gap-3 sm:gap-4">
           <Button
             variant="ghost"

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { PlusIcon, CubeIcon } from '@heroicons/react/24/outline';
 import { Button, Modal, ConfirmDialog, StatusBadge, PaginationBar } from '../../components/ui';
 import type { StatusType } from '../../components/ui/Badge';
@@ -25,7 +25,8 @@ const statusOptions = [
 function QuotesPage() {
   usePageTitle('Quotes');
   const navigate = useNavigate();
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchParams] = useSearchParams();
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
   const [statusFilter, setStatusFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
