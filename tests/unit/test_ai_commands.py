@@ -544,18 +544,23 @@ class TestResultSummarization:
     """Tests for the _summarize_result helper function."""
 
     def test_summarize_error(self):
+        """Should return error message when result contains an error key."""
         assert "Error" in _summarize_result({"error": "something went wrong"})
 
     def test_summarize_message(self):
+        """Should return the message string when result contains a message key."""
         assert _summarize_result({"message": "Lead created"}) == "Lead created"
 
     def test_summarize_count(self):
+        """Should include the count value when result contains a count key."""
         assert "5" in _summarize_result({"count": 5})
 
     def test_summarize_report(self):
+        """Should include the report type when result contains a report_type key."""
         assert "pipeline" in _summarize_result({"report_type": "pipeline"})
 
     def test_summarize_fallback(self):
+        """Should return 'Completed' when result has no recognized keys."""
         assert _summarize_result({"foo": "bar"}) == "Completed"
 
 

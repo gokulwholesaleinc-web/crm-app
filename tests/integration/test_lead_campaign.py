@@ -7,13 +7,10 @@ Tests cover:
 - Authentication requirement
 """
 
-import sys
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-
-sys.path.insert(0, "/Users/harshvarma/crm-app/backend")
 
 from src.auth.models import User
 from src.leads.models import Lead, LeadSource

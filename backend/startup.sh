@@ -13,4 +13,4 @@ if [ -f "migrate_production.py" ]; then
 fi
 
 echo "Starting FastAPI server..."
-exec uvicorn src.main:app --host 0.0.0.0 --port 5000
+exec uvicorn src.main:app --host 0.0.0.0 --port 8000

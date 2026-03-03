@@ -10,13 +10,15 @@ Validates:
 - Invoice download endpoint
 - Checkout session includes company name
 - _get_member_email correctly uses member_type/member_id fields
+
+Note: TestRenderCampaignWrapper, TestRenderPaymentReceiptEmail, and
+TestRenderBrandedEmail were removed from this file during consolidation.
+The more comprehensive versions of these classes live in
+test_branded_templates.py (which has more test methods and edge cases).
 """
 
-import sys
 import pytest
 from datetime import date, timedelta
-
-sys.path.insert(0, "/Users/harshvarma/crm-app/backend")
 
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,146 +44,6 @@ from src.whitelabel.models import Tenant, TenantSettings, TenantUser
 def _token(user: User) -> dict:
     token = create_access_token(data={"sub": str(user.id)})
     return {"Authorization": f"Bearer {token}"}
-
-
-# =========================================================================
-# Branded template rendering tests (unit)
-# =========================================================================
-
-
-class TestRenderCampaignWrapper:
-    """Test the campaign wrapper renders branded content correctly."""
-
-    def test_campaign_wrapper_contains_unsubscribe_link(self):
-        branding = TenantBrandingHelper.get_default_branding()
-        html = render_campaign_wrapper(
-            branding=branding,
-            campaign_body="<p>Campaign content here</p>",
-            unsubscribe_url="/unsubscribe?id=123",
-        )
-        assert "Unsubscribe" in html
-        assert "/unsubscribe?id=123" in html
-
-    def test_campaign_wrapper_includes_body_content(self):
-        branding = TenantBrandingHelper.get_default_branding()
-        html = render_campaign_wrapper(
-            branding=branding,
-            campaign_body="<p>Special offer just for you!</p>",
-            unsubscribe_url="/unsub",
-        )
-        assert "Special offer just for you!" in html
-
-    def test_campaign_wrapper_uses_branding_colors(self):
-        branding = {
-            "company_name": "Acme Corp",
-            "logo_url": "",
-            "primary_color": "#ff0000",
-            "secondary_color": "#00ff00",
-            "accent_color": "#0000ff",
-            "footer_text": "Acme Footer",
-            "privacy_policy_url": "",
-            "terms_of_service_url": "",
-            "email_from_name": "Acme Corp",
-            "email_from_address": "hello@acme.com",
-        }
-        html = render_campaign_wrapper(
-            branding=branding,
-            campaign_body="<p>Hello</p>",
-            unsubscribe_url="/unsub",
-        )
-        assert "Acme Corp" in html
-        assert "#ff0000" in html
-
-    def test_campaign_wrapper_includes_logo_when_provided(self):
-        branding = TenantBrandingHelper.get_default_branding()
-        branding["logo_url"] = "https://example.com/logo.png"
-        branding["company_name"] = "Logo Corp"
-        html = render_campaign_wrapper(
-            branding=branding,
-            campaign_body="<p>Test</p>",
-            unsubscribe_url="/unsub",
-        )
-        assert "https://example.com/logo.png" in html
-        assert "Logo Corp" in html
-
-
-class TestRenderPaymentReceiptEmail:
-    """Test the payment receipt email rendering."""
-
-    def test_receipt_email_contains_amount(self):
-        branding = TenantBrandingHelper.get_default_branding()
-        payment_data = {
-            "receipt_number": "42",
-            "client_name": "John Doe",
-            "amount": "500.00",
-            "currency": "USD",
-            "payment_date": "2026-01-15",
-            "payment_method": "Card",
-        }
-        subject, html = render_payment_receipt_email(branding, payment_data)
-        assert "500.00" in html
-        assert "USD" in html
-        assert "42" in subject
-        assert "John Doe" in html
-
-    def test_receipt_email_contains_payment_details(self):
-        branding = TenantBrandingHelper.get_default_branding()
-        payment_data = {
-            "receipt_number": "99",
-            "client_name": "Jane",
-            "amount": "1200.50",
-            "currency": "EUR",
-            "payment_date": "2026-02-10",
-            "payment_method": "Bank Transfer",
-        }
-        subject, html = render_payment_receipt_email(branding, payment_data)
-        assert "1200.50" in html
-        assert "EUR" in html
-        assert "Bank Transfer" in html
-        assert "99" in html
-
-    def test_receipt_email_uses_company_name(self):
-        branding = TenantBrandingHelper.get_default_branding()
-        branding["company_name"] = "Test Corp"
-        payment_data = {
-            "receipt_number": "1",
-            "client_name": "Client",
-            "amount": "100",
-            "currency": "USD",
-            "payment_date": "2026-01-01",
-            "payment_method": "Card",
-        }
-        subject, html = render_payment_receipt_email(branding, payment_data)
-        assert "Test Corp" in subject
-        assert "Test Corp" in html
-
-
-class TestRenderBrandedEmail:
-    """Test the generic branded email wrapper."""
-
-    def test_branded_email_wraps_content(self):
-        branding = TenantBrandingHelper.get_default_branding()
-        html = render_branded_email(
-            branding=branding,
-            subject="Test Subject",
-            headline="Test Headline",
-            body_html="<p>Custom body content</p>",
-        )
-        assert "Custom body content" in html
-        assert "Test Headline" in html
-
-    def test_branded_email_includes_cta_button(self):
-        branding = TenantBrandingHelper.get_default_branding()
-        html = render_branded_email(
-            branding=branding,
-            subject="Test",
-            headline="Headline",
-            body_html="<p>Body</p>",
-            cta_text="Click Me",
-            cta_url="https://example.com/action",
-        )
-        assert "Click Me" in html
-        assert "https://example.com/action" in html
 
 
 class TestRenderTemplate:

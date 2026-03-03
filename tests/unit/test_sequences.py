@@ -563,6 +563,7 @@ class TestSequencesUnauthorized:
     async def test_create_sequence_unauthorized(
         self, client: AsyncClient, db_session: AsyncSession
     ):
+        """Should return 401 when creating a sequence without authentication."""
         response = await client.post(
             "/api/sequences",
             json={"name": "Test", "steps": []},
@@ -573,5 +574,6 @@ class TestSequencesUnauthorized:
     async def test_list_sequences_unauthorized(
         self, client: AsyncClient, db_session: AsyncSession
     ):
+        """Should return 401 when listing sequences without authentication."""
         response = await client.get("/api/sequences")
         assert response.status_code == 401

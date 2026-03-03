@@ -4,17 +4,19 @@ Tests cover:
 - Core filtering engine (apply_filter_condition, parse_filter_group, apply_filters_to_query)
 - Report execution (count, sum, avg, min, max metrics with group_by)
 - Report CSV export
-- Report templates listing
-- Saved report CRUD via API
+- Report templates listing (service-layer)
+- Saved report CRUD (direct DB)
 - Saved filter CRUD via API
 - Advanced filters on entity list endpoints (leads, contacts, companies, opportunities, activities)
+
+Note: TestReportTemplates and TestSavedReportCRUD were renamed to
+TestReportTemplatesServiceLayer and TestSavedReportCRUDDirectDB to
+avoid class name collision with the API-level tests in
+tests/unit/test_reports.py (TestReportTemplatesAPI, TestSavedReportCRUDAPI).
 """
 
-import sys
 import json
 import pytest
-
-sys.path.insert(0, "/Users/harshvarma/crm-app/backend")
 
 from src.leads.models import Lead, LeadSource
 from src.companies.models import Company
@@ -37,62 +39,77 @@ class TestFilterConditions:
     """Test individual filter condition operators."""
 
     def test_eq_operator(self):
+        """Should produce a valid filter condition for the eq operator."""
         cond = apply_filter_condition(Lead, "status", "eq", "new")
         assert cond is not None
 
     def test_neq_operator(self):
+        """Should produce a valid filter condition for the neq operator."""
         cond = apply_filter_condition(Lead, "status", "neq", "lost")
         assert cond is not None
 
     def test_contains_operator(self):
+        """Should produce a valid filter condition for the contains operator."""
         cond = apply_filter_condition(Lead, "first_name", "contains", "john")
         assert cond is not None
 
     def test_not_contains_operator(self):
+        """Should produce a valid filter condition for the not_contains operator."""
         cond = apply_filter_condition(Lead, "first_name", "not_contains", "john")
         assert cond is not None
 
     def test_gt_operator(self):
+        """Should produce a valid filter condition for the gt operator."""
         cond = apply_filter_condition(Lead, "score", "gt", 50)
         assert cond is not None
 
     def test_lt_operator(self):
+        """Should produce a valid filter condition for the lt operator."""
         cond = apply_filter_condition(Lead, "score", "lt", 50)
         assert cond is not None
 
     def test_gte_operator(self):
+        """Should produce a valid filter condition for the gte operator."""
         cond = apply_filter_condition(Lead, "score", "gte", 50)
         assert cond is not None
 
     def test_lte_operator(self):
+        """Should produce a valid filter condition for the lte operator."""
         cond = apply_filter_condition(Lead, "score", "lte", 50)
         assert cond is not None
 
     def test_in_operator(self):
+        """Should produce a valid filter condition for the in operator."""
         cond = apply_filter_condition(Lead, "status", "in", ["new", "contacted"])
         assert cond is not None
 
     def test_not_in_operator(self):
+        """Should produce a valid filter condition for the not_in operator."""
         cond = apply_filter_condition(Lead, "status", "not_in", ["lost", "converted"])
         assert cond is not None
 
     def test_is_empty_operator(self):
+        """Should produce a valid filter condition for the is_empty operator."""
         cond = apply_filter_condition(Lead, "email", "is_empty", None)
         assert cond is not None
 
     def test_is_not_empty_operator(self):
+        """Should produce a valid filter condition for the is_not_empty operator."""
         cond = apply_filter_condition(Lead, "email", "is_not_empty", None)
         assert cond is not None
 
     def test_between_operator(self):
+        """Should produce a valid filter condition for the between operator."""
         cond = apply_filter_condition(Lead, "score", "between", [20, 80])
         assert cond is not None
 
     def test_unknown_field_raises_error(self):
+        """Should raise ValueError when filtering on an unknown field."""
         with pytest.raises(ValueError, match="Unknown field"):
             apply_filter_condition(Lead, "nonexistent_field", "eq", "test")
 
     def test_unknown_operator_raises_error(self):
+        """Should raise ValueError when using an unknown filter operator."""
         with pytest.raises(ValueError, match="Unknown operator"):
             apply_filter_condition(Lead, "status", "invalid_op", "test")
 
@@ -101,6 +118,7 @@ class TestFilterGroups:
     """Test AND/OR filter group parsing."""
 
     def test_and_group(self):
+        """Should parse an AND filter group with multiple conditions."""
         filter_def = {
             "operator": "and",
             "conditions": [
@@ -112,6 +130,7 @@ class TestFilterGroups:
         assert result is not None
 
     def test_or_group(self):
+        """Should parse an OR filter group with multiple conditions."""
         filter_def = {
             "operator": "or",
             "conditions": [
@@ -123,6 +142,7 @@ class TestFilterGroups:
         assert result is not None
 
     def test_nested_group(self):
+        """Should parse nested AND/OR filter groups."""
         filter_def = {
             "operator": "and",
             "conditions": [
@@ -140,11 +160,13 @@ class TestFilterGroups:
         assert result is not None
 
     def test_empty_conditions_returns_none(self):
+        """Should return None when filter group has empty conditions list."""
         filter_def = {"operator": "and", "conditions": []}
         result = parse_filter_group(Lead, filter_def)
         assert result is None
 
     def test_default_operator_is_and(self):
+        """Should default to AND operator when no operator is specified."""
         filter_def = {
             "conditions": [
                 {"field": "status", "op": "eq", "value": "new"},
@@ -154,6 +176,7 @@ class TestFilterGroups:
         assert result is not None
 
     def test_single_condition_shorthand(self):
+        """Should parse a single condition shorthand without wrapping in a group."""
         filter_def = {"field": "status", "op": "eq", "value": "new"}
         result = parse_filter_group(Lead, filter_def)
         assert result is not None
@@ -163,6 +186,7 @@ class TestApplyFiltersToQuery:
     """Test applying filters to a SQLAlchemy query."""
 
     def test_apply_valid_filter(self):
+        """Should apply a valid filter group to a SQLAlchemy query."""
         query = select(Lead)
         filters = {
             "operator": "and",
@@ -174,11 +198,13 @@ class TestApplyFiltersToQuery:
         assert result_query is not None
 
     def test_apply_none_filter_returns_same_query(self):
+        """Should return the original query unchanged when filter is None."""
         query = select(Lead)
         result_query = apply_filters_to_query(query, Lead, None)
         assert result_query is query
 
     def test_apply_empty_filter_returns_same_query(self):
+        """Should return the original query unchanged when filter is empty dict."""
         query = select(Lead)
         result_query = apply_filters_to_query(query, Lead, {})
         assert result_query is query
@@ -188,43 +214,51 @@ class TestApplyFiltersToQuery:
 # Report template tests
 # ============================================================
 
-class TestReportTemplates:
-    """Test pre-built report templates."""
+class TestReportTemplatesServiceLayer:
+    """Test pre-built report templates at the service layer (REPORT_TEMPLATES constant)."""
 
     def test_templates_exist(self):
+        """Should have exactly 10 pre-built report templates."""
         assert len(REPORT_TEMPLATES) == 10
 
     def test_pipeline_by_stage_template(self):
+        """Should define pipeline_by_stage template for opportunities grouped by stage."""
         tmpl = next(t for t in REPORT_TEMPLATES if t["id"] == "pipeline_by_stage")
         assert tmpl["entity_type"] == "opportunities"
         assert tmpl["group_by"] == "pipeline_stage_id"
         assert tmpl["metric"] == "count"
 
     def test_revenue_by_month_template(self):
+        """Should define revenue_by_month template summing opportunity amounts."""
         tmpl = next(t for t in REPORT_TEMPLATES if t["id"] == "revenue_by_month")
         assert tmpl["entity_type"] == "opportunities"
         assert tmpl["metric"] == "sum"
         assert tmpl["metric_field"] == "amount"
 
     def test_lead_conversion_template(self):
+        """Should define lead_conversion template for leads grouped by status."""
         tmpl = next(t for t in REPORT_TEMPLATES if t["id"] == "lead_conversion")
         assert tmpl["entity_type"] == "leads"
         assert tmpl["group_by"] == "status"
 
     def test_activity_by_rep_template(self):
+        """Should define activity_by_rep template for activities grouped by owner."""
         tmpl = next(t for t in REPORT_TEMPLATES if t["id"] == "activity_by_rep")
         assert tmpl["entity_type"] == "activities"
         assert tmpl["group_by"] == "owner_id"
 
     def test_campaign_performance_template(self):
+        """Should define campaign_performance template for campaigns entity."""
         tmpl = next(t for t in REPORT_TEMPLATES if t["id"] == "campaign_performance")
         assert tmpl["entity_type"] == "campaigns"
 
     def test_deals_won_lost_template(self):
+        """Should define deals_won_lost template for opportunities entity."""
         tmpl = next(t for t in REPORT_TEMPLATES if t["id"] == "deals_won_lost")
         assert tmpl["entity_type"] == "opportunities"
 
     def test_payment_summary_by_month_template(self):
+        """Should define payment_summary_by_month template summing payment amounts by month."""
         tmpl = next(t for t in REPORT_TEMPLATES if t["id"] == "payment_summary_by_month")
         assert tmpl["entity_type"] == "payments"
         assert tmpl["metric"] == "sum"
@@ -232,18 +266,21 @@ class TestReportTemplates:
         assert tmpl["date_group"] == "month"
 
     def test_contracts_by_status_template(self):
+        """Should define contracts_by_status template counting contracts grouped by status."""
         tmpl = next(t for t in REPORT_TEMPLATES if t["id"] == "contracts_by_status")
         assert tmpl["entity_type"] == "contracts"
         assert tmpl["metric"] == "count"
         assert tmpl["group_by"] == "status"
 
     def test_revenue_by_source_template(self):
+        """Should define revenue_by_source template summing opportunity amounts."""
         tmpl = next(t for t in REPORT_TEMPLATES if t["id"] == "revenue_by_source")
         assert tmpl["entity_type"] == "opportunities"
         assert tmpl["metric"] == "sum"
         assert tmpl["metric_field"] == "amount"
 
     def test_pipeline_value_by_owner_template(self):
+        """Should define pipeline_value_by_owner template for opportunities grouped by owner."""
         tmpl = next(t for t in REPORT_TEMPLATES if t["id"] == "pipeline_value_by_owner")
         assert tmpl["entity_type"] == "opportunities"
         assert tmpl["group_by"] == "owner_id"
@@ -483,8 +520,8 @@ class TestSavedReportSchedule:
 # ============================================================
 
 @pytest.mark.asyncio
-class TestSavedReportCRUD:
-    """Integration tests for saved report CRUD via direct DB."""
+class TestSavedReportCRUDDirectDB:
+    """Integration tests for saved report CRUD via direct DB operations."""
 
     async def test_create_saved_report(self, db_session, test_user):
         """Test creating a saved report directly in DB."""

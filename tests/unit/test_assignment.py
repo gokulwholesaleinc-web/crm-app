@@ -454,6 +454,7 @@ class TestAssignmentUnauthorized:
     async def test_create_rule_unauthorized(
         self, client: AsyncClient, db_session: AsyncSession
     ):
+        """Should return 401 when creating a rule without authentication."""
         response = await client.post(
             "/api/assignment-rules",
             json={"name": "Test", "assignment_type": "round_robin", "user_ids": [1]},
@@ -464,5 +465,6 @@ class TestAssignmentUnauthorized:
     async def test_list_rules_unauthorized(
         self, client: AsyncClient, db_session: AsyncSession
     ):
+        """Should return 401 when listing rules without authentication."""
         response = await client.get("/api/assignment-rules")
         assert response.status_code == 401

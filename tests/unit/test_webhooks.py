@@ -409,6 +409,7 @@ class TestWebhooksUnauthorized:
     async def test_create_webhook_unauthorized(
         self, client: AsyncClient, db_session: AsyncSession
     ):
+        """Should return 401 when creating a webhook without authentication."""
         response = await client.post(
             "/api/webhooks",
             json={"name": "Test", "url": "https://example.com", "events": ["lead.created"]},
@@ -419,5 +420,6 @@ class TestWebhooksUnauthorized:
     async def test_list_webhooks_unauthorized(
         self, client: AsyncClient, db_session: AsyncSession
     ):
+        """Should return 401 when listing webhooks without authentication."""
         response = await client.get("/api/webhooks")
         assert response.status_code == 401

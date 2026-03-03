@@ -238,6 +238,7 @@ class TestEmailTemplatesUnauthorized:
     async def test_create_template_unauthorized(
         self, client: AsyncClient, db_session: AsyncSession
     ):
+        """Should return 401 when creating a template without authentication."""
         response = await client.post(
             "/api/campaigns/templates",
             json={"name": "Test", "subject_template": "s", "body_template": "b"},
@@ -248,6 +249,7 @@ class TestEmailTemplatesUnauthorized:
     async def test_list_templates_unauthorized(
         self, client: AsyncClient, db_session: AsyncSession
     ):
+        """Should return 401 when listing templates without authentication."""
         response = await client.get("/api/campaigns/templates")
         assert response.status_code == 401
 

@@ -658,45 +658,54 @@ class TestPaymentsUnauthorized:
 
     @pytest.mark.asyncio
     async def test_list_payments_unauthorized(self, client: AsyncClient):
+        """Should return 401 when listing payments without authentication."""
         response = await client.get("/api/payments")
         assert response.status_code == 401
 
     @pytest.mark.asyncio
     async def test_get_payment_unauthorized(self, client: AsyncClient):
+        """Should return 401 when getting a payment without authentication."""
         response = await client.get("/api/payments/1")
         assert response.status_code == 401
 
     @pytest.mark.asyncio
     async def test_create_checkout_unauthorized(self, client: AsyncClient):
+        """Should return 401 when creating a checkout without authentication."""
         response = await client.post("/api/payments/create-checkout", json={})
         assert response.status_code == 401
 
     @pytest.mark.asyncio
     async def test_create_payment_intent_unauthorized(self, client: AsyncClient):
+        """Should return 401 when creating a payment intent without authentication."""
         response = await client.post("/api/payments/create-payment-intent", json={})
         assert response.status_code == 401
 
     @pytest.mark.asyncio
     async def test_list_customers_unauthorized(self, client: AsyncClient):
+        """Should return 401 when listing customers without authentication."""
         response = await client.get("/api/payments/customers")
         assert response.status_code == 401
 
     @pytest.mark.asyncio
     async def test_sync_customer_unauthorized(self, client: AsyncClient):
+        """Should return 401 when syncing a customer without authentication."""
         response = await client.post("/api/payments/customers/sync", json={})
         assert response.status_code == 401
 
     @pytest.mark.asyncio
     async def test_list_products_unauthorized(self, client: AsyncClient):
+        """Should return 401 when listing products without authentication."""
         response = await client.get("/api/payments/products")
         assert response.status_code == 401
 
     @pytest.mark.asyncio
     async def test_create_product_unauthorized(self, client: AsyncClient):
+        """Should return 401 when creating a product without authentication."""
         response = await client.post("/api/payments/products", json={})
         assert response.status_code == 401
 
     @pytest.mark.asyncio
     async def test_list_subscriptions_unauthorized(self, client: AsyncClient):
+        """Should return 401 when listing subscriptions without authentication."""
         response = await client.get("/api/payments/subscriptions")
         assert response.status_code == 401

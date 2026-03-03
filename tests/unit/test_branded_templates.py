@@ -79,10 +79,12 @@ SAMPLE_PAYMENT = {
 # ===================================================================
 
 class TestTenantBrandingHelper:
+    """Tests for retrieving tenant-specific branding configuration."""
 
     async def test_get_branding_for_user_returns_tenant_data(
         self, db_session: AsyncSession, test_user: User, test_tenant: Tenant, test_tenant_user: TenantUser,
     ):
+        """Should return tenant-specific branding when user belongs to a tenant."""
         branding = await TenantBrandingHelper.get_branding_for_user(db_session, test_user.id)
 
         assert branding["company_name"] == "Test Tenant Inc"
@@ -95,6 +97,7 @@ class TestTenantBrandingHelper:
     async def test_get_branding_falls_back_to_defaults_when_no_tenant(
         self, db_session: AsyncSession, test_user: User,
     ):
+        """Should fall back to default branding when user has no tenant."""
         branding = await TenantBrandingHelper.get_branding_for_user(db_session, test_user.id)
 
         defaults = TenantBrandingHelper.get_default_branding()
@@ -103,6 +106,7 @@ class TestTenantBrandingHelper:
         assert branding["primary_color"] == "#6366f1"
 
     async def test_get_default_branding_has_required_keys(self):
+        """Should include all required branding keys in the default branding dict."""
         branding = TenantBrandingHelper.get_default_branding()
         required_keys = {
             "company_name", "logo_url", "primary_color", "secondary_color",
@@ -117,8 +121,10 @@ class TestTenantBrandingHelper:
 # ===================================================================
 
 class TestRenderBrandedEmail:
+    """Tests for the base branded email template rendering."""
 
     def test_renders_with_all_branding_fields(self):
+        """Should include all branding elements in the rendered HTML."""
         html = render_branded_email(
             branding=SAMPLE_BRANDING,
             subject="Test Subject",
@@ -138,6 +144,7 @@ class TestRenderBrandedEmail:
         assert "logo.png" in html
 
     def test_renders_cta_button(self):
+        """Should render a call-to-action button when cta_text and cta_url are provided."""
         html = render_branded_email(
             branding=SAMPLE_BRANDING,
             subject="Test",
@@ -151,6 +158,7 @@ class TestRenderBrandedEmail:
         assert "https://app.acme.com/dashboard" in html
 
     def test_renders_without_cta(self):
+        """Should render the email without a CTA button when none is provided."""
         html = render_branded_email(
             branding=SAMPLE_BRANDING,
             subject="Test",
@@ -163,6 +171,7 @@ class TestRenderBrandedEmail:
         assert "View Dashboard" not in html
 
     def test_renders_without_logo(self):
+        """Should render the email without an img tag when logo_url is empty."""
         branding = {**SAMPLE_BRANDING, "logo_url": ""}
         html = render_branded_email(
             branding=branding,
@@ -175,6 +184,7 @@ class TestRenderBrandedEmail:
         assert '<img' not in html.split('</td></tr></table>')[0]  # no img in header area
 
     def test_renders_without_footer_links(self):
+        """Should omit privacy and terms links when footer URLs are empty."""
         branding = {
             **SAMPLE_BRANDING,
             "footer_text": "",
@@ -192,6 +202,7 @@ class TestRenderBrandedEmail:
         assert "Terms of Service" not in html
 
     def test_html_structure_is_valid(self):
+        """Should produce valid HTML with DOCTYPE and dark mode support."""
         html = render_branded_email(
             branding=SAMPLE_BRANDING,
             subject="Structure Test",
@@ -204,6 +215,7 @@ class TestRenderBrandedEmail:
         assert "prefers-color-scheme:dark" in html
 
     def test_escapes_special_characters(self):
+        """Should HTML-escape special characters in branding and headline text."""
         branding = {**SAMPLE_BRANDING, "company_name": "O'Brien & Sons <LLC>"}
         html = render_branded_email(
             branding=branding,
@@ -221,8 +233,10 @@ class TestRenderBrandedEmail:
 # ===================================================================
 
 class TestRenderQuoteEmail:
+    """Tests for quote-specific branded email rendering."""
 
     def test_renders_quote_with_items(self):
+        """Should render quote details including line items, total, and validity date."""
         subject, html = render_quote_email(SAMPLE_BRANDING, SAMPLE_QUOTE)
 
         assert "Q-2026-001" in subject
@@ -235,6 +249,7 @@ class TestRenderQuoteEmail:
         assert "2026-03-15" in html
 
     def test_quote_has_review_accept_button_with_view_url(self):
+        """Should include a review and accept button when view_url is provided."""
         subject, html = render_quote_email(SAMPLE_BRANDING, SAMPLE_QUOTE)
 
         assert "Review &amp; Accept Quote" in html
@@ -243,6 +258,7 @@ class TestRenderQuoteEmail:
         assert "accept or decline" in html
 
     def test_quote_without_view_url(self):
+        """Should render fallback copy without a review button when view_url is absent."""
         data = {**SAMPLE_QUOTE}
         del data["view_url"]
         subject, html = render_quote_email(SAMPLE_BRANDING, data)
@@ -257,8 +273,10 @@ class TestRenderQuoteEmail:
 # ===================================================================
 
 class TestRenderProposalEmail:
+    """Tests for proposal-specific branded email rendering."""
 
     def test_renders_proposal_correctly(self):
+        """Should render proposal title, client name, summary, and total in the email."""
         subject, html = render_proposal_email(SAMPLE_BRANDING, SAMPLE_PROPOSAL)
 
         assert "CRM Implementation Plan" in subject
@@ -268,6 +286,7 @@ class TestRenderProposalEmail:
         assert "85,000.00" in html
 
     def test_proposal_has_view_button(self):
+        """Should include a View Proposal button linking to the proposal URL."""
         subject, html = render_proposal_email(SAMPLE_BRANDING, SAMPLE_PROPOSAL)
 
         assert "View Proposal" in html
@@ -279,8 +298,10 @@ class TestRenderProposalEmail:
 # ===================================================================
 
 class TestRenderPaymentReceiptEmail:
+    """Tests for payment receipt branded email rendering."""
 
     def test_renders_receipt_correctly(self):
+        """Should render receipt number, client, amount, date, and payment method."""
         subject, html = render_payment_receipt_email(SAMPLE_BRANDING, SAMPLE_PAYMENT)
 
         assert "REC-2026-042" in subject
@@ -291,6 +312,7 @@ class TestRenderPaymentReceiptEmail:
         assert "Visa ending 4242" in html
 
     def test_receipt_has_line_items(self):
+        """Should include individual line items and their amounts in the receipt."""
         subject, html = render_payment_receipt_email(SAMPLE_BRANDING, SAMPLE_PAYMENT)
 
         assert "Annual License" in html
@@ -299,6 +321,7 @@ class TestRenderPaymentReceiptEmail:
         assert "2,500.00" in html
 
     def test_receipt_without_items(self):
+        """Should render the receipt summary even when the items list is empty."""
         data = {**SAMPLE_PAYMENT, "items": []}
         subject, html = render_payment_receipt_email(SAMPLE_BRANDING, data)
 
@@ -311,8 +334,10 @@ class TestRenderPaymentReceiptEmail:
 # ===================================================================
 
 class TestRenderCampaignWrapper:
+    """Tests for wrapping campaign content in branded email layout."""
 
     def test_wraps_campaign_body(self):
+        """Should wrap campaign HTML body with branded header and footer."""
         html = render_campaign_wrapper(
             branding=SAMPLE_BRANDING,
             campaign_body="<h2>Spring Sale!</h2><p>50% off everything.</p>",
@@ -324,6 +349,7 @@ class TestRenderCampaignWrapper:
         assert "Acme Corp" in html
 
     def test_includes_unsubscribe_link(self):
+        """Should include the unsubscribe link in the campaign email footer."""
         html = render_campaign_wrapper(
             branding=SAMPLE_BRANDING,
             campaign_body="<p>Campaign content</p>",
@@ -339,11 +365,14 @@ class TestRenderCampaignWrapper:
 # ===================================================================
 
 class TestBrandedPDFGenerator:
+    """Tests for branded PDF generation of quotes, proposals, and invoices."""
 
     def setup_method(self):
+        """Initialize a BrandedPDFGenerator instance for each test."""
         self.gen = BrandedPDFGenerator()
 
     def test_generate_quote_pdf_returns_bytes(self):
+        """Should return bytes containing branded HTML with quote details and line items."""
         quote_data = {
             "quote_number": "Q-001",
             "date": "2026-02-10",
@@ -375,6 +404,7 @@ class TestBrandedPDFGenerator:
         assert "Acme Corp" in html
 
     def test_generate_proposal_pdf_returns_bytes(self):
+        """Should return bytes containing branded HTML with proposal sections and table of contents."""
         proposal_data = {
             "proposal_title": "Digital Transformation",
             "client_name": "Bob Corp",
@@ -401,6 +431,7 @@ class TestBrandedPDFGenerator:
         assert "Acme Corp" in html
 
     def test_generate_invoice_pdf_returns_bytes(self):
+        """Should return bytes containing branded HTML with invoice details and paid status."""
         invoice_data = {
             "invoice_number": "INV-2026-100",
             "date": "2026-02-10",
@@ -432,6 +463,7 @@ class TestBrandedPDFGenerator:
         assert "Thank you for your business" in html
 
     def test_invoice_unpaid_status(self):
+        """Should display UNPAID status with warning color for unpaid invoices."""
         invoice_data = {
             "invoice_number": "INV-002",
             "date": "2026-02-10",
@@ -456,6 +488,7 @@ class TestBrandedPDFGenerator:
 # ===================================================================
 
 class TestSendBrandedEmail:
+    """Tests for EmailService.send_branded_email integration with tenant branding."""
 
     async def test_send_branded_email_queues_with_branding(
         self,
@@ -464,6 +497,7 @@ class TestSendBrandedEmail:
         test_tenant: Tenant,
         test_tenant_user: TenantUser,
     ):
+        """Should queue a branded email using the tenant's branding settings."""
         service = EmailService(db_session)
         email = await service.send_branded_email(
             to_email="recipient@example.com",
@@ -485,6 +519,7 @@ class TestSendBrandedEmail:
         db_session: AsyncSession,
         test_user: User,
     ):
+        """Should use default CRM branding when user has no tenant association."""
         service = EmailService(db_session)
         email = await service.send_branded_email(
             to_email="recipient@example.com",
@@ -504,6 +539,7 @@ class TestSendBrandedEmail:
         test_tenant: Tenant,
         test_tenant_user: TenantUser,
     ):
+        """Should include CTA button text and URL in the branded email body."""
         service = EmailService(db_session)
         email = await service.send_branded_email(
             to_email="recipient@example.com",

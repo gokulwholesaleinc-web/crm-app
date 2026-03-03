@@ -9,10 +9,7 @@ Tests cover:
 - Tests do NOT mock anything.
 """
 
-import sys
 import pytest
-
-sys.path.insert(0, "/Users/harshvarma/crm-app/backend")
 
 
 class TestCreateExpense:

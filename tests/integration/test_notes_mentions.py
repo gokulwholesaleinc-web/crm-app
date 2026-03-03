@@ -7,14 +7,10 @@ Validates:
 - Unknown usernames are ignored (no errors)
 """
 
-import sys
-
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-sys.path.insert(0, "/Users/harshvarma/crm-app/backend")
 
 from src.auth.models import User
 from src.auth.security import get_password_hash, create_access_token

@@ -173,5 +173,6 @@ class TestSalesFunnelUnauthorized:
     async def test_get_funnel_unauthorized(
         self, client: AsyncClient, db_session: AsyncSession
     ):
+        """Should return 401 when accessing funnel endpoint without authentication."""
         response = await client.get("/api/dashboard/funnel")
         assert response.status_code == 401

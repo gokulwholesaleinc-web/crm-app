@@ -39,6 +39,7 @@ class TestLeadAuditWiring:
         test_user: User,
         test_lead_source: LeadSource,
     ):
+        """Should create an audit log entry when a lead is created."""
         response = await client.post(
             "/api/leads",
             headers=auth_headers,
@@ -64,6 +65,7 @@ class TestLeadAuditWiring:
         auth_headers: dict,
         test_lead: Lead,
     ):
+        """Should create an audit log entry with field changes when a lead is updated."""
         response = await client.patch(
             f"/api/leads/{test_lead.id}",
             headers=auth_headers,
@@ -87,6 +89,7 @@ class TestLeadAuditWiring:
         auth_headers: dict,
         test_lead: Lead,
     ):
+        """Should create an audit log entry when a lead is deleted."""
         lead_id = test_lead.id
         response = await client.delete(
             f"/api/leads/{lead_id}",
@@ -110,6 +113,7 @@ class TestContactAuditWiring:
         test_user: User,
         test_company: Company,
     ):
+        """Should create an audit log entry when a contact is created."""
         response = await client.post(
             "/api/contacts",
             headers=auth_headers,
@@ -135,6 +139,7 @@ class TestContactAuditWiring:
         auth_headers: dict,
         test_contact: Contact,
     ):
+        """Should create an audit log entry with field changes when a contact is updated."""
         response = await client.patch(
             f"/api/contacts/{test_contact.id}",
             headers=auth_headers,
@@ -157,6 +162,7 @@ class TestContactAuditWiring:
         auth_headers: dict,
         test_contact: Contact,
     ):
+        """Should create an audit log entry when a contact is deleted."""
         contact_id = test_contact.id
         response = await client.delete(
             f"/api/contacts/{contact_id}",
@@ -179,6 +185,7 @@ class TestCompanyAuditWiring:
         auth_headers: dict,
         test_user: User,
     ):
+        """Should create an audit log entry when a company is created."""
         response = await client.post(
             "/api/companies",
             headers=auth_headers,
@@ -202,6 +209,7 @@ class TestCompanyAuditWiring:
         auth_headers: dict,
         test_company: Company,
     ):
+        """Should create an audit log entry with field changes when a company is updated."""
         response = await client.patch(
             f"/api/companies/{test_company.id}",
             headers=auth_headers,
@@ -224,6 +232,7 @@ class TestCompanyAuditWiring:
         auth_headers: dict,
         test_company: Company,
     ):
+        """Should create an audit log entry when a company is deleted."""
         company_id = test_company.id
         response = await client.delete(
             f"/api/companies/{company_id}",
@@ -247,6 +256,7 @@ class TestOpportunityAuditWiring:
         test_user: User,
         test_pipeline_stage: PipelineStage,
     ):
+        """Should create an audit log entry when an opportunity is created."""
         response = await client.post(
             "/api/opportunities",
             headers=auth_headers,
@@ -270,6 +280,7 @@ class TestOpportunityAuditWiring:
         auth_headers: dict,
         test_opportunity: Opportunity,
     ):
+        """Should create an audit log entry with field changes when an opportunity is updated."""
         response = await client.patch(
             f"/api/opportunities/{test_opportunity.id}",
             headers=auth_headers,
@@ -292,6 +303,7 @@ class TestOpportunityAuditWiring:
         auth_headers: dict,
         test_opportunity: Opportunity,
     ):
+        """Should create an audit log entry when an opportunity is deleted."""
         opp_id = test_opportunity.id
         response = await client.delete(
             f"/api/opportunities/{opp_id}",
@@ -315,6 +327,7 @@ class TestActivityAuditWiring:
         test_user: User,
         test_contact: Contact,
     ):
+        """Should create an audit log entry when an activity is created."""
         response = await client.post(
             "/api/activities",
             headers=auth_headers,
@@ -340,6 +353,7 @@ class TestActivityAuditWiring:
         auth_headers: dict,
         test_activity: Activity,
     ):
+        """Should create an audit log entry with field changes when an activity is updated."""
         response = await client.patch(
             f"/api/activities/{test_activity.id}",
             headers=auth_headers,
@@ -362,6 +376,7 @@ class TestActivityAuditWiring:
         auth_headers: dict,
         test_activity: Activity,
     ):
+        """Should create an audit log entry when an activity is deleted."""
         activity_id = test_activity.id
         response = await client.delete(
             f"/api/activities/{activity_id}",
@@ -385,6 +400,7 @@ class TestQuoteAuditWiring:
         test_user: User,
         test_contact: Contact,
     ):
+        """Should create an audit log entry when a quote is created."""
         response = await client.post(
             "/api/quotes",
             headers=auth_headers,
@@ -408,6 +424,7 @@ class TestQuoteAuditWiring:
         test_user: User,
         test_contact: Contact,
     ):
+        """Should create an audit log entry with field changes when a quote is updated."""
         # Create a quote via API so current user owns it
         create_resp = await client.post(
             "/api/quotes",
@@ -444,6 +461,7 @@ class TestQuoteAuditWiring:
         test_user: User,
         test_contact: Contact,
     ):
+        """Should create an audit log entry when a quote is deleted."""
         # Create a quote via API so current user owns it
         create_resp = await client.post(
             "/api/quotes",
@@ -479,6 +497,7 @@ class TestProposalAuditWiring:
         test_user: User,
         test_contact: Contact,
     ):
+        """Should create an audit log entry when a proposal is created."""
         response = await client.post(
             "/api/proposals",
             headers=auth_headers,
@@ -502,6 +521,7 @@ class TestProposalAuditWiring:
         test_user: User,
         test_contact: Contact,
     ):
+        """Should create an audit log entry with field changes when a proposal is updated."""
         # Create a proposal via API so current user owns it
         create_resp = await client.post(
             "/api/proposals",
@@ -538,6 +558,7 @@ class TestProposalAuditWiring:
         test_user: User,
         test_contact: Contact,
     ):
+        """Should create an audit log entry when a proposal is deleted."""
         # Create a proposal via API so current user owns it
         create_resp = await client.post(
             "/api/proposals",

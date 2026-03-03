@@ -1,9 +1,16 @@
 """
-Unit tests for AI endpoint routes not covered by other AI test files.
+Unit tests for AI endpoint routes.
 
 Tests for insights, daily summary, recommendations, next-best-action,
 and semantic search endpoints. OpenAI-dependent tests are wrapped
 in try/except so they do not fail when the API key is invalid.
+
+Note: This is the primary file for AI endpoint tests. Duplicate classes
+(TestLeadInsights, TestOpportunityInsights, TestDailySummary,
+TestRecommendations, TestNextBestAction, TestSemanticSearch) were
+removed from test_ai.py during consolidation. test_ai.py retains
+TestChatEndpoint, OpenAI-integration tests, singular-route next-action
+tests, and activity-based recommendation tests (all unique).
 """
 
 import pytest

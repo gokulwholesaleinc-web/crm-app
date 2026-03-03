@@ -13,6 +13,7 @@ class TestListNotifications:
 
     @pytest.mark.asyncio
     async def test_list_empty(self, client: AsyncClient, auth_headers: dict):
+        """Should return empty list with zero total when no notifications exist."""
         response = await client.get("/api/notifications", headers=auth_headers)
         assert response.status_code == 200
         data = response.json()
@@ -21,6 +22,7 @@ class TestListNotifications:
 
     @pytest.mark.asyncio
     async def test_list_requires_auth(self, client: AsyncClient):
+        """Should return 401 when listing notifications without authentication."""
         response = await client.get("/api/notifications")
         assert response.status_code == 401
 
@@ -32,6 +34,7 @@ class TestListNotifications:
         db_session: AsyncSession,
         test_user,
     ):
+        """Should return the user's own notifications in the list."""
         notif = Notification(
             user_id=test_user.id,
             type="test",
@@ -54,6 +57,7 @@ class TestListNotifications:
         auth_headers: dict,
         db_session: AsyncSession,
     ):
+        """Should not show notifications belonging to other users."""
         # Create notification for a different user (id=9999)
         notif = Notification(
             user_id=9999,
@@ -76,6 +80,7 @@ class TestUnreadCount:
     async def test_unread_count_zero(
         self, client: AsyncClient, auth_headers: dict
     ):
+        """Should return zero unread count when no notifications exist."""
         response = await client.get(
             "/api/notifications/unread-count", headers=auth_headers
         )
@@ -90,6 +95,7 @@ class TestUnreadCount:
         db_session: AsyncSession,
         test_user,
     ):
+        """Should return correct unread count when unread notifications exist."""
         for i in range(3):
             notif = Notification(
                 user_id=test_user.id,
@@ -108,6 +114,7 @@ class TestUnreadCount:
 
     @pytest.mark.asyncio
     async def test_unread_count_requires_auth(self, client: AsyncClient):
+        """Should return 401 when checking unread count without authentication."""
         response = await client.get("/api/notifications/unread-count")
         assert response.status_code == 401
 
@@ -123,6 +130,7 @@ class TestMarkRead:
         db_session: AsyncSession,
         test_user,
     ):
+        """Should mark a notification as read and return is_read true."""
         notif = Notification(
             user_id=test_user.id,
             type="test",
@@ -146,6 +154,7 @@ class TestMarkRead:
         db_session: AsyncSession,
         test_user,
     ):
+        """Should decrement unread count to zero after marking the only notification as read."""
         notif = Notification(
             user_id=test_user.id,
             type="test",
@@ -170,6 +179,7 @@ class TestMarkRead:
     async def test_mark_read_not_found(
         self, client: AsyncClient, auth_headers: dict
     ):
+        """Should return 404 when marking a non-existent notification as read."""
         response = await client.put(
             "/api/notifications/99999/read", headers=auth_headers
         )
@@ -177,6 +187,7 @@ class TestMarkRead:
 
     @pytest.mark.asyncio
     async def test_mark_read_requires_auth(self, client: AsyncClient):
+        """Should return 401 when marking as read without authentication."""
         response = await client.put("/api/notifications/1/read")
         assert response.status_code == 401
 
@@ -192,6 +203,7 @@ class TestMarkAllRead:
         db_session: AsyncSession,
         test_user,
     ):
+        """Should mark all unread notifications as read and return updated count."""
         for i in range(3):
             notif = Notification(
                 user_id=test_user.id,
@@ -218,6 +230,7 @@ class TestMarkAllRead:
     async def test_mark_all_read_when_none(
         self, client: AsyncClient, auth_headers: dict
     ):
+        """Should return updated count of zero when no unread notifications exist."""
         response = await client.put(
             "/api/notifications/read-all", headers=auth_headers
         )
@@ -226,6 +239,7 @@ class TestMarkAllRead:
 
     @pytest.mark.asyncio
     async def test_mark_all_read_requires_auth(self, client: AsyncClient):
+        """Should return 401 when marking all as read without authentication."""
         response = await client.put("/api/notifications/read-all")
         assert response.status_code == 401
 
@@ -242,6 +256,7 @@ class TestNotificationWithEntity:
         test_user,
         test_contact,
     ):
+        """Should include entity_type and entity_id when notification is linked to an entity."""
         notif = Notification(
             user_id=test_user.id,
             type="assignment",

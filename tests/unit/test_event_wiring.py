@@ -75,6 +75,7 @@ class TestLeadEventWiring:
     async def test_lead_created_event(
         self, client: AsyncClient, auth_headers: dict, test_lead_source: LeadSource, event_collector: _EventCollector
     ):
+        """Should emit a lead.created event with correct payload when a lead is created."""
         response = await client.post(
             "/api/leads",
             headers=auth_headers,
@@ -100,6 +101,7 @@ class TestLeadEventWiring:
     async def test_lead_updated_event(
         self, client: AsyncClient, auth_headers: dict, test_lead: Lead, event_collector: _EventCollector
     ):
+        """Should emit a lead.updated event with correct payload when a lead is updated."""
         response = await client.patch(
             f"/api/leads/{test_lead.id}",
             headers=auth_headers,
@@ -121,6 +123,7 @@ class TestContactEventWiring:
     async def test_contact_created_event(
         self, client: AsyncClient, auth_headers: dict, test_company: Company, event_collector: _EventCollector
     ):
+        """Should emit a contact.created event with correct payload when a contact is created."""
         response = await client.post(
             "/api/contacts",
             headers=auth_headers,
@@ -144,6 +147,7 @@ class TestContactEventWiring:
     async def test_contact_updated_event(
         self, client: AsyncClient, auth_headers: dict, test_contact: Contact, event_collector: _EventCollector
     ):
+        """Should emit a contact.updated event with correct payload when a contact is updated."""
         response = await client.patch(
             f"/api/contacts/{test_contact.id}",
             headers=auth_headers,
@@ -163,6 +167,7 @@ class TestCompanyEventWiring:
     async def test_company_created_event(
         self, client: AsyncClient, auth_headers: dict, event_collector: _EventCollector
     ):
+        """Should emit a company.created event with correct payload when a company is created."""
         response = await client.post(
             "/api/companies",
             headers=auth_headers,
@@ -184,6 +189,7 @@ class TestCompanyEventWiring:
     async def test_company_updated_event(
         self, client: AsyncClient, auth_headers: dict, test_company: Company, event_collector: _EventCollector
     ):
+        """Should emit a company.updated event with correct payload when a company is updated."""
         response = await client.patch(
             f"/api/companies/{test_company.id}",
             headers=auth_headers,
@@ -209,6 +215,7 @@ class TestOpportunityEventWiring:
         test_company: Company,
         event_collector: _EventCollector,
     ):
+        """Should emit an opportunity.created event with correct payload when an opportunity is created."""
         response = await client.post(
             "/api/opportunities",
             headers=auth_headers,
@@ -236,6 +243,7 @@ class TestOpportunityEventWiring:
         test_opportunity: Opportunity,
         event_collector: _EventCollector,
     ):
+        """Should emit an opportunity.updated event with correct payload when an opportunity is updated."""
         response = await client.patch(
             f"/api/opportunities/{test_opportunity.id}",
             headers=auth_headers,
@@ -257,6 +265,7 @@ class TestOpportunityEventWiring:
         test_won_stage: PipelineStage,
         event_collector: _EventCollector,
     ):
+        """Should emit both opportunity.stage_changed and opportunity.updated events when stage changes."""
         response = await client.patch(
             f"/api/opportunities/{test_opportunity.id}",
             headers=auth_headers,
@@ -281,6 +290,7 @@ class TestActivityEventWiring:
     async def test_activity_created_event(
         self, client: AsyncClient, auth_headers: dict, test_contact: Contact, event_collector: _EventCollector
     ):
+        """Should emit an activity.created event with correct payload when an activity is created."""
         response = await client.post(
             "/api/activities",
             headers=auth_headers,
@@ -316,6 +326,7 @@ class TestQuoteEventWiring:
         test_company: Company,
         event_collector: _EventCollector,
     ):
+        """Should emit a quote.accepted event with correct payload when a quote is accepted."""
         # Create a quote
         quote = Quote(
             quote_number="QE-001",
@@ -359,6 +370,7 @@ class TestProposalEventWiring:
         test_company: Company,
         event_collector: _EventCollector,
     ):
+        """Should emit a proposal.accepted event with correct payload when a proposal is accepted."""
         # Create a proposal in sent status
         proposal = Proposal(
             proposal_number="PE-001",

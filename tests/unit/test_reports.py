@@ -2,7 +2,12 @@
 Unit tests for custom reports endpoints.
 
 Tests for report execution (count, sum), group_by, saved report CRUD,
-and pre-built report templates.
+and pre-built report templates -- all via HTTP API endpoints.
+
+Note: TestReportTemplates and TestSavedReportCRUD were renamed to
+TestReportTemplatesAPI and TestSavedReportCRUDAPI to avoid class name
+collision with the service-layer / direct-DB tests in
+tests/integration/test_reports_and_filtering.py.
 """
 
 import pytest
@@ -141,8 +146,8 @@ class TestReportExecute:
         assert response.status_code == 401
 
 
-class TestReportTemplates:
-    """Tests for pre-built report templates."""
+class TestReportTemplatesAPI:
+    """Tests for pre-built report templates via HTTP API."""
 
     @pytest.mark.asyncio
     async def test_list_report_templates(
@@ -187,8 +192,8 @@ class TestReportTemplates:
         assert "pipeline_by_stage" in ids
 
 
-class TestSavedReportCRUD:
-    """Tests for saved report CRUD endpoints."""
+class TestSavedReportCRUDAPI:
+    """Tests for saved report CRUD via HTTP API endpoints."""
 
     @pytest.mark.asyncio
     async def test_create_saved_report(

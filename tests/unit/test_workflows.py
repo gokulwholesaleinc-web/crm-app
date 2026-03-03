@@ -1150,6 +1150,7 @@ class TestWorkflowsUnauthorized:
     async def test_create_rule_unauthorized(
         self, client: AsyncClient, db_session: AsyncSession
     ):
+        """Should return 401 when creating a workflow rule without authentication."""
         response = await client.post(
             "/api/workflows",
             json={"name": "Test", "trigger_entity": "lead", "trigger_event": "created"},
@@ -1160,6 +1161,7 @@ class TestWorkflowsUnauthorized:
     async def test_list_rules_unauthorized(
         self, client: AsyncClient, db_session: AsyncSession
     ):
+        """Should return 401 when listing workflow rules without authentication."""
         response = await client.get("/api/workflows")
         assert response.status_code == 401
 
@@ -1170,5 +1172,6 @@ class TestWorkflowsUnauthorized:
         db_session: AsyncSession,
         test_workflow_rule: WorkflowRule,
     ):
+        """Should return 401 when getting a workflow rule without authentication."""
         response = await client.get(f"/api/workflows/{test_workflow_rule.id}")
         assert response.status_code == 401

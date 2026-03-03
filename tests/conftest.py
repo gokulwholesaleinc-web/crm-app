@@ -5,6 +5,7 @@ Provides async test database setup, test client, and user fixtures.
 """
 
 import asyncio
+import os
 import sys
 import time
 from typing import AsyncGenerator, Generator
@@ -30,7 +31,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.pool import StaticPool
 
 # Add backend src to path
-sys.path.insert(0, "/Users/harshvarma/crm-app/backend")
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
 from src.database import Base, get_db
 from src.auth.security import get_password_hash, create_access_token

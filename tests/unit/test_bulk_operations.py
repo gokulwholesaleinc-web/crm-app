@@ -2,6 +2,12 @@
 Unit tests for bulk operations endpoints.
 
 Tests for mass update and mass assign operations on CRM entities.
+
+Note: Duplicate TestBulkAssign and TestBulkUpdate classes were removed
+from test_import_export.py during consolidation. This file has the more
+comprehensive versions (batch operations, DB verification). Unique tests
+from test_import_export.py (contacts assign, updates_applied assertion)
+were merged here.
 """
 
 import pytest
@@ -177,6 +183,31 @@ class TestBulkUpdate:
 
         assert response.status_code == 400
 
+    @pytest.mark.asyncio
+    async def test_bulk_update_returns_updates_applied(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_lead: Lead,
+    ):
+        """Test bulk update response includes updates_applied field."""
+        response = await client.post(
+            "/api/import-export/bulk/update",
+            headers=auth_headers,
+            json={
+                "entity_type": "leads",
+                "entity_ids": [test_lead.id],
+                "updates": {"status": "contacted"},
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["updated"] == 1
+        assert data["updates_applied"]["status"] == "contacted"
+
 
 class TestBulkAssign:
     """Tests for bulk assign endpoint."""
@@ -214,6 +245,33 @@ class TestBulkAssign:
             result = await db_session.execute(select(Lead).where(Lead.id == lead_id))
             lead = result.scalar_one()
             assert lead.owner_id == second_user.id
+
+    @pytest.mark.asyncio
+    async def test_bulk_assign_contacts(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_contact: Contact,
+    ):
+        """Test bulk assigning owner to contacts."""
+        response = await client.post(
+            "/api/import-export/bulk/assign",
+            headers=auth_headers,
+            json={
+                "entity_type": "contacts",
+                "entity_ids": [test_contact.id],
+                "owner_id": test_user.id,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["updated"] == 1
+        assert data["entity_type"] == "contacts"
+        assert data["owner_id"] == test_user.id
 
     @pytest.mark.asyncio
     async def test_bulk_assign_invalid_entity_type(
@@ -263,6 +321,7 @@ class TestBulkOperationsUnauthorized:
     async def test_bulk_update_unauthorized(
         self, client: AsyncClient, db_session: AsyncSession
     ):
+        """Should return 401 when performing bulk update without authentication."""
         response = await client.post(
             "/api/import-export/bulk/update",
             json={
@@ -277,6 +336,7 @@ class TestBulkOperationsUnauthorized:
     async def test_bulk_assign_unauthorized(
         self, client: AsyncClient, db_session: AsyncSession
     ):
+        """Should return 401 when performing bulk assign without authentication."""
         response = await client.post(
             "/api/import-export/bulk/assign",
             json={
