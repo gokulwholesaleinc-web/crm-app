@@ -40,4 +40,10 @@ export const notificationsApi = {
 
   markAllRead: () =>
     apiClient.put<{ updated: number }>('/api/notifications/read-all').then((r) => r.data),
+
+  deleteNotification: (id: number) =>
+    apiClient.delete<{ deleted: boolean }>(`/api/notifications/${id}`).then((r) => r.data),
+
+  deleteAll: () =>
+    apiClient.delete<{ deleted: number }>('/api/notifications').then((r) => r.data),
 };

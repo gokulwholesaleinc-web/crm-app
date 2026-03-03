@@ -2,7 +2,7 @@
 
 from typing import Optional, List, Tuple
 
-from sqlalchemy import select, func, update
+from sqlalchemy import select, func, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.notifications.models import Notification
@@ -107,6 +107,22 @@ class NotificationService:
             )
         )
         return result.scalar() or 0
+
+    async def delete_notification(self, notification_id: int, user_id: int) -> bool:
+        """Delete a single notification. Returns True if deleted."""
+        notif = await self.get_by_id(notification_id)
+        if not notif or notif.user_id != user_id:
+            return False
+        await self.db.delete(notif)
+        await self.db.flush()
+        return True
+
+    async def delete_all_notifications(self, user_id: int) -> int:
+        """Delete all notifications for a user. Returns count deleted."""
+        stmt = delete(Notification).where(Notification.user_id == user_id)
+        result = await self.db.execute(stmt)
+        await self.db.flush()
+        return result.rowcount
 
 
 async def notify_on_assignment(

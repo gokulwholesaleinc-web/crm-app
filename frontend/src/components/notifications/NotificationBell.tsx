@@ -1,12 +1,14 @@
 import { Fragment, useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BellIcon, CheckIcon } from '@heroicons/react/24/outline';
+import { BellIcon, CheckIcon, XMarkIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { Transition } from '@headlessui/react';
 import {
   useNotifications,
   useUnreadCount,
   useMarkNotificationRead,
   useMarkAllNotificationsRead,
+  useDeleteNotification,
+  useDeleteAllNotifications,
 } from '../../hooks/useNotifications';
 import { Spinner } from '../ui/Spinner';
 
@@ -55,6 +57,8 @@ export function NotificationBell() {
   });
   const markReadMutation = useMarkNotificationRead();
   const markAllReadMutation = useMarkAllNotificationsRead();
+  const deleteNotificationMutation = useDeleteNotification();
+  const deleteAllMutation = useDeleteAllNotifications();
 
   const unreadCount = unreadData?.count ?? 0;
   const notifications = notificationsData?.items ?? [];
@@ -110,6 +114,15 @@ export function NotificationBell() {
     markAllReadMutation.mutate();
   };
 
+  const handleDeleteNotification = (e: React.MouseEvent, notificationId: number) => {
+    e.stopPropagation();
+    deleteNotificationMutation.mutate(notificationId);
+  };
+
+  const handleDeleteAll = () => {
+    deleteAllMutation.mutate();
+  };
+
   return (
     <div className="relative">
       <button
@@ -144,17 +157,31 @@ export function NotificationBell() {
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Notifications</h3>
-            {unreadCount > 0 && (
-              <button
-                type="button"
-                onClick={handleMarkAllRead}
-                className="text-xs text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
-                disabled={markAllReadMutation.isPending}
-              >
-                <CheckIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                Mark all read
-              </button>
-            )}
+            <div className="flex items-center gap-3">
+              {unreadCount > 0 && (
+                <button
+                  type="button"
+                  onClick={handleMarkAllRead}
+                  className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 font-medium flex items-center gap-1"
+                  disabled={markAllReadMutation.isPending}
+                >
+                  <CheckIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                  Mark all read
+                </button>
+              )}
+              {notifications.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleDeleteAll}
+                  className="text-xs text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 font-medium flex items-center gap-1"
+                  disabled={deleteAllMutation.isPending}
+                  aria-label="Clear all notifications"
+                >
+                  <TrashIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                  Clear all
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Notifications list */}
@@ -172,19 +199,21 @@ export function NotificationBell() {
               <ul role="list">
                 {notifications.map((notification) => (
                   <li key={notification.id}>
-                    <button
-                      type="button"
-                      onClick={() => handleNotificationClick(notification)}
-                      className={`w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
+                    <div
+                      className={`relative group flex items-start px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
                         !notification.is_read ? 'bg-primary-50/50 dark:bg-primary-900/20' : ''
                       }`}
                     >
-                      <div className="flex items-start gap-3">
+                      <button
+                        type="button"
+                        onClick={() => handleNotificationClick(notification)}
+                        className="w-full text-left flex items-start gap-3 min-w-0"
+                      >
                         {!notification.is_read && (
                           <span className="mt-1.5 h-2 w-2 rounded-full bg-primary-500 flex-shrink-0" />
                         )}
                         <div className={`min-w-0 flex-1 ${notification.is_read ? 'ml-5' : ''}`}>
-                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate pr-6">
                             {notification.title}
                           </p>
                           <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
@@ -194,8 +223,17 @@ export function NotificationBell() {
                             {formatTimeAgo(notification.created_at)}
                           </p>
                         </div>
-                      </div>
-                    </button>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteNotification(e, notification.id)}
+                        className="absolute top-3 right-3 p-1 rounded-md text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                        aria-label={`Delete notification: ${notification.title}`}
+                        disabled={deleteNotificationMutation.isPending}
+                      >
+                        <XMarkIcon className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>

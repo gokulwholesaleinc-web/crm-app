@@ -76,3 +76,31 @@ async def mark_all_read(
     service = NotificationService(db)
     updated = await service.mark_all_read(current_user.id)
     return {"updated": updated}
+
+
+@router.delete("/{notification_id}")
+async def delete_notification(
+    notification_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Delete a single notification."""
+    service = NotificationService(db)
+    deleted = await service.delete_notification(notification_id, current_user.id)
+    if not deleted:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail=f"Notification with ID {notification_id} not found",
+        )
+    return {"deleted": True}
+
+
+@router.delete("")
+async def delete_all_notifications(
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Delete all notifications for the current user."""
+    service = NotificationService(db)
+    count = await service.delete_all_notifications(current_user.id)
+    return {"deleted": count}

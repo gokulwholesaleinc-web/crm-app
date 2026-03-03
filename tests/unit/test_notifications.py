@@ -244,6 +244,124 @@ class TestMarkAllRead:
         assert response.status_code == 401
 
 
+class TestDeleteNotification:
+    """Tests for DELETE /api/notifications/{id}."""
+
+    @pytest.mark.asyncio
+    async def test_delete_notification(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        db_session: AsyncSession,
+        test_user,
+    ):
+        """Should delete a single notification and return deleted true."""
+        notif = Notification(
+            user_id=test_user.id,
+            type="test",
+            title="Delete me",
+            message="Should be deleted",
+        )
+        db_session.add(notif)
+        await db_session.flush()
+
+        response = await client.delete(
+            f"/api/notifications/{notif.id}", headers=auth_headers
+        )
+        assert response.status_code == 200
+        assert response.json()["deleted"] is True
+
+        # Verify it's gone
+        list_resp = await client.get("/api/notifications", headers=auth_headers)
+        assert list_resp.json()["total"] == 0
+
+    @pytest.mark.asyncio
+    async def test_delete_notification_not_found(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """Should return 404 when deleting a non-existent notification."""
+        response = await client.delete(
+            "/api/notifications/99999", headers=auth_headers
+        )
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_delete_notification_requires_auth(self, client: AsyncClient):
+        """Should return 401 when deleting without authentication."""
+        response = await client.delete("/api/notifications/1")
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_delete_notification_updates_unread_count(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        db_session: AsyncSession,
+        test_user,
+    ):
+        """Should decrement unread count when an unread notification is deleted."""
+        notif = Notification(
+            user_id=test_user.id,
+            type="test",
+            title="Unread to delete",
+            message="Msg",
+        )
+        db_session.add(notif)
+        await db_session.flush()
+
+        await client.delete(f"/api/notifications/{notif.id}", headers=auth_headers)
+
+        count_resp = await client.get(
+            "/api/notifications/unread-count", headers=auth_headers
+        )
+        assert count_resp.json()["count"] == 0
+
+
+class TestDeleteAllNotifications:
+    """Tests for DELETE /api/notifications."""
+
+    @pytest.mark.asyncio
+    async def test_delete_all_notifications(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        db_session: AsyncSession,
+        test_user,
+    ):
+        """Should delete all notifications and return deleted count."""
+        for i in range(3):
+            db_session.add(Notification(
+                user_id=test_user.id,
+                type="test",
+                title=f"Notif {i}",
+                message=f"Msg {i}",
+            ))
+        await db_session.flush()
+
+        response = await client.delete("/api/notifications", headers=auth_headers)
+        assert response.status_code == 200
+        assert response.json()["deleted"] == 3
+
+        # Verify all gone
+        list_resp = await client.get("/api/notifications", headers=auth_headers)
+        assert list_resp.json()["total"] == 0
+
+    @pytest.mark.asyncio
+    async def test_delete_all_when_none(
+        self, client: AsyncClient, auth_headers: dict
+    ):
+        """Should return deleted count of zero when no notifications exist."""
+        response = await client.delete("/api/notifications", headers=auth_headers)
+        assert response.status_code == 200
+        assert response.json()["deleted"] == 0
+
+    @pytest.mark.asyncio
+    async def test_delete_all_requires_auth(self, client: AsyncClient):
+        """Should return 401 when clearing all notifications without authentication."""
+        response = await client.delete("/api/notifications")
+        assert response.status_code == 401
+
+
 class TestNotificationWithEntity:
     """Tests for notifications with entity links."""
 
