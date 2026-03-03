@@ -9,7 +9,8 @@ import {
   useUploadReceipt,
 } from '../../../hooks/useExpenses';
 import { formatCurrencyWithCents } from '../../../utils/formatters';
-import { apiClient } from '../../../api/client';
+import { getDownloadUrl } from '../../../api/attachments';
+import { getToken } from '../../../api/client';
 import { TrashIcon, PaperClipIcon, ArrowDownTrayIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 import { PaperClipIcon as PaperClipSolidIcon } from '@heroicons/react/24/solid';
 
@@ -95,31 +96,41 @@ export default function ExpensesTab({ companyId }: ExpensesTabProps) {
   };
 
   const handleDownload = useCallback(async (attachmentId: number) => {
-    const response = await apiClient.get(`/api/attachments/${attachmentId}/download`, {
-      responseType: 'blob',
-      maxRedirects: 5,
-    });
-    const blob = response.data as Blob;
-    const contentDisposition = response.headers['content-disposition'] as string | undefined;
-    const filename = contentDisposition?.match(/filename="?(.+?)"?$/)?.[1] ?? 'download';
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    try {
+      const url = getDownloadUrl(attachmentId);
+      const token = getToken();
+      const response = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!response.ok) throw new Error('Download failed');
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = 'receipt';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      // silent fail - toast could be added here
+    }
   }, []);
 
   const handleView = useCallback(async (attachmentId: number) => {
-    const response = await apiClient.get(`/api/attachments/${attachmentId}/download`, {
-      responseType: 'blob',
-      maxRedirects: 5,
-    });
-    const blob = response.data as Blob;
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank');
+    try {
+      const url = getDownloadUrl(attachmentId);
+      const token = getToken();
+      const response = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!response.ok) throw new Error('View failed');
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, '_blank');
+    } catch {
+      // silent fail
+    }
   }, []);
 
   const expenses = expensesData?.items ?? [];
