@@ -10,8 +10,14 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.attachments.models import Attachment
+from src.attachments.object_storage import (
+    is_object_storage_available,
+    upload_file_bytes,
+    get_download_url,
+    delete_object,
+    generate_object_key,
+)
 
-# Configurable via env var, default 10MB
 MAX_UPLOAD_SIZE = int(os.getenv("MAX_UPLOAD_SIZE", str(10 * 1024 * 1024)))
 
 ALLOWED_EXTENSIONS = {
@@ -23,8 +29,11 @@ ALLOWED_EXTENSIONS = {
 UPLOAD_DIR = Path(__file__).parent.parent.parent / "uploads"
 
 
+def _use_object_storage() -> bool:
+    return is_object_storage_available()
+
+
 def _get_extension(filename: str) -> str:
-    """Extract lowercase file extension without the dot."""
     return filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
 
 
@@ -40,40 +49,40 @@ class AttachmentService:
         user_id: int,
         category: Optional[str] = None,
     ) -> Attachment:
-        """Upload a file and create an attachment record."""
-        # Validate extension
         ext = _get_extension(file.filename or "")
         if ext not in ALLOWED_EXTENSIONS:
             raise ValueError(
                 f"File type '.{ext}' not allowed. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
             )
 
-        # Read file content
         content = await file.read()
         file_size = len(content)
 
-        # Validate size
         if file_size > MAX_UPLOAD_SIZE:
             raise ValueError(
                 f"File size {file_size} bytes exceeds maximum of {MAX_UPLOAD_SIZE} bytes"
             )
 
-        # Generate unique filename to avoid collisions
         unique_name = f"{uuid.uuid4().hex}.{ext}"
-        entity_dir = UPLOAD_DIR / entity_type / str(entity_id)
-        entity_dir.mkdir(parents=True, exist_ok=True)
-        file_path = entity_dir / unique_name
+        content_type = file.content_type or "application/octet-stream"
 
-        # Write file to disk
-        file_path.write_bytes(content)
+        if _use_object_storage():
+            object_key = generate_object_key(entity_type, entity_id, ext)
+            await upload_file_bytes(content, object_key, content_type)
+            file_path = f"obj://{object_key}"
+        else:
+            entity_dir = UPLOAD_DIR / entity_type / str(entity_id)
+            entity_dir.mkdir(parents=True, exist_ok=True)
+            disk_path = entity_dir / unique_name
+            disk_path.write_bytes(content)
+            file_path = str(disk_path.relative_to(UPLOAD_DIR))
 
-        # Create DB record
         attachment = Attachment(
             filename=unique_name,
             original_filename=file.filename or unique_name,
-            file_path=str(file_path.relative_to(UPLOAD_DIR)),
+            file_path=file_path,
             file_size=file_size,
-            mime_type=file.content_type or "application/octet-stream",
+            mime_type=content_type,
             entity_type=entity_type,
             entity_id=entity_id,
             uploaded_by=user_id,
@@ -90,7 +99,6 @@ class AttachmentService:
         entity_id: int,
         category: Optional[str] = None,
     ) -> Tuple[List[Attachment], int]:
-        """List all attachments for an entity, optionally filtered by category."""
         query = (
             select(Attachment)
             .where(Attachment.entity_type == entity_type)
@@ -116,21 +124,30 @@ class AttachmentService:
         return items, total
 
     async def get_attachment(self, attachment_id: int) -> Optional[Attachment]:
-        """Get a single attachment by ID."""
         result = await self.db.execute(
             select(Attachment).where(Attachment.id == attachment_id)
         )
         return result.scalar_one_or_none()
 
     async def delete_attachment(self, attachment: Attachment) -> None:
-        """Delete attachment record and remove file from disk."""
-        file_path = UPLOAD_DIR / attachment.file_path
-        if file_path.exists():
-            file_path.unlink()
+        if attachment.file_path.startswith("obj://"):
+            object_key = attachment.file_path[6:]
+            await delete_object(object_key)
+        else:
+            file_path = UPLOAD_DIR / attachment.file_path
+            if file_path.exists():
+                file_path.unlink()
 
         await self.db.delete(attachment)
         await self.db.flush()
 
-    def get_file_path(self, attachment: Attachment) -> Path:
-        """Get the absolute file path for downloading."""
+    def get_file_path(self, attachment: Attachment) -> Optional[Path]:
+        if attachment.file_path.startswith("obj://"):
+            return None
         return UPLOAD_DIR / attachment.file_path
+
+    async def get_download_url(self, attachment: Attachment) -> Optional[str]:
+        if attachment.file_path.startswith("obj://"):
+            object_key = attachment.file_path[6:]
+            return await get_download_url(object_key)
+        return None
