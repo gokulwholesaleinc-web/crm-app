@@ -57,11 +57,6 @@ function ProposalsPage() {
   const totalPages = proposalsData?.pages ?? 1;
   const total = proposalsData?.total ?? 0;
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    setCurrentPage(1);
-  };
-
   const handleDeleteClick = (proposal: Proposal) => {
     setDeleteConfirm({ isOpen: true, proposal });
   };
@@ -169,7 +164,7 @@ function ProposalsPage() {
 
       {/* Search and Filters */}
       <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4 border border-transparent dark:border-gray-700">
-        <form onSubmit={handleSearch} className="flex flex-col gap-3 sm:flex-row sm:gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
           <div className="flex-1">
             <label htmlFor="proposal-search" className="sr-only">
               Search proposals
@@ -195,7 +190,7 @@ function ProposalsPage() {
                 type="text"
                 id="proposal-search"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
                 className="block w-full pl-10 pr-3 py-2.5 sm:py-2 border border-gray-300 dark:border-gray-600 rounded-md leading-5 bg-white dark:bg-gray-700 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary-500 focus-visible:border-primary-500 text-base sm:text-sm"
                 placeholder="Search by title or proposal number..."
               />
@@ -220,11 +215,8 @@ function ProposalsPage() {
                 ))}
               </select>
             </div>
-            <Button type="submit" variant="secondary" className="px-4 sm:px-3">
-              Search
-            </Button>
           </div>
-        </form>
+        </div>
       </div>
 
       {/* Error */}

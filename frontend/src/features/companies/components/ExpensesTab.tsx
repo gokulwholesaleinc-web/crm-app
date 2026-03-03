@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { Button, Spinner, Modal } from '../../../components/ui';
 import { PaginationBar } from '../../../components/ui/Pagination';
 import {
@@ -9,6 +9,7 @@ import {
   useUploadReceipt,
 } from '../../../hooks/useExpenses';
 import { formatCurrencyWithCents } from '../../../utils/formatters';
+import { apiClient } from '../../../api/client';
 import { TrashIcon, PaperClipIcon, ArrowDownTrayIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 import { PaperClipIcon as PaperClipSolidIcon } from '@heroicons/react/24/solid';
 
@@ -92,6 +93,34 @@ export default function ExpensesTab({ companyId }: ExpensesTabProps) {
     e.target.value = '';
     setUploadExpenseId(null);
   };
+
+  const handleDownload = useCallback(async (attachmentId: number) => {
+    const response = await apiClient.get(`/api/attachments/${attachmentId}/download`, {
+      responseType: 'blob',
+      maxRedirects: 5,
+    });
+    const blob = response.data as Blob;
+    const contentDisposition = response.headers['content-disposition'] as string | undefined;
+    const filename = contentDisposition?.match(/filename="?(.+?)"?$/)?.[1] ?? 'download';
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const handleView = useCallback(async (attachmentId: number) => {
+    const response = await apiClient.get(`/api/attachments/${attachmentId}/download`, {
+      responseType: 'blob',
+      maxRedirects: 5,
+    });
+    const blob = response.data as Blob;
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+  }, []);
 
   const expenses = expensesData?.items ?? [];
 
@@ -223,16 +252,14 @@ export default function ExpensesTab({ companyId }: ExpensesTabProps) {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-center text-sm">
                         {expense.receipt_attachment_id ? (
-                          <a
-                            href={`/api/attachments/${expense.receipt_attachment_id}/download`}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                          <button
+                            onClick={() => handleView(expense.receipt_attachment_id!)}
                             className="inline-flex items-center gap-1 text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300 transition-colors"
                             title="View receipt"
                           >
                             <PaperClipSolidIcon className="h-4 w-4" />
                             <span className="text-xs underline">View</span>
-                          </a>
+                          </button>
                         ) : (
                           <button
                             onClick={() => handleReceiptClick(expense.id)}
@@ -249,15 +276,13 @@ export default function ExpensesTab({ companyId }: ExpensesTabProps) {
                         <div className="flex items-center justify-end gap-2">
                           {expense.receipt_attachment_id ? (
                             <>
-                              <a
-                                href={`/api/attachments/${expense.receipt_attachment_id}/download`}
-                                target="_blank"
-                                rel="noopener noreferrer"
+                              <button
+                                onClick={() => handleDownload(expense.receipt_attachment_id!)}
                                 className="p-1.5 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 rounded transition-colors"
                                 title="Download receipt"
                               >
                                 <ArrowDownTrayIcon className="h-4 w-4" />
-                              </a>
+                              </button>
                               <button
                                 onClick={() => handleReceiptClick(expense.id)}
                                 className="p-1.5 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 rounded transition-colors"
