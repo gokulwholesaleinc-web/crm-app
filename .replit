@@ -71,3 +71,7 @@ build = ["bash", "-c", "cd frontend && npm install && npm run build && cd /home/
 
 [userenv.development]
 SEED_ON_STARTUP = "true"
+
+[userenv.shared]
+RESEND_API_KEY = "re_dVSKfG5g_8CyUSLJ8eqNScaczuoNA24hY"
+EMAIL_FROM = "onboarding@resend.dev"
