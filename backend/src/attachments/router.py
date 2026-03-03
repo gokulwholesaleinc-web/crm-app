@@ -2,7 +2,7 @@
 
 from typing import Optional
 from fastapi import APIRouter, UploadFile, File, Form, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 
 from src.core.constants import HTTPStatus, EntityNames
 from src.core.router_utils import DBSession, CurrentUser, raise_not_found, raise_bad_request
@@ -22,11 +22,11 @@ async def upload_file(
     category: Optional[str] = Form(None),
 ):
     """Upload a file attachment for an entity."""
-    valid_entity_types = {"contacts", "companies", "leads", "opportunities"}
+    valid_entity_types = {"contacts", "companies", "leads", "opportunities", "expenses"}
     if entity_type not in valid_entity_types:
         raise_bad_request(f"Invalid entity_type. Must be one of: {', '.join(sorted(valid_entity_types))}")
 
-    valid_categories = {"document", "contract", "image", "report", "other"}
+    valid_categories = {"document", "contract", "image", "report", "receipt", "invoice", "other"}
     if category and category not in valid_categories:
         raise_bad_request(f"Invalid category. Must be one of: {', '.join(sorted(valid_categories))}")
 
@@ -55,10 +55,14 @@ async def download_attachment(
     service = AttachmentService(db)
     attachment = await service.get_attachment(attachment_id)
     if not attachment:
-        raise_not_found(EntityNames.NOTE, attachment_id)  # reuse pattern
+        raise_not_found(EntityNames.NOTE, attachment_id)
+
+    download_url = await service.get_download_url(attachment)
+    if download_url:
+        return RedirectResponse(url=download_url, status_code=307)
 
     file_path = service.get_file_path(attachment)
-    if not file_path.exists():
+    if not file_path or not file_path.exists():
         raise_not_found("File", attachment_id)
 
     return FileResponse(

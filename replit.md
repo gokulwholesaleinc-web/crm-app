@@ -51,7 +51,7 @@ Each domain feature lives in its own package under `backend/src/`:
 | `import_export` | CSV import/export |
 | `notes` | Notes CRUD |
 | `workflows` | Workflow automation rules and execution |
-| `attachments` | File upload/download |
+| `attachments` | File upload/download via Replit Object Storage (GCS signed URLs), local disk fallback |
 | `dedup` | Duplicate detection and merge |
 | `email` | Email sending (Resend API), branded templates, PDF generation, tracking |
 | `notifications` | In-app notification system |
@@ -120,6 +120,7 @@ Each domain feature lives in its own package under `backend/src/`:
 | **Stripe** | Payment processing — products, prices, subscriptions, checkout sessions, webhooks | `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET` |
 | **Resend** | Transactional email delivery | `RESEND_API_KEY`, `EMAIL_FROM` |
 | **PostgreSQL 16** | Primary database with pgvector extension | `DATABASE_URL` env var |
+| **Replit Object Storage** | File attachments via GCS signed URLs (sidecar at 127.0.0.1:1106) | `DEFAULT_OBJECT_STORAGE_BUCKET_ID`, `PRIVATE_OBJECT_DIR` env vars |
 
 ### Key Python Packages
 
