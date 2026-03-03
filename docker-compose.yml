@@ -45,6 +45,7 @@ services:
     volumes:
       - ./backend/src:/app/src
       - ./tests:/app/tests
+      - upload_data:/app/uploads
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 
   frontend:
@@ -66,3 +67,4 @@ services:
 
 volumes:
   postgres_data:
+  upload_data:

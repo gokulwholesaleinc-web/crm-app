@@ -11,6 +11,7 @@ import {
 import { formatCurrencyWithCents } from '../../../utils/formatters';
 import { getDownloadUrl } from '../../../api/attachments';
 import { getToken } from '../../../api/client';
+import { showError } from '../../../utils/toast';
 import { TrashIcon, PaperClipIcon, ArrowDownTrayIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 import { PaperClipIcon as PaperClipSolidIcon } from '@heroicons/react/24/solid';
 
@@ -101,19 +102,25 @@ export default function ExpensesTab({ companyId }: ExpensesTabProps) {
       const token = getToken();
       const response = await fetch(url, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
+        redirect: 'follow',
       });
-      if (!response.ok) throw new Error('Download failed');
+      if (!response.ok) {
+        const errBody = await response.text().catch(() => '');
+        throw new Error(errBody || `Download failed (${response.status})`);
+      }
       const blob = await response.blob();
+      const disposition = response.headers.get('content-disposition');
+      const filename = disposition?.match(/filename="?(.+?)"?$/)?.[1] ?? 'receipt';
       const blobUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = blobUrl;
-      link.download = 'receipt';
+      link.download = filename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(blobUrl);
-    } catch {
-      // silent fail - toast could be added here
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Failed to download receipt');
     }
   }, []);
 
@@ -123,13 +130,17 @@ export default function ExpensesTab({ companyId }: ExpensesTabProps) {
       const token = getToken();
       const response = await fetch(url, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
+        redirect: 'follow',
       });
-      if (!response.ok) throw new Error('View failed');
+      if (!response.ok) {
+        const errBody = await response.text().catch(() => '');
+        throw new Error(errBody || `View failed (${response.status})`);
+      }
       const blob = await response.blob();
       const blobUrl = URL.createObjectURL(blob);
       window.open(blobUrl, '_blank');
-    } catch {
-      // silent fail
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Failed to view receipt');
     }
   }, []);
 

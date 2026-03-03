@@ -57,7 +57,11 @@ async def download_attachment(
     if not attachment:
         raise_not_found(EntityNames.NOTE, attachment_id)
 
-    download_url = await service.get_download_url(attachment)
+    try:
+        download_url = await service.get_download_url(attachment)
+    except Exception:
+        download_url = None
+
     if download_url:
         return RedirectResponse(url=download_url, status_code=307)
 
