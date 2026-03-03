@@ -158,6 +158,21 @@ export function useUpdatePipelineStage() {
 }
 
 /**
+ * Hook to delete a pipeline stage
+ */
+export function useDeletePipelineStage() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (stageId: number) => opportunitiesApi.deleteStage(stageId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...pipelineKeys.all, 'stages'] });
+      queryClient.invalidateQueries({ queryKey: [...pipelineKeys.all, 'kanban'] });
+    },
+  });
+}
+
+/**
  * Hook to reorder pipeline stages
  */
 export function useReorderPipelineStages() {

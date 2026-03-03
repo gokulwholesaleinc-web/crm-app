@@ -48,7 +48,7 @@ export function ConvertLeadModal({
       createOpportunity: false,
       opportunityName: '',
       opportunityValue: 0,
-      opportunityStage: 'qualification',
+      opportunityStage: 'discovery',
     },
   });
 

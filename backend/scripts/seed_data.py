@@ -146,12 +146,13 @@ async def seed_database():
         # ============================================================
         print("Creating pipeline stages...")
         stage_data = [
-            ("Qualification", 10, "#6366F1"),
-            ("Discovery", 25, "#8B5CF6"),
-            ("Proposal", 50, "#F59E0B"),
-            ("Negotiation", 75, "#10B981"),
-            ("Closed Won", 100, "#22C55E"),
-            ("Closed Lost", 0, "#EF4444"),
+            ("Discovery", 10, "#06b6d4"),
+            ("Proposal", 30, "#818cf8"),
+            ("Negotiation", 50, "#f59e0b"),
+            ("Scoping", 70, "#10b981"),
+            ("Stalling", 20, "#ef4444"),
+            ("Won", 100, "#22c55e"),
+            ("Lost", 0, "#6b7280"),
         ]
         pipeline_stages = []
         for order, (name, probability, color) in enumerate(stage_data):
@@ -257,8 +258,8 @@ async def seed_database():
         print("Creating opportunities...")
         opportunities = []
 
-        # Only use active stages (not Closed Won/Lost for most)
-        active_stages = pipeline_stages[:4]  # Qualification through Negotiation
+        # Only use active stages (not Won/Lost for most)
+        active_stages = pipeline_stages[:5]  # Discovery through Stalling
         all_stages = pipeline_stages
 
         for _ in range(25):

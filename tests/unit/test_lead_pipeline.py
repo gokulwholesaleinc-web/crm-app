@@ -44,7 +44,7 @@ async def lead_pipeline_stages(db_session: AsyncSession) -> list[PipelineStage]:
 async def opp_pipeline_stage(db_session: AsyncSession) -> PipelineStage:
     """Create an opportunity-type pipeline stage for isolation tests."""
     stage = PipelineStage(
-        name="Opp Qualification",
+        name="Opp Discovery",
         order=1,
         color="#6366f1",
         probability=20,
@@ -98,7 +98,7 @@ class TestLeadPipelineStages:
         assert response.status_code == 200
         data = response.json()
         stage_names = [s["name"] for s in data]
-        assert "Opp Qualification" not in stage_names
+        assert "Opp Discovery" not in stage_names
         assert len(data) == 5
 
     @pytest.mark.asyncio
@@ -497,7 +497,7 @@ class TestPipelineTypeIsolation:
         assert response.status_code == 200
         data = response.json()
         stage_names = [s["name"] for s in data]
-        assert "Opp Qualification" in stage_names
+        assert "Opp Discovery" in stage_names
         # Lead stage names should not appear
         assert "New" not in stage_names
         assert "Discovery" not in stage_names

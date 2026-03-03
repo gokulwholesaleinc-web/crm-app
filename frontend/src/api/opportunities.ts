@@ -118,6 +118,13 @@ export const updateStage = async (
 };
 
 /**
+ * Delete a pipeline stage
+ */
+export const deleteStage = async (stageId: number): Promise<void> => {
+  await apiClient.delete(`${OPPORTUNITIES_BASE}/stages/${stageId}`);
+};
+
+/**
  * Reorder pipeline stages
  */
 export const reorderStages = async (
@@ -219,6 +226,7 @@ export const opportunitiesApi = {
   listStages,
   createStage,
   updateStage,
+  deleteStage,
   reorderStages,
   // Kanban
   getKanban,

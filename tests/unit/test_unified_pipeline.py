@@ -41,11 +41,11 @@ async def lead_stages(db_session: AsyncSession) -> list[PipelineStage]:
 async def opp_stages(db_session: AsyncSession) -> list[PipelineStage]:
     """Create opportunity-type pipeline stages."""
     stages_data = [
-        {"name": "Qualification", "order": 1, "color": "#6366f1", "probability": 20, "is_won": False, "is_lost": False},
+        {"name": "Discovery", "order": 1, "color": "#6366f1", "probability": 20, "is_won": False, "is_lost": False},
         {"name": "Proposal", "order": 2, "color": "#8b5cf6", "probability": 50, "is_won": False, "is_lost": False},
         {"name": "Negotiation", "order": 3, "color": "#f59e0b", "probability": 75, "is_won": False, "is_lost": False},
-        {"name": "Closed Won", "order": 4, "color": "#22c55e", "probability": 100, "is_won": True, "is_lost": False},
-        {"name": "Closed Lost", "order": 5, "color": "#ef4444", "probability": 0, "is_won": False, "is_lost": True},
+        {"name": "Won", "order": 4, "color": "#22c55e", "probability": 100, "is_won": True, "is_lost": False},
+        {"name": "Lost", "order": 5, "color": "#ef4444", "probability": 0, "is_won": False, "is_lost": True},
     ]
     stages = []
     for data in stages_data:
@@ -134,7 +134,7 @@ class TestAutoConversion:
         from sqlalchemy import select
 
         won_stage = lead_stages[3]
-        first_opp_stage = opp_stages[0]  # "Qualification" (order=1)
+        first_opp_stage = opp_stages[0]  # "Discovery" (order=1)
 
         response = await client.post(
             f"/api/leads/{test_lead_in_pipeline.id}/move",
@@ -386,7 +386,7 @@ class TestUnifiedPipelineEndpoint:
         data = response.json()
 
         qual_data = next(
-            s for s in data["opportunity_stages"] if s["stage_name"] == "Qualification"
+            s for s in data["opportunity_stages"] if s["stage_name"] == "Discovery"
         )
         assert qual_data["count"] == 1
         assert qual_data["total_value"] == 50000.0

@@ -67,7 +67,7 @@ function OpportunitiesPage() {
     id: String(item.id),
     name: item.name,
     value: item.amount ?? 0,
-    stage: item.pipeline_stage?.name?.toLowerCase().replace(/\s+/g, '_') ?? 'qualification',
+    stage: item.pipeline_stage?.name?.toLowerCase().replace(/\s+/g, '_') ?? 'discovery',
     probability: item.probability ?? 0,
     expectedCloseDate: item.expected_close_date ?? undefined,
     contactName: item.contact?.full_name ?? undefined,
@@ -160,7 +160,7 @@ function OpportunitiesPage() {
     return {
       name: editingOpportunity.name,
       value: editingOpportunity.amount ?? 0,
-      stage: editingOpportunity.pipeline_stage?.name?.toLowerCase().replace(/\s+/g, '_') ?? 'qualification',
+      stage: editingOpportunity.pipeline_stage?.name?.toLowerCase().replace(/\s+/g, '_') ?? 'discovery',
       probability: editingOpportunity.probability ?? 0,
       expectedCloseDate: editingOpportunity.expected_close_date ?? '',
       contactId: editingOpportunity.contact_id ? String(editingOpportunity.contact_id) : '',
@@ -182,11 +182,11 @@ function OpportunitiesPage() {
   }));
 
   const totalPipelineValue = opportunities
-    .filter((o) => !['closed_won', 'closed_lost'].includes(o.stage))
+    .filter((o) => !['won', 'lost'].includes(o.stage))
     .reduce((sum, o) => sum + o.value, 0);
 
   const weightedPipelineValue = opportunities
-    .filter((o) => !['closed_won', 'closed_lost'].includes(o.stage))
+    .filter((o) => !['won', 'lost'].includes(o.stage))
     .reduce((sum, o) => sum + o.value * (o.probability / 100), 0);
 
   return (
@@ -286,7 +286,7 @@ function OpportunitiesPage() {
             <p className="mt-1 sm:mt-2 text-2xl sm:text-3xl font-semibold text-gray-900 dark:text-gray-100">
               {
                 opportunities.filter(
-                  (o) => !['closed_won', 'closed_lost'].includes(o.stage)
+                  (o) => !['won', 'lost'].includes(o.stage)
                 ).length
               }
             </p>

@@ -29,12 +29,13 @@ export const leadStatusColors: Record<string, StatusColorConfig> = {
  * Opportunity status/stage color mappings
  */
 export const opportunityStatusColors: Record<string, StatusColorConfig> = {
-  qualification: { bg: 'bg-blue-100', text: 'text-blue-800' },
-  needs_analysis: { bg: 'bg-yellow-100', text: 'text-yellow-800' },
+  discovery: { bg: 'bg-cyan-100', text: 'text-cyan-800' },
   proposal: { bg: 'bg-purple-100', text: 'text-purple-800' },
   negotiation: { bg: 'bg-orange-100', text: 'text-orange-800' },
-  closed_won: { bg: 'bg-green-100', text: 'text-green-800' },
-  closed_lost: { bg: 'bg-red-100', text: 'text-red-800' },
+  scoping: { bg: 'bg-green-100', text: 'text-green-800' },
+  stalling: { bg: 'bg-red-100', text: 'text-red-800' },
+  won: { bg: 'bg-emerald-100', text: 'text-emerald-800' },
+  lost: { bg: 'bg-gray-100', text: 'text-gray-800' },
 };
 
 /**

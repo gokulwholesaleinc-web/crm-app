@@ -106,11 +106,13 @@ function LeadDetailPage() {
       // Map stage string to stage ID (using default stage 1 for now)
       // In a production app, you'd fetch pipeline stages and map properly
       const stageMapping: Record<string, number> = {
-        qualification: 1,
+        discovery: 1,
         proposal: 2,
         negotiation: 3,
-        closed_won: 4,
-        closed_lost: 5,
+        scoping: 4,
+        stalling: 5,
+        won: 6,
+        lost: 7,
       };
       const stageId = data.opportunityStage ? (stageMapping[data.opportunityStage] || 1) : 1;
 

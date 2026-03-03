@@ -124,6 +124,32 @@ async def update_stage(
     return updated_stage
 
 
+@router.delete("/stages/{stage_id}", status_code=HTTPStatus.NO_CONTENT)
+async def delete_stage(
+    stage_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Delete a pipeline stage. Fails if opportunities still reference it."""
+    service = PipelineStageService(db)
+    stage = await get_entity_or_404(service, stage_id, EntityNames.PIPELINE_STAGE)
+
+    # Check if any opportunities reference this stage
+    from sqlalchemy import func as sa_func
+    count_result = await db.execute(
+        select(sa_func.count()).select_from(Opportunity).where(Opportunity.pipeline_stage_id == stage_id)
+    )
+    count = count_result.scalar() or 0
+    if count > 0:
+        raise HTTPException(
+            status_code=HTTPStatus.CONFLICT,
+            detail=f"Cannot delete stage '{stage.name}': {count} opportunity(ies) still use it. Move them first.",
+        )
+
+    await service.delete(stage)
+    invalidate_pipeline_stages_cache()
+
+
 @router.post("/stages/reorder", response_model=List[PipelineStageResponse])
 async def reorder_stages(
     stage_orders: List[dict],  # [{id: int, order: int}, ...]

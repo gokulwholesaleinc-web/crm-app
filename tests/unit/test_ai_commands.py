@@ -246,7 +246,7 @@ class TestQueryProcessorFunctions:
         )
 
         assert result["success"] is True
-        assert result["new_stage"] == "Closed Won"
+        assert result["new_stage"] == "Won"
 
     @pytest.mark.asyncio
     async def test_update_opportunity_stage_not_found(

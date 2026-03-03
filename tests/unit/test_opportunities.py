@@ -101,7 +101,7 @@ class TestPipelineStages:
             "/api/opportunities/stages",
             headers=auth_headers,
             json={
-                "name": "Closed Won",
+                "name": "Won",
                 "description": "Deal won",
                 "order": 10,
                 "probability": 100,
@@ -124,7 +124,7 @@ class TestPipelineStages:
             "/api/opportunities/stages",
             headers=auth_headers,
             json={
-                "name": "Closed Lost",
+                "name": "Lost",
                 "description": "Deal lost",
                 "order": 11,
                 "probability": 0,

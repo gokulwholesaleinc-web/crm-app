@@ -158,7 +158,7 @@ async def lead_source(db_session):
 @pytest.fixture
 async def pipeline_stage(db_session):
     stage = PipelineStage(
-        name="Qualification", order=1, color="#6366f1",
+        name="Discovery", order=1, color="#6366f1",
         probability=20, is_won=False, is_lost=False, is_active=True,
     )
     db_session.add(stage)

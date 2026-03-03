@@ -810,7 +810,7 @@ class TestWinProbability:
     ):
         """Test win probability for a lost deal returns 0."""
         lost_stage = PipelineStage(
-            name="Closed Lost",
+            name="Lost",
             order=6,
             color="#ef4444",
             probability=0,

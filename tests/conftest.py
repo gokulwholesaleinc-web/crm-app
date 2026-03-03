@@ -283,11 +283,11 @@ async def test_lead(db_session: AsyncSession, test_user: User, test_lead_source:
 async def test_pipeline_stage(db_session: AsyncSession) -> PipelineStage:
     """Create a test pipeline stage."""
     stage = PipelineStage(
-        name="Qualification",
-        description="Initial qualification stage",
+        name="Discovery",
+        description="Initial discovery stage",
         order=1,
-        color="#6366f1",
-        probability=20,
+        color="#06b6d4",
+        probability=10,
         is_won=False,
         is_lost=False,
         is_active=True,
@@ -303,9 +303,9 @@ async def test_pipeline_stage(db_session: AsyncSession) -> PipelineStage:
 async def test_won_stage(db_session: AsyncSession) -> PipelineStage:
     """Create a won pipeline stage."""
     stage = PipelineStage(
-        name="Closed Won",
+        name="Won",
         description="Deal won",
-        order=5,
+        order=6,
         color="#22c55e",
         probability=100,
         is_won=True,

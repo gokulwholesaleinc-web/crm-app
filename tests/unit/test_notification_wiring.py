@@ -162,7 +162,7 @@ class TestOpportunityStageChangeNotification:
         )
         notifications = list(result.scalars().all())
         assert len(notifications) == 1
-        assert "Qualification" in notifications[0].message or "Closed Won" in notifications[0].message
+        assert "Discovery" in notifications[0].message or "Won" in notifications[0].message
 
 
 class TestActivityDueNotification:

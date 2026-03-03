@@ -4,6 +4,7 @@ import {
   usePipelineStages,
   useCreatePipelineStage,
   useUpdatePipelineStage,
+  useDeletePipelineStage,
 } from '../../../hooks/useOpportunities';
 import { Card, CardHeader, CardBody } from '../../../components/ui/Card';
 import { Spinner } from '../../../components/ui/Spinner';
@@ -11,7 +12,7 @@ import { Button } from '../../../components/ui/Button';
 import { Badge } from '../../../components/ui/Badge';
 import { Modal, ModalFooter } from '../../../components/ui/Modal';
 import { FormInput } from '../../../components/forms';
-import { PlusIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 import type {
   PipelineStage,
   PipelineStageCreate,
@@ -183,8 +184,10 @@ export function PipelineStagesSection() {
   const { data: stages, isLoading } = usePipelineStages(false);
   const createMutation = useCreatePipelineStage();
   const updateMutation = useUpdatePipelineStage();
+  const deleteMutation = useDeletePipelineStage();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingStage, setEditingStage] = useState<PipelineStage | null>(null);
+  const [deletingStage, setDeletingStage] = useState<PipelineStage | null>(null);
 
   return (
     <Card>
@@ -242,6 +245,15 @@ export function PipelineStagesSection() {
                   >
                     Edit
                   </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setDeletingStage(stage)}
+                    className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+                    aria-label={`Delete ${stage.name}`}
+                  >
+                    <TrashIcon className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
             ))}
@@ -268,6 +280,46 @@ export function PipelineStagesSection() {
         isPending={createMutation.isPending}
         isError={createMutation.isError}
       />
+
+      {/* Delete Confirmation Modal */}
+      {deletingStage && (
+        <Modal isOpen={!!deletingStage} onClose={() => setDeletingStage(null)} title="Delete Pipeline Stage" size="sm">
+          <div className="space-y-4">
+            <p className="text-sm text-gray-700 dark:text-gray-300">
+              Are you sure you want to delete <strong>{deletingStage.name}</strong>? This cannot be undone.
+            </p>
+            {deleteMutation.isError && (
+              <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-3">
+                <p className="text-sm text-red-800 dark:text-red-300">
+                  {(deleteMutation.error as Error)?.message?.includes('409')
+                    ? `Cannot delete: opportunities still use this stage. Move them first.`
+                    : 'Failed to delete stage. It may still have opportunities assigned.'}
+                </p>
+              </div>
+            )}
+            <ModalFooter>
+              <Button type="button" variant="secondary" onClick={() => { setDeletingStage(null); deleteMutation.reset(); }}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                isLoading={deleteMutation.isPending}
+                onClick={async () => {
+                  try {
+                    await deleteMutation.mutateAsync(deletingStage.id);
+                    setDeletingStage(null);
+                  } catch {
+                    // error shown in modal
+                  }
+                }}
+              >
+                Delete
+              </Button>
+            </ModalFooter>
+          </div>
+        </Modal>
+      )}
 
       {/* Edit Stage Modal */}
       {editingStage && (
