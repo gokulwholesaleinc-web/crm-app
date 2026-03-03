@@ -11,6 +11,20 @@ from typing import AsyncGenerator, Generator
 
 import pytest
 import pytest_asyncio
+
+
+def pytest_itemcollected(item):
+    """Display test docstrings as descriptions in verbose pytest output.
+
+    Instead of showing raw method names like:
+        tests/test_expenses.py::TestCreateExpense::test_create_expense PASSED
+    Shows the docstring:
+        tests/test_expenses.py::TestCreateExpense::Should create a new expense PASSED
+    """
+    doc = getattr(item.obj, "__doc__", None)
+    if doc:
+        first_line = doc.strip().split("\n")[0]
+        item._nodeid = f"{item.parent.nodeid}::{first_line}"
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.pool import StaticPool
