@@ -778,8 +778,8 @@ class TestWeightedAmount:
 
         assert response.status_code == 201
         data = response.json()
-        # Stage probability is 20%, so weighted should be 20000
-        assert data["weighted_amount"] == 20000.0
+        # Stage probability is 10%, so weighted should be 10000
+        assert data["weighted_amount"] == 10000.0
 
     @pytest.mark.asyncio
     async def test_weighted_amount_with_override(
