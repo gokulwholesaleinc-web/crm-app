@@ -64,7 +64,7 @@ async def register(
     user_data: UserCreate,
     db: DBSession,
 ):
-    """Register a new user."""
+    """Register a new user and auto-link to the default tenant."""
     service = AuthService(db)
 
     # Check if user already exists
@@ -73,6 +73,32 @@ async def register(
         raise_bad_request("Email already registered")
 
     user = await service.create_user(user_data)
+
+    # Auto-link new user to the default tenant (or tenant from request context)
+    tenant_slug = getattr(request.state, "tenant_slug_hint", None) or "default"
+    result = await db.execute(
+        select(Tenant).where(Tenant.slug == tenant_slug)
+    )
+    tenant = result.scalar_one_or_none()
+    if tenant:
+        # Check if link already exists (defensive)
+        existing_link = await db.execute(
+            select(TenantUser).where(
+                TenantUser.user_id == user.id,
+                TenantUser.tenant_id == tenant.id,
+            )
+        )
+        if not existing_link.scalar_one_or_none():
+            tenant_user = TenantUser(
+                user_id=user.id,
+                tenant_id=tenant.id,
+                role="member",
+                is_primary=True,
+            )
+            db.add(tenant_user)
+            await db.commit()
+            await db.refresh(user)
+
     return user
 
 

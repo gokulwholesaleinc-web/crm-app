@@ -17,6 +17,7 @@ from src.companies.models import Company
 from src.leads.models import Lead, LeadSource
 from src.opportunities.models import Opportunity, PipelineStage
 from src.audit.models import AuditLog
+from src.whitelabel.models import Tenant, TenantUser
 
 
 @pytest.fixture
@@ -532,6 +533,125 @@ class TestAdminRoleAccess:
 
         response = await client.get("/api/admin/stats", headers=headers)
         assert response.status_code == 200
+
+
+class TestAdminLinkTenant:
+    """Tests for POST /api/admin/users/{id}/link-tenant."""
+
+    @pytest.fixture
+    async def default_tenant(self, db_session: AsyncSession) -> Tenant:
+        """Create a default tenant for link-tenant tests."""
+        tenant = Tenant(
+            name="Default Organization",
+            slug="default",
+            is_active=True,
+            plan="professional",
+            max_users=50,
+        )
+        db_session.add(tenant)
+        await db_session.commit()
+        await db_session.refresh(tenant)
+        return tenant
+
+    @pytest.mark.asyncio
+    async def test_link_user_to_tenant_success(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_headers: dict,
+        test_superuser: User,
+        test_user: User,
+        default_tenant: Tenant,
+    ):
+        """Admin can link a user to a tenant."""
+        response = await client.post(
+            f"/api/admin/users/{test_user.id}/link-tenant",
+            json={"tenant_slug": "default", "role": "member", "is_primary": True},
+            headers=admin_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["user_id"] == test_user.id
+        assert data["tenant_slug"] == "default"
+        assert data["role"] == "member"
+        assert data["is_primary"] is True
+
+    @pytest.mark.asyncio
+    async def test_link_user_to_tenant_duplicate_rejected(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_headers: dict,
+        test_superuser: User,
+        test_user: User,
+        default_tenant: Tenant,
+    ):
+        """Linking a user to a tenant they're already in returns 409."""
+        # Link first time
+        await client.post(
+            f"/api/admin/users/{test_user.id}/link-tenant",
+            json={"tenant_slug": "default"},
+            headers=admin_headers,
+        )
+        # Duplicate link
+        response = await client.post(
+            f"/api/admin/users/{test_user.id}/link-tenant",
+            json={"tenant_slug": "default"},
+            headers=admin_headers,
+        )
+        assert response.status_code == 409
+        assert "already linked" in response.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_link_user_to_nonexistent_tenant(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_headers: dict,
+        test_superuser: User,
+        test_user: User,
+    ):
+        """Linking to a nonexistent tenant returns 404."""
+        response = await client.post(
+            f"/api/admin/users/{test_user.id}/link-tenant",
+            json={"tenant_slug": "nonexistent"},
+            headers=admin_headers,
+        )
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_link_nonexistent_user_to_tenant(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_headers: dict,
+        test_superuser: User,
+        default_tenant: Tenant,
+    ):
+        """Linking a nonexistent user returns 404."""
+        response = await client.post(
+            "/api/admin/users/99999/link-tenant",
+            json={"tenant_slug": "default"},
+            headers=admin_headers,
+        )
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_link_tenant_forbidden_for_regular_user(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        non_admin_headers: dict,
+        test_user: User,
+        default_tenant: Tenant,
+    ):
+        """Regular user cannot link users to tenants."""
+        response = await client.post(
+            f"/api/admin/users/{test_user.id}/link-tenant",
+            json={"tenant_slug": "default"},
+            headers=non_admin_headers,
+        )
+        assert response.status_code == 403
 
 
 class TestCacheEndpointsRemoved:

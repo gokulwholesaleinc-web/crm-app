@@ -6,10 +6,12 @@ Tests for register, login, and get_me endpoints.
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.models import User
 from src.auth.security import verify_password, get_password_hash
+from src.whitelabel.models import Tenant, TenantSettings, TenantUser
 
 
 class TestAuthRegister:
@@ -96,6 +98,62 @@ class TestAuthRegister:
         data = response.json()
         assert data["phone"] == "+1-555-0199"
         assert data["job_title"] == "Developer"
+
+    @pytest.mark.asyncio
+    async def test_register_auto_links_to_default_tenant(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        """New user registration auto-links user to default tenant."""
+        # Create a default tenant first
+        tenant = Tenant(
+            name="Default Organization",
+            slug="default",
+            is_active=True,
+            plan="professional",
+            max_users=50,
+        )
+        db_session.add(tenant)
+        await db_session.commit()
+        await db_session.refresh(tenant)
+
+        response = await client.post(
+            "/api/auth/register",
+            json={
+                "email": "autolinked@example.com",
+                "password": "securepassword123",
+                "full_name": "Auto Linked User",
+            },
+        )
+        assert response.status_code == 201
+        user_id = response.json()["id"]
+
+        # Verify TenantUser record was created
+        result = await db_session.execute(
+            select(TenantUser).where(
+                TenantUser.user_id == user_id,
+                TenantUser.tenant_id == tenant.id,
+            )
+        )
+        tenant_user = result.scalar_one_or_none()
+        assert tenant_user is not None
+        assert tenant_user.is_primary is True
+        assert tenant_user.role == "member"
+
+    @pytest.mark.asyncio
+    async def test_register_without_default_tenant_still_succeeds(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        """Registration succeeds even when no default tenant exists."""
+        response = await client.post(
+            "/api/auth/register",
+            json={
+                "email": "notenant@example.com",
+                "password": "securepassword123",
+                "full_name": "No Tenant User",
+            },
+        )
+        assert response.status_code == 201
+        assert response.json()["email"] == "notenant@example.com"
 
 
 class TestAuthLogin:
