@@ -50,6 +50,7 @@ class TestRenderTemplate:
     """Test the template variable rendering."""
 
     def test_renders_variables(self):
+        """Known variables are replaced in the template output."""
         result = render_template(
             "Hello {{name}}, welcome to {{company}}!",
             {"name": "Alice", "company": "Acme"},
@@ -57,6 +58,7 @@ class TestRenderTemplate:
         assert result == "Hello Alice, welcome to Acme!"
 
     def test_preserves_unknown_variables(self):
+        """Variables not in the context dict are left as-is in the output."""
         result = render_template(
             "Hi {{name}}, your order is {{order_id}}",
             {"name": "Bob"},
