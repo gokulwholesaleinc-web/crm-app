@@ -54,9 +54,83 @@ from src.meta.router import router as meta_router
 from src.expenses.router import router as expenses_router
 
 
+async def _run_production_migrations():
+    """Run idempotent schema migrations using raw asyncpg (no ORM)."""
+    import asyncpg
+
+    db_url = settings.db_url
+    if db_url.startswith("postgresql+asyncpg://"):
+        db_url = db_url.replace("postgresql+asyncpg://", "postgresql://")
+    if "?sslmode=" in db_url:
+        db_url = db_url.split("?")[0]
+
+    try:
+        conn = await asyncpg.connect(db_url)
+        try:
+            await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'sales_rep' NOT NULL")
+            await conn.execute("""
+                UPDATE users SET role = 'admin', is_superuser = true
+                WHERE email IN ('admin@admin.com', 'harsh@test.com')
+                AND (role != 'admin' OR is_superuser = false)
+            """)
+            await conn.execute("""
+                INSERT INTO user_roles (user_id, role_id, created_at, updated_at)
+                SELECT u.id, r.id, NOW(), NOW()
+                FROM users u, roles r
+                WHERE u.email IN ('admin@admin.com', 'harsh@test.com')
+                AND r.name = 'admin'
+                AND NOT EXISTS (
+                    SELECT 1 FROM user_roles ur WHERE ur.user_id = u.id AND ur.role_id = r.id
+                )
+            """)
+
+            column_migrations = [
+                "ALTER TABLE leads ADD COLUMN IF NOT EXISTS sales_code VARCHAR(100)",
+                "CREATE INDEX IF NOT EXISTS ix_leads_sales_code ON leads(sales_code)",
+                "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS sales_code VARCHAR(100)",
+                "CREATE INDEX IF NOT EXISTS ix_contacts_sales_code ON contacts(sales_code)",
+                "ALTER TABLE companies ADD COLUMN IF NOT EXISTS segment VARCHAR(100)",
+                "CREATE INDEX IF NOT EXISTS ix_companies_segment ON companies(segment)",
+                "ALTER TABLE proposal_templates ADD COLUMN IF NOT EXISTS body TEXT NOT NULL DEFAULT ''",
+                "ALTER TABLE proposal_templates ADD COLUMN IF NOT EXISTS legal_terms TEXT",
+                "ALTER TABLE proposal_templates ADD COLUMN IF NOT EXISTS is_default BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE proposal_templates ADD COLUMN IF NOT EXISTS owner_id INTEGER REFERENCES users(id) ON DELETE SET NULL",
+                "ALTER TABLE attachments ADD COLUMN IF NOT EXISTS category VARCHAR(50)",
+                "ALTER TABLE saved_filters ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE saved_reports ADD COLUMN IF NOT EXISTS schedule VARCHAR(20)",
+                "ALTER TABLE saved_reports ADD COLUMN IF NOT EXISTS recipients TEXT",
+                "ALTER TABLE leads ADD COLUMN IF NOT EXISTS pipeline_stage_id INTEGER REFERENCES pipeline_stages(id) ON DELETE SET NULL",
+                "CREATE INDEX IF NOT EXISTS ix_leads_pipeline_stage_id ON leads(pipeline_stage_id)",
+                "ALTER TABLE pipeline_stages ADD COLUMN IF NOT EXISTS pipeline_type VARCHAR(20) DEFAULT 'opportunity'",
+                "CREATE INDEX IF NOT EXISTS ix_pipeline_stages_pipeline_type ON pipeline_stages(pipeline_type)",
+            ]
+            for sql in column_migrations:
+                try:
+                    await conn.execute(sql)
+                except Exception:
+                    pass
+
+            try:
+                await conn.execute("""
+                    UPDATE pipeline_stages SET pipeline_type = 'lead'
+                    WHERE LOWER(name) IN ('new', 'contacted', 'qualified', 'nurturing', 'unqualified', 'converted')
+                    AND pipeline_type != 'lead'
+                """)
+            except Exception:
+                pass
+
+            print("Production migrations completed successfully")
+        finally:
+            await conn.close()
+    except Exception as e:
+        print(f"Production migration error (non-fatal): {e}")
+
+
 async def _init_database():
     """Initialize database tables and seed data in background."""
     try:
+        await _run_production_migrations()
+
         async with engine.begin() as conn:
             await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
 
