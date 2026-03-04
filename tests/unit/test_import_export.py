@@ -586,6 +586,204 @@ class TestImportExportRoundTrip:
         assert export_response.status_code == 200
 
 
+class TestExportDataScoping:
+    """Tests that export respects role-based data scoping.
+
+    Admin/manager users should export ALL records regardless of owner.
+    Sales rep users should only export their own records.
+    """
+
+    @pytest.mark.asyncio
+    async def test_admin_exports_all_contacts(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_admin_user: User,
+        admin_auth_headers: dict,
+    ):
+        """Admin user exports contacts owned by other users."""
+        # Create a separate user to own some contacts
+        other_user = User(
+            email="otheruser_contacts@example.com",
+            hashed_password="hashed",
+            full_name="Other User",
+            is_active=True,
+            is_superuser=False,
+        )
+        db_session.add(other_user)
+        await db_session.flush()
+
+        # Create contacts owned by the other user (not the admin)
+        for i in range(3):
+            contact = Contact(
+                first_name=f"OtherOwner{i}",
+                last_name="Contact",
+                email=f"otherowner_contact{i}@test.com",
+                status="active",
+                owner_id=other_user.id,
+                created_by_id=other_user.id,
+            )
+            db_session.add(contact)
+        await db_session.commit()
+
+        # Admin exports - should see all contacts including other user's
+        response = await client.get(
+            "/api/import-export/export/contacts",
+            headers=admin_auth_headers,
+        )
+        assert response.status_code == 200
+        reader = csv.DictReader(io.StringIO(response.text))
+        rows = list(reader)
+        exported_emails = [row["email"] for row in rows]
+
+        assert len(rows) >= 3
+        assert "otherowner_contact0@test.com" in exported_emails
+        assert "otherowner_contact1@test.com" in exported_emails
+        assert "otherowner_contact2@test.com" in exported_emails
+
+    @pytest.mark.asyncio
+    async def test_admin_exports_all_companies(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_admin_user: User,
+        admin_auth_headers: dict,
+    ):
+        """Admin user exports companies owned by other users."""
+        other_user = User(
+            email="otheruser_companies@example.com",
+            hashed_password="hashed",
+            full_name="Other User",
+            is_active=True,
+            is_superuser=False,
+        )
+        db_session.add(other_user)
+        await db_session.flush()
+
+        for i in range(2):
+            company = Company(
+                name=f"OtherOwner Corp {i}",
+                status="prospect",
+                owner_id=other_user.id,
+                created_by_id=other_user.id,
+            )
+            db_session.add(company)
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/import-export/export/companies",
+            headers=admin_auth_headers,
+        )
+        assert response.status_code == 200
+        reader = csv.DictReader(io.StringIO(response.text))
+        rows = list(reader)
+        company_names = [row["name"] for row in rows]
+
+        assert len(rows) >= 2
+        assert "OtherOwner Corp 0" in company_names
+        assert "OtherOwner Corp 1" in company_names
+
+    @pytest.mark.asyncio
+    async def test_admin_exports_all_leads(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_admin_user: User,
+        admin_auth_headers: dict,
+    ):
+        """Admin user exports leads owned by other users."""
+        other_user = User(
+            email="otheruser_leads@example.com",
+            hashed_password="hashed",
+            full_name="Other User",
+            is_active=True,
+            is_superuser=False,
+        )
+        db_session.add(other_user)
+        await db_session.flush()
+
+        for i in range(2):
+            lead = Lead(
+                first_name=f"OtherOwner{i}",
+                last_name="Lead",
+                email=f"otherowner_lead{i}@test.com",
+                status="new",
+                owner_id=other_user.id,
+                created_by_id=other_user.id,
+            )
+            db_session.add(lead)
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/import-export/export/leads",
+            headers=admin_auth_headers,
+        )
+        assert response.status_code == 200
+        reader = csv.DictReader(io.StringIO(response.text))
+        rows = list(reader)
+        lead_emails = [row["email"] for row in rows]
+
+        assert len(rows) >= 2
+        assert "otherowner_lead0@test.com" in lead_emails
+        assert "otherowner_lead1@test.com" in lead_emails
+
+    @pytest.mark.asyncio
+    async def test_sales_rep_exports_only_own_contacts(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        _sales_rep_user: User,
+        sales_rep_auth_headers: dict,
+    ):
+        """Sales rep user exports only contacts they own."""
+        # Create a contact owned by the sales rep
+        own_contact = Contact(
+            first_name="OwnContact",
+            last_name="Rep",
+            email="own_contact@test.com",
+            status="active",
+            owner_id=_sales_rep_user.id,
+            created_by_id=_sales_rep_user.id,
+        )
+        db_session.add(own_contact)
+
+        # Create a contact owned by someone else
+        other_user = User(
+            email="anotheruser_scope@example.com",
+            hashed_password="hashed",
+            full_name="Another User",
+            is_active=True,
+            is_superuser=False,
+        )
+        db_session.add(other_user)
+        await db_session.flush()
+
+        other_contact = Contact(
+            first_name="OtherContact",
+            last_name="User",
+            email="other_contact_scoped@test.com",
+            status="active",
+            owner_id=other_user.id,
+            created_by_id=other_user.id,
+        )
+        db_session.add(other_contact)
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/import-export/export/contacts",
+            headers=sales_rep_auth_headers,
+        )
+        assert response.status_code == 200
+        reader = csv.DictReader(io.StringIO(response.text))
+        rows = list(reader)
+        exported_emails = [row["email"] for row in rows]
+
+        # Sales rep should see their own contact
+        assert "own_contact@test.com" in exported_emails
+        # Sales rep should NOT see the other user's contact
+        assert "other_contact_scoped@test.com" not in exported_emails
+
+
 class TestImportExportUnauthorized:
     """Tests for unauthorized access to import/export endpoints."""
 

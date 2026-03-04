@@ -159,6 +159,10 @@ async def create_campaign(
     db: DBSession,
 ):
     """Create a new campaign."""
+    # Default owner to current user so the campaign appears in their list
+    if campaign_data.owner_id is None:
+        campaign_data.owner_id = current_user.id
+
     service = CampaignService(db)
     campaign = await service.create(campaign_data, current_user.id)
     return CampaignResponse.model_validate(campaign)

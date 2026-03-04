@@ -8,6 +8,7 @@
 import {
   createContext,
   useContext,
+  useState,
   useEffect,
   useCallback,
   type ReactNode,
@@ -159,14 +160,15 @@ interface TenantProviderProps {
 }
 
 export function TenantProvider({ children }: TenantProviderProps) {
-  // Read slug from localStorage on mount
-  const storedSlug = (() => {
+  // Use React state so updates to the slug trigger a re-render and
+  // propagate to all consumers (BrandingSection, Sidebar, etc.).
+  const [slugState, setSlugState] = useState<string | null>(() => {
     try {
       return localStorage.getItem(TENANT_SLUG_KEY);
     } catch {
       return null;
     }
-  })();
+  });
 
   const queryClient = useQueryClient();
 
@@ -180,9 +182,9 @@ export function TenantProvider({ children }: TenantProviderProps) {
   })();
 
   const { data: tenant, isLoading } = useQuery({
-    queryKey: ['tenant', 'config', storedSlug],
-    queryFn: () => fetchTenantConfig(storedSlug!),
-    enabled: !!storedSlug,
+    queryKey: ['tenant', 'config', slugState],
+    queryFn: () => fetchTenantConfig(slugState!),
+    enabled: !!slugState,
     staleTime: 10 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
     retry: 1,
@@ -213,6 +215,17 @@ export function TenantProvider({ children }: TenantProviderProps) {
     };
   }, []);
 
+  // Listen for the custom storage event dispatched by setTenantSlugOnLogin
+  // so the provider picks up the slug even when set outside of React.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ slug: string | null }>).detail;
+      setSlugState(detail.slug);
+    };
+    window.addEventListener('tenant-slug-changed', handler);
+    return () => window.removeEventListener('tenant-slug-changed', handler);
+  }, []);
+
   const setTenantSlug = useCallback(
     (slug: string | null) => {
       try {
@@ -225,6 +238,8 @@ export function TenantProvider({ children }: TenantProviderProps) {
       } catch {
         // localStorage not available
       }
+      // Update React state so the provider (and all consumers) re-render
+      setSlugState(slug);
       // Invalidate the query to refetch
       queryClient.invalidateQueries({ queryKey: ['tenant', 'config'] });
     },
@@ -237,7 +252,7 @@ export function TenantProvider({ children }: TenantProviderProps) {
 
   const contextValue: TenantContextValue = {
     tenant: tenant ?? null,
-    tenantSlug: storedSlug,
+    tenantSlug: slugState,
     isLoading,
     setTenantSlug,
     refreshBranding,
@@ -264,6 +279,10 @@ export function setTenantSlugOnLogin(slug: string) {
   } catch {
     // localStorage not available
   }
+  // Notify the TenantProvider so it updates React state immediately
+  window.dispatchEvent(
+    new CustomEvent('tenant-slug-changed', { detail: { slug } })
+  );
 }
 
 export function clearTenantSlugOnLogout() {
@@ -272,4 +291,7 @@ export function clearTenantSlugOnLogout() {
   } catch {
     // localStorage not available
   }
+  window.dispatchEvent(
+    new CustomEvent('tenant-slug-changed', { detail: { slug: null } })
+  );
 }

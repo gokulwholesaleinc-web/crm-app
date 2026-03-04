@@ -1,12 +1,13 @@
 """Import/Export API routes."""
 
-from typing import List, Dict, Any
+from typing import Annotated, List, Dict, Any
 from pydantic import BaseModel
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
 import io
 from src.core.constants import HTTPStatus
 from src.core.router_utils import DBSession, CurrentUser, raise_bad_request
+from src.core.data_scope import DataScope, get_data_scope
 from src.import_export.csv_handler import CSVHandler
 from src.import_export.bulk_operations import BulkOperationsHandler
 
@@ -51,10 +52,11 @@ class BulkDeleteRequest(BaseModel):
 async def export_contacts(
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
-    """Export contacts as CSV (scoped to current user)."""
+    """Export contacts as CSV (respects role-based data scoping)."""
     handler = CSVHandler(db)
-    csv_content = await handler.export_contacts(user_id=current_user.id)
+    csv_content = await handler.export_contacts(user_id=data_scope.owner_id)
 
     return StreamingResponse(
         io.StringIO(csv_content),
@@ -69,10 +71,11 @@ async def export_contacts(
 async def export_companies(
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
-    """Export companies as CSV (scoped to current user)."""
+    """Export companies as CSV (respects role-based data scoping)."""
     handler = CSVHandler(db)
-    csv_content = await handler.export_companies(user_id=current_user.id)
+    csv_content = await handler.export_companies(user_id=data_scope.owner_id)
 
     return StreamingResponse(
         io.StringIO(csv_content),
@@ -87,10 +90,11 @@ async def export_companies(
 async def export_leads(
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
-    """Export leads as CSV (scoped to current user)."""
+    """Export leads as CSV (respects role-based data scoping)."""
     handler = CSVHandler(db)
-    csv_content = await handler.export_leads(user_id=current_user.id)
+    csv_content = await handler.export_leads(user_id=data_scope.owner_id)
 
     return StreamingResponse(
         io.StringIO(csv_content),

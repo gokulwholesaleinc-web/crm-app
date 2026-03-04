@@ -18,6 +18,9 @@ const BASE_URL = import.meta.env.VITE_API_URL || '';
 // Token storage key
 const TOKEN_KEY = 'crm_access_token';
 
+// Tenant slug storage key (must match TenantProvider)
+const TENANT_SLUG_KEY = 'crm_tenant_slug:v1';
+
 /**
  * Create configured Axios instance
  */
@@ -30,12 +33,21 @@ const createApiClient = (): AxiosInstance => {
     timeout: 30000,
   });
 
-  // Request interceptor - add auth token
+  // Request interceptor - add auth token and tenant slug
   client.interceptors.request.use(
     (config: InternalAxiosRequestConfig) => {
       const token = getToken();
       if (token && config.headers) {
         config.headers.Authorization = `Bearer ${token}`;
+      }
+      // Attach tenant slug so the backend can resolve branding
+      try {
+        const slug = localStorage.getItem(TENANT_SLUG_KEY);
+        if (slug && config.headers) {
+          config.headers['X-Tenant-Slug'] = slug;
+        }
+      } catch {
+        // localStorage not available
       }
       return config;
     },

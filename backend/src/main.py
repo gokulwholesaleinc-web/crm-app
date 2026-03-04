@@ -341,8 +341,12 @@ if FRONTEND_DIST.exists():
             response = FileResponse(file_path)
             if file_path.suffix in _CACHEABLE_EXTENSIONS:
                 response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            else:
+                response.headers["Cache-Control"] = "no-cache, must-revalidate"
             return response
-        return FileResponse(FRONTEND_DIST / "index.html")
+        response = FileResponse(FRONTEND_DIST / "index.html")
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        return response
 else:
     @app.get("/")
     async def root():

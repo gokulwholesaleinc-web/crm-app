@@ -2,7 +2,7 @@
  * Main App component with routing, query client, and toast notifications.
  */
 
-import { Suspense, useEffect } from 'react';
+import { Suspense, useEffect, useRef } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
@@ -11,7 +11,8 @@ import AppRoutes from './routes';
 import { Spinner } from './components/ui/Spinner';
 import { useAuthStore } from './store/authStore';
 import { useTheme } from './hooks/useTheme';
-import { TenantProvider } from './providers/TenantProvider';
+import { TenantProvider, useTenant } from './providers/TenantProvider';
+import { apiClient } from './api/client';
 
 // Configure QueryClient with sensible defaults
 const queryClient = new QueryClient({
@@ -61,12 +62,50 @@ function ThemeInitializer() {
   return null;
 }
 
+// Recover tenant slug for already-authenticated users who are missing it.
+// This handles users who logged in before the tenant-slug feature was
+// deployed, or whose localStorage was cleared while the auth token persisted.
+function TenantRecovery() {
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isLoading = useAuthStore((state) => state.isLoading);
+  const { tenantSlug, setTenantSlug } = useTenant();
+  const recovered = useRef(false);
+
+  useEffect(() => {
+    if (isLoading || !isAuthenticated || tenantSlug || recovered.current) {
+      return;
+    }
+    recovered.current = true;
+
+    // User is authenticated but has no tenant slug stored -- fetch their
+    // tenant memberships from the backend and store the primary one.
+    apiClient
+      .get<Array<{ tenant_slug: string; is_primary: boolean }>>('/api/auth/me/tenants')
+      .then((res) => {
+        const tenants = res.data;
+        if (tenants && tenants.length > 0) {
+          const primary = tenants.find((t) => t.is_primary) ?? tenants[0];
+          if (primary) {
+            setTenantSlug(primary.tenant_slug);
+          }
+        }
+      })
+      .catch(() => {
+        // Silently ignore -- user may genuinely have no tenant association,
+        // or the token may be invalid (401 handler will redirect to login).
+      });
+  }, [isAuthenticated, isLoading, tenantSlug, setTenantSlug]);
+
+  return null;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TenantProvider>
         <ThemeInitializer />
         <AuthEventHandler />
+        <TenantRecovery />
         <BrowserRouter
           future={{
             v7_startTransition: true,

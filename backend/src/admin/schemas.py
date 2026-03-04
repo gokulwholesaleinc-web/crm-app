@@ -35,6 +35,22 @@ class AssignRoleRequest(BaseModel):
     role: str
 
 
+class LinkTenantRequest(BaseModel):
+    """Request body to link a user to a tenant."""
+    tenant_slug: str = "default"
+    role: str = "member"
+    is_primary: bool = True
+
+
+class LinkTenantResponse(BaseModel):
+    """Response after linking a user to a tenant."""
+    user_id: int
+    tenant_id: int
+    tenant_slug: str
+    role: str
+    is_primary: bool
+
+
 class SystemStats(BaseModel):
     """System-wide aggregate statistics."""
     total_users: int = 0

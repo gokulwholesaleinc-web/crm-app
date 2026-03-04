@@ -26,10 +26,13 @@ from src.admin.schemas import (
     AdminUserResponse,
     AdminUserUpdate,
     AssignRoleRequest,
+    LinkTenantRequest,
+    LinkTenantResponse,
     SystemStats,
     TeamMemberOverview,
     ActivityFeedEntry,
 )
+from src.whitelabel.models import Tenant, TenantUser
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -372,4 +375,66 @@ async def assign_role(
         is_superuser=user.is_superuser,
         last_login=user.last_login,
         created_at=user.created_at if hasattr(user, "created_at") else None,
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /api/admin/users/{id}/link-tenant
+# ---------------------------------------------------------------------------
+@router.post("/users/{user_id}/link-tenant", response_model=LinkTenantResponse)
+@limiter.limit("10/minute")
+async def link_user_to_tenant(
+    request: Request,
+    user_id: int,
+    data: LinkTenantRequest,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Link a user to a tenant. Creates a TenantUser record."""
+    _require_admin(current_user)
+
+    # Verify user exists
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise_not_found("User", user_id)
+
+    # Verify tenant exists
+    result = await db.execute(select(Tenant).where(Tenant.slug == data.tenant_slug))
+    tenant = result.scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail=f"Tenant with slug '{data.tenant_slug}' not found",
+        )
+
+    # Check if link already exists
+    result = await db.execute(
+        select(TenantUser).where(
+            TenantUser.user_id == user_id,
+            TenantUser.tenant_id == tenant.id,
+        )
+    )
+    existing = result.scalar_one_or_none()
+    if existing:
+        raise HTTPException(
+            status_code=HTTPStatus.CONFLICT,
+            detail="User is already linked to this tenant",
+        )
+
+    tenant_user = TenantUser(
+        user_id=user_id,
+        tenant_id=tenant.id,
+        role=data.role,
+        is_primary=data.is_primary,
+    )
+    db.add(tenant_user)
+    await db.commit()
+
+    return LinkTenantResponse(
+        user_id=user_id,
+        tenant_id=tenant.id,
+        tenant_slug=tenant.slug,
+        role=data.role,
+        is_primary=data.is_primary,
     )

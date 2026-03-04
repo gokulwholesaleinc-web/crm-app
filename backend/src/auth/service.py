@@ -43,6 +43,8 @@ class AuthService:
 
     async def update_user(self, user: User, user_data: UserUpdate) -> User:
         """Update user profile."""
+        # Merge the user into the current session in case it was detached (e.g. from cache)
+        user = await self.db.merge(user)
         update_data = user_data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(user, field, value)
