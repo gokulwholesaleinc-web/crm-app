@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.models import User
 from src.auth.security import verify_password, get_password_hash
-from src.whitelabel.models import Tenant, TenantSettings, TenantUser
+from src.whitelabel.models import Tenant, TenantUser
 
 
 class TestAuthRegister:

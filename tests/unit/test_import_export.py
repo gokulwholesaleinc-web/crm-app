@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from src.auth.models import User
+from src.auth.security import get_password_hash
 from src.contacts.models import Contact
 from src.companies.models import Company
 from src.leads.models import Lead, LeadSource
@@ -587,11 +588,7 @@ class TestImportExportRoundTrip:
 
 
 class TestExportDataScoping:
-    """Tests that export respects role-based data scoping.
-
-    Admin/manager users should export ALL records regardless of owner.
-    Sales rep users should only export their own records.
-    """
+    """Tests that export respects role-based data scoping."""
 
     @pytest.mark.asyncio
     async def test_admin_exports_all_contacts(
@@ -605,7 +602,7 @@ class TestExportDataScoping:
         # Create a separate user to own some contacts
         other_user = User(
             email="otheruser_contacts@example.com",
-            hashed_password="hashed",
+            hashed_password=get_password_hash("password123"),
             full_name="Other User",
             is_active=True,
             is_superuser=False,
@@ -652,7 +649,7 @@ class TestExportDataScoping:
         """Admin user exports companies owned by other users."""
         other_user = User(
             email="otheruser_companies@example.com",
-            hashed_password="hashed",
+            hashed_password=get_password_hash("password123"),
             full_name="Other User",
             is_active=True,
             is_superuser=False,
@@ -694,7 +691,7 @@ class TestExportDataScoping:
         """Admin user exports leads owned by other users."""
         other_user = User(
             email="otheruser_leads@example.com",
-            hashed_password="hashed",
+            hashed_password=get_password_hash("password123"),
             full_name="Other User",
             is_active=True,
             is_superuser=False,
@@ -750,7 +747,7 @@ class TestExportDataScoping:
         # Create a contact owned by someone else
         other_user = User(
             email="anotheruser_scope@example.com",
-            hashed_password="hashed",
+            hashed_password=get_password_hash("password123"),
             full_name="Another User",
             is_active=True,
             is_superuser=False,

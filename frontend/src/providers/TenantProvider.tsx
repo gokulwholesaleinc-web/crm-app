@@ -95,6 +95,8 @@ function applyBrandingToDOM(config: TenantConfig | null) {
     root.style.removeProperty('--brand-primary');
     root.style.removeProperty('--brand-secondary');
     root.style.removeProperty('--brand-accent');
+    const existingStyle = document.getElementById('tenant-custom-css');
+    if (existingStyle) existingStyle.remove();
     return;
   }
 
@@ -172,14 +174,14 @@ export function TenantProvider({ children }: TenantProviderProps) {
 
   const queryClient = useQueryClient();
 
-  const cachedConfig = (() => {
+  const [cachedConfig] = useState<TenantConfig | undefined>(() => {
     try {
       const cached = localStorage.getItem(TENANT_CONFIG_KEY);
       return cached ? JSON.parse(cached) as TenantConfig : undefined;
     } catch {
       return undefined;
     }
-  })();
+  });
 
   const { data: tenant, isLoading } = useQuery({
     queryKey: ['tenant', 'config', slugState],
@@ -210,8 +212,6 @@ export function TenantProvider({ children }: TenantProviderProps) {
   useEffect(() => {
     return () => {
       applyBrandingToDOM(null);
-      const existingStyle = document.getElementById('tenant-custom-css');
-      if (existingStyle) existingStyle.remove();
     };
   }, []);
 

@@ -127,7 +127,6 @@ async def list_campaigns(
     owner_id: Optional[int] = None,
 ):
     """List campaigns with pagination and filters."""
-    # Auto-scope to current user's data by default
     effective_owner_id = owner_id
     if effective_owner_id is None:
         effective_owner_id = current_user.id
@@ -159,7 +158,6 @@ async def create_campaign(
     db: DBSession,
 ):
     """Create a new campaign."""
-    # Default owner to current user so the campaign appears in their list
     if campaign_data.owner_id is None:
         campaign_data.owner_id = current_user.id
 

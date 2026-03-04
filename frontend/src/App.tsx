@@ -2,7 +2,7 @@
  * Main App component with routing, query client, and toast notifications.
  */
 
-import { Suspense, useEffect, useRef } from 'react';
+import { Suspense, useEffect } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
@@ -14,7 +14,6 @@ import { useTheme } from './hooks/useTheme';
 import { TenantProvider, useTenant } from './providers/TenantProvider';
 import { apiClient } from './api/client';
 
-// Configure QueryClient with sensible defaults
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -29,7 +28,6 @@ const queryClient = new QueryClient({
   },
 });
 
-// Loading fallback component for lazy-loaded routes
 function PageLoader() {
   return (
     <div className="flex h-screen w-full items-center justify-center">
@@ -38,7 +36,6 @@ function PageLoader() {
   );
 }
 
-// Component to handle auth events (401 responses)
 function AuthEventHandler() {
   const logout = useAuthStore((state) => state.logout);
 
@@ -56,29 +53,21 @@ function AuthEventHandler() {
   return null;
 }
 
-// Initialize theme at app root to prevent flash of wrong theme
 function ThemeInitializer() {
   useTheme();
   return null;
 }
 
-// Recover tenant slug for already-authenticated users who are missing it.
-// This handles users who logged in before the tenant-slug feature was
-// deployed, or whose localStorage was cleared while the auth token persisted.
 function TenantRecovery() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const isLoading = useAuthStore((state) => state.isLoading);
   const { tenantSlug, setTenantSlug } = useTenant();
-  const recovered = useRef(false);
 
   useEffect(() => {
-    if (isLoading || !isAuthenticated || tenantSlug || recovered.current) {
+    if (isLoading || !isAuthenticated || tenantSlug) {
       return;
     }
-    recovered.current = true;
 
-    // User is authenticated but has no tenant slug stored -- fetch their
-    // tenant memberships from the backend and store the primary one.
     apiClient
       .get<Array<{ tenant_slug: string; is_primary: boolean }>>('/api/auth/me/tenants')
       .then((res) => {
@@ -91,8 +80,7 @@ function TenantRecovery() {
         }
       })
       .catch(() => {
-        // Silently ignore -- user may genuinely have no tenant association,
-        // or the token may be invalid (401 handler will redirect to login).
+        // ignore
       });
   }, [isAuthenticated, isLoading, tenantSlug, setTenantSlug]);
 

@@ -8,7 +8,6 @@ from typing import List
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from sqlalchemy import select, func, update
-from sqlalchemy.orm import load_only
 
 from src.core.constants import HTTPStatus
 from src.core.rate_limit import limiter

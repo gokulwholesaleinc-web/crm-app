@@ -48,7 +48,7 @@ from src.quotes.router import router as quotes_router
 from src.payments.router import router as payments_router
 from src.proposals.router import router as proposals_router
 from src.contracts.router import router as contracts_router
-from src.admin.router import router as admin_router  # noqa: F401
+from src.admin.router import router as admin_router
 from src.ai.router import router as ai_router
 from src.meta.router import router as meta_router
 from src.expenses.router import router as expenses_router

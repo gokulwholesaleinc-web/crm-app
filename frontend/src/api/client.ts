@@ -10,15 +10,9 @@ import axios, {
 } from 'axios';
 import type { ApiError } from '../types';
 
-// Get base URL from environment variable
-// Individual API modules include /api prefix, so base URL should be empty for proxy setup
-// or the backend root URL (e.g., http://localhost:8000) for direct access
 const BASE_URL = import.meta.env.VITE_API_URL || '';
 
-// Token storage key
 const TOKEN_KEY = 'crm_access_token';
-
-// Tenant slug storage key (must match TenantProvider)
 const TENANT_SLUG_KEY = 'crm_tenant_slug:v1';
 
 /**
@@ -33,21 +27,15 @@ const createApiClient = (): AxiosInstance => {
     timeout: 30000,
   });
 
-  // Request interceptor - add auth token and tenant slug
   client.interceptors.request.use(
     (config: InternalAxiosRequestConfig) => {
       const token = getToken();
       if (token && config.headers) {
         config.headers.Authorization = `Bearer ${token}`;
       }
-      // Attach tenant slug so the backend can resolve branding
-      try {
-        const slug = localStorage.getItem(TENANT_SLUG_KEY);
-        if (slug && config.headers) {
-          config.headers['X-Tenant-Slug'] = slug;
-        }
-      } catch {
-        // localStorage not available
+      const slug = localStorage.getItem(TENANT_SLUG_KEY);
+      if (slug && config.headers) {
+        config.headers['X-Tenant-Slug'] = slug;
       }
       return config;
     },
@@ -56,20 +44,16 @@ const createApiClient = (): AxiosInstance => {
     }
   );
 
-  // Response interceptor - handle errors
   client.interceptors.response.use(
     (response: AxiosResponse) => {
       return response;
     },
     (error: AxiosError<ApiError>) => {
-      // Handle 401 Unauthorized - clear token and redirect to login
       if (error.response?.status === 401) {
         clearToken();
-        // Optionally dispatch an event or redirect
         window.dispatchEvent(new CustomEvent('auth:unauthorized'));
       }
 
-      // Transform error for consistent handling
       const apiError: ApiError = {
         detail: error.response?.data?.detail || error.message || 'An error occurred',
         status_code: error.response?.status,
@@ -110,8 +94,6 @@ export const isAuthenticated = (): boolean => {
   return !!getToken();
 };
 
-// Create and export the API client instance
 export const apiClient = createApiClient();
 
-// Export default for convenience
 export default apiClient;

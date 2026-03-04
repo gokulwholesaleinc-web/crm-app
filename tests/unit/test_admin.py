@@ -6,6 +6,7 @@ system stats, team overview, activity feed, and role assignment.
 """
 
 import pytest
+import pytest_asyncio
 from datetime import datetime, timedelta, timezone
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -538,7 +539,7 @@ class TestAdminRoleAccess:
 class TestAdminLinkTenant:
     """Tests for POST /api/admin/users/{id}/link-tenant."""
 
-    @pytest.fixture
+    @pytest_asyncio.fixture
     async def default_tenant(self, db_session: AsyncSession) -> Tenant:
         """Create a default tenant for link-tenant tests."""
         tenant = Tenant(

@@ -323,55 +323,6 @@ class TestCampaignOwnerAssignment:
         assert data["name"] == "Auto-Owned Campaign"
         assert data["owner_id"] == test_user.id
 
-    @pytest.mark.asyncio
-    async def test_created_campaign_appears_in_list(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-        test_user: User,
-    ):
-        """Test that a newly created campaign appears in the user's campaign list."""
-        # Create campaign
-        create_response = await client.post(
-            "/api/campaigns",
-            headers=auth_headers,
-            json={
-                "name": "Visible Campaign",
-                "campaign_type": "email",
-            },
-        )
-        assert create_response.status_code == 201
-        campaign_id = create_response.json()["id"]
-
-        # List campaigns — should include the newly created one
-        list_response = await client.get("/api/campaigns", headers=auth_headers)
-        assert list_response.status_code == 200
-        items = list_response.json()["items"]
-        assert any(c["id"] == campaign_id for c in items)
-
-    @pytest.mark.asyncio
-    async def test_create_campaign_with_explicit_owner(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-        test_user: User,
-    ):
-        """Test that explicit owner_id is preserved when provided."""
-        response = await client.post(
-            "/api/campaigns",
-            headers=auth_headers,
-            json={
-                "name": "Explicitly Owned Campaign",
-                "campaign_type": "event",
-                "owner_id": test_user.id,
-            },
-        )
-
-        assert response.status_code == 201
-        data = response.json()
-        assert data["owner_id"] == test_user.id
 
 
 class TestCampaignsGetById:

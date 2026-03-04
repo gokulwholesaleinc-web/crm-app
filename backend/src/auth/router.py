@@ -74,30 +74,21 @@ async def register(
 
     user = await service.create_user(user_data)
 
-    # Auto-link new user to the default tenant (or tenant from request context)
     tenant_slug = getattr(request.state, "tenant_slug_hint", None) or "default"
     result = await db.execute(
         select(Tenant).where(Tenant.slug == tenant_slug)
     )
     tenant = result.scalar_one_or_none()
     if tenant:
-        # Check if link already exists (defensive)
-        existing_link = await db.execute(
-            select(TenantUser).where(
-                TenantUser.user_id == user.id,
-                TenantUser.tenant_id == tenant.id,
-            )
+        tenant_user = TenantUser(
+            user_id=user.id,
+            tenant_id=tenant.id,
+            role="member",
+            is_primary=True,
         )
-        if not existing_link.scalar_one_or_none():
-            tenant_user = TenantUser(
-                user_id=user.id,
-                tenant_id=tenant.id,
-                role="member",
-                is_primary=True,
-            )
-            db.add(tenant_user)
-            await db.commit()
-            await db.refresh(user)
+        db.add(tenant_user)
+        await db.commit()
+        await db.refresh(user)
 
     return user
 
@@ -133,28 +124,18 @@ async def login_json(
     db: DBSession,
 ):
     """Login with JSON body and get access token."""
-    try:
-        service = AuthService(db)
-        user = await service.authenticate_user(login_data.email, login_data.password)
+    service = AuthService(db)
+    user = await service.authenticate_user(login_data.email, login_data.password)
 
-        if not user:
-            raise HTTPException(
-                status_code=HTTPStatus.UNAUTHORIZED,
-                detail="Incorrect email or password",
-            )
-
-        access_token = create_access_token(data={"sub": str(user.id)})
-        tenants = await _get_user_tenant_info(db, user.id)
-        return Token(access_token=access_token, tenants=tenants)
-    except HTTPException:
-        raise
-    except Exception as e:
-        import logging
-        logging.error(f"Login error: {str(e)}", exc_info=True)
+    if not user:
         raise HTTPException(
-            status_code=500,
-            detail="Internal server error",
+            status_code=HTTPStatus.UNAUTHORIZED,
+            detail="Incorrect email or password",
         )
+
+    access_token = create_access_token(data={"sub": str(user.id)})
+    tenants = await _get_user_tenant_info(db, user.id)
+    return Token(access_token=access_token, tenants=tenants)
 
 
 @router.get("/me", response_model=UserResponse)
