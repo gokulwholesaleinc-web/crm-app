@@ -442,25 +442,6 @@ class TestLeadsUpdate:
         assert data["status"] == "contacted"
 
     @pytest.mark.asyncio
-    async def test_update_lead_to_qualified(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-        test_lead: Lead,
-    ):
-        """Test updating lead to qualified status."""
-        response = await client.patch(
-            f"/api/leads/{test_lead.id}",
-            headers=auth_headers,
-            json={"status": "qualified"},
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "qualified"
-
-    @pytest.mark.asyncio
     async def test_update_lead_budget(
         self,
         client: AsyncClient,

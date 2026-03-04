@@ -781,30 +781,8 @@ class TestWeightedAmount:
         # Stage probability is 10%, so weighted should be 10000
         assert data["weighted_amount"] == 10000.0
 
-    @pytest.mark.asyncio
-    async def test_weighted_amount_with_override(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-        test_pipeline_stage: PipelineStage,
-    ):
-        """Test weighted amount with probability override."""
-        response = await client.post(
-            "/api/opportunities",
-            headers=auth_headers,
-            json={
-                "name": "Override Test",
-                "pipeline_stage_id": test_pipeline_stage.id,
-                "amount": 100000.0,
-                "probability": 50,  # Override stage probability
-            },
-        )
-
-        assert response.status_code == 201
-        data = response.json()
-        # Custom probability is 50%, so weighted should be 50000
-        assert data["weighted_amount"] == 50000.0
+    # NOTE: Probability override weighted amount is tested in
+    # TestOpportunitiesCreate::test_create_opportunity_with_probability_override
 
 
 class TestOpportunitiesUnauthorized:

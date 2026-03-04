@@ -14,7 +14,7 @@ from sqlalchemy import select
 
 from src.auth.models import User
 from src.auth.security import get_password_hash, create_access_token
-from src.proposals.models import Proposal, ProposalTemplate, ProposalView
+from src.proposals.models import Proposal, ProposalView
 from src.contacts.models import Contact
 from src.companies.models import Company
 from src.opportunities.models import Opportunity, PipelineStage
@@ -736,67 +736,7 @@ class TestPublicView:
         assert response.status_code == 404
 
 
-# =============================================================================
-# Template Tests
-# =============================================================================
-
-class TestProposalTemplates:
-    """Tests for proposal template endpoints."""
-
-    @pytest.mark.asyncio
-    async def test_create_template(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-    ):
-        """Test creating a proposal template."""
-        response = await client.post(
-            "/api/proposals/templates",
-            headers=auth_headers,
-            json={
-                "name": "SaaS Template",
-                "description": "Template for SaaS proposals",
-                "category": "software",
-                "body": "Dear {{contact_name}},\n\nWe propose {{scope}}.",
-            },
-        )
-
-        assert response.status_code == 201
-        data = response.json()
-        assert data["name"] == "SaaS Template"
-        assert data["category"] == "software"
-        assert "{{contact_name}}" in data["body"]
-
-    @pytest.mark.asyncio
-    async def test_list_templates(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-    ):
-        """Test listing proposal templates."""
-        # Create a template first
-        template = ProposalTemplate(
-            name="Test Template",
-            description="A test template",
-            category="general",
-            body="Hello {{name}}",
-            created_by_id=1,
-        )
-        db_session.add(template)
-        await db_session.commit()
-
-        response = await client.get(
-            "/api/proposals/templates",
-            headers=auth_headers,
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert isinstance(data, list)
-        assert len(data) >= 1
-        assert any(t["name"] == "Test Template" for t in data)
+# NOTE: Proposal template CRUD tests are in test_proposal_template_crud.py
 
 
 # =============================================================================

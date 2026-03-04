@@ -1086,85 +1086,10 @@ class TestFinancialCalculations:
 # =============================================================================
 
 class TestQuotePaymentType:
-    """Tests for payment_type and recurring_interval columns."""
+    """Tests for payment_type update on quotes.
 
-    @pytest.mark.asyncio
-    async def test_create_one_time_quote(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-    ):
-        """Test creating a one-time payment quote (default)."""
-        response = await client.post(
-            "/api/quotes",
-            headers=auth_headers,
-            json={
-                "title": "One-Time Quote",
-                "currency": "USD",
-                "tax_rate": 0,
-                "discount_value": 0,
-                "line_items": [
-                    {"description": "Setup Fee", "quantity": 1, "unit_price": 500.0},
-                ],
-            },
-        )
-
-        assert response.status_code == 201
-        data = response.json()
-        assert data["payment_type"] == "one_time"
-        assert data["recurring_interval"] is None
-
-    @pytest.mark.asyncio
-    async def test_create_subscription_quote(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-    ):
-        """Test creating a subscription quote with recurring interval."""
-        response = await client.post(
-            "/api/quotes",
-            headers=auth_headers,
-            json={
-                "title": "Monthly SaaS Quote",
-                "currency": "USD",
-                "tax_rate": 0,
-                "discount_value": 0,
-                "payment_type": "subscription",
-                "recurring_interval": "monthly",
-                "line_items": [
-                    {"description": "SaaS License", "quantity": 1, "unit_price": 99.0},
-                ],
-            },
-        )
-
-        assert response.status_code == 201
-        data = response.json()
-        assert data["payment_type"] == "subscription"
-        assert data["recurring_interval"] == "monthly"
-
-    @pytest.mark.asyncio
-    async def test_subscription_requires_recurring_interval(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-    ):
-        """Test that subscription payment_type requires recurring_interval."""
-        response = await client.post(
-            "/api/quotes",
-            headers=auth_headers,
-            json={
-                "title": "Bad Sub Quote",
-                "currency": "USD",
-                "tax_rate": 0,
-                "discount_value": 0,
-                "payment_type": "subscription",
-            },
-        )
-
-        assert response.status_code == 422
+    NOTE: Creation tests for payment_type/recurring_interval are in test_subscription.py.
+    """
 
     @pytest.mark.asyncio
     async def test_update_payment_type_to_subscription(
