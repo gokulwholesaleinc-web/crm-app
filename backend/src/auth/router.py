@@ -165,6 +165,21 @@ async def get_me(
     return current_user
 
 
+@router.get("/me/tenants", response_model=List[TenantInfo])
+async def get_my_tenants(
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Get tenant memberships for the current user.
+
+    Used by the frontend to recover tenant context when a user is
+    already authenticated but has no tenant slug stored locally
+    (e.g. logged in before the tenant-slug feature was deployed).
+    """
+    tenants = await _get_user_tenant_info(db, current_user.id)
+    return tenants or []
+
+
 @router.patch("/me", response_model=UserResponse)
 async def update_me(
     user_data: UserUpdate,
