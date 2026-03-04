@@ -385,8 +385,6 @@ export function ActivitiesPage() {
       >
         <ActivityForm
           activity={editingActivity || undefined}
-          entityType="user"
-          entityId={0}
           onSubmit={handleFormSubmit}
           onCancel={handleFormCancel}
           isLoading={createActivity.isPending || updateActivity.isPending}

@@ -19,6 +19,9 @@ class ActivityBase(BaseModel):
 
 
 class ActivityCreate(ActivityBase):
+    entity_type: Optional[str] = None
+    entity_id: Optional[int] = None
+
     # Call-specific
     call_duration_minutes: Optional[int] = None
     call_outcome: Optional[str] = None

@@ -742,6 +742,8 @@ export interface ActivityBase {
 }
 
 export interface ActivityCreate extends ActivityBase {
+  entity_type?: string;
+  entity_id?: number;
   // Call-specific
   call_duration_minutes?: number | null;
   call_outcome?: string | null;

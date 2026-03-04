@@ -77,6 +77,10 @@ class ActivityService(CRUDService[Activity, ActivityCreate, ActivityUpdate]):
     async def create(self, data: ActivityCreate, user_id: int) -> Activity:
         """Create a new activity."""
         activity_data = data.model_dump()
+        if not activity_data.get("entity_type"):
+            activity_data["entity_type"] = "user"
+        if not activity_data.get("entity_id"):
+            activity_data["entity_id"] = user_id
         if not activity_data.get("owner_id"):
             activity_data["owner_id"] = user_id
 

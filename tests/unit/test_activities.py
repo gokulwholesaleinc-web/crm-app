@@ -374,11 +374,36 @@ class TestActivitiesCreate:
             headers=auth_headers,
             json={
                 "activity_type": "call",
-                # Missing subject, entity_type, entity_id
+                # Missing subject
             },
         )
 
         assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_create_activity_without_entity(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """Test creating activity without entity_type/entity_id defaults to user."""
+        response = await client.post(
+            "/api/activities",
+            headers=auth_headers,
+            json={
+                "activity_type": "task",
+                "subject": "Standalone task",
+                "priority": "normal",
+            },
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["entity_type"] == "user"
+        assert data["entity_id"] == test_user.id
+        assert data["owner_id"] == test_user.id
 
 
 class TestActivitiesGetById:

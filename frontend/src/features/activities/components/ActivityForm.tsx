@@ -12,8 +12,8 @@ import type { Activity, ActivityCreate, ActivityUpdate } from '../../../types';
 
 interface ActivityFormProps {
   activity?: Activity;
-  entityType: string;
-  entityId: number;
+  entityType?: string;
+  entityId?: number;
   onSubmit: (data: ActivityCreate | ActivityUpdate) => Promise<void>;
   onCancel: () => void;
   isLoading?: boolean;
@@ -184,12 +184,13 @@ export function ActivityForm({
         ...typeSpecificFields,
       } as ActivityUpdate);
     } else {
-      await onSubmit({
+      const createData: Record<string, unknown> = {
         ...baseData,
         ...typeSpecificFields,
-        entity_type: entityType,
-        entity_id: entityId,
-      } as ActivityCreate);
+      };
+      if (entityType) createData.entity_type = entityType;
+      if (entityId) createData.entity_id = entityId;
+      await onSubmit(createData as ActivityCreate);
     }
   };
 
