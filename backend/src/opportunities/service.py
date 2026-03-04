@@ -125,9 +125,11 @@ class PipelineStageService(BaseService[PipelineStage]):
 
     model = PipelineStage
 
-    async def get_all(self, active_only: bool = True, pipeline_type: str = "opportunity") -> List[PipelineStage]:
-        """Get all pipeline stages ordered by order field, filtered by pipeline_type."""
-        query = select(PipelineStage).where(PipelineStage.pipeline_type == pipeline_type)
+    async def get_all(self, active_only: bool = True, pipeline_type: str | None = None) -> List[PipelineStage]:
+        """Get all pipeline stages ordered by order field, optionally filtered by pipeline_type."""
+        query = select(PipelineStage)
+        if pipeline_type is not None:
+            query = query.where(PipelineStage.pipeline_type == pipeline_type)
         if active_only:
             query = query.where(PipelineStage.is_active == True)
         query = query.order_by(PipelineStage.order)

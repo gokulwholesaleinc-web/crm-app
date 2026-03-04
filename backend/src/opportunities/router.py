@@ -76,18 +76,19 @@ async def list_stages(
     db: DBSession,
     response: Response,
     active_only: bool = True,
+    pipeline_type: Optional[str] = None,
 ):
     """List all pipeline stages (cached for 5 minutes)."""
     service = PipelineStageService(db)
 
     async def fetch_stages():
-        stages = await service.get_all(active_only=active_only)
+        stages = await service.get_all(active_only=active_only, pipeline_type=pipeline_type)
         # Convert to dicts for caching (ORM objects can't be cached across sessions)
         return [PipelineStageResponse.model_validate(s).model_dump() for s in stages]
 
     cached_stages = await cached_fetch(
         CACHE_PIPELINE_STAGES,
-        f"stages:{active_only}",
+        f"stages:{active_only}:{pipeline_type}",
         fetch_stages,
     )
     response.headers["Cache-Control"] = "public, max-age=300"

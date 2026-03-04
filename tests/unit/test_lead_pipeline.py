@@ -489,10 +489,11 @@ class TestPipelineTypeIsolation:
         lead_pipeline_stages: list[PipelineStage],
         opp_pipeline_stage: PipelineStage,
     ):
-        """GET /api/opportunities/stages only returns opportunity stages."""
+        """GET /api/opportunities/stages?pipeline_type=opportunity only returns opportunity stages."""
         response = await client.get(
             "/api/opportunities/stages",
             headers=auth_headers,
+            params={"pipeline_type": "opportunity"},
         )
         assert response.status_code == 200
         data = response.json()

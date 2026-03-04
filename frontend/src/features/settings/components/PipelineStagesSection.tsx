@@ -26,6 +26,7 @@ interface StageFormData {
   probability: string;
   is_won: boolean;
   is_lost: boolean;
+  pipeline_type: string;
 }
 
 interface StageModalProps {
@@ -56,11 +57,13 @@ function StageModal({ isOpen, onClose, title, initialData, onSubmit, isPending, 
       probability: '0',
       is_won: false,
       is_lost: false,
+      pipeline_type: 'opportunity',
     },
   });
 
   const isWon = watch('is_won');
   const isLost = watch('is_lost');
+  const pipelineType = watch('pipeline_type');
 
   useEffect(() => {
     if (isOpen) {
@@ -71,6 +74,7 @@ function StageModal({ isOpen, onClose, title, initialData, onSubmit, isPending, 
         probability: '0',
         is_won: false,
         is_lost: false,
+        pipeline_type: 'opportunity',
       });
       setSuccess(false);
     }
@@ -140,8 +144,26 @@ function StageModal({ isOpen, onClose, title, initialData, onSubmit, isPending, 
           />
         </div>
 
+        <div>
+          <label htmlFor="pipeline_type" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Pipeline Side
+          </label>
+          <select
+            id="pipeline_type"
+            value={pipelineType}
+            onChange={(e) => setValue('pipeline_type', e.target.value)}
+            className="block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm dark:bg-gray-700 dark:text-gray-100"
+          >
+            <option value="lead">Lead (left side)</option>
+            <option value="opportunity">Opportunity (right side)</option>
+          </select>
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            Controls which side of the pipeline board this stage appears on.
+          </p>
+        </div>
+
         <div className="flex gap-4">
-          <label className="flex items-center gap-2 text-sm text-gray-700">
+          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
             <input
               type="checkbox"
               className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
@@ -153,7 +175,7 @@ function StageModal({ isOpen, onClose, title, initialData, onSubmit, isPending, 
             />
             Won Stage
           </label>
-          <label className="flex items-center gap-2 text-sm text-gray-700">
+          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
             <input
               type="checkbox"
               className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
@@ -193,7 +215,7 @@ export function PipelineStagesSection() {
     <Card>
       <CardHeader
         title="Pipeline Stages"
-        description="Manage your opportunity pipeline stages"
+        description="Manage your lead and opportunity pipeline stages"
         action={
           <Button
             variant="secondary"
@@ -232,6 +254,9 @@ export function PipelineStagesSection() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                  <Badge variant={stage.pipeline_type === 'lead' ? 'blue' : 'purple'} size="sm">
+                    {stage.pipeline_type === 'lead' ? 'Lead' : 'Opportunity'}
+                  </Badge>
                   <Badge variant={stage.is_won ? 'green' : stage.is_lost ? 'red' : 'gray'} size="sm">
                     {stage.probability}%
                   </Badge>
@@ -274,6 +299,7 @@ export function PipelineStagesSection() {
             probability: parseInt(data.probability, 10),
             is_won: data.is_won,
             is_lost: data.is_lost,
+            pipeline_type: data.pipeline_type,
           };
           await createMutation.mutateAsync(stageData);
         }}
@@ -334,6 +360,7 @@ export function PipelineStagesSection() {
             probability: String(editingStage.probability),
             is_won: editingStage.is_won,
             is_lost: editingStage.is_lost,
+            pipeline_type: editingStage.pipeline_type || 'opportunity',
           }}
           onSubmit={async (data) => {
             const stageData: PipelineStageUpdate = {
@@ -343,6 +370,7 @@ export function PipelineStagesSection() {
               probability: parseInt(data.probability, 10),
               is_won: data.is_won,
               is_lost: data.is_lost,
+              pipeline_type: data.pipeline_type,
             };
             await updateMutation.mutateAsync({ id: editingStage.id, data: stageData });
           }}

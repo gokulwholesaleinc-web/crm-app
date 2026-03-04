@@ -233,7 +233,7 @@ function PipelinePage() {
 
   // List data (only fetch in list mode)
   const { data: opportunitiesData, isLoading: listLoading } = useOpportunities();
-  const { data: pipelineStages } = usePipelineStages();
+  const { data: pipelineStages } = usePipelineStages(true, 'opportunity');
 
   // Form dropdowns (only fetch when modal is open)
   const isModalOpen = showForm || !!editingOpportunity;

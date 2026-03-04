@@ -85,10 +85,10 @@ export const deleteOpportunity = async (opportunityId: number): Promise<void> =>
 /**
  * List all pipeline stages
  */
-export const listStages = async (activeOnly = true): Promise<PipelineStage[]> => {
-  const response = await apiClient.get<PipelineStage[]>(`${OPPORTUNITIES_BASE}/stages`, {
-    params: { active_only: activeOnly },
-  });
+export const listStages = async (activeOnly = true, pipelineType?: string): Promise<PipelineStage[]> => {
+  const params: Record<string, unknown> = { active_only: activeOnly };
+  if (pipelineType) params.pipeline_type = pipelineType;
+  const response = await apiClient.get<PipelineStage[]>(`${OPPORTUNITIES_BASE}/stages`, { params });
   return response.data;
 };
 

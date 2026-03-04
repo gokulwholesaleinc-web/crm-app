@@ -399,6 +399,7 @@ export interface PipelineStage {
   is_won: boolean;
   is_lost: boolean;
   is_active: boolean;
+  pipeline_type: string;
 }
 
 export interface PipelineStageCreate {
@@ -410,6 +411,7 @@ export interface PipelineStageCreate {
   is_won?: boolean;
   is_lost?: boolean;
   is_active?: boolean;
+  pipeline_type?: string;
 }
 
 export interface PipelineStageUpdate extends Partial<PipelineStageCreate> {}

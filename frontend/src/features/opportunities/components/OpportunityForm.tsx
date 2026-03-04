@@ -46,7 +46,7 @@ export function OpportunityForm({
   companies = [],
 }: OpportunityFormProps) {
   // Load actual pipeline stages from the API
-  const { data: pipelineStages } = usePipelineStages();
+  const { data: pipelineStages } = usePipelineStages(true, 'opportunity');
 
   // Build stages list from API data or use fallbacks
   const opportunityStages = pipelineStages

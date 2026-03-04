@@ -15,6 +15,7 @@ class PipelineStageBase(BaseModel):
     is_won: bool = False
     is_lost: bool = False
     is_active: bool = True
+    pipeline_type: str = "opportunity"
 
 
 class PipelineStageCreate(PipelineStageBase):
@@ -30,6 +31,7 @@ class PipelineStageUpdate(BaseModel):
     is_won: Optional[bool] = None
     is_lost: Optional[bool] = None
     is_active: Optional[bool] = None
+    pipeline_type: Optional[str] = None
 
 
 class PipelineStageResponse(PipelineStageBase):

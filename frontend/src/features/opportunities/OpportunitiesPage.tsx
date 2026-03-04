@@ -44,7 +44,7 @@ function OpportunitiesPage() {
     error,
   } = useOpportunities();
 
-  const { data: pipelineStages } = usePipelineStages();
+  const { data: pipelineStages } = usePipelineStages(true, 'opportunity');
   const isModalOpen = showForm || !!editingOpportunity;
   const { data: contactsData } = useContacts({ page_size: 25 }, { enabled: isModalOpen });
   const { data: companiesData } = useCompanies({ page_size: 25 }, { enabled: isModalOpen });

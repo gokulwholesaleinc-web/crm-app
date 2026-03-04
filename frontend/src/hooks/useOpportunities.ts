@@ -24,7 +24,7 @@ export const opportunityKeys = createQueryKeys('opportunities');
 
 export const pipelineKeys = {
   all: ['pipeline'] as const,
-  stages: (activeOnly?: boolean) => [...pipelineKeys.all, 'stages', { activeOnly }] as const,
+  stages: (activeOnly?: boolean, pipelineType?: string) => [...pipelineKeys.all, 'stages', { activeOnly, pipelineType }] as const,
   kanban: (ownerId?: number) => [...pipelineKeys.all, 'kanban', { ownerId }] as const,
   forecast: (monthsAhead?: number, ownerId?: number) =>
     [...pipelineKeys.all, 'forecast', { monthsAhead, ownerId }] as const,
@@ -118,10 +118,10 @@ export function useDeleteOpportunity() {
 /**
  * Hook to fetch all pipeline stages
  */
-export function usePipelineStages(activeOnly = true) {
+export function usePipelineStages(activeOnly = true, pipelineType?: string) {
   return useQuery({
-    queryKey: pipelineKeys.stages(activeOnly),
-    queryFn: () => opportunitiesApi.listStages(activeOnly),
+    queryKey: pipelineKeys.stages(activeOnly, pipelineType),
+    queryFn: () => opportunitiesApi.listStages(activeOnly, pipelineType),
     ...CACHE_TIMES.REFERENCE,
   });
 }
