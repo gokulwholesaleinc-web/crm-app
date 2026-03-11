@@ -126,9 +126,9 @@ async def import_contacts(
     if not result.get("success"):
         raise HTTPException(
             status_code=HTTPStatus.BAD_REQUEST,
-            detail={"imported": result.get("imported", 0), "errors": result.get("errors", [])},
+            detail={"imported_count": result.get("imported", 0), "errors": result.get("errors", [])},
         )
-    return {"success": True, "detail": "Import complete", "imported": result["imported"], "errors": result.get("errors", [])}
+    return {"success": True, "detail": "Import complete", "imported_count": result["imported"], "errors": result.get("errors", []), "duplicates_skipped": result.get("duplicates_skipped", 0)}
 
 
 @router.post("/import/companies")
@@ -151,9 +151,9 @@ async def import_companies(
     if not result.get("success"):
         raise HTTPException(
             status_code=HTTPStatus.BAD_REQUEST,
-            detail={"imported": result.get("imported", 0), "errors": result.get("errors", [])},
+            detail={"imported_count": result.get("imported", 0), "errors": result.get("errors", [])},
         )
-    return {"success": True, "detail": "Import complete", "imported": result["imported"], "errors": result.get("errors", [])}
+    return {"success": True, "detail": "Import complete", "imported_count": result["imported"], "errors": result.get("errors", []), "duplicates_skipped": result.get("duplicates_skipped", 0)}
 
 
 @router.post("/import/leads")
@@ -176,9 +176,28 @@ async def import_leads(
     if not result.get("success"):
         raise HTTPException(
             status_code=HTTPStatus.BAD_REQUEST,
-            detail={"imported": result.get("imported", 0), "errors": result.get("errors", [])},
+            detail={"imported_count": result.get("imported", 0), "errors": result.get("errors", [])},
         )
-    return {"success": True, "detail": "Import complete", "imported": result["imported"], "errors": result.get("errors", [])}
+    return {"success": True, "detail": "Import complete", "imported_count": result["imported"], "errors": result.get("errors", []), "duplicates_skipped": result.get("duplicates_skipped", 0)}
+
+
+# Preview endpoint
+@router.post("/preview/{entity_type}")
+async def preview_import(
+    entity_type: str,
+    current_user: CurrentUser,
+    db: DBSession,
+    file: UploadFile = File(...),
+):
+    """Preview CSV import: returns mapped columns, first 5 rows, and validation errors without committing."""
+    if entity_type not in ["contacts", "companies", "leads"]:
+        raise_bad_request("Invalid entity type. Must be: contacts, companies, or leads")
+
+    csv_content = await _read_csv_upload(file)
+
+    handler = CSVHandler(db)
+    preview = handler.preview_csv(entity_type, csv_content)
+    return preview
 
 
 # Template endpoints

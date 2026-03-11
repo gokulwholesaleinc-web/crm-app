@@ -1,20 +1,138 @@
-"""CSV import/export handler."""
+"""CSV import/export handler with smart column mapping and duplicate detection."""
 
 import csv
 import io
-from typing import List, Dict, Any, Type, Optional
+import re
+from typing import List, Dict, Any, Type, Optional, Set
 from datetime import datetime
-from sqlalchemy import select
+from difflib import SequenceMatcher
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.contacts.models import Contact
 from src.companies.models import Company
 from src.leads.models import Lead
 
 
+# Common aliases for CSV columns → internal field names
+COLUMN_ALIASES: Dict[str, str] = {
+    "firstname": "first_name",
+    "first": "first_name",
+    "fname": "first_name",
+    "lastname": "last_name",
+    "last": "last_name",
+    "lname": "last_name",
+    "surname": "last_name",
+    "emailaddress": "email",
+    "email_address": "email",
+    "e_mail": "email",
+    "phonenumber": "phone",
+    "phone_number": "phone",
+    "telephone": "phone",
+    "tel": "phone",
+    "mobilephone": "mobile",
+    "mobile_phone": "mobile",
+    "cell": "mobile",
+    "cellphone": "mobile",
+    "cell_phone": "mobile",
+    "jobtitle": "job_title",
+    "job": "job_title",
+    "title": "job_title",
+    "position": "job_title",
+    "dept": "department",
+    "company": "company_name",
+    "companyname": "company_name",
+    "company_id": "company_id",
+    "companyid": "company_id",
+    "address": "address_line1",
+    "address1": "address_line1",
+    "street": "address_line1",
+    "address2": "address_line2",
+    "zip": "postal_code",
+    "zipcode": "postal_code",
+    "zip_code": "postal_code",
+    "postcode": "postal_code",
+    "linkedin": "linkedin_url",
+    "linkedinurl": "linkedin_url",
+    "twitter": "twitter_handle",
+    "twitterhandle": "twitter_handle",
+    "desc": "description",
+    "notes": "description",
+    "site": "website",
+    "url": "website",
+    "web": "website",
+    "companysize": "company_size",
+    "size": "company_size",
+    "revenue": "annual_revenue",
+    "annualrevenue": "annual_revenue",
+    "employees": "employee_count",
+    "employeecount": "employee_count",
+    "num_employees": "employee_count",
+    "source": "source_id",
+    "sourceid": "source_id",
+    "sourcedetails": "source_details",
+    "source_detail": "source_details",
+    "budget": "budget_amount",
+    "budgetamount": "budget_amount",
+    "currency": "budget_currency",
+    "budgetcurrency": "budget_currency",
+    "reqs": "requirements",
+    "requirement": "requirements",
+}
+
+FUZZY_MATCH_THRESHOLD = 0.75
+
+
+def _normalize_header(header: str) -> str:
+    """Normalize a CSV header for matching: lowercase, strip, remove special chars."""
+    return re.sub(r"[^a-z0-9]", "", header.lower().strip())
+
+
+def _map_columns(csv_headers: List[str], target_fields: List[str]) -> Dict[str, str]:
+    """Map CSV headers to target field names using exact match, aliases, and fuzzy matching.
+
+    Returns dict of {csv_header: target_field} for matched columns.
+    """
+    mapping: Dict[str, str] = {}
+    matched_fields: Set[str] = set()
+    normalized_targets = {_normalize_header(f): f for f in target_fields}
+
+    for header in csv_headers:
+        normalized = _normalize_header(header)
+        if not normalized:
+            continue
+
+        # 1. Exact match (after normalization)
+        if normalized in normalized_targets and normalized_targets[normalized] not in matched_fields:
+            mapping[header] = normalized_targets[normalized]
+            matched_fields.add(normalized_targets[normalized])
+            continue
+
+        # 2. Alias lookup
+        if normalized in COLUMN_ALIASES and COLUMN_ALIASES[normalized] in target_fields and COLUMN_ALIASES[normalized] not in matched_fields:
+            mapping[header] = COLUMN_ALIASES[normalized]
+            matched_fields.add(COLUMN_ALIASES[normalized])
+            continue
+
+        # 3. Fuzzy match as fallback
+        best_score = 0.0
+        best_field = None
+        for target in target_fields:
+            if target in matched_fields:
+                continue
+            score = SequenceMatcher(None, normalized, _normalize_header(target)).ratio()
+            if score > best_score:
+                best_score = score
+                best_field = target
+        if best_field and best_score >= FUZZY_MATCH_THRESHOLD:
+            mapping[header] = best_field
+            matched_fields.add(best_field)
+
+    return mapping
+
+
 class CSVHandler:
     """Handles CSV import and export for CRM entities."""
 
-    # Field mappings for each entity type
     CONTACT_FIELDS = [
         "first_name", "last_name", "email", "phone", "mobile",
         "job_title", "department", "company_id",
@@ -37,97 +155,116 @@ class CSVHandler:
         "description", "requirements", "budget_amount", "budget_currency",
     ]
 
+    NUMERIC_INT_FIELDS = {"company_id", "source_id", "annual_revenue", "employee_count"}
+    NUMERIC_FLOAT_FIELDS = {"budget_amount"}
+
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    def _get_fields(self, entity_type: str) -> List[str]:
+        return {"contacts": self.CONTACT_FIELDS, "companies": self.COMPANY_FIELDS, "leads": self.LEAD_FIELDS}[entity_type]
+
+    def _get_model(self, entity_type: str) -> Type:
+        return {"contacts": Contact, "companies": Company, "leads": Lead}[entity_type]
+
+    # ------------------------------------------------------------------
+    # Export
+    # ------------------------------------------------------------------
+
     async def export_contacts(self, user_id: int = None) -> str:
-        """Export contacts to CSV, scoped to user."""
         query = select(Contact)
         if user_id:
             query = query.where(Contact.owner_id == user_id)
         result = await self.db.execute(query)
-        contacts = result.scalars().all()
-
-        return self._to_csv(contacts, self.CONTACT_FIELDS)
+        return self._to_csv(result.scalars().all(), self.CONTACT_FIELDS)
 
     async def export_companies(self, user_id: int = None) -> str:
-        """Export companies to CSV, scoped to user."""
         query = select(Company)
         if user_id:
             query = query.where(Company.owner_id == user_id)
         result = await self.db.execute(query)
-        companies = result.scalars().all()
-
-        return self._to_csv(companies, self.COMPANY_FIELDS)
+        return self._to_csv(result.scalars().all(), self.COMPANY_FIELDS)
 
     async def export_leads(self, user_id: int = None) -> str:
-        """Export leads to CSV, scoped to user."""
         query = select(Lead)
         if user_id:
             query = query.where(Lead.owner_id == user_id)
         result = await self.db.execute(query)
-        leads = result.scalars().all()
+        return self._to_csv(result.scalars().all(), self.LEAD_FIELDS)
 
-        return self._to_csv(leads, self.LEAD_FIELDS)
+    # ------------------------------------------------------------------
+    # Import
+    # ------------------------------------------------------------------
 
-    async def import_contacts(
-        self,
-        csv_content: str,
-        user_id: int,
-        skip_errors: bool = True,
-    ) -> Dict[str, Any]:
-        """Import contacts from CSV."""
-        return await self._import_entities(
-            csv_content=csv_content,
-            entity_class=Contact,
-            fields=self.CONTACT_FIELDS,
-            user_id=user_id,
-            skip_errors=skip_errors,
-        )
+    async def import_contacts(self, csv_content: str, user_id: int, skip_errors: bool = True) -> Dict[str, Any]:
+        return await self._import_entities(csv_content, Contact, self.CONTACT_FIELDS, user_id, skip_errors)
 
-    async def import_companies(
-        self,
-        csv_content: str,
-        user_id: int,
-        skip_errors: bool = True,
-    ) -> Dict[str, Any]:
-        """Import companies from CSV."""
-        return await self._import_entities(
-            csv_content=csv_content,
-            entity_class=Company,
-            fields=self.COMPANY_FIELDS,
-            user_id=user_id,
-            skip_errors=skip_errors,
-        )
+    async def import_companies(self, csv_content: str, user_id: int, skip_errors: bool = True) -> Dict[str, Any]:
+        return await self._import_entities(csv_content, Company, self.COMPANY_FIELDS, user_id, skip_errors)
 
-    async def import_leads(
-        self,
-        csv_content: str,
-        user_id: int,
-        skip_errors: bool = True,
-    ) -> Dict[str, Any]:
-        """Import leads from CSV."""
-        return await self._import_entities(
-            csv_content=csv_content,
-            entity_class=Lead,
-            fields=self.LEAD_FIELDS,
-            user_id=user_id,
-            skip_errors=skip_errors,
-        )
+    async def import_leads(self, csv_content: str, user_id: int, skip_errors: bool = True) -> Dict[str, Any]:
+        return await self._import_entities(csv_content, Lead, self.LEAD_FIELDS, user_id, skip_errors)
+
+    # ------------------------------------------------------------------
+    # Preview (no DB writes)
+    # ------------------------------------------------------------------
+
+    def preview_csv(self, entity_type: str, csv_content: str) -> Dict[str, Any]:
+        """Preview a CSV: show column mapping, first rows, and validation warnings."""
+        fields = self._get_fields(entity_type)
+        reader = csv.DictReader(io.StringIO(csv_content))
+        csv_headers = reader.fieldnames or []
+
+        column_mapping = _map_columns(csv_headers, fields)
+        unmapped = [h for h in csv_headers if h not in column_mapping]
+        missing_fields = [f for f in fields if f not in column_mapping.values()]
+
+        # Read first 5 rows with mapped column names
+        preview_rows = []
+        warnings = []
+        emails_seen: Set[str] = set()
+        for i, row in enumerate(reader):
+            if i >= 5:
+                break
+            mapped_row = {}
+            for csv_col, target_field in column_mapping.items():
+                mapped_row[target_field] = row.get(csv_col, "").strip()
+            preview_rows.append(mapped_row)
+
+            # Check for duplicate emails within file
+            email = mapped_row.get("email", "").lower()
+            if email:
+                if email in emails_seen:
+                    warnings.append(f"Row {i + 2}: duplicate email '{email}' within file")
+                emails_seen.add(email)
+
+        # Count total rows
+        reader2 = csv.DictReader(io.StringIO(csv_content))
+        total_rows = sum(1 for _ in reader2)
+
+        return {
+            "total_rows": total_rows,
+            "column_mapping": column_mapping,
+            "unmapped_columns": unmapped,
+            "missing_fields": missing_fields,
+            "preview_rows": preview_rows,
+            "warnings": warnings,
+        }
+
+    # ------------------------------------------------------------------
+    # Internals
+    # ------------------------------------------------------------------
 
     @staticmethod
     def _sanitize_csv_value(value: str) -> str:
-        """Prefix dangerous cell values with a single quote to prevent CSV injection."""
         if value and isinstance(value, str) and value[0] in ("=", "+", "-", "@"):
             return "'" + value
         return value
 
     def _to_csv(self, entities: List[Any], fields: List[str]) -> str:
-        """Convert entities to CSV string."""
         output = io.StringIO()
         writer = csv.DictWriter(output, fieldnames=fields)
         writer.writeheader()
-
         for entity in entities:
             row = {}
             for field in fields:
@@ -140,8 +277,27 @@ class CSVHandler:
                     cell = self._sanitize_csv_value(cell)
                 row[field] = cell
             writer.writerow(row)
-
         return output.getvalue()
+
+    async def _get_existing_emails(self, entity_class: Type) -> Set[str]:
+        """Fetch all existing emails for an entity type to detect duplicates."""
+        if not hasattr(entity_class, "email"):
+            return set()
+        result = await self.db.execute(
+            select(func.lower(entity_class.email)).where(entity_class.email.isnot(None))
+        )
+        return {row[0] for row in result.all()}
+
+    def _parse_value(self, field: str, raw: str) -> Any:
+        """Parse a raw CSV string value to the appropriate Python type."""
+        value = raw.strip()
+        if not value:
+            return None
+        if field in self.NUMERIC_INT_FIELDS:
+            return int(value)
+        if field in self.NUMERIC_FLOAT_FIELDS:
+            return float(value)
+        return value
 
     async def _import_entities(
         self,
@@ -151,35 +307,39 @@ class CSVHandler:
         user_id: int,
         skip_errors: bool = True,
     ) -> Dict[str, Any]:
-        """Generic entity import from CSV."""
         reader = csv.DictReader(io.StringIO(csv_content))
+        csv_headers = reader.fieldnames or []
+
+        # Smart column mapping
+        column_mapping = _map_columns(csv_headers, fields)
+
+        # Load existing emails for dedup
+        existing_emails = await self._get_existing_emails(entity_class)
+        seen_emails: Set[str] = set()
 
         imported = 0
         errors = []
-        row_num = 1  # Header is row 0
+        duplicates_skipped = 0
+        row_num = 1
 
         for row in reader:
             row_num += 1
             try:
-                # Filter to only valid fields
                 entity_data = {}
-                for field in fields:
-                    if field in row and row[field]:
-                        value = row[field].strip()
-                        # Handle numeric fields
-                        if field in ["company_id", "source_id", "annual_revenue", "employee_count"]:
-                            if value:
-                                value = int(value)
-                            else:
-                                value = None
-                        elif field in ["budget_amount"]:
-                            if value:
-                                value = float(value)
-                            else:
-                                value = None
-                        entity_data[field] = value
+                for csv_col, target_field in column_mapping.items():
+                    raw = row.get(csv_col, "")
+                    if raw:
+                        entity_data[target_field] = self._parse_value(target_field, raw)
 
-                # Create entity with owner_id for data scoping
+                # Duplicate detection by email
+                email = (entity_data.get("email") or "").lower()
+                if email:
+                    if email in existing_emails or email in seen_emails:
+                        duplicates_skipped += 1
+                        errors.append(f"Row {row_num}: skipped duplicate email '{email}'")
+                        continue
+                    seen_emails.add(email)
+
                 entity = entity_class(**entity_data, owner_id=user_id, created_by_id=user_id)
                 self.db.add(entity)
 
@@ -189,21 +349,15 @@ class CSVHandler:
                         imported += 1
                     except Exception as flush_exc:
                         await self.db.rollback()
-                        error_msg = f"Row {row_num}: {str(flush_exc)}"
-                        errors.append(error_msg)
+                        errors.append(f"Row {row_num}: {str(flush_exc)}")
                 else:
                     imported += 1
 
             except Exception as e:
-                error_msg = f"Row {row_num}: {str(e)}"
-                errors.append(error_msg)
+                errors.append(f"Row {row_num}: {str(e)}")
                 if not skip_errors:
                     await self.db.rollback()
-                    return {
-                        "imported": 0,
-                        "errors": errors,
-                        "success": False,
-                    }
+                    return {"imported": 0, "errors": errors, "success": False, "duplicates_skipped": duplicates_skipped}
 
         if not skip_errors:
             await self.db.flush()
@@ -212,19 +366,11 @@ class CSVHandler:
             "imported": imported,
             "errors": errors,
             "success": True,
+            "duplicates_skipped": duplicates_skipped,
         }
 
     def get_template(self, entity_type: str) -> str:
-        """Get CSV template for an entity type."""
-        if entity_type == "contacts":
-            fields = self.CONTACT_FIELDS
-        elif entity_type == "companies":
-            fields = self.COMPANY_FIELDS
-        elif entity_type == "leads":
-            fields = self.LEAD_FIELDS
-        else:
-            raise ValueError(f"Unknown entity type: {entity_type}")
-
+        fields = self._get_fields(entity_type)
         output = io.StringIO()
         writer = csv.DictWriter(output, fieldnames=fields)
         writer.writeheader()

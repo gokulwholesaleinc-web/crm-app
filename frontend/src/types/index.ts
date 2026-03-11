@@ -1185,6 +1185,16 @@ export interface ImportResult {
   success: boolean;
   imported_count: number;
   errors: string[];
+  duplicates_skipped: number;
+}
+
+export interface ImportPreview {
+  total_rows: number;
+  column_mapping: Record<string, string>;
+  unmapped_columns: string[];
+  missing_fields: string[];
+  preview_rows: Record<string, string>[];
+  warnings: string[];
 }
 
 /**

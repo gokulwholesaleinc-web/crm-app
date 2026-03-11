@@ -1,5 +1,6 @@
 /**
- * Import/Export page for CSV data import and export operations
+ * Import/Export page for CSV data import and export operations.
+ * Supports smart column mapping preview before import.
  */
 
 import { useState, useRef } from 'react';
@@ -9,6 +10,8 @@ import {
   DocumentTextIcon,
   CheckCircleIcon,
   ExclamationTriangleIcon,
+  ArrowPathIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
 import { Button } from '../../components/ui';
 import {
@@ -19,12 +22,13 @@ import {
   exportCompanies,
   exportLeads,
   getTemplate,
+  previewImport,
   downloadBlob,
   generateExportFilename,
 } from '../../api/importExport';
-import type { ImportResult, ImportExportEntityType } from '../../types';
+import type { ImportResult, ImportPreview, ImportExportEntityType } from '../../types';
 
-type OperationStatus = 'idle' | 'loading' | 'success' | 'error';
+type OperationStatus = 'idle' | 'loading' | 'previewing' | 'importing' | 'success' | 'error';
 
 interface ExportCardProps {
   title: string;
@@ -40,7 +44,7 @@ function ExportCard({ title, description, onExport, onTemplate, isExporting }: E
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-5">
       <div className="flex items-start gap-3">
         <div className="p-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
-          <ArrowDownTrayIcon className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+          <ArrowDownTrayIcon className="h-6 w-6 text-blue-600 dark:text-blue-400" aria-hidden="true" />
         </div>
         <div className="flex-1">
           <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
@@ -50,7 +54,7 @@ function ExportCard({ title, description, onExport, onTemplate, isExporting }: E
               size="sm"
               onClick={onExport}
               isLoading={isExporting}
-              leftIcon={<ArrowDownTrayIcon className="h-4 w-4" />}
+              leftIcon={<ArrowDownTrayIcon className="h-4 w-4" aria-hidden="true" />}
             >
               Export CSV
             </Button>
@@ -58,7 +62,7 @@ function ExportCard({ title, description, onExport, onTemplate, isExporting }: E
               size="sm"
               variant="ghost"
               onClick={onTemplate}
-              leftIcon={<DocumentTextIcon className="h-4 w-4" />}
+              leftIcon={<DocumentTextIcon className="h-4 w-4" aria-hidden="true" />}
             >
               Download Template
             </Button>
@@ -69,22 +73,38 @@ function ExportCard({ title, description, onExport, onTemplate, isExporting }: E
   );
 }
 
-interface ImportSectionProps {
-  entityType: ImportExportEntityType;
-  label: string;
-  onImport: (file: File) => Promise<void>;
+interface ImportState {
   status: OperationStatus;
   result: ImportResult | null;
+  preview: ImportPreview | null;
+  file: File | null;
   error: string | null;
 }
 
-function ImportSection({ entityType, label, onImport, status, result, error }: ImportSectionProps) {
+const INITIAL_IMPORT_STATE: ImportState = {
+  status: 'idle',
+  result: null,
+  preview: null,
+  file: null,
+  error: null,
+};
+
+interface ImportSectionProps {
+  entityType: ImportExportEntityType;
+  label: string;
+  state: ImportState;
+  onFileSelect: (file: File) => void;
+  onConfirmImport: () => void;
+  onCancel: () => void;
+}
+
+function ImportSection({ entityType, label, state, onFileSelect, onConfirmImport, onCancel }: ImportSectionProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      await onImport(file);
+      onFileSelect(file);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -95,9 +115,9 @@ function ImportSection({ entityType, label, onImport, status, result, error }: I
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-5">
       <div className="flex items-start gap-3">
         <div className="p-2 bg-green-50 dark:bg-green-900/30 rounded-lg">
-          <ArrowUpTrayIcon className="h-6 w-6 text-green-600 dark:text-green-400" />
+          <ArrowUpTrayIcon className="h-6 w-6 text-green-600 dark:text-green-400" aria-hidden="true" />
         </div>
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Import {label}</h3>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Upload a CSV file to import {label.toLowerCase()}
@@ -111,34 +131,62 @@ function ImportSection({ entityType, label, onImport, status, result, error }: I
               onChange={handleFileChange}
               className="hidden"
               id={`import-${entityType}`}
+              aria-label={`Choose CSV file to import ${label.toLowerCase()}`}
             />
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => fileInputRef.current?.click()}
-              isLoading={status === 'loading'}
-              leftIcon={<ArrowUpTrayIcon className="h-4 w-4" />}
-            >
-              Choose CSV File
-            </Button>
+            {state.status === 'idle' || state.status === 'success' || state.status === 'error' ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => fileInputRef.current?.click()}
+                isLoading={state.status === 'previewing'}
+                leftIcon={<ArrowUpTrayIcon className="h-4 w-4" aria-hidden="true" />}
+              >
+                Choose CSV File
+              </Button>
+            ) : null}
           </div>
 
-          {/* Result */}
-          {status === 'success' && result && (
-            <div className="mt-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-md">
+          {/* Preview */}
+          {state.status === 'previewing' && (
+            <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-md">
               <div className="flex items-center gap-2">
-                <CheckCircleIcon className="h-5 w-5 text-green-600 dark:text-green-400" />
+                <ArrowPathIcon className="h-4 w-4 text-blue-600 dark:text-blue-400 animate-spin" aria-hidden="true" />
+                <span className="text-sm text-blue-800 dark:text-blue-300">Analyzing CSV...</span>
+              </div>
+            </div>
+          )}
+
+          {state.preview && (state.status === 'loading' || state.status === 'importing') && (
+            <PreviewPanel
+              preview={state.preview}
+              fileName={state.file?.name ?? ''}
+              isImporting={state.status === 'importing'}
+              onConfirm={onConfirmImport}
+              onCancel={onCancel}
+            />
+          )}
+
+          {/* Success */}
+          {state.status === 'success' && state.result && (
+            <div className="mt-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-md" role="status" aria-live="polite">
+              <div className="flex items-center gap-2">
+                <CheckCircleIcon className="h-5 w-5 text-green-600 dark:text-green-400" aria-hidden="true" />
                 <span className="text-sm font-medium text-green-800 dark:text-green-300">
-                  Successfully imported {result.imported_count} record{result.imported_count !== 1 ? 's' : ''}
+                  Successfully imported {state.result.imported_count} record{state.result.imported_count !== 1 ? 's' : ''}
                 </span>
               </div>
-              {result.errors.length > 0 && (
+              {state.result.duplicates_skipped > 0 && (
+                <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-1">
+                  {state.result.duplicates_skipped} duplicate{state.result.duplicates_skipped !== 1 ? 's' : ''} skipped (email already exists)
+                </p>
+              )}
+              {state.result.errors.length > 0 && (
                 <div className="mt-2">
                   <p className="text-xs font-medium text-yellow-700 dark:text-yellow-400">
-                    {result.errors.length} warning{result.errors.length !== 1 ? 's' : ''}:
+                    {state.result.errors.length} warning{state.result.errors.length !== 1 ? 's' : ''}:
                   </p>
                   <ul className="mt-1 text-xs text-yellow-600 dark:text-yellow-400 list-disc list-inside max-h-24 overflow-y-auto">
-                    {result.errors.map((err, i) => (
+                    {state.result.errors.map((err, i) => (
                       <li key={i}>{err}</li>
                     ))}
                   </ul>
@@ -147,11 +195,12 @@ function ImportSection({ entityType, label, onImport, status, result, error }: I
             </div>
           )}
 
-          {status === 'error' && error && (
-            <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 rounded-md">
+          {/* Error */}
+          {state.status === 'error' && state.error && (
+            <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 rounded-md" role="alert">
               <div className="flex items-center gap-2">
-                <ExclamationTriangleIcon className="h-5 w-5 text-red-600 dark:text-red-400" />
-                <span className="text-sm font-medium text-red-800 dark:text-red-300">{error}</span>
+                <ExclamationTriangleIcon className="h-5 w-5 text-red-600 dark:text-red-400" aria-hidden="true" />
+                <span className="text-sm font-medium text-red-800 dark:text-red-300">{state.error}</span>
               </div>
             </div>
           )}
@@ -161,32 +210,141 @@ function ImportSection({ entityType, label, onImport, status, result, error }: I
   );
 }
 
+interface PreviewPanelProps {
+  preview: ImportPreview;
+  fileName: string;
+  isImporting: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+function PreviewPanel({ preview, fileName, isImporting, onConfirm, onCancel }: PreviewPanelProps) {
+  const mappedCount = Object.keys(preview.column_mapping).length;
+  const mappingEntries = Object.entries(preview.column_mapping);
+
+  return (
+    <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-md space-y-3">
+      {/* File info */}
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+          {fileName} &mdash; {preview.total_rows} row{preview.total_rows !== 1 ? 's' : ''}
+        </span>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+          aria-label="Cancel import"
+        >
+          <XMarkIcon className="h-4 w-4" aria-hidden="true" />
+        </button>
+      </div>
+
+      {/* Column mapping */}
+      <div>
+        <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+          Column mapping ({mappedCount} matched):
+        </p>
+        <div className="flex flex-wrap gap-1">
+          {mappingEntries.map(([csv, field]) => (
+            <span
+              key={csv}
+              className="inline-flex items-center text-xs px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300"
+            >
+              {csv === field ? field : `${csv} \u2192 ${field}`}
+            </span>
+          ))}
+        </div>
+        {preview.unmapped_columns.length > 0 && (
+          <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+            Ignored columns: {preview.unmapped_columns.join(', ')}
+          </p>
+        )}
+        {preview.missing_fields.length > 0 && (
+          <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+            Missing fields (will be empty): {preview.missing_fields.join(', ')}
+          </p>
+        )}
+      </div>
+
+      {/* Preview table */}
+      {preview.preview_rows.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-xs">
+            <thead>
+              <tr>
+                {Object.values(preview.column_mapping).map((field) => (
+                  <th
+                    key={field}
+                    className="px-2 py-1 text-left font-medium text-gray-600 dark:text-gray-400 border-b border-gray-200 dark:border-gray-600"
+                  >
+                    {field}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {preview.preview_rows.map((row, i) => (
+                <tr key={i}>
+                  {Object.values(preview.column_mapping).map((field) => (
+                    <td
+                      key={field}
+                      className="px-2 py-1 text-gray-800 dark:text-gray-200 border-b border-gray-100 dark:border-gray-700 max-w-[150px] truncate"
+                    >
+                      {row[field] || <span className="text-gray-300 dark:text-gray-600">&mdash;</span>}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {preview.total_rows > 5 && (
+            <p className="text-xs text-gray-400 mt-1">...and {preview.total_rows - 5} more rows</p>
+          )}
+        </div>
+      )}
+
+      {/* Warnings */}
+      {preview.warnings.length > 0 && (
+        <div className="text-xs text-yellow-600 dark:text-yellow-400">
+          {preview.warnings.map((w, i) => (
+            <p key={i}>{w}</p>
+          ))}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="flex gap-2">
+        <Button size="sm" onClick={onConfirm} isLoading={isImporting}>
+          Import {preview.total_rows} rows
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onCancel} disabled={isImporting}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function ImportExportPage() {
   const [exportingEntity, setExportingEntity] = useState<string | null>(null);
-
-  const [importStates, setImportStates] = useState<
-    Record<ImportExportEntityType, { status: OperationStatus; result: ImportResult | null; error: string | null }>
-  >({
-    contacts: { status: 'idle', result: null, error: null },
-    companies: { status: 'idle', result: null, error: null },
-    leads: { status: 'idle', result: null, error: null },
+  const [importStates, setImportStates] = useState<Record<ImportExportEntityType, ImportState>>({
+    contacts: { ...INITIAL_IMPORT_STATE },
+    companies: { ...INITIAL_IMPORT_STATE },
+    leads: { ...INITIAL_IMPORT_STATE },
   });
+
+  const updateImportState = (entityType: ImportExportEntityType, patch: Partial<ImportState>) => {
+    setImportStates((prev) => ({
+      ...prev,
+      [entityType]: { ...prev[entityType], ...patch },
+    }));
+  };
 
   const handleExport = async (entityType: ImportExportEntityType) => {
     setExportingEntity(entityType);
     try {
-      let blob: Blob;
-      switch (entityType) {
-        case 'contacts':
-          blob = await exportContacts();
-          break;
-        case 'companies':
-          blob = await exportCompanies();
-          break;
-        case 'leads':
-          blob = await exportLeads();
-          break;
-      }
+      const exportFns = { contacts: exportContacts, companies: exportCompanies, leads: exportLeads };
+      const blob = await exportFns[entityType]();
       downloadBlob(blob, generateExportFilename(entityType));
     } catch (error) {
       console.error(`Failed to export ${entityType}:`, error);
@@ -204,36 +362,34 @@ export function ImportExportPage() {
     }
   };
 
-  const handleImport = async (entityType: ImportExportEntityType, file: File) => {
-    setImportStates((prev) => ({
-      ...prev,
-      [entityType]: { status: 'loading', result: null, error: null },
-    }));
-
+  const handleFileSelect = async (entityType: ImportExportEntityType, file: File) => {
+    updateImportState(entityType, { status: 'previewing', file, result: null, error: null, preview: null });
     try {
-      let result: ImportResult;
-      switch (entityType) {
-        case 'contacts':
-          result = await importContacts(file);
-          break;
-        case 'companies':
-          result = await importCompanies(file);
-          break;
-        case 'leads':
-          result = await importLeads(file);
-          break;
-      }
-      setImportStates((prev) => ({
-        ...prev,
-        [entityType]: { status: 'success', result, error: null },
-      }));
+      const preview = await previewImport(entityType, file);
+      updateImportState(entityType, { status: 'loading', preview });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to preview file';
+      updateImportState(entityType, { status: 'error', error: message });
+    }
+  };
+
+  const handleConfirmImport = async (entityType: ImportExportEntityType) => {
+    const { file } = importStates[entityType];
+    if (!file) return;
+
+    updateImportState(entityType, { status: 'importing' });
+    try {
+      const importFns = { contacts: importContacts, companies: importCompanies, leads: importLeads };
+      const result = await importFns[entityType](file);
+      updateImportState(entityType, { status: 'success', result, preview: null, file: null });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Import failed';
-      setImportStates((prev) => ({
-        ...prev,
-        [entityType]: { status: 'error', result: null, error: message },
-      }));
+      updateImportState(entityType, { status: 'error', error: message, preview: null, file: null });
     }
+  };
+
+  const handleCancel = (entityType: ImportExportEntityType) => {
+    updateImportState(entityType, { ...INITIAL_IMPORT_STATE });
   };
 
   const entityConfigs: { type: ImportExportEntityType; label: string; description: string }[] = [
@@ -244,7 +400,6 @@ export function ImportExportPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Import / Export</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
@@ -279,10 +434,10 @@ export function ImportExportPage() {
               key={config.type}
               entityType={config.type}
               label={config.label}
-              onImport={(file) => handleImport(config.type, file)}
-              status={importStates[config.type].status}
-              result={importStates[config.type].result}
-              error={importStates[config.type].error}
+              state={importStates[config.type]}
+              onFileSelect={(file) => handleFileSelect(config.type, file)}
+              onConfirmImport={() => handleConfirmImport(config.type)}
+              onCancel={() => handleCancel(config.type)}
             />
           ))}
         </div>

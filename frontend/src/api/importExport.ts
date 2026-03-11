@@ -4,7 +4,7 @@
  */
 
 import { apiClient } from './client';
-import type { ImportResult, ImportExportEntityType, BulkUpdateRequest, BulkAssignRequest, BulkOperationResult } from '../types';
+import type { ImportResult, ImportPreview, ImportExportEntityType, BulkUpdateRequest, BulkAssignRequest, BulkOperationResult } from '../types';
 
 const IMPORT_EXPORT_BASE = '/api/import-export';
 
@@ -99,6 +99,23 @@ export const importLeads = async (
 };
 
 /**
+ * Preview a CSV file before importing: shows column mapping, first rows, and warnings
+ */
+export const previewImport = async (
+  entityType: ImportExportEntityType,
+  file: File
+): Promise<ImportPreview> => {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await apiClient.post<ImportPreview>(
+    `${IMPORT_EXPORT_BASE}/preview/${entityType}`,
+    formData
+  );
+  return response.data;
+};
+
+/**
  * Get CSV template for importing an entity type
  */
 export const getTemplate = async (entityType: ImportExportEntityType): Promise<Blob> => {
@@ -186,6 +203,7 @@ export const importExportApi = {
   importContacts,
   importCompanies,
   importLeads,
+  previewImport,
   getTemplate,
   downloadBlob,
   generateExportFilename,
