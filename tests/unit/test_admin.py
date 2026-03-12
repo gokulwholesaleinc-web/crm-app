@@ -11,6 +11,8 @@ from datetime import datetime, timedelta, timezone
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy import select
+
 from src.auth.models import User
 from src.auth.security import get_password_hash, create_access_token
 from src.contacts.models import Contact
@@ -275,6 +277,156 @@ class TestAdminDeleteUser:
             headers=non_admin_headers,
         )
         assert response.status_code == 403
+
+
+class TestAdminPermanentDeleteUser:
+    """Tests for DELETE /api/admin/users/{id}/permanent (hard delete)."""
+
+    @pytest.mark.asyncio
+    async def test_permanent_delete_user(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_headers: dict,
+        test_superuser: User,
+    ):
+        """Admin can permanently delete a user."""
+        target = User(
+            email="deleteme@example.com",
+            hashed_password=get_password_hash("password123"),
+            full_name="Delete Me",
+            is_active=True,
+            is_superuser=False,
+        )
+        db_session.add(target)
+        await db_session.commit()
+        await db_session.refresh(target)
+
+        response = await client.delete(
+            f"/api/admin/users/{target.id}/permanent",
+            headers=admin_headers,
+        )
+        assert response.status_code == 200
+        assert "permanently deleted" in response.json()["detail"].lower()
+
+        # Confirm user no longer exists
+        result = await db_session.execute(select(User).where(User.id == target.id))
+        assert result.scalar_one_or_none() is None
+
+    @pytest.mark.asyncio
+    async def test_permanent_delete_nonexistent_user(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_headers: dict,
+        test_superuser: User,
+    ):
+        """Deleting a nonexistent user returns 404."""
+        response = await client.delete(
+            "/api/admin/users/99999/permanent",
+            headers=admin_headers,
+        )
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_permanent_delete_forbidden_for_regular_user(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        non_admin_headers: dict,
+        test_user: User,
+    ):
+        """Regular user cannot permanently delete users."""
+        response = await client.delete(
+            f"/api/admin/users/{test_user.id}/permanent",
+            headers=non_admin_headers,
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_cannot_delete_self(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_headers: dict,
+        test_superuser: User,
+    ):
+        """Admin cannot delete their own account."""
+        response = await client.delete(
+            f"/api/admin/users/{test_superuser.id}/permanent",
+            headers=admin_headers,
+        )
+        assert response.status_code == 400
+        assert "own account" in response.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_cannot_delete_superuser(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_headers: dict,
+        test_superuser: User,
+    ):
+        """Cannot permanently delete a superuser account."""
+        other_super = User(
+            email="othersuper@example.com",
+            hashed_password=get_password_hash("password123"),
+            full_name="Other Super",
+            is_active=True,
+            is_superuser=True,
+        )
+        db_session.add(other_super)
+        await db_session.commit()
+        await db_session.refresh(other_super)
+
+        response = await client.delete(
+            f"/api/admin/users/{other_super.id}/permanent",
+            headers=admin_headers,
+        )
+        assert response.status_code == 400
+        assert "superuser" in response.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_permanent_delete_user_with_owned_records(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_headers: dict,
+        test_superuser: User,
+    ):
+        """Deleting a user who owns records succeeds without errors."""
+        target = User(
+            email="ownerstuff@example.com",
+            hashed_password=get_password_hash("password123"),
+            full_name="Owner Stuff",
+            is_active=True,
+            is_superuser=False,
+        )
+        db_session.add(target)
+        await db_session.commit()
+        await db_session.refresh(target)
+
+        contact = Contact(
+            first_name="Orphan",
+            last_name="Contact",
+            email="orphan@test.com",
+            status="active",
+            owner_id=target.id,
+            created_by_id=target.id,
+        )
+        db_session.add(contact)
+        await db_session.commit()
+
+        response = await client.delete(
+            f"/api/admin/users/{target.id}/permanent",
+            headers=admin_headers,
+        )
+        assert response.status_code == 200
+        assert "permanently deleted" in response.json()["detail"].lower()
+
+        # User should be gone
+        result = await db_session.execute(select(User).where(User.id == target.id))
+        assert result.scalar_one_or_none() is None
 
 
 class TestAdminStats:

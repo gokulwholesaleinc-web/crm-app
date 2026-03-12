@@ -178,6 +178,46 @@ async def deactivate_user(
 
 
 # ---------------------------------------------------------------------------
+# DELETE /api/admin/users/{id}/permanent
+# ---------------------------------------------------------------------------
+@router.delete("/users/{user_id}/permanent")
+@limiter.limit("5/minute")
+async def permanently_delete_user(
+    request: Request,
+    user_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Permanently delete a user and all their CASCADE-linked data.
+
+    Related records with SET NULL foreign keys (contacts, leads, etc.)
+    will have their owner_id/created_by_id set to NULL by the database.
+    """
+    _require_admin(current_user)
+
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail="Cannot delete your own account",
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise_not_found("User", user_id)
+
+    if user.is_superuser:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail="Cannot delete a superuser account",
+        )
+
+    await db.delete(user)
+    await db.commit()
+    return {"detail": f"User {user_id} permanently deleted"}
+
+
+# ---------------------------------------------------------------------------
 # GET /api/admin/stats
 # ---------------------------------------------------------------------------
 @router.get("/stats", response_model=SystemStats)
