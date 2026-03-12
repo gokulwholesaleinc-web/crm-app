@@ -77,9 +77,43 @@ COLUMN_ALIASES: Dict[str, str] = {
     "budgetcurrency": "budget_currency",
     "reqs": "requirements",
     "requirement": "requirements",
+    # Monday.com specific aliases
+    "leadstatus": "status",
+    "lead_status": "status",
+    "location": "address_line1",
+    "link": "website",
+    "text": "description",
 }
 
+# Headers that represent a full name (to be split into first_name + last_name)
+FULL_NAME_HEADERS = {"name", "fullname", "person", "contactname", "leadname"}
+
 FUZZY_MATCH_THRESHOLD = 0.75
+
+
+def _split_full_name(full_name: str) -> tuple:
+    """Split 'John Smith' into ('John', 'Smith')."""
+    parts = full_name.strip().split(None, 1)
+    if len(parts) == 2:
+        return parts[0], parts[1]
+    return (parts[0], "") if parts else ("", "")
+
+
+def _find_name_column(csv_headers: list, column_mapping: dict, target_fields: list):
+    """Find a full-name CSV column that should be split into first_name + last_name.
+
+    Returns the CSV header name if found, None otherwise.
+    """
+    if "first_name" not in target_fields or "last_name" not in target_fields:
+        return None
+    mapped_fields = set(column_mapping.values())
+    if "first_name" in mapped_fields or "last_name" in mapped_fields:
+        return None
+    for header in csv_headers:
+        normalized = _normalize_header(header)
+        if normalized in FULL_NAME_HEADERS:
+            return header
+    return None
 
 
 def _normalize_header(header: str) -> str:
@@ -216,8 +250,11 @@ class CSVHandler:
         csv_headers = reader.fieldnames or []
 
         column_mapping = _map_columns(csv_headers, fields)
-        unmapped = [h for h in csv_headers if h not in column_mapping]
+        name_col = _find_name_column(csv_headers, column_mapping, fields)
+        unmapped = [h for h in csv_headers if h not in column_mapping and h != name_col]
         missing_fields = [f for f in fields if f not in column_mapping.values()]
+        if name_col:
+            missing_fields = [f for f in missing_fields if f not in ("first_name", "last_name")]
 
         # Read first 5 rows with mapped column names
         preview_rows = []
@@ -229,6 +266,12 @@ class CSVHandler:
             mapped_row = {}
             for csv_col, target_field in column_mapping.items():
                 mapped_row[target_field] = row.get(csv_col, "").strip()
+            if name_col:
+                raw_name = row.get(name_col, "").strip()
+                if raw_name:
+                    first, last = _split_full_name(raw_name)
+                    mapped_row["first_name"] = first
+                    mapped_row["last_name"] = last
             preview_rows.append(mapped_row)
 
             # Check for duplicate emails within file
@@ -312,6 +355,7 @@ class CSVHandler:
 
         # Smart column mapping
         column_mapping = _map_columns(csv_headers, fields)
+        name_col = _find_name_column(csv_headers, column_mapping, fields)
 
         # Load existing emails for dedup
         existing_emails = await self._get_existing_emails(entity_class)
@@ -330,6 +374,14 @@ class CSVHandler:
                     raw = row.get(csv_col, "")
                     if raw:
                         entity_data[target_field] = self._parse_value(target_field, raw)
+
+                # Split full name column into first_name + last_name
+                if name_col:
+                    raw_name = row.get(name_col, "").strip()
+                    if raw_name:
+                        first, last = _split_full_name(raw_name)
+                        entity_data["first_name"] = first
+                        entity_data["last_name"] = last
 
                 # Duplicate detection by email
                 email = (entity_data.get("email") or "").lower()

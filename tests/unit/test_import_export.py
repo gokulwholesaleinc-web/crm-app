@@ -17,7 +17,7 @@ from src.auth.security import get_password_hash
 from src.contacts.models import Contact
 from src.companies.models import Company
 from src.leads.models import Lead, LeadSource
-from src.import_export.csv_handler import _map_columns, _normalize_header
+from src.import_export.csv_handler import _map_columns, _normalize_header, _split_full_name, _find_name_column
 
 
 class TestExportContacts:
@@ -1051,3 +1051,298 @@ class TestImportExportUnauthorized:
             files=files,
         )
         assert response.status_code == 401
+
+
+class TestMondayComImport:
+    """Tests for Monday.com CSV import compatibility."""
+
+    @pytest.mark.asyncio
+    async def test_import_contacts_with_name_column(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """Monday.com exports a single 'Name' column — should split into first_name + last_name."""
+        csv_content = """Name,Email,Phone,Status
+John Smith,john.monday@test.com,+1-555-0001,active
+Jane Doe,jane.monday@test.com,+1-555-0002,active
+"""
+        files = {"file": ("contacts.csv", csv_content, "text/csv")}
+
+        response = await client.post(
+            "/api/import-export/import/contacts",
+            headers=auth_headers,
+            files=files,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["imported_count"] == 2
+
+        result = await db_session.execute(
+            select(Contact).where(Contact.email == "john.monday@test.com")
+        )
+        contact = result.scalar_one_or_none()
+        assert contact is not None
+        assert contact.first_name == "John"
+        assert contact.last_name == "Smith"
+
+    @pytest.mark.asyncio
+    async def test_import_contacts_with_person_column(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """Monday.com 'Person' column should also split into first_name + last_name."""
+        csv_content = """Person,Email,Phone
+Alice Johnson,alice.monday@test.com,+1-555-0010
+"""
+        files = {"file": ("contacts.csv", csv_content, "text/csv")}
+
+        response = await client.post(
+            "/api/import-export/import/contacts",
+            headers=auth_headers,
+            files=files,
+        )
+
+        assert response.status_code == 200
+        assert response.json()["imported_count"] == 1
+
+        result = await db_session.execute(
+            select(Contact).where(Contact.email == "alice.monday@test.com")
+        )
+        contact = result.scalar_one_or_none()
+        assert contact is not None
+        assert contact.first_name == "Alice"
+        assert contact.last_name == "Johnson"
+
+    @pytest.mark.asyncio
+    async def test_import_leads_with_monday_headers(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """Monday.com lead export with Lead Status, Name, and Company columns."""
+        csv_content = """Name,Email,Phone,Company,Lead Status
+Bob Wilson,bob.monday@test.com,+1-555-0020,Acme Inc,new
+"""
+        files = {"file": ("leads.csv", csv_content, "text/csv")}
+
+        response = await client.post(
+            "/api/import-export/import/leads",
+            headers=auth_headers,
+            files=files,
+        )
+
+        assert response.status_code == 200
+        assert response.json()["imported_count"] == 1
+
+        result = await db_session.execute(
+            select(Lead).where(Lead.email == "bob.monday@test.com")
+        )
+        lead = result.scalar_one_or_none()
+        assert lead is not None
+        assert lead.first_name == "Bob"
+        assert lead.last_name == "Wilson"
+        assert lead.company_name == "Acme Inc"
+        assert lead.status == "new"
+
+    @pytest.mark.asyncio
+    async def test_import_contacts_single_name_no_last(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """Single-word name should set first_name only, last_name empty."""
+        csv_content = """Name,Email
+Madonna,madonna.monday@test.com
+"""
+        files = {"file": ("contacts.csv", csv_content, "text/csv")}
+
+        response = await client.post(
+            "/api/import-export/import/contacts",
+            headers=auth_headers,
+            files=files,
+        )
+
+        assert response.status_code == 200
+        assert response.json()["imported_count"] == 1
+
+        result = await db_session.execute(
+            select(Contact).where(Contact.email == "madonna.monday@test.com")
+        )
+        contact = result.scalar_one_or_none()
+        assert contact is not None
+        assert contact.first_name == "Madonna"
+        assert contact.last_name == ""
+
+    @pytest.mark.asyncio
+    async def test_name_column_ignored_when_first_last_present(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """If CSV has both first_name/last_name AND Name, use first_name/last_name."""
+        csv_content = """first_name,last_name,Name,Email
+Explicit,Fields,Should Ignore,explicit.monday@test.com
+"""
+        files = {"file": ("contacts.csv", csv_content, "text/csv")}
+
+        response = await client.post(
+            "/api/import-export/import/contacts",
+            headers=auth_headers,
+            files=files,
+        )
+
+        assert response.status_code == 200
+        assert response.json()["imported_count"] == 1
+
+        result = await db_session.execute(
+            select(Contact).where(Contact.email == "explicit.monday@test.com")
+        )
+        contact = result.scalar_one_or_none()
+        assert contact is not None
+        assert contact.first_name == "Explicit"
+        assert contact.last_name == "Fields"
+
+    @pytest.mark.asyncio
+    async def test_monday_unmapped_columns_ignored(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """Monday.com metadata columns (Subitems, Board, Item ID) should be ignored."""
+        csv_content = """Name,Email,Subitems,Board,Item ID,Creation Log
+Test User,monday.meta@test.com,sub1,My Board,12345,2024-01-01
+"""
+        files = {"file": ("contacts.csv", csv_content, "text/csv")}
+
+        response = await client.post(
+            "/api/import-export/import/contacts",
+            headers=auth_headers,
+            files=files,
+        )
+
+        assert response.status_code == 200
+        assert response.json()["imported_count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_preview_monday_csv_contacts(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+    ):
+        """Preview should show name split and not list Name as unmapped."""
+        csv_content = """Name,Email,Phone,Status
+John Smith,john@preview.com,+1-555-0001,active
+"""
+        files = {"file": ("contacts.csv", csv_content, "text/csv")}
+
+        response = await client.post(
+            "/api/import-export/preview/contacts",
+            headers=auth_headers,
+            files=files,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "Name" not in data["unmapped_columns"]
+        assert data["preview_rows"][0]["first_name"] == "John"
+        assert data["preview_rows"][0]["last_name"] == "Smith"
+        assert "first_name" not in data["missing_fields"]
+        assert "last_name" not in data["missing_fields"]
+
+    @pytest.mark.asyncio
+    async def test_monday_location_maps_to_address(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """Monday.com 'Location' column should map to address_line1."""
+        csv_content = """first_name,last_name,email,Location
+Loc,Test,loc.monday@test.com,123 Main St
+"""
+        files = {"file": ("contacts.csv", csv_content, "text/csv")}
+
+        response = await client.post(
+            "/api/import-export/import/contacts",
+            headers=auth_headers,
+            files=files,
+        )
+
+        assert response.status_code == 200
+        assert response.json()["imported_count"] == 1
+
+        result = await db_session.execute(
+            select(Contact).where(Contact.email == "loc.monday@test.com")
+        )
+        contact = result.scalar_one_or_none()
+        assert contact is not None
+        assert contact.address_line1 == "123 Main St"
+
+
+class TestSplitFullName:
+    """Unit tests for _split_full_name helper."""
+
+    def test_two_word_name(self):
+        assert _split_full_name("John Smith") == ("John", "Smith")
+
+    def test_single_word_name(self):
+        assert _split_full_name("Madonna") == ("Madonna", "")
+
+    def test_three_word_name(self):
+        first, last = _split_full_name("John Paul Smith")
+        assert first == "John"
+        assert last == "Paul Smith"
+
+    def test_empty_string(self):
+        assert _split_full_name("") == ("", "")
+
+    def test_whitespace_only(self):
+        assert _split_full_name("   ") == ("", "")
+
+    def test_extra_whitespace(self):
+        assert _split_full_name("  John   Smith  ") == ("John", "Smith")
+
+
+class TestFindNameColumn:
+    """Unit tests for _find_name_column helper."""
+
+    def test_finds_name_column(self):
+        headers = ["Name", "Email", "Phone"]
+        mapping = {"Email": "email", "Phone": "phone"}
+        fields = ["first_name", "last_name", "email", "phone"]
+        assert _find_name_column(headers, mapping, fields) == "Name"
+
+    def test_finds_person_column(self):
+        headers = ["Person", "Email"]
+        mapping = {"Email": "email"}
+        fields = ["first_name", "last_name", "email"]
+        assert _find_name_column(headers, mapping, fields) == "Person"
+
+    def test_returns_none_when_first_name_mapped(self):
+        headers = ["Name", "first_name", "Email"]
+        mapping = {"first_name": "first_name", "Email": "email"}
+        fields = ["first_name", "last_name", "email"]
+        assert _find_name_column(headers, mapping, fields) is None
+
+    def test_returns_none_for_companies(self):
+        headers = ["Name", "Email"]
+        mapping = {"Email": "email"}
+        fields = ["name", "email", "industry"]
+        assert _find_name_column(headers, mapping, fields) is None
