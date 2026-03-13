@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import clsx from 'clsx';
@@ -40,9 +41,12 @@ export function KanbanCard({ opportunity, onClick }: KanbanCardProps) {
     transition,
   };
 
-  const isOverdue =
-    opportunity.expectedCloseDate &&
-    new Date(opportunity.expectedCloseDate) < new Date();
+  const isOverdue = useMemo(
+    () =>
+      opportunity.expectedCloseDate &&
+      new Date(opportunity.expectedCloseDate) < new Date(),
+    [opportunity.expectedCloseDate]
+  );
 
   return (
     <div

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -45,11 +45,14 @@ export function KanbanBoard({
     useState<Opportunity[]>(opportunities);
 
   // Update local state when props change (compare both IDs and stages)
-  const propsKey = JSON.stringify(opportunities.map((o) => `${o.id}:${o.stage}`));
-  const localKey = JSON.stringify(localOpportunities.map((o) => `${o.id}:${o.stage}`));
-  if (propsKey !== localKey) {
+  const propsKey = useMemo(
+    () => opportunities.map((o) => `${o.id}:${o.stage}`).join(','),
+    [opportunities]
+  );
+
+  useEffect(() => {
     setLocalOpportunities(opportunities);
-  }
+  }, [propsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const sensors = useSensors(
     useSensor(PointerSensor, {

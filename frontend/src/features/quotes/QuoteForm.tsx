@@ -23,26 +23,44 @@ const EMPTY_LINE_ITEM: QuoteLineItemCreate = {
   sort_order: 0,
 };
 
+const DEFAULT_FORM_STATE = {
+  title: '',
+  description: '',
+  contactId: null as number | null,
+  companyId: null as number | null,
+  opportunityId: null as number | null,
+  currency: 'USD',
+  validUntil: '',
+  discountType: '',
+  discountValue: 0,
+  taxRate: 0,
+  termsAndConditions: '',
+  notes: '',
+  paymentType: 'one_time',
+  recurringInterval: '',
+};
+
 export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteFormProps) {
   const [searchParams] = useSearchParams();
   const urlOpportunityId = searchParams.get('opportunity_id');
 
-  const [formData, setFormData] = useState({
-    title: initialData?.title ?? '',
-    description: initialData?.description ?? '',
-    contactId: initialData?.contact_id ?? null as number | null,
-    companyId: initialData?.company_id ?? null as number | null,
-    opportunityId: initialData?.opportunity_id ?? (urlOpportunityId ? parseInt(urlOpportunityId, 10) : null) as number | null,
-    currency: initialData?.currency ?? 'USD',
-    validUntil: initialData?.valid_until ?? '',
-    discountType: initialData?.discount_type ?? '',
-    discountValue: initialData?.discount_value ?? 0,
-    taxRate: initialData?.tax_rate ?? 0,
-    termsAndConditions: initialData?.terms_and_conditions ?? '',
-    notes: initialData?.notes ?? '',
-    paymentType: initialData?.payment_type ?? 'one_time',
-    recurringInterval: initialData?.recurring_interval ?? '',
-  });
+  const [formData, setFormData] = useState(() => ({
+    ...DEFAULT_FORM_STATE,
+    title: initialData?.title ?? DEFAULT_FORM_STATE.title,
+    description: initialData?.description ?? DEFAULT_FORM_STATE.description,
+    contactId: initialData?.contact_id ?? DEFAULT_FORM_STATE.contactId,
+    companyId: initialData?.company_id ?? DEFAULT_FORM_STATE.companyId,
+    opportunityId: initialData?.opportunity_id ?? (urlOpportunityId ? parseInt(urlOpportunityId, 10) : null),
+    currency: initialData?.currency ?? DEFAULT_FORM_STATE.currency,
+    validUntil: initialData?.valid_until ?? DEFAULT_FORM_STATE.validUntil,
+    discountType: initialData?.discount_type ?? DEFAULT_FORM_STATE.discountType,
+    discountValue: initialData?.discount_value ?? DEFAULT_FORM_STATE.discountValue,
+    taxRate: initialData?.tax_rate ?? DEFAULT_FORM_STATE.taxRate,
+    termsAndConditions: initialData?.terms_and_conditions ?? DEFAULT_FORM_STATE.termsAndConditions,
+    notes: initialData?.notes ?? DEFAULT_FORM_STATE.notes,
+    paymentType: initialData?.payment_type ?? DEFAULT_FORM_STATE.paymentType,
+    recurringInterval: initialData?.recurring_interval ?? DEFAULT_FORM_STATE.recurringInterval,
+  }));
 
   const updateField = <K extends keyof typeof formData>(field: K, value: typeof formData[K]) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
