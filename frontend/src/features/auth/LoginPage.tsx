@@ -165,7 +165,7 @@ function LoginPage() {
                   },
                 })}
                 className="appearance-none rounded-none relative block w-full px-3 py-2.5 sm:py-2 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 text-base sm:text-sm rounded-t-md focus-visible:outline-none focus-visible:ring-primary-500 focus-visible:border-primary-500 focus-visible:z-10"
-                placeholder="Email address"
+                placeholder="Email address..."
               />
               {errors.email && (
                 <p className="mt-1 text-xs sm:text-sm text-red-600 dark:text-red-400">{errors.email.message}</p>
@@ -183,7 +183,7 @@ function LoginPage() {
                   required: 'Password is required',
                 })}
                 className="appearance-none rounded-none relative block w-full px-3 py-2.5 sm:py-2 pr-10 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 text-base sm:text-sm rounded-b-md focus-visible:outline-none focus-visible:ring-primary-500 focus-visible:border-primary-500 focus-visible:z-10"
-                placeholder="Password"
+                placeholder="Password..."
               />
               <button
                 type="button"

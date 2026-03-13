@@ -432,6 +432,37 @@ Corp C,newcorp@test.com,Retail,prospect
         assert data["duplicates_skipped"] == 1
 
 
+    @pytest.mark.asyncio
+    async def test_import_companies_duplicate_name_detection(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """Companies with duplicate names (no email) should be skipped on re-import."""
+        csv_content = """name,industry,status
+Acme Corp,Technology,prospect
+Beta LLC,Finance,customer
+"""
+        files = {"file": ("companies.csv", csv_content, "text/csv")}
+        response = await client.post("/api/import-export/import/companies", headers=auth_headers, files=files)
+        data = response.json()
+        assert data["imported_count"] == 2
+
+        # Re-import same names — should be skipped
+        csv_content2 = """name,industry,status
+Acme Corp,Retail,prospect
+Beta LLC,Healthcare,customer
+Gamma Inc,Education,prospect
+"""
+        files2 = {"file": ("companies.csv", csv_content2, "text/csv")}
+        response2 = await client.post("/api/import-export/import/companies", headers=auth_headers, files=files2)
+        data2 = response2.json()
+        assert data2["imported_count"] == 1  # Only Gamma Inc
+        assert data2["duplicates_skipped"] == 2  # Acme Corp + Beta LLC
+
+
 class TestImportLeads:
     """Tests for leads import endpoint."""
 

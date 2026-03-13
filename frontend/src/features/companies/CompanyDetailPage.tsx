@@ -18,7 +18,11 @@ import {
   UserCircleIcon,
   SparklesIcon,
 } from '@heroicons/react/24/outline';
-import { Button, Spinner, Modal, ConfirmDialog, StatusBadge } from '../../components/ui';
+import { Button } from '../../components/ui/Button';
+import { Spinner } from '../../components/ui/Spinner';
+import { Modal } from '../../components/ui/Modal';
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
+import { StatusBadge } from '../../components/ui/Badge';
 import type { StatusType } from '../../components/ui/Badge';
 
 const NotesList = lazy(() => import('../../components/shared/NotesList'));

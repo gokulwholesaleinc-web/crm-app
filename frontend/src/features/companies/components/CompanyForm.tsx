@@ -255,6 +255,7 @@ export function CompanyForm({
         />
         <Input
           {...register('phone')}
+          type="tel"
           label="Phone"
           placeholder="+1 (555) 000-0000..."
         />
@@ -326,13 +327,16 @@ export function CompanyForm({
         <div className="grid grid-cols-2 gap-4">
           <Input
             {...register('linkedin_url')}
+            type="url"
             label="LinkedIn URL"
+            spellCheck={false}
             placeholder="https://linkedin.com/company/..."
           />
           <Input
             {...register('twitter_handle')}
             label="Twitter Handle"
-            placeholder="@companyhandle"
+            spellCheck={false}
+            placeholder="@companyhandle..."
           />
         </div>
       </div>
