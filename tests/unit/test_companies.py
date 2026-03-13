@@ -259,6 +259,32 @@ class TestCompaniesCreate:
         assert data["employee_count"] == 500
         assert data["status"] == "customer"
 
+    @pytest.mark.asyncio
+    async def test_create_company_with_custom_fields(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+    ):
+        """Test creating company with link_creative_tier, sow_url, account_manager."""
+        response = await client.post(
+            "/api/companies",
+            headers=auth_headers,
+            json={
+                "name": "Custom Fields Corp",
+                "link_creative_tier": "3",
+                "sow_url": "https://docs.google.com/sow/123",
+                "account_manager": "Jane Smith",
+                "status": "customer",
+            },
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["link_creative_tier"] == "3"
+        assert data["sow_url"] == "https://docs.google.com/sow/123"
+        assert data["account_manager"] == "Jane Smith"
+
 
 class TestCompaniesGetById:
     """Tests for get company by ID endpoint."""
@@ -447,6 +473,43 @@ class TestCompaniesUpdate:
         data = response.json()
         assert data["annual_revenue"] == 10000000.0
         assert data["employee_count"] == 200
+
+
+    @pytest.mark.asyncio
+    async def test_update_company_custom_fields(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_company: Company,
+    ):
+        """Test updating company link_creative_tier, sow_url, account_manager."""
+        response = await client.patch(
+            f"/api/companies/{test_company.id}",
+            headers=auth_headers,
+            json={
+                "link_creative_tier": "2",
+                "sow_url": "https://example.com/sow.pdf",
+                "account_manager": "Bob Jones",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["link_creative_tier"] == "2"
+        assert data["sow_url"] == "https://example.com/sow.pdf"
+        assert data["account_manager"] == "Bob Jones"
+
+        # Verify persistence via GET
+        get_response = await client.get(
+            f"/api/companies/{test_company.id}",
+            headers=auth_headers,
+        )
+        assert get_response.status_code == 200
+        get_data = get_response.json()
+        assert get_data["link_creative_tier"] == "2"
+        assert get_data["sow_url"] == "https://example.com/sow.pdf"
+        assert get_data["account_manager"] == "Bob Jones"
 
 
 class TestCompaniesDelete:

@@ -24,6 +24,9 @@ class CompanyBase(BaseModel):
     linkedin_url: Optional[str] = None
     twitter_handle: Optional[str] = None
     description: Optional[str] = None
+    link_creative_tier: Optional[str] = None
+    sow_url: Optional[str] = None
+    account_manager: Optional[str] = None
     status: str = "prospect"
     segment: Optional[str] = None
     owner_id: Optional[int] = None
@@ -51,6 +54,9 @@ class CompanyUpdate(BaseModel):
     linkedin_url: Optional[str] = None
     twitter_handle: Optional[str] = None
     description: Optional[str] = None
+    link_creative_tier: Optional[str] = None
+    sow_url: Optional[str] = None
+    account_manager: Optional[str] = None
     status: Optional[str] = None
     segment: Optional[str] = None
     owner_id: Optional[int] = None

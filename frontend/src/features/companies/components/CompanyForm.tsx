@@ -35,6 +35,9 @@ interface FormValues {
   linkedin_url: string;
   twitter_handle: string;
   description: string;
+  link_creative_tier: string;
+  sow_url: string;
+  account_manager: string;
   status: string;
   segment: string;
 }
@@ -68,6 +71,15 @@ const industryOptions = [
   { value: 'consulting', label: 'Consulting' },
   { value: 'media', label: 'Media & Entertainment' },
   { value: 'other', label: 'Other' },
+];
+
+const linkCreativeTierOptions = [
+  { value: '', label: 'Select tier...' },
+  { value: '1', label: 'Tier 1' },
+  { value: '2', label: 'Tier 2' },
+  { value: '3', label: 'Tier 3' },
+  { value: '4', label: 'Tier 4' },
+  { value: '5', label: 'Tier 5' },
 ];
 
 const segmentOptions = [
@@ -114,6 +126,9 @@ export function CompanyForm({
       linkedin_url: company?.linkedin_url || '',
       twitter_handle: company?.twitter_handle || '',
       description: company?.description || '',
+      link_creative_tier: company?.link_creative_tier || '',
+      sow_url: company?.sow_url || '',
+      account_manager: company?.account_manager || '',
       status: company?.status || 'prospect',
       segment: company?.segment || '',
     },
@@ -140,6 +155,9 @@ export function CompanyForm({
         linkedin_url: company.linkedin_url || '',
         twitter_handle: company.twitter_handle || '',
         description: company.description || '',
+        link_creative_tier: company.link_creative_tier || '',
+        sow_url: company.sow_url || '',
+        account_manager: company.account_manager || '',
         status: company.status,
         segment: company.segment || '',
       });
@@ -165,6 +183,9 @@ export function CompanyForm({
       linkedin_url: data.linkedin_url || undefined,
       twitter_handle: data.twitter_handle || undefined,
       description: data.description || undefined,
+      link_creative_tier: data.link_creative_tier || undefined,
+      sow_url: data.sow_url || undefined,
+      account_manager: data.account_manager || undefined,
       status: data.status,
       segment: data.segment || undefined,
     };
@@ -310,6 +331,33 @@ export function CompanyForm({
             {...register('twitter_handle')}
             label="Twitter Handle"
             placeholder="@companyhandle"
+          />
+        </div>
+      </div>
+
+      {/* Account & Creative */}
+      <div className="border-t pt-4 mt-4">
+        <h4 className="text-sm font-medium text-gray-700 mb-3">Account & Creative</h4>
+        <div className="grid grid-cols-2 gap-4">
+          <Controller
+            name="link_creative_tier"
+            control={control}
+            render={({ field }) => (
+              <Select {...field} label="Link Creative Tier" options={linkCreativeTierOptions} />
+            )}
+          />
+          <Input
+            {...register('account_manager')}
+            label="Account Manager"
+            placeholder="e.g. Jane Smith..."
+          />
+        </div>
+        <div className="mt-4">
+          <Input
+            {...register('sow_url')}
+            type="url"
+            label="SOW URL"
+            placeholder="https://..."
           />
         </div>
       </div>

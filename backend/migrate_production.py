@@ -89,6 +89,10 @@ async def run_migrations():
             # pipeline_stages.pipeline_type
             ("ALTER TABLE pipeline_stages ADD COLUMN IF NOT EXISTS pipeline_type VARCHAR(20) DEFAULT 'opportunity'", "pipeline_stages.pipeline_type"),
             ("CREATE INDEX IF NOT EXISTS ix_pipeline_stages_pipeline_type ON pipeline_stages(pipeline_type)", "index pipeline_stages.pipeline_type"),
+            # companies custom fields
+            ("ALTER TABLE companies ADD COLUMN IF NOT EXISTS link_creative_tier VARCHAR(10)", "companies.link_creative_tier"),
+            ("ALTER TABLE companies ADD COLUMN IF NOT EXISTS sow_url VARCHAR(500)", "companies.sow_url"),
+            ("ALTER TABLE companies ADD COLUMN IF NOT EXISTS account_manager VARCHAR(255)", "companies.account_manager"),
         ]
 
         for sql, desc in column_migrations:

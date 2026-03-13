@@ -14,6 +14,9 @@ import {
   MapPinIcon,
   UsersIcon,
   LinkIcon,
+  DocumentTextIcon,
+  UserCircleIcon,
+  SparklesIcon,
 } from '@heroicons/react/24/outline';
 import { Button, Spinner, Modal, ConfirmDialog, StatusBadge } from '../../components/ui';
 import type { StatusType } from '../../components/ui/Badge';
@@ -405,6 +408,31 @@ export function CompanyDetailPage() {
                 )}
               </div>
             </div>
+
+            {/* Account & Creative */}
+            {(company.link_creative_tier || company.sow_url || company.account_manager) && (
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 p-6">
+                <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">Account & Creative</h3>
+                <div className="space-y-1">
+                  <DetailItem
+                    icon={SparklesIcon}
+                    label="Link Creative Tier"
+                    value={company.link_creative_tier ? `Tier ${company.link_creative_tier}` : null}
+                  />
+                  <DetailItem
+                    icon={UserCircleIcon}
+                    label="Account Manager"
+                    value={company.account_manager}
+                  />
+                  <DetailItem
+                    icon={DocumentTextIcon}
+                    label="SOW"
+                    value={company.sow_url ? 'View SOW' : null}
+                    link={company.sow_url || undefined}
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Social Links */}
             {(company.linkedin_url || company.twitter_handle) && (

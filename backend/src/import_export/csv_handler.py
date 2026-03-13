@@ -91,9 +91,21 @@ COLUMN_ALIASES: Dict[str, str] = {
     # Business size aliases
     "businesssizetier": "company_size",
     "businesssize": "company_size",
-    "tier": "company_size",
     "companytier": "company_size",
     "sizetier": "company_size",
+    "tier": "company_size",
+    # Link Creative Tier aliases
+    "linkcreativetier": "link_creative_tier",
+    "creativetier": "link_creative_tier",
+    "linktier": "link_creative_tier",
+    # SOW aliases
+    "sow": "sow_url",
+    "sowurl": "sow_url",
+    "statementofwork": "sow_url",
+    # Account Manager aliases
+    "accountmanager": "account_manager",
+    "am": "account_manager",
+    "manager": "account_manager",
 }
 
 # Headers that represent a full name (to be split into first_name + last_name)
@@ -232,7 +244,7 @@ class CSVHandler:
         "name", "website", "industry", "company_size", "phone", "email",
         "address_line1", "address_line2", "city", "state", "postal_code", "country",
         "annual_revenue", "employee_count", "linkedin_url", "twitter_handle",
-        "description", "status",
+        "description", "status", "link_creative_tier", "sow_url", "account_manager",
     ]
 
     LEAD_FIELDS = [

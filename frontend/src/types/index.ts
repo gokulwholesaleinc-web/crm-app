@@ -211,6 +211,9 @@ export interface CompanyBase {
   linkedin_url?: string | null;
   twitter_handle?: string | null;
   description?: string | null;
+  link_creative_tier?: string | null;
+  sow_url?: string | null;
+  account_manager?: string | null;
   status: string;
   segment?: string | null;
   owner_id?: number | null;

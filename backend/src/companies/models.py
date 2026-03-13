@@ -49,6 +49,11 @@ class Company(Base, AuditableMixin):
     # Segment
     segment: Mapped[Optional[str]] = mapped_column(String(100), index=True, nullable=True)
 
+    # Custom / transferable fields
+    link_creative_tier: Mapped[Optional[str]] = mapped_column(String(10))
+    sow_url: Mapped[Optional[str]] = mapped_column(String(500))
+    account_manager: Mapped[Optional[str]] = mapped_column(String(255))
+
     # Status
     status: Mapped[str] = mapped_column(String(20), default="prospect")  # prospect, customer, churned
 
