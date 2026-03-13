@@ -185,7 +185,10 @@ function LeadsPage() {
         // Check for duplicates before creating
         const result = await checkDuplicatesMutation.mutateAsync({
           entityType: 'leads',
-          data: { email: data.email, phone: data.phone },
+          data: {
+            ...(data.email ? { email: data.email } : {}),
+            ...(data.phone ? { phone: data.phone } : {}),
+          },
         });
         if (result.has_duplicates) {
           setPendingFormData(data);
@@ -760,7 +763,7 @@ function LeadsPage() {
           onSubmit={handleFormSubmit}
           onCancel={handleFormCancel}
           isLoading={
-            createLeadMutation.isPending || updateLeadMutation.isPending
+            createLeadMutation.isPending || updateLeadMutation.isPending || checkDuplicatesMutation.isPending
           }
           submitLabel={editingLead ? 'Update Lead' : 'Create Lead'}
         />

@@ -333,6 +333,7 @@ function ContactsPage() {
                 type="search"
                 name="search"
                 id="search"
+                autoComplete="off"
                 value={searchQuery}
                 onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
                 className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md leading-5 bg-white dark:bg-gray-700 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus-visible:outline-none focus-visible:placeholder-gray-400 focus-visible:ring-1 focus-visible:ring-primary-500 focus-visible:border-primary-500 text-sm"
@@ -424,13 +425,13 @@ function ContactsPage() {
                     <div className="flex items-center gap-2 ml-2 flex-shrink-0">
                       <button
                         onClick={() => handleEdit(contact)}
-                        className="p-2 text-primary-600 hover:text-primary-900 dark:hover:text-primary-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md"
+                        className="p-2 text-primary-600 hover:text-primary-900 dark:hover:text-primary-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => handleDeleteClick(contact)}
-                        className="p-2 text-red-600 hover:text-red-900 dark:hover:text-red-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md"
+                        className="p-2 text-red-600 hover:text-red-900 dark:hover:text-red-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                         disabled={deleteContactMutation.isPending}
                       >
                         Delete
@@ -585,13 +586,13 @@ function ContactsPage() {
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button
                           onClick={() => handleEdit(contact)}
-                          className="text-primary-600 hover:text-primary-900 dark:hover:text-primary-300 mr-4"
+                          className="text-primary-600 hover:text-primary-900 dark:hover:text-primary-300 mr-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
                         >
                           Edit
                         </button>
                         <button
                           onClick={() => handleDeleteClick(contact)}
-                          className="text-red-600 hover:text-red-900 dark:hover:text-red-300"
+                          className="text-red-600 hover:text-red-900 dark:hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded"
                           disabled={deleteContactMutation.isPending}
                         >
                           Delete
@@ -754,7 +755,7 @@ function ContactsPage() {
           onSubmit={handleFormSubmit}
           onCancel={handleFormCancel}
           isLoading={
-            createContactMutation.isPending || updateContactMutation.isPending
+            createContactMutation.isPending || updateContactMutation.isPending || checkDuplicatesMutation.isPending
           }
           submitLabel={editingContact ? 'Update Contact' : 'Create Contact'}
         />

@@ -100,7 +100,7 @@ function CompanyCard({
                   e.stopPropagation();
                   onEdit();
                 }}
-                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                 aria-label="Edit company"
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -117,7 +117,7 @@ function CompanyCard({
                   e.stopPropagation();
                   onDelete();
                 }}
-                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-red-500"
+                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-red-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                 aria-label="Delete company"
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -543,7 +543,7 @@ export function CompaniesPage() {
           company={editingCompany || undefined}
           onSubmit={handleFormSubmit}
           onCancel={handleFormCancel}
-          isLoading={createCompany.isPending || updateCompany.isPending}
+          isLoading={createCompany.isPending || updateCompany.isPending || checkDuplicatesMutation.isPending}
         />
       </Modal>
 
