@@ -10,6 +10,11 @@ import asyncpg
 import os
 from typing import List, Tuple
 
+# Admin emails from environment (comma-separated), default to admin@admin.com
+ADMIN_EMAILS = [
+    e.strip() for e in os.getenv("ADMIN_EMAILS", "admin@admin.com").split(",") if e.strip()
+]
+
 # Get DATABASE_URL from environment
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 if not DATABASE_URL:
@@ -37,26 +42,53 @@ async def run_migrations():
         """)
 
         # Set admin users to admin role and superuser
-        updated = await conn.execute("""
+        placeholders = ", ".join(f"${i+1}" for i in range(len(ADMIN_EMAILS)))
+        updated = await conn.execute(f"""
             UPDATE users
             SET role = 'admin', is_superuser = true
-            WHERE email IN ('admin@admin.com', 'harsh@test.com')
+            WHERE email IN ({placeholders})
             AND (role != 'admin' OR is_superuser = false)
-        """)
+        """, *ADMIN_EMAILS)
         print(f"   ✅ Role column exists, {updated.split()[-1]} users updated to admin")
 
         # Ensure admin users have admin role mapping in user_roles
-        await conn.execute("""
+        await conn.execute(f"""
             INSERT INTO user_roles (user_id, role_id, created_at, updated_at)
             SELECT u.id, r.id, NOW(), NOW()
             FROM users u, roles r
-            WHERE u.email IN ('admin@admin.com', 'harsh@test.com')
+            WHERE u.email IN ({placeholders})
             AND r.name = 'admin'
             AND NOT EXISTS (
                 SELECT 1 FROM user_roles ur WHERE ur.user_id = u.id AND ur.role_id = r.id
             )
-        """)
+        """, *ADMIN_EMAILS)
         print("   ✅ Admin user_roles mappings verified")
+
+        # Migration 1b: Add unique constraints
+        print("📋 Migration 1b: Add unique constraints...")
+        try:
+            await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_contacts_unique_email ON contacts(email) WHERE email IS NOT NULL")
+            print("   ✅ contacts unique email index")
+        except Exception as e:
+            print(f"   ⚠️  contacts unique email index: {e}")
+        try:
+            await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_companies_unique_name_owner ON companies(name, owner_id)")
+            print("   ✅ companies unique name+owner index")
+        except Exception as e:
+            print(f"   ⚠️  companies unique name+owner index: {e}")
+
+        # Migration 1c: Add missing performance indexes
+        print("📋 Migration 1c: Add missing performance indexes...")
+        for idx_sql, idx_desc in [
+            ("CREATE INDEX IF NOT EXISTS ix_companies_status ON companies(status)", "companies.status"),
+            ("CREATE INDEX IF NOT EXISTS ix_companies_industry ON companies(industry)", "companies.industry"),
+            ("CREATE INDEX IF NOT EXISTS ix_contacts_status ON contacts(status)", "contacts.status"),
+        ]:
+            try:
+                await conn.execute(idx_sql)
+                print(f"   ✅ index {idx_desc}")
+            except Exception as e:
+                print(f"   ⚠️  index {idx_desc}: {e}")
 
         # Migration 2: Add missing columns to existing tables
         # (Base.metadata.create_all only creates new tables, not new columns)

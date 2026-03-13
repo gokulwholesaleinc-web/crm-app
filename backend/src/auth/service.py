@@ -65,13 +65,14 @@ class AuthService:
 
         return user
 
-    async def get_all_users(self, skip: int = 0, limit: int = 100) -> list[User]:
+    async def get_all_users(self, page: int = 1, page_size: int = 100) -> list[User]:
         """Get all users with pagination."""
+        offset = (page - 1) * page_size
         result = await self.db.execute(
             select(User)
             .where(User.is_active == True)
-            .offset(skip)
-            .limit(limit)
+            .offset(offset)
+            .limit(page_size)
             .order_by(User.full_name)
         )
         return list(result.scalars().all())

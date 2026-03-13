@@ -3,7 +3,6 @@
 import logging
 from typing import Annotated, Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
-from sqlalchemy import select, func
 from src.core.constants import HTTPStatus, EntityNames, ENTITY_TYPE_CONTACTS
 from src.core.router_utils import (
     DBSession,
@@ -161,70 +160,8 @@ async def get_contact_payment_summary(
     db: DBSession,
 ):
     """Get payment summary for a contact via their StripeCustomer link."""
-    from src.payments.models import Payment, StripeCustomer
-
-    # Find StripeCustomer records linked to this contact
-    customer_query = select(StripeCustomer.id).where(
-        StripeCustomer.contact_id == contact_id
-    )
-    customer_result = await db.execute(customer_query)
-    customer_ids = [row[0] for row in customer_result.fetchall()]
-
-    if not customer_ids:
-        return {
-            "total_paid": 0.0,
-            "payment_count": 0,
-            "late_payments": 0,
-            "on_time_rate": 100.0,
-            "last_payment_date": None,
-        }
-
-    # Query succeeded payments for these customers
-    payments_query = (
-        select(Payment)
-        .where(Payment.customer_id.in_(customer_ids))
-        .where(Payment.status == "succeeded")
-    )
-    result = await db.execute(payments_query)
-    payments = list(result.scalars().all())
-
-    if not payments:
-        return {
-            "total_paid": 0.0,
-            "payment_count": 0,
-            "late_payments": 0,
-            "on_time_rate": 100.0,
-            "last_payment_date": None,
-        }
-
-    total_paid = sum(float(p.amount) for p in payments)
-    payment_count = len(payments)
-
-    # Count all payments (including failed) for late payment calculation
-    all_payments_query = (
-        select(Payment)
-        .where(Payment.customer_id.in_(customer_ids))
-    )
-    all_result = await db.execute(all_payments_query)
-    all_payments = list(all_result.scalars().all())
-
-    late_payments = sum(1 for p in all_payments if p.status == "failed")
-    total_attempts = len(all_payments)
-    on_time_rate = round(((total_attempts - late_payments) / total_attempts) * 100, 1) if total_attempts > 0 else 100.0
-
-    # Find most recent payment date
-    last_payment_date = max(
-        (p.created_at for p in payments),
-        default=None,
-    )
-
-    return {
-        "total_paid": round(total_paid, 2),
-        "payment_count": payment_count,
-        "late_payments": late_payments,
-        "on_time_rate": on_time_rate,
-        "last_payment_date": last_payment_date.isoformat() if last_payment_date else None,
-    }
+    service = ContactService(db)
+    return await service.get_payment_summary(contact_id)
 
 
 @router.get("/{contact_id}", response_model=ContactResponse)

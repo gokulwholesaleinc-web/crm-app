@@ -18,6 +18,7 @@ import {
   ExclamationTriangleIcon,
   PhoneIcon,
 } from '@heroicons/react/24/outline';
+import { showError } from '../../utils/toast';
 import { Button } from '../../components/ui/Button';
 import { Spinner } from '../../components/ui/Spinner';
 import { ChatMessage } from './components/ChatMessage';
@@ -92,7 +93,7 @@ export function AIAssistantPage() {
     try {
       await sendMessage(content);
     } catch (error) {
-      console.error('Failed to send message:', error);
+      showError('Failed to send message');
     }
   };
 

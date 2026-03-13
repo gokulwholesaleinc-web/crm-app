@@ -13,6 +13,7 @@ import {
   UsersIcon,
   CurrencyDollarIcon,
 } from '@heroicons/react/24/outline';
+import { showError } from '../../utils/toast';
 import { Button, Select, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { CampaignForm } from './components/CampaignForm';
 import {
@@ -239,7 +240,7 @@ export function CampaignsPage() {
       await deleteCampaign.mutateAsync(deleteConfirm.campaign.id);
       setDeleteConfirm(INITIAL_DELETE_CONFIRM);
     } catch (error) {
-      console.error('Failed to delete campaign:', error);
+      showError('Failed to delete campaign');
     }
   };
 
@@ -262,7 +263,7 @@ export function CampaignsPage() {
       setShowForm(false);
       setEditingCampaign(null);
     } catch (error) {
-      console.error('Failed to save campaign:', error);
+      showError('Failed to save campaign');
     }
   };
 

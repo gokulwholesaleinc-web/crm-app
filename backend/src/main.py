@@ -58,6 +58,10 @@ async def _run_production_migrations():
     """Run idempotent schema migrations using raw asyncpg (no ORM)."""
     import asyncpg
 
+    admin_emails = [
+        e.strip() for e in os.getenv("ADMIN_EMAILS", "admin@admin.com").split(",") if e.strip()
+    ]
+
     db_url = settings.db_url
     if db_url.startswith("postgresql+asyncpg://"):
         db_url = db_url.replace("postgresql+asyncpg://", "postgresql://")
@@ -68,21 +72,35 @@ async def _run_production_migrations():
         conn = await asyncpg.connect(db_url)
         try:
             await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'sales_rep' NOT NULL")
-            await conn.execute("""
+            placeholders = ", ".join(f"${i+1}" for i in range(len(admin_emails)))
+            await conn.execute(f"""
                 UPDATE users SET role = 'admin', is_superuser = true
-                WHERE email IN ('admin@admin.com', 'harsh@test.com')
+                WHERE email IN ({placeholders})
                 AND (role != 'admin' OR is_superuser = false)
-            """)
-            await conn.execute("""
+            """, *admin_emails)
+            await conn.execute(f"""
                 INSERT INTO user_roles (user_id, role_id, created_at, updated_at)
                 SELECT u.id, r.id, NOW(), NOW()
                 FROM users u, roles r
-                WHERE u.email IN ('admin@admin.com', 'harsh@test.com')
+                WHERE u.email IN ({placeholders})
                 AND r.name = 'admin'
                 AND NOT EXISTS (
                     SELECT 1 FROM user_roles ur WHERE ur.user_id = u.id AND ur.role_id = r.id
                 )
-            """)
+            """, *admin_emails)
+
+            # Unique constraints and missing indexes
+            for idx_sql in [
+                "CREATE UNIQUE INDEX IF NOT EXISTS ix_contacts_unique_email ON contacts(email) WHERE email IS NOT NULL",
+                "CREATE UNIQUE INDEX IF NOT EXISTS ix_companies_unique_name_owner ON companies(name, owner_id)",
+                "CREATE INDEX IF NOT EXISTS ix_companies_status ON companies(status)",
+                "CREATE INDEX IF NOT EXISTS ix_companies_industry ON companies(industry)",
+                "CREATE INDEX IF NOT EXISTS ix_contacts_status ON contacts(status)",
+            ]:
+                try:
+                    await conn.execute(idx_sql)
+                except Exception:
+                    pass
 
             column_migrations = [
                 "ALTER TABLE leads ADD COLUMN IF NOT EXISTS sales_code VARCHAR(100)",

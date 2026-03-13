@@ -19,6 +19,7 @@ import {
   formatPercentage,
   getStatusBadgeClasses,
 } from '../../utils';
+import { showError } from '../../utils/toast';
 import type { Opportunity, OpportunityCreate, OpportunityUpdate } from '../../types';
 
 const defaultStages: KanbanStage[] = [
@@ -95,7 +96,7 @@ function OpportunitiesPage() {
         newStageId: stage.id,
       });
     } catch (err) {
-      console.error('Failed to move opportunity:', err);
+      showError('Failed to move opportunity');
       throw err;
     }
   };
@@ -148,7 +149,7 @@ function OpportunitiesPage() {
       setShowForm(false);
       setEditingOpportunity(null);
     } catch (err) {
-      console.error('Failed to save opportunity:', err);
+      showError('Failed to save opportunity');
     }
   };
 

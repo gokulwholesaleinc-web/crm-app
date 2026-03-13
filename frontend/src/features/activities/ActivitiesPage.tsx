@@ -29,6 +29,7 @@ import {
   useDeleteActivity,
   useCompleteActivity,
 } from '../../hooks/useActivities';
+import { showError } from '../../utils/toast';
 import type { Activity, ActivityCreate, ActivityUpdate, ActivityFilters } from '../../types';
 
 type ViewMode = 'list' | 'timeline' | 'calendar';
@@ -132,7 +133,7 @@ export function ActivitiesPage() {
     try {
       await completeActivity.mutateAsync({ id });
     } catch (error) {
-      console.error('Failed to complete activity:', error);
+      showError('Failed to complete activity');
     }
   };
 
@@ -146,7 +147,7 @@ export function ActivitiesPage() {
       await deleteActivity.mutateAsync(deleteConfirm.activity.id);
       setDeleteConfirm(INITIAL_DELETE_CONFIRM);
     } catch (error) {
-      console.error('Failed to delete activity:', error);
+      showError('Failed to delete activity');
     }
   };
 
@@ -169,7 +170,7 @@ export function ActivitiesPage() {
       setShowForm(false);
       setEditingActivity(null);
     } catch (error) {
-      console.error('Failed to save activity:', error);
+      showError('Failed to save activity');
     }
   };
 

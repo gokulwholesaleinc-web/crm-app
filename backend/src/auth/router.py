@@ -1,7 +1,7 @@
 """Authentication API routes."""
 
 from typing import Annotated, List
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
 from src.core.constants import HTTPStatus, ErrorMessages, EntityNames
@@ -177,10 +177,10 @@ async def update_me(
 async def list_users(
     current_user: CurrentUser,
     db: DBSession,
-    skip: int = 0,
-    limit: int = 100,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(100, ge=1, le=200),
 ):
     """List all users (for assignment dropdowns, etc.)."""
     service = AuthService(db)
-    users = await service.get_all_users(skip=skip, limit=limit)
+    users = await service.get_all_users(page=page, page_size=page_size)
     return users

@@ -12,6 +12,7 @@ import {
   PauseIcon,
 } from '@heroicons/react/24/outline';
 import { Button, Select, Spinner, Modal, ConfirmDialog } from '../../components/ui';
+import { showError } from '../../utils/toast';
 import { WorkflowForm } from './components/WorkflowForm';
 import {
   useWorkflows,
@@ -178,7 +179,7 @@ export function WorkflowsPage() {
       await deleteWorkflow.mutateAsync(deleteConfirm.workflow.id);
       setDeleteConfirm({ isOpen: false, workflow: null });
     } catch (error) {
-      console.error('Failed to delete workflow:', error);
+      showError('Failed to delete workflow');
     }
   };
 
@@ -198,7 +199,7 @@ export function WorkflowsPage() {
         data: { is_active: !workflow.is_active },
       });
     } catch (error) {
-      console.error('Failed to toggle workflow:', error);
+      showError('Failed to toggle workflow');
     }
   };
 
@@ -212,7 +213,7 @@ export function WorkflowsPage() {
       setShowForm(false);
       setEditingWorkflow(null);
     } catch (error) {
-      console.error('Failed to save workflow:', error);
+      showError('Failed to save workflow');
     }
   };
 

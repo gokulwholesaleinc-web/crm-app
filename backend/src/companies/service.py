@@ -101,3 +101,15 @@ class CompanyService(
             select(func.count()).where(Contact.company_id == company_id)
         )
         return result.scalar() or 0
+
+    async def get_contact_counts_batch(self, company_ids: List[int]) -> Dict[int, int]:
+        """Get contact counts for multiple companies in a single query."""
+        if not company_ids:
+            return {}
+        result = await self.db.execute(
+            select(Contact.company_id, func.count(Contact.id))
+            .where(Contact.company_id.in_(company_ids))
+            .group_by(Contact.company_id)
+        )
+        counts = {row[0]: row[1] for row in result.all()}
+        return {cid: counts.get(cid, 0) for cid in company_ids}

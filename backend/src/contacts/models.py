@@ -1,7 +1,7 @@
 """Contact model for CRM contacts."""
 
 from typing import Optional, TYPE_CHECKING
-from sqlalchemy import String, Integer, ForeignKey, Text, Index
+from sqlalchemy import String, Integer, ForeignKey, Text, Index, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.database import Base
 from src.core.mixins.auditable import AuditableMixin
@@ -51,7 +51,7 @@ class Contact(Base, AuditableMixin):
     avatar_url: Mapped[Optional[str]] = mapped_column(String(500))
 
     # Status
-    status: Mapped[str] = mapped_column(String(20), default="active")  # active, inactive
+    status: Mapped[str] = mapped_column(String(20), default="active", index=True)  # active, inactive
 
     # Owner (assigned user)
     owner_id: Mapped[Optional[int]] = mapped_column(
@@ -77,4 +77,5 @@ class Contact(Base, AuditableMixin):
     __table_args__ = (
         Index("ix_contacts_name", "first_name", "last_name"),
         Index("ix_contacts_owner_created", "owner_id", "created_at"),
+        UniqueConstraint("email", name="ix_contacts_unique_email"),
     )

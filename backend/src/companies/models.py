@@ -1,7 +1,7 @@
 """Company model for CRM accounts."""
 
 from typing import Optional, List, TYPE_CHECKING
-from sqlalchemy import String, Integer, ForeignKey, Text, BigInteger, Index
+from sqlalchemy import String, Integer, ForeignKey, Text, BigInteger, Index, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.database import Base
 from src.core.mixins.auditable import AuditableMixin
@@ -19,7 +19,7 @@ class Company(Base, AuditableMixin):
     # Basic info
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     website: Mapped[Optional[str]] = mapped_column(String(500))
-    industry: Mapped[Optional[str]] = mapped_column(String(100))
+    industry: Mapped[Optional[str]] = mapped_column(String(100), index=True)
     company_size: Mapped[Optional[str]] = mapped_column(String(50))  # 1-10, 11-50, etc.
 
     # Contact info
@@ -55,7 +55,7 @@ class Company(Base, AuditableMixin):
     account_manager: Mapped[Optional[str]] = mapped_column(String(255))
 
     # Status
-    status: Mapped[str] = mapped_column(String(20), default="prospect")  # prospect, customer, churned
+    status: Mapped[str] = mapped_column(String(20), default="prospect", index=True)  # prospect, customer, churned
 
     # Owner
     owner_id: Mapped[Optional[int]] = mapped_column(
@@ -73,4 +73,5 @@ class Company(Base, AuditableMixin):
 
     __table_args__ = (
         Index("ix_companies_owner_created", "owner_id", "created_at"),
+        UniqueConstraint("name", "owner_id", name="ix_companies_unique_name_owner"),
     )

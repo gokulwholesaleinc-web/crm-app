@@ -124,7 +124,13 @@ async def list_activities(
 ):
     """List activities with pagination and filters."""
     import json as _json
-    parsed_filters = _json.loads(filters) if filters else None
+    from fastapi import HTTPException
+    parsed_filters = None
+    if filters:
+        try:
+            parsed_filters = _json.loads(filters)
+        except _json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid JSON filter format")
 
     if data_scope.can_see_all():
         effective_owner_id = owner_id

@@ -62,7 +62,13 @@ async def list_companies(
 ):
     """List companies with pagination and filters."""
     import json as _json
-    parsed_filters = _json.loads(filters) if filters else None
+    from fastapi import HTTPException
+    parsed_filters = None
+    if filters:
+        try:
+            parsed_filters = _json.loads(filters)
+        except _json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid JSON filter format")
 
     if data_scope.can_see_all():
         effective_owner_id = owner_id
@@ -83,9 +89,17 @@ async def list_companies(
         shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_COMPANIES),
     )
 
-    company_responses = [
-        await _build_company_response(service, company) for company in companies
-    ]
+    # Bulk-load tags and contact counts to avoid N+1 queries
+    company_ids = [c.id for c in companies]
+    tags_map = await service.get_tags_for_entities(company_ids)
+    counts_map = await service.get_contact_counts_batch(company_ids)
+
+    company_responses = []
+    for company in companies:
+        response_dict = CompanyResponse.model_validate(company).model_dump()
+        response_dict["tags"] = [TagBrief.model_validate(t) for t in tags_map.get(company.id, [])]
+        response_dict["contact_count"] = counts_map.get(company.id, 0)
+        company_responses.append(CompanyResponse(**response_dict))
 
     return CompanyListResponse(
         items=company_responses,

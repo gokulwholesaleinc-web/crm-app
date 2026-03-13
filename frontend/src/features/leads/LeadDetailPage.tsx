@@ -12,6 +12,7 @@ import { ConvertLeadModal } from './components/ConvertLeadModal';
 import { LeadForm, LeadFormData } from './components/LeadForm';
 import { AIInsightsCard, NextBestActionCard } from '../../components/ai';
 import { getStatusBadgeClasses, formatStatusLabel, getScoreColor } from '../../utils';
+import { showError } from '../../utils/toast';
 import { formatDate, formatPhoneNumber } from '../../utils/formatters';
 import { useLead, useDeleteLead, useConvertLead, useUpdateLead } from '../../hooks/useLeads';
 import { useTimeline } from '../../hooks/useActivities';
@@ -63,7 +64,7 @@ function LeadDetailPage() {
       });
       setShowEditForm(false);
     } catch (err) {
-      console.error('Failed to update lead:', err);
+      showError('Failed to update lead');
     }
   };
 

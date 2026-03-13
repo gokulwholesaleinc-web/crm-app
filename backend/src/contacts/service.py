@@ -102,3 +102,57 @@ class ContactService(
         await self.clear_tags(contact.id)
         await super().delete(contact)
 
+    async def get_payment_summary(self, contact_id: int) -> dict:
+        """Get payment summary for a contact via their StripeCustomer link."""
+        from src.payments.models import Payment, StripeCustomer
+
+        empty_summary = {
+            "total_paid": 0.0,
+            "payment_count": 0,
+            "late_payments": 0,
+            "on_time_rate": 100.0,
+            "last_payment_date": None,
+        }
+
+        # Find StripeCustomer records linked to this contact
+        customer_result = await self.db.execute(
+            select(StripeCustomer.id).where(StripeCustomer.contact_id == contact_id)
+        )
+        customer_ids = [row[0] for row in customer_result.fetchall()]
+
+        if not customer_ids:
+            return empty_summary
+
+        # Query all payments for these customers
+        all_result = await self.db.execute(
+            select(Payment).where(Payment.customer_id.in_(customer_ids))
+        )
+        all_payments = list(all_result.scalars().all())
+
+        if not all_payments:
+            return empty_summary
+
+        succeeded = [p for p in all_payments if p.status == "succeeded"]
+        if not succeeded:
+            late_payments = sum(1 for p in all_payments if p.status == "failed")
+            total_attempts = len(all_payments)
+            return {
+                **empty_summary,
+                "late_payments": late_payments,
+                "on_time_rate": round(((total_attempts - late_payments) / total_attempts) * 100, 1) if total_attempts > 0 else 100.0,
+            }
+
+        total_paid = sum(float(p.amount) for p in succeeded)
+        late_payments = sum(1 for p in all_payments if p.status == "failed")
+        total_attempts = len(all_payments)
+        on_time_rate = round(((total_attempts - late_payments) / total_attempts) * 100, 1) if total_attempts > 0 else 100.0
+        last_payment_date = max((p.created_at for p in succeeded), default=None)
+
+        return {
+            "total_paid": round(total_paid, 2),
+            "payment_count": len(succeeded),
+            "late_payments": late_payments,
+            "on_time_rate": on_time_rate,
+            "last_payment_date": last_payment_date.isoformat() if last_payment_date else None,
+        }
+

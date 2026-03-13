@@ -27,6 +27,7 @@ import {
 } from '../../hooks/useCampaigns';
 import { getStatusColor, formatStatusLabel } from '../../utils/statusColors';
 import { formatCurrency, formatDate } from '../../utils/formatters';
+import { showError } from '../../utils/toast';
 import type { CampaignUpdate, CampaignMember } from '../../types';
 
 // Member status colors (specific to campaign members, not part of centralized status colors)
@@ -204,7 +205,7 @@ export function CampaignDetailPage() {
       await deleteCampaign.mutateAsync(campaignId);
       navigate('/campaigns');
     } catch (error) {
-      console.error('Failed to delete campaign:', error);
+      showError('Failed to delete campaign');
     }
   };
 
@@ -214,7 +215,7 @@ export function CampaignDetailPage() {
       await updateCampaign.mutateAsync({ id: campaignId, data });
       setShowEditForm(false);
     } catch (error) {
-      console.error('Failed to update campaign:', error);
+      showError('Failed to update campaign');
     }
   };
 
@@ -228,7 +229,7 @@ export function CampaignDetailPage() {
       await removeMember.mutateAsync({ campaignId, memberId: removeMemberConfirm.memberId });
       setRemoveMemberConfirm({ isOpen: false, memberId: null });
     } catch (error) {
-      console.error('Failed to remove member:', error);
+      showError('Failed to remove member');
     }
   };
 
@@ -244,7 +245,7 @@ export function CampaignDetailPage() {
       });
       setShowAddMembersModal(false);
     } catch (error) {
-      console.error('Failed to add members:', error);
+      showError('Failed to add members');
     }
   };
 

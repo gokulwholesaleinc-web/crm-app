@@ -16,6 +16,7 @@ import { useProposals } from '../../hooks/useProposals';
 import { usePayments } from '../../hooks/usePayments';
 import { formatCurrency, formatDate, formatPercentage } from '../../utils/formatters';
 import { getStatusBadgeClasses } from '../../utils';
+import { showError } from '../../utils/toast';
 import type { OpportunityUpdate, Quote, Proposal, Payment } from '../../types';
 import clsx from 'clsx';
 
@@ -82,7 +83,7 @@ function OpportunityDetailPage() {
       });
       setShowEditForm(false);
     } catch (err) {
-      console.error('Failed to update opportunity:', err);
+      showError('Failed to update opportunity');
     }
   };
 

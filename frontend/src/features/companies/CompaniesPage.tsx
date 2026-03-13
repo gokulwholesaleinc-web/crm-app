@@ -15,7 +15,7 @@ import {
   PhoneIcon,
   EnvelopeIcon,
 } from '@heroicons/react/24/outline';
-import { Button, Input, Select, Spinner, Modal, ConfirmDialog } from '../../components/ui';
+import { Button, Input, Select, Spinner, Modal, ConfirmDialog, PaginationBar } from '../../components/ui';
 import { DuplicateWarningModal } from '../../components/shared/DuplicateWarningModal';
 import { CompanyForm } from './components/CompanyForm';
 import {
@@ -502,31 +502,13 @@ export function CompaniesPage() {
                   <option value={100}>100 / page</option>
                 </select>
               </div>
-              {companiesData.pages > 1 && (
-                <div className="flex items-center justify-between gap-2 sm:gap-4">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={filters.page === 1}
-                    onClick={() => updateFilter('page', String((filters.page || 1) - 1))}
-                    className="flex-1 sm:flex-none"
-                  >
-                    Previous
-                  </Button>
-                  <span className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                    Page {filters.page} of {companiesData.pages}
-                  </span>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={filters.page === companiesData.pages}
-                    onClick={() => updateFilter('page', String((filters.page || 1) + 1))}
-                    className="flex-1 sm:flex-none"
-                  >
-                    Next
-                  </Button>
-                </div>
-              )}
+              <PaginationBar
+                page={filters.page ?? 1}
+                pages={companiesData.pages}
+                total={companiesData.total}
+                pageSize={filters.page_size ?? 12}
+                onPageChange={(p) => updateFilter('page', String(p))}
+              />
             </div>
           )}
         </>

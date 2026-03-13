@@ -28,6 +28,7 @@ import {
   downloadBlob,
   generateExportFilename,
 } from '../../api/importExport';
+import { showError } from '../../utils/toast';
 import type { ImportResult, ImportPreview, ImportExportEntityType, ContactDecision, ContactMatch } from '../../types';
 
 type OperationStatus = 'idle' | 'loading' | 'previewing' | 'importing' | 'success' | 'error';
@@ -479,7 +480,7 @@ export function ImportExportPage() {
       const blob = await exportFns[entityType]();
       downloadBlob(blob, generateExportFilename(entityType));
     } catch (error) {
-      console.error(`Failed to export ${entityType}:`, error);
+      showError(`Failed to export ${entityType}`);
     } finally {
       setExportingEntity(null);
     }
@@ -490,7 +491,7 @@ export function ImportExportPage() {
       const blob = await getTemplate(entityType);
       downloadBlob(blob, `${entityType}_template.csv`);
     } catch (error) {
-      console.error(`Failed to download template for ${entityType}:`, error);
+      showError(`Failed to download template for ${entityType}`);
     }
   };
 

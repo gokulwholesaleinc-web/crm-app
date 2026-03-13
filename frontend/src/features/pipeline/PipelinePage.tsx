@@ -23,6 +23,7 @@ import {
   formatPercentage,
   getStatusBadgeClasses,
 } from '../../utils';
+import { showError } from '../../utils/toast';
 import type {
   Opportunity,
   OpportunityCreate,
@@ -296,7 +297,7 @@ function PipelinePage() {
       setShowForm(false);
       setEditingOpportunity(null);
     } catch (err) {
-      console.error('Failed to save opportunity:', err);
+      showError('Failed to save opportunity');
     }
   };
 
