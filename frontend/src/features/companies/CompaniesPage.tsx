@@ -16,6 +16,7 @@ import {
   EnvelopeIcon,
 } from '@heroicons/react/24/outline';
 import { Button, Input, Select, Spinner, Modal, ConfirmDialog } from '../../components/ui';
+import { DuplicateWarningModal } from '../../components/shared/DuplicateWarningModal';
 import { CompanyForm } from './components/CompanyForm';
 import {
   useCompanies,
@@ -23,10 +24,12 @@ import {
   useUpdateCompany,
   useDeleteCompany,
 } from '../../hooks/useCompanies';
+import { useCheckDuplicates } from '../../hooks/useDedup';
 import { getStatusColor, formatStatusLabel } from '../../utils/statusColors';
 import { formatCurrency } from '../../utils/formatters';
 import { showSuccess, showError } from '../../utils/toast';
 import type { Company, CompanyCreate, CompanyUpdate, CompanyFilters } from '../../types';
+import type { DuplicateMatch } from '../../api/dedup';
 
 const statusOptions = [
   { value: '', label: 'All Status' },
@@ -255,6 +258,9 @@ export function CompaniesPage() {
     isOpen: false,
     company: null,
   });
+  const [pendingFormData, setPendingFormData] = useState<CompanyCreate | CompanyUpdate | null>(null);
+  const [duplicateResults, setDuplicateResults] = useState<DuplicateMatch[]>([]);
+  const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
 
   // Get filter values from URL params
   const filters: CompanyFilters = useMemo(
@@ -275,6 +281,7 @@ export function CompaniesPage() {
   const createCompany = useCreateCompany();
   const updateCompany = useUpdateCompany();
   const deleteCompany = useDeleteCompany();
+  const checkDuplicatesMutation = useCheckDuplicates();
 
   const updateFilter = (key: string, value: string) => {
     const newParams = new URLSearchParams(searchParams);
@@ -313,20 +320,55 @@ export function CompaniesPage() {
     setShowForm(true);
   };
 
+  const doCreateCompany = async (data: CompanyCreate) => {
+    await createCompany.mutateAsync(data);
+    showSuccess('Company created successfully');
+    setShowForm(false);
+    setEditingCompany(null);
+    setPendingFormData(null);
+  };
+
   const handleFormSubmit = async (data: CompanyCreate | CompanyUpdate) => {
     try {
       if (editingCompany) {
         await updateCompany.mutateAsync({ id: editingCompany.id, data: data as CompanyUpdate });
         showSuccess('Company updated successfully');
+        setShowForm(false);
+        setEditingCompany(null);
       } else {
-        await createCompany.mutateAsync(data as CompanyCreate);
-        showSuccess('Company created successfully');
+        // Check for duplicates before creating
+        const result = await checkDuplicatesMutation.mutateAsync({
+          entityType: 'companies',
+          data: { name: (data as CompanyCreate).name },
+        });
+        if (result.has_duplicates) {
+          setPendingFormData(data as CompanyCreate);
+          setDuplicateResults(result.duplicates);
+          setShowDuplicateWarning(true);
+          return;
+        }
+        await doCreateCompany(data as CompanyCreate);
       }
-      setShowForm(false);
-      setEditingCompany(null);
     } catch {
       showError('Failed to save company');
     }
+  };
+
+  const handleCreateAnyway = async () => {
+    if (!pendingFormData) return;
+    setShowDuplicateWarning(false);
+    try {
+      await doCreateCompany(pendingFormData as CompanyCreate);
+    } catch {
+      showError('Failed to create company');
+    }
+  };
+
+  const handleViewDuplicate = (id: number) => {
+    setShowDuplicateWarning(false);
+    setShowForm(false);
+    setPendingFormData(null);
+    navigate(`/companies/${id}`);
   };
 
   const handleFormCancel = () => {
@@ -516,6 +558,16 @@ export function CompaniesPage() {
         cancelLabel="Cancel"
         variant="danger"
         isLoading={deleteCompany.isPending}
+      />
+
+      {/* Duplicate Warning Modal */}
+      <DuplicateWarningModal
+        isOpen={showDuplicateWarning}
+        onClose={() => { setShowDuplicateWarning(false); setPendingFormData(null); }}
+        onCreateAnyway={handleCreateAnyway}
+        onViewDuplicate={handleViewDuplicate}
+        duplicates={duplicateResults}
+        entityType="companies"
       />
     </div>
   );

@@ -1,20 +1,24 @@
 import { useState, useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { PlusIcon, FunnelIcon, BookmarkIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { Button, Modal, ConfirmDialog } from '../../components/ui';
 import { SkeletonTable } from '../../components/ui/Skeleton';
+import { DuplicateWarningModal } from '../../components/shared/DuplicateWarningModal';
 import { ContactForm, ContactFormData } from './components/ContactForm';
 import { SmartListBuilder } from './components/SmartListBuilder';
 import { useContacts, useCreateContact, useUpdateContact, useDeleteContact } from '../../hooks/useContacts';
+import { useCheckDuplicates } from '../../hooks/useDedup';
 import { useSavedFilters, useDeleteSavedFilter } from '../../hooks/useFilters';
 import { formatDate, formatPhoneNumber } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { showSuccess, showError } from '../../utils/toast';
 import type { Contact, ContactCreate, ContactUpdate } from '../../types';
+import type { DuplicateMatch } from '../../api/dedup';
 import type { FilterGroup } from '../../api/filters';
 
 function ContactsPage() {
   usePageTitle('Contacts');
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
   const [currentPage, setCurrentPage] = useState(1);
@@ -28,6 +32,9 @@ function ContactsPage() {
     contact: null,
   });
   const [pageSize, setPageSize] = useState(25);
+  const [pendingFormData, setPendingFormData] = useState<ContactFormData | null>(null);
+  const [duplicateResults, setDuplicateResults] = useState<DuplicateMatch[]>([]);
+  const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
 
   // Fetch saved smart lists
   const { data: savedFilters } = useSavedFilters('contacts');
@@ -61,6 +68,7 @@ function ContactsPage() {
   const createContactMutation = useCreateContact();
   const updateContactMutation = useUpdateContact();
   const deleteContactMutation = useDeleteContact();
+  const checkDuplicatesMutation = useCheckDuplicates();
 
   const contacts = contactsData?.items ?? [];
   const totalPages = contactsData?.pages ?? 1;
@@ -90,6 +98,23 @@ function ContactsPage() {
     setShowForm(true);
   };
 
+  const doCreateContact = async (data: ContactFormData) => {
+    const createData: ContactCreate = {
+      first_name: data.firstName,
+      last_name: data.lastName,
+      email: data.email,
+      phone: data.phone,
+      job_title: data.jobTitle,
+      company_id: data.company_id ?? undefined,
+      status: 'active',
+    };
+    await createContactMutation.mutateAsync(createData);
+    showSuccess('Contact created successfully');
+    setShowForm(false);
+    setEditingContact(null);
+    setPendingFormData(null);
+  };
+
   const handleFormSubmit = async (data: ContactFormData) => {
     try {
       if (editingContact) {
@@ -106,24 +131,47 @@ function ContactsPage() {
           data: updateData,
         });
         showSuccess('Contact updated successfully');
+        setShowForm(false);
+        setEditingContact(null);
       } else {
-        const createData: ContactCreate = {
-          first_name: data.firstName,
-          last_name: data.lastName,
-          email: data.email,
-          phone: data.phone,
-          job_title: data.jobTitle,
-          company_id: data.company_id ?? undefined,
-          status: 'active', // Default status for new contacts
-        };
-        await createContactMutation.mutateAsync(createData);
-        showSuccess('Contact created successfully');
+        // Check for duplicates before creating
+        const result = await checkDuplicatesMutation.mutateAsync({
+          entityType: 'contacts',
+          data: {
+            first_name: data.firstName,
+            last_name: data.lastName,
+            email: data.email,
+            phone: data.phone,
+          },
+        });
+        if (result.has_duplicates) {
+          setPendingFormData(data);
+          setDuplicateResults(result.duplicates);
+          setShowDuplicateWarning(true);
+          return;
+        }
+        await doCreateContact(data);
       }
-      setShowForm(false);
-      setEditingContact(null);
     } catch (err) {
       showError('Failed to save contact');
     }
+  };
+
+  const handleCreateAnyway = async () => {
+    if (!pendingFormData) return;
+    setShowDuplicateWarning(false);
+    try {
+      await doCreateContact(pendingFormData);
+    } catch {
+      showError('Failed to create contact');
+    }
+  };
+
+  const handleViewDuplicate = (id: number) => {
+    setShowDuplicateWarning(false);
+    setShowForm(false);
+    setPendingFormData(null);
+    navigate(`/contacts/${id}`);
   };
 
   const handleFormCancel = () => {
@@ -723,6 +771,16 @@ function ContactsPage() {
         cancelLabel="Cancel"
         variant="danger"
         isLoading={deleteContactMutation.isPending}
+      />
+
+      {/* Duplicate Warning Modal */}
+      <DuplicateWarningModal
+        isOpen={showDuplicateWarning}
+        onClose={() => { setShowDuplicateWarning(false); setPendingFormData(null); }}
+        onCreateAnyway={handleCreateAnyway}
+        onViewDuplicate={handleViewDuplicate}
+        duplicates={duplicateResults}
+        entityType="contacts"
       />
     </div>
   );

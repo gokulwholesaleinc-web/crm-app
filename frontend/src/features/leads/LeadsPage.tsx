@@ -4,11 +4,13 @@ import { PlusIcon, ListBulletIcon, ViewColumnsIcon } from '@heroicons/react/24/o
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button, Modal, ConfirmDialog } from '../../components/ui';
 import { SkeletonTable } from '../../components/ui/Skeleton';
+import { DuplicateWarningModal } from '../../components/shared/DuplicateWarningModal';
 import { LeadForm, LeadFormData } from './components/LeadForm';
 import { LeadKanbanBoard } from './components/LeadKanbanBoard';
 import { BulkActionToolbar } from './components/BulkActionToolbar';
 import { LeadEmailCampaignModal } from './components/LeadEmailCampaignModal';
 import { useLeads, useCreateLead, useUpdateLead, useDeleteLead, leadKeys } from '../../hooks/useLeads';
+import { useCheckDuplicates } from '../../hooks/useDedup';
 import { useUsers } from '../../hooks/useAuth';
 import { bulkUpdate, bulkAssign } from '../../api/importExport';
 import { getStatusBadgeClasses, formatStatusLabel, getScoreColor } from '../../utils';
@@ -16,6 +18,7 @@ import { formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { showSuccess, showError } from '../../utils/toast';
 import type { Lead, LeadCreate, LeadUpdate, KanbanLead } from '../../types';
+import type { DuplicateMatch } from '../../api/dedup';
 import clsx from 'clsx';
 
 const statusOptions = [
@@ -68,6 +71,9 @@ function LeadsPage() {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [showCampaignModal, setShowCampaignModal] = useState(false);
   const [pageSize, setPageSize] = useState(25);
+  const [pendingFormData, setPendingFormData] = useState<LeadFormData | null>(null);
+  const [duplicateResults, setDuplicateResults] = useState<DuplicateMatch[]>([]);
+  const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
 
   // Use the hooks for data fetching
   const {
@@ -84,6 +90,7 @@ function LeadsPage() {
   const createLeadMutation = useCreateLead();
   const updateLeadMutation = useUpdateLead();
   const deleteLeadMutation = useDeleteLead();
+  const checkDuplicatesMutation = useCheckDuplicates();
   const { data: usersData } = useUsers(0, 100, { enabled: selectedIds.length > 0 });
   const queryClient = useQueryClient();
 
@@ -133,6 +140,26 @@ function LeadsPage() {
     setShowForm(true);
   };
 
+  const doCreateLead = async (data: LeadFormData) => {
+    const createData: LeadCreate = {
+      first_name: data.firstName,
+      last_name: data.lastName,
+      email: data.email,
+      phone: data.phone,
+      company_name: data.company,
+      job_title: data.jobTitle,
+      status: data.status,
+      source_id: data.source_id ?? undefined,
+      pipeline_stage_id: data.pipeline_stage_id ?? undefined,
+      budget_currency: 'USD',
+    };
+    await createLeadMutation.mutateAsync(createData);
+    showSuccess('Lead created successfully');
+    setShowForm(false);
+    setEditingLead(null);
+    setPendingFormData(null);
+  };
+
   const handleFormSubmit = async (data: LeadFormData) => {
     try {
       if (editingLead) {
@@ -152,27 +179,42 @@ function LeadsPage() {
           data: updateData,
         });
         showSuccess('Lead updated successfully');
+        setShowForm(false);
+        setEditingLead(null);
       } else {
-        const createData: LeadCreate = {
-          first_name: data.firstName,
-          last_name: data.lastName,
-          email: data.email,
-          phone: data.phone,
-          company_name: data.company,
-          job_title: data.jobTitle,
-          status: data.status,
-          source_id: data.source_id ?? undefined,
-          pipeline_stage_id: data.pipeline_stage_id ?? undefined,
-          budget_currency: 'USD', // Required field
-        };
-        await createLeadMutation.mutateAsync(createData);
-        showSuccess('Lead created successfully');
+        // Check for duplicates before creating
+        const result = await checkDuplicatesMutation.mutateAsync({
+          entityType: 'leads',
+          data: { email: data.email, phone: data.phone },
+        });
+        if (result.has_duplicates) {
+          setPendingFormData(data);
+          setDuplicateResults(result.duplicates);
+          setShowDuplicateWarning(true);
+          return;
+        }
+        await doCreateLead(data);
       }
-      setShowForm(false);
-      setEditingLead(null);
     } catch (err) {
       showError('Failed to save lead');
     }
+  };
+
+  const handleCreateAnyway = async () => {
+    if (!pendingFormData) return;
+    setShowDuplicateWarning(false);
+    try {
+      await doCreateLead(pendingFormData);
+    } catch {
+      showError('Failed to create lead');
+    }
+  };
+
+  const handleViewDuplicate = (id: number) => {
+    setShowDuplicateWarning(false);
+    setShowForm(false);
+    setPendingFormData(null);
+    navigate(`/leads/${id}`);
   };
 
   const handleFormCancel = () => {
@@ -742,6 +784,16 @@ function LeadsPage() {
         isOpen={showCampaignModal}
         onClose={() => setShowCampaignModal(false)}
         selectedLeadIds={selectedIds}
+      />
+
+      {/* Duplicate Warning Modal */}
+      <DuplicateWarningModal
+        isOpen={showDuplicateWarning}
+        onClose={() => { setShowDuplicateWarning(false); setPendingFormData(null); }}
+        onCreateAnyway={handleCreateAnyway}
+        onViewDuplicate={handleViewDuplicate}
+        duplicates={duplicateResults}
+        entityType="leads"
       />
     </div>
   );
