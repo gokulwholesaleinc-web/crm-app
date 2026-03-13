@@ -37,6 +37,10 @@ const createApiClient = (): AxiosInstance => {
       if (slug && config.headers) {
         config.headers['X-Tenant-Slug'] = slug;
       }
+      // Let Axios set multipart/form-data with boundary for file uploads
+      if (config.data instanceof FormData && config.headers) {
+        delete config.headers['Content-Type'];
+      }
       return config;
     },
     (error: AxiosError) => {

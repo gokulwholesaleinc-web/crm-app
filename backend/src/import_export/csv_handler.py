@@ -94,13 +94,6 @@ COLUMN_ALIASES: Dict[str, str] = {
     "tier": "company_size",
     "companytier": "company_size",
     "sizetier": "company_size",
-    # Point of contact as description (best fit for company imports)
-    "pointofcontact": "description",
-    "poc": "description",
-    "contactperson": "description",
-    "primarycontact": "description",
-    # Account manager
-    "accountmanager": "description",
 }
 
 # Headers that represent a full name (to be split into first_name + last_name)
@@ -108,6 +101,9 @@ FULL_NAME_HEADERS = {"name", "fullname", "person", "contactname", "leadname"}
 
 # Headers that represent a combined location (to be split into city + state)
 LOCATION_HEADERS = {"hqlocation", "hqaddress", "headquarterslocation", "headquarters", "cityst", "citystate"}
+
+# Headers that represent a contact person name (for auto-creating linked contacts on company import)
+CONTACT_PERSON_HEADERS = {"pointofcontact", "poc", "contactperson", "primarycontact", "contactname", "contact"}
 
 FUZZY_MATCH_THRESHOLD = 0.75
 
@@ -158,6 +154,18 @@ def _find_location_column(csv_headers: list, column_mapping: dict, target_fields
     for header in csv_headers:
         normalized = _normalize_header(header)
         if normalized in LOCATION_HEADERS:
+            return header
+    return None
+
+
+def _find_contact_person_column(csv_headers: list, column_mapping: dict) -> Optional[str]:
+    """Find a contact person CSV column for company imports.
+
+    Returns the CSV header name if found, None otherwise.
+    """
+    for header in csv_headers:
+        normalized = _normalize_header(header)
+        if normalized in CONTACT_PERSON_HEADERS and header not in column_mapping:
             return header
     return None
 
@@ -279,8 +287,142 @@ class CSVHandler:
     async def import_contacts(self, csv_content: str, user_id: int, skip_errors: bool = True) -> Dict[str, Any]:
         return await self._import_entities(csv_content, Contact, self.CONTACT_FIELDS, user_id, skip_errors)
 
-    async def import_companies(self, csv_content: str, user_id: int, skip_errors: bool = True) -> Dict[str, Any]:
-        return await self._import_entities(csv_content, Company, self.COMPANY_FIELDS, user_id, skip_errors)
+    async def import_companies(
+        self,
+        csv_content: str,
+        user_id: int,
+        skip_errors: bool = True,
+        contact_decisions: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        """Import companies with optional auto-creation of linked contacts.
+
+        contact_decisions: list of {csv_name, action, contact_id?} where action is
+        "create_new", "link_existing", or "skip".
+        """
+        reader = csv.DictReader(io.StringIO(csv_content))
+        csv_headers = reader.fieldnames or []
+
+        column_mapping = _map_columns(csv_headers, self.COMPANY_FIELDS)
+        name_col = _find_name_column(csv_headers, column_mapping, self.COMPANY_FIELDS)
+        location_col = _find_location_column(csv_headers, column_mapping, self.COMPANY_FIELDS)
+        contact_person_col = _find_contact_person_column(csv_headers, column_mapping)
+
+        # Build lookup for contact decisions: csv_name -> {action, contact_id}
+        decision_map: Dict[str, Dict[str, Any]] = {}
+        if contact_decisions:
+            for d in contact_decisions:
+                decision_map[d["csv_name"].strip().lower()] = d
+
+        existing_emails = await self._get_existing_emails(Company)
+        seen_emails: Set[str] = set()
+
+        imported = 0
+        contacts_created = 0
+        contacts_linked = 0
+        errors = []
+        duplicates_skipped = 0
+        row_num = 1
+
+        for row in reader:
+            row_num += 1
+            try:
+                entity_data = {}
+                for csv_col, target_field in column_mapping.items():
+                    raw = row.get(csv_col, "")
+                    if raw:
+                        entity_data[target_field] = self._parse_value(target_field, raw)
+
+                if name_col:
+                    raw_name = row.get(name_col, "").strip()
+                    if raw_name:
+                        first, last = _split_full_name(raw_name)
+                        entity_data["first_name"] = first
+                        entity_data["last_name"] = last
+
+                if location_col:
+                    raw_loc = row.get(location_col, "").strip()
+                    if raw_loc:
+                        city, state = _split_location(raw_loc)
+                        entity_data["city"] = city
+                        entity_data["state"] = state
+
+                # Duplicate detection
+                email = (entity_data.get("email") or "").lower()
+                if email:
+                    if email in existing_emails or email in seen_emails:
+                        duplicates_skipped += 1
+                        errors.append(f"Row {row_num}: skipped duplicate email '{email}'")
+                        continue
+                    seen_emails.add(email)
+
+                company = Company(**entity_data, owner_id=user_id, created_by_id=user_id)
+                self.db.add(company)
+
+                if skip_errors:
+                    try:
+                        await self.db.flush()
+                        imported += 1
+                    except Exception as flush_exc:
+                        await self.db.rollback()
+                        errors.append(f"Row {row_num}: {str(flush_exc)}")
+                        continue
+                else:
+                    await self.db.flush()
+                    imported += 1
+
+                # Auto-create or link contacts from Point of Contact column
+                if contact_person_col:
+                    raw_contact = row.get(contact_person_col, "").strip()
+                    if raw_contact:
+                        contact_names = [n.strip() for n in raw_contact.split(",") if n.strip()]
+                        for contact_name in contact_names:
+                            name_key = contact_name.strip().lower()
+                            decision = decision_map.get(name_key, {"action": "create_new"})
+                            action = decision.get("action", "create_new")
+
+                            if action == "skip":
+                                continue
+                            elif action == "link_existing" and decision.get("contact_id"):
+                                # Link existing contact to this company
+                                from sqlalchemy import update
+                                await self.db.execute(
+                                    update(Contact)
+                                    .where(Contact.id == decision["contact_id"])
+                                    .values(company_id=company.id)
+                                )
+                                contacts_linked += 1
+                            else:
+                                # Create new contact linked to this company
+                                first, last = _split_full_name(contact_name)
+                                contact = Contact(
+                                    first_name=first,
+                                    last_name=last or first,
+                                    company_id=company.id,
+                                    owner_id=user_id,
+                                    created_by_id=user_id,
+                                )
+                                self.db.add(contact)
+                                try:
+                                    await self.db.flush()
+                                    contacts_created += 1
+                                except Exception as contact_exc:
+                                    await self.db.rollback()
+                                    errors.append(f"Row {row_num}: contact '{contact_name}': {str(contact_exc)}")
+
+            except Exception as e:
+                errors.append(f"Row {row_num}: {str(e)}")
+                if not skip_errors:
+                    await self.db.rollback()
+                    return {"imported": 0, "errors": errors, "success": False, "duplicates_skipped": duplicates_skipped}
+
+        return {
+            "imported": imported,
+            "contacts_created": contacts_created,
+            "contacts_linked": contacts_linked,
+            "errors": errors,
+            "success": True,
+            "duplicates_skipped": duplicates_skipped,
+        }
 
     async def import_leads(self, csv_content: str, user_id: int, skip_errors: bool = True) -> Dict[str, Any]:
         return await self._import_entities(csv_content, Lead, self.LEAD_FIELDS, user_id, skip_errors)
@@ -289,7 +431,7 @@ class CSVHandler:
     # Preview (no DB writes)
     # ------------------------------------------------------------------
 
-    def preview_csv(self, entity_type: str, csv_content: str) -> Dict[str, Any]:
+    async def preview_csv(self, entity_type: str, csv_content: str) -> Dict[str, Any]:
         """Preview a CSV: show column mapping, first rows, and validation warnings."""
         fields = self._get_fields(entity_type)
         reader = csv.DictReader(io.StringIO(csv_content))
@@ -298,7 +440,8 @@ class CSVHandler:
         column_mapping = _map_columns(csv_headers, fields)
         name_col = _find_name_column(csv_headers, column_mapping, fields)
         location_col = _find_location_column(csv_headers, column_mapping, fields)
-        special_cols = {name_col, location_col} - {None}
+        contact_person_col = _find_contact_person_column(csv_headers, column_mapping) if entity_type == "companies" else None
+        special_cols = {name_col, location_col, contact_person_col} - {None}
         unmapped = [h for h in csv_headers if h not in column_mapping and h not in special_cols]
         missing_fields = [f for f in fields if f not in column_mapping.values()]
         if name_col:
@@ -306,13 +449,25 @@ class CSVHandler:
         if location_col:
             missing_fields = [f for f in missing_fields if f not in ("city", "state")]
 
+        # Load existing contacts for fuzzy matching during company import
+        existing_contacts = []
+        if contact_person_col:
+            result = await self.db.execute(
+                select(Contact.id, Contact.first_name, Contact.last_name, Contact.email, Contact.company_id)
+            )
+            existing_contacts = result.all()
+
+        # Read ALL rows to collect contact person names and build matches
+        all_rows_raw = list(csv.DictReader(io.StringIO(csv_content)))
+        total_rows = len(all_rows_raw)
+
         # Read first 5 rows with mapped column names
         preview_rows = []
         warnings = []
         emails_seen: Set[str] = set()
-        for i, row in enumerate(reader):
-            if i >= 5:
-                break
+        contact_matches: List[Dict[str, Any]] = []
+
+        for i, row in enumerate(all_rows_raw):
             mapped_row = {}
             for csv_col, target_field in column_mapping.items():
                 mapped_row[target_field] = row.get(csv_col, "").strip()
@@ -328,7 +483,9 @@ class CSVHandler:
                     city, state = _split_location(raw_loc)
                     mapped_row["city"] = city
                     mapped_row["state"] = state
-            preview_rows.append(mapped_row)
+
+            if i < 5:
+                preview_rows.append(mapped_row)
 
             # Check for duplicate emails within file
             email = mapped_row.get("email", "").lower()
@@ -337,11 +494,36 @@ class CSVHandler:
                     warnings.append(f"Row {i + 2}: duplicate email '{email}' within file")
                 emails_seen.add(email)
 
-        # Count total rows
-        reader2 = csv.DictReader(io.StringIO(csv_content))
-        total_rows = sum(1 for _ in reader2)
+            # Build contact match candidates for company imports
+            if contact_person_col:
+                raw_contact = row.get(contact_person_col, "").strip()
+                if raw_contact:
+                    # Handle multiple contacts separated by comma (e.g. "Marco Russo, Anna Russo")
+                    contact_names = [n.strip() for n in raw_contact.split(",") if n.strip()]
+                    for contact_name in contact_names:
+                        first, last = _split_full_name(contact_name)
+                        full_name_csv = f"{first} {last}".strip().lower()
+                        candidates = []
+                        for c in existing_contacts:
+                            full_name_db = f"{c.first_name} {c.last_name}".strip().lower()
+                            score = SequenceMatcher(None, full_name_csv, full_name_db).ratio()
+                            if score >= 0.5:
+                                candidates.append({
+                                    "contact_id": c.id,
+                                    "name": f"{c.first_name} {c.last_name}",
+                                    "email": c.email,
+                                    "match_pct": round(score * 100),
+                                })
+                        candidates.sort(key=lambda x: x["match_pct"], reverse=True)
+                        contact_matches.append({
+                            "row": i + 2,
+                            "csv_name": contact_name,
+                            "first_name": first,
+                            "last_name": last,
+                            "candidates": candidates[:5],
+                        })
 
-        return {
+        result = {
             "total_rows": total_rows,
             "column_mapping": column_mapping,
             "unmapped_columns": unmapped,
@@ -349,6 +531,10 @@ class CSVHandler:
             "preview_rows": preview_rows,
             "warnings": warnings,
         }
+        if contact_person_col:
+            result["contact_person_column"] = contact_person_col
+            result["contact_matches"] = contact_matches
+        return result
 
     # ------------------------------------------------------------------
     # Internals

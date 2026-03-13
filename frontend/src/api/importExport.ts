@@ -4,7 +4,7 @@
  */
 
 import { apiClient } from './client';
-import type { ImportResult, ImportPreview, ImportExportEntityType, BulkUpdateRequest, BulkAssignRequest, BulkOperationResult } from '../types';
+import type { ImportResult, ImportPreview, ImportExportEntityType, BulkUpdateRequest, BulkAssignRequest, BulkOperationResult, ContactDecision } from '../types';
 
 const IMPORT_EXPORT_BASE = '/api/import-export';
 
@@ -63,10 +63,14 @@ export const importContacts = async (
  */
 export const importCompanies = async (
   file: File,
-  skipErrors: boolean = true
+  skipErrors: boolean = true,
+  contactDecisions?: ContactDecision[]
 ): Promise<ImportResult> => {
   const formData = new FormData();
   formData.append('file', file);
+  if (contactDecisions) {
+    formData.append('contact_decisions', JSON.stringify(contactDecisions));
+  }
 
   const response = await apiClient.post<ImportResult>(
     `${IMPORT_EXPORT_BASE}/import/companies`,

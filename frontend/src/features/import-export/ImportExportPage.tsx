@@ -3,7 +3,7 @@
  * Supports smart column mapping preview before import.
  */
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import {
   ArrowUpTrayIcon,
   ArrowDownTrayIcon,
@@ -12,6 +12,8 @@ import {
   ExclamationTriangleIcon,
   ArrowPathIcon,
   XMarkIcon,
+  UserPlusIcon,
+  LinkIcon,
 } from '@heroicons/react/24/outline';
 import { Button } from '../../components/ui';
 import {
@@ -26,7 +28,7 @@ import {
   downloadBlob,
   generateExportFilename,
 } from '../../api/importExport';
-import type { ImportResult, ImportPreview, ImportExportEntityType } from '../../types';
+import type { ImportResult, ImportPreview, ImportExportEntityType, ContactDecision, ContactMatch } from '../../types';
 
 type OperationStatus = 'idle' | 'loading' | 'previewing' | 'importing' | 'success' | 'error';
 
@@ -93,12 +95,14 @@ interface ImportSectionProps {
   entityType: ImportExportEntityType;
   label: string;
   state: ImportState;
+  contactDecisions: Record<string, ContactDecision>;
+  onContactDecisionChange: (csvName: string, decision: ContactDecision) => void;
   onFileSelect: (file: File) => void;
   onConfirmImport: () => void;
   onCancel: () => void;
 }
 
-function ImportSection({ entityType, label, state, onFileSelect, onConfirmImport, onCancel }: ImportSectionProps) {
+function ImportSection({ entityType, label, state, contactDecisions, onContactDecisionChange, onFileSelect, onConfirmImport, onCancel }: ImportSectionProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -161,6 +165,8 @@ function ImportSection({ entityType, label, state, onFileSelect, onConfirmImport
               preview={state.preview}
               fileName={state.file?.name ?? ''}
               isImporting={state.status === 'importing'}
+              contactDecisions={contactDecisions}
+              onContactDecisionChange={onContactDecisionChange}
               onConfirm={onConfirmImport}
               onCancel={onCancel}
             />
@@ -175,6 +181,12 @@ function ImportSection({ entityType, label, state, onFileSelect, onConfirmImport
                   Successfully imported {state.result.imported_count} record{state.result.imported_count !== 1 ? 's' : ''}
                 </span>
               </div>
+              {(state.result.contacts_created ?? 0) > 0 && (
+                <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">
+                  {state.result.contacts_created} contact{state.result.contacts_created !== 1 ? 's' : ''} created
+                  {(state.result.contacts_linked ?? 0) > 0 && `, ${state.result.contacts_linked} linked to existing`}
+                </p>
+              )}
               {state.result.duplicates_skipped > 0 && (
                 <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-1">
                   {state.result.duplicates_skipped} duplicate{state.result.duplicates_skipped !== 1 ? 's' : ''} skipped (email already exists)
@@ -210,15 +222,116 @@ function ImportSection({ entityType, label, state, onFileSelect, onConfirmImport
   );
 }
 
+function getMatchBadgeColor(pct: number): string {
+  if (pct >= 90) return 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300';
+  if (pct >= 70) return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300';
+  return 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300';
+}
+
+interface ContactMatchPanelProps {
+  matches: ContactMatch[];
+  decisions: Record<string, ContactDecision>;
+  onDecisionChange: (csvName: string, decision: ContactDecision) => void;
+}
+
+function ContactMatchPanel({ matches, decisions, onDecisionChange }: ContactMatchPanelProps) {
+  if (matches.length === 0) return null;
+
+  return (
+    <div className="border border-blue-200 dark:border-blue-700 rounded-md p-3 bg-blue-50/50 dark:bg-blue-900/10">
+      <div className="flex items-center gap-2 mb-2">
+        <UserPlusIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+        <p className="text-xs font-semibold text-blue-800 dark:text-blue-300">
+          Contact Matching ({matches.length} contact{matches.length !== 1 ? 's' : ''} detected)
+        </p>
+      </div>
+      <div className="space-y-2 max-h-60 overflow-y-auto">
+        {matches.map((match) => {
+          const decision = decisions[match.csv_name] ?? { csv_name: match.csv_name, action: 'create_new' as const };
+          const hasMatches = match.candidates.length > 0;
+
+          return (
+            <div key={`${match.row}-${match.csv_name}`} className="flex items-start gap-3 p-2 bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate">
+                  Row {match.row}: {match.csv_name}
+                </p>
+                {hasMatches ? (
+                  <div className="mt-1 space-y-1">
+                    {match.candidates.map((c) => (
+                      <label key={c.contact_id} className="flex items-center gap-2 text-xs cursor-pointer group">
+                        <input
+                          type="radio"
+                          name={`contact-${match.csv_name}`}
+                          checked={decision.action === 'link_existing' && decision.contact_id === c.contact_id}
+                          onChange={() => onDecisionChange(match.csv_name, {
+                            csv_name: match.csv_name,
+                            action: 'link_existing',
+                            contact_id: c.contact_id,
+                          })}
+                          className="text-blue-600"
+                        />
+                        <LinkIcon className="h-3 w-3 text-gray-400 group-hover:text-blue-500" aria-hidden="true" />
+                        <span className="text-gray-700 dark:text-gray-300 truncate">
+                          {c.name}{c.email ? ` (${c.email})` : ''}
+                        </span>
+                        <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${getMatchBadgeColor(c.match_pct)}`}>
+                          {c.match_pct}%
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">No existing matches found</p>
+                )}
+              </div>
+              <div className="flex flex-col gap-1 shrink-0">
+                <label className="flex items-center gap-1.5 text-[10px] cursor-pointer">
+                  <input
+                    type="radio"
+                    name={`contact-${match.csv_name}`}
+                    checked={decision.action === 'create_new'}
+                    onChange={() => onDecisionChange(match.csv_name, {
+                      csv_name: match.csv_name,
+                      action: 'create_new',
+                    })}
+                    className="text-green-600"
+                  />
+                  <span className="text-green-700 dark:text-green-400 font-medium">Create new</span>
+                </label>
+                <label className="flex items-center gap-1.5 text-[10px] cursor-pointer">
+                  <input
+                    type="radio"
+                    name={`contact-${match.csv_name}`}
+                    checked={decision.action === 'skip'}
+                    onChange={() => onDecisionChange(match.csv_name, {
+                      csv_name: match.csv_name,
+                      action: 'skip',
+                    })}
+                    className="text-gray-400"
+                  />
+                  <span className="text-gray-500 dark:text-gray-400">Skip</span>
+                </label>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 interface PreviewPanelProps {
   preview: ImportPreview;
   fileName: string;
   isImporting: boolean;
+  contactDecisions: Record<string, ContactDecision>;
+  onContactDecisionChange: (csvName: string, decision: ContactDecision) => void;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
-function PreviewPanel({ preview, fileName, isImporting, onConfirm, onCancel }: PreviewPanelProps) {
+function PreviewPanel({ preview, fileName, isImporting, contactDecisions, onContactDecisionChange, onConfirm, onCancel }: PreviewPanelProps) {
   const mappedCount = Object.keys(preview.column_mapping).length;
   const mappingEntries = Object.entries(preview.column_mapping);
 
@@ -253,6 +366,11 @@ function PreviewPanel({ preview, fileName, isImporting, onConfirm, onCancel }: P
               {csv === field ? field : `${csv} \u2192 ${field}`}
             </span>
           ))}
+          {preview.contact_person_column && (
+            <span className="inline-flex items-center text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300">
+              {preview.contact_person_column} &rarr; linked contacts
+            </span>
+          )}
         </div>
         {preview.unmapped_columns.length > 0 && (
           <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
@@ -303,6 +421,15 @@ function PreviewPanel({ preview, fileName, isImporting, onConfirm, onCancel }: P
         </div>
       )}
 
+      {/* Contact matching for company imports */}
+      {preview.contact_matches && preview.contact_matches.length > 0 && (
+        <ContactMatchPanel
+          matches={preview.contact_matches}
+          decisions={contactDecisions}
+          onDecisionChange={onContactDecisionChange}
+        />
+      )}
+
       {/* Warnings */}
       {preview.warnings.length > 0 && (
         <div className="text-xs text-yellow-600 dark:text-yellow-400">
@@ -332,6 +459,7 @@ export function ImportExportPage() {
     companies: { ...INITIAL_IMPORT_STATE },
     leads: { ...INITIAL_IMPORT_STATE },
   });
+  const [contactDecisions, setContactDecisions] = useState<Record<string, ContactDecision>>({});
 
   const updateImportState = (entityType: ImportExportEntityType, patch: Partial<ImportState>) => {
     setImportStates((prev) => ({
@@ -339,6 +467,10 @@ export function ImportExportPage() {
       [entityType]: { ...prev[entityType], ...patch },
     }));
   };
+
+  const handleContactDecisionChange = useCallback((csvName: string, decision: ContactDecision) => {
+    setContactDecisions((prev) => ({ ...prev, [csvName]: decision }));
+  }, []);
 
   const handleExport = async (entityType: ImportExportEntityType) => {
     setExportingEntity(entityType);
@@ -364,8 +496,25 @@ export function ImportExportPage() {
 
   const handleFileSelect = async (entityType: ImportExportEntityType, file: File) => {
     updateImportState(entityType, { status: 'previewing', file, result: null, error: null, preview: null });
+    if (entityType === 'companies') {
+      setContactDecisions({});
+    }
     try {
       const preview = await previewImport(entityType, file);
+      // Pre-populate contact decisions as "create_new" for all matches
+      if (preview.contact_matches) {
+        const defaults: Record<string, ContactDecision> = {};
+        for (const match of preview.contact_matches) {
+          if (!defaults[match.csv_name]) {
+            // Auto-select existing contact if 100% match, otherwise create new
+            const exactMatch = match.candidates.find((c) => c.match_pct === 100);
+            defaults[match.csv_name] = exactMatch
+              ? { csv_name: match.csv_name, action: 'link_existing', contact_id: exactMatch.contact_id }
+              : { csv_name: match.csv_name, action: 'create_new' };
+          }
+        }
+        setContactDecisions(defaults);
+      }
       updateImportState(entityType, { status: 'loading', preview });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to preview file';
@@ -379,9 +528,16 @@ export function ImportExportPage() {
 
     updateImportState(entityType, { status: 'importing' });
     try {
-      const importFns = { contacts: importContacts, companies: importCompanies, leads: importLeads };
-      const result = await importFns[entityType](file);
+      let result: ImportResult;
+      if (entityType === 'companies') {
+        const decisions = Object.values(contactDecisions);
+        result = await importCompanies(file, true, decisions.length > 0 ? decisions : undefined);
+      } else {
+        const importFns = { contacts: importContacts, leads: importLeads } as const;
+        result = await importFns[entityType](file);
+      }
       updateImportState(entityType, { status: 'success', result, preview: null, file: null });
+      setContactDecisions({});
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Import failed';
       updateImportState(entityType, { status: 'error', error: message, preview: null, file: null });
@@ -390,6 +546,9 @@ export function ImportExportPage() {
 
   const handleCancel = (entityType: ImportExportEntityType) => {
     updateImportState(entityType, { ...INITIAL_IMPORT_STATE });
+    if (entityType === 'companies') {
+      setContactDecisions({});
+    }
   };
 
   const entityConfigs: { type: ImportExportEntityType; label: string; description: string }[] = [
@@ -435,6 +594,8 @@ export function ImportExportPage() {
               entityType={config.type}
               label={config.label}
               state={importStates[config.type]}
+              contactDecisions={contactDecisions}
+              onContactDecisionChange={handleContactDecisionChange}
               onFileSelect={(file) => handleFileSelect(config.type, file)}
               onConfirmImport={() => handleConfirmImport(config.type)}
               onCancel={() => handleCancel(config.type)}

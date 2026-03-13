@@ -1186,6 +1186,29 @@ export interface ImportResult {
   imported_count: number;
   errors: string[];
   duplicates_skipped: number;
+  contacts_created?: number;
+  contacts_linked?: number;
+}
+
+export interface ContactMatchCandidate {
+  contact_id: number;
+  name: string;
+  email: string | null;
+  match_pct: number;
+}
+
+export interface ContactMatch {
+  row: number;
+  csv_name: string;
+  first_name: string;
+  last_name: string;
+  candidates: ContactMatchCandidate[];
+}
+
+export interface ContactDecision {
+  csv_name: string;
+  action: 'create_new' | 'link_existing' | 'skip';
+  contact_id?: number;
 }
 
 export interface ImportPreview {
@@ -1195,6 +1218,8 @@ export interface ImportPreview {
   missing_fields: string[];
   preview_rows: Record<string, string>[];
   warnings: string[];
+  contact_person_column?: string;
+  contact_matches?: ContactMatch[];
 }
 
 /**

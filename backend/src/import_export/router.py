@@ -1,10 +1,11 @@
 """Import/Export API routes."""
 
-from typing import Annotated, List, Dict, Any
+from typing import Annotated, List, Dict, Any, Optional
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 import io
+import json
 from src.core.constants import HTTPStatus
 from src.core.router_utils import DBSession, CurrentUser, raise_bad_request
 from src.core.data_scope import DataScope, get_data_scope
@@ -137,15 +138,26 @@ async def import_companies(
     db: DBSession,
     file: UploadFile = File(...),
     skip_errors: bool = True,
+    contact_decisions: Optional[str] = Form(None),
 ):
-    """Import companies from CSV file."""
+    """Import companies from CSV file with optional contact linking.
+
+    contact_decisions: JSON string of [{csv_name, action, contact_id?}] where
+    action is "create_new", "link_existing", or "skip".
+    If omitted, all contacts are auto-created.
+    """
     csv_content = await _read_csv_upload(file)
+
+    parsed_decisions = None
+    if contact_decisions:
+        parsed_decisions = json.loads(contact_decisions)
 
     handler = CSVHandler(db)
     result = await handler.import_companies(
         csv_content=csv_content,
         user_id=current_user.id,
         skip_errors=skip_errors,
+        contact_decisions=parsed_decisions,
     )
 
     if not result.get("success"):
@@ -153,7 +165,15 @@ async def import_companies(
             status_code=HTTPStatus.BAD_REQUEST,
             detail={"imported_count": result.get("imported", 0), "errors": result.get("errors", [])},
         )
-    return {"success": True, "detail": "Import complete", "imported_count": result["imported"], "errors": result.get("errors", []), "duplicates_skipped": result.get("duplicates_skipped", 0)}
+    return {
+        "success": True,
+        "detail": "Import complete",
+        "imported_count": result["imported"],
+        "contacts_created": result.get("contacts_created", 0),
+        "contacts_linked": result.get("contacts_linked", 0),
+        "errors": result.get("errors", []),
+        "duplicates_skipped": result.get("duplicates_skipped", 0),
+    }
 
 
 @router.post("/import/leads")
@@ -196,7 +216,7 @@ async def preview_import(
     csv_content = await _read_csv_upload(file)
 
     handler = CSVHandler(db)
-    preview = handler.preview_csv(entity_type, csv_content)
+    preview = await handler.preview_csv(entity_type, csv_content)
     return preview
 
 
