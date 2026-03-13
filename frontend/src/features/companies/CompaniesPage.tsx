@@ -12,6 +12,8 @@ import {
   BuildingOffice2Icon,
   GlobeAltIcon,
   UsersIcon,
+  PhoneIcon,
+  EnvelopeIcon,
 } from '@heroicons/react/24/outline';
 import { Button, Input, Select, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { CompanyForm } from './components/CompanyForm';
@@ -142,7 +144,7 @@ function CompanyCard({
             )}
           </div>
 
-          <div className="flex items-center gap-4 mt-3 text-sm text-gray-500 dark:text-gray-400">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-sm text-gray-500 dark:text-gray-400">
             {company.website && (
               <a
                 href={company.website}
@@ -151,24 +153,47 @@ function CompanyCard({
                 onClick={(e) => e.stopPropagation()}
                 className="flex items-center gap-1 hover:text-primary-600"
               >
-                <GlobeAltIcon className="h-4 w-4" />
+                <GlobeAltIcon className="h-4 w-4 flex-shrink-0" />
                 <span className="truncate max-w-[150px]">
                   {company.website.replace(/^https?:\/\//, '')}
                 </span>
               </a>
             )}
+            {company.email && (
+              <a
+                href={`mailto:${company.email}`}
+                onClick={(e) => e.stopPropagation()}
+                className="flex items-center gap-1 hover:text-primary-600"
+              >
+                <EnvelopeIcon className="h-4 w-4 flex-shrink-0" />
+                <span className="truncate max-w-[180px]">{company.email}</span>
+              </a>
+            )}
+            {company.phone && (
+              <a
+                href={`tel:${company.phone}`}
+                onClick={(e) => e.stopPropagation()}
+                className="flex items-center gap-1 hover:text-primary-600"
+              >
+                <PhoneIcon className="h-4 w-4 flex-shrink-0" />
+                <span>{company.phone}</span>
+              </a>
+            )}
             <span className="flex items-center gap-1">
-              <UsersIcon className="h-4 w-4" />
+              <UsersIcon className="h-4 w-4 flex-shrink-0" />
               {company.contact_count} contacts
             </span>
           </div>
 
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs text-gray-500 dark:text-gray-400">
-            {(company.city || company.state) && (
-              <span>{[company.city, company.state].filter(Boolean).join(', ')}</span>
+            {(company.city || company.state || company.country) && (
+              <span>{[company.city, company.state, company.country].filter(Boolean).join(', ')}</span>
             )}
             {company.company_size && (
               <span>Size: {company.company_size}</span>
+            )}
+            {company.employee_count != null && (
+              <span>{company.employee_count} employees</span>
             )}
             {company.link_creative_tier && (
               <span>Tier {company.link_creative_tier}</span>
@@ -176,10 +201,27 @@ function CompanyCard({
             {company.account_manager && (
               <span>AM: {company.account_manager}</span>
             )}
-            {company.annual_revenue && (
+            {company.annual_revenue != null && (
               <span>Revenue: {formatCurrency(company.annual_revenue)}</span>
             )}
+            {company.sow_url && (
+              <a
+                href={company.sow_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="hover:text-primary-600"
+              >
+                SOW
+              </a>
+            )}
           </div>
+
+          {company.description && (
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
+              {company.description}
+            </p>
+          )}
 
           {company.tags && company.tags.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-3">
