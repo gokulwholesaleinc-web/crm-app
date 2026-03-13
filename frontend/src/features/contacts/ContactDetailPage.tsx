@@ -180,7 +180,7 @@ function ContactDetailPage() {
                 {contact.company?.name && (
                   <Link
                     to={`/companies/${contact.company.id}`}
-                    className="text-primary-600 hover:text-primary-500"
+                    className="text-primary-600 hover:text-primary-500 focus-visible:underline focus-visible:outline-none"
                   >
                     {contact.company.name}
                   </Link>
@@ -281,7 +281,7 @@ function ContactDetailPage() {
                   {contact.company ? (
                     <Link
                       to={`/companies/${contact.company.id}`}
-                      className="text-primary-600 hover:text-primary-500"
+                      className="text-primary-600 hover:text-primary-500 focus-visible:underline focus-visible:outline-none"
                     >
                       {contact.company.name}
                     </Link>

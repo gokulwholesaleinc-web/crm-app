@@ -61,7 +61,7 @@ function CompanyCard({
 
   return (
     <div
-      className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 p-5 hover:shadow-md transition-shadow cursor-pointer"
+      className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 p-5 hover:shadow-md transition-shadow cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
       onClick={onClick}
       role="button"
       tabIndex={0}
@@ -321,6 +321,8 @@ export function CompaniesPage() {
             }}
             placeholder="Search companies..."
             leftIcon={<MagnifyingGlassIcon className="h-5 w-5" />}
+            aria-label="Search companies"
+            name="search"
           />
         </div>
         <div className="flex items-center justify-between gap-3 sm:gap-4">
@@ -395,31 +397,49 @@ export function CompaniesPage() {
           </div>
 
           {/* Pagination */}
-          {companiesData && companiesData.pages > 1 && (
-            <div className="flex flex-col gap-3 pt-4 sm:flex-row sm:items-center sm:justify-center sm:gap-4">
-              <div className="flex items-center justify-between gap-2 sm:gap-4">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={filters.page === 1}
-                  onClick={() => updateFilter('page', String((filters.page || 1) - 1))}
-                  className="flex-1 sm:flex-none"
-                >
-                  Previous
-                </Button>
+          {companiesData && (
+            <div className="flex flex-col gap-3 pt-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+              <div className="flex items-center justify-center gap-3 sm:justify-start">
                 <span className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                  Page {filters.page} of {companiesData.pages}
+                  {companiesData.total} total
                 </span>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={filters.page === companiesData.pages}
-                  onClick={() => updateFilter('page', String((filters.page || 1) + 1))}
-                  className="flex-1 sm:flex-none"
+                <select
+                  value={filters.page_size}
+                  onChange={(e) => updateFilter('page_size', e.target.value)}
+                  aria-label="Results per page"
+                  className="text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1"
                 >
-                  Next
-                </Button>
+                  <option value={12}>12 / page</option>
+                  <option value={25}>25 / page</option>
+                  <option value={50}>50 / page</option>
+                  <option value={100}>100 / page</option>
+                </select>
               </div>
+              {companiesData.pages > 1 && (
+                <div className="flex items-center justify-between gap-2 sm:gap-4">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={filters.page === 1}
+                    onClick={() => updateFilter('page', String((filters.page || 1) - 1))}
+                    className="flex-1 sm:flex-none"
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                    Page {filters.page} of {companiesData.pages}
+                  </span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={filters.page === companiesData.pages}
+                    onClick={() => updateFilter('page', String((filters.page || 1) + 1))}
+                    className="flex-1 sm:flex-none"
+                  >
+                    Next
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </>

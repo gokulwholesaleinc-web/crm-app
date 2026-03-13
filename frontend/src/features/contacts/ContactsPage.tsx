@@ -396,7 +396,7 @@ function ContactsPage() {
                         Company:{' '}
                         <Link
                           to={`/companies/${contact.company.id}`}
-                          className="text-primary-600 hover:text-primary-500"
+                          className="text-primary-600 hover:text-primary-500 focus-visible:underline focus-visible:outline-none"
                         >
                           {contact.company.name}
                         </Link>
@@ -509,9 +509,25 @@ function ContactsPage() {
             <div className="bg-white dark:bg-gray-800 px-4 py-3 border-t border-gray-200 dark:border-gray-700 sm:px-6">
               {/* Mobile Pagination */}
               <div className="flex flex-col gap-3 sm:hidden">
-                <p className="text-sm text-gray-700 dark:text-gray-300 text-center">
-                  Page {currentPage} of {totalPages} ({total} results)
-                </p>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-gray-700 dark:text-gray-300">
+                    Page {currentPage} of {totalPages} ({total} results)
+                  </p>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    aria-label="Results per page"
+                    className="text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1"
+                  >
+                    <option value={10}>10 / page</option>
+                    <option value={25}>25 / page</option>
+                    <option value={50}>50 / page</option>
+                    <option value={100}>100 / page</option>
+                  </select>
+                </div>
                 <div className="flex justify-between gap-3">
                   <Button
                     variant="secondary"
