@@ -587,20 +587,25 @@ export function ImportExportPage() {
       {/* Import Section */}
       <div>
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">Import Data</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {entityConfigs.map((config) => (
-            <ImportSection
-              key={config.type}
-              entityType={config.type}
-              label={config.label}
-              state={importStates[config.type]}
-              contactDecisions={contactDecisions}
-              onContactDecisionChange={handleContactDecisionChange}
-              onFileSelect={(file) => handleFileSelect(config.type, file)}
-              onConfirmImport={() => handleConfirmImport(config.type)}
-              onCancel={() => handleCancel(config.type)}
-            />
-          ))}
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+          Contacts are auto-created when importing companies via the &quot;Point of Contact&quot; column.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {entityConfigs
+            .filter((config) => config.type !== 'contacts')
+            .map((config) => (
+              <ImportSection
+                key={config.type}
+                entityType={config.type}
+                label={config.label}
+                state={importStates[config.type]}
+                contactDecisions={contactDecisions}
+                onContactDecisionChange={handleContactDecisionChange}
+                onFileSelect={(file) => handleFileSelect(config.type, file)}
+                onConfirmImport={() => handleConfirmImport(config.type)}
+                onCancel={() => handleCancel(config.type)}
+              />
+            ))}
         </div>
       </div>
     </div>
