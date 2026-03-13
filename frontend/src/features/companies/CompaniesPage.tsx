@@ -189,12 +189,11 @@ function CompanyCard({
             {(company.city || company.state || company.country) && (
               <span>{[company.city, company.state, company.country].filter(Boolean).join(', ')}</span>
             )}
-            {company.company_size && (
-              <span>Size: {company.company_size}</span>
-            )}
-            {company.employee_count != null && (
+            {company.employee_count != null ? (
               <span>{company.employee_count} employees</span>
-            )}
+            ) : company.company_size ? (
+              <span>Size: {company.company_size}</span>
+            ) : null}
             {company.link_creative_tier && (
               <span>Tier {company.link_creative_tier}</span>
             )}
