@@ -1,7 +1,7 @@
 """Admin dashboard Pydantic schemas."""
 
 from datetime import datetime
-from typing import Optional, List
+from typing import Any, Optional, List
 from pydantic import BaseModel, EmailStr
 
 
@@ -84,7 +84,7 @@ class ActivityFeedEntry(BaseModel):
     user_id: Optional[int] = None
     user_name: Optional[str] = None
     timestamp: datetime
-    changes: Optional[dict] = None
+    changes: Optional[Any] = None
 
     model_config = {"from_attributes": True}
 
