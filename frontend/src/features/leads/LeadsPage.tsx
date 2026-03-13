@@ -403,6 +403,7 @@ function LeadsPage() {
                         type="checkbox"
                         checked={selectedIds.includes(lead.id)}
                         onChange={() => toggleSelectOne(lead.id)}
+                        aria-label={`Select ${lead.first_name} ${lead.last_name}`}
                         className="mt-1 rounded border-gray-300 text-primary-600 focus-visible:ring-primary-500"
                       />
                       <div className="min-w-0 flex-1">
@@ -437,13 +438,13 @@ function LeadsPage() {
                   <div className="flex gap-4 pt-2 border-t border-gray-100 dark:border-gray-700">
                     <button
                       onClick={() => handleEdit(lead)}
-                      className="flex-1 text-center py-2 text-sm font-medium text-primary-600 hover:text-primary-900 dark:hover:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-md transition-colors"
+                      className="flex-1 text-center py-2 text-sm font-medium text-primary-600 hover:text-primary-900 dark:hover:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                     >
                       Edit
                     </button>
                     <button
                       onClick={() => handleDeleteClick(lead)}
-                      className="flex-1 text-center py-2 text-sm font-medium text-red-600 hover:text-red-900 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
+                      className="flex-1 text-center py-2 text-sm font-medium text-red-600 hover:text-red-900 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                       disabled={deleteLeadMutation.isPending}
                     >
                       Delete
@@ -463,6 +464,7 @@ function LeadsPage() {
                         type="checkbox"
                         checked={leads.length > 0 && selectedIds.length === leads.length}
                         onChange={toggleSelectAll}
+                        aria-label="Select all leads"
                         className="rounded border-gray-300 text-primary-600 focus-visible:ring-primary-500"
                       />
                     </th>

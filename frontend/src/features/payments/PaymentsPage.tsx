@@ -113,6 +113,8 @@ function PaymentsPage() {
               <input
                 id="payment-search"
                 type="text"
+                name="search"
+                autoComplete="off"
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);

@@ -190,6 +190,8 @@ function ProposalsPage() {
               <input
                 type="text"
                 id="proposal-search"
+                name="search"
+                autoComplete="off"
                 value={searchQuery}
                 onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
                 className="block w-full pl-10 pr-3 py-2.5 sm:py-2 border border-gray-300 dark:border-gray-600 rounded-md leading-5 bg-white dark:bg-gray-700 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary-500 focus-visible:border-primary-500 text-base sm:text-sm"
@@ -300,7 +302,7 @@ function ProposalsPage() {
                     </Link>
                     <button
                       onClick={() => handleDeleteClick(proposal)}
-                      className="flex-1 text-center py-2 text-sm font-medium text-red-600 hover:text-red-900 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md"
+                      className="flex-1 text-center py-2 text-sm font-medium text-red-600 hover:text-red-900 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                       disabled={deleteProposalMutation.isPending}
                     >
                       Delete
@@ -371,7 +373,7 @@ function ProposalsPage() {
                         </Link>
                         <button
                           onClick={() => handleDeleteClick(proposal)}
-                          className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                          className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded"
                           disabled={deleteProposalMutation.isPending}
                         >
                           Delete
