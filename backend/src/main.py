@@ -103,6 +103,9 @@ async def _run_production_migrations():
                 "CREATE INDEX IF NOT EXISTS ix_leads_pipeline_stage_id ON leads(pipeline_stage_id)",
                 "ALTER TABLE pipeline_stages ADD COLUMN IF NOT EXISTS pipeline_type VARCHAR(20) DEFAULT 'opportunity'",
                 "CREATE INDEX IF NOT EXISTS ix_pipeline_stages_pipeline_type ON pipeline_stages(pipeline_type)",
+                "ALTER TABLE companies ADD COLUMN IF NOT EXISTS link_creative_tier VARCHAR(10)",
+                "ALTER TABLE companies ADD COLUMN IF NOT EXISTS sow_url VARCHAR(500)",
+                "ALTER TABLE companies ADD COLUMN IF NOT EXISTS account_manager VARCHAR(255)",
             ]
             for sql in column_migrations:
                 try:

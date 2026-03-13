@@ -391,7 +391,17 @@ function ContactsPage() {
                   </div>
                   <div className="mt-2 space-y-1 text-sm text-gray-500 dark:text-gray-400">
                     {contact.email && <p className="truncate">{contact.email}</p>}
-                    {contact.company?.name && <p className="truncate">Company: {contact.company.name}</p>}
+                    {contact.company?.name && (
+                      <p className="truncate">
+                        Company:{' '}
+                        <Link
+                          to={`/companies/${contact.company.id}`}
+                          className="text-primary-600 hover:text-primary-500"
+                        >
+                          {contact.company.name}
+                        </Link>
+                      </p>
+                    )}
                     {contact.phone && <p>{formatPhoneNumber(contact.phone)}</p>}
                     <p className="text-xs text-gray-400 dark:text-gray-500">Created: {formatDate(contact.created_at)}</p>
                   </div>
@@ -457,7 +467,16 @@ function ContactsPage() {
                         {contact.email || '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                        {contact.company?.name || '-'}
+                        {contact.company ? (
+                          <Link
+                            to={`/companies/${contact.company.id}`}
+                            className="text-primary-600 hover:text-primary-500"
+                          >
+                            {contact.company.name}
+                          </Link>
+                        ) : (
+                          '-'
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {formatPhoneNumber(contact.phone)}

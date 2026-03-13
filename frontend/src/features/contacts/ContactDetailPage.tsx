@@ -173,9 +173,18 @@ function ContactDetailPage() {
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">
               {contact.first_name} {contact.last_name}
             </h1>
-            {contact.job_title && contact.company?.name && (
+            {(contact.job_title || contact.company?.name) && (
               <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
-                {contact.job_title} at {contact.company.name}
+                {contact.job_title}
+                {contact.job_title && contact.company?.name && ' at '}
+                {contact.company?.name && (
+                  <Link
+                    to={`/companies/${contact.company.id}`}
+                    className="text-primary-600 hover:text-primary-500"
+                  >
+                    {contact.company.name}
+                  </Link>
+                )}
               </p>
             )}
           </div>
@@ -269,7 +278,16 @@ function ContactDetailPage() {
               <div>
                 <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Company</dt>
                 <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
-                  {contact.company?.name || '-'}
+                  {contact.company ? (
+                    <Link
+                      to={`/companies/${contact.company.id}`}
+                      className="text-primary-600 hover:text-primary-500"
+                    >
+                      {contact.company.name}
+                    </Link>
+                  ) : (
+                    '-'
+                  )}
                 </dd>
               </div>
 

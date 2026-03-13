@@ -162,11 +162,18 @@ function CompanyCard({
             </span>
           </div>
 
-          <div className="flex items-center gap-4 mt-2 text-xs text-gray-500 dark:text-gray-400">
-            {company.city && company.country && (
-              <span>
-                {company.city}, {company.country}
-              </span>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs text-gray-500 dark:text-gray-400">
+            {(company.city || company.state) && (
+              <span>{[company.city, company.state].filter(Boolean).join(', ')}</span>
+            )}
+            {company.company_size && (
+              <span>Size: {company.company_size}</span>
+            )}
+            {company.link_creative_tier && (
+              <span>Tier {company.link_creative_tier}</span>
+            )}
+            {company.account_manager && (
+              <span>AM: {company.account_manager}</span>
             )}
             {company.annual_revenue && (
               <span>Revenue: {formatCurrency(company.annual_revenue)}</span>
