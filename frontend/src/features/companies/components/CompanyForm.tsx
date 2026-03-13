@@ -179,7 +179,7 @@ export function CompanyForm({
         <Input
           {...register('name', { required: 'Company name is required' })}
           label="Company Name"
-          placeholder="Enter company name"
+          placeholder="Enter company name..."
           error={errors.name?.message}
         />
         <Controller
@@ -195,7 +195,7 @@ export function CompanyForm({
         <Input
           {...register('website')}
           label="Website"
-          placeholder="https://example.com"
+          placeholder="https://example.com..."
         />
         <Input
           {...register('email')}
@@ -233,7 +233,7 @@ export function CompanyForm({
         <Input
           {...register('phone')}
           label="Phone"
-          placeholder="+1 (555) 000-0000"
+          placeholder="+1 (555) 000-0000..."
         />
       </div>
 

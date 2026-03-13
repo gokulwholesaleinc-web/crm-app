@@ -250,6 +250,7 @@ export function NotesList({ entityType, entityId }: NotesListProps) {
                       onClick={() => setNoteToDelete({ id: note.id, content: note.content })}
                       className="flex-shrink-0 p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
                       title="Delete note"
+                      aria-label="Delete note"
                     >
                       <svg
                         className="h-4 w-4"

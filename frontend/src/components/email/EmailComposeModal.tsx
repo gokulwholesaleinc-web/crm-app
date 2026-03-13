@@ -51,11 +51,12 @@ export function EmailComposeModal({
           <input
             id="email-to"
             type="email"
+            name="to"
             required
             value={to}
             onChange={(e) => setTo(e.target.value)}
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-primary-500 focus:ring-primary-500"
-            placeholder="recipient@example.com"
+            placeholder="recipient@example.com..."
             autoComplete="email"
           />
         </div>
@@ -67,11 +68,13 @@ export function EmailComposeModal({
           <input
             id="email-subject"
             type="text"
+            name="subject"
             required
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-primary-500 focus:ring-primary-500"
-            placeholder="Email subject"
+            placeholder="Email subject..."
+            autoComplete="off"
           />
         </div>
 
@@ -81,6 +84,7 @@ export function EmailComposeModal({
           </label>
           <textarea
             id="email-body"
+            name="body"
             required
             rows={8}
             value={body}
