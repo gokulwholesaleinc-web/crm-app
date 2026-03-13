@@ -27,7 +27,7 @@ function ContactsPage() {
     isOpen: false,
     contact: null,
   });
-  const pageSize = 10;
+  const [pageSize, setPageSize] = useState(25);
 
   // Fetch saved smart lists
   const { data: savedFilters } = useSavedFilters('contacts');
@@ -514,7 +514,7 @@ function ContactsPage() {
               </div>
               {/* Desktop Pagination */}
               <div className="hidden sm:flex sm:items-center sm:justify-between">
-                <div>
+                <div className="flex items-center gap-4">
                   <p className="text-sm text-gray-700 dark:text-gray-300">
                     Showing{' '}
                     <span className="font-medium">
@@ -526,6 +526,20 @@ function ContactsPage() {
                     </span>{' '}
                     of <span className="font-medium">{total}</span> results
                   </p>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    aria-label="Results per page"
+                    className="text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1"
+                  >
+                    <option value={10}>10 / page</option>
+                    <option value={25}>25 / page</option>
+                    <option value={50}>50 / page</option>
+                    <option value={100}>100 / page</option>
+                  </select>
                 </div>
                 <div>
                   <nav
