@@ -48,6 +48,7 @@ function LoginPage() {
   });
 
   const onSubmit = async (data: LoginRequest) => {
+    if (!data.email || !data.password) return;
     setIsLoading(true);
     setError(null);
 
@@ -74,6 +75,8 @@ function LoginPage() {
 
       navigate('/');
     } catch (err: unknown) {
+      // Clear saved credentials if auto-login failed (e.g. password changed)
+      localStorage.removeItem(REMEMBER_KEY);
       const errorMessage = err instanceof Error ? err.message :
         (typeof err === 'object' && err !== null && 'detail' in err)
           ? String((err as { detail: unknown }).detail)
@@ -83,6 +86,14 @@ function LoginPage() {
       setIsLoading(false);
     }
   };
+
+  // Auto-login when saved "Remember me" credentials exist
+  useEffect(() => {
+    if (saved) {
+      handleSubmit(onSubmit)();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-8 sm:py-12 px-4 sm:px-6 lg:px-8">
