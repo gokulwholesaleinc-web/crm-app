@@ -215,6 +215,7 @@ export function CompanyForm({
       <div className="grid grid-cols-2 gap-4">
         <Input
           {...register('website')}
+          type="url"
           label="Website"
           placeholder="https://example.com..."
         />
@@ -222,7 +223,8 @@ export function CompanyForm({
           {...register('email')}
           type="email"
           label="Email"
-          placeholder="contact@example.com"
+          placeholder="contact@example.com..."
+          spellCheck={false}
         />
       </div>
 
@@ -283,7 +285,7 @@ export function CompanyForm({
         <Input
           {...register('address_line1')}
           label="Address Line 1"
-          placeholder="Street address"
+          placeholder="Street address..."
         />
         <div className="mt-4">
           <Input
@@ -296,24 +298,24 @@ export function CompanyForm({
           <Input
             {...register('city')}
             label="City"
-            placeholder="City"
+            placeholder="City..."
           />
           <Input
             {...register('state')}
             label="State/Province"
-            placeholder="State"
+            placeholder="State..."
           />
         </div>
         <div className="grid grid-cols-2 gap-4 mt-4">
           <Input
             {...register('postal_code')}
             label="Postal Code"
-            placeholder="Postal code"
+            placeholder="Postal code..."
           />
           <Input
             {...register('country')}
             label="Country"
-            placeholder="Country"
+            placeholder="Country..."
           />
         </div>
       </div>
@@ -367,7 +369,7 @@ export function CompanyForm({
         label="Description"
         name="description"
         rows={3}
-        placeholder="Add notes about the company"
+        placeholder="Add notes about the company..."
         register={register('description')}
       />
 
