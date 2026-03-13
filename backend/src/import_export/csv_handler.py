@@ -83,10 +83,31 @@ COLUMN_ALIASES: Dict[str, str] = {
     "location": "address_line1",
     "link": "website",
     "text": "description",
+    # Domain / URL aliases
+    "domain": "website",
+    "domainname": "website",
+    "websiteurl": "website",
+    "homepage": "website",
+    # Business size aliases
+    "businesssizetier": "company_size",
+    "businesssize": "company_size",
+    "tier": "company_size",
+    "companytier": "company_size",
+    "sizetier": "company_size",
+    # Point of contact as description (best fit for company imports)
+    "pointofcontact": "description",
+    "poc": "description",
+    "contactperson": "description",
+    "primarycontact": "description",
+    # Account manager
+    "accountmanager": "description",
 }
 
 # Headers that represent a full name (to be split into first_name + last_name)
 FULL_NAME_HEADERS = {"name", "fullname", "person", "contactname", "leadname"}
+
+# Headers that represent a combined location (to be split into city + state)
+LOCATION_HEADERS = {"hqlocation", "hqaddress", "headquarterslocation", "headquarters", "cityst", "citystate"}
 
 FUZZY_MATCH_THRESHOLD = 0.75
 
@@ -94,6 +115,14 @@ FUZZY_MATCH_THRESHOLD = 0.75
 def _split_full_name(full_name: str) -> tuple:
     """Split 'John Smith' into ('John', 'Smith')."""
     parts = full_name.strip().split(None, 1)
+    if len(parts) == 2:
+        return parts[0], parts[1]
+    return (parts[0], "") if parts else ("", "")
+
+
+def _split_location(location: str) -> tuple:
+    """Split 'Springfield, IL' into ('Springfield', 'IL')."""
+    parts = [p.strip() for p in location.strip().split(",", 1)]
     if len(parts) == 2:
         return parts[0], parts[1]
     return (parts[0], "") if parts else ("", "")
@@ -112,6 +141,23 @@ def _find_name_column(csv_headers: list, column_mapping: dict, target_fields: li
     for header in csv_headers:
         normalized = _normalize_header(header)
         if normalized in FULL_NAME_HEADERS:
+            return header
+    return None
+
+
+def _find_location_column(csv_headers: list, column_mapping: dict, target_fields: list):
+    """Find a combined location CSV column that should be split into city + state.
+
+    Returns the CSV header name if found, None otherwise.
+    """
+    if "city" not in target_fields or "state" not in target_fields:
+        return None
+    mapped_fields = set(column_mapping.values())
+    if "city" in mapped_fields or "state" in mapped_fields:
+        return None
+    for header in csv_headers:
+        normalized = _normalize_header(header)
+        if normalized in LOCATION_HEADERS:
             return header
     return None
 
@@ -251,10 +297,14 @@ class CSVHandler:
 
         column_mapping = _map_columns(csv_headers, fields)
         name_col = _find_name_column(csv_headers, column_mapping, fields)
-        unmapped = [h for h in csv_headers if h not in column_mapping and h != name_col]
+        location_col = _find_location_column(csv_headers, column_mapping, fields)
+        special_cols = {name_col, location_col} - {None}
+        unmapped = [h for h in csv_headers if h not in column_mapping and h not in special_cols]
         missing_fields = [f for f in fields if f not in column_mapping.values()]
         if name_col:
             missing_fields = [f for f in missing_fields if f not in ("first_name", "last_name")]
+        if location_col:
+            missing_fields = [f for f in missing_fields if f not in ("city", "state")]
 
         # Read first 5 rows with mapped column names
         preview_rows = []
@@ -272,6 +322,12 @@ class CSVHandler:
                     first, last = _split_full_name(raw_name)
                     mapped_row["first_name"] = first
                     mapped_row["last_name"] = last
+            if location_col:
+                raw_loc = row.get(location_col, "").strip()
+                if raw_loc:
+                    city, state = _split_location(raw_loc)
+                    mapped_row["city"] = city
+                    mapped_row["state"] = state
             preview_rows.append(mapped_row)
 
             # Check for duplicate emails within file
@@ -356,6 +412,7 @@ class CSVHandler:
         # Smart column mapping
         column_mapping = _map_columns(csv_headers, fields)
         name_col = _find_name_column(csv_headers, column_mapping, fields)
+        location_col = _find_location_column(csv_headers, column_mapping, fields)
 
         # Load existing emails for dedup
         existing_emails = await self._get_existing_emails(entity_class)
@@ -382,6 +439,14 @@ class CSVHandler:
                         first, last = _split_full_name(raw_name)
                         entity_data["first_name"] = first
                         entity_data["last_name"] = last
+
+                # Split location column into city + state
+                if location_col:
+                    raw_loc = row.get(location_col, "").strip()
+                    if raw_loc:
+                        city, state = _split_location(raw_loc)
+                        entity_data["city"] = city
+                        entity_data["state"] = state
 
                 # Duplicate detection by email
                 email = (entity_data.get("email") or "").lower()
