@@ -129,7 +129,7 @@ function LeadStageColumn({ stage }: { stage: KanbanLeadStage }) {
   };
 
   return (
-    <div className="flex-shrink-0 w-64 sm:w-72" onDrop={handleDrop} onDragOver={handleDragOver}>
+    <div className="w-full md:flex-shrink-0 md:w-72" onDrop={handleDrop} onDragOver={handleDragOver}>
       <div className="bg-blue-50/50 dark:bg-blue-950/30 rounded-lg p-3 h-full">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2 min-w-0">
@@ -143,6 +143,7 @@ function LeadStageColumn({ stage }: { stage: KanbanLeadStage }) {
             <div
               key={lead.id}
               draggable
+              style={{ touchAction: 'manipulation' }}
               onDragStart={(e) => {
                 e.dataTransfer.setData('application/json', JSON.stringify({ id: lead.id, entityType: 'lead', sourceStageId: stage.stage_id }));
               }}
@@ -182,7 +183,7 @@ function OpportunityStageColumn({ stage }: { stage: KanbanStage }) {
   };
 
   return (
-    <div className="flex-shrink-0 w-64 sm:w-72" onDrop={handleDrop} onDragOver={handleDragOver}>
+    <div className="w-full md:flex-shrink-0 md:w-72" onDrop={handleDrop} onDragOver={handleDragOver}>
       <div className="bg-emerald-50/50 dark:bg-emerald-950/30 rounded-lg p-3 h-full">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2 min-w-0">
@@ -199,6 +200,7 @@ function OpportunityStageColumn({ stage }: { stage: KanbanStage }) {
             <div
               key={opp.id}
               draggable
+              style={{ touchAction: 'manipulation' }}
               onDragStart={(e) => {
                 e.dataTransfer.setData('application/json', JSON.stringify({ id: opp.id, entityType: 'opportunity', sourceStageId: stage.stage_id }));
               }}
@@ -223,7 +225,9 @@ function PipelinePage() {
   usePageTitle('Pipeline');
   const navigate = useNavigate();
 
-  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
+  const [viewMode, setViewMode] = useState<'kanban' | 'list'>(() =>
+    window.matchMedia('(min-width: 768px)').matches ? 'kanban' : 'list'
+  );
   const [showForm, setShowForm] = useState(false);
   const [editingOpportunity, setEditingOpportunity] = useState<Opportunity | null>(null);
 
@@ -425,11 +429,11 @@ function PipelinePage() {
           </div>
         ) : (
           <div className="overflow-x-auto pb-4">
-            <div className="flex gap-3 min-w-max items-start">
+            <div className="flex flex-col md:flex-row gap-3 md:min-w-max items-start">
               {/* Lead pipeline stages */}
               {leadStages.length > 0 && (
                 <>
-                  <div className="flex gap-3">
+                  <div className="flex flex-col md:flex-row gap-3">
                     {leadStages.map((stage) => (
                       <LeadStageColumn key={`lead-${stage.stage_id}`} stage={stage} />
                     ))}
@@ -453,7 +457,7 @@ function PipelinePage() {
 
               {/* Opportunity pipeline stages */}
               {oppStages.length > 0 && (
-                <div className="flex gap-3">
+                <div className="flex flex-col md:flex-row gap-3">
                   {oppStages.map((stage) => (
                     <OpportunityStageColumn key={`opp-${stage.stage_id}`} stage={stage} />
                   ))}

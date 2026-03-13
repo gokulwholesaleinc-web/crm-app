@@ -33,7 +33,9 @@ const defaultStages: KanbanStage[] = [
 
 function OpportunitiesPage() {
   const navigate = useNavigate();
-  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
+  const [viewMode, setViewMode] = useState<'kanban' | 'list'>(() =>
+    window.matchMedia('(min-width: 768px)').matches ? 'kanban' : 'list'
+  );
   const [showForm, setShowForm] = useState(false);
   const [editingOpportunity, setEditingOpportunity] = useState<Opportunity | null>(null);
 

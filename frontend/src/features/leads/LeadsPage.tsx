@@ -67,7 +67,7 @@ function LeadsPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; lead: Lead | null }>(INITIAL_DELETE_CONFIRM);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [showCampaignModal, setShowCampaignModal] = useState(false);
-  const pageSize = 10;
+  const [pageSize, setPageSize] = useState(25);
 
   // Use the hooks for data fetching
   const {
@@ -394,7 +394,7 @@ function LeadsPage() {
         ) : (
           <>
             {/* Mobile Card View */}
-            <div className="sm:hidden divide-y divide-gray-200 dark:divide-gray-700">
+            <div className="block md:hidden divide-y divide-gray-200 dark:divide-gray-700">
               {leads.map((lead: Lead) => (
                 <div key={lead.id} className={clsx('p-4 space-y-3', selectedIds.includes(lead.id) && 'bg-primary-50 dark:bg-primary-900/20')}>
                   <div className="flex items-start justify-between gap-2">
@@ -408,13 +408,16 @@ function LeadsPage() {
                       <div className="min-w-0 flex-1">
                         <Link
                           to={`/leads/${lead.id}`}
-                          className="text-sm font-medium text-primary-600 hover:text-primary-900 block truncate"
+                          className="text-sm font-medium text-primary-600 hover:text-primary-900 dark:hover:text-primary-300 block truncate"
                         >
                           {lead.first_name} {lead.last_name}
                         </Link>
                         <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{lead.email || '-'}</p>
                         {lead.company_name && (
                           <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{lead.company_name}</p>
+                        )}
+                        {lead.phone && (
+                          <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{lead.phone}</p>
                         )}
                       </div>
                     </div>
@@ -429,7 +432,7 @@ function LeadsPage() {
                         {lead.source?.name ? formatStatusLabel(lead.source.name) : '-'}
                       </span>
                     </div>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">{formatDate(lead.created_at)}</span>
+                    <span className="text-xs text-gray-400 dark:text-gray-500">{formatDate(lead.created_at)}</span>
                   </div>
                   <div className="flex gap-4 pt-2 border-t border-gray-100 dark:border-gray-700">
                     <button
@@ -451,7 +454,7 @@ function LeadsPage() {
             </div>
 
             {/* Desktop Table View */}
-            <div className="hidden sm:block overflow-x-auto">
+            <div className="hidden md:block overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead className="bg-gray-50 dark:bg-gray-900">
                   <tr>
@@ -563,25 +566,50 @@ function LeadsPage() {
             </div>
 
             {/* Pagination */}
-            <div className="bg-white dark:bg-gray-800 px-4 py-3 flex items-center justify-between border-t border-gray-200 dark:border-gray-700 sm:px-6">
-              <div className="flex-1 flex justify-between sm:hidden">
-                <Button
-                  variant="secondary"
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                >
-                  Previous
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                >
-                  Next
-                </Button>
+            <div className="bg-white dark:bg-gray-800 px-4 py-3 border-t border-gray-200 dark:border-gray-700 sm:px-6">
+              {/* Mobile Pagination */}
+              <div className="flex flex-col gap-3 md:hidden">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-gray-700 dark:text-gray-300">
+                    Page {currentPage} of {totalPages} ({total} results)
+                  </p>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    aria-label="Results per page"
+                    className="text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1"
+                  >
+                    <option value={10}>10 / page</option>
+                    <option value={25}>25 / page</option>
+                    <option value={50}>50 / page</option>
+                    <option value={100}>100 / page</option>
+                  </select>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <Button
+                    variant="secondary"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="flex-1"
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="flex-1"
+                  >
+                    Next
+                  </Button>
+                </div>
               </div>
-              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-                <div>
+              {/* Desktop Pagination */}
+              <div className="hidden md:flex md:items-center md:justify-between">
+                <div className="flex items-center gap-4">
                   <p className="text-sm text-gray-700 dark:text-gray-300">
                     Showing{' '}
                     <span className="font-medium">
@@ -593,6 +621,20 @@ function LeadsPage() {
                     </span>{' '}
                     of <span className="font-medium">{total}</span> results
                   </p>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    aria-label="Results per page"
+                    className="text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1"
+                  >
+                    <option value={10}>10 / page</option>
+                    <option value={25}>25 / page</option>
+                    <option value={50}>50 / page</option>
+                    <option value={100}>100 / page</option>
+                  </select>
                 </div>
                 <div>
                   <nav

@@ -33,6 +33,21 @@ import type { Activity, ActivityCreate, ActivityUpdate, ActivityFilters } from '
 
 type ViewMode = 'list' | 'timeline' | 'calendar';
 
+const activityTypeIcons: Record<string, React.ComponentType<{ className?: string }>> = {
+  call: PhoneIcon,
+  email: EnvelopeIcon,
+  meeting: CalendarIcon,
+  task: ClipboardDocumentCheckIcon,
+  note: DocumentTextIcon,
+};
+
+const priorityBadgeClasses: Record<string, string> = {
+  low: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300',
+  normal: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
+  high: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300',
+  urgent: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300',
+};
+
 const activityTypeFilters = [
   { value: '', label: 'All Types', icon: null },
   { value: 'call', label: 'Calls', icon: PhoneIcon },
@@ -322,18 +337,111 @@ export function ActivitiesPage() {
               </div>
             </div>
           ) : (
-            activities.map((activity) => (
-              <ActivityCard
-                key={activity.id}
-                activity={activity}
-                onComplete={handleComplete}
-                onEdit={() => handleEdit(activity)}
-                onDelete={(id) => {
-                  const activity = activities.find((a) => a.id === id);
-                  if (activity) handleDeleteClick(activity);
-                }}
-              />
-            ))
+            <>
+              {/* Mobile Card View */}
+              <div className="block md:hidden divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                {activities.map((activity) => {
+                  const TypeIcon = activityTypeIcons[activity.activity_type] ?? DocumentTextIcon;
+                  const isOverdue =
+                    !activity.is_completed &&
+                    activity.due_date &&
+                    new Date(activity.due_date) < new Date();
+                  return (
+                    <div
+                      key={activity.id}
+                      className={clsx(
+                        'p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50',
+                        activity.is_completed && 'opacity-60'
+                      )}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="p-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 flex-shrink-0">
+                          <TypeIcon className="h-4 w-4 text-gray-500 dark:text-gray-400" aria-hidden="true" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2">
+                            <h4
+                              className={clsx(
+                                'text-sm font-medium text-gray-900 dark:text-gray-100 truncate',
+                                activity.is_completed && 'line-through text-gray-500 dark:text-gray-400'
+                              )}
+                            >
+                              {activity.subject}
+                            </h4>
+                            <span className={clsx(
+                              'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium flex-shrink-0',
+                              priorityBadgeClasses[activity.priority] ?? priorityBadgeClasses.normal
+                            )}>
+                              {activity.priority}
+                            </span>
+                          </div>
+                          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+                            <span className="capitalize">{activity.activity_type}</span>
+                            {activity.entity_type && (
+                              <span className="truncate">
+                                {activity.entity_type} #{activity.entity_id}
+                              </span>
+                            )}
+                            {activity.due_date ? (
+                              <span className={clsx('flex items-center gap-1', isOverdue ? 'text-red-600 dark:text-red-400' : '')}>
+                                <CalendarIcon className="h-3 w-3 flex-shrink-0" aria-hidden="true" />
+                                {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(activity.due_date))}
+                              </span>
+                            ) : activity.scheduled_at ? (
+                              <span className="flex items-center gap-1">
+                                <ClockIcon className="h-3 w-3 flex-shrink-0" aria-hidden="true" />
+                                {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(activity.scheduled_at))}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="mt-2 flex items-center gap-1">
+                            {!activity.is_completed && (
+                              <button
+                                onClick={() => handleComplete(activity.id)}
+                                className="px-2 py-1 text-xs font-medium text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+                                aria-label={`Complete ${activity.subject}`}
+                              >
+                                Complete
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleEdit(activity)}
+                              className="px-2 py-1 text-xs font-medium text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                              aria-label={`Edit ${activity.subject}`}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeleteClick(activity)}
+                              className="px-2 py-1 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                              aria-label={`Delete ${activity.subject}`}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Desktop Card View */}
+              <div className="hidden md:block space-y-4">
+                {activities.map((activity) => (
+                  <ActivityCard
+                    key={activity.id}
+                    activity={activity}
+                    onComplete={handleComplete}
+                    onEdit={() => handleEdit(activity)}
+                    onDelete={(id) => {
+                      const found = activities.find((a) => a.id === id);
+                      if (found) handleDeleteClick(found);
+                    }}
+                  />
+                ))}
+              </div>
+            </>
           )}
 
           {/* Pagination */}
@@ -359,9 +467,22 @@ export function ActivitiesPage() {
                   Next
                 </Button>
               </div>
-              <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 order-first sm:order-none">
-                Page {filters.page} of {activitiesData.pages}
-              </span>
+              <div className="flex items-center gap-2 order-first sm:order-none">
+                <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+                  Page {filters.page} of {activitiesData.pages}
+                </span>
+                <select
+                  value={filters.page_size}
+                  onChange={(e) => updateFilter('page_size', e.target.value)}
+                  aria-label="Results per page"
+                  className="text-xs sm:text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1"
+                >
+                  <option value={10}>10 / page</option>
+                  <option value={20}>20 / page</option>
+                  <option value={50}>50 / page</option>
+                  <option value={100}>100 / page</option>
+                </select>
+              </div>
             </div>
           )}
         </div>

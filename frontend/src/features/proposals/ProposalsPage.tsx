@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { PlusIcon, SparklesIcon, DocumentDuplicateIcon } from '@heroicons/react/24/outline';
-import { Button, Modal, ConfirmDialog, StatusBadge, PaginationBar } from '../../components/ui';
+import { Button, Modal, ConfirmDialog, StatusBadge } from '../../components/ui';
 import type { StatusType } from '../../components/ui/Badge';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { ProposalForm } from './ProposalForm';
@@ -38,7 +38,7 @@ function ProposalsPage() {
     isOpen: false,
     proposal: null,
   });
-  const pageSize = 10;
+  const [pageSize, setPageSize] = useState(25);
 
   const {
     data: proposalsData,
@@ -267,37 +267,40 @@ function ProposalsPage() {
         ) : (
           <>
             {/* Mobile Card View */}
-            <div className="sm:hidden divide-y divide-gray-200 dark:divide-gray-700">
+            <div className="block md:hidden divide-y divide-gray-200 dark:divide-gray-700">
               {proposals.map((proposal: Proposal) => (
-                <div key={proposal.id} className="p-4 space-y-2">
+                <div key={proposal.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700">
                   <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <Link
-                        to={`/proposals/${proposal.id}`}
-                        className="text-sm font-medium text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300 block truncate"
-                      >
-                        {proposal.title}
-                      </Link>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{proposal.proposal_number}</p>
-                    </div>
-                    <StatusBadge status={proposal.status as StatusType} size="sm" showDot={false} className="flex-shrink-0" />
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-500 dark:text-gray-400">
-                      {proposal.company?.name ?? proposal.contact?.full_name ?? '-'}
-                    </span>
-                    <span className="text-gray-500 dark:text-gray-400">{formatDate(proposal.created_at)}</span>
-                  </div>
-                  <div className="flex gap-4 pt-2 border-t border-gray-100 dark:border-gray-700">
                     <Link
                       to={`/proposals/${proposal.id}`}
-                      className="flex-1 text-center py-2 text-sm font-medium text-primary-600 hover:text-primary-900 dark:hover:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-md transition-colors"
+                      className="flex-1 min-w-0"
+                    >
+                      <p className="text-sm font-medium text-primary-600 hover:text-primary-900 dark:hover:text-primary-300 truncate">
+                        {proposal.title}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{proposal.proposal_number}</p>
+                    </Link>
+                    <StatusBadge status={proposal.status as StatusType} size="sm" showDot={false} className="flex-shrink-0" />
+                  </div>
+                  <div className="mt-2 space-y-1 text-sm text-gray-500 dark:text-gray-400">
+                    <p className="truncate">
+                      {proposal.contact?.full_name ?? '-'}
+                    </p>
+                    {proposal.company && (
+                      <p className="text-xs truncate">{proposal.company.name}</p>
+                    )}
+                    <p className="text-xs text-gray-400 dark:text-gray-500">{formatDate(proposal.created_at)}</p>
+                  </div>
+                  <div className="flex gap-4 pt-2 mt-2 border-t border-gray-100 dark:border-gray-700">
+                    <Link
+                      to={`/proposals/${proposal.id}`}
+                      className="flex-1 text-center py-2 text-sm font-medium text-primary-600 hover:text-primary-900 dark:hover:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-md"
                     >
                       View
                     </Link>
                     <button
                       onClick={() => handleDeleteClick(proposal)}
-                      className="flex-1 text-center py-2 text-sm font-medium text-red-600 hover:text-red-900 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
+                      className="flex-1 text-center py-2 text-sm font-medium text-red-600 hover:text-red-900 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md"
                       disabled={deleteProposalMutation.isPending}
                     >
                       Delete
@@ -308,7 +311,7 @@ function ProposalsPage() {
             </div>
 
             {/* Desktop Table */}
-            <div className="hidden sm:block overflow-x-auto">
+            <div className="hidden md:block overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead className="bg-gray-50 dark:bg-gray-900">
                   <tr>
@@ -381,13 +384,128 @@ function ProposalsPage() {
             </div>
 
             {/* Pagination */}
-            <PaginationBar
-              page={currentPage}
-              pages={totalPages}
-              total={total}
-              pageSize={pageSize}
-              onPageChange={setCurrentPage}
-            />
+            <div className="bg-white dark:bg-gray-800 px-4 py-3 border-t border-gray-200 dark:border-gray-700 sm:px-6">
+              {/* Mobile Pagination */}
+              <div className="flex flex-col gap-3 md:hidden">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-gray-700 dark:text-gray-300">
+                    Page {currentPage} of {totalPages} ({total} results)
+                  </p>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    aria-label="Results per page"
+                    className="text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1"
+                  >
+                    <option value={10}>10 / page</option>
+                    <option value={25}>25 / page</option>
+                    <option value={50}>50 / page</option>
+                    <option value={100}>100 / page</option>
+                  </select>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <Button
+                    variant="secondary"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="flex-1"
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="flex-1"
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+              {/* Desktop Pagination */}
+              <div className="hidden md:flex md:items-center md:justify-between">
+                <div className="flex items-center gap-4">
+                  <p className="text-sm text-gray-700 dark:text-gray-300">
+                    Showing{' '}
+                    <span className="font-medium">
+                      {(currentPage - 1) * pageSize + 1}
+                    </span>{' '}
+                    to{' '}
+                    <span className="font-medium">
+                      {Math.min(currentPage * pageSize, total)}
+                    </span>{' '}
+                    of <span className="font-medium">{total}</span> results
+                  </p>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    aria-label="Results per page"
+                    className="text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1"
+                  >
+                    <option value={10}>10 / page</option>
+                    <option value={25}>25 / page</option>
+                    <option value={50}>50 / page</option>
+                    <option value={100}>100 / page</option>
+                  </select>
+                </div>
+                <div>
+                  <nav
+                    className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px"
+                    aria-label="Pagination"
+                  >
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <span className="sr-only">Previous</span>
+                      <svg
+                        className="h-5 w-5"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                        aria-hidden="true"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    </button>
+                    <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <button
+                      onClick={() =>
+                        setCurrentPage((p) => Math.min(totalPages, p + 1))
+                      }
+                      disabled={currentPage === totalPages}
+                      className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <span className="sr-only">Next</span>
+                      <svg
+                        className="h-5 w-5"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                        aria-hidden="true"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    </button>
+                  </nav>
+                </div>
+              </div>
+            </div>
           </>
         )}
       </div>

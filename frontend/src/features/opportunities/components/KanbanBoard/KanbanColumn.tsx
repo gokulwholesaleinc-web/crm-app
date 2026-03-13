@@ -45,7 +45,7 @@ export function KanbanColumn({
   return (
     <div
       className={clsx(
-        'flex flex-col bg-gray-50 dark:bg-gray-900 rounded-lg min-w-[260px] max-w-[260px] sm:min-w-[300px] sm:max-w-[300px] shrink-0 snap-start sm:snap-align-none',
+        'flex flex-col bg-gray-50 dark:bg-gray-900 rounded-lg w-full md:min-w-[260px] md:max-w-[300px] md:shrink-0 snap-start md:snap-align-none',
         isOver && 'bg-gray-100 dark:bg-gray-800'
       )}
     >
