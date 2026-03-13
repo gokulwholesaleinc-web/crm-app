@@ -4,10 +4,14 @@ Tests cover:
 - Create expense
 - List expenses with pagination and category filter
 - Get expense totals
+- Get single expense
 - Update expense
 - Delete expense
+- Upload receipt
 - Tests do NOT mock anything.
 """
+
+import io
 
 import pytest
 
@@ -392,5 +396,49 @@ class TestGetExpense:
         response = await client.get(
             "/api/expenses/99999",
             headers=auth_headers,
+        )
+        assert response.status_code == 404
+
+
+class TestUploadReceipt:
+    """Test POST /api/expenses/{expense_id}/receipt."""
+
+    @pytest.mark.asyncio
+    async def test_upload_receipt(self, client, auth_headers, test_company):
+        """Should upload a receipt and link it to the expense."""
+        create_resp = await client.post(
+            "/api/expenses",
+            json={
+                "company_id": test_company.id,
+                "amount": 45.00,
+                "description": "Lunch receipt",
+                "expense_date": "2026-02-15",
+                "category": "Food",
+            },
+            headers=auth_headers,
+        )
+        assert create_resp.status_code == 201
+        expense_id = create_resp.json()["id"]
+        assert create_resp.json()["receipt_attachment_id"] is None
+
+        file_content = b"fake receipt image data"
+        response = await client.post(
+            f"/api/expenses/{expense_id}/receipt",
+            headers=auth_headers,
+            files={"file": ("receipt.png", io.BytesIO(file_content), "image/png")},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["id"] == expense_id
+        assert data["receipt_attachment_id"] is not None
+
+    @pytest.mark.asyncio
+    async def test_upload_receipt_not_found(self, client, auth_headers):
+        """Should return 404 for non-existent expense."""
+        file_content = b"fake receipt"
+        response = await client.post(
+            "/api/expenses/99999/receipt",
+            headers=auth_headers,
+            files={"file": ("receipt.png", io.BytesIO(file_content), "image/png")},
         )
         assert response.status_code == 404
