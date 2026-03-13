@@ -386,7 +386,7 @@ export function CommentSection({ entityType, entityId }: CommentSectionProps) {
             </div>
           ) : comments.length === 0 ? (
             <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
-              No comments yet. Start the conversation above.
+              No comments yet.
             </p>
           ) : (
             <div className="divide-y divide-gray-100 dark:divide-gray-700">

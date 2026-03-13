@@ -41,6 +41,7 @@ import { useProposals } from '../../hooks/useProposals';
 import { useTimeline } from '../../hooks/useActivities';
 import { getStatusColor, formatStatusLabel } from '../../utils/statusColors';
 import { formatCurrency, formatDate } from '../../utils/formatters';
+import { showSuccess, showError } from '../../utils/toast';
 import type { CompanyUpdate, Contact, Opportunity, Quote, Proposal } from '../../types';
 
 type TabType = 'overview' | 'opportunities' | 'contracts' | 'quotes' | 'proposals' | 'activities' | 'notes' | 'attachments' | 'history' | 'sharing' | 'meta' | 'expenses';
@@ -169,9 +170,10 @@ export function CompanyDetailPage() {
     if (!companyId) return;
     try {
       await deleteCompany.mutateAsync(companyId);
+      showSuccess('Company deleted successfully');
       navigate('/companies');
-    } catch (error) {
-      console.error('Failed to delete company:', error);
+    } catch {
+      showError('Failed to delete company');
     }
   };
 
@@ -180,8 +182,9 @@ export function CompanyDetailPage() {
     try {
       await updateCompany.mutateAsync({ id: companyId, data });
       setShowEditForm(false);
-    } catch (error) {
-      console.error('Failed to update company:', error);
+      showSuccess('Company updated successfully');
+    } catch {
+      showError('Failed to update company');
     }
   };
 

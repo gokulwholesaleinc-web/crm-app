@@ -14,6 +14,7 @@ import { EmailComposeModal, EmailHistory } from '../../components/email';
 import { ContactForm, ContactFormData } from './components/ContactForm';
 import { NextBestActionCard } from '../../components/ai';
 import { useContact, useDeleteContact, useUpdateContact } from '../../hooks/useContacts';
+import { showSuccess, showError } from '../../utils/toast';
 import { useTimeline } from '../../hooks/useActivities';
 import { useQuotes } from '../../hooks/useQuotes';
 import { useProposals } from '../../hooks/useProposals';
@@ -74,8 +75,9 @@ function ContactDetailPage() {
         data: updateData,
       });
       setShowEditForm(false);
-    } catch (err) {
-      console.error('Failed to update contact:', err);
+      showSuccess('Contact updated successfully');
+    } catch {
+      showError('Failed to update contact');
     }
   };
 

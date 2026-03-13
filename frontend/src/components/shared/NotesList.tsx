@@ -219,7 +219,7 @@ export function NotesList({ entityType, entityId }: NotesListProps) {
             </div>
           ) : notes.length === 0 ? (
             <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
-              No notes yet. Add your first note above.
+              No notes yet.
             </p>
           ) : (
             <ul className="space-y-4">

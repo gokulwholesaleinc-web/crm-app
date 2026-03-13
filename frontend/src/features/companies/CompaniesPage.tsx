@@ -23,6 +23,7 @@ import {
 } from '../../hooks/useCompanies';
 import { getStatusColor, formatStatusLabel } from '../../utils/statusColors';
 import { formatCurrency } from '../../utils/formatters';
+import { showSuccess, showError } from '../../utils/toast';
 import type { Company, CompanyCreate, CompanyUpdate, CompanyFilters } from '../../types';
 
 const statusOptions = [
@@ -256,8 +257,9 @@ export function CompaniesPage() {
     try {
       await deleteCompany.mutateAsync(deleteConfirm.company.id);
       setDeleteConfirm({ isOpen: false, company: null });
-    } catch (error) {
-      console.error('Failed to delete company:', error);
+      showSuccess('Company deleted successfully');
+    } catch {
+      showError('Failed to delete company');
     }
   };
 
@@ -274,13 +276,15 @@ export function CompaniesPage() {
     try {
       if (editingCompany) {
         await updateCompany.mutateAsync({ id: editingCompany.id, data: data as CompanyUpdate });
+        showSuccess('Company updated successfully');
       } else {
         await createCompany.mutateAsync(data as CompanyCreate);
+        showSuccess('Company created successfully');
       }
       setShowForm(false);
       setEditingCompany(null);
-    } catch (error) {
-      console.error('Failed to save company:', error);
+    } catch {
+      showError('Failed to save company');
     }
   };
 

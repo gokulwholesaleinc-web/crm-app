@@ -45,7 +45,7 @@ export function EmailComposeModal({
     <Modal isOpen={isOpen} onClose={onClose} title="Compose Email" size="lg">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label htmlFor="email-to" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="email-to" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
             To
           </label>
           <input
@@ -55,14 +55,15 @@ export function EmailComposeModal({
             required
             value={to}
             onChange={(e) => setTo(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-primary-500 focus:ring-primary-500"
+            className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 shadow-sm text-sm focus-visible:outline-none focus-visible:border-primary-500 focus-visible:ring-1 focus-visible:ring-primary-500"
             placeholder="recipient@example.com..."
             autoComplete="email"
+            spellCheck={false}
           />
         </div>
 
         <div>
-          <label htmlFor="email-subject" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="email-subject" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
             Subject
           </label>
           <input
@@ -72,14 +73,14 @@ export function EmailComposeModal({
             required
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-primary-500 focus:ring-primary-500"
+            className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 shadow-sm text-sm focus-visible:outline-none focus-visible:border-primary-500 focus-visible:ring-1 focus-visible:ring-primary-500"
             placeholder="Email subject..."
             autoComplete="off"
           />
         </div>
 
         <div>
-          <label htmlFor="email-body" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="email-body" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
             Body
           </label>
           <textarea
@@ -89,7 +90,7 @@ export function EmailComposeModal({
             rows={8}
             value={body}
             onChange={(e) => setBody(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-primary-500 focus:ring-primary-500"
+            className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 shadow-sm text-sm focus-visible:outline-none focus-visible:border-primary-500 focus-visible:ring-1 focus-visible:ring-primary-500"
             placeholder="Write your email..."
           />
         </div>

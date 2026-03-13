@@ -196,7 +196,7 @@ export function AuditTimeline({ entityType, entityId }: AuditTimelineProps) {
           </div>
         ) : entries.length === 0 ? (
           <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
-            No change history recorded yet.
+            No audit history yet.
           </p>
         ) : (
           <>

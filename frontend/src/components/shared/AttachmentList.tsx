@@ -233,7 +233,7 @@ export function AttachmentList({ entityType, entityId }: AttachmentListProps) {
             </div>
           ) : attachments.length === 0 ? (
             <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
-              No files attached yet.
+              No attachments yet.
             </p>
           ) : (
             <ul className="divide-y divide-gray-100 dark:divide-gray-700">
