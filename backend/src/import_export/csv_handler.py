@@ -326,7 +326,9 @@ class CSVHandler:
                 decision_map[d["csv_name"].strip().lower()] = d
 
         existing_emails = await self._get_existing_emails(Company)
+        existing_names = await self._get_existing_names(Company)
         seen_emails: Set[str] = set()
+        seen_names: Set[str] = set()
 
         imported = 0
         contacts_created = 0
@@ -358,7 +360,7 @@ class CSVHandler:
                         entity_data["city"] = city
                         entity_data["state"] = state
 
-                # Duplicate detection
+                # Duplicate detection by email
                 email = (entity_data.get("email") or "").lower()
                 if email:
                     if email in existing_emails or email in seen_emails:
@@ -366,6 +368,15 @@ class CSVHandler:
                         errors.append(f"Row {row_num}: skipped duplicate email '{email}'")
                         continue
                     seen_emails.add(email)
+
+                # Duplicate detection by name (for companies without email)
+                company_name = (entity_data.get("name") or "").strip().lower()
+                if company_name and not email:
+                    if company_name in existing_names or company_name in seen_names:
+                        duplicates_skipped += 1
+                        errors.append(f"Row {row_num}: skipped duplicate company '{entity_data.get('name')}'")
+                        continue
+                    seen_names.add(company_name)
 
                 company = Company(**entity_data, owner_id=user_id, created_by_id=user_id)
                 self.db.add(company)
@@ -575,6 +586,15 @@ class CSVHandler:
                 row[field] = cell
             writer.writerow(row)
         return output.getvalue()
+
+    async def _get_existing_names(self, entity_class: Type) -> Set[str]:
+        """Fetch all existing names (lowercased) for an entity type to detect duplicates."""
+        if not hasattr(entity_class, "name"):
+            return set()
+        result = await self.db.execute(
+            select(func.lower(entity_class.name)).where(entity_class.name.isnot(None))
+        )
+        return {row[0] for row in result.all()}
 
     async def _get_existing_emails(self, entity_class: Type) -> Set[str]:
         """Fetch all existing emails for an entity type to detect duplicates."""
