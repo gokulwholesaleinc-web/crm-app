@@ -1,3 +1,17 @@
+# Development stage (used by docker-compose for local dev)
+FROM node:20-alpine AS development
+
+WORKDIR /app
+
+COPY frontend/package*.json ./
+RUN npm ci
+
+COPY frontend/ .
+
+EXPOSE 3000
+
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]
+
 # Build stage
 FROM node:20-alpine AS build
 
@@ -9,7 +23,7 @@ RUN npm ci
 COPY frontend/ .
 RUN npm run build
 
-# Production stage
+# Production stage (default - used by Railway)
 FROM nginx:alpine AS production
 
 COPY --from=build /app/dist /usr/share/nginx/html
@@ -23,17 +37,3 @@ ENV BACKEND_PORT=8000
 EXPOSE 80
 
 CMD ["/docker-entrypoint-custom.sh"]
-
-# Development stage
-FROM node:20-alpine AS development
-
-WORKDIR /app
-
-COPY frontend/package*.json ./
-RUN npm ci
-
-COPY frontend/ .
-
-EXPOSE 3000
-
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]
