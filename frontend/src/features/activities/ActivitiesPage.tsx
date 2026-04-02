@@ -221,7 +221,7 @@ export function ActivitiesPage() {
                     : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
                 )}
               >
-                {Icon && <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
+                {Icon && <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden="true" />}
                 <span className="hidden xs:inline sm:inline">{type.label}</span>
                 <span className="xs:hidden sm:hidden">{type.label.slice(0, 4)}</span>
               </button>
@@ -325,14 +325,14 @@ export function ActivitiesPage() {
         <div className="space-y-3 sm:space-y-4">
           {activities.length === 0 ? (
             <div className="text-center py-8 sm:py-12">
-              <DocumentTextIcon className="mx-auto h-10 w-10 sm:h-12 sm:w-12 text-gray-400" />
+              <DocumentTextIcon className="mx-auto h-10 w-10 sm:h-12 sm:w-12 text-gray-400" aria-hidden="true" />
               <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">No activities</h3>
               <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
                 Get started by creating a new activity.
               </p>
               <div className="mt-4 sm:mt-6">
                 <Button onClick={() => setShowForm(true)} className="w-full sm:w-auto">
-                  <PlusIcon className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
+                  <PlusIcon className="h-4 w-4 sm:h-5 sm:w-5 mr-2" aria-hidden="true" />
                   New Activity
                 </Button>
               </div>

@@ -187,7 +187,7 @@ function ReportsPage() {
       {/* My Reports Section */}
       <section>
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
-          <DocumentTextIcon className="h-5 w-5 text-gray-400" />
+          <DocumentTextIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
           My Reports
         </h2>
         {reportsLoading ? (
@@ -215,7 +215,7 @@ function ReportsPage() {
                     </div>
                     {report.schedule && (
                       <span className="flex-shrink-0 ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
-                        <ClockIcon className="h-3 w-3" />
+                        <ClockIcon className="h-3 w-3" aria-hidden="true" />
                         {report.schedule}
                       </span>
                     )}
@@ -238,7 +238,7 @@ function ReportsPage() {
                       className="p-1.5 text-gray-400 hover:text-red-500 rounded-md hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
                       aria-label={`Delete report ${report.name}`}
                     >
-                      <TrashIcon className="h-4 w-4" />
+                      <TrashIcon className="h-4 w-4" aria-hidden="true" />
                     </button>
                   </div>
                 </CardBody>
@@ -251,7 +251,7 @@ function ReportsPage() {
       {/* Templates Section */}
       <section>
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
-          <ChartBarIcon className="h-5 w-5 text-gray-400" />
+          <ChartBarIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
           Report Templates
         </h2>
         {templatesLoading ? (

@@ -103,7 +103,7 @@ export function FloatingChatWidget() {
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b bg-gradient-to-r from-purple-500 to-indigo-600 rounded-t-xl">
             <div className="flex items-center gap-2 text-white">
-              <SparklesIcon className="h-5 w-5" />
+              <SparklesIcon className="h-5 w-5" aria-hidden="true" />
               <span className="text-sm font-medium">AI Assistant</span>
             </div>
             <div className="flex items-center gap-1">
@@ -112,14 +112,14 @@ export function FloatingChatWidget() {
                 className="p-1 text-white/80 hover:text-white rounded transition-colors"
                 aria-label="Minimize"
               >
-                <MinusIcon className="h-4 w-4" />
+                <MinusIcon className="h-4 w-4" aria-hidden="true" />
               </button>
               <button
                 onClick={handleClose}
                 className="p-1 text-white/80 hover:text-white rounded transition-colors"
                 aria-label="Close"
               >
-                <XMarkIcon className="h-4 w-4" />
+                <XMarkIcon className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
           </div>
@@ -130,7 +130,7 @@ export function FloatingChatWidget() {
               <div className="flex-1 overflow-y-auto p-3 space-y-3">
                 {messages.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full text-center px-4">
-                    <SparklesIcon className="h-8 w-8 text-purple-400 mb-2" />
+                    <SparklesIcon className="h-8 w-8 text-purple-400 mb-2" aria-hidden="true" />
                     <p className="text-sm text-gray-500">
                       Ask me anything about your CRM
                     </p>
@@ -184,7 +184,7 @@ export function FloatingChatWidget() {
                     {isLoading && (
                       <div className="flex items-center gap-2 ml-1">
                         <div className="h-6 w-6 rounded-full bg-purple-100 flex items-center justify-center">
-                          <SparklesIcon className="h-3.5 w-3.5 text-purple-600" />
+                          <SparklesIcon className="h-3.5 w-3.5 text-purple-600" aria-hidden="true" />
                         </div>
                         <div className="bg-gray-100 rounded-xl px-3 py-2">
                           <Spinner size="sm" />
@@ -232,9 +232,9 @@ export function FloatingChatWidget() {
         title="AI Assistant"
       >
         {isOpen ? (
-          <XMarkIcon className="h-6 w-6" />
+          <XMarkIcon className="h-6 w-6" aria-hidden="true" />
         ) : (
-          <SparklesIcon className="h-6 w-6" />
+          <SparklesIcon className="h-6 w-6" aria-hidden="true" />
         )}
       </button>
     </>

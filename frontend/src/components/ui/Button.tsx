@@ -78,13 +78,13 @@ export const Button = ({
       ) : (
         <>
           {leftIcon && (
-            <span className={clsx('mr-2', iconSizeStyles[size])}>
+            <span className={clsx('mr-2', iconSizeStyles[size])} aria-hidden="true">
               {leftIcon}
             </span>
           )}
           {children}
           {rightIcon && (
-            <span className={clsx('ml-2', iconSizeStyles[size])}>
+            <span className={clsx('ml-2', iconSizeStyles[size])} aria-hidden="true">
               {rightIcon}
             </span>
           )}

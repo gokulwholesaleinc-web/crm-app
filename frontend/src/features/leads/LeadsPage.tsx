@@ -423,6 +423,7 @@ function LeadsPage() {
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
+              aria-hidden="true"
             >
               <path
                 strokeLinecap="round"
@@ -565,6 +566,7 @@ function LeadsPage() {
                           type="checkbox"
                           checked={selectedIds.includes(lead.id)}
                           onChange={() => toggleSelectOne(lead.id)}
+                          aria-label={`Select ${lead.first_name} ${lead.last_name}`}
                           className="rounded border-gray-300 text-primary-600 focus-visible:ring-primary-500"
                         />
                       </td>
@@ -597,14 +599,16 @@ function LeadsPage() {
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button
                           onClick={() => handleEdit(lead)}
-                          className="text-primary-600 hover:text-primary-900 dark:hover:text-primary-300 mr-4"
+                          className="text-primary-600 hover:text-primary-900 dark:hover:text-primary-300 mr-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
+                          aria-label={`Edit ${lead.first_name} ${lead.last_name}`}
                         >
                           Edit
                         </button>
                         <button
                           onClick={() => handleDeleteClick(lead)}
-                          className="text-red-600 hover:text-red-900 dark:hover:text-red-300"
+                          className="text-red-600 hover:text-red-900 dark:hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded"
                           disabled={deleteLeadMutation.isPending}
+                          aria-label={`Delete ${lead.first_name} ${lead.last_name}`}
                         >
                           Delete
                         </button>

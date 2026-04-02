@@ -121,7 +121,7 @@ export function ActivityCard({
         )}
       >
         <div className={clsx('p-1 sm:p-1.5 rounded-full flex-shrink-0', colors.bg)}>
-          <Icon className={clsx('h-3.5 w-3.5 sm:h-4 sm:w-4', colors.text)} />
+          <Icon className={clsx('h-3.5 w-3.5 sm:h-4 sm:w-4', colors.text)} aria-hidden="true" />
         </div>
         <div className="flex-1 min-w-0">
           <p
@@ -140,13 +140,13 @@ export function ActivityCard({
           <button
             onClick={() => onComplete(activity.id)}
             className="p-1.5 sm:p-1 rounded hover:bg-gray-200 transition-colors flex-shrink-0 min-h-[36px] min-w-[36px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
-            title="Mark as complete"
+            aria-label="Mark as complete"
           >
-            <CheckCircleIcon className="h-5 w-5 text-gray-400 hover:text-green-500" />
+            <CheckCircleIcon className="h-5 w-5 text-gray-400 hover:text-green-500" aria-hidden="true" />
           </button>
         )}
         {activity.is_completed && (
-          <CheckCircleSolidIcon className="h-5 w-5 text-green-500 flex-shrink-0" />
+          <CheckCircleSolidIcon className="h-5 w-5 text-green-500 flex-shrink-0" aria-hidden="true" />
         )}
       </div>
     );
@@ -161,7 +161,7 @@ export function ActivityCard({
     >
       <div className="flex items-start gap-3 sm:gap-4">
         <div className={clsx('p-1.5 sm:p-2 rounded-lg flex-shrink-0', colors.bg)}>
-          <Icon className={clsx('h-4 w-4 sm:h-5 sm:w-5', colors.text)} />
+          <Icon className={clsx('h-4 w-4 sm:h-5 sm:w-5', colors.text)} aria-hidden="true" />
         </div>
         <div className="flex-1 min-w-0">
           {/* Header row - stacks on very small screens */}
@@ -182,7 +182,7 @@ export function ActivityCard({
               )}
               {isOverdue && (
                 <span className="flex items-center gap-0.5 sm:gap-1 text-[10px] sm:text-xs text-red-600">
-                  <ExclamationTriangleIcon className="h-3 w-3 sm:h-4 sm:w-4" />
+                  <ExclamationTriangleIcon className="h-3 w-3 sm:h-4 sm:w-4" aria-hidden="true" />
                   <span className="hidden xs:inline">Overdue</span>
                 </span>
               )}
@@ -196,13 +196,13 @@ export function ActivityCard({
           <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-2 text-[10px] sm:text-xs text-gray-500">
             {activity.scheduled_at && (
               <span className="flex items-center gap-0.5 sm:gap-1">
-                <ClockIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                <ClockIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5" aria-hidden="true" />
                 <span className="truncate max-w-[100px] sm:max-w-none">{formatDate(activity.scheduled_at)}</span>
               </span>
             )}
             {activity.due_date && (
               <span className={clsx('flex items-center gap-0.5 sm:gap-1', isOverdue && 'text-red-600')}>
-                <CalendarIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                <CalendarIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5" aria-hidden="true" />
                 <span className="truncate max-w-[100px] sm:max-w-none">Due: {formatDate(activity.due_date)}</span>
               </span>
             )}
@@ -212,7 +212,7 @@ export function ActivityCard({
 
           {activity.completed_at && (
             <p className="text-[10px] sm:text-xs text-green-600 mt-2 flex items-center gap-0.5 sm:gap-1">
-              <CheckCircleSolidIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+              <CheckCircleSolidIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5" aria-hidden="true" />
               Completed {formatDate(activity.completed_at)}
             </p>
           )}
@@ -231,7 +231,7 @@ export function ActivityCard({
           )}
           {activity.is_completed && (
             <div className="p-2 sm:p-1.5">
-              <CheckCircleSolidIcon className="h-5 w-5 text-green-500" />
+              <CheckCircleSolidIcon className="h-5 w-5 text-green-500" aria-hidden="true" />
             </div>
           )}
           {onEdit && (

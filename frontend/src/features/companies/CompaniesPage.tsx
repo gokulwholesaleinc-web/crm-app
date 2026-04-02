@@ -87,7 +87,7 @@ function CompanyCard({
             />
           ) : (
             <div className="h-12 w-12 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
-              <BuildingOffice2Icon className="h-6 w-6 text-gray-400" />
+              <BuildingOffice2Icon className="h-6 w-6 text-gray-400" aria-hidden="true" />
             </div>
           )}
         </div>
@@ -157,7 +157,7 @@ function CompanyCard({
                 onClick={(e) => e.stopPropagation()}
                 className="flex items-center gap-1 hover:text-primary-600"
               >
-                <GlobeAltIcon className="h-4 w-4 flex-shrink-0" />
+                <GlobeAltIcon className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
                 <span className="truncate max-w-[150px]">
                   {company.website.replace(/^https?:\/\//, '')}
                 </span>
@@ -169,7 +169,7 @@ function CompanyCard({
                 onClick={(e) => e.stopPropagation()}
                 className="flex items-center gap-1 hover:text-primary-600"
               >
-                <EnvelopeIcon className="h-4 w-4 flex-shrink-0" />
+                <EnvelopeIcon className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
                 <span className="truncate max-w-[180px]">{company.email}</span>
               </a>
             )}
@@ -179,12 +179,12 @@ function CompanyCard({
                 onClick={(e) => e.stopPropagation()}
                 className="flex items-center gap-1 hover:text-primary-600"
               >
-                <PhoneIcon className="h-4 w-4 flex-shrink-0" />
+                <PhoneIcon className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
                 <span>{company.phone}</span>
               </a>
             )}
             <span className="flex items-center gap-1">
-              <UsersIcon className="h-4 w-4 flex-shrink-0" />
+              <UsersIcon className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
               {company.contact_count} {company.contact_count === 1 ? 'contact' : 'contacts'}
             </span>
           </div>
@@ -465,7 +465,7 @@ export function CompaniesPage() {
         </div>
       ) : companies.length === 0 ? (
         <div className="text-center py-12 px-4">
-          <BuildingOffice2Icon className="mx-auto h-12 w-12 text-gray-400" />
+          <BuildingOffice2Icon className="mx-auto h-12 w-12 text-gray-400" aria-hidden="true" />
           <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">No companies</h3>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             Get started by adding a new company.

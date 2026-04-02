@@ -245,7 +245,7 @@ function ContactsPage() {
       {savedFilters && savedFilters.length > 0 && (
         <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4 border border-transparent dark:border-gray-700">
           <div className="flex items-center gap-2 mb-3">
-            <BookmarkIcon className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+            <BookmarkIcon className="h-4 w-4 text-gray-500 dark:text-gray-400" aria-hidden="true" />
             <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Smart Lists</h3>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -280,7 +280,7 @@ function ContactsPage() {
                     className="p-0.5 text-gray-400 hover:text-red-500 rounded"
                     aria-label={`Delete ${filter.name} smart list`}
                   >
-                    <XMarkIcon className="h-3.5 w-3.5" />
+                    <XMarkIcon className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
                 )}
               </div>
@@ -292,7 +292,7 @@ function ContactsPage() {
       {/* Active Filter Banner */}
       {activeFilters && (
         <div className="flex items-center gap-2 px-4 py-2 bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-lg">
-          <FunnelIcon className="h-4 w-4 text-primary-600 dark:text-primary-400" />
+          <FunnelIcon className="h-4 w-4 text-primary-600 dark:text-primary-400" aria-hidden="true" />
           <span className="text-sm text-primary-800 dark:text-primary-200 font-medium">
             {activeSmartListName ? `Smart List: ${activeSmartListName}` : 'Custom filters applied'}
           </span>
@@ -322,6 +322,7 @@ function ContactsPage() {
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"
@@ -383,6 +384,7 @@ function ContactsPage() {
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
+              aria-hidden="true"
             >
               <path
                 strokeLinecap="round"
