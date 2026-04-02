@@ -23,10 +23,16 @@ from src.companies.models import Company
 from src.leads.models import Lead, LeadSource
 from src.opportunities.models import Opportunity, PipelineStage
 from src.activities.models import Activity
-from src.campaigns.models import Campaign, CampaignMember
-from src.dashboard.models import DashboardNumberCard, DashboardChart
+from src.campaigns.models import Campaign, CampaignMember, EmailTemplate, EmailCampaignStep
+from src.dashboard.models import DashboardNumberCard, DashboardChart, DashboardReportWidget
 from src.ai.models import AIEmbedding, AIConversation
 from src.whitelabel.models import Tenant, TenantSettings, TenantUser
+from src.meta.models import CompanyMetaData, MetaCredential, MetaLeadCapture
+from src.integrations.google_calendar.models import GoogleCalendarCredential, CalendarSyncEvent
+from src.email.models import EmailQueue
+from src.reports.models import SavedReport
+from src.sequences.models import Sequence, SequenceEnrollment
+from src.notifications.models import Notification
 
 # Alembic Config object
 config = context.config

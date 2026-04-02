@@ -128,6 +128,21 @@ async def _run_production_migrations():
                 "ALTER TABLE companies ADD COLUMN IF NOT EXISTS account_manager VARCHAR(255)",
                 "ALTER TABLE email_queue ADD COLUMN IF NOT EXISTS retry_count INTEGER DEFAULT 0 NOT NULL",
                 "ALTER TABLE email_queue ADD COLUMN IF NOT EXISTS next_retry_at TIMESTAMPTZ",
+                # Infrastructure buildout: campaign multi-step execution
+                "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS current_step INTEGER DEFAULT 0",
+                "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS next_step_at TIMESTAMPTZ",
+                "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS is_executing BOOLEAN DEFAULT FALSE",
+                # Campaign member tracking: Date → DateTime
+                "ALTER TABLE campaign_members ALTER COLUMN sent_at TYPE TIMESTAMPTZ USING sent_at::TIMESTAMPTZ",
+                "ALTER TABLE campaign_members ALTER COLUMN responded_at TYPE TIMESTAMPTZ USING responded_at::TIMESTAMPTZ",
+                "ALTER TABLE campaign_members ALTER COLUMN converted_at TYPE TIMESTAMPTZ USING converted_at::TIMESTAMPTZ",
+                # Scheduled report delivery
+                "ALTER TABLE saved_reports ADD COLUMN IF NOT EXISTS last_sent_at TIMESTAMPTZ",
+                # Meta integration: Instagram fields
+                "ALTER TABLE company_meta_data ADD COLUMN IF NOT EXISTS instagram_id VARCHAR(100)",
+                "ALTER TABLE company_meta_data ADD COLUMN IF NOT EXISTS instagram_username VARCHAR(255)",
+                "ALTER TABLE company_meta_data ADD COLUMN IF NOT EXISTS instagram_followers INTEGER",
+                "ALTER TABLE company_meta_data ADD COLUMN IF NOT EXISTS instagram_media_count INTEGER",
             ]
             for sql in column_migrations:
                 try:
