@@ -397,8 +397,14 @@ async def reseed_demo_data(current_user: CurrentUser):
 
         demo_id = demo_user.id
 
-        # Delete all demo user's data in dependency order
-        await session.execute(delete(EntityTag))
+        # Delete demo user's data in dependency order
+        # Scope EntityTag deletions to demo user's entities only
+        from sqlalchemy import and_
+        for etype, model in [("contacts", Contact), ("companies", Company), ("leads", Lead), ("opportunities", Opportunity)]:
+            demo_ids_q = select(model.id).where(model.owner_id == demo_id)
+            await session.execute(
+                delete(EntityTag).where(and_(EntityTag.entity_type == etype, EntityTag.entity_id.in_(demo_ids_q)))
+            )
         await session.execute(delete(Note).where(Note.created_by_id == demo_id))
         await session.execute(delete(Activity).where(Activity.owner_id == demo_id))
         await session.execute(delete(Opportunity).where(Opportunity.owner_id == demo_id))

@@ -135,6 +135,19 @@ async def track_click(
     url: str = Query(..., description="The destination URL"),
 ):
     """Track email link click and redirect to destination."""
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise HTTPException(status_code=400, detail="Invalid redirect URL")
+    # Block redirects to private/internal IPs
+    import ipaddress
+    try:
+        import socket
+        ip = socket.gethostbyname(parsed.hostname or "")
+        if ipaddress.ip_address(ip).is_private:
+            raise HTTPException(status_code=400, detail="Invalid redirect URL")
+    except (socket.gaierror, ValueError):
+        pass
     service = EmailService(db)
     await service.record_click(email_id)
     return RedirectResponse(url=url, status_code=302)

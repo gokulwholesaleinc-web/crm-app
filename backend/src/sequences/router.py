@@ -1,9 +1,11 @@
 """Sales sequence API routes."""
 
-from typing import Optional, List
-from fastapi import APIRouter, Query
+from typing import Annotated, Optional, List
+from fastapi import APIRouter, Depends, Query
+from src.auth.models import User
 from src.core.constants import HTTPStatus
 from src.core.router_utils import DBSession, CurrentUser, raise_not_found, raise_bad_request
+from src.core.permissions import require_manager_or_above
 from src.sequences.schemas import (
     SequenceCreate,
     SequenceUpdate,
@@ -158,7 +160,7 @@ async def resume_enrollment(
 
 @router.post("/process-due", response_model=ProcessDueResult)
 async def process_due_steps(
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_manager_or_above)],
     db: DBSession,
 ):
     """Process all due enrollment steps."""

@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 class Settings(BaseSettings):
     DATABASE_URL: str = ""
 
-    SECRET_KEY: str = "dev-secret-key-change-in-production"
+    SECRET_KEY: str  # Required — no default, fails at startup if missing
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 

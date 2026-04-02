@@ -56,8 +56,26 @@ class WebhookService(BaseService[Webhook]):
         webhooks = list(result.scalars().all())
         return webhooks, total
 
+    @staticmethod
+    def _validate_webhook_url(url: str) -> None:
+        """Reject private/internal URLs to prevent SSRF."""
+        from urllib.parse import urlparse
+        import ipaddress, socket
+        parsed = urlparse(url)
+        if parsed.scheme not in ("https",):
+            raise ValueError("Webhook URL must use HTTPS")
+        if not parsed.hostname:
+            raise ValueError("Invalid webhook URL")
+        try:
+            ip = socket.gethostbyname(parsed.hostname)
+            if ipaddress.ip_address(ip).is_private:
+                raise ValueError("Webhook URL must not point to a private IP")
+        except socket.gaierror:
+            pass  # allow unresolvable hosts (may resolve at delivery time)
+
     async def create_webhook(self, data: WebhookCreate, user_id: int) -> Webhook:
         """Create a new webhook."""
+        self._validate_webhook_url(data.url)
         webhook = Webhook(**data.model_dump(), created_by_id=user_id)
         self.db.add(webhook)
         await self.db.flush()

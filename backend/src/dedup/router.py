@@ -1,11 +1,13 @@
 """Duplicate detection and merge API routes."""
 
-from typing import Dict, Any, List
+from typing import Annotated, Dict, Any, List
 from pydantic import BaseModel
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from src.auth.models import User
 from src.core.constants import HTTPStatus
 from src.core.router_utils import DBSession, CurrentUser, raise_bad_request
+from src.core.permissions import require_manager_or_above
 from src.dedup.service import DedupService
 
 
@@ -57,7 +59,7 @@ async def check_duplicates(
 @router.post("/merge", response_model=MergeResponse)
 async def merge_entities(
     request: MergeRequest,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_manager_or_above)],
     db: DBSession,
 ):
     """Merge two records of the same entity type. Secondary is merged into primary."""
