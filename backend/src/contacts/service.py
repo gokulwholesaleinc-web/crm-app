@@ -1,7 +1,7 @@
 """Contact service layer."""
 
 from typing import Optional, List, Tuple, Any, Dict
-from sqlalchemy import select, func, or_
+from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from src.contacts.models import Contact
 from src.core.filtering import apply_filters_to_query, build_token_search
@@ -53,54 +53,12 @@ class ContactService(
         if status:
             query = query.where(Contact.status == status)
 
-        if owner_id:
-            if shared_entity_ids:
-                query = query.where(or_(Contact.owner_id == owner_id, Contact.id.in_(shared_entity_ids)))
-            else:
-                query = query.where(Contact.owner_id == owner_id)
+        query = self.apply_owner_filter(query, owner_id, shared_entity_ids)
 
         if tag_ids:
             query = await self._filter_by_tags(query, tag_ids)
 
-        count_query = select(func.count()).select_from(query.subquery())
-        total_result = await self.db.execute(count_query)
-        total = total_result.scalar()
-
-        offset = (page - 1) * page_size
-        query = query.offset(offset).limit(page_size).order_by(Contact.created_at.desc())
-
-        result = await self.db.execute(query)
-        contacts = list(result.scalars().all())
-
-        return contacts, total
-
-    async def create(self, data: ContactCreate, user_id: int) -> Contact:
-        """Create a new contact."""
-        contact = await super().create(data, user_id)
-
-        # Add tags
-        if data.tag_ids:
-            await self.update_tags(contact.id, data.tag_ids)
-            await self.db.refresh(contact)
-
-        return contact
-
-    async def update(self, contact: Contact, data: ContactUpdate, user_id: int) -> Contact:
-        """Update a contact."""
-        contact = await super().update(contact, data, user_id)
-
-        # Update tags if provided
-        if data.tag_ids is not None:
-            await self.update_tags(contact.id, data.tag_ids)
-            await self.db.refresh(contact)
-
-        return contact
-
-    async def delete(self, contact: Contact) -> None:
-        """Delete a contact."""
-        # Remove tag associations
-        await self.clear_tags(contact.id)
-        await super().delete(contact)
+        return await self.paginate_query(query, page, page_size)
 
     async def get_payment_summary(self, contact_id: int) -> dict:
         """Get payment summary for a contact via their StripeCustomer link."""

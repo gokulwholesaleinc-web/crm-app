@@ -14,15 +14,6 @@ from src.core.filtering import build_token_search
 from src.email.branded_templates import TenantBrandingHelper, render_proposal_email
 from src.email.service import EmailService
 
-# Valid status transitions
-VALID_TRANSITIONS = {
-    "draft": ["sent"],
-    "sent": ["viewed", "accepted", "rejected"],
-    "viewed": ["accepted", "rejected"],
-    "accepted": [],
-    "rejected": [],
-}
-
 
 class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreate, ProposalUpdate]):
     """Service for Proposal CRUD operations."""

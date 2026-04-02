@@ -1,7 +1,7 @@
 """Opportunity service layer."""
 
 from typing import Optional, List, Tuple, Any, Dict
-from sqlalchemy import select, func, or_
+from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from src.opportunities.models import Opportunity, PipelineStage
 from src.core.filtering import apply_filters_to_query, build_token_search
@@ -72,51 +72,12 @@ class OpportunityService(
         if company_id:
             query = query.where(Opportunity.company_id == company_id)
 
-        if owner_id:
-            if shared_entity_ids:
-                query = query.where(or_(Opportunity.owner_id == owner_id, Opportunity.id.in_(shared_entity_ids)))
-            else:
-                query = query.where(Opportunity.owner_id == owner_id)
+        query = self.apply_owner_filter(query, owner_id, shared_entity_ids)
 
         if tag_ids:
             query = await self._filter_by_tags(query, tag_ids)
 
-        count_query = select(func.count()).select_from(query.subquery())
-        total_result = await self.db.execute(count_query)
-        total = total_result.scalar()
-
-        offset = (page - 1) * page_size
-        query = query.offset(offset).limit(page_size).order_by(Opportunity.created_at.desc())
-
-        result = await self.db.execute(query)
-        opportunities = list(result.scalars().all())
-
-        return opportunities, total
-
-    async def create(self, data: OpportunityCreate, user_id: int) -> Opportunity:
-        """Create a new opportunity."""
-        opportunity = await super().create(data, user_id)
-
-        if data.tag_ids:
-            await self.update_tags(opportunity.id, data.tag_ids)
-            await self.db.refresh(opportunity)
-
-        return opportunity
-
-    async def update(self, opportunity: Opportunity, data: OpportunityUpdate, user_id: int) -> Opportunity:
-        """Update an opportunity."""
-        opportunity = await super().update(opportunity, data, user_id)
-
-        if data.tag_ids is not None:
-            await self.update_tags(opportunity.id, data.tag_ids)
-            await self.db.refresh(opportunity)
-
-        return opportunity
-
-    async def delete(self, opportunity: Opportunity) -> None:
-        """Delete an opportunity."""
-        await self.clear_tags(opportunity.id)
-        await super().delete(opportunity)
+        return await self.paginate_query(query, page, page_size)
 
 
 

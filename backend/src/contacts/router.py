@@ -8,9 +8,13 @@ from src.core.router_utils import (
     DBSession,
     CurrentUser,
     parse_tag_ids,
+    parse_json_filters,
+    effective_owner_id,
     get_entity_or_404,
     calculate_pages,
     check_ownership,
+    build_response_with_tags,
+    build_list_responses_with_tags,
 )
 from src.core.data_scope import DataScope, get_data_scope, check_record_access_or_shared
 from src.contacts.schemas import (
@@ -48,11 +52,7 @@ router = APIRouter(prefix="/api/contacts", tags=["contacts"])
 
 
 async def _build_contact_response(service: ContactService, contact) -> ContactResponse:
-    """Build a ContactResponse with tags."""
-    tags = await service.get_tags(contact.id)
-    response_dict = ContactResponse.model_validate(contact).model_dump()
-    response_dict["tags"] = [TagBrief.model_validate(t) for t in tags]
-    return ContactResponse(**response_dict)
+    return await build_response_with_tags(service, contact, ContactResponse, TagBrief)
 
 
 @router.get("", response_model=ContactListResponse)
@@ -70,20 +70,6 @@ async def list_contacts(
     filters: Optional[str] = None,
 ):
     """List contacts with pagination and filters."""
-    import json as _json
-    from fastapi import HTTPException
-    parsed_filters = None
-    if filters:
-        try:
-            parsed_filters = _json.loads(filters)
-        except _json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail="Invalid JSON filter format")
-
-    if data_scope.can_see_all():
-        effective_owner_id = owner_id
-    else:
-        effective_owner_id = data_scope.owner_id
-
     service = ContactService(db)
 
     contacts, total = await service.get_list(
@@ -92,24 +78,16 @@ async def list_contacts(
         search=search,
         company_id=company_id,
         status=status,
-        owner_id=effective_owner_id,
+        owner_id=effective_owner_id(data_scope, owner_id),
         tag_ids=parse_tag_ids(tag_ids),
-        filters=parsed_filters,
+        filters=parse_json_filters(filters),
         shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_CONTACTS),
     )
 
-    # Bulk-load tags in a single query to avoid N+1
-    entity_ids = [contact.id for contact in contacts]
-    tags_map = await service.get_tags_for_entities(entity_ids)
-
-    contact_responses = []
-    for contact in contacts:
-        response_dict = ContactResponse.model_validate(contact).model_dump()
-        response_dict["tags"] = [TagBrief.model_validate(t) for t in tags_map.get(contact.id, [])]
-        contact_responses.append(ContactResponse(**response_dict))
+    tags_map = await service.get_tags_for_entities([c.id for c in contacts])
 
     return ContactListResponse(
-        items=contact_responses,
+        items=build_list_responses_with_tags(contacts, tags_map, ContactResponse, TagBrief),
         total=total,
         page=page,
         page_size=page_size,

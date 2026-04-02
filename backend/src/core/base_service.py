@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from typing import TypeVar, Generic, Optional, List, Tuple, Type, Any, Dict
 from collections import defaultdict
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload, InstrumentedAttribute
 from pydantic import BaseModel
@@ -22,6 +22,8 @@ class BaseService(Generic[ModelType]):
     Provides:
     - get_by_id: Fetch single record by ID
     - get_multi: Fetch paginated list of records
+    - paginate_query: Execute a query with pagination and count
+    - apply_owner_filter: Filter by owner_id with shared entity support
     """
 
     model: Type[ModelType]
@@ -47,6 +49,38 @@ class BaseService(Generic[ModelType]):
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
+    async def paginate_query(
+        self,
+        query,
+        page: int = 1,
+        page_size: int = DEFAULT_PAGE_SIZE,
+        order_by=None,
+    ) -> Tuple[List[ModelType], int]:
+        """Execute a query with count and pagination. Returns (items, total)."""
+        count_query = select(func.count()).select_from(query.subquery())
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar() or 0
+
+        if order_by is not None:
+            query = query.order_by(order_by)
+        elif hasattr(self.model, 'created_at'):
+            query = query.order_by(self.model.created_at.desc())
+
+        offset = (page - 1) * page_size
+        query = query.offset(offset).limit(page_size)
+
+        result = await self.db.execute(query)
+        items = list(result.scalars().all())
+        return items, total
+
+    def apply_owner_filter(self, query, owner_id: Optional[int], shared_entity_ids: Optional[List[int]] = None):
+        """Filter by owner_id, including shared entities if present."""
+        if not owner_id:
+            return query
+        if shared_entity_ids:
+            return query.where(or_(self.model.owner_id == owner_id, self.model.id.in_(shared_entity_ids)))
+        return query.where(self.model.owner_id == owner_id)
+
     async def get_multi(
         self,
         page: int = 1,
@@ -64,25 +98,11 @@ class BaseService(Generic[ModelType]):
         for option in self._get_eager_load_options():
             query = query.options(option)
 
-        # Get total count
-        count_query = select(func.count()).select_from(query.subquery())
-        total_result = await self.db.execute(count_query)
-        total = total_result.scalar() or 0
-
-        # Apply ordering
+        sort_col = None
         if order_by is not None:
-            query = query.order_by(order_by.desc() if order_desc else order_by.asc())
-        elif hasattr(self.model, 'created_at'):
-            query = query.order_by(self.model.created_at.desc())
+            sort_col = order_by.desc() if order_desc else order_by.asc()
 
-        # Apply pagination
-        offset = (page - 1) * page_size
-        query = query.offset(offset).limit(page_size)
-
-        result = await self.db.execute(query)
-        items = list(result.scalars().all())
-
-        return items, total
+        return await self.paginate_query(query, page, page_size, order_by=sort_col)
 
 
 class CRUDService(BaseService[ModelType], Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
@@ -106,14 +126,7 @@ class CRUDService(BaseService[ModelType], Generic[ModelType, CreateSchemaType, U
         user_id: int,
         **extra_fields,
     ) -> ModelType:
-        """
-        Create a new record.
-
-        Args:
-            data: Pydantic schema with creation data
-            user_id: ID of user creating the record
-            **extra_fields: Additional fields to set on the model
-        """
+        """Create a new record, auto-handling tags if TaggableServiceMixin is present."""
         model_data = data.model_dump(exclude=self.create_exclude_fields)
         model_data.update(extra_fields)
         model_data["created_by_id"] = user_id
@@ -122,6 +135,11 @@ class CRUDService(BaseService[ModelType], Generic[ModelType, CreateSchemaType, U
         self.db.add(instance)
         await self.db.flush()
         await self.db.refresh(instance)
+
+        if hasattr(data, 'tag_ids') and data.tag_ids and hasattr(self, 'update_tags'):
+            await self.update_tags(instance.id, data.tag_ids)
+            await self.db.refresh(instance)
+
         return instance
 
     async def update(
@@ -130,14 +148,7 @@ class CRUDService(BaseService[ModelType], Generic[ModelType, CreateSchemaType, U
         data: UpdateSchemaType,
         user_id: int,
     ) -> ModelType:
-        """
-        Update an existing record.
-
-        Args:
-            instance: The model instance to update
-            data: Pydantic schema with update data
-            user_id: ID of user making the update
-        """
+        """Update an existing record, auto-handling tags if TaggableServiceMixin is present."""
         update_data = data.model_dump(exclude=self.update_exclude_fields, exclude_unset=True)
 
         for field, value in update_data.items():
@@ -148,10 +159,17 @@ class CRUDService(BaseService[ModelType], Generic[ModelType, CreateSchemaType, U
 
         await self.db.flush()
         await self.db.refresh(instance)
+
+        if hasattr(data, 'tag_ids') and data.tag_ids is not None and hasattr(self, 'update_tags'):
+            await self.update_tags(instance.id, data.tag_ids)
+            await self.db.refresh(instance)
+
         return instance
 
     async def delete(self, instance: ModelType) -> None:
-        """Delete a record."""
+        """Delete a record, clearing tags if TaggableServiceMixin is present."""
+        if hasattr(self, 'clear_tags'):
+            await self.clear_tags(instance.id)
         await self.db.delete(instance)
         await self.db.flush()
 

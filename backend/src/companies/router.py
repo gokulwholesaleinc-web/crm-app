@@ -8,9 +8,12 @@ from src.core.router_utils import (
     DBSession,
     CurrentUser,
     parse_tag_ids,
+    parse_json_filters,
+    effective_owner_id,
     get_entity_or_404,
     calculate_pages,
     check_ownership,
+    build_response_with_tags,
 )
 from src.core.data_scope import DataScope, get_data_scope, check_record_access_or_shared
 from src.companies.schemas import (
@@ -61,20 +64,6 @@ async def list_companies(
     filters: Optional[str] = None,
 ):
     """List companies with pagination and filters."""
-    import json as _json
-    from fastapi import HTTPException
-    parsed_filters = None
-    if filters:
-        try:
-            parsed_filters = _json.loads(filters)
-        except _json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail="Invalid JSON filter format")
-
-    if data_scope.can_see_all():
-        effective_owner_id = owner_id
-    else:
-        effective_owner_id = data_scope.owner_id
-
     service = CompanyService(db)
 
     companies, total = await service.get_list(
@@ -83,9 +72,9 @@ async def list_companies(
         search=search,
         status=status,
         industry=industry,
-        owner_id=effective_owner_id,
+        owner_id=effective_owner_id(data_scope, owner_id),
         tag_ids=parse_tag_ids(tag_ids),
-        filters=parsed_filters,
+        filters=parse_json_filters(filters),
         shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_COMPANIES),
     )
 

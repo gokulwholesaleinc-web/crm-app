@@ -1,7 +1,7 @@
 """Lead service layer."""
 
 from typing import Optional, List, Tuple, Any, Dict
-from sqlalchemy import select, func, or_
+from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from src.leads.models import Lead, LeadSource
 from src.core.filtering import apply_filters_to_query, build_token_search
@@ -54,11 +54,7 @@ class LeadService(
         if source_id:
             query = query.where(Lead.source_id == source_id)
 
-        if owner_id:
-            if shared_entity_ids:
-                query = query.where(or_(Lead.owner_id == owner_id, Lead.id.in_(shared_entity_ids)))
-            else:
-                query = query.where(Lead.owner_id == owner_id)
+        query = self.apply_owner_filter(query, owner_id, shared_entity_ids)
 
         if min_score is not None:
             query = query.where(Lead.score >= min_score)
@@ -66,17 +62,7 @@ class LeadService(
         if tag_ids:
             query = await self._filter_by_tags(query, tag_ids)
 
-        count_query = select(func.count()).select_from(query.subquery())
-        total_result = await self.db.execute(count_query)
-        total = total_result.scalar()
-
-        offset = (page - 1) * page_size
-        query = query.offset(offset).limit(page_size).order_by(Lead.score.desc(), Lead.created_at.desc())
-
-        result = await self.db.execute(query)
-        leads = list(result.scalars().all())
-
-        return leads, total
+        return await self.paginate_query(query, page, page_size, order_by=Lead.score.desc())
 
     async def create(self, data: LeadCreate, user_id: int) -> Lead:
         """Create a new lead with auto-scoring."""
@@ -91,9 +77,6 @@ class LeadService(
         score, score_factors = calculate_lead_score(lead, source_name)
         lead.score = score
         lead.score_factors = score_factors
-
-        if data.tag_ids:
-            await self.update_tags(lead.id, data.tag_ids)
 
         await self.db.flush()
         await self.db.refresh(lead)
@@ -113,17 +96,9 @@ class LeadService(
         lead.score = score
         lead.score_factors = score_factors
 
-        if data.tag_ids is not None:
-            await self.update_tags(lead.id, data.tag_ids)
-
         await self.db.flush()
         await self.db.refresh(lead)
         return lead
-
-    async def delete(self, lead: Lead) -> None:
-        """Delete a lead."""
-        await self.clear_tags(lead.id)
-        await super().delete(lead)
 
 
     # Lead Source methods

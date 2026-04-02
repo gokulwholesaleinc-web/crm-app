@@ -1,7 +1,7 @@
 """Company service layer."""
 
 from typing import Optional, List, Tuple, Any, Dict
-from sqlalchemy import select, func, or_
+from sqlalchemy import select, func
 from src.companies.models import Company
 from src.core.filtering import apply_filters_to_query, build_token_search
 from src.companies.schemas import CompanyCreate, CompanyUpdate
@@ -48,51 +48,12 @@ class CompanyService(
         if industry:
             query = query.where(Company.industry == industry)
 
-        if owner_id:
-            if shared_entity_ids:
-                query = query.where(or_(Company.owner_id == owner_id, Company.id.in_(shared_entity_ids)))
-            else:
-                query = query.where(Company.owner_id == owner_id)
+        query = self.apply_owner_filter(query, owner_id, shared_entity_ids)
 
         if tag_ids:
             query = await self._filter_by_tags(query, tag_ids)
 
-        count_query = select(func.count()).select_from(query.subquery())
-        total_result = await self.db.execute(count_query)
-        total = total_result.scalar()
-
-        offset = (page - 1) * page_size
-        query = query.offset(offset).limit(page_size).order_by(Company.created_at.desc())
-
-        result = await self.db.execute(query)
-        companies = list(result.scalars().all())
-
-        return companies, total
-
-    async def create(self, data: CompanyCreate, user_id: int) -> Company:
-        """Create a new company."""
-        company = await super().create(data, user_id)
-
-        if data.tag_ids:
-            await self.update_tags(company.id, data.tag_ids)
-            await self.db.refresh(company)
-
-        return company
-
-    async def update(self, company: Company, data: CompanyUpdate, user_id: int) -> Company:
-        """Update a company."""
-        company = await super().update(company, data, user_id)
-
-        if data.tag_ids is not None:
-            await self.update_tags(company.id, data.tag_ids)
-            await self.db.refresh(company)
-
-        return company
-
-    async def delete(self, company: Company) -> None:
-        """Delete a company."""
-        await self.clear_tags(company.id)
-        await super().delete(company)
+        return await self.paginate_query(query, page, page_size)
 
 
     async def get_contact_count(self, company_id: int) -> int:

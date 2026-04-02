@@ -18,16 +18,6 @@ from src.email.branded_templates import TenantBrandingHelper, render_quote_email
 from src.email.pdf_service import BrandedPDFGenerator
 from src.email.service import EmailService
 
-# Valid status transitions
-VALID_TRANSITIONS = {
-    "draft": ["sent"],
-    "sent": ["viewed", "accepted", "rejected"],
-    "viewed": ["accepted", "rejected"],
-    "accepted": [],
-    "rejected": [],
-    "expired": [],
-}
-
 
 class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteUpdate]):
     """Service for Quote CRUD operations."""

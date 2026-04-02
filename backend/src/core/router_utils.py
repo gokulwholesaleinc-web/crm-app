@@ -1,5 +1,6 @@
 """Common router utilities and helpers for DRY code."""
 
+import json as _json
 from typing import Annotated, Optional, List, TypeVar, Any
 from fastapi import Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -90,21 +91,6 @@ def raise_bad_request(message: str) -> None:
     )
 
 
-def raise_conflict(message: str) -> None:
-    """
-    Raise an HTTPException with 409 status for conflict.
-
-    Args:
-        message: Error message to return
-
-    Raises:
-        HTTPException: Always raises with 409 status
-    """
-    raise HTTPException(
-        status_code=HTTPStatus.CONFLICT,
-        detail=message,
-    )
-
 
 def raise_forbidden(message: str = None) -> None:
     """
@@ -176,32 +162,40 @@ async def get_entity_or_404(
 
 
 def calculate_pages(total: int, page_size: int) -> int:
-    """
-    Calculate the total number of pages.
-
-    Args:
-        total: Total number of items
-        page_size: Items per page
-
-    Returns:
-        Total number of pages
-    """
+    """Calculate the total number of pages."""
     return (total + page_size - 1) // page_size
 
 
-# Common query parameter factories
-def pagination_params(
-    page: int = Query(1, ge=1, description="Page number"),
-    page_size: int = Query(20, ge=1, le=100, description="Items per page"),
-) -> dict:
-    """
-    Common pagination query parameters.
-
-    Returns:
-        Dictionary with page and page_size
-    """
-    return {"page": page, "page_size": page_size}
+def parse_json_filters(filters: Optional[str]) -> Optional[dict]:
+    """Parse a JSON filter string, raising 400 on invalid JSON."""
+    if not filters:
+        return None
+    try:
+        return _json.loads(filters)
+    except _json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON filter format")
 
 
-# Type alias for pagination dependency
-PaginationParams = Annotated[dict, Depends(pagination_params)]
+def effective_owner_id(data_scope, requested_owner_id: Optional[int] = None) -> Optional[int]:
+    """Return the effective owner_id based on data scope permissions."""
+    if data_scope.can_see_all():
+        return requested_owner_id
+    return data_scope.owner_id
+
+
+async def build_response_with_tags(service, entity, response_model, tag_brief_model):
+    """Build a single entity response with tags loaded."""
+    tags = await service.get_tags(entity.id)
+    response_dict = response_model.model_validate(entity).model_dump()
+    response_dict["tags"] = [tag_brief_model.model_validate(t) for t in tags]
+    return response_model(**response_dict)
+
+
+def build_list_responses_with_tags(items, tags_map, response_model, tag_brief_model) -> List:
+    """Build a list of entity responses with pre-loaded tags map."""
+    responses = []
+    for item in items:
+        response_dict = response_model.model_validate(item).model_dump()
+        response_dict["tags"] = [tag_brief_model.model_validate(t) for t in tags_map.get(item.id, [])]
+        responses.append(response_model(**response_dict))
+    return responses
