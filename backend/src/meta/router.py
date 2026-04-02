@@ -183,7 +183,7 @@ async def receive_webhook(
     raw_body = await request.body()
     if settings.META_APP_SECRET:
         signature = request.headers.get("X-Hub-Signature-256", "")
-        expected = "sha256=" + hmac.new(
+        expected = "sha256=" + hmac.HMAC(
             settings.META_APP_SECRET.encode(),
             raw_body,
             hashlib.sha256,
