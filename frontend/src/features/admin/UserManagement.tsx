@@ -1,14 +1,16 @@
 import { useState, useCallback } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardHeader, CardBody } from '../../components/ui/Card';
 import { Table } from '../../components/ui/Table';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { useAdminUsers, useUpdateAdminUser, useAssignUserRole } from '../../hooks/useAdmin';
 import { authApi } from '../../api/auth';
+import { deleteUserPermanently } from '../../api/admin';
 import toast from 'react-hot-toast';
 import type { AdminUser } from '../../types';
 import type { Column } from '../../components/ui/Table';
-import { PencilSquareIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { PencilSquareIcon, XMarkIcon, TrashIcon } from '@heroicons/react/24/outline';
 
 const ROLE_OPTIONS = ['admin', 'manager', 'sales_rep', 'viewer'] as const;
 
@@ -54,6 +56,21 @@ export default function UserManagement() {
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
   const [editForm, setEditForm] = useState<EditUserFormData>({ full_name: '', email: '' });
   const [editError, setEditError] = useState<string | null>(null);
+  const [deletingUser, setDeletingUser] = useState<AdminUser | null>(null);
+  const queryClient = useQueryClient();
+
+  const deleteMutation = useMutation({
+    mutationFn: (userId: number) => deleteUserPermanently(userId),
+    onSuccess: () => {
+      toast.success(`User permanently deleted`);
+      setDeletingUser(null);
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+    },
+    onError: (err: unknown) => {
+      const msg = err && typeof err === 'object' && 'detail' in err ? String((err as { detail: string }).detail) : 'Failed to delete user';
+      toast.error(msg);
+    },
+  });
 
   const handleQuickAdd = useCallback(async () => {
     if (!addForm.full_name || !addForm.email || !addForm.password) {
@@ -240,6 +257,20 @@ export default function UserManagement() {
       sortable: true,
       render: (row) => (
         <span style={{ fontVariantNumeric: 'tabular-nums' }}>{row.opportunity_count}</span>
+      ),
+    },
+    {
+      key: 'actions',
+      header: '',
+      render: (row) => (
+        <button
+          type="button"
+          onClick={() => setDeletingUser(row)}
+          className="p-1 text-gray-400 hover:text-red-500 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+          aria-label={`Delete ${row.full_name}`}
+        >
+          <TrashIcon className="h-4 w-4" aria-hidden="true" />
+        </button>
       ),
     },
   ];
@@ -482,6 +513,49 @@ export default function UserManagement() {
               </Button>
               <Button onClick={handleSaveEdit} disabled={updateUser.isPending}>
                 {updateUser.isPending ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Delete Confirmation Modal */}
+      {deletingUser && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setDeletingUser(null);
+          }}
+        >
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-sm mx-4">
+            <div className="px-6 py-5">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex-shrink-0 h-10 w-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                  <TrashIcon className="h-5 w-5 text-red-600 dark:text-red-400" aria-hidden="true" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                    Delete User
+                  </h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    This action cannot be undone.
+                  </p>
+                </div>
+              </div>
+              <p className="text-sm text-gray-700 dark:text-gray-300">
+                Permanently delete <strong>{deletingUser.full_name}</strong> ({deletingUser.email})?
+                Their owned records will have the owner cleared.
+              </p>
+            </div>
+            <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+              <Button variant="secondary" onClick={() => setDeletingUser(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                onClick={() => deleteMutation.mutate(deletingUser.id)}
+                disabled={deleteMutation.isPending}
+              >
+                {deleteMutation.isPending ? 'Deleting...' : 'Delete Permanently'}
               </Button>
             </div>
           </div>

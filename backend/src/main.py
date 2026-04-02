@@ -52,6 +52,7 @@ from src.admin.router import router as admin_router
 from src.ai.router import router as ai_router
 from src.meta.router import router as meta_router
 from src.expenses.router import router as expenses_router
+from src.integrations.google_calendar.router import router as google_calendar_router
 
 
 async def _run_production_migrations():
@@ -290,11 +291,13 @@ app.include_router(contracts_router)
 app.include_router(admin_router)
 app.include_router(meta_router)
 app.include_router(expenses_router)
+app.include_router(google_calendar_router)
 
 
 # Register webhook event handler with event system
 from src.events.service import on as event_on
 from src.webhooks.event_handler import webhook_event_handler
+from src.notifications.event_handler import notification_event_handler
 from src.events.service import (
     LEAD_CREATED, LEAD_UPDATED,
     CONTACT_CREATED, CONTACT_UPDATED,
@@ -317,6 +320,10 @@ for _evt in [
     PAYMENT_RECEIVED,
 ]:
     event_on(_evt, webhook_event_handler)
+
+# Register notification event handler for key events
+for _evt in [LEAD_CREATED, CONTACT_CREATED, OPPORTUNITY_STAGE_CHANGED]:
+    event_on(_evt, notification_event_handler)
 
 
 # Static files for production - serve frontend if dist exists

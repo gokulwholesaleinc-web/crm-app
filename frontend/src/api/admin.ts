@@ -70,10 +70,18 @@ export const assignUserRole = async (
   return response.data;
 };
 
+export const deleteUserPermanently = async (userId: number): Promise<{ detail: string }> => {
+  const response = await apiClient.delete<{ detail: string }>(
+    `${ADMIN_BASE}/users/${userId}/permanent`
+  );
+  return response.data;
+};
+
 export const adminApi = {
   getAdminUsers,
   updateAdminUser,
   deactivateUser,
+  deleteUserPermanently,
   getSystemStats,
   getTeamOverview,
   getActivityFeed,

@@ -277,7 +277,7 @@ class EmailService:
 
         sent_emails = []
         for member in members:
-            email_addr = await self._get_member_email(member)
+            email_addr = await self.get_member_email(member)
             if email_addr:
                 unsubscribe_url = (
                     f"/api/campaigns/{campaign_id}/unsubscribe"
@@ -302,7 +302,7 @@ class EmailService:
 
         return sent_emails
 
-    async def _get_member_email(self, member) -> Optional[str]:
+    async def get_member_email(self, member) -> Optional[str]:
         """Get the email address for a campaign member."""
         if member.member_type in ("contact", "contacts"):
             from src.contacts.models import Contact

@@ -1,0 +1,86 @@
+/**
+ * Integrations API — Google Calendar + Meta OAuth/sync
+ */
+
+import { apiClient } from './client';
+
+// =========================================================================
+// Google Calendar
+// =========================================================================
+
+export interface CalendarSyncStatus {
+  connected: boolean;
+  calendar_id: string | null;
+  last_synced_at: string | null;
+  synced_events_count: number;
+}
+
+export const getCalendarStatus = async (): Promise<CalendarSyncStatus> => {
+  const response = await apiClient.get<CalendarSyncStatus>('/api/integrations/google-calendar/status');
+  return response.data;
+};
+
+export const getCalendarAuthUrl = async (redirectUri: string): Promise<{ auth_url: string }> => {
+  const response = await apiClient.post<{ auth_url: string }>('/api/integrations/google-calendar/connect', {
+    redirect_uri: redirectUri,
+  });
+  return response.data;
+};
+
+export const calendarCallback = async (code: string): Promise<unknown> => {
+  const response = await apiClient.post('/api/integrations/google-calendar/callback', { code });
+  return response.data;
+};
+
+export const disconnectCalendar = async (): Promise<void> => {
+  await apiClient.delete('/api/integrations/google-calendar/disconnect');
+};
+
+export const syncCalendar = async (): Promise<{ synced: number; events: unknown[] }> => {
+  const response = await apiClient.post<{ synced: number; events: unknown[] }>('/api/integrations/google-calendar/sync');
+  return response.data;
+};
+
+export const pushToCalendar = async (activityId: number): Promise<{ google_event_id: string }> => {
+  const response = await apiClient.post<{ google_event_id: string }>('/api/integrations/google-calendar/push', {
+    activity_id: activityId,
+  });
+  return response.data;
+};
+
+// =========================================================================
+// Meta (Facebook/Instagram)
+// =========================================================================
+
+export interface MetaConnectionStatus {
+  connected: boolean;
+  scopes: string | null;
+  token_expiry: string | null;
+  pages: Array<{ id: string; name: string; category: string; fan_count: number }>;
+}
+
+export const getMetaStatus = async (): Promise<MetaConnectionStatus> => {
+  const response = await apiClient.get<MetaConnectionStatus>('/api/meta/status');
+  return response.data;
+};
+
+export const getMetaAuthUrl = async (redirectUri: string): Promise<{ auth_url: string }> => {
+  const response = await apiClient.post<{ auth_url: string }>('/api/meta/connect', {
+    redirect_uri: redirectUri,
+  });
+  return response.data;
+};
+
+export const metaCallback = async (code: string, redirectUri: string): Promise<unknown> => {
+  const response = await apiClient.post('/api/meta/callback', { code, redirect_uri: redirectUri });
+  return response.data;
+};
+
+export const disconnectMeta = async (): Promise<void> => {
+  await apiClient.delete('/api/meta/disconnect');
+};
+
+export const syncInstagram = async (companyId: number, pageId: string): Promise<unknown> => {
+  const response = await apiClient.post(`/api/meta/companies/${companyId}/sync-instagram`, { page_id: pageId });
+  return response.data;
+};

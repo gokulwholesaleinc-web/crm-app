@@ -107,6 +107,39 @@ export const getMyTasks = async (
 // =============================================================================
 
 /**
+ * Unified timeline event (activity + email + sequence events)
+ */
+export interface UnifiedTimelineEvent {
+  id: number;
+  event_type: string;
+  subject: string;
+  description: string | null;
+  entity_type: string | null;
+  entity_id: number | null;
+  timestamp: string;
+  metadata: Record<string, unknown> | null;
+}
+
+export interface UnifiedTimelineResponse {
+  items: UnifiedTimelineEvent[];
+}
+
+/**
+ * Get unified timeline for an entity (activities + emails + sequences)
+ */
+export const getUnifiedTimeline = async (
+  entityType: string,
+  entityId: number,
+  limit = 50,
+): Promise<UnifiedTimelineResponse> => {
+  const response = await apiClient.get<UnifiedTimelineResponse>(
+    `${ACTIVITIES_BASE}/timeline/unified/${entityType}/${entityId}`,
+    { params: { limit } },
+  );
+  return response.data;
+};
+
+/**
  * Get activity timeline for an entity
  */
 export const getEntityTimeline = async (

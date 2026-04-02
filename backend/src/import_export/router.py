@@ -1,7 +1,7 @@
 """Import/Export API routes."""
 
 from typing import Annotated, List, Dict, Any, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 import io
@@ -241,6 +241,60 @@ async def get_import_template(
             "Content-Disposition": f"attachment; filename={entity_type}_template.csv"
         },
     )
+
+
+# =========================================================================
+# Mapped Import (user-specified column mapping)
+# =========================================================================
+
+@router.post("/import/{entity_type}/mapped")
+async def import_with_mapping(
+    entity_type: str,
+    current_user: CurrentUser,
+    db: DBSession,
+    file: UploadFile = File(...),
+    column_mapping: str = Form(...),
+    skip_errors: bool = Form(True),
+):
+    """Import entities using user-specified column mapping.
+
+    column_mapping: JSON string of {csv_header: target_field}.
+    Set target_field to "skip" or "" to ignore a column.
+    """
+    if entity_type not in ["contacts", "companies", "leads"]:
+        raise_bad_request("Invalid entity type. Must be: contacts, companies, or leads")
+
+    csv_content = await _read_csv_upload(file)
+
+    try:
+        mapping = json.loads(column_mapping)
+    except json.JSONDecodeError:
+        raise_bad_request("column_mapping must be valid JSON")
+
+    handler = CSVHandler(db)
+    try:
+        result = await handler.import_with_mapping(
+            entity_type=entity_type,
+            csv_content=csv_content,
+            column_mapping=mapping,
+            user_id=current_user.id,
+            skip_errors=skip_errors,
+        )
+    except ValueError as exc:
+        raise_bad_request(str(exc))
+
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail={"imported_count": result.get("imported", 0), "errors": result.get("errors", [])},
+        )
+    return {
+        "success": True,
+        "detail": "Import complete",
+        "imported_count": result["imported"],
+        "errors": result.get("errors", []),
+        "duplicates_skipped": result.get("duplicates_skipped", 0),
+    }
 
 
 # =========================================================================

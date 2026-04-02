@@ -44,7 +44,7 @@ from src.activities.models import Activity
 from src.campaigns.models import Campaign, CampaignMember, EmailTemplate, EmailCampaignStep
 from src.core.models import Note, Tag, EntityTag, EntityShare
 from src.workflows.models import WorkflowRule, WorkflowExecution
-from src.dashboard.models import DashboardNumberCard, DashboardChart
+from src.dashboard.models import DashboardNumberCard, DashboardChart, DashboardReportWidget
 from src.ai.models import AIEmbedding, AIConversation, AIFeedback, AIKnowledgeDocument, AIUserPreferences, AIActionLog, AILearning, AIInteractionLog
 from src.whitelabel.models import Tenant, TenantSettings, TenantUser
 from src.attachments.models import Attachment
@@ -62,8 +62,10 @@ from src.quotes.models import Quote, QuoteLineItem, QuoteTemplate, ProductBundle
 from src.payments.models import StripeCustomer, Product, Price, Payment, Subscription
 from src.proposals.models import Proposal, ProposalTemplate, ProposalView
 from src.contracts.models import Contract
-from src.meta.models import CompanyMetaData
+from src.meta.models import CompanyMetaData, MetaCredential, MetaLeadCapture
 from src.expenses.models import Expense
+from src.integrations.google_calendar.models import GoogleCalendarCredential, CalendarSyncEvent
+from src.reports.delivery import ReportDeliveryService
 
 
 # Test database URL - using SQLite in-memory for tests
@@ -184,9 +186,10 @@ async def auth_headers(auth_token: str) -> dict:
 
 
 @pytest_asyncio.fixture(scope="function")
-async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
+async def client(db_session: AsyncSession, test_engine) -> AsyncGenerator[AsyncClient, None]:
     """Create async test client."""
     from src.main import app
+    import src.database as db_module
 
     # Override the database dependency
     async def override_get_db():
@@ -195,11 +198,19 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     app.dependency_overrides[get_db] = override_get_db
     app.state.limiter.enabled = False
 
+    # Override async_session_maker so event handlers (notifications, webhooks)
+    # that create their own sessions also use the test database.
+    original_session_maker = db_module.async_session_maker
+    db_module.async_session_maker = async_sessionmaker(
+        test_engine, class_=AsyncSession, expire_on_commit=False,
+    )
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
 
     app.dependency_overrides.clear()
+    db_module.async_session_maker = original_session_maker
 
 
 @pytest_asyncio.fixture(scope="function")

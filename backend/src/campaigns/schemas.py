@@ -51,6 +51,9 @@ class CampaignResponse(CampaignBase):
     num_sent: int
     num_responses: int
     num_converted: int
+    current_step: int = 0
+    next_step_at: Optional[datetime] = None
+    is_executing: bool = False
     response_rate: Optional[float] = None
     conversion_rate: Optional[float] = None
     roi: Optional[float] = None
@@ -82,17 +85,17 @@ class CampaignMemberCreate(CampaignMemberBase):
 
 class CampaignMemberUpdate(BaseModel):
     status: Optional[str] = None
-    sent_at: Optional[date] = None
-    responded_at: Optional[date] = None
-    converted_at: Optional[date] = None
+    sent_at: Optional[datetime] = None
+    responded_at: Optional[datetime] = None
+    converted_at: Optional[datetime] = None
     response_notes: Optional[str] = None
 
 
 class CampaignMemberResponse(CampaignMemberBase):
     id: int
-    sent_at: Optional[date] = None
-    responded_at: Optional[date] = None
-    converted_at: Optional[date] = None
+    sent_at: Optional[datetime] = None
+    responded_at: Optional[datetime] = None
+    converted_at: Optional[datetime] = None
     response_notes: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
@@ -111,6 +114,29 @@ class CampaignStats(BaseModel):
     converted: int
     response_rate: Optional[float]
     conversion_rate: Optional[float]
+
+
+# Campaign Analytics schemas
+class StepAnalytics(BaseModel):
+    step_order: int
+    template_name: str
+    sent: int
+    opened: int
+    clicked: int
+    failed: int
+    open_rate: float
+    click_rate: float
+
+
+class CampaignAnalytics(BaseModel):
+    campaign_id: int
+    total_sent: int
+    total_opened: int
+    total_clicked: int
+    total_failed: int
+    open_rate: float
+    click_rate: float
+    steps: List[StepAnalytics]
 
 
 # Email Template schemas

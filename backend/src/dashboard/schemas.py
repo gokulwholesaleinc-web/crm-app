@@ -1,5 +1,6 @@
 """Pydantic schemas for dashboard."""
 
+from datetime import datetime
 from typing import Optional, List, Any, Dict
 from pydantic import BaseModel, ConfigDict
 
@@ -77,3 +78,30 @@ class SalesFunnelResponse(BaseModel):
     stages: List[FunnelStage]
     conversions: List[FunnelConversion]
     avg_days_in_stage: Dict[str, Optional[float]]
+
+
+# Report Widget schemas
+class ReportWidgetCreate(BaseModel):
+    report_id: int
+    position: int = 0
+    width: str = "half"
+
+
+class ReportWidgetUpdate(BaseModel):
+    position: Optional[int] = None
+    width: Optional[str] = None
+    is_visible: Optional[bool] = None
+
+
+class ReportWidgetResponse(BaseModel):
+    id: int
+    user_id: int
+    report_id: int
+    report_name: str
+    report_chart_type: str
+    position: int
+    width: str
+    is_visible: bool
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

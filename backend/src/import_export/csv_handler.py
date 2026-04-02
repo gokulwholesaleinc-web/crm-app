@@ -83,6 +83,8 @@ COLUMN_ALIASES: Dict[str, str] = {
     "location": "address_line1",
     "link": "website",
     "text": "description",
+    "longtext": "description",
+    "numbers": "budget_amount",
     # Domain / URL aliases
     "domain": "website",
     "domainname": "website",
@@ -118,6 +120,28 @@ LOCATION_HEADERS = {"hqlocation", "hqaddress", "headquarterslocation", "headquar
 CONTACT_PERSON_HEADERS = {"pointofcontact", "poc", "contactperson", "primarycontact", "contactname", "contact"}
 
 FUZZY_MATCH_THRESHOLD = 0.75
+
+# Monday.com status label → CRM lead status mapping
+MONDAY_STATUS_MAP: Dict[str, str] = {
+    "working on it": "contacted",
+    "done": "converted",
+    "stuck": "unqualified",
+    "not started": "new",
+}
+
+# Monday.com-specific column headers used for CSV source detection
+_MONDAY_SIGNATURE_HEADERS = {"subitems", "lastupdated", "creationlog", "itemid", "linkedpulses", "mirrorcolumn", "peoplecolumn"}
+
+
+def _detect_monday_csv(csv_headers: List[str]) -> bool:
+    """Return True if the CSV headers contain Monday.com-specific columns."""
+    normalized = {_normalize_header(h) for h in csv_headers}
+    return len(normalized & _MONDAY_SIGNATURE_HEADERS) >= 2
+
+
+def _apply_monday_status(value: str) -> str:
+    """Convert a Monday.com status label to a CRM lead status, falling back to the original value."""
+    return MONDAY_STATUS_MAP.get(value.strip().lower(), value)
 
 
 def _split_full_name(full_name: str) -> tuple:
@@ -454,6 +478,31 @@ class CSVHandler:
     # Preview (no DB writes)
     # ------------------------------------------------------------------
 
+    async def import_with_mapping(
+        self,
+        entity_type: str,
+        csv_content: str,
+        column_mapping: Dict[str, str],
+        user_id: int,
+        skip_errors: bool = True,
+    ) -> Dict[str, Any]:
+        """Import entities using user-specified column mapping.
+
+        column_mapping: {csv_header: target_field} overrides auto-detection.
+        """
+        entity_class = self._get_model(entity_type)
+        fields = self._get_fields(entity_type)
+
+        # Validate mapping: target fields must exist
+        for csv_col, target_field in column_mapping.items():
+            if target_field not in fields and target_field not in ("skip", ""):
+                raise ValueError(f"Invalid target field '{target_field}' for {entity_type}")
+
+        # Filter out skipped columns before passing to _import_entities
+        active_mapping = {k: v for k, v in column_mapping.items() if v and v != "skip"}
+
+        return await self._import_entities(csv_content, entity_class, fields, user_id, skip_errors, active_mapping)
+
     async def preview_csv(self, entity_type: str, csv_content: str) -> Dict[str, Any]:
         """Preview a CSV: show column mapping, first rows, and validation warnings."""
         fields = self._get_fields(entity_type)
@@ -546,13 +595,18 @@ class CSVHandler:
                             "candidates": candidates[:5],
                         })
 
+        source_detected = "monday.com" if _detect_monday_csv(csv_headers) else None
+
         result = {
             "total_rows": total_rows,
+            "csv_headers": csv_headers,
+            "available_fields": fields,
             "column_mapping": column_mapping,
             "unmapped_columns": unmapped,
             "missing_fields": missing_fields,
             "preview_rows": preview_rows,
             "warnings": warnings,
+            "source_detected": source_detected,
         }
         if contact_person_col:
             result["contact_person_column"] = contact_person_col
@@ -623,14 +677,17 @@ class CSVHandler:
         fields: List[str],
         user_id: int,
         skip_errors: bool = True,
+        column_mapping: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         reader = csv.DictReader(io.StringIO(csv_content))
         csv_headers = reader.fieldnames or []
 
-        # Smart column mapping
-        column_mapping = _map_columns(csv_headers, fields)
+        # Use provided mapping or auto-detect
+        if column_mapping is None:
+            column_mapping = _map_columns(csv_headers, fields)
         name_col = _find_name_column(csv_headers, column_mapping, fields)
         location_col = _find_location_column(csv_headers, column_mapping, fields)
+        is_monday = _detect_monday_csv(csv_headers)
 
         # Load existing emails for dedup
         existing_emails = await self._get_existing_emails(entity_class)
@@ -666,6 +723,10 @@ class CSVHandler:
                         entity_data["city"] = city
                         entity_data["state"] = state
 
+                # Map Monday.com status labels to CRM statuses
+                if is_monday and "status" in entity_data and entity_data["status"]:
+                    entity_data["status"] = _apply_monday_status(entity_data["status"])
+
                 # Duplicate detection by email
                 email = (entity_data.get("email") or "").lower()
                 if email:
@@ -676,22 +737,22 @@ class CSVHandler:
                     seen_emails.add(email)
 
                 entity = entity_class(**entity_data, owner_id=user_id, created_by_id=user_id)
-                self.db.add(entity)
 
                 if skip_errors:
-                    try:
-                        await self.db.flush()
-                        imported += 1
-                    except Exception as flush_exc:
-                        await self.db.rollback()
-                        errors.append(f"Row {row_num}: {str(flush_exc)}")
+                    async with self.db.begin_nested():
+                        self.db.add(entity)
+                        try:
+                            await self.db.flush()
+                            imported += 1
+                        except Exception as flush_exc:
+                            errors.append(f"Row {row_num}: {str(flush_exc)}")
                 else:
+                    self.db.add(entity)
                     imported += 1
 
             except Exception as e:
                 errors.append(f"Row {row_num}: {str(e)}")
                 if not skip_errors:
-                    await self.db.rollback()
                     return {"imported": 0, "errors": errors, "success": False, "duplicates_skipped": duplicates_skipped}
 
         if not skip_errors:

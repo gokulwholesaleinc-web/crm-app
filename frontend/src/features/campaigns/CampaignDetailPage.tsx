@@ -16,6 +16,7 @@ import {
 import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { CampaignForm } from './components/CampaignForm';
 import { AddMembersModal } from './components/AddMembersModal';
+import { CampaignAnalyticsSection } from './components/CampaignAnalytics';
 import {
   useCampaign,
   useCampaignStats,
@@ -403,6 +404,14 @@ export function CampaignDetailPage() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Email Analytics */}
+      {campaign.campaign_type === 'email' && campaignId && (
+        <div>
+          <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">Email Analytics</h3>
+          <CampaignAnalyticsSection campaignId={campaignId} />
         </div>
       )}
 

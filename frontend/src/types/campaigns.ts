@@ -98,3 +98,25 @@ export interface CampaignStats {
   response_rate?: number | null;
   conversion_rate?: number | null;
 }
+
+export interface StepAnalytics {
+  step_order: number;
+  template_name: string;
+  sent: number;
+  opened: number;
+  clicked: number;
+  failed: number;
+  open_rate: number;
+  click_rate: number;
+}
+
+export interface CampaignAnalytics {
+  campaign_id: number;
+  total_sent: number;
+  total_opened: number;
+  total_clicked: number;
+  total_failed: number;
+  open_rate: number;
+  click_rate: number;
+  steps: StepAnalytics[];
+}

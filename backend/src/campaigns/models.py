@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 from typing import Optional
-from sqlalchemy import String, Integer, ForeignKey, Text, Date, Float, Index, DateTime, func
+from sqlalchemy import String, Integer, ForeignKey, Text, Date, Float, Index, DateTime, func, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.database import Base
 from src.core.mixins.auditable import AuditableMixin
@@ -41,6 +41,11 @@ class Campaign(Base, AuditableMixin):
     num_sent: Mapped[int] = mapped_column(Integer, default=0)
     num_responses: Mapped[int] = mapped_column(Integer, default=0)
     num_converted: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Multi-step execution tracking
+    current_step: Mapped[int] = mapped_column(Integer, default=0)
+    next_step_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_executing: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Owner
     owner_id: Mapped[Optional[int]] = mapped_column(
@@ -98,9 +103,9 @@ class CampaignMember(Base):
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending, sent, responded, converted
 
     # Tracking
-    sent_at: Mapped[Optional[date]] = mapped_column(Date)
-    responded_at: Mapped[Optional[date]] = mapped_column(Date)
-    converted_at: Mapped[Optional[date]] = mapped_column(Date)
+    sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    responded_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    converted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Response details
     response_notes: Mapped[Optional[str]] = mapped_column(Text)

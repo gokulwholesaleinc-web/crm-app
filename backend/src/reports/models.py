@@ -30,6 +30,7 @@ class SavedReport(Base):
     is_public: Mapped[bool] = mapped_column(Boolean, default=False)
     schedule: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # daily/weekly/monthly
     recipients: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON array of email addresses
+    last_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

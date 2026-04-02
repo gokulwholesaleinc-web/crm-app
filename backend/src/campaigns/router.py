@@ -20,6 +20,7 @@ from src.campaigns.schemas import (
     CampaignMemberUpdate,
     AddMembersRequest,
     CampaignStats,
+    CampaignAnalytics,
     EmailTemplateCreate,
     EmailTemplateUpdate,
     EmailTemplateResponse,
@@ -219,6 +220,18 @@ async def get_campaign_stats(
     return CampaignStats(**stats)
 
 
+@router.get("/{campaign_id}/analytics", response_model=CampaignAnalytics)
+async def get_campaign_analytics(
+    campaign_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Get email analytics (open/click/bounce rates) for a campaign, per step."""
+    service = CampaignService(db)
+    await get_entity_or_404(service, campaign_id, EntityNames.CAMPAIGN)
+    return await service.get_campaign_analytics(campaign_id)
+
+
 # =========================================================================
 # Campaign Members endpoints
 # =========================================================================
@@ -373,49 +386,53 @@ async def execute_campaign(
     current_user: CurrentUser,
     db: DBSession,
 ):
-    """Execute a campaign: send emails to all members using step 1 template."""
+    """Execute a campaign: send step 1 immediately, schedule remaining steps."""
     from src.email.service import EmailService
 
     service = CampaignService(db)
     campaign = await get_entity_or_404(service, campaign_id, EntityNames.CAMPAIGN)
     check_ownership(campaign, current_user, EntityNames.CAMPAIGN)
 
-    # Get the first step's template for the initial send
+    if campaign.is_executing:
+        return {"message": "Campaign is already executing", "status": campaign.status}
+
     step_service = EmailCampaignStepService(db)
     steps = await step_service.get_steps(campaign_id)
     if not steps:
         return {"message": "No steps configured for this campaign", "status": campaign.status}
 
-    first_step = steps[0]
-    campaign.status = "in_progress"
+    # Send step 1 immediately
+    campaign.status = "active"
+    campaign.is_executing = True
+    campaign.current_step = 0
     await db.flush()
 
     email_service = EmailService(db)
-    sent_emails = await email_service.send_campaign_emails(
-        campaign_id=campaign_id,
-        template_id=first_step.template_id,
-        sent_by_id=current_user.id,
-    )
+    try:
+        sent_emails = await email_service.send_campaign_emails(
+            campaign_id=campaign_id,
+            template_id=steps[0].template_id,
+            sent_by_id=current_user.id,
+        )
+    except Exception as exc:
+        campaign.status = "paused"
+        campaign.is_executing = False
+        await db.flush()
+        return {"message": f"Campaign execution failed: {str(exc)}", "status": campaign.status, "emails_sent": 0}
 
-    # Update campaign counters
     campaign.num_sent = len(sent_emails)
-    await db.flush()
+    await service._update_member_statuses(campaign_id, sent_emails)
 
-    # Update member statuses to "sent"
-    member_service = CampaignMemberService(db)
-    members, _ = await member_service.get_campaign_members(
-        campaign_id=campaign_id, page=1, page_size=10000,
-    )
-    from datetime import date as date_type
-    today = date_type.today()
-    for member in members:
-        member.status = "sent"
-        member.sent_at = today
-    await db.flush()
+    campaign.current_step = 1
+    service._advance_to_next_step(campaign, steps)
 
+    await db.flush()
     await db.refresh(campaign)
+
     return {
-        "message": f"Campaign executed: {len(sent_emails)} emails sent",
+        "message": f"Campaign started: {len(sent_emails)} emails sent for step 1",
         "status": campaign.status,
         "emails_sent": len(sent_emails),
+        "total_steps": len(steps),
+        "next_step_at": campaign.next_step_at.isoformat() if campaign.next_step_at else None,
     }
