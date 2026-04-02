@@ -373,10 +373,49 @@ async def execute_campaign(
     current_user: CurrentUser,
     db: DBSession,
 ):
-    """Trigger campaign execution (set status to in_progress)."""
+    """Execute a campaign: send emails to all members using step 1 template."""
+    from src.email.service import EmailService
+
     service = CampaignService(db)
     campaign = await get_entity_or_404(service, campaign_id, EntityNames.CAMPAIGN)
+    check_ownership(campaign, current_user, EntityNames.CAMPAIGN)
+
+    # Get the first step's template for the initial send
+    step_service = EmailCampaignStepService(db)
+    steps = await step_service.get_steps(campaign_id)
+    if not steps:
+        return {"message": "No steps configured for this campaign", "status": campaign.status}
+
+    first_step = steps[0]
     campaign.status = "in_progress"
     await db.flush()
+
+    email_service = EmailService(db)
+    sent_emails = await email_service.send_campaign_emails(
+        campaign_id=campaign_id,
+        template_id=first_step.template_id,
+        sent_by_id=current_user.id,
+    )
+
+    # Update campaign counters
+    campaign.num_sent = len(sent_emails)
+    await db.flush()
+
+    # Update member statuses to "sent"
+    member_service = CampaignMemberService(db)
+    members, _ = await member_service.get_campaign_members(
+        campaign_id=campaign_id, page=1, page_size=10000,
+    )
+    from datetime import date as date_type
+    today = date_type.today()
+    for member in members:
+        member.status = "sent"
+        member.sent_at = today
+    await db.flush()
+
     await db.refresh(campaign)
-    return {"message": "Campaign execution started", "status": campaign.status}
+    return {
+        "message": f"Campaign executed: {len(sent_emails)} emails sent",
+        "status": campaign.status,
+        "emails_sent": len(sent_emails),
+    }

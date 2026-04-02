@@ -6,6 +6,7 @@ import { lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 
 import { PrivateRoute } from './PrivateRoute';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 
 // Lazy load all page components for code splitting
 // Authentication pages
@@ -92,7 +93,9 @@ function AppRoutes() {
         path="/"
         element={
           <PrivateRoute>
-            <DashboardPage />
+            <ErrorBoundary>
+              <DashboardPage />
+            </ErrorBoundary>
           </PrivateRoute>
         }
       />
@@ -102,7 +105,9 @@ function AppRoutes() {
         path="/contacts"
         element={
           <PrivateRoute>
-            <ContactsPage />
+            <ErrorBoundary>
+              <ContactsPage />
+            </ErrorBoundary>
           </PrivateRoute>
         }
       />
@@ -110,7 +115,9 @@ function AppRoutes() {
         path="/contacts/:id"
         element={
           <PrivateRoute>
-            <ContactDetailPage />
+            <ErrorBoundary>
+              <ContactDetailPage />
+            </ErrorBoundary>
           </PrivateRoute>
         }
       />
@@ -120,7 +127,9 @@ function AppRoutes() {
         path="/companies"
         element={
           <PrivateRoute>
-            <CompaniesPage />
+            <ErrorBoundary>
+              <CompaniesPage />
+            </ErrorBoundary>
           </PrivateRoute>
         }
       />
@@ -128,7 +137,9 @@ function AppRoutes() {
         path="/companies/:id"
         element={
           <PrivateRoute>
-            <CompanyDetailPage />
+            <ErrorBoundary>
+              <CompanyDetailPage />
+            </ErrorBoundary>
           </PrivateRoute>
         }
       />
@@ -138,7 +149,9 @@ function AppRoutes() {
         path="/leads"
         element={
           <PrivateRoute>
-            <LeadsPage />
+            <ErrorBoundary>
+              <LeadsPage />
+            </ErrorBoundary>
           </PrivateRoute>
         }
       />
@@ -146,7 +159,9 @@ function AppRoutes() {
         path="/leads/:id"
         element={
           <PrivateRoute>
-            <LeadDetailPage />
+            <ErrorBoundary>
+              <LeadDetailPage />
+            </ErrorBoundary>
           </PrivateRoute>
         }
       />
@@ -157,7 +172,9 @@ function AppRoutes() {
         path="/opportunities/:id"
         element={
           <PrivateRoute>
-            <OpportunityDetailPage />
+            <ErrorBoundary>
+              <OpportunityDetailPage />
+            </ErrorBoundary>
           </PrivateRoute>
         }
       />
@@ -167,7 +184,9 @@ function AppRoutes() {
         path="/quotes"
         element={
           <PrivateRoute>
-            <QuotesPage />
+            <ErrorBoundary>
+              <QuotesPage />
+            </ErrorBoundary>
           </PrivateRoute>
         }
       />
@@ -175,7 +194,9 @@ function AppRoutes() {
         path="/quotes/:id"
         element={
           <PrivateRoute>
-            <QuoteDetailPage />
+            <ErrorBoundary>
+              <QuoteDetailPage />
+            </ErrorBoundary>
           </PrivateRoute>
         }
       />
@@ -185,7 +206,9 @@ function AppRoutes() {
         path="/payments"
         element={
           <PrivateRoute>
-            <PaymentsPage />
+            <ErrorBoundary>
+              <PaymentsPage />
+            </ErrorBoundary>
           </PrivateRoute>
         }
       />
@@ -193,7 +216,9 @@ function AppRoutes() {
         path="/payments/:id"
         element={
           <PrivateRoute>
-            <PaymentDetailPage />
+            <ErrorBoundary>
+              <PaymentDetailPage />
+            </ErrorBoundary>
           </PrivateRoute>
         }
       />
@@ -203,7 +228,9 @@ function AppRoutes() {
         path="/proposals"
         element={
           <PrivateRoute>
-            <ProposalsPage />
+            <ErrorBoundary>
+              <ProposalsPage />
+            </ErrorBoundary>
           </PrivateRoute>
         }
       />
@@ -211,7 +238,9 @@ function AppRoutes() {
         path="/proposals/:id"
         element={
           <PrivateRoute>
-            <ProposalDetailPage />
+            <ErrorBoundary>
+              <ProposalDetailPage />
+            </ErrorBoundary>
           </PrivateRoute>
         }
       />
@@ -221,7 +250,9 @@ function AppRoutes() {
         path="/activities"
         element={
           <PrivateRoute>
-            <ActivitiesPage />
+            <ErrorBoundary>
+              <ActivitiesPage />
+            </ErrorBoundary>
           </PrivateRoute>
         }
       />
@@ -231,7 +262,9 @@ function AppRoutes() {
         path="/campaigns"
         element={
           <PrivateRoute>
-            <CampaignsPage />
+            <ErrorBoundary>
+              <CampaignsPage />
+            </ErrorBoundary>
           </PrivateRoute>
         }
       />
@@ -239,7 +272,9 @@ function AppRoutes() {
         path="/campaigns/:id"
         element={
           <PrivateRoute>
-            <CampaignDetailPage />
+            <ErrorBoundary>
+              <CampaignDetailPage />
+            </ErrorBoundary>
           </PrivateRoute>
         }
       />
@@ -249,7 +284,9 @@ function AppRoutes() {
         path="/ai-assistant"
         element={
           <PrivateRoute>
-            <AIAssistantPage />
+            <ErrorBoundary>
+              <AIAssistantPage />
+            </ErrorBoundary>
           </PrivateRoute>
         }
       />
@@ -259,7 +296,9 @@ function AppRoutes() {
         path="/reports"
         element={
           <PrivateRoute>
-            <ReportsPage />
+            <ErrorBoundary>
+              <ReportsPage />
+            </ErrorBoundary>
           </PrivateRoute>
         }
       />
@@ -269,7 +308,9 @@ function AppRoutes() {
         path="/workflows"
         element={
           <PrivateRoute>
-            <WorkflowsPage />
+            <ErrorBoundary>
+              <WorkflowsPage />
+            </ErrorBoundary>
           </PrivateRoute>
         }
       />
@@ -279,7 +320,9 @@ function AppRoutes() {
         path="/import-export"
         element={
           <PrivateRoute>
-            <ImportExportPage />
+            <ErrorBoundary>
+              <ImportExportPage />
+            </ErrorBoundary>
           </PrivateRoute>
         }
       />
@@ -289,7 +332,9 @@ function AppRoutes() {
         path="/sequences"
         element={
           <PrivateRoute>
-            <SequencesPage />
+            <ErrorBoundary>
+              <SequencesPage />
+            </ErrorBoundary>
           </PrivateRoute>
         }
       />
@@ -299,7 +344,9 @@ function AppRoutes() {
         path="/pipeline"
         element={
           <PrivateRoute>
-            <PipelinePage />
+            <ErrorBoundary>
+              <PipelinePage />
+            </ErrorBoundary>
           </PrivateRoute>
         }
       />
@@ -309,7 +356,9 @@ function AppRoutes() {
         path="/settings"
         element={
           <PrivateRoute>
-            <SettingsPage />
+            <ErrorBoundary>
+              <SettingsPage />
+            </ErrorBoundary>
           </PrivateRoute>
         }
       />
@@ -319,7 +368,9 @@ function AppRoutes() {
         path="/admin"
         element={
           <PrivateRoute>
-            <AdminDashboardPage />
+            <ErrorBoundary>
+              <AdminDashboardPage />
+            </ErrorBoundary>
           </PrivateRoute>
         }
       />
@@ -329,7 +380,9 @@ function AppRoutes() {
         path="/duplicates"
         element={
           <PrivateRoute>
-            <DuplicatesPage />
+            <ErrorBoundary>
+              <DuplicatesPage />
+            </ErrorBoundary>
           </PrivateRoute>
         }
       />

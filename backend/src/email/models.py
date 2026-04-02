@@ -19,8 +19,12 @@ class EmailQueue(Base):
     # Status tracking
     status: Mapped[str] = mapped_column(
         String(20), default="pending", nullable=False
-    )  # pending, sent, failed
+    )  # pending, sent, failed, retry
     attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    next_retry_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Timestamps

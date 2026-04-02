@@ -96,6 +96,7 @@ async def _run_production_migrations():
                 "CREATE INDEX IF NOT EXISTS ix_companies_status ON companies(status)",
                 "CREATE INDEX IF NOT EXISTS ix_companies_industry ON companies(industry)",
                 "CREATE INDEX IF NOT EXISTS ix_contacts_status ON contacts(status)",
+                "CREATE INDEX IF NOT EXISTS ix_activities_entity ON activities(entity_type, entity_id)",
             ]:
                 try:
                     await conn.execute(idx_sql)
@@ -124,6 +125,8 @@ async def _run_production_migrations():
                 "ALTER TABLE companies ADD COLUMN IF NOT EXISTS link_creative_tier VARCHAR(10)",
                 "ALTER TABLE companies ADD COLUMN IF NOT EXISTS sow_url VARCHAR(500)",
                 "ALTER TABLE companies ADD COLUMN IF NOT EXISTS account_manager VARCHAR(255)",
+                "ALTER TABLE email_queue ADD COLUMN IF NOT EXISTS retry_count INTEGER DEFAULT 0 NOT NULL",
+                "ALTER TABLE email_queue ADD COLUMN IF NOT EXISTS next_retry_at TIMESTAMPTZ",
             ]
             for sql in column_migrations:
                 try:
@@ -216,12 +219,16 @@ async def _init_database():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup/shutdown events."""
+    from src.core.scheduler import start_scheduler, stop_scheduler
+
     print("Starting up CRM application...")
     asyncio.create_task(_init_database())
+    start_scheduler()
 
     yield
 
     print("Shutting down CRM application...")
+    stop_scheduler()
     await engine.dispose()
 
 

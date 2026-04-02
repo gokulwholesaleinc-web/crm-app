@@ -11,6 +11,7 @@ import { useCheckDuplicates } from '../../hooks/useDedup';
 import { useSavedFilters, useDeleteSavedFilter } from '../../hooks/useFilters';
 import { formatDate, formatPhoneNumber } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
+import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { showSuccess, showError } from '../../utils/toast';
 import type { Contact, ContactCreate, ContactUpdate } from '../../types';
 import type { DuplicateMatch } from '../../api/dedup';
@@ -21,6 +22,7 @@ function ContactsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
+  const debouncedSearch = useDebouncedValue(searchQuery, 300);
   const [currentPage, setCurrentPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
@@ -61,7 +63,7 @@ function ContactsPage() {
   } = useContacts({
     page: currentPage,
     page_size: pageSize,
-    search: searchQuery || undefined,
+    search: debouncedSearch || undefined,
     ...(activeFilters ? { filters: JSON.stringify(activeFilters) } : {}),
   });
 

@@ -2,7 +2,7 @@
  * Companies list page
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import {
@@ -28,6 +28,7 @@ import { useCheckDuplicates } from '../../hooks/useDedup';
 import { getStatusColor, formatStatusLabel } from '../../utils/statusColors';
 import { formatCurrency } from '../../utils/formatters';
 import { showSuccess, showError } from '../../utils/toast';
+import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import type { Company, CompanyCreate, CompanyUpdate, CompanyFilters } from '../../types';
 import type { DuplicateMatch } from '../../api/dedup';
 
@@ -184,7 +185,7 @@ function CompanyCard({
             )}
             <span className="flex items-center gap-1">
               <UsersIcon className="h-4 w-4 flex-shrink-0" />
-              {company.contact_count} contacts
+              {company.contact_count} {company.contact_count === 1 ? 'contact' : 'contacts'}
             </span>
           </div>
 
@@ -193,7 +194,7 @@ function CompanyCard({
               <span>{[company.city, company.state, company.country].filter(Boolean).join(', ')}</span>
             )}
             {company.employee_count != null ? (
-              <span>{company.employee_count} employees</span>
+              <span>{company.employee_count} {company.employee_count === 1 ? 'employee' : 'employees'}</span>
             ) : company.company_size ? (
               <span>Size: {company.company_size}</span>
             ) : null}
@@ -254,6 +255,16 @@ export function CompaniesPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
+  const debouncedSearch = useDebouncedValue(searchQuery, 300);
+
+  // Sync debounced search value to URL params
+  useEffect(() => {
+    const current = searchParams.get('search') || '';
+    if (debouncedSearch !== current) {
+      updateFilter('search', debouncedSearch);
+    }
+  }, [debouncedSearch]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; company: Company | null }>({
     isOpen: false,
     company: null,
@@ -402,10 +413,7 @@ export function CompaniesPage() {
         <div className="flex-1 sm:max-w-md">
           <Input
             value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              updateFilter('search', e.target.value);
-            }}
+            onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search companies..."
             leftIcon={<MagnifyingGlassIcon className="h-5 w-5" />}
             aria-label="Search companies"

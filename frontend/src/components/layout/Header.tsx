@@ -92,7 +92,9 @@ export function Header({
                 aria-hidden="true"
               />
             </div>
+            <label htmlFor="desktop-search" className="sr-only">Search contacts, companies, deals</label>
             <input
+              id="desktop-search"
               type="search"
               placeholder="Search contacts, companies, deals..."
               className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg leading-5 bg-white dark:bg-gray-700 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 text-sm focus-visible:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
@@ -125,8 +127,10 @@ export function Header({
                   aria-hidden="true"
                 />
               </div>
+              <label htmlFor="mobile-search" className="sr-only">Search</label>
               <input
                 ref={searchInputRef}
+                id="mobile-search"
                 type="search"
                 placeholder="Search..."
                 className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg leading-5 bg-white dark:bg-gray-700 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 text-base focus-visible:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"

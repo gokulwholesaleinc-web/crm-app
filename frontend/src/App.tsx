@@ -9,6 +9,7 @@ import { Toaster } from 'react-hot-toast';
 
 import AppRoutes from './routes';
 import { Spinner } from './components/ui/Spinner';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { useAuthStore } from './store/authStore';
 import { useTheme } from './hooks/useTheme';
 import { TenantProvider, useTenant } from './providers/TenantProvider';
@@ -100,9 +101,11 @@ function App() {
             v7_relativeSplatPath: true,
           }}
         >
-          <Suspense fallback={<PageLoader />}>
-            <AppRoutes />
-          </Suspense>
+          <ErrorBoundary>
+            <Suspense fallback={<PageLoader />}>
+              <AppRoutes />
+            </Suspense>
+          </ErrorBoundary>
           <div aria-live="polite" aria-atomic="true">
             <Toaster
               position="top-right"

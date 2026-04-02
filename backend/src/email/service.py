@@ -1,18 +1,23 @@
 """Email service layer - handles sending, tracking, and queue management."""
 
 import asyncio
+import logging
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Tuple, Dict
 
 import resend
-from sqlalchemy import select, func
+from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
 from src.email.models import EmailQueue
 from src.email.branded_templates import TenantBrandingHelper, render_branded_email
 from src.core.constants import DEFAULT_PAGE_SIZE
+
+logger = logging.getLogger(__name__)
+
+MAX_RETRIES = 5
 
 
 def send_email(to_email: str, subject: str, body: str) -> None:
@@ -73,15 +78,26 @@ class EmailService:
         return email
 
     async def _attempt_send(self, email: EmailQueue) -> None:
-        """Attempt to send an email, updating status accordingly."""
+        """Attempt to send an email, updating status accordingly.
+
+        On failure, sets status to 'retry' with exponential backoff
+        (2^retry_count minutes) up to MAX_RETRIES, then marks as 'failed'.
+        """
         email.attempts += 1
         try:
             await asyncio.to_thread(send_email, email.to_email, email.subject, email.body)
             email.status = "sent"
             email.sent_at = datetime.now(timezone.utc)
         except Exception as exc:
-            email.status = "failed"
             email.error = str(exc)[:500]
+            email.retry_count += 1
+            if email.retry_count >= MAX_RETRIES:
+                email.status = "failed"
+                logger.warning("Email %s permanently failed after %d retries", email.id, email.retry_count)
+            else:
+                email.status = "retry"
+                backoff_minutes = 2 ** email.retry_count
+                email.next_retry_at = datetime.now(timezone.utc) + timedelta(minutes=backoff_minutes)
         await self.db.flush()
 
     async def get_by_id(self, email_id: int) -> Optional[EmailQueue]:
@@ -153,6 +169,26 @@ class EmailService:
             email.clicked_at = datetime.now(timezone.utc)
         await self.db.flush()
         return email
+
+    async def process_retries(self) -> int:
+        """Retry emails that are due for retry. Returns the count of retried emails."""
+        now = datetime.now(timezone.utc)
+        result = await self.db.execute(
+            select(EmailQueue).where(
+                and_(
+                    EmailQueue.status == "retry",
+                    EmailQueue.next_retry_at <= now,
+                )
+            )
+        )
+        due_emails = list(result.scalars().all())
+
+        retried = 0
+        for email in due_emails:
+            await self._attempt_send(email)
+            retried += 1
+
+        return retried
 
     async def send_template_email(
         self,

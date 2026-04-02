@@ -16,6 +16,7 @@ import { bulkUpdate, bulkAssign } from '../../api/importExport';
 import { getStatusBadgeClasses, formatStatusLabel, getScoreColor } from '../../utils';
 import { formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
+import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { showSuccess, showError } from '../../utils/toast';
 import type { Lead, LeadCreate, LeadUpdate, KanbanLead } from '../../types';
 import type { DuplicateMatch } from '../../api/dedup';
@@ -63,6 +64,7 @@ function LeadsPage() {
   const [searchParams] = useSearchParams();
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
+  const debouncedSearch = useDebouncedValue(searchQuery, 300);
   const [statusFilter, setStatusFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
@@ -83,7 +85,7 @@ function LeadsPage() {
   } = useLeads({
     page: currentPage,
     page_size: pageSize,
-    search: searchQuery || undefined,
+    search: debouncedSearch || undefined,
     status: statusFilter || undefined,
   });
 
@@ -339,6 +341,7 @@ function LeadsPage() {
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"
