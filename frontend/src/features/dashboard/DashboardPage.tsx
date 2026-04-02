@@ -1,7 +1,9 @@
 import { lazy, Suspense, useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { NumberCard } from './components/NumberCard';
 import { ChartCard } from './components/ChartCard';
 import { SalesFunnelChart } from './components/SalesFunnelChart';
+import { ReportWidgetCard } from './components/ReportWidgetCard';
 import { SkeletonCard, SkeletonChart } from '../../components/ui/Skeleton';
 import { ErrorEmptyState } from '../../components/ui/EmptyState';
 import { DateRangePicker } from '../../components/ui/DateRangePicker';
@@ -11,6 +13,9 @@ import { formatCurrency, formatDate } from '../../utils';
 import { useKPIs, usePipelineFunnelChart, useLeadsBySourceChart, useSalesFunnel, useSalesKpis } from '../../hooks/useDashboard';
 import { useUserTimeline } from '../../hooks/useActivities';
 import { usePageTitle } from '../../hooks/usePageTitle';
+import { useSavedReports } from '../../hooks/useReports';
+import { listDashboardWidgets, createDashboardWidget } from '../../api/dashboard';
+import { useAuthStore } from '../../store/authStore';
 import type { NumberCardData, ChartDataPoint } from '../../types';
 
 // Build a Map for O(1) lookups by card id
@@ -26,6 +31,161 @@ function findCardValue(cardMap: Map<string, NumberCardData>, id: string): number
 function findCardChange(cardMap: Map<string, NumberCardData>, id: string): number {
   const card = cardMap.get(id);
   return card?.change ?? 0;
+}
+
+function ReportWidgetsSection() {
+  const queryClient = useQueryClient();
+  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+  const [showAddModal, setShowAddModal] = useState(false);
+
+  const { data: widgets } = useQuery({
+    queryKey: ['dashboard', 'widgets'],
+    queryFn: listDashboardWidgets,
+    staleTime: 60 * 1000,
+    enabled: isAuthenticated && !authLoading,
+  });
+
+  const { data: savedReports } = useSavedReports();
+
+  const addMutation = useMutation({
+    mutationFn: createDashboardWidget,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard', 'widgets'] });
+      setShowAddModal(false);
+    },
+  });
+
+  const visibleWidgets = widgets?.filter(w => w.is_visible) ?? [];
+  const widgetReportIds = new Set(widgets?.map(w => w.report_id) ?? []);
+  const availableReports = savedReports?.filter(r => !widgetReportIds.has(r.id)) ?? [];
+
+  if (visibleWidgets.length === 0 && !showAddModal) {
+    return (
+      <div className="flex items-center justify-between">
+        <span className="text-sm text-gray-500 dark:text-gray-400">No pinned reports</span>
+        <button
+          type="button"
+          onClick={() => setShowAddModal(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 rounded-md hover:bg-primary-100 dark:hover:bg-primary-900/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+          aria-label="Add report widget"
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          Add Widget
+        </button>
+        {showAddModal && (
+          <AddWidgetModal
+            reports={availableReports}
+            onAdd={(reportId) => addMutation.mutate({ report_id: reportId, position: visibleWidgets.length })}
+            onClose={() => setShowAddModal(false)}
+            isLoading={addMutation.isPending}
+          />
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">
+          Report Widgets
+        </h2>
+        <button
+          type="button"
+          onClick={() => setShowAddModal(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 rounded-md hover:bg-primary-100 dark:hover:bg-primary-900/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+          aria-label="Add report widget"
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          Add Widget
+        </button>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:gap-6 lg:grid-cols-2">
+        {visibleWidgets.map(widget => (
+          <div key={widget.id} className={widget.width === 'full' ? 'lg:col-span-2' : ''}>
+            <ReportWidgetCard widget={widget} />
+          </div>
+        ))}
+      </div>
+      {showAddModal && (
+        <AddWidgetModal
+          reports={availableReports}
+          onAdd={(reportId) => addMutation.mutate({ report_id: reportId, position: visibleWidgets.length })}
+          onClose={() => setShowAddModal(false)}
+          isLoading={addMutation.isPending}
+        />
+      )}
+    </div>
+  );
+}
+
+function AddWidgetModal({
+  reports,
+  onAdd,
+  onClose,
+  isLoading,
+}: {
+  reports: { id: number; name: string; chart_type: string; entity_type: string }[];
+  onAdd: (reportId: number) => void;
+  onClose: () => void;
+  isLoading: boolean;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Add report widget"
+    >
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4 max-h-[70vh] flex flex-col">
+        <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Add Report Widget</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+            aria-label="Close"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="overflow-y-auto flex-1 p-4">
+          {reports.length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-6">
+              No saved reports available. Create a report first.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {reports.map(report => (
+                <li key={report.id}>
+                  <button
+                    type="button"
+                    disabled={isLoading}
+                    onClick={() => onAdd(report.id)}
+                    className="w-full px-3 py-2.5 text-left rounded-md border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                  >
+                    <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">
+                      {report.name}
+                    </span>
+                    <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                      {report.entity_type} - {report.chart_type}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function DashboardPage() {
@@ -251,6 +411,9 @@ function DashboardPage() {
       <Suspense fallback={null}>
         <DashboardRecommendations maxItems={3} />
       </Suspense>
+
+      {/* Report Widgets */}
+      <ReportWidgetsSection />
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 gap-3 sm:gap-6 lg:grid-cols-2">

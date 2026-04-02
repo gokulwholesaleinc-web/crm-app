@@ -226,6 +226,8 @@ class SequenceService(BaseService[Sequence]):
         if not seq or not seq.steps:
             enrollment.status = "completed"
             enrollment.completed_at = datetime.now(timezone.utc)
+            if seq:
+                await self._notify_sequence_completed(seq, enrollment)
             return {
                 "enrollment_id": enrollment.id,
                 "status": "completed",
@@ -238,6 +240,7 @@ class SequenceService(BaseService[Sequence]):
         if current_step_index >= len(steps):
             enrollment.status = "completed"
             enrollment.completed_at = datetime.now(timezone.utc)
+            await self._notify_sequence_completed(seq, enrollment)
             return {
                 "enrollment_id": enrollment.id,
                 "status": "completed",
@@ -305,9 +308,25 @@ class SequenceService(BaseService[Sequence]):
             enrollment.status = "completed"
             enrollment.completed_at = datetime.now(timezone.utc)
             result["status"] = "completed"
+            await self._notify_sequence_completed(seq, enrollment)
         else:
             next_step = steps[next_step_index]
             delay_days = next_step.get("delay_days", 0)
             enrollment.next_step_at = datetime.now(timezone.utc) + timedelta(days=delay_days)
 
         return result
+
+    async def _notify_sequence_completed(
+        self, seq: Sequence, enrollment: SequenceEnrollment
+    ) -> None:
+        """Send a completion notification to the sequence creator."""
+        from src.notifications.event_handler import create_completion_notification
+
+        await create_completion_notification(
+            user_id=seq.created_by_id,
+            title="Sequence Enrollment Completed",
+            message=f"Enrollment #{enrollment.id} in sequence '{seq.name}' has completed",
+            entity_type="sequence",
+            entity_id=seq.id,
+            notification_type="sequence_completed",
+        )

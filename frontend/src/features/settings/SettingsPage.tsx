@@ -24,6 +24,7 @@ import { LeadSourcesSection } from './components/LeadSourcesSection';
 import { WebhooksSection } from './components/WebhooksSection';
 import { AssignmentRulesSection } from './components/AssignmentRulesSection';
 import { RolesSection } from './components/RolesSection';
+import { IntegrationsSection } from './components/IntegrationsSection';
 
 function SettingsPage() {
   const { user, isLoading } = useAuthStore();
@@ -151,6 +152,9 @@ function SettingsPage() {
 
       {/* Lead Sources Section */}
       <LeadSourcesSection />
+
+      {/* Integrations Section (Google Calendar, Meta) */}
+      <IntegrationsSection />
 
       {/* Webhooks Section */}
       <WebhooksSection />

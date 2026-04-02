@@ -204,6 +204,76 @@ export const getConvertedRevenue = async (
   return response.data;
 };
 
+// =============================================================================
+// Report Widgets
+// =============================================================================
+
+export interface ReportWidget {
+  id: number;
+  user_id: number;
+  report_id: number;
+  report_name: string;
+  report_chart_type: string;
+  position: number;
+  width: 'half' | 'full';
+  is_visible: boolean;
+  created_at: string;
+}
+
+export interface CreateWidgetPayload {
+  report_id: number;
+  position?: number;
+  width?: string;
+}
+
+export interface UpdateWidgetPayload {
+  position?: number;
+  width?: string;
+  is_visible?: boolean;
+}
+
+export interface WidgetDataResponse {
+  widget_id: number;
+  report_name: string;
+  chart_type: string;
+  result: {
+    entity_type: string;
+    metric: string;
+    metric_field?: string | null;
+    group_by?: string | null;
+    chart_type: string;
+    data: { label: string; value: number }[];
+    total?: number | null;
+  };
+}
+
+export const listDashboardWidgets = async (): Promise<ReportWidget[]> => {
+  const response = await apiClient.get<ReportWidget[]>(`${DASHBOARD_BASE}/widgets`);
+  return response.data;
+};
+
+export const createDashboardWidget = async (data: CreateWidgetPayload): Promise<ReportWidget> => {
+  const response = await apiClient.post<ReportWidget>(`${DASHBOARD_BASE}/widgets`, data);
+  return response.data;
+};
+
+export const updateDashboardWidget = async (
+  id: number,
+  data: UpdateWidgetPayload
+): Promise<ReportWidget> => {
+  const response = await apiClient.patch<ReportWidget>(`${DASHBOARD_BASE}/widgets/${id}`, data);
+  return response.data;
+};
+
+export const deleteDashboardWidget = async (id: number): Promise<void> => {
+  await apiClient.delete(`${DASHBOARD_BASE}/widgets/${id}`);
+};
+
+export const getDashboardWidgetData = async (id: number): Promise<WidgetDataResponse> => {
+  const response = await apiClient.get<WidgetDataResponse>(`${DASHBOARD_BASE}/widgets/${id}/data`);
+  return response.data;
+};
+
 // Export all dashboard functions
 export const dashboardApi = {
   // Main
@@ -223,6 +293,12 @@ export const dashboardApi = {
   // Multi-Currency
   getCurrencies,
   getConvertedRevenue,
+  // Report Widgets
+  listDashboardWidgets,
+  createDashboardWidget,
+  updateDashboardWidget,
+  deleteDashboardWidget,
+  getDashboardWidgetData,
 };
 
 export default dashboardApi;

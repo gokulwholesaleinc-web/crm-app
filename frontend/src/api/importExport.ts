@@ -199,6 +199,30 @@ export const bulkDelete = async (data: BulkDeleteRequest): Promise<BulkDeleteRes
   return response.data;
 };
 
+// =============================================================================
+// Mapped Import (user-specified column mapping)
+// =============================================================================
+
+export const importWithMapping = async (
+  entityType: string,
+  file: File,
+  columnMapping: Record<string, string>,
+  skipErrors: boolean = true,
+): Promise<{
+  success: boolean;
+  imported_count: number;
+  errors: string[];
+  duplicates_skipped: number;
+}> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('column_mapping', JSON.stringify(columnMapping));
+  formData.append('skip_errors', String(skipErrors));
+
+  const response = await apiClient.post(`${IMPORT_EXPORT_BASE}/import/${entityType}/mapped`, formData);
+  return response.data;
+};
+
 // Export all import/export functions
 export const importExportApi = {
   exportContacts,
@@ -214,6 +238,7 @@ export const importExportApi = {
   bulkUpdate,
   bulkAssign,
   bulkDelete,
+  importWithMapping,
 };
 
 export default importExportApi;

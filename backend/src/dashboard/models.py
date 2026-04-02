@@ -1,7 +1,7 @@
 """Dashboard configuration models - ERPNext pattern."""
 
 from typing import Optional
-from sqlalchemy import String, Integer, Text, Boolean
+from sqlalchemy import String, Integer, Text, Boolean, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 from src.database import Base
 from src.core.mixins.auditable import TimestampMixin
@@ -62,3 +62,29 @@ class DashboardChart(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     order: Mapped[int] = mapped_column(Integer, default=0)
     width: Mapped[str] = mapped_column(String(10), default="half")  # full, half, third
+
+
+class DashboardReportWidget(Base, TimestampMixin):
+    """
+    Dashboard report widget - pins a saved report to the dashboard.
+
+    Users can add saved reports as widgets on their dashboard with
+    configurable position and width.
+    """
+    __tablename__ = "dashboard_report_widgets"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    report_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("saved_reports.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    width: Mapped[str] = mapped_column(String(10), default="half")  # half, full
+    is_visible: Mapped[bool] = mapped_column(Boolean, default=True)

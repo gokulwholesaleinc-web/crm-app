@@ -181,6 +181,7 @@ export {
   generateExportFilename,
   bulkUpdate,
   bulkAssign,
+  importWithMapping,
 } from './importExport';
 
 // Audit API
@@ -328,3 +329,19 @@ export const api = {
 };
 
 export default api;
+
+// Integrations API (Google Calendar, Meta OAuth)
+export {
+  getCalendarStatus,
+  getCalendarAuthUrl,
+  calendarCallback,
+  disconnectCalendar,
+  syncCalendar,
+  pushToCalendar,
+  getMetaStatus,
+  getMetaAuthUrl,
+  metaCallback,
+  disconnectMeta,
+  syncInstagram,
+} from './integrations';
+export type { CalendarSyncStatus, MetaConnectionStatus } from './integrations';

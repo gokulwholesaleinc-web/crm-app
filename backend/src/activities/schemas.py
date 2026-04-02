@@ -113,5 +113,21 @@ class TimelineResponse(BaseModel):
     items: List[TimelineItem]
 
 
+class UnifiedTimelineEvent(BaseModel):
+    """A single event in the unified timeline (activity, email, or sequence step)."""
+    id: int
+    event_type: str  # activity, email_sent, email_opened, email_clicked, sequence_step
+    subject: str
+    description: Optional[str] = None
+    entity_type: Optional[str] = None
+    entity_id: Optional[int] = None
+    timestamp: str
+    metadata: Optional[dict] = None
+
+
+class UnifiedTimelineResponse(BaseModel):
+    items: List[UnifiedTimelineEvent]
+
+
 class CompleteActivityRequest(BaseModel):
     notes: Optional[str] = None

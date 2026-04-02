@@ -38,6 +38,7 @@ import {
   ClipboardDocumentListIcon,
   UserPlusIcon,
 } from '@heroicons/react/24/outline';
+import { SequenceStepBuilder } from './components/SequenceStepBuilder';
 
 const STEP_TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   email: EnvelopeIcon,
@@ -241,7 +242,7 @@ function SequenceForm({
       </div>
       <div>
         <span className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Steps</span>
-        <StepBuilder steps={steps} onChange={setSteps} />
+        <SequenceStepBuilder steps={steps} onChange={setSteps} />
       </div>
       <div className="flex items-center gap-2">
         <input

@@ -12,6 +12,7 @@ import type {
   CampaignMember,
   CampaignMemberUpdate,
   CampaignStats,
+  CampaignAnalytics,
   AddMembersRequest,
   AddMembersResponse,
   EmailTemplate,
@@ -83,6 +84,16 @@ export const deleteCampaign = async (campaignId: number): Promise<void> => {
 export const getCampaignStats = async (campaignId: number): Promise<CampaignStats> => {
   const response = await apiClient.get<CampaignStats>(
     `${CAMPAIGNS_BASE}/${campaignId}/stats`
+  );
+  return response.data;
+};
+
+/**
+ * Get campaign email analytics (open/click/bounce rates per step)
+ */
+export const getCampaignAnalytics = async (campaignId: number): Promise<CampaignAnalytics> => {
+  const response = await apiClient.get<CampaignAnalytics>(
+    `${CAMPAIGNS_BASE}/${campaignId}/analytics`
   );
   return response.data;
 };
@@ -237,6 +248,7 @@ export const campaignsApi = {
   update: updateCampaign,
   delete: deleteCampaign,
   getStats: getCampaignStats,
+  getAnalytics: getCampaignAnalytics,
   // Members
   getMembers: getCampaignMembers,
   addMembers: addCampaignMembers,

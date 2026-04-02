@@ -1,7 +1,9 @@
 """Campaign service layer."""
 
+import logging
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Tuple, Dict
-from sqlalchemy import select, func
+from sqlalchemy import select, func, and_
 from src.campaigns.models import Campaign, CampaignMember, EmailTemplate, EmailCampaignStep
 from src.campaigns.schemas import (
     CampaignCreate,
@@ -12,10 +14,14 @@ from src.campaigns.schemas import (
     EmailTemplateUpdate,
     EmailCampaignStepCreate,
     EmailCampaignStepUpdate,
+    StepAnalytics,
+    CampaignAnalytics,
 )
 from src.core.base_service import CRUDService, BaseService
 from src.core.constants import DEFAULT_PAGE_SIZE
 from src.core.filtering import build_token_search
+
+logger = logging.getLogger(__name__)
 
 
 class CampaignService(CRUDService[Campaign, CampaignCreate, CampaignUpdate]):
@@ -64,6 +70,114 @@ class CampaignService(CRUDService[Campaign, CampaignCreate, CampaignUpdate]):
 
         return campaigns, total
 
+    async def process_due_campaign_steps(self) -> List[Dict]:
+        """Process campaigns that have a due next step.
+
+        Finds campaigns where is_executing=True and next_step_at <= now,
+        sends emails for the current step, then advances or completes.
+        """
+        now = datetime.now(timezone.utc)
+        result = await self.db.execute(
+            select(Campaign).where(
+                and_(
+                    Campaign.is_executing == True,
+                    Campaign.next_step_at.isnot(None),
+                    Campaign.next_step_at <= now,
+                )
+            )
+        )
+        due_campaigns = list(result.scalars().all())
+
+        processed = []
+        for campaign in due_campaigns:
+            try:
+                step_result = await self._execute_campaign_step(campaign)
+                processed.append(step_result)
+            except Exception as e:
+                logger.error("Failed to process step for campaign %s: %s", campaign.id, e)
+                processed.append({"campaign_id": campaign.id, "status": "error", "error": str(e)})
+
+        await self.db.flush()
+        return processed
+
+    async def _update_member_statuses(self, campaign_id: int, sent_emails) -> None:
+        """Mark campaign members as 'sent' for emails that were actually queued."""
+        from src.email.service import EmailService
+
+        now = datetime.now(timezone.utc)
+        email_addresses = {e.to_email for e in sent_emails}
+        email_service = EmailService(self.db)
+        members_result = await self.db.execute(
+            select(CampaignMember).where(CampaignMember.campaign_id == campaign_id)
+        )
+        for member in members_result.scalars().all():
+            member_email = await email_service.get_member_email(member)
+            if member_email in email_addresses:
+                member.status = "sent"
+                member.sent_at = now
+
+    def _advance_to_next_step(self, campaign: Campaign, steps: list) -> None:
+        """Advance campaign to the next step, or mark completed if done."""
+        if campaign.current_step >= len(steps):
+            campaign.status = "completed"
+            campaign.is_executing = False
+            campaign.next_step_at = None
+        else:
+            next_step = steps[campaign.current_step]
+            campaign.next_step_at = datetime.now(timezone.utc) + timedelta(days=next_step.delay_days)
+
+    async def _execute_campaign_step(self, campaign: Campaign) -> Dict:
+        """Execute the current step for a campaign and schedule the next one."""
+        from src.email.service import EmailService
+
+        step_service = EmailCampaignStepService(self.db)
+        steps = await step_service.get_steps(campaign.id)
+
+        if campaign.current_step >= len(steps):
+            campaign.status = "completed"
+            campaign.is_executing = False
+            campaign.next_step_at = None
+            await self._notify_campaign_completed(campaign)
+            return {"campaign_id": campaign.id, "status": "completed", "reason": "all_steps_done"}
+
+        step = steps[campaign.current_step]
+
+        email_service = EmailService(self.db)
+        sent_emails = await email_service.send_campaign_emails(
+            campaign_id=campaign.id,
+            template_id=step.template_id,
+            sent_by_id=campaign.owner_id,
+        )
+
+        campaign.num_sent = (campaign.num_sent or 0) + len(sent_emails)
+        await self._update_member_statuses(campaign.id, sent_emails)
+
+        campaign.current_step += 1
+        self._advance_to_next_step(campaign, steps)
+
+        if campaign.status == "completed":
+            await self._notify_campaign_completed(campaign)
+
+        return {
+            "campaign_id": campaign.id,
+            "step_executed": campaign.current_step - 1,
+            "emails_sent": len(sent_emails),
+            "status": campaign.status,
+        }
+
+    async def _notify_campaign_completed(self, campaign: Campaign) -> None:
+        """Send a completion notification to the campaign owner."""
+        from src.notifications.event_handler import create_completion_notification
+
+        await create_completion_notification(
+            user_id=campaign.owner_id,
+            title="Campaign Completed",
+            message=f"Campaign '{campaign.name}' has completed all steps",
+            entity_type="campaign",
+            entity_id=campaign.id,
+            notification_type="campaign_completed",
+        )
+
     async def get_campaign_stats(self, campaign_id: int) -> Dict:
         """Get campaign statistics."""
         # Count by status
@@ -100,6 +214,76 @@ class CampaignService(CRUDService[Campaign, CampaignCreate, CampaignUpdate]):
             "response_rate": response_rate,
             "conversion_rate": conversion_rate,
         }
+
+    async def get_campaign_analytics(self, campaign_id: int) -> CampaignAnalytics:
+        """Get email analytics for a campaign, grouped by step."""
+        from sqlalchemy import Integer as SAInteger, case
+        from src.email.models import EmailQueue
+
+        # Get campaign steps with template names
+        step_result = await self.db.execute(
+            select(EmailCampaignStep, EmailTemplate.name)
+            .join(EmailTemplate, EmailCampaignStep.template_id == EmailTemplate.id)
+            .where(EmailCampaignStep.campaign_id == campaign_id)
+            .order_by(EmailCampaignStep.step_order)
+        )
+        step_rows = step_result.all()
+
+        # Get email stats grouped by template_id for this campaign
+        email_result = await self.db.execute(
+            select(
+                EmailQueue.template_id,
+                func.count(EmailQueue.id).label("sent"),
+                func.count(EmailQueue.opened_at).label("opened"),
+                func.count(EmailQueue.clicked_at).label("clicked"),
+                func.sum(
+                    case((EmailQueue.status == "failed", 1), else_=0)
+                ).label("failed"),
+            )
+            .where(EmailQueue.campaign_id == campaign_id)
+            .group_by(EmailQueue.template_id)
+        )
+        email_stats = {row.template_id: row for row in email_result.all()}
+
+        total_sent = 0
+        total_opened = 0
+        total_clicked = 0
+        total_failed = 0
+        steps = []
+
+        for step, template_name in step_rows:
+            stats = email_stats.get(step.template_id)
+            sent = stats.sent if stats else 0
+            opened = stats.opened if stats else 0
+            clicked = stats.clicked if stats else 0
+            failed = int(stats.failed or 0) if stats else 0
+
+            total_sent += sent
+            total_opened += opened
+            total_clicked += clicked
+            total_failed += failed
+
+            steps.append(StepAnalytics(
+                step_order=step.step_order,
+                template_name=template_name,
+                sent=sent,
+                opened=opened,
+                clicked=clicked,
+                failed=failed,
+                open_rate=round((opened / sent) * 100, 1) if sent > 0 else 0.0,
+                click_rate=round((clicked / sent) * 100, 1) if sent > 0 else 0.0,
+            ))
+
+        return CampaignAnalytics(
+            campaign_id=campaign_id,
+            total_sent=total_sent,
+            total_opened=total_opened,
+            total_clicked=total_clicked,
+            total_failed=total_failed,
+            open_rate=round((total_opened / total_sent) * 100, 1) if total_sent > 0 else 0.0,
+            click_rate=round((total_clicked / total_sent) * 100, 1) if total_sent > 0 else 0.0,
+            steps=steps,
+        )
 
 
 class CampaignMemberService(BaseService[CampaignMember]):

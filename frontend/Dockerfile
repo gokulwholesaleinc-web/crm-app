@@ -3,10 +3,10 @@ FROM node:20-alpine AS development
 
 WORKDIR /app
 
-COPY frontend/package*.json ./
+COPY package*.json ./
 RUN npm ci
 
-COPY frontend/ .
+COPY . .
 
 EXPOSE 3000
 
@@ -17,18 +17,18 @@ FROM node:20-alpine AS build
 
 WORKDIR /app
 
-COPY frontend/package*.json ./
+COPY package*.json ./
 RUN npm ci
 
-COPY frontend/ .
+COPY . .
 RUN npm run build
 
 # Production stage (default - used by Railway)
 FROM nginx:alpine AS production
 
 COPY --from=build /app/dist /usr/share/nginx/html
-COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf.template
-COPY frontend/docker-entrypoint.sh /docker-entrypoint-custom.sh
+COPY nginx.conf /etc/nginx/conf.d/default.conf.template
+COPY docker-entrypoint.sh /docker-entrypoint-custom.sh
 RUN chmod +x /docker-entrypoint-custom.sh
 
 ENV BACKEND_HOST=backend

@@ -19,6 +19,8 @@ from src.activities.schemas import (
     ActivityListResponse,
     TimelineResponse,
     TimelineItem,
+    UnifiedTimelineEvent,
+    UnifiedTimelineResponse,
     CompleteActivityRequest,
 )
 from src.activities.service import ActivityService
@@ -280,6 +282,24 @@ async def get_overdue_activities(
         limit=limit,
     )
     return TimelineResponse(items=[TimelineItem(**item) for item in items])
+
+
+@router.get("/timeline/unified/{entity_type}/{entity_id}", response_model=UnifiedTimelineResponse)
+async def get_unified_timeline(
+    entity_type: str,
+    entity_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+    limit: int = Query(50, ge=1, le=200),
+):
+    """Get unified timeline combining activities, emails, and sequence events for an entity."""
+    timeline = ActivityTimeline(db)
+    items = await timeline.get_unified_timeline(
+        entity_type=entity_type,
+        entity_id=entity_id,
+        limit=limit,
+    )
+    return UnifiedTimelineResponse(items=[UnifiedTimelineEvent(**item) for item in items])
 
 
 @router.get("/{activity_id}", response_model=ActivityResponse)

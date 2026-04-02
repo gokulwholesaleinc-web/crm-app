@@ -23,6 +23,7 @@ export const campaignKeys = {
   stats: (id: number) => ['campaigns', 'stats', id] as const,
   members: (id: number, params?: { page?: number; page_size?: number; status?: string }) =>
     ['campaigns', 'members', id, params] as const,
+  analytics: (id: number) => ['campaigns', 'analytics', id] as const,
 };
 
 // =============================================================================
@@ -88,6 +89,17 @@ export function useDeleteCampaign() {
 // =============================================================================
 // Campaign Stats and Members Hooks
 // =============================================================================
+
+/**
+ * Hook to fetch campaign email analytics
+ */
+export function useCampaignAnalytics(id: number | undefined) {
+  return useQuery({
+    queryKey: campaignKeys.analytics(id!),
+    queryFn: () => campaignsApi.getAnalytics(id!),
+    enabled: !!id,
+  });
+}
 
 /**
  * Hook to fetch campaign stats
