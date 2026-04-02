@@ -1,6 +1,5 @@
 """Opportunity API routes."""
 
-import json as _json
 import logging
 from typing import Annotated, Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -11,9 +10,13 @@ from src.core.router_utils import (
     DBSession,
     CurrentUser,
     parse_tag_ids,
+    parse_json_filters,
+    effective_owner_id,
     get_entity_or_404,
     calculate_pages,
     check_ownership,
+    build_response_with_tags,
+    build_list_responses_with_tags,
 )
 from src.core.data_scope import DataScope, get_data_scope, check_record_access_or_shared
 from src.core.cache import (
@@ -62,11 +65,7 @@ router = APIRouter(prefix="/api/opportunities", tags=["opportunities"])
 async def _build_opportunity_response(
     service: OpportunityService, opportunity
 ) -> OpportunityResponse:
-    """Build an OpportunityResponse with tags."""
-    tags = await service.get_tags(opportunity.id)
-    response_dict = OpportunityResponse.model_validate(opportunity).model_dump()
-    response_dict["tags"] = [TagBrief.model_validate(t) for t in tags]
-    return OpportunityResponse(**response_dict)
+    return await build_response_with_tags(service, opportunity, OpportunityResponse, TagBrief)
 
 
 # Pipeline Stages endpoints
@@ -256,18 +255,6 @@ async def list_opportunities(
     filters: Optional[str] = None,
 ):
     """List opportunities with pagination and filters."""
-    parsed_filters = None
-    if filters:
-        try:
-            parsed_filters = _json.loads(filters)
-        except _json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail="Invalid JSON filter format")
-
-    if data_scope.can_see_all():
-        effective_owner_id = owner_id
-    else:
-        effective_owner_id = data_scope.owner_id
-
     service = OpportunityService(db)
 
     opportunities, total = await service.get_list(
@@ -277,24 +264,16 @@ async def list_opportunities(
         pipeline_stage_id=pipeline_stage_id,
         contact_id=contact_id,
         company_id=company_id,
-        owner_id=effective_owner_id,
+        owner_id=effective_owner_id(data_scope, owner_id),
         tag_ids=parse_tag_ids(tag_ids),
-        filters=parsed_filters,
+        filters=parse_json_filters(filters),
         shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_OPPORTUNITIES),
     )
 
-    # Bulk-load tags in a single query to avoid N+1
-    entity_ids = [opp.id for opp in opportunities]
-    tags_map = await service.get_tags_for_entities(entity_ids)
-
-    opp_responses = []
-    for opp in opportunities:
-        response_dict = OpportunityResponse.model_validate(opp).model_dump()
-        response_dict["tags"] = [TagBrief.model_validate(t) for t in tags_map.get(opp.id, [])]
-        opp_responses.append(OpportunityResponse(**response_dict))
+    tags_map = await service.get_tags_for_entities([o.id for o in opportunities])
 
     return OpportunityListResponse(
-        items=opp_responses,
+        items=build_list_responses_with_tags(opportunities, tags_map, OpportunityResponse, TagBrief),
         total=total,
         page=page,
         page_size=page_size,

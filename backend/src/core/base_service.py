@@ -191,35 +191,24 @@ class StatusTransitionMixin:
     valid_accept_statuses: list = ["sent", "viewed"]
     valid_reject_statuses: list = ["sent", "viewed"]
 
-    async def mark_sent(self, instance):
-        """Mark an entity as sent."""
-        if instance.status not in self.valid_send_statuses:
-            raise ValueError(f"Cannot transition from '{instance.status}' to 'sent'")
-        instance.status = "sent"
-        instance.sent_at = datetime.now(timezone.utc)
+    async def _transition_status(self, instance, target_status: str, valid_from: list, timestamp_attr: str):
+        """Transition an entity to a new status with validation."""
+        if instance.status not in valid_from:
+            raise ValueError(f"Cannot transition from '{instance.status}' to '{target_status}'")
+        instance.status = target_status
+        setattr(instance, timestamp_attr, datetime.now(timezone.utc))
         await self.db.flush()
         await self.db.refresh(instance)
         return instance
+
+    async def mark_sent(self, instance):
+        return await self._transition_status(instance, "sent", self.valid_send_statuses, "sent_at")
 
     async def mark_accepted(self, instance):
-        """Mark an entity as accepted."""
-        if instance.status not in self.valid_accept_statuses:
-            raise ValueError(f"Cannot transition from '{instance.status}' to 'accepted'")
-        instance.status = "accepted"
-        instance.accepted_at = datetime.now(timezone.utc)
-        await self.db.flush()
-        await self.db.refresh(instance)
-        return instance
+        return await self._transition_status(instance, "accepted", self.valid_accept_statuses, "accepted_at")
 
     async def mark_rejected(self, instance):
-        """Mark an entity as rejected."""
-        if instance.status not in self.valid_reject_statuses:
-            raise ValueError(f"Cannot transition from '{instance.status}' to 'rejected'")
-        instance.status = "rejected"
-        instance.rejected_at = datetime.now(timezone.utc)
-        await self.db.flush()
-        await self.db.refresh(instance)
-        return instance
+        return await self._transition_status(instance, "rejected", self.valid_reject_statuses, "rejected_at")
 
 
 class TaggableServiceMixin:

@@ -1,6 +1,5 @@
 """Lead API routes."""
 
-import json as _json
 import logging
 from typing import Annotated, Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -13,10 +12,14 @@ from src.core.router_utils import (
     DBSession,
     CurrentUser,
     parse_tag_ids,
+    parse_json_filters,
+    effective_owner_id,
     get_entity_or_404,
     calculate_pages,
     raise_bad_request,
     check_ownership,
+    build_response_with_tags,
+    build_list_responses_with_tags,
 )
 from src.core.data_scope import DataScope, get_data_scope, check_record_access_or_shared
 from src.core.cache import (
@@ -61,11 +64,7 @@ router = APIRouter(prefix="/api/leads", tags=["leads"])
 
 
 async def _build_lead_response(service: LeadService, lead) -> LeadResponse:
-    """Build a LeadResponse with tags."""
-    tags = await service.get_tags(lead.id)
-    response_dict = LeadResponse.model_validate(lead).model_dump()
-    response_dict["tags"] = [TagBrief.model_validate(t) for t in tags]
-    return LeadResponse(**response_dict)
+    return await build_response_with_tags(service, lead, LeadResponse, TagBrief)
 
 
 @router.get("", response_model=LeadListResponse)
@@ -89,19 +88,6 @@ async def list_leads(
     - Admin/Manager: see all leads (or filter by owner_id if provided)
     - Sales_rep/Viewer: see only own leads + shared leads
     """
-    parsed_filters = None
-    if filters:
-        try:
-            parsed_filters = _json.loads(filters)
-        except _json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail="Invalid JSON filter format")
-
-    # Use data_scope to determine owner_id filter
-    if data_scope.can_see_all():
-        effective_owner_id = owner_id  # None = all, or specific user if requested
-    else:
-        effective_owner_id = data_scope.owner_id  # Forced to own records
-
     service = LeadService(db)
 
     leads, total = await service.get_list(
@@ -110,25 +96,17 @@ async def list_leads(
         search=search,
         status=status,
         source_id=source_id,
-        owner_id=effective_owner_id,
+        owner_id=effective_owner_id(data_scope, owner_id),
         min_score=min_score,
         tag_ids=parse_tag_ids(tag_ids),
-        filters=parsed_filters,
+        filters=parse_json_filters(filters),
         shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_LEADS),
     )
 
-    # Bulk-load tags in a single query to avoid N+1
-    entity_ids = [lead.id for lead in leads]
-    tags_map = await service.get_tags_for_entities(entity_ids)
-
-    lead_responses = []
-    for lead in leads:
-        response_dict = LeadResponse.model_validate(lead).model_dump()
-        response_dict["tags"] = [TagBrief.model_validate(t) for t in tags_map.get(lead.id, [])]
-        lead_responses.append(LeadResponse(**response_dict))
+    tags_map = await service.get_tags_for_entities([l.id for l in leads])
 
     return LeadListResponse(
-        items=lead_responses,
+        items=build_list_responses_with_tags(leads, tags_map, LeadResponse, TagBrief),
         total=total,
         page=page,
         page_size=page_size,

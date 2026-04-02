@@ -38,6 +38,20 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/quotes", tags=["quotes"])
 
 
+def _build_branded_response(branding_data: dict, quote) -> QuotePublicResponse:
+    branding = QuoteBranding(
+        company_name=branding_data.get("company_name"),
+        logo_url=branding_data.get("logo_url"),
+        primary_color=branding_data.get("primary_color", "#6366f1"),
+        secondary_color=branding_data.get("secondary_color", "#8b5cf6"),
+        accent_color=branding_data.get("accent_color", "#22c55e"),
+        footer_text=branding_data.get("footer_text"),
+    )
+    response = QuotePublicResponse.model_validate(quote)
+    response.branding = branding
+    return response
+
+
 @router.get("", response_model=QuoteListResponse)
 async def list_quotes(
     current_user: CurrentUser,
@@ -205,19 +219,7 @@ async def get_public_quote(
     await service.record_quote_view(quote)
 
     # Resolve branding from quote owner's tenant
-    branding_data = await service.get_branding_for_quote(quote)
-    branding = QuoteBranding(
-        company_name=branding_data.get("company_name"),
-        logo_url=branding_data.get("logo_url"),
-        primary_color=branding_data.get("primary_color", "#6366f1"),
-        secondary_color=branding_data.get("secondary_color", "#8b5cf6"),
-        accent_color=branding_data.get("accent_color", "#22c55e"),
-        footer_text=branding_data.get("footer_text"),
-    )
-
-    response = QuotePublicResponse.model_validate(quote)
-    response.branding = branding
-    return response
+    return _build_branded_response(await service.get_branding_for_quote(quote), quote)
 
 
 @router.post("/public/{quote_number}/accept", response_model=QuotePublicResponse)
@@ -245,19 +247,7 @@ async def accept_quote_public(
     except ValueError as e:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
 
-    branding_data = await service.get_branding_for_quote(quote)
-    branding = QuoteBranding(
-        company_name=branding_data.get("company_name"),
-        logo_url=branding_data.get("logo_url"),
-        primary_color=branding_data.get("primary_color", "#6366f1"),
-        secondary_color=branding_data.get("secondary_color", "#8b5cf6"),
-        accent_color=branding_data.get("accent_color", "#22c55e"),
-        footer_text=branding_data.get("footer_text"),
-    )
-
-    response = QuotePublicResponse.model_validate(quote)
-    response.branding = branding
-    return response
+    return _build_branded_response(await service.get_branding_for_quote(quote), quote)
 
 
 @router.post("/public/{quote_number}/reject", response_model=QuotePublicResponse)
@@ -281,19 +271,7 @@ async def reject_quote_public(
     except ValueError as e:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
 
-    branding_data = await service.get_branding_for_quote(quote)
-    branding = QuoteBranding(
-        company_name=branding_data.get("company_name"),
-        logo_url=branding_data.get("logo_url"),
-        primary_color=branding_data.get("primary_color", "#6366f1"),
-        secondary_color=branding_data.get("secondary_color", "#8b5cf6"),
-        accent_color=branding_data.get("accent_color", "#22c55e"),
-        footer_text=branding_data.get("footer_text"),
-    )
-
-    response = QuotePublicResponse.model_validate(quote)
-    response.branding = branding
-    return response
+    return _build_branded_response(await service.get_branding_for_quote(quote), quote)
 
 
 # =============================================================================
