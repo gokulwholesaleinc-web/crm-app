@@ -1,8 +1,13 @@
 #!/bin/sh
-# Extract IPv4 nameserver from resolv.conf (skip IPv6 to avoid nginx parser issues)
-RESOLVER=$(awk '/^nameserver/{if($2 !~ /:/){print $2; exit}}' /etc/resolv.conf)
-# Fallback to public DNS if no IPv4 nameserver found
-RESOLVER=${RESOLVER:-8.8.8.8}
+# Extract the first nameserver from resolv.conf
+RAW_RESOLVER=$(awk '/^nameserver/{print $2; exit}' /etc/resolv.conf)
+
+# Wrap IPv6 addresses in brackets for nginx, leave IPv4 as-is
+if echo "$RAW_RESOLVER" | grep -q ':'; then
+  RESOLVER="[$RAW_RESOLVER]"
+else
+  RESOLVER="${RAW_RESOLVER:-8.8.8.8}"
+fi
 export RESOLVER
 
 # Substitute variables in nginx config
