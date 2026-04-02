@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
-from sqlalchemy import select, or_, and_, union_all, literal, cast, String
+from sqlalchemy import select, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.activities.models import Activity
 

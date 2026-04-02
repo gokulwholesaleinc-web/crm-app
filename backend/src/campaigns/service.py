@@ -134,9 +134,7 @@ class CampaignService(CRUDService[Campaign, CampaignCreate, CampaignUpdate]):
         steps = await step_service.get_steps(campaign.id)
 
         if campaign.current_step >= len(steps):
-            campaign.status = "completed"
-            campaign.is_executing = False
-            campaign.next_step_at = None
+            self._advance_to_next_step(campaign, steps)
             await self._notify_campaign_completed(campaign)
             return {"campaign_id": campaign.id, "status": "completed", "reason": "all_steps_done"}
 
@@ -217,7 +215,7 @@ class CampaignService(CRUDService[Campaign, CampaignCreate, CampaignUpdate]):
 
     async def get_campaign_analytics(self, campaign_id: int) -> CampaignAnalytics:
         """Get email analytics for a campaign, grouped by step."""
-        from sqlalchemy import Integer as SAInteger, case
+        from sqlalchemy import case
         from src.email.models import EmailQueue
 
         # Get campaign steps with template names

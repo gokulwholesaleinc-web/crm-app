@@ -37,28 +37,14 @@ async def _build_notification(session, event_type: str, payload: Dict[str, Any])
     if not user_id:
         return None
 
-    if event_type == "lead.created":
-        first_name = data.get("first_name", "")
-        last_name = data.get("last_name", "")
-        name = f"{first_name} {last_name}".strip() or "Unknown"
+    if event_type in ("lead.created", "contact.created"):
+        name = f"{data.get('first_name', '')} {data.get('last_name', '')}".strip() or "Unknown"
+        label = "Lead" if event_type == "lead.created" else "Contact"
         return Notification(
             user_id=user_id,
-            type="lead_created",
-            title="New Lead",
-            message=f"New lead: {name}",
-            entity_type=entity_type,
-            entity_id=entity_id,
-        )
-
-    if event_type == "contact.created":
-        first_name = data.get("first_name", "")
-        last_name = data.get("last_name", "")
-        name = f"{first_name} {last_name}".strip() or "Unknown"
-        return Notification(
-            user_id=user_id,
-            type="contact_created",
-            title="New Contact",
-            message=f"New contact: {name}",
+            type=event_type.replace(".", "_"),
+            title=f"New {label}",
+            message=f"New {label.lower()}: {name}",
             entity_type=entity_type,
             entity_id=entity_id,
         )
