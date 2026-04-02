@@ -166,9 +166,9 @@ export function TenantProvider({ children }: TenantProviderProps) {
   // propagate to all consumers (BrandingSection, Sidebar, etc.).
   const [slugState, setSlugState] = useState<string | null>(() => {
     try {
-      return localStorage.getItem(TENANT_SLUG_KEY);
+      return localStorage.getItem(TENANT_SLUG_KEY) || 'default';
     } catch {
-      return null;
+      return 'default';
     }
   });
 
