@@ -129,6 +129,7 @@ class PaymentBase(BaseModel):
 class PaymentCreate(PaymentBase):
     stripe_payment_intent_id: Optional[str] = None
     stripe_checkout_session_id: Optional[str] = None
+    stripe_invoice_id: Optional[str] = None
 
 
 class PaymentUpdate(BaseModel):
@@ -137,6 +138,7 @@ class PaymentUpdate(BaseModel):
     receipt_url: Optional[str] = None
     stripe_payment_intent_id: Optional[str] = None
     stripe_checkout_session_id: Optional[str] = None
+    stripe_invoice_id: Optional[str] = None
 
 
 class CustomerBrief(BaseModel):
@@ -166,6 +168,7 @@ class PaymentResponse(PaymentBase):
     id: int
     stripe_payment_intent_id: Optional[str] = None
     stripe_checkout_session_id: Optional[str] = None
+    stripe_invoice_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     customer: Optional[CustomerBrief] = None
@@ -243,3 +246,37 @@ class CreatePaymentIntentResponse(BaseModel):
     payment_intent_id: str
     client_secret: str
     payment_id: int
+
+
+# =============================================================================
+# Invoice Schemas
+# =============================================================================
+
+class CreateInvoiceRequest(BaseModel):
+    customer_id: int
+    amount: Decimal
+    description: str
+    currency: str = "USD"
+    due_days: int = 30
+    payment_method_types: Optional[List[str]] = None
+
+
+class CreateInvoiceResponse(BaseModel):
+    invoice_url: str
+    payment_id: int
+    stripe_invoice_id: str
+
+
+# =============================================================================
+# Onboarding Link Schemas
+# =============================================================================
+
+class OnboardingLinkRequest(BaseModel):
+    contact_id: Optional[int] = None
+    company_id: Optional[int] = None
+    success_url: str
+    cancel_url: str
+
+
+class OnboardingLinkResponse(BaseModel):
+    url: str
