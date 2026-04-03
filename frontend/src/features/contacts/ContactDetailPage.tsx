@@ -10,7 +10,8 @@ const SharePanel = lazy(() => import('../../components/shared/SharePanel'));
 const ContractsList = lazy(() => import('../../components/shared/ContractsList'));
 const PaymentSummary = lazy(() => import('../../components/shared/PaymentSummary'));
 const DocumentsTab = lazy(() => import('../../components/shared/DocumentsTab'));
-import { EmailComposeModal, EmailHistory } from '../../components/email';
+import { EmailComposeModal, EmailThread } from '../../components/email';
+import type { ThreadEmailItem } from '../../types/email';
 import { ContactForm, ContactFormData } from './components/ContactForm';
 import { NextBestActionCard } from '../../components/ai';
 import { useContact, useDeleteContact, useUpdateContact } from '../../hooks/useContacts';
@@ -34,6 +35,7 @@ function ContactDetailPage() {
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEmailCompose, setShowEmailCompose] = useState(false);
+  const [replyToEmail, setReplyToEmail] = useState<ThreadEmailItem | null>(null);
 
   // Use hooks for data fetching
   const { data: contact, isLoading, error } = useContact(contactId);
@@ -419,7 +421,30 @@ function ContactDetailPage() {
       {activeTab === 'emails' && contactId && (
         <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
           <div className="px-4 py-5 sm:p-6">
-            <EmailHistory entityType="contacts" entityId={contactId} />
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Email Thread</h3>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setReplyToEmail(null);
+                  setShowEmailCompose(true);
+                }}
+              >
+                Compose Email
+              </Button>
+            </div>
+            <EmailThread
+              entityType="contacts"
+              entityId={contactId}
+              onReply={(email) => {
+                setReplyToEmail(email);
+                setShowEmailCompose(true);
+              }}
+              onCompose={() => {
+                setReplyToEmail(null);
+                setShowEmailCompose(true);
+              }}
+            />
           </div>
         </div>
       )}
@@ -558,10 +583,14 @@ function ContactDetailPage() {
       {/* Email Compose Modal */}
       <EmailComposeModal
         isOpen={showEmailCompose}
-        onClose={() => setShowEmailCompose(false)}
+        onClose={() => {
+          setShowEmailCompose(false);
+          setReplyToEmail(null);
+        }}
         defaultTo={contact.email || ''}
         entityType="contacts"
         entityId={contactId}
+        replyTo={replyToEmail}
       />
 
       {/* Edit Form Modal */}

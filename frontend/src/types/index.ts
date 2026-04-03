@@ -16,3 +16,4 @@ export * from './dashboard';
 export * from './payments';
 export * from './proposals';
 export * from './misc';
+export * from './email';

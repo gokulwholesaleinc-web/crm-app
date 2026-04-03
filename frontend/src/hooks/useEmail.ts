@@ -11,6 +11,8 @@ export const emailKeys = {
   entity: (entityType: string, entityId: number) =>
     [...emailKeys.all, 'entity', entityType, entityId] as const,
   detail: (id: number) => [...emailKeys.all, 'detail', id] as const,
+  thread: (entityType: string, entityId: number, page: number) =>
+    [...emailKeys.all, 'thread', entityType, entityId, page] as const,
 };
 
 export function useEmailList(params?: {
@@ -51,6 +53,14 @@ export function useSendTemplateEmail() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: emailKeys.all });
     },
+  });
+}
+
+export function useEmailThread(entityType: string, entityId: number, page = 1, pageSize = 50) {
+  return useQuery({
+    queryKey: emailKeys.thread(entityType, entityId, page),
+    queryFn: () => emailApi.thread({ entity_type: entityType, entity_id: entityId, page, page_size: pageSize }),
+    enabled: !!entityType && !!entityId,
   });
 }
 

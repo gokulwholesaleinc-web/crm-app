@@ -3,11 +3,15 @@
  */
 
 import { apiClient } from './client';
+import type { ThreadResponse } from '../types/email';
 
 export interface SendEmailPayload {
   to_email: string;
   subject: string;
   body: string;
+  from_email?: string;
+  cc?: string;
+  bcc?: string;
   entity_type?: string;
   entity_id?: number;
 }
@@ -68,4 +72,7 @@ export const emailApi = {
 
   getById: (id: number) =>
     apiClient.get<EmailQueueItem>(`/api/email/${id}`).then((r) => r.data),
+
+  thread: (params: { entity_type: string; entity_id: number; page?: number; page_size?: number }) =>
+    apiClient.get<ThreadResponse>('/api/email/thread', { params }).then((r) => r.data),
 };
