@@ -1,7 +1,7 @@
 """Email request/response schemas."""
 
 from datetime import datetime
-from typing import Optional, List, Any
+from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, ConfigDict, EmailStr
 
 
@@ -29,6 +29,8 @@ class SendTemplateEmailRequest(BaseModel):
 class SendCampaignEmailRequest(BaseModel):
     """Request to send emails for a campaign."""
     campaign_id: int
+    template_id: int
+    variables: Optional[Dict[str, str]] = None
 
 
 class EmailQueueResponse(BaseModel):

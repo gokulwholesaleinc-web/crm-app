@@ -7,7 +7,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Tuple, Dict
 
 import resend
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, union_all, literal, literal_column, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
@@ -58,6 +59,24 @@ class EmailService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    @staticmethod
+    def _validate_from_email(from_email: Optional[str]) -> Optional[str]:
+        """Validate from_email against the configured EMAIL_FROM domain.
+
+        Returns the from_email if valid, or None to fall back to default.
+        """
+        if not from_email:
+            return None
+        # Extract domain from the default EMAIL_FROM setting
+        default_domain = settings.EMAIL_FROM.rsplit("@", 1)[-1] if "@" in settings.EMAIL_FROM else ""
+        if not default_domain:
+            return None
+        email_domain = from_email.rsplit("@", 1)[-1] if "@" in from_email else ""
+        if email_domain.lower() != default_domain.lower():
+            logger.warning("Invalid from_email domain %s, using default", from_email)
+            return None
+        return from_email
+
     async def queue_email(
         self,
         to_email: str,
@@ -73,6 +92,7 @@ class EmailService:
         bcc: Optional[str] = None,
     ) -> EmailQueue:
         """Create an email queue entry and attempt to send."""
+        from_email = self._validate_from_email(from_email)
         email = EmailQueue(
             to_email=to_email,
             from_email=from_email,
@@ -436,7 +456,17 @@ class EmailService:
             inbound.entity_id = contact.id
 
         self.db.add(inbound)
-        await self.db.flush()
+        try:
+            await self.db.flush()
+        except IntegrityError:
+            await self.db.rollback()
+            # Duplicate resend_email_id — return existing record (idempotent)
+            result = await self.db.execute(
+                select(InboundEmail).where(
+                    InboundEmail.resend_email_id == resend_email_id
+                )
+            )
+            return result.scalar_one()
 
         # Log as activity on matched contact
         if contact:
@@ -463,89 +493,72 @@ class EmailService:
         page: int = 1,
         page_size: int = 50,
     ) -> Tuple[List[Dict], int]:
-        """Get unified email thread (inbound + outbound) for an entity."""
-        # Count outbound
-        outbound_count_q = select(func.count()).select_from(
-            select(EmailQueue.id).where(
-                EmailQueue.entity_type == entity_type,
-                EmailQueue.entity_id == entity_id,
-            ).subquery()
-        )
-        # Count inbound
-        inbound_count_q = select(func.count()).select_from(
-            select(InboundEmail.id).where(
-                InboundEmail.entity_type == entity_type,
-                InboundEmail.entity_id == entity_id,
-            ).subquery()
-        )
+        """Get unified email thread (inbound + outbound) for an entity.
 
-        outbound_total = (await self.db.execute(outbound_count_q)).scalar() or 0
-        inbound_total = (await self.db.execute(inbound_count_q)).scalar() or 0
-        total = outbound_total + inbound_total
+        Uses SQL UNION ALL with ORDER BY + LIMIT/OFFSET at the database level.
+        """
+        from sqlalchemy import case
 
-        # Fetch outbound emails
-        outbound_result = await self.db.execute(
-            select(EmailQueue).where(
+        # Outbound subquery
+        outbound_q = (
+            select(
+                EmailQueue.id.label("id"),
+                literal("outbound").label("direction"),
+                func.coalesce(EmailQueue.from_email, literal(settings.EMAIL_FROM)).label("from_email"),
+                EmailQueue.to_email.label("to_email"),
+                EmailQueue.cc.label("cc"),
+                EmailQueue.subject.label("subject"),
+                EmailQueue.body.label("body"),
+                literal(None).label("body_html"),
+                func.coalesce(EmailQueue.sent_at, EmailQueue.created_at).label("timestamp"),
+                EmailQueue.status.label("status"),
+                EmailQueue.open_count.label("open_count"),
+                literal(None).label("attachments"),
+            )
+            .where(
                 EmailQueue.entity_type == entity_type,
                 EmailQueue.entity_id == entity_id,
             )
         )
-        outbound_emails = list(outbound_result.scalars().all())
 
-        # Fetch inbound emails
-        inbound_result = await self.db.execute(
-            select(InboundEmail).where(
+        # Inbound subquery
+        inbound_q = (
+            select(
+                InboundEmail.id.label("id"),
+                literal("inbound").label("direction"),
+                InboundEmail.from_email.label("from_email"),
+                InboundEmail.to_email.label("to_email"),
+                InboundEmail.cc.label("cc"),
+                InboundEmail.subject.label("subject"),
+                InboundEmail.body_text.label("body"),
+                InboundEmail.body_html.label("body_html"),
+                InboundEmail.received_at.label("timestamp"),
+                literal(None).label("status"),
+                literal(None).label("open_count"),
+                literal(None).label("attachments"),
+            )
+            .where(
                 InboundEmail.entity_type == entity_type,
                 InboundEmail.entity_id == entity_id,
             )
         )
-        inbound_emails = list(inbound_result.scalars().all())
 
-        # Merge into unified list
-        items = []
-        for e in outbound_emails:
-            items.append({
-                "id": e.id,
-                "direction": "outbound",
-                "from_email": e.from_email or settings.EMAIL_FROM,
-                "to_email": e.to_email,
-                "cc": e.cc,
-                "subject": e.subject,
-                "body": e.body,
-                "body_html": None,
-                "timestamp": e.sent_at or e.created_at,
-                "status": e.status,
-                "open_count": e.open_count,
-                "attachments": None,
-            })
-        for e in inbound_emails:
-            items.append({
-                "id": e.id,
-                "direction": "inbound",
-                "from_email": e.from_email,
-                "to_email": e.to_email,
-                "cc": e.cc,
-                "subject": e.subject,
-                "body": e.body_text,
-                "body_html": e.body_html,
-                "timestamp": e.received_at,
-                "status": None,
-                "open_count": None,
-                "attachments": e.attachments,
-            })
+        combined = union_all(outbound_q, inbound_q).subquery()
 
-        # Sort by timestamp descending (newest first)
-        # Normalize naive datetimes to UTC for comparison (SQLite returns naive)
-        def _sort_key(item):
-            ts = item["timestamp"]
-            if ts and ts.tzinfo is None:
-                ts = ts.replace(tzinfo=timezone.utc)
-            return ts
+        # Count total
+        count_q = select(func.count()).select_from(combined)
+        total = (await self.db.execute(count_q)).scalar() or 0
 
-        items.sort(key=_sort_key, reverse=True)
-
-        # Paginate
+        # Fetch paginated results
         offset = (page - 1) * page_size
-        paginated = items[offset:offset + page_size]
+        data_q = (
+            select(combined)
+            .order_by(combined.c.timestamp.desc())
+            .offset(offset)
+            .limit(page_size)
+        )
+        result = await self.db.execute(data_q)
+        rows = result.mappings().all()
 
-        return paginated, total
+        items = [dict(row) for row in rows]
+        return items, total

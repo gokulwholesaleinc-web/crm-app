@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import DOMPurify from 'dompurify';
 import { Spinner, Badge, Button } from '../ui';
 import { useEmailThread } from '../../hooks/useEmail';
@@ -106,7 +106,7 @@ function EmailBubble({
             {email.body_html ? (
               <div
                 dangerouslySetInnerHTML={{
-                  __html: DOMPurify.sanitize(email.body_html),
+                  __html: DOMPurify.sanitize(email.body_html, { FORBID_TAGS: ['style', 'form'], FORBID_ATTR: ['style'] }),
                 }}
               />
             ) : (
@@ -136,7 +136,25 @@ function EmailBubble({
 
 export function EmailThread({ entityType, entityId, onReply, onCompose }: EmailThreadProps) {
   const [page, setPage] = useState(1);
+  const [accumulated, setAccumulated] = useState<ThreadEmailItem[]>([]);
   const { data, isLoading } = useEmailThread(entityType, entityId, page);
+  const prevPageRef = useRef(page);
+
+  // Append new page data to accumulated list when data arrives
+  useEffect(() => {
+    if (!data?.items) return;
+    if (page === 1) {
+      setAccumulated(data.items);
+    } else if (page !== prevPageRef.current) {
+      // Older pages append to the beginning (they are older emails)
+      setAccumulated((prev) => [...data.items, ...prev]);
+    }
+    prevPageRef.current = page;
+  }, [data, page]);
+
+  const loadOlder = useCallback(() => {
+    setPage((p) => p + 1);
+  }, []);
 
   if (isLoading && page === 1) {
     return (
@@ -146,10 +164,9 @@ export function EmailThread({ entityType, entityId, onReply, onCompose }: EmailT
     );
   }
 
-  const emails = data?.items ?? [];
   const totalPages = data?.pages ?? 1;
 
-  if (emails.length === 0 && page === 1) {
+  if (accumulated.length === 0 && page === 1) {
     return (
       <div className="text-center py-8">
         <svg className="mx-auto h-12 w-12 text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -176,7 +193,7 @@ export function EmailThread({ entityType, entityId, onReply, onCompose }: EmailT
         <div className="text-center">
           <button
             type="button"
-            onClick={() => setPage((p) => p + 1)}
+            onClick={loadOlder}
             disabled={isLoading}
             className="text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 font-medium focus-visible:outline-none focus-visible:underline disabled:opacity-50"
             aria-label="Load older emails"
@@ -187,7 +204,7 @@ export function EmailThread({ entityType, entityId, onReply, onCompose }: EmailT
       )}
 
       {/* Email bubbles */}
-      {emails.map((email) => (
+      {accumulated.map((email) => (
         <EmailBubble
           key={`${email.direction}-${email.id}`}
           email={email}
