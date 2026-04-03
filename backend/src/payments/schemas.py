@@ -271,12 +271,14 @@ class CreateAndSendInvoiceRequest(BaseModel):
     description: str = "Invoice"
     due_days: int = Field(default=30, ge=1, le=365)
     quote_id: Optional[int] = None
+    payment_method_types: Optional[List[str]] = None
 
 
 class CreateAndSendInvoiceResponse(BaseModel):
     invoice_id: str
     payment_id: int
     status: str
+    invoice_url: Optional[str] = None
 
 
 class CreateOnboardingLinkRequest(BaseModel):

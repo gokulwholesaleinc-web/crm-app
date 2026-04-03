@@ -73,6 +73,9 @@ const PipelinePage = lazy(() => import('../features/pipeline/PipelinePage'));
 // Settings
 const SettingsPage = lazy(() => import('../features/settings/SettingsPage'));
 
+// OAuth Callbacks
+const OAuthCallbackPage = lazy(() => import('../features/settings/OAuthCallbackPage'));
+
 // Admin
 const AdminDashboardPage = lazy(() => import('../features/admin/AdminDashboard'));
 
@@ -382,6 +385,28 @@ function AppRoutes() {
           <PrivateRoute>
             <ErrorBoundary>
               <DuplicatesPage />
+            </ErrorBoundary>
+          </PrivateRoute>
+        }
+      />
+
+      {/* OAuth Callbacks */}
+      <Route
+        path="/settings/integrations/google-calendar/callback"
+        element={
+          <PrivateRoute>
+            <ErrorBoundary>
+              <OAuthCallbackPage />
+            </ErrorBoundary>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/settings/integrations/meta/callback"
+        element={
+          <PrivateRoute>
+            <ErrorBoundary>
+              <OAuthCallbackPage />
             </ErrorBoundary>
           </PrivateRoute>
         }

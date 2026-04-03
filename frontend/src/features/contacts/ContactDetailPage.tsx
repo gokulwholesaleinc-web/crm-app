@@ -10,6 +10,8 @@ const SharePanel = lazy(() => import('../../components/shared/SharePanel'));
 const ContractsList = lazy(() => import('../../components/shared/ContractsList'));
 const PaymentSummary = lazy(() => import('../../components/shared/PaymentSummary'));
 const DocumentsTab = lazy(() => import('../../components/shared/DocumentsTab'));
+import { SendInvoiceModal } from '../payments/components/SendInvoiceModal';
+import { OnboardingLinkGenerator } from '../payments/components/OnboardingLinkGenerator';
 import { EmailComposeModal, EmailThread } from '../../components/email';
 import type { ThreadEmailItem } from '../../types/email';
 import { ContactForm, ContactFormData } from './components/ContactForm';
@@ -35,6 +37,7 @@ function ContactDetailPage() {
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEmailCompose, setShowEmailCompose] = useState(false);
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [replyToEmail, setReplyToEmail] = useState<ThreadEmailItem | null>(null);
 
   // Use hooks for data fetching
@@ -203,6 +206,13 @@ function ContactDetailPage() {
           </Button>
           <Button
             variant="secondary"
+            onClick={() => setShowInvoiceModal(true)}
+            className="flex-1 sm:flex-none"
+          >
+            Send Invoice
+          </Button>
+          <Button
+            variant="secondary"
             onClick={() => setShowEditForm(true)}
             className="flex-1 sm:flex-none"
           >
@@ -248,6 +258,7 @@ function ContactDetailPage() {
         <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="h-20 bg-gray-200 dark:bg-gray-700 rounded" /></div>}>
           <PaymentSummary contactId={contactId} />
         </Suspense>
+        <OnboardingLinkGenerator contactId={contactId} contactEmail={contact.email} />
         <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
           <div className="p-4 sm:p-6">
             <dl className="grid grid-cols-1 gap-4 sm:gap-x-4 sm:gap-y-6 sm:grid-cols-2">
@@ -620,6 +631,14 @@ function ContactDetailPage() {
         cancelLabel="Cancel"
         variant="danger"
         isLoading={deleteContactMutation.isPending}
+      />
+
+      {/* Send Invoice Modal */}
+      <SendInvoiceModal
+        isOpen={showInvoiceModal}
+        onClose={() => setShowInvoiceModal(false)}
+        contactId={contactId}
+        contactEmail={contact.email}
       />
     </div>
   );

@@ -172,3 +172,35 @@ export function useCancelSubscription() {
     },
   });
 }
+
+// =============================================================================
+// Invoice & Onboarding Hooks
+// =============================================================================
+
+/**
+ * Hook to create and send a Stripe Invoice
+ */
+export function useCreateAndSendInvoice() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Parameters<typeof paymentsApi.createAndSendInvoice>[0]) =>
+      paymentsApi.createAndSendInvoice(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: paymentKeys.lists() });
+    },
+  });
+}
+
+/**
+ * Hook to create an onboarding link for a customer
+ */
+export function useCreateOnboardingLink() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Parameters<typeof paymentsApi.createOnboardingLink>[0]) =>
+      paymentsApi.createOnboardingLink(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [customerQueryKey, 'list'] });
+    },
+  });
+}

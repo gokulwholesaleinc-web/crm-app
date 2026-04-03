@@ -885,6 +885,7 @@ body {{ font-family: Arial, Helvetica, sans-serif; margin: 40px; color: #111827;
         currency: str = "USD",
         due_days: int = 30,
         quote_id: Optional[int] = None,
+        payment_method_types: Optional[List[str]] = None,
     ) -> dict:
         """Create a Stripe Invoice, finalize it, and send it.
 
@@ -907,11 +908,16 @@ body {{ font-family: Arial, Helvetica, sans-serif; margin: 40px; color: #111827;
                 description=description,
             )
 
-            invoice = stripe.Invoice.create(
-                customer=customer.stripe_customer_id,
-                collection_method="send_invoice",
-                days_until_due=due_days,
-            )
+            invoice_params = {
+                "customer": customer.stripe_customer_id,
+                "collection_method": "send_invoice",
+                "days_until_due": due_days,
+            }
+            if payment_method_types:
+                invoice_params["payment_settings"] = {
+                    "payment_method_types": payment_method_types,
+                }
+            invoice = stripe.Invoice.create(**invoice_params)
 
             invoice = stripe.Invoice.finalize_invoice(invoice.id)
             invoice = stripe.Invoice.send_invoice(invoice.id)
@@ -941,6 +947,7 @@ body {{ font-family: Arial, Helvetica, sans-serif; margin: 40px; color: #111827;
             "invoice_id": invoice.id,
             "payment_id": payment.id,
             "status": "pending",
+            "invoice_url": getattr(invoice, "hosted_invoice_url", None),
         }
 
     async def create_onboarding_link(

@@ -4,6 +4,7 @@ import { StatusBadge, Button, PaginationBar } from '../../components/ui';
 import type { StatusType } from '../../components/ui/Badge';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { usePayments, useSubscriptions, useCancelSubscription } from '../../hooks/usePayments';
+import { SendInvoiceModal } from './components/SendInvoiceModal';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { showSuccess, showError } from '../../utils/toast';
@@ -24,6 +25,7 @@ function PaymentsPage() {
   usePageTitle('Payments');
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<Tab>('All Payments');
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [statusFilter, setStatusFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
   const [currentPage, setCurrentPage] = useState(1);
@@ -78,6 +80,9 @@ function PaymentsPage() {
             Track and manage Stripe payments
           </p>
         </div>
+        <Button variant="primary" onClick={() => setShowInvoiceModal(true)}>
+          Send Invoice
+        </Button>
       </div>
 
       {/* Tabs */}
@@ -434,6 +439,11 @@ function PaymentsPage() {
           )}
         </div>
       )}
+
+      <SendInvoiceModal
+        isOpen={showInvoiceModal}
+        onClose={() => setShowInvoiceModal(false)}
+      />
     </div>
   );
 }
