@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     DATABASE_SSL_VERIFY: bool = False
 
     RESEND_API_KEY: str = ""
+    RESEND_WEBHOOK_SECRET: str = ""
     EMAIL_FROM: str = "onboarding@resend.dev"
 
     STRIPE_SECRET_KEY: str = ""

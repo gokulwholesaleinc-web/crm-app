@@ -48,7 +48,7 @@ from src.dashboard.models import DashboardNumberCard, DashboardChart, DashboardR
 from src.ai.models import AIEmbedding, AIConversation, AIFeedback, AIKnowledgeDocument, AIUserPreferences, AIActionLog, AILearning, AIInteractionLog
 from src.whitelabel.models import Tenant, TenantSettings, TenantUser
 from src.attachments.models import Attachment
-from src.email.models import EmailQueue
+from src.email.models import EmailQueue, InboundEmail, EmailSettings
 from src.notifications.models import Notification
 from src.filters.models import SavedFilter
 from src.reports.models import SavedReport

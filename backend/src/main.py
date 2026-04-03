@@ -53,6 +53,7 @@ from src.ai.router import router as ai_router
 from src.meta.router import router as meta_router
 from src.expenses.router import router as expenses_router
 from src.integrations.google_calendar.router import router as google_calendar_router
+from src.settings.router import router as settings_router
 
 
 async def _run_production_migrations():
@@ -143,12 +144,59 @@ async def _run_production_migrations():
                 "ALTER TABLE company_meta_data ADD COLUMN IF NOT EXISTS instagram_username VARCHAR(255)",
                 "ALTER TABLE company_meta_data ADD COLUMN IF NOT EXISTS instagram_followers INTEGER",
                 "ALTER TABLE company_meta_data ADD COLUMN IF NOT EXISTS instagram_media_count INTEGER",
+                # Email logging: new columns on email_queue
+                "ALTER TABLE email_queue ADD COLUMN IF NOT EXISTS from_email VARCHAR(255)",
+                "ALTER TABLE email_queue ADD COLUMN IF NOT EXISTS cc TEXT",
+                "ALTER TABLE email_queue ADD COLUMN IF NOT EXISTS bcc TEXT",
             ]
             for sql in column_migrations:
                 try:
                     await conn.execute(sql)
                 except Exception:
                     pass
+
+            # Create inbound_emails table if it doesn't exist
+            try:
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS inbound_emails (
+                        id SERIAL PRIMARY KEY,
+                        resend_email_id VARCHAR(255) UNIQUE NOT NULL,
+                        from_email VARCHAR(255) NOT NULL,
+                        to_email VARCHAR(255) NOT NULL,
+                        cc TEXT,
+                        bcc TEXT,
+                        subject VARCHAR(500) NOT NULL,
+                        body_text TEXT,
+                        body_html TEXT,
+                        message_id VARCHAR(500),
+                        in_reply_to VARCHAR(500),
+                        attachments JSONB,
+                        entity_type VARCHAR(50),
+                        entity_id INTEGER,
+                        received_at TIMESTAMPTZ NOT NULL,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                """)
+                await conn.execute("CREATE INDEX IF NOT EXISTS ix_inbound_emails_entity ON inbound_emails(entity_type, entity_id)")
+                await conn.execute("CREATE INDEX IF NOT EXISTS ix_inbound_emails_from ON inbound_emails(from_email)")
+            except Exception:
+                pass
+
+            # Create email_settings table if it doesn't exist
+            try:
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS email_settings (
+                        id SERIAL PRIMARY KEY,
+                        daily_send_limit INTEGER NOT NULL DEFAULT 200,
+                        warmup_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+                        warmup_start_date DATE,
+                        warmup_target_daily INTEGER NOT NULL DEFAULT 200,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                """)
+            except Exception:
+                pass
 
             try:
                 await conn.execute("""
@@ -187,7 +235,7 @@ async def _init_database():
         from src.ai.models import AIEmbedding, AIConversation, AIFeedback, AIKnowledgeDocument, AIUserPreferences
         from src.whitelabel.models import Tenant, TenantSettings, TenantUser
         from src.attachments.models import Attachment
-        from src.email.models import EmailQueue
+        from src.email.models import EmailQueue, InboundEmail, EmailSettings
         from src.notifications.models import Notification
         from src.filters.models import SavedFilter
         from src.reports.models import SavedReport
@@ -307,6 +355,7 @@ app.include_router(admin_router)
 app.include_router(meta_router)
 app.include_router(expenses_router)
 app.include_router(google_calendar_router)
+app.include_router(settings_router)
 
 
 # Register webhook event handler with event system
