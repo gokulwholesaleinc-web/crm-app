@@ -12,10 +12,13 @@ import {
   ChartBarIcon,
   UsersIcon,
   CurrencyDollarIcon,
+  ArrowUpTrayIcon,
 } from '@heroicons/react/24/outline';
 import { showError } from '../../utils/toast';
 import { Button, Select, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { CampaignForm } from './components/CampaignForm';
+import { VolumeStats } from './components/VolumeStats';
+import { ImportWizard } from '../leads/components/ImportWizard';
 import {
   useCampaigns,
   useCreateCampaign,
@@ -196,6 +199,7 @@ export function CampaignsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; campaign: Campaign | null }>(INITIAL_DELETE_CONFIRM);
+  const [showImportWizard, setShowImportWizard] = useState(false);
 
   // Get filter values from URL params
   const filters: CampaignFilters = useMemo(
@@ -284,14 +288,28 @@ export function CampaignsPage() {
             Manage marketing campaigns and track their performance
           </p>
         </div>
-        <Button
-          leftIcon={<PlusIcon className="h-5 w-5" />}
-          onClick={() => setShowForm(true)}
-          className="w-full sm:w-auto"
-        >
-          New Campaign
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <Button
+            variant="secondary"
+            leftIcon={<ArrowUpTrayIcon className="h-5 w-5" />}
+            onClick={() => setShowImportWizard(true)}
+            className="w-full sm:w-auto"
+            aria-label="New campaign from CSV import"
+          >
+            New from Import
+          </Button>
+          <Button
+            leftIcon={<PlusIcon className="h-5 w-5" />}
+            onClick={() => setShowForm(true)}
+            className="w-full sm:w-auto"
+          >
+            New Campaign
+          </Button>
+        </div>
       </div>
+
+      {/* Volume Stats Dashboard */}
+      <VolumeStats />
 
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
@@ -422,6 +440,14 @@ export function CampaignsPage() {
         cancelLabel="Cancel"
         variant="danger"
         isLoading={deleteCampaign.isPending}
+      />
+
+      {/* Import Wizard for Campaign from Import */}
+      <ImportWizard
+        isOpen={showImportWizard}
+        onClose={() => setShowImportWizard(false)}
+        entityType="leads"
+        defaultCampaignEnabled
       />
     </div>
   );

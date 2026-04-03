@@ -42,8 +42,21 @@ def upgrade() -> None:
     op.create_index("ix_inbound_emails_entity", "inbound_emails", ["entity_type", "entity_id"])
     op.create_index("ix_inbound_emails_from", "inbound_emails", ["from_email"])
 
+    # Create email_settings table
+    op.create_table(
+        "email_settings",
+        sa.Column("id", sa.Integer(), primary_key=True),
+        sa.Column("daily_send_limit", sa.Integer(), nullable=False, server_default="200"),
+        sa.Column("warmup_enabled", sa.Boolean(), nullable=False, server_default="false"),
+        sa.Column("warmup_start_date", sa.Date(), nullable=True),
+        sa.Column("warmup_target_daily", sa.Integer(), nullable=False, server_default="200"),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+    )
+
 
 def downgrade() -> None:
+    op.drop_table("email_settings")
     op.drop_index("ix_inbound_emails_from", table_name="inbound_emails")
     op.drop_index("ix_inbound_emails_entity", table_name="inbound_emails")
     op.drop_table("inbound_emails")

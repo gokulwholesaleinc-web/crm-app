@@ -21,6 +21,11 @@ import type {
   EmailCampaignStep,
   EmailCampaignStepCreate,
   EmailCampaignStepUpdate,
+  VolumeStats,
+  EmailSettings,
+  EmailSettingsUpdate,
+  CreateCampaignFromImportRequest,
+  CreateCampaignFromImportResponse,
 } from '../types';
 
 const CAMPAIGNS_BASE = '/api/campaigns';
@@ -239,6 +244,45 @@ export const executeCampaign = async (
   return response.data;
 };
 
+// =============================================================================
+// Campaign from Import
+// =============================================================================
+
+export const createCampaignFromImport = async (
+  data: CreateCampaignFromImportRequest
+): Promise<CreateCampaignFromImportResponse> => {
+  const response = await apiClient.post<CreateCampaignFromImportResponse>(
+    `${CAMPAIGNS_BASE}/create-from-import`,
+    data
+  );
+  return response.data;
+};
+
+// =============================================================================
+// Email Volume Stats
+// =============================================================================
+
+export const getVolumeStats = async (): Promise<VolumeStats> => {
+  const response = await apiClient.get<VolumeStats>('/api/email/volume-stats');
+  return response.data;
+};
+
+// =============================================================================
+// Email Settings
+// =============================================================================
+
+export const getEmailSettings = async (): Promise<EmailSettings> => {
+  const response = await apiClient.get<EmailSettings>('/api/settings/email');
+  return response.data;
+};
+
+export const updateEmailSettings = async (
+  data: EmailSettingsUpdate
+): Promise<EmailSettings> => {
+  const response = await apiClient.put<EmailSettings>('/api/settings/email', data);
+  return response.data;
+};
+
 // Export all campaign functions
 export const campaignsApi = {
   // CRUD
@@ -267,6 +311,12 @@ export const campaignsApi = {
   deleteStep: deleteCampaignStep,
   // Execute
   execute: executeCampaign,
+  // LinkedIn / Import
+  createFromImport: createCampaignFromImport,
+  // Volume & Settings
+  getVolumeStats,
+  getEmailSettings,
+  updateEmailSettings,
 };
 
 export default campaignsApi;

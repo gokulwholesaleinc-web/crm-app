@@ -120,3 +120,43 @@ export interface CampaignAnalytics {
   click_rate: number;
   steps: StepAnalytics[];
 }
+
+// =============================================================================
+// LinkedIn Campaign / Volume Types
+// =============================================================================
+
+export interface VolumeStats {
+  sent_today: number;
+  daily_limit: number;
+  warmup_enabled: boolean;
+  warmup_day: number;
+  warmup_current_limit: number;
+  remaining_today: number;
+}
+
+export interface EmailSettings {
+  daily_send_limit: number;
+  warmup_enabled: boolean;
+  warmup_start_date: string | null;
+  warmup_target_daily: number;
+}
+
+export interface EmailSettingsUpdate {
+  daily_send_limit?: number;
+  warmup_enabled?: boolean;
+  warmup_start_date?: string | null;
+  warmup_target_daily?: number;
+}
+
+export interface CreateCampaignFromImportRequest {
+  name: string;
+  member_ids: number[];
+  member_type: string;
+  template_id?: number;
+  schedule_start?: string;
+  delay_days?: number;
+}
+
+export interface CreateCampaignFromImportResponse extends Campaign {
+  member_count: number;
+}

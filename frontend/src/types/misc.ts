@@ -228,6 +228,7 @@ export interface ImportPreview {
   preview_rows: Record<string, string>[];
   warnings: string[];
   source_detected?: string | null;
+  is_linkedin_format?: boolean;
   contact_person_column?: string;
   contact_matches?: ContactMatch[];
 }

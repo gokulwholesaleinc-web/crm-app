@@ -9,6 +9,7 @@ import { LeadForm, LeadFormData } from './components/LeadForm';
 import { LeadKanbanBoard } from './components/LeadKanbanBoard';
 import { BulkActionToolbar } from './components/BulkActionToolbar';
 import { LeadEmailCampaignModal } from './components/LeadEmailCampaignModal';
+import { AddToCampaignModal } from './components/AddToCampaignModal';
 import { useLeads, useCreateLead, useUpdateLead, useDeleteLead, leadKeys } from '../../hooks/useLeads';
 import { useCheckDuplicates } from '../../hooks/useDedup';
 import { useUsers } from '../../hooks/useAuth';
@@ -72,6 +73,7 @@ function LeadsPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; lead: Lead | null }>(INITIAL_DELETE_CONFIRM);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [showCampaignModal, setShowCampaignModal] = useState(false);
+  const [showAddToCampaign, setShowAddToCampaign] = useState(false);
   const [pageSize, setPageSize] = useState(25);
   const [pendingFormData, setPendingFormData] = useState<LeadFormData | null>(null);
   const [duplicateResults, setDuplicateResults] = useState<DuplicateMatch[]>([]);
@@ -300,12 +302,21 @@ function LeadsPage() {
           </div>
 
           {selectedIds.length > 0 && (
-            <Button
-              variant="secondary"
-              onClick={() => setShowCampaignModal(true)}
-            >
-              Send Email ({selectedIds.length})
-            </Button>
+            <>
+              <Button
+                variant="secondary"
+                onClick={() => setShowAddToCampaign(true)}
+                aria-label={`Add ${selectedIds.length} leads to campaign`}
+              >
+                Add to Campaign ({selectedIds.length})
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => setShowCampaignModal(true)}
+              >
+                Send Email ({selectedIds.length})
+              </Button>
+            </>
           )}
 
           <Button
@@ -699,6 +710,14 @@ function LeadsPage() {
         isOpen={showCampaignModal}
         onClose={() => setShowCampaignModal(false)}
         selectedLeadIds={selectedIds}
+      />
+
+      {/* Add to Campaign Modal */}
+      <AddToCampaignModal
+        isOpen={showAddToCampaign}
+        onClose={() => setShowAddToCampaign(false)}
+        selectedLeadIds={selectedIds}
+        onSuccess={() => setSelectedIds([])}
       />
 
       {/* Duplicate Warning Modal */}

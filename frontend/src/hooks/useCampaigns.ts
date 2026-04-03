@@ -12,6 +12,8 @@ import type {
   CampaignUpdate,
   CampaignFilters,
   AddMembersRequest,
+  EmailSettingsUpdate,
+  CreateCampaignFromImportRequest,
 } from '../types';
 
 // =============================================================================
@@ -156,6 +158,49 @@ export function useRemoveCampaignMember() {
       queryClient.invalidateQueries({ queryKey: campaignKeys.members(campaignId) });
       queryClient.invalidateQueries({ queryKey: campaignKeys.stats(campaignId) });
       queryClient.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) });
+    },
+  });
+}
+
+// =============================================================================
+// Volume Stats & Email Settings Hooks
+// =============================================================================
+
+export function useVolumeStats() {
+  return useQuery({
+    queryKey: ['email', 'volume-stats'] as const,
+    queryFn: () => campaignsApi.getVolumeStats(),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useEmailSettings() {
+  return useQuery({
+    queryKey: ['settings', 'email'] as const,
+    queryFn: () => campaignsApi.getEmailSettings(),
+  });
+}
+
+export function useUpdateEmailSettings() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: EmailSettingsUpdate) => campaignsApi.updateEmailSettings(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings', 'email'] });
+      queryClient.invalidateQueries({ queryKey: ['email', 'volume-stats'] });
+    },
+  });
+}
+
+export function useCreateCampaignFromImport() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: CreateCampaignFromImportRequest) =>
+      campaignsApi.createFromImport(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: campaignKeys.lists() });
     },
   });
 }
