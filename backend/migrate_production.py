@@ -121,6 +121,9 @@ async def run_migrations():
             # pipeline_stages.pipeline_type
             ("ALTER TABLE pipeline_stages ADD COLUMN IF NOT EXISTS pipeline_type VARCHAR(20) DEFAULT 'opportunity'", "pipeline_stages.pipeline_type"),
             ("CREATE INDEX IF NOT EXISTS ix_pipeline_stages_pipeline_type ON pipeline_stages(pipeline_type)", "index pipeline_stages.pipeline_type"),
+            # payments
+            ("ALTER TABLE payments ADD COLUMN IF NOT EXISTS stripe_invoice_id VARCHAR(255)", "payments.stripe_invoice_id"),
+            ("CREATE UNIQUE INDEX IF NOT EXISTS ix_payments_stripe_invoice_id ON payments(stripe_invoice_id) WHERE stripe_invoice_id IS NOT NULL", "index payments.stripe_invoice_id"),
             # companies custom fields
             ("ALTER TABLE companies ADD COLUMN IF NOT EXISTS link_creative_tier VARCHAR(10)", "companies.link_creative_tier"),
             ("ALTER TABLE companies ADD COLUMN IF NOT EXISTS sow_url VARCHAR(500)", "companies.sow_url"),
