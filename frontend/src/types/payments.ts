@@ -137,6 +137,32 @@ export interface SyncCustomerRequest {
   company_id?: number;
 }
 
+export interface CreateAndSendInvoiceRequest {
+  customer_id: number;
+  amount: number;
+  description: string;
+  due_days?: number;
+  payment_method_types?: string[];
+}
+
+export interface CreateAndSendInvoiceResponse {
+  invoice_id: string;
+  payment_id: number;
+  status: string;
+  invoice_url?: string;
+}
+
+export interface CreateOnboardingLinkRequest {
+  contact_id?: number;
+  company_id?: number;
+  success_url: string;
+  cancel_url: string;
+}
+
+export interface CreateOnboardingLinkResponse {
+  url: string;
+}
+
 export type StripeCustomerListResponse = PaginatedResponse<StripeCustomer>;
 export type ProductListResponse = PaginatedResponse<ProductItem>;
 export type SubscriptionListResponse = PaginatedResponse<SubscriptionItem>;

@@ -16,6 +16,8 @@ import type {
   CreateCheckoutRequest,
   CreatePaymentIntentRequest,
   SyncCustomerRequest,
+  CreateAndSendInvoiceRequest,
+  CreateOnboardingLinkRequest,
 } from '../types';
 
 // =============================================================================
@@ -182,9 +184,9 @@ export function useCancelSubscription() {
  */
 export function useCreateAndSendInvoice() {
   const queryClient = useQueryClient();
+
   return useMutation({
-    mutationFn: (data: Parameters<typeof paymentsApi.createAndSendInvoice>[0]) =>
-      paymentsApi.createAndSendInvoice(data),
+    mutationFn: (data: CreateAndSendInvoiceRequest) => paymentsApi.createAndSendInvoice(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: paymentKeys.lists() });
     },
@@ -196,9 +198,9 @@ export function useCreateAndSendInvoice() {
  */
 export function useCreateOnboardingLink() {
   const queryClient = useQueryClient();
+
   return useMutation({
-    mutationFn: (data: Parameters<typeof paymentsApi.createOnboardingLink>[0]) =>
-      paymentsApi.createOnboardingLink(data),
+    mutationFn: (data: CreateOnboardingLinkRequest) => paymentsApi.createOnboardingLink(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [customerQueryKey, 'list'] });
     },

@@ -17,7 +17,7 @@ import time
 import pytest
 from httpx import AsyncClient
 
-from src.auth.security import get_password_hash, create_access_token
+from src.auth.security import create_access_token
 from src.auth.models import User
 from src.payments.models import StripeCustomer, Payment
 from src.payments.service import PaymentService

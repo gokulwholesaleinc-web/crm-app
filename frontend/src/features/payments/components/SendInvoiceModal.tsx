@@ -67,7 +67,7 @@ export function SendInvoiceModal({
     try {
       const result = await invoiceMutation.mutateAsync({
         customer_id: customerId as number,
-        amount: Math.round(parseFloat(amount) * 100),
+        amount: parseFloat(amount),
         description,
         due_days: dueDays,
         payment_method_types: paymentMethodTypes,

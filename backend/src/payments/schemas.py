@@ -2,7 +2,7 @@
 
 import urllib.parse
 from datetime import datetime
-from typing import Optional, List
+from typing import Literal, Optional, List
 from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -271,7 +271,7 @@ class CreateAndSendInvoiceRequest(BaseModel):
     description: str = "Invoice"
     due_days: int = Field(default=30, ge=1, le=365)
     quote_id: Optional[int] = None
-    payment_method_types: Optional[List[str]] = None
+    payment_method_types: Optional[List[Literal["card", "us_bank_account"]]] = None
 
 
 class CreateAndSendInvoiceResponse(BaseModel):

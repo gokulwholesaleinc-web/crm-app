@@ -24,7 +24,7 @@ function OAuthCallbackPage() {
     const isGoogle = location.pathname.includes('google-calendar');
     const isMeta = location.pathname.includes('meta');
 
-    const handle = async () => {
+    (async () => {
       try {
         if (isGoogle) {
           await calendarCallback(code);
@@ -33,15 +33,15 @@ function OAuthCallbackPage() {
           const redirectUri = window.location.origin + '/settings/integrations/meta/callback';
           await metaCallback(code, redirectUri);
           showSuccess('Meta connected successfully');
+        } else {
+          showError('Unknown integration callback');
         }
       } catch {
         showError('Failed to complete connection. Please try again.');
       } finally {
         navigate('/settings', { replace: true });
       }
-    };
-
-    handle();
+    })();
   }, [searchParams, location.pathname, navigate]);
 
   return (

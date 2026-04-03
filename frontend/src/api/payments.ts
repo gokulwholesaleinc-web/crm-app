@@ -19,6 +19,10 @@ import type {
   CreateCheckoutResponse,
   CreatePaymentIntentRequest,
   CreatePaymentIntentResponse,
+  CreateAndSendInvoiceRequest,
+  CreateAndSendInvoiceResponse,
+  CreateOnboardingLinkRequest,
+  CreateOnboardingLinkResponse,
 } from '../types';
 
 const PAYMENTS_BASE = '/api/payments';
@@ -108,27 +112,16 @@ export const cancelSubscription = async (subscriptionId: number): Promise<Subscr
 /**
  * Create and send a Stripe Invoice
  */
-export const createAndSendInvoice = async (data: {
-  customer_id: number;
-  amount: number;
-  description: string;
-  due_days?: number;
-  payment_method_types?: string[];
-}): Promise<{ invoice_id: string; payment_id: number; status: string; invoice_url?: string }> => {
-  const response = await apiClient.post(`${PAYMENTS_BASE}/invoices/create-and-send`, data);
+export const createAndSendInvoice = async (data: CreateAndSendInvoiceRequest): Promise<CreateAndSendInvoiceResponse> => {
+  const response = await apiClient.post<CreateAndSendInvoiceResponse>(`${PAYMENTS_BASE}/invoices/create-and-send`, data);
   return response.data;
 };
 
 /**
  * Create a Stripe onboarding link for a customer
  */
-export const createOnboardingLink = async (data: {
-  contact_id?: number;
-  company_id?: number;
-  success_url: string;
-  cancel_url: string;
-}): Promise<{ url: string }> => {
-  const response = await apiClient.post(`${PAYMENTS_BASE}/customers/onboarding-link`, data);
+export const createOnboardingLink = async (data: CreateOnboardingLinkRequest): Promise<CreateOnboardingLinkResponse> => {
+  const response = await apiClient.post<CreateOnboardingLinkResponse>(`${PAYMENTS_BASE}/customers/onboarding-link`, data);
   return response.data;
 };
 
