@@ -16,7 +16,6 @@ from src.email.schemas import (
     SendCampaignEmailRequest,
     EmailQueueResponse,
     EmailListResponse,
-    InboundEmailResponse,
     ThreadEmailItem,
     ThreadResponse,
 )

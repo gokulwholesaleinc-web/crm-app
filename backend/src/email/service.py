@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Tuple, Dict
 
 import resend
-from sqlalchemy import select, func, and_, union_all, literal, literal_column, text
+from sqlalchemy import select, func, and_, union_all, literal
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -497,8 +497,6 @@ class EmailService:
 
         Uses SQL UNION ALL with ORDER BY + LIMIT/OFFSET at the database level.
         """
-        from sqlalchemy import case
-
         # Outbound subquery
         outbound_q = (
             select(
