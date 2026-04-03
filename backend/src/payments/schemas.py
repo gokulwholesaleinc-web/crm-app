@@ -1,9 +1,10 @@
 """Pydantic schemas for payments."""
 
+import urllib.parse
 from datetime import datetime
 from typing import Optional, List
 from decimal import Decimal
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 # =============================================================================
@@ -220,6 +221,16 @@ class SubscriptionListResponse(BaseModel):
 # Checkout / PaymentIntent Schemas
 # =============================================================================
 
+def _validate_url(v: str) -> str:
+    """Validate that a URL has a proper http/https scheme."""
+    parsed = urllib.parse.urlparse(v)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError("URL must start with http:// or https://")
+    if not parsed.netloc:
+        raise ValueError("URL must have a valid hostname")
+    return v
+
+
 class CreateCheckoutRequest(BaseModel):
     quote_id: Optional[int] = None
     amount: Optional[Decimal] = None
@@ -227,6 +238,11 @@ class CreateCheckoutRequest(BaseModel):
     success_url: str
     cancel_url: str
     customer_id: Optional[int] = None
+
+    @field_validator("success_url", "cancel_url")
+    @classmethod
+    def validate_urls(cls, v: str) -> str:
+        return _validate_url(v)
 
 
 class CreateCheckoutResponse(BaseModel):
@@ -248,35 +264,32 @@ class CreatePaymentIntentResponse(BaseModel):
     payment_id: int
 
 
-# =============================================================================
-# Invoice Schemas
-# =============================================================================
-
-class CreateInvoiceRequest(BaseModel):
+class CreateAndSendInvoiceRequest(BaseModel):
     customer_id: int
     amount: Decimal
-    description: str
     currency: str = "USD"
-    due_days: int = 30
-    payment_method_types: Optional[List[str]] = None
+    description: str = "Invoice"
+    due_days: int = Field(default=30, ge=1, le=365)
+    quote_id: Optional[int] = None
 
 
-class CreateInvoiceResponse(BaseModel):
-    invoice_url: str
+class CreateAndSendInvoiceResponse(BaseModel):
+    invoice_id: str
     payment_id: int
-    stripe_invoice_id: str
+    status: str
 
 
-# =============================================================================
-# Onboarding Link Schemas
-# =============================================================================
-
-class OnboardingLinkRequest(BaseModel):
+class CreateOnboardingLinkRequest(BaseModel):
     contact_id: Optional[int] = None
     company_id: Optional[int] = None
     success_url: str
     cancel_url: str
 
+    @field_validator("success_url", "cancel_url")
+    @classmethod
+    def validate_urls(cls, v: str) -> str:
+        return _validate_url(v)
 
-class OnboardingLinkResponse(BaseModel):
+
+class CreateOnboardingLinkResponse(BaseModel):
     url: str
