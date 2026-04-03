@@ -85,6 +85,11 @@ COLUMN_ALIASES: Dict[str, str] = {
     "text": "description",
     "longtext": "description",
     "numbers": "budget_amount",
+    # LinkedIn Sales Navigator specific aliases
+    "linkedinprofileurl": "linkedin_url",
+    "linkedinprofile": "linkedin_url",
+    "geography": "city",
+    "industry": "industry",
     # Domain / URL aliases
     "domain": "website",
     "domainname": "website",
@@ -131,6 +136,21 @@ MONDAY_STATUS_MAP: Dict[str, str] = {
 
 # Monday.com-specific column headers used for CSV source detection
 _MONDAY_SIGNATURE_HEADERS = {"subitems", "lastupdated", "creationlog", "itemid", "linkedpulses", "mirrorcolumn", "peoplecolumn"}
+
+# LinkedIn Sales Navigator CSV signature headers
+_LINKEDIN_SIGNATURE_HEADERS = {
+    "firstname", "lastname", "company", "title", "linkedinprofileurl",
+    "email", "geography", "industry", "connectiondegree", "connected",
+}
+
+
+def detect_linkedin_format(headers: list) -> bool:
+    """Return True if the CSV headers match LinkedIn Sales Navigator export format.
+
+    Requires at least 4 LinkedIn-specific headers to be present.
+    """
+    normalized = {_normalize_header(h) for h in headers}
+    return len(normalized & _LINKEDIN_SIGNATURE_HEADERS) >= 4
 
 
 def _detect_monday_csv(csv_headers: List[str]) -> bool:
@@ -595,7 +615,13 @@ class CSVHandler:
                             "candidates": candidates[:5],
                         })
 
-        source_detected = "monday.com" if _detect_monday_csv(csv_headers) else None
+        is_linkedin = detect_linkedin_format(csv_headers)
+        if is_linkedin:
+            source_detected = "linkedin_sales_navigator"
+        elif _detect_monday_csv(csv_headers):
+            source_detected = "monday.com"
+        else:
+            source_detected = None
 
         result = {
             "total_rows": total_rows,
@@ -688,6 +714,7 @@ class CSVHandler:
         name_col = _find_name_column(csv_headers, column_mapping, fields)
         location_col = _find_location_column(csv_headers, column_mapping, fields)
         is_monday = _detect_monday_csv(csv_headers)
+        is_linkedin = detect_linkedin_format(csv_headers)
 
         # Load existing emails for dedup
         existing_emails = await self._get_existing_emails(entity_class)
@@ -726,6 +753,10 @@ class CSVHandler:
                 # Map Monday.com status labels to CRM statuses
                 if is_monday and "status" in entity_data and entity_data["status"]:
                     entity_data["status"] = _apply_monday_status(entity_data["status"])
+
+                # Auto-tag LinkedIn Sales Navigator imports
+                if is_linkedin and hasattr(entity_class, "source_details"):
+                    entity_data.setdefault("source_details", "linkedin_sales_navigator")
 
                 # Duplicate detection by email
                 email = (entity_data.get("email") or "").lower()

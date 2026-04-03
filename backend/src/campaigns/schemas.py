@@ -106,6 +106,15 @@ class AddMembersRequest(BaseModel):
     member_ids: List[int]
 
 
+class CreateFromImportRequest(BaseModel):
+    name: str
+    member_ids: List[int]
+    member_type: str = "contacts"  # "contacts" or "leads"
+    template_id: Optional[int] = None
+    schedule_start: Optional[datetime] = None
+    delay_days: int = 1
+
+
 class CampaignStats(BaseModel):
     total_members: int
     pending: int

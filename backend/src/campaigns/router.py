@@ -19,6 +19,7 @@ from src.campaigns.schemas import (
     CampaignMemberResponse,
     CampaignMemberUpdate,
     AddMembersRequest,
+    CreateFromImportRequest,
     CampaignStats,
     CampaignAnalytics,
     EmailTemplateCreate,
@@ -110,6 +111,52 @@ async def delete_email_template(
     if not template:
         raise_not_found("Email template", template_id)
     await service.delete_template(template)
+
+
+# =========================================================================
+# Create-from-import endpoint (before /{campaign_id} routes)
+# =========================================================================
+
+@router.post("/create-from-import", response_model=CampaignResponse, status_code=HTTPStatus.CREATED)
+async def create_campaign_from_import(
+    request: CreateFromImportRequest,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Create a new campaign and bulk-add members from an import.
+
+    Optionally creates the first EmailCampaignStep if template_id is provided.
+    """
+    campaign_data = CampaignCreate(
+        name=request.name,
+        campaign_type="email",
+        status="planned",
+        start_date=request.schedule_start.date() if request.schedule_start else None,
+        owner_id=current_user.id,
+    )
+
+    service = CampaignService(db)
+    campaign = await service.create(campaign_data, current_user.id)
+
+    member_service = CampaignMemberService(db)
+    added = await member_service.add_members_bulk(
+        campaign_id=campaign.id,
+        member_type=request.member_type,
+        member_ids=request.member_ids,
+    )
+
+    if request.template_id:
+        step_service = EmailCampaignStepService(db)
+        step_data = EmailCampaignStepCreate(
+            template_id=request.template_id,
+            delay_days=request.delay_days,
+            step_order=1,
+        )
+        await step_service.create_step(campaign.id, step_data)
+
+    await db.flush()
+    await db.refresh(campaign)
+    return CampaignResponse.model_validate(campaign)
 
 
 # =========================================================================
