@@ -29,7 +29,7 @@ from src.ai.models import AIEmbedding, AIConversation
 from src.whitelabel.models import Tenant, TenantSettings, TenantUser
 from src.meta.models import CompanyMetaData, MetaCredential, MetaLeadCapture
 from src.integrations.google_calendar.models import GoogleCalendarCredential, CalendarSyncEvent
-from src.email.models import EmailQueue
+from src.email.models import EmailQueue, InboundEmail
 from src.reports.models import SavedReport
 from src.sequences.models import Sequence, SequenceEnrollment
 from src.notifications.models import Notification

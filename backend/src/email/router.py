@@ -1,9 +1,11 @@
 """Email API routes."""
 
 import base64
+import logging
+from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Request
 from fastapi.responses import Response, RedirectResponse
 
 from src.core.constants import HTTPStatus
@@ -14,8 +16,16 @@ from src.email.schemas import (
     SendCampaignEmailRequest,
     EmailQueueResponse,
     EmailListResponse,
+    EmailSettingsResponse,
+    EmailSettingsUpdate,
+    InboundEmailResponse,
+    ThreadEmailItem,
+    ThreadResponse,
 )
 from src.email.service import EmailService
+from src.email.throttle import EmailThrottleService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/email", tags=["email"])
 
@@ -40,6 +50,9 @@ async def send_email(
         sent_by_id=current_user.id,
         entity_type=data.entity_type,
         entity_id=data.entity_id,
+        from_email=data.from_email,
+        cc=data.cc,
+        bcc=data.bcc,
     )
     return email
 
@@ -90,6 +103,145 @@ async def send_campaign_email(
             detail=str(exc),
         )
     return {"sent": len(emails), "items": [EmailQueueResponse.model_validate(e) for e in emails]}
+
+
+@router.post("/inbound-webhook", status_code=200)
+async def inbound_webhook(request: Request, db: DBSession):
+    """Receive inbound email webhook from Resend.
+
+    Verifies svix signature, stores the email, and auto-matches to contact.
+    """
+    from src.config import settings as app_settings
+
+    body = await request.body()
+    headers = request.headers
+
+    # Verify svix signature if webhook secret is configured
+    if app_settings.RESEND_WEBHOOK_SECRET:
+        try:
+            from svix.webhooks import Webhook
+            wh = Webhook(app_settings.RESEND_WEBHOOK_SECRET)
+            wh.verify(body, {
+                "svix-id": headers.get("svix-id", ""),
+                "svix-timestamp": headers.get("svix-timestamp", ""),
+                "svix-signature": headers.get("svix-signature", ""),
+            })
+        except Exception as e:
+            logger.warning("Webhook signature verification failed: %s", e)
+            raise HTTPException(status_code=400, detail="Invalid webhook signature")
+
+    payload = await request.json()
+    event_type = payload.get("type", "")
+
+    if event_type != "email.received":
+        return {"status": "ignored", "type": event_type}
+
+    data = payload.get("data", {})
+    email_id = data.get("email_id") or data.get("id", "")
+
+    # Fetch full email body from Resend API if email_id is available
+    body_html = data.get("html")
+    body_text = data.get("text")
+    if email_id and not body_html and app_settings.RESEND_API_KEY:
+        try:
+            import resend
+            resend.api_key = app_settings.RESEND_API_KEY
+            full_email = resend.Emails.get(email_id)
+            body_html = getattr(full_email, "html", None) or body_html
+            body_text = getattr(full_email, "text", None) or body_text
+        except Exception as e:
+            logger.warning("Failed to fetch full email from Resend: %s", e)
+
+    from_email = data.get("from", "")
+    to_email = data.get("to", [""])[0] if isinstance(data.get("to"), list) else data.get("to", "")
+    cc_list = data.get("cc", [])
+    cc = ", ".join(cc_list) if cc_list else None
+
+    service = EmailService(db)
+    inbound = await service.store_inbound_email(
+        resend_email_id=email_id or f"webhook-{datetime.now(timezone.utc).timestamp()}",
+        from_email=from_email,
+        to_email=to_email,
+        subject=data.get("subject", "(no subject)"),
+        received_at=datetime.now(timezone.utc),
+        cc=cc,
+        body_text=body_text,
+        body_html=body_html,
+        message_id=data.get("message_id"),
+        in_reply_to=data.get("in_reply_to"),
+        attachments=data.get("attachments"),
+    )
+
+    return {"status": "processed", "inbound_email_id": inbound.id}
+
+
+@router.get("/thread", response_model=ThreadResponse)
+async def get_email_thread(
+    current_user: CurrentUser,
+    db: DBSession,
+    entity_type: str = Query(..., description="Entity type (e.g. contacts)"),
+    entity_id: int = Query(..., description="Entity ID"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
+):
+    """Get unified email thread (inbound + outbound) for an entity."""
+    service = EmailService(db)
+    items, total = await service.get_thread(
+        entity_type=entity_type,
+        entity_id=entity_id,
+        page=page,
+        page_size=page_size,
+    )
+    return ThreadResponse(
+        items=[ThreadEmailItem(**item) for item in items],
+        total=total,
+        page=page,
+        page_size=page_size,
+        pages=calculate_pages(total, page_size),
+    )
+
+
+@router.get("/volume-stats")
+async def get_volume_stats(
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Get email volume statistics (sent today, daily limit, warmup info)."""
+    throttle = EmailThrottleService(db)
+    return await throttle.get_volume_stats()
+
+
+@router.get("/settings", response_model=EmailSettingsResponse)
+async def get_email_settings(
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Get email settings (daily limits, warmup config)."""
+    throttle = EmailThrottleService(db)
+    settings = await throttle.get_settings()
+    return EmailSettingsResponse.model_validate(settings)
+
+
+@router.put("/settings", response_model=EmailSettingsResponse)
+async def update_email_settings(
+    data: EmailSettingsUpdate,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Update email settings (daily limits, warmup config)."""
+    from datetime import date as date_type
+    warmup_date = None
+    if data.warmup_start_date:
+        warmup_date = date_type.fromisoformat(data.warmup_start_date)
+
+    throttle = EmailThrottleService(db)
+    settings = await throttle.update_settings(
+        daily_send_limit=data.daily_send_limit,
+        warmup_enabled=data.warmup_enabled,
+        warmup_start_date=warmup_date,
+        warmup_target_daily=data.warmup_target_daily,
+    )
+    return EmailSettingsResponse.model_validate(settings)
 
 
 @router.get("", response_model=EmailListResponse)
