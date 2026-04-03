@@ -116,19 +116,21 @@ async def inbound_webhook(request: Request, db: DBSession):
     body = await request.body()
     headers = request.headers
 
-    # Verify svix signature if webhook secret is configured
-    if app_settings.RESEND_WEBHOOK_SECRET:
-        try:
-            from svix.webhooks import Webhook
-            wh = Webhook(app_settings.RESEND_WEBHOOK_SECRET)
-            wh.verify(body, {
-                "svix-id": headers.get("svix-id", ""),
-                "svix-timestamp": headers.get("svix-timestamp", ""),
-                "svix-signature": headers.get("svix-signature", ""),
-            })
-        except Exception as e:
-            logger.warning("Webhook signature verification failed: %s", e)
-            raise HTTPException(status_code=400, detail="Invalid webhook signature")
+    # Verify svix signature — require webhook secret to be configured
+    if not app_settings.RESEND_WEBHOOK_SECRET:
+        raise HTTPException(status_code=503, detail="Webhook secret not configured")
+
+    try:
+        from svix.webhooks import Webhook, WebhookVerificationError
+        wh = Webhook(app_settings.RESEND_WEBHOOK_SECRET)
+        wh.verify(body, {
+            "svix-id": headers.get("svix-id", ""),
+            "svix-timestamp": headers.get("svix-timestamp", ""),
+            "svix-signature": headers.get("svix-signature", ""),
+        })
+    except WebhookVerificationError as e:
+        logger.warning("Webhook signature verification failed: %s", e)
+        raise HTTPException(status_code=400, detail="Invalid webhook signature")
 
     payload = await request.json()
     event_type = payload.get("type", "")
