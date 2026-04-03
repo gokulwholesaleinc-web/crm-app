@@ -1,7 +1,7 @@
 """Pydantic schemas for campaigns."""
 
 from datetime import date, datetime
-from typing import Optional, List
+from typing import Literal, Optional, List
 from pydantic import BaseModel, ConfigDict
 
 
@@ -109,7 +109,7 @@ class AddMembersRequest(BaseModel):
 class CreateFromImportRequest(BaseModel):
     name: str
     member_ids: List[int]
-    member_type: str = "contacts"  # "contacts" or "leads"
+    member_type: Literal["contacts", "leads"] = "contacts"
     template_id: Optional[int] = None
     schedule_start: Optional[datetime] = None
     delay_days: int = 1

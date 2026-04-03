@@ -230,7 +230,7 @@ class EmailService:
         result = await self.db.execute(
             select(EmailQueue).where(
                 and_(
-                    EmailQueue.status == "retry",
+                    EmailQueue.status.in_(["retry", "throttled"]),
                     EmailQueue.next_retry_at <= now,
                 )
             )
@@ -553,7 +553,7 @@ class EmailService:
         offset = (page - 1) * page_size
         data_q = (
             select(combined)
-            .order_by(combined.c.timestamp.desc())
+            .order_by(combined.c.timestamp.desc().nulls_last())
             .offset(offset)
             .limit(page_size)
         )

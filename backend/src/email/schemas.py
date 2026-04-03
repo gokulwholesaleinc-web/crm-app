@@ -1,8 +1,8 @@
 """Email request/response schemas."""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class SendEmailRequest(BaseModel):
@@ -104,10 +104,10 @@ class EmailSettingsResponse(BaseModel):
 
 class EmailSettingsUpdate(BaseModel):
     """Email settings update request."""
-    daily_send_limit: Optional[int] = None
+    daily_send_limit: Optional[int] = Field(None, ge=1)
     warmup_enabled: Optional[bool] = None
-    warmup_start_date: Optional[str] = None
-    warmup_target_daily: Optional[int] = None
+    warmup_start_date: Optional[date] = None
+    warmup_target_daily: Optional[int] = Field(None, ge=1)
 
 
 class ThreadEmailItem(BaseModel):
@@ -120,7 +120,7 @@ class ThreadEmailItem(BaseModel):
     subject: str
     body: Optional[str] = None
     body_html: Optional[str] = None
-    timestamp: datetime
+    timestamp: Optional[datetime] = None
     status: Optional[str] = None  # outbound only
     open_count: Optional[int] = None  # outbound only
     attachments: Optional[Any] = None  # inbound only

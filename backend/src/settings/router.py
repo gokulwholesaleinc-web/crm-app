@@ -27,16 +27,11 @@ async def update_email_settings(
     db: DBSession,
 ):
     """Update email settings (daily limits, warmup config)."""
-    from datetime import date as date_type
-    warmup_date = None
-    if data.warmup_start_date:
-        warmup_date = date_type.fromisoformat(data.warmup_start_date)
-
     throttle = EmailThrottleService(db)
     settings = await throttle.update_settings(
         daily_send_limit=data.daily_send_limit,
         warmup_enabled=data.warmup_enabled,
-        warmup_start_date=warmup_date,
+        warmup_start_date=data.warmup_start_date,
         warmup_target_daily=data.warmup_target_daily,
     )
     return EmailSettingsResponse.model_validate(settings)

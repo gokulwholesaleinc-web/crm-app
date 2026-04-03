@@ -16,8 +16,6 @@ from src.email.schemas import (
     SendCampaignEmailRequest,
     EmailQueueResponse,
     EmailListResponse,
-    EmailSettingsResponse,
-    EmailSettingsUpdate,
     InboundEmailResponse,
     ThreadEmailItem,
     ThreadResponse,
@@ -113,7 +111,7 @@ async def inbound_webhook(request: Request, db: DBSession):
     """
     from src.config import settings as app_settings
 
-    body = await request.body()
+    raw_body = await request.body()
     headers = request.headers
 
     # Verify svix signature — require webhook secret to be configured
@@ -123,7 +121,7 @@ async def inbound_webhook(request: Request, db: DBSession):
     try:
         from svix.webhooks import Webhook, WebhookVerificationError
         wh = Webhook(app_settings.RESEND_WEBHOOK_SECRET)
-        wh.verify(body, {
+        wh.verify(raw_body, {
             "svix-id": headers.get("svix-id", ""),
             "svix-timestamp": headers.get("svix-timestamp", ""),
             "svix-signature": headers.get("svix-signature", ""),
@@ -211,39 +209,6 @@ async def get_volume_stats(
     """Get email volume statistics (sent today, daily limit, warmup info)."""
     throttle = EmailThrottleService(db)
     return await throttle.get_volume_stats()
-
-
-@router.get("/settings", response_model=EmailSettingsResponse)
-async def get_email_settings(
-    current_user: CurrentUser,
-    db: DBSession,
-):
-    """Get email settings (daily limits, warmup config)."""
-    throttle = EmailThrottleService(db)
-    settings = await throttle.get_settings()
-    return EmailSettingsResponse.model_validate(settings)
-
-
-@router.put("/settings", response_model=EmailSettingsResponse)
-async def update_email_settings(
-    data: EmailSettingsUpdate,
-    current_user: CurrentUser,
-    db: DBSession,
-):
-    """Update email settings (daily limits, warmup config)."""
-    from datetime import date as date_type
-    warmup_date = None
-    if data.warmup_start_date:
-        warmup_date = date_type.fromisoformat(data.warmup_start_date)
-
-    throttle = EmailThrottleService(db)
-    settings = await throttle.update_settings(
-        daily_send_limit=data.daily_send_limit,
-        warmup_enabled=data.warmup_enabled,
-        warmup_start_date=warmup_date,
-        warmup_target_daily=data.warmup_target_daily,
-    )
-    return EmailSettingsResponse.model_validate(settings)
 
 
 @router.get("", response_model=EmailListResponse)

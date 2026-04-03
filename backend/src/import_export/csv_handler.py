@@ -144,13 +144,20 @@ _LINKEDIN_SIGNATURE_HEADERS = {
 }
 
 
+# Headers unique to LinkedIn exports (not common in generic CSVs)
+_LINKEDIN_UNIQUE_HEADERS = {"linkedinprofileurl", "connectiondegree", "connected", "geography"}
+
+
 def detect_linkedin_format(headers: list) -> bool:
     """Return True if the CSV headers match LinkedIn Sales Navigator export format.
 
-    Requires at least 4 LinkedIn-specific headers to be present.
+    Requires at least 4 signature headers AND at least one LinkedIn-unique header
+    to avoid false positives on generic CSVs.
     """
     normalized = {_normalize_header(h) for h in headers}
-    return len(normalized & _LINKEDIN_SIGNATURE_HEADERS) >= 4
+    matched = normalized & _LINKEDIN_SIGNATURE_HEADERS
+    has_unique = bool(normalized & _LINKEDIN_UNIQUE_HEADERS)
+    return len(matched) >= 4 and has_unique
 
 
 def _detect_monday_csv(csv_headers: List[str]) -> bool:

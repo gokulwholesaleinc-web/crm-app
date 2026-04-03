@@ -27,7 +27,7 @@ class EmailThrottleService:
 
     async def get_today_sent_count(self) -> int:
         """Count emails with status='sent' and sent_at = today (UTC)."""
-        today = date.today()
+        today = datetime.now(timezone.utc).date()
         result = await self.db.execute(
             select(func.count(EmailQueue.id)).where(
                 and_(
@@ -52,7 +52,7 @@ class EmailThrottleService:
         if not settings.warmup_enabled or not settings.warmup_start_date:
             return settings.daily_send_limit
 
-        days_elapsed = (date.today() - settings.warmup_start_date).days + 1
+        days_elapsed = (datetime.now(timezone.utc).date() - settings.warmup_start_date).days + 1
         if days_elapsed < 1:
             return settings.daily_send_limit
 
@@ -84,7 +84,7 @@ class EmailThrottleService:
 
         warmup_day = None
         if settings.warmup_enabled and settings.warmup_start_date:
-            warmup_day = (date.today() - settings.warmup_start_date).days + 1
+            warmup_day = (datetime.now(timezone.utc).date() - settings.warmup_start_date).days + 1
 
         return {
             "sent_today": sent_today,
