@@ -28,6 +28,10 @@ from src.payments.schemas import (
     CreateCheckoutResponse,
     CreatePaymentIntentRequest,
     CreatePaymentIntentResponse,
+    CreateAndSendInvoiceRequest,
+    CreateAndSendInvoiceResponse,
+    CreateOnboardingLinkRequest,
+    CreateOnboardingLinkResponse,
 )
 from src.payments.service import (
     PaymentService,
@@ -190,7 +194,12 @@ async def stripe_webhook(request: Request, db: DBSession):
             detail=str(e),
         )
 
-    if result.get("event_type") in ("checkout.session.completed", "payment_intent.succeeded"):
+    if result.get("event_type") in (
+        "checkout.session.completed",
+        "payment_intent.succeeded",
+        "invoice.paid",
+        "checkout.session.async_payment_succeeded",
+    ):
         await emit(PAYMENT_RECEIVED, {
             "entity_id": None,
             "entity_type": "payment",
@@ -232,7 +241,7 @@ async def sync_customer(
     db: DBSession,
 ):
     """Sync a CRM contact or company to a Stripe customer."""
-    if not request_data.contact_id and not request_data.company_id:
+    if request_data.contact_id is None and request_data.company_id is None:
         raise HTTPException(
             status_code=HTTPStatus.BAD_REQUEST,
             detail="Either contact_id or company_id is required",
@@ -244,6 +253,71 @@ async def sync_customer(
         company_id=request_data.company_id,
     )
     return StripeCustomerResponse.model_validate(customer)
+
+
+@router.post("/customers/onboarding-link", response_model=CreateOnboardingLinkResponse)
+async def create_onboarding_link(
+    request_data: CreateOnboardingLinkRequest,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Create a Stripe onboarding / setup link for a customer."""
+    if request_data.contact_id is None and request_data.company_id is None:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail="Either contact_id or company_id is required",
+        )
+
+    service = PaymentService(db)
+    try:
+        result = await service.create_onboarding_link(
+            success_url=request_data.success_url,
+            cancel_url=request_data.cancel_url,
+            contact_id=request_data.contact_id,
+            company_id=request_data.company_id,
+        )
+        return CreateOnboardingLinkResponse(**result)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+# =============================================================================
+# Invoice Endpoints
+# =============================================================================
+
+@router.post("/invoices/create-and-send", response_model=CreateAndSendInvoiceResponse)
+async def create_and_send_invoice(
+    request_data: CreateAndSendInvoiceRequest,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Create, finalize, and send a Stripe invoice."""
+    if request_data.amount <= 0:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail="Amount must be greater than 0",
+        )
+
+    service = PaymentService(db)
+    try:
+        result = await service.create_and_send_invoice(
+            customer_id=request_data.customer_id,
+            amount=float(request_data.amount),
+            description=request_data.description,
+            user_id=current_user.id,
+            currency=request_data.currency,
+            due_days=request_data.due_days,
+            quote_id=request_data.quote_id,
+        )
+        return CreateAndSendInvoiceResponse(**result)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail=str(e),
+        )
 
 
 # =============================================================================

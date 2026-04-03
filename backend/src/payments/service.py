@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import logging
+from decimal import Decimal
 from datetime import datetime, timezone
 from html import escape
 from typing import Optional, List, Tuple
@@ -149,6 +150,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
 
         If the linked quote has payment_type="subscription", creates a
         subscription-mode checkout session using the quote's recurring_interval.
+        Supports card and ACH (us_bank_account) payment methods.
 
         Returns dict with checkout_session_id and checkout_url,
         or raises ValueError if Stripe is not configured.
@@ -196,7 +198,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         price_data: dict = {
             "currency": currency.lower(),
             "product_data": {"name": f"Payment to {company_name} - {currency} {amount}"},
-            "unit_amount": int(amount * 100),
+            "unit_amount": int(Decimal(str(amount)) * 100),
         }
 
         if is_subscription and recurring_interval:
@@ -209,24 +211,38 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
 
         checkout_mode = "subscription" if is_subscription else "payment"
 
-        # Create Stripe checkout session
-        session = stripe.checkout.Session.create(
-            payment_method_types=["card"],
-            line_items=[{
+        # Build session params with ACH support
+        session_params = {
+            "payment_method_types": ["card", "us_bank_account"],
+            "line_items": [{
                 "price_data": price_data,
                 "quantity": 1,
             }],
-            mode=checkout_mode,
-            success_url=success_url,
-            cancel_url=cancel_url,
-            customer=stripe_customer_id,
-        )
+            "mode": checkout_mode,
+            "success_url": success_url,
+            "cancel_url": cancel_url,
+            "customer": stripe_customer_id,
+            "payment_method_options": {
+                "us_bank_account": {
+                    "financial_connections": {"permissions": ["payment_method"]},
+                },
+            },
+        }
+
+        # For one-time payments, save bank details for future use
+        if checkout_mode == "payment":
+            session_params["payment_intent_data"] = {
+                "setup_future_usage": "off_session",
+            }
+
+        # Create Stripe checkout session
+        session = stripe.checkout.Session.create(**session_params)
 
         # Create local payment record
         payment = Payment(
             stripe_checkout_session_id=session.id,
             amount=amount,
-            currency=currency,
+            currency=currency.upper(),
             status="pending",
             customer_id=customer_id,
             quote_id=quote_id,
@@ -270,7 +286,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
                 stripe_customer_id = customer.stripe_customer_id
 
         intent_params = {
-            "amount": int(amount * 100),
+            "amount": int(Decimal(str(amount)) * 100),
             "currency": currency.lower(),
         }
         if stripe_customer_id:
@@ -282,7 +298,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         payment = Payment(
             stripe_payment_intent_id=intent.id,
             amount=amount,
-            currency=currency,
+            currency=currency.upper(),
             status="pending",
             customer_id=customer_id,
             opportunity_id=opportunity_id,
@@ -416,6 +432,18 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             await self._handle_subscription_updated(obj)
         elif event_type == "customer.subscription.deleted":
             await self._handle_subscription_deleted(obj)
+        elif event_type == "invoice.paid":
+            await self._handle_invoice_paid(obj)
+        elif event_type == "invoice.payment_failed":
+            await self._handle_invoice_payment_failed(obj)
+        elif event_type == "invoice.sent":
+            await self._handle_invoice_sent(obj)
+        elif event_type == "checkout.session.async_payment_succeeded":
+            await self._handle_async_payment_succeeded(obj)
+        elif event_type == "checkout.session.async_payment_failed":
+            await self._handle_async_payment_failed(obj)
+        elif event_type == "setup_intent.succeeded":
+            await self._handle_setup_intent_succeeded(obj)
 
         return {"event_type": event_type, "event_id": event_id, "status": "processed"}
 
@@ -626,7 +654,12 @@ body {{ font-family: Arial, Helvetica, sans-serif; margin: 40px; color: #111827;
         return html.encode("utf-8")
 
     async def _handle_checkout_completed(self, session_obj: dict) -> None:
-        """Handle checkout.session.completed event."""
+        """Handle checkout.session.completed event.
+
+        For ACH/bank payments, payment_status may be "processing" rather than
+        "paid". In that case we set status to "processing" and do NOT send
+        receipt -- the receipt is sent when async_payment_succeeded fires.
+        """
         session_id = session_obj.get("id")
         if not session_id:
             return
@@ -635,18 +668,24 @@ body {{ font-family: Arial, Helvetica, sans-serif; margin: 40px; color: #111827;
             select(Payment).where(Payment.stripe_checkout_session_id == session_id)
         )
         payment = result.scalar_one_or_none()
-        if payment and payment.status != "succeeded":
-            payment.status = "succeeded"
+        if payment and payment.status not in ("succeeded", "refunded"):
             payment_intent_id = session_obj.get("payment_intent")
             if payment_intent_id:
                 payment.stripe_payment_intent_id = payment_intent_id
-            await self.db.flush()
 
-            # Send branded receipt email
-            try:
-                await self.send_payment_receipt(payment.id)
-            except (OSError, RuntimeError) as exc:
-                logger.warning("Failed to send receipt for payment %s: %s", payment.id, exc)
+            payment_status = session_obj.get("payment_status")
+            if payment_status == "processing":
+                payment.status = "processing"
+                await self.db.flush()
+            else:
+                payment.status = "succeeded"
+                await self.db.flush()
+
+                # Send branded receipt email only when fully paid
+                try:
+                    await self.send_payment_receipt(payment.id)
+                except (OSError, RuntimeError) as exc:
+                    logger.warning("Failed to send receipt for payment %s: %s", payment.id, exc)
 
     async def _handle_payment_succeeded(self, intent_obj: dict) -> None:
         """Handle payment_intent.succeeded event."""
@@ -673,33 +712,39 @@ body {{ font-family: Arial, Helvetica, sans-serif; margin: 40px; color: #111827;
             except (OSError, RuntimeError) as exc:
                 logger.warning("Failed to send receipt for payment %s: %s", payment.id, exc)
 
+    async def _find_payment(self, lookup_field, obj: dict, obj_key: str = "id") -> Optional[Payment]:
+        """Look up a Payment by a Stripe ID field. Returns None if not found."""
+        value = obj.get(obj_key)
+        if not value:
+            return None
+        result = await self.db.execute(
+            select(Payment).where(lookup_field == value)
+        )
+        return result.scalar_one_or_none()
+
+    async def _set_payment_status(
+        self, payment: Optional[Payment], new_status: str,
+        guard_statuses: tuple = ("succeeded", "refunded"),
+    ) -> None:
+        """Set payment status if payment exists and current status is not in guard_statuses."""
+        if not payment:
+            return
+        if guard_statuses and payment.status in guard_statuses:
+            return
+        payment.status = new_status
+        await self.db.flush()
+
     async def _handle_payment_failed(self, intent_obj: dict) -> None:
         """Handle payment_intent.payment_failed event."""
-        intent_id = intent_obj.get("id")
-        if not intent_id:
-            return
-
-        result = await self.db.execute(
-            select(Payment).where(Payment.stripe_payment_intent_id == intent_id)
-        )
-        payment = result.scalar_one_or_none()
-        if payment and payment.status not in ("succeeded", "refunded"):
-            payment.status = "failed"
-            await self.db.flush()
+        payment = await self._find_payment(Payment.stripe_payment_intent_id, intent_obj)
+        await self._set_payment_status(payment, "failed")
 
     async def _handle_charge_refunded(self, charge_obj: dict) -> None:
         """Handle charge.refunded event."""
-        payment_intent_id = charge_obj.get("payment_intent")
-        if not payment_intent_id:
-            return
-
-        result = await self.db.execute(
-            select(Payment).where(Payment.stripe_payment_intent_id == payment_intent_id)
+        payment = await self._find_payment(
+            Payment.stripe_payment_intent_id, charge_obj, obj_key="payment_intent"
         )
-        payment = result.scalar_one_or_none()
-        if payment:
-            payment.status = "refunded"
-            await self.db.flush()
+        await self._set_payment_status(payment, "refunded", guard_statuses=())
 
     async def _handle_subscription_updated(self, sub_obj: dict) -> None:
         """Handle subscription created/updated events."""
@@ -731,6 +776,205 @@ body {{ font-family: Arial, Helvetica, sans-serif; margin: 40px; color: #111827;
         if subscription:
             subscription.status = "canceled"
             await self.db.flush()
+
+    async def _handle_invoice_paid(self, invoice_obj: dict) -> None:
+        """Handle invoice.paid event -- marks payment as succeeded."""
+        invoice_id = invoice_obj.get("id")
+        if not invoice_id:
+            return
+
+        result = await self.db.execute(
+            select(Payment).where(Payment.stripe_invoice_id == invoice_id)
+        )
+        payment = result.scalar_one_or_none()
+        if payment and payment.status != "succeeded":
+            payment.status = "succeeded"
+            await self.db.flush()
+
+    async def _handle_invoice_payment_failed(self, invoice_obj: dict) -> None:
+        """Handle invoice.payment_failed event -- marks payment as failed."""
+        invoice_id = invoice_obj.get("id")
+        if not invoice_id:
+            return
+
+        result = await self.db.execute(
+            select(Payment).where(Payment.stripe_invoice_id == invoice_id)
+        )
+        payment = result.scalar_one_or_none()
+        if payment and payment.status not in ("succeeded", "refunded"):
+            payment.status = "failed"
+            await self.db.flush()
+
+    async def _handle_invoice_sent(self, invoice_obj: dict) -> None:
+        """Handle invoice.sent event -- marks pending payment as sent."""
+        invoice_id = invoice_obj.get("id")
+        if not invoice_id:
+            return
+
+        result = await self.db.execute(
+            select(Payment).where(Payment.stripe_invoice_id == invoice_id)
+        )
+        payment = result.scalar_one_or_none()
+        if payment and payment.status == "pending":
+            payment.status = "sent"
+            await self.db.flush()
+
+    async def _handle_async_payment_succeeded(self, session_obj: dict) -> None:
+        """Handle checkout.session.async_payment_succeeded (ACH success)."""
+        session_id = session_obj.get("id")
+        if not session_id:
+            return
+
+        result = await self.db.execute(
+            select(Payment).where(Payment.stripe_checkout_session_id == session_id)
+        )
+        payment = result.scalar_one_or_none()
+        if payment and payment.status != "succeeded":
+            payment.status = "succeeded"
+            payment_intent_id = session_obj.get("payment_intent")
+            if payment_intent_id:
+                payment.stripe_payment_intent_id = payment_intent_id
+            await self.db.flush()
+
+            try:
+                await self.send_payment_receipt(payment.id)
+            except (OSError, RuntimeError) as exc:
+                logger.warning("Failed to send receipt for payment %s: %s", payment.id, exc)
+
+    async def _handle_async_payment_failed(self, session_obj: dict) -> None:
+        """Handle checkout.session.async_payment_failed (ACH failure)."""
+        session_id = session_obj.get("id")
+        if not session_id:
+            return
+
+        result = await self.db.execute(
+            select(Payment).where(Payment.stripe_checkout_session_id == session_id)
+        )
+        payment = result.scalar_one_or_none()
+        if payment and payment.status not in ("succeeded", "refunded"):
+            payment.status = "failed"
+            await self.db.flush()
+
+    async def _handle_setup_intent_succeeded(self, setup_obj: dict) -> None:
+        """Handle setup_intent.succeeded -- log for future payment method reuse."""
+        setup_id = setup_obj.get("id")
+        customer_id = setup_obj.get("customer")
+        logger.info(
+            "SetupIntent succeeded: %s for customer %s", setup_id, customer_id
+        )
+
+    async def sync_customer_from_id(self, customer_id: int) -> StripeCustomer:
+        """Look up a local StripeCustomer by primary key.
+
+        Raises ValueError if not found.
+        """
+        result = await self.db.execute(
+            select(StripeCustomer).where(StripeCustomer.id == customer_id)
+        )
+        customer = result.scalar_one_or_none()
+        if not customer:
+            raise ValueError(f"Stripe customer {customer_id} not found")
+        return customer
+
+    async def create_and_send_invoice(
+        self,
+        customer_id: int,
+        amount: float,
+        description: str,
+        user_id: int,
+        currency: str = "USD",
+        due_days: int = 30,
+        quote_id: Optional[int] = None,
+    ) -> dict:
+        """Create a Stripe Invoice, finalize it, and send it.
+
+        Returns dict with invoice_id, payment_id, and status.
+        Raises ValueError if Stripe is not configured or customer not found.
+        """
+        stripe = _get_stripe()
+        if not stripe:
+            raise ValueError("Stripe is not configured. Set STRIPE_SECRET_KEY environment variable.")
+
+        customer = await self.sync_customer_from_id(customer_id)
+        amount_cents = int(Decimal(str(amount)) * 100)
+
+        invoice = None
+        try:
+            stripe.InvoiceItem.create(
+                customer=customer.stripe_customer_id,
+                amount=amount_cents,
+                currency=currency.lower(),
+                description=description,
+            )
+
+            invoice = stripe.Invoice.create(
+                customer=customer.stripe_customer_id,
+                collection_method="send_invoice",
+                days_until_due=due_days,
+            )
+
+            invoice = stripe.Invoice.finalize_invoice(invoice.id)
+            invoice = stripe.Invoice.send_invoice(invoice.id)
+        except Exception as exc:
+            if invoice and hasattr(invoice, "id"):
+                try:
+                    stripe.Invoice.void_invoice(invoice.id)
+                except Exception:
+                    logger.warning("Failed to void draft invoice %s after error", invoice.id)
+            raise ValueError(f"Failed to create invoice: {exc}") from exc
+
+        payment = Payment(
+            stripe_invoice_id=invoice.id,
+            amount=amount,
+            currency=currency.upper(),
+            status="pending",
+            customer_id=customer_id,
+            quote_id=quote_id,
+            owner_id=user_id,
+            created_by_id=user_id,
+        )
+        self.db.add(payment)
+        await self.db.flush()
+        await self.db.refresh(payment)
+
+        return {
+            "invoice_id": invoice.id,
+            "payment_id": payment.id,
+            "status": "pending",
+        }
+
+    async def create_onboarding_link(
+        self,
+        success_url: str,
+        cancel_url: str,
+        contact_id: Optional[int] = None,
+        company_id: Optional[int] = None,
+    ) -> dict:
+        """Create a Stripe customer portal / onboarding link.
+
+        Returns dict with the URL. Raises ValueError if Stripe is not
+        configured or neither contact_id nor company_id is provided.
+        """
+        if contact_id is None and company_id is None:
+            raise ValueError("Either contact_id or company_id is required")
+
+        stripe = _get_stripe()
+        if not stripe:
+            raise ValueError("Stripe is not configured. Set STRIPE_SECRET_KEY environment variable.")
+
+        customer = await self.sync_customer(
+            contact_id=contact_id,
+            company_id=company_id,
+        )
+
+        session = stripe.checkout.Session.create(
+            mode="setup",
+            customer=customer.stripe_customer_id,
+            success_url=success_url,
+            cancel_url=cancel_url,
+        )
+
+        return {"url": session.url}
 
 
 class ProductService(CRUDService[Product, ProductCreate, ProductUpdate]):

@@ -110,6 +110,9 @@ class Payment(Base, AuditableMixin):
     stripe_checkout_session_id: Mapped[Optional[str]] = mapped_column(
         String(255), index=True
     )
+    stripe_invoice_id: Mapped[Optional[str]] = mapped_column(
+        String(255), unique=True, index=True, nullable=True
+    )
 
     # Relations
     customer_id: Mapped[Optional[int]] = mapped_column(
@@ -133,7 +136,7 @@ class Payment(Base, AuditableMixin):
     currency: Mapped[str] = mapped_column(String(3), default="USD")
     status: Mapped[str] = mapped_column(
         String(20), default="pending", nullable=False
-    )  # pending, succeeded, failed, refunded
+    )  # pending, sent, succeeded, failed, refunded
     payment_method: Mapped[Optional[str]] = mapped_column(String(50))
     receipt_url: Mapped[Optional[str]] = mapped_column(String(500))
 
