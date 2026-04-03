@@ -213,6 +213,7 @@ export const importWithMapping = async (
   imported_count: number;
   errors: string[];
   duplicates_skipped: number;
+  imported_ids?: number[];
 }> => {
   const formData = new FormData();
   formData.append('file', file);

@@ -25,6 +25,7 @@ import { WebhooksSection } from './components/WebhooksSection';
 import { AssignmentRulesSection } from './components/AssignmentRulesSection';
 import { RolesSection } from './components/RolesSection';
 import { IntegrationsSection } from './components/IntegrationsSection';
+import { EmailSettingsSection } from './components/EmailSettingsSection';
 
 function SettingsPage() {
   const { user, isLoading } = useAuthStore();
@@ -155,6 +156,9 @@ function SettingsPage() {
 
       {/* Integrations Section (Google Calendar, Meta) */}
       <IntegrationsSection />
+
+      {/* Email Settings Section */}
+      <EmailSettingsSection />
 
       {/* Webhooks Section */}
       <WebhooksSection />
