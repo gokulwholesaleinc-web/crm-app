@@ -144,6 +144,9 @@ async def _run_production_migrations():
                 "ALTER TABLE company_meta_data ADD COLUMN IF NOT EXISTS instagram_username VARCHAR(255)",
                 "ALTER TABLE company_meta_data ADD COLUMN IF NOT EXISTS instagram_followers INTEGER",
                 "ALTER TABLE company_meta_data ADD COLUMN IF NOT EXISTS instagram_media_count INTEGER",
+                # Stripe invoice tracking
+                "ALTER TABLE payments ADD COLUMN IF NOT EXISTS stripe_invoice_id VARCHAR(255)",
+                "CREATE UNIQUE INDEX IF NOT EXISTS ix_payments_stripe_invoice_id ON payments(stripe_invoice_id) WHERE stripe_invoice_id IS NOT NULL",
                 # Email logging: new columns on email_queue
                 "ALTER TABLE email_queue ADD COLUMN IF NOT EXISTS from_email VARCHAR(255)",
                 "ALTER TABLE email_queue ADD COLUMN IF NOT EXISTS cc TEXT",
