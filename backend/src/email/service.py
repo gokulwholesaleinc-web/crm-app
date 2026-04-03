@@ -161,20 +161,15 @@ class EmailService:
         if sent_by_id is not None:
             filters.append(EmailQueue.sent_by_id == sent_by_id)
 
-        # Count
+        # Count + Fetch
+        count_query = select(func.count()).select_from(EmailQueue)
+        query = select(EmailQueue).order_by(EmailQueue.created_at.desc())
         if filters:
-            count_query = select(func.count()).select_from(
-                select(EmailQueue.id).where(*filters).subquery()
-            )
-        else:
-            count_query = select(func.count()).select_from(EmailQueue)
+            count_query = count_query.where(*filters)
+            query = query.where(*filters)
         total_result = await self.db.execute(count_query)
         total = total_result.scalar() or 0
 
-        # Fetch
-        query = select(EmailQueue).order_by(EmailQueue.created_at.desc())
-        if filters:
-            query = query.where(*filters)
         query = query.offset((page - 1) * page_size).limit(page_size)
 
         result = await self.db.execute(query)
@@ -182,27 +177,26 @@ class EmailService:
 
         return items, total
 
-    async def record_open(self, email_id: int) -> Optional[EmailQueue]:
-        """Record an email open event."""
+    async def _record_tracking_event(
+        self, email_id: int, count_attr: str, timestamp_attr: str,
+    ) -> Optional[EmailQueue]:
+        """Increment a tracking counter and set the first-occurrence timestamp."""
         email = await self.get_by_id(email_id)
         if not email:
             return None
-        email.open_count += 1
-        if not email.opened_at:
-            email.opened_at = datetime.now(timezone.utc)
+        setattr(email, count_attr, getattr(email, count_attr) + 1)
+        if not getattr(email, timestamp_attr):
+            setattr(email, timestamp_attr, datetime.now(timezone.utc))
         await self.db.flush()
         return email
 
+    async def record_open(self, email_id: int) -> Optional[EmailQueue]:
+        """Record an email open event."""
+        return await self._record_tracking_event(email_id, "open_count", "opened_at")
+
     async def record_click(self, email_id: int) -> Optional[EmailQueue]:
         """Record an email click event."""
-        email = await self.get_by_id(email_id)
-        if not email:
-            return None
-        email.click_count += 1
-        if not email.clicked_at:
-            email.clicked_at = datetime.now(timezone.utc)
-        await self.db.flush()
-        return email
+        return await self._record_tracking_event(email_id, "click_count", "clicked_at")
 
     async def process_retries(self) -> int:
         """Retry emails that are due for retry. Returns the count of retried emails."""
@@ -216,13 +210,9 @@ class EmailService:
             )
         )
         due_emails = list(result.scalars().all())
-
-        retried = 0
         for email in due_emails:
             await self._attempt_send(email)
-            retried += 1
-
-        return retried
+        return len(due_emails)
 
     async def send_template_email(
         self,

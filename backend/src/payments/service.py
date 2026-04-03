@@ -712,33 +712,39 @@ body {{ font-family: Arial, Helvetica, sans-serif; margin: 40px; color: #111827;
             except (OSError, RuntimeError) as exc:
                 logger.warning("Failed to send receipt for payment %s: %s", payment.id, exc)
 
+    async def _find_payment(self, lookup_field, obj: dict, obj_key: str = "id") -> Optional[Payment]:
+        """Look up a Payment by a Stripe ID field. Returns None if not found."""
+        value = obj.get(obj_key)
+        if not value:
+            return None
+        result = await self.db.execute(
+            select(Payment).where(lookup_field == value)
+        )
+        return result.scalar_one_or_none()
+
+    async def _set_payment_status(
+        self, payment: Optional[Payment], new_status: str,
+        guard_statuses: tuple = ("succeeded", "refunded"),
+    ) -> None:
+        """Set payment status if payment exists and current status is not in guard_statuses."""
+        if not payment:
+            return
+        if guard_statuses and payment.status in guard_statuses:
+            return
+        payment.status = new_status
+        await self.db.flush()
+
     async def _handle_payment_failed(self, intent_obj: dict) -> None:
         """Handle payment_intent.payment_failed event."""
-        intent_id = intent_obj.get("id")
-        if not intent_id:
-            return
-
-        result = await self.db.execute(
-            select(Payment).where(Payment.stripe_payment_intent_id == intent_id)
-        )
-        payment = result.scalar_one_or_none()
-        if payment and payment.status not in ("succeeded", "refunded"):
-            payment.status = "failed"
-            await self.db.flush()
+        payment = await self._find_payment(Payment.stripe_payment_intent_id, intent_obj)
+        await self._set_payment_status(payment, "failed")
 
     async def _handle_charge_refunded(self, charge_obj: dict) -> None:
         """Handle charge.refunded event."""
-        payment_intent_id = charge_obj.get("payment_intent")
-        if not payment_intent_id:
-            return
-
-        result = await self.db.execute(
-            select(Payment).where(Payment.stripe_payment_intent_id == payment_intent_id)
+        payment = await self._find_payment(
+            Payment.stripe_payment_intent_id, charge_obj, obj_key="payment_intent"
         )
-        payment = result.scalar_one_or_none()
-        if payment:
-            payment.status = "refunded"
-            await self.db.flush()
+        await self._set_payment_status(payment, "refunded", guard_statuses=())
 
     async def _handle_subscription_updated(self, sub_obj: dict) -> None:
         """Handle subscription created/updated events."""
