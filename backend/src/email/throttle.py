@@ -1,8 +1,8 @@
 """Email throttle service - daily send limits and warmup management."""
 
 import math
-from datetime import date, datetime, timezone
-from sqlalchemy import select, func, and_
+from datetime import date
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.email.models import EmailQueue, EmailSettings
@@ -14,7 +14,7 @@ class EmailThrottleService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def _get_settings(self) -> EmailSettings:
+    async def get_settings(self) -> EmailSettings:
         """Get or create the singleton email settings row."""
         result = await self.db.execute(select(EmailSettings).limit(1))
         settings = result.scalar_one_or_none()
@@ -30,25 +30,24 @@ class EmailThrottleService:
         today = date.today()
         result = await self.db.execute(
             select(func.count(EmailQueue.id)).where(
-                and_(
-                    EmailQueue.status == "sent",
-                    func.date(EmailQueue.sent_at) == today,
-                )
+                EmailQueue.status == "sent",
+                func.date(EmailQueue.sent_at) == today,
             )
         )
         return result.scalar() or 0
+
+    # Fixed warmup tiers: (max_day, emails_per_day)
+    _WARMUP_TIERS = [(3, 20), (6, 40), (9, 60)]
 
     async def get_effective_daily_limit(self) -> int:
         """Return the current effective daily send limit.
 
         If warmup is enabled and warmup_start_date is set:
-          Day 1-3: 20/day
-          Day 4-6: 40/day
-          Day 7-9: 60/day
-          Then +20% daily until warmup_target_daily is reached.
+          Day 1-3: 20/day, Day 4-6: 40/day, Day 7-9: 60/day,
+          then +20% daily until warmup_target_daily is reached.
         Otherwise, return the configured daily_send_limit.
         """
-        settings = await self._get_settings()
+        settings = await self.get_settings()
         if not settings.warmup_enabled or not settings.warmup_start_date:
             return settings.daily_send_limit
 
@@ -56,15 +55,15 @@ class EmailThrottleService:
         if days_elapsed < 1:
             return settings.daily_send_limit
 
-        # Fixed tiers for the first 9 days
-        if days_elapsed <= 3:
-            limit = 20
-        elif days_elapsed <= 6:
-            limit = 40
-        elif days_elapsed <= 9:
-            limit = 60
-        else:
-            # After day 9, start at 60 and increase by 20% each day
+        # Check fixed tiers first
+        limit = None
+        for max_day, tier_limit in self._WARMUP_TIERS:
+            if days_elapsed <= max_day:
+                limit = tier_limit
+                break
+
+        # After day 9, start at 60 and increase by 20% each day
+        if limit is None:
             extra_days = days_elapsed - 9
             limit = math.floor(60 * (1.2 ** extra_days))
 
@@ -78,7 +77,7 @@ class EmailThrottleService:
 
     async def get_volume_stats(self) -> dict:
         """Return current email volume statistics."""
-        settings = await self._get_settings()
+        settings = await self.get_settings()
         sent_today = await self.get_today_sent_count()
         daily_limit = await self.get_effective_daily_limit()
 
@@ -103,7 +102,7 @@ class EmailThrottleService:
         warmup_target_daily: int | None = None,
     ) -> EmailSettings:
         """Update email settings."""
-        settings = await self._get_settings()
+        settings = await self.get_settings()
         if daily_send_limit is not None:
             settings.daily_send_limit = daily_send_limit
         if warmup_enabled is not None:
@@ -115,7 +114,3 @@ class EmailThrottleService:
         await self.db.flush()
         await self.db.refresh(settings)
         return settings
-
-    async def get_settings(self) -> EmailSettings:
-        """Get current email settings (public)."""
-        return await self._get_settings()

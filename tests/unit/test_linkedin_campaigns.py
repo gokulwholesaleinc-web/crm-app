@@ -304,7 +304,7 @@ class TestEmailThrottle:
         """Warmup day 1-3 should return 20/day."""
         from src.email.throttle import EmailThrottleService
         throttle = EmailThrottleService(db_session)
-        settings = await throttle._get_settings()
+        settings = await throttle.get_settings()
         settings.warmup_enabled = True
         settings.warmup_start_date = date.today()
         settings.warmup_target_daily = 200
@@ -318,7 +318,7 @@ class TestEmailThrottle:
         """Warmup day 4-6 should return 40/day."""
         from src.email.throttle import EmailThrottleService
         throttle = EmailThrottleService(db_session)
-        settings = await throttle._get_settings()
+        settings = await throttle.get_settings()
         settings.warmup_enabled = True
         settings.warmup_start_date = date.today() - timedelta(days=4)
         settings.warmup_target_daily = 200
@@ -332,7 +332,7 @@ class TestEmailThrottle:
         """Warmup day 7-9 should return 60/day."""
         from src.email.throttle import EmailThrottleService
         throttle = EmailThrottleService(db_session)
-        settings = await throttle._get_settings()
+        settings = await throttle.get_settings()
         settings.warmup_enabled = True
         settings.warmup_start_date = date.today() - timedelta(days=7)
         settings.warmup_target_daily = 200
@@ -346,7 +346,7 @@ class TestEmailThrottle:
         """Warmup after day 9 should increase by 20% per day."""
         from src.email.throttle import EmailThrottleService
         throttle = EmailThrottleService(db_session)
-        settings = await throttle._get_settings()
+        settings = await throttle.get_settings()
         settings.warmup_enabled = True
         settings.warmup_start_date = date.today() - timedelta(days=9)
         settings.warmup_target_daily = 200
@@ -361,7 +361,7 @@ class TestEmailThrottle:
         """Warmup limit should never exceed target."""
         from src.email.throttle import EmailThrottleService
         throttle = EmailThrottleService(db_session)
-        settings = await throttle._get_settings()
+        settings = await throttle.get_settings()
         settings.warmup_enabled = True
         settings.warmup_start_date = date.today() - timedelta(days=30)
         settings.warmup_target_daily = 100

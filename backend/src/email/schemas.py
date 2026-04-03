@@ -1,6 +1,6 @@
 """Email request/response schemas."""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, ConfigDict, EmailStr
 
@@ -108,6 +108,11 @@ class EmailSettingsUpdate(BaseModel):
     warmup_enabled: Optional[bool] = None
     warmup_start_date: Optional[str] = None
     warmup_target_daily: Optional[int] = None
+
+    @property
+    def parsed_warmup_date(self) -> Optional[date]:
+        """Parse warmup_start_date string to date object."""
+        return date.fromisoformat(self.warmup_start_date) if self.warmup_start_date else None
 
 
 class ThreadEmailItem(BaseModel):

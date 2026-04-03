@@ -37,7 +37,7 @@ function EmailBubble({
   const isOutbound = email.direction === 'outbound';
   const status = isOutbound ? (email.status || 'pending') : 'received';
   const badge = STATUS_BADGE[status] ?? { variant: 'gray' as BadgeVariant, label: status };
-  const bodyContent = email.body || email.body_html || '';
+  const bodyContent = email.body || '';
 
   return (
     <div

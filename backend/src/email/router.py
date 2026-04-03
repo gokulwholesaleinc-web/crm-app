@@ -18,7 +18,6 @@ from src.email.schemas import (
     EmailListResponse,
     EmailSettingsResponse,
     EmailSettingsUpdate,
-    InboundEmailResponse,
     ThreadEmailItem,
     ThreadResponse,
 )
@@ -155,7 +154,8 @@ async def inbound_webhook(request: Request, db: DBSession):
             logger.warning("Failed to fetch full email from Resend: %s", e)
 
     from_email = data.get("from", "")
-    to_email = data.get("to", [""])[0] if isinstance(data.get("to"), list) else data.get("to", "")
+    to_raw = data.get("to", "")
+    to_email = to_raw[0] if isinstance(to_raw, list) else to_raw
     cc_list = data.get("cc", [])
     cc = ", ".join(cc_list) if cc_list else None
 
@@ -231,16 +231,11 @@ async def update_email_settings(
     db: DBSession,
 ):
     """Update email settings (daily limits, warmup config)."""
-    from datetime import date as date_type
-    warmup_date = None
-    if data.warmup_start_date:
-        warmup_date = date_type.fromisoformat(data.warmup_start_date)
-
     throttle = EmailThrottleService(db)
     settings = await throttle.update_settings(
         daily_send_limit=data.daily_send_limit,
         warmup_enabled=data.warmup_enabled,
-        warmup_start_date=warmup_date,
+        warmup_start_date=data.parsed_warmup_date,
         warmup_target_daily=data.warmup_target_daily,
     )
     return EmailSettingsResponse.model_validate(settings)
