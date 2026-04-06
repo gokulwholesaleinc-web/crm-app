@@ -42,6 +42,7 @@ import {
   CheckIcon,
   ArrowPathIcon,
   ShieldCheckIcon,
+  QuestionMarkCircleIcon,
 } from '@heroicons/react/24/outline';
 import { useTenant } from '../../providers/TenantProvider';
 import { useAuthStore } from '../../store/authStore';
@@ -75,6 +76,7 @@ const DEFAULT_SECONDARY_NAVIGATION: NavItem[] = [
   { id: 'reports', name: 'Reports', href: '/reports', icon: ChartBarIcon },
   { id: 'ai-assistant', name: 'AI Assistant', href: '/ai-assistant', icon: SparklesIcon },
   { id: 'settings', name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
+  { id: 'help', name: 'Help', href: '/help', icon: QuestionMarkCircleIcon },
   { id: 'admin', name: 'Admin', href: '/admin', icon: ShieldCheckIcon },
 ];
 
