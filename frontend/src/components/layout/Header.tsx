@@ -40,7 +40,6 @@ export function Header({
   onSearch,
   onLogout,
   showSearch = true,
-  notifications = 0,
   className,
 }: HeaderProps) {
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);

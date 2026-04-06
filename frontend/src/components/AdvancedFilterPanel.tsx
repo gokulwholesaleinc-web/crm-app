@@ -4,7 +4,7 @@
  * saving/loading filter presets, and URL sync.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import {
   FunnelIcon,
   PlusIcon,
@@ -53,6 +53,7 @@ const OPERATORS_BY_TYPE: Record<string, string[]> = {
 const NO_VALUE_OPS = new Set(['is_empty', 'is_not_empty']);
 
 // Entity field definitions
+// eslint-disable-next-line react-refresh/only-export-components
 export const ENTITY_FIELDS: Record<string, FieldDef[]> = {
   leads: [
     { name: 'first_name', label: 'First Name', type: 'string' },
@@ -207,7 +208,7 @@ export function AdvancedFilterPanel({ entityType, onApply, className }: Advanced
   const [filterName, setFilterName] = useState('');
   const [activeFilterCount, setActiveFilterCount] = useState(0);
 
-  const fields = ENTITY_FIELDS[entityType] || [];
+  const fields = useMemo(() => ENTITY_FIELDS[entityType] ?? [], [entityType]);
   const { data: savedFilters } = useSavedFilters(entityType);
   const createFilterMutation = useCreateSavedFilter();
   const deleteFilterMutation = useDeleteSavedFilter();

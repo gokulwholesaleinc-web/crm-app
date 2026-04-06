@@ -263,7 +263,7 @@ function ContactDetailPage() {
           <PaymentSummary contactId={contactId} />
         </Suspense>
         <Suspense fallback={null}>
-          <OnboardingLinkGenerator contactId={contactId} contactEmail={contact.email} />
+          <OnboardingLinkGenerator contactId={contactId} contactEmail={contact.email ?? undefined} />
         </Suspense>
         <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
           <div className="p-4 sm:p-6">
@@ -645,7 +645,7 @@ function ContactDetailPage() {
           isOpen={showInvoiceModal}
           onClose={() => setShowInvoiceModal(false)}
           contactId={contactId}
-          contactEmail={contact.email}
+          contactEmail={contact.email ?? undefined}
         />
       </Suspense>
     </div>

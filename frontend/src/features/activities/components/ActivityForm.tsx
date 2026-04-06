@@ -190,7 +190,7 @@ export function ActivityForm({
       };
       if (entityType) createData.entity_type = entityType;
       if (entityId) createData.entity_id = entityId;
-      await onSubmit(createData as ActivityCreate);
+      await onSubmit(createData as unknown as ActivityCreate);
     }
   };
 

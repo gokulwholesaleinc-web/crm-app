@@ -22,7 +22,6 @@ import {
   UserGroupIcon,
   BuildingOfficeIcon,
   FunnelIcon,
-  CurrencyDollarIcon,
   DocumentTextIcon,
   DocumentDuplicateIcon,
   CreditCardIcon,
@@ -522,6 +521,7 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
 }
 
 // Shared navigation items for DRY principle - used by both Sidebar and MobileSidebar
+// eslint-disable-next-line react-refresh/only-export-components
 export const getNavigation = () => ({
   main: DEFAULT_MAIN_NAVIGATION,
   secondary: DEFAULT_SECONDARY_NAVIGATION,

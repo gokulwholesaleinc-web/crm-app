@@ -16,17 +16,15 @@ export function AIProposalGenerator({ onClose }: AIProposalGeneratorProps) {
   const { data: opportunitiesData, isLoading: loadingOpps } = useOpportunities({ page_size: 100 });
   const generateMutation = useGenerateProposal();
 
-  const opportunities = opportunitiesData?.items ?? [];
-
   const opportunityOptions = useMemo(
     () =>
-      opportunities.map((opp) => {
+      (opportunitiesData?.items ?? []).map((opp) => {
         let label = opp.name;
         if (opp.company) label += ` - ${opp.company.name}`;
         if (opp.amount) label += ` ($${opp.amount.toLocaleString()})`;
         return { value: opp.id, label };
       }),
-    [opportunities]
+    [opportunitiesData]
   );
 
   const handleGenerate = async () => {
@@ -76,7 +74,7 @@ export function AIProposalGenerator({ onClose }: AIProposalGeneratorProps) {
         )}
       </div>
 
-      {opportunities.length === 0 && !loadingOpps && (
+      {!loadingOpps && !opportunitiesData?.items?.length && (
         <div className="rounded-md bg-yellow-50 dark:bg-yellow-900/20 p-4">
           <p className="text-sm text-yellow-700 dark:text-yellow-300">
             No opportunities found. Create an opportunity first to generate a proposal.

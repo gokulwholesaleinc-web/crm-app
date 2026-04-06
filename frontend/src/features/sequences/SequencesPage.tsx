@@ -40,6 +40,19 @@ import {
 } from '@heroicons/react/24/outline';
 import { SequenceStepBuilder } from './components/SequenceStepBuilder';
 
+// Step preview badge styling, keyed by SequenceStep.type.
+const STEP_TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  email: EnvelopeIcon,
+  task: ClipboardDocumentListIcon,
+  wait: ClockIcon,
+};
+
+const STEP_TYPE_COLORS: Record<string, string> = {
+  email: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+  task: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',
+  wait: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+};
+
 function SequenceForm({
   sequence,
   onSubmit,

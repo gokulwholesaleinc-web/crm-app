@@ -46,10 +46,10 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
     urlOpportunityId ? parseInt(urlOpportunityId, 10) : undefined
   );
 
-  const contacts = contactsData?.items ?? [];
-  const companies = companiesData?.items ?? [];
-  const opportunities = opportunitiesData?.items ?? [];
-  const quotes = quotesData?.items ?? [];
+  const contacts = useMemo(() => contactsData?.items ?? [], [contactsData]);
+  const companies = useMemo(() => companiesData?.items ?? [], [companiesData]);
+  const opportunities = useMemo(() => opportunitiesData?.items ?? [], [opportunitiesData]);
+  const quotes = useMemo(() => quotesData?.items ?? [], [quotesData]);
 
   const opportunityOptions = useMemo(
     () => opportunities.map((o) => ({ value: o.id, label: o.name })),
@@ -77,7 +77,7 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
         companyId: urlOpportunity.company_id && !prev.companyId ? urlOpportunity.company_id : prev.companyId,
       }));
     }
-  }, [urlOpportunity]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [urlOpportunity]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

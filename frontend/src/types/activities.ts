@@ -21,7 +21,7 @@ export interface ActivityBase {
   assigned_to_id?: number | null;
 }
 
-export interface ActivityCreate extends ActivityBase {
+export interface ActivityCreate extends Omit<ActivityBase, 'entity_type' | 'entity_id'> {
   entity_type?: string;
   entity_id?: number;
   // Call-specific

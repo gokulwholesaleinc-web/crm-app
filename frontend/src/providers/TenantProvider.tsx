@@ -267,12 +267,14 @@ export function TenantProvider({ children }: TenantProviderProps) {
 
 // --- Hook ---
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useTenant() {
   return useContext(TenantContext);
 }
 
 // --- Storage helper for login flow ---
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function setTenantSlugOnLogin(slug: string) {
   try {
     localStorage.setItem(TENANT_SLUG_KEY, slug);
@@ -285,6 +287,7 @@ export function setTenantSlugOnLogin(slug: string) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function clearTenantSlugOnLogout() {
   try {
     localStorage.removeItem(TENANT_SLUG_KEY);

@@ -74,9 +74,9 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
     urlOpportunityId ? parseInt(urlOpportunityId, 10) : undefined
   );
 
-  const contacts = contactsData?.items ?? [];
-  const companies = companiesData?.items ?? [];
-  const opportunities = opportunitiesData?.items ?? [];
+  const contacts = useMemo(() => contactsData?.items ?? [], [contactsData]);
+  const companies = useMemo(() => companiesData?.items ?? [], [companiesData]);
+  const opportunities = useMemo(() => opportunitiesData?.items ?? [], [opportunitiesData]);
 
   const opportunityOptions = useMemo(
     () => opportunities.map((o) => ({ value: o.id, label: o.name })),
@@ -100,7 +100,7 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
         companyId: urlOpportunity.company_id && !prev.companyId ? urlOpportunity.company_id : prev.companyId,
       }));
     }
-  }, [urlOpportunity]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [urlOpportunity]);
 
   const [lineItems, setLineItems] = useState<QuoteLineItemCreate[]>(
     initialData?.line_items ?? [{ ...EMPTY_LINE_ITEM }]

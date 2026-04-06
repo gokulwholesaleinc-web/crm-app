@@ -23,8 +23,8 @@ export function CreateFromTemplateFlow({ template, onCancel, onCreated }: Create
   const { data: companiesData } = useCompanies({ page_size: 100 });
   const createFromTemplateMutation = useCreateFromTemplate();
 
-  const contacts = contactsData?.items ?? [];
-  const companies = companiesData?.items ?? [];
+  const contacts = useMemo(() => contactsData?.items ?? [], [contactsData]);
+  const companies = useMemo(() => companiesData?.items ?? [], [companiesData]);
 
   const contactOptions = useMemo(
     () => contacts.map((c) => ({ value: c.id, label: c.full_name })),

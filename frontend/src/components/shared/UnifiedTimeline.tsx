@@ -18,8 +18,16 @@ import {
   CheckCircleIcon,
 } from '@heroicons/react/24/outline';
 
-const EVENT_CONFIG: Record<string, { icon: React.ComponentType<{ className?: string }>; color: string; label: string }> = {
-  activity: { icon: ClipboardDocumentListIcon, color: 'text-gray-600 bg-gray-100 dark:text-gray-400 dark:bg-gray-700', label: 'Activity' },
+type EventConfig = { icon: React.ComponentType<{ className?: string }>; color: string; label: string };
+
+const DEFAULT_EVENT_CONFIG: EventConfig = {
+  icon: ClipboardDocumentListIcon,
+  color: 'text-gray-600 bg-gray-100 dark:text-gray-400 dark:bg-gray-700',
+  label: 'Activity',
+};
+
+const EVENT_CONFIG: Record<string, EventConfig> = {
+  activity: DEFAULT_EVENT_CONFIG,
   email_sent: { icon: EnvelopeIcon, color: 'text-blue-600 bg-blue-100 dark:text-blue-400 dark:bg-blue-900/30', label: 'Email Sent' },
   email_opened: { icon: EnvelopeOpenIcon, color: 'text-green-600 bg-green-100 dark:text-green-400 dark:bg-green-900/30', label: 'Email Opened' },
   email_clicked: { icon: CursorArrowRaysIcon, color: 'text-purple-600 bg-purple-100 dark:text-purple-400 dark:bg-purple-900/30', label: 'Email Clicked' },
@@ -27,7 +35,7 @@ const EVENT_CONFIG: Record<string, { icon: React.ComponentType<{ className?: str
 };
 
 function TimelineEventCard({ event }: { event: UnifiedTimelineEvent }) {
-  const config = EVENT_CONFIG[event.event_type] || EVENT_CONFIG.activity;
+  const config: EventConfig = EVENT_CONFIG[event.event_type] ?? DEFAULT_EVENT_CONFIG;
   const Icon = config.icon;
 
   // Use activity_type from metadata for more specific icons

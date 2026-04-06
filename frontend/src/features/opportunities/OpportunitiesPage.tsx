@@ -112,10 +112,9 @@ function OpportunitiesPage() {
 
   const handleFormSubmit = async (data: OpportunityFormData) => {
     try {
-      // Find the stage ID from the stage name
-      const stage = pipelineStages?.find(
-        (s) => s.name.toLowerCase().replace(/\s+/g, '_') === data.stage
-      );
+      // OpportunityFormData.stage is the pipeline stage ID (number), set by the
+      // form's stage <select> whose option values are stage IDs.
+      const stageId = Number(data.stage);
 
       if (editingOpportunity) {
         const updateData: OpportunityUpdate = {
@@ -123,7 +122,7 @@ function OpportunitiesPage() {
           amount: data.value,
           probability: data.probability,
           expected_close_date: data.expectedCloseDate || undefined,
-          pipeline_stage_id: stage?.id,
+          pipeline_stage_id: stageId,
           contact_id: data.contactId ? parseInt(data.contactId, 10) : undefined,
           company_id: data.companyId ? parseInt(data.companyId, 10) : undefined,
           description: data.description,
@@ -139,7 +138,7 @@ function OpportunitiesPage() {
           currency: 'USD',
           probability: data.probability,
           expected_close_date: data.expectedCloseDate || undefined,
-          pipeline_stage_id: stage?.id || 1,
+          pipeline_stage_id: stageId || 1,
           contact_id: data.contactId ? parseInt(data.contactId, 10) : undefined,
           company_id: data.companyId ? parseInt(data.companyId, 10) : undefined,
           description: data.description,
@@ -163,7 +162,7 @@ function OpportunitiesPage() {
     return {
       name: editingOpportunity.name,
       value: editingOpportunity.amount ?? 0,
-      stage: editingOpportunity.pipeline_stage?.name?.toLowerCase().replace(/\s+/g, '_') ?? 'discovery',
+      stage: editingOpportunity.pipeline_stage_id ?? 1,
       probability: editingOpportunity.probability ?? 0,
       expectedCloseDate: editingOpportunity.expected_close_date ?? '',
       contactId: editingOpportunity.contact_id ? String(editingOpportunity.contact_id) : '',

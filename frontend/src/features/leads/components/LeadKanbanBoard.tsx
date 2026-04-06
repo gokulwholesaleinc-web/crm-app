@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -201,7 +201,10 @@ export function LeadKanbanBoard({ onLeadClick }: LeadKanbanBoardProps) {
   const [activeLead, setActiveLead] = useState<KanbanLead | null>(null);
   const [localStages, setLocalStages] = useState<KanbanLeadStage[] | null>(null);
 
-  const stages = localStages ?? kanbanData?.stages ?? [];
+  const stages = useMemo(
+    () => localStages ?? kanbanData?.stages ?? [],
+    [localStages, kanbanData]
+  );
 
   // Sync local state when data changes
   const dataKey = JSON.stringify(kanbanData?.stages?.map((s) => `${s.stage_id}:${s.leads.map((l) => l.id).join(',')}`));

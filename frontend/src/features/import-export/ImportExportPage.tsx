@@ -143,7 +143,6 @@ function ImportSection({ entityType, label, state, contactDecisions, onContactDe
                 size="sm"
                 variant="secondary"
                 onClick={() => fileInputRef.current?.click()}
-                isLoading={state.status === 'previewing'}
                 leftIcon={<ArrowUpTrayIcon className="h-4 w-4" aria-hidden="true" />}
               >
                 Choose CSV File

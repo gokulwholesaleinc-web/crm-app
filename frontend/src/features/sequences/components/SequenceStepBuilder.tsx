@@ -18,19 +18,28 @@ import {
   PlusIcon,
 } from '@heroicons/react/24/outline';
 
-const STEP_CONFIG: Record<string, { icon: React.ComponentType<{ className?: string }>; label: string; color: string; bg: string }> = {
+type StepConfig = {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  color: string;
+  bg: string;
+};
+
+const WAIT_STEP_CONFIG: StepConfig = {
+  icon: ClockIcon,
+  label: 'Wait',
+  color: 'text-amber-600 dark:text-amber-400',
+  bg: 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800',
+};
+
+const STEP_CONFIG: Record<string, StepConfig> = {
   email: {
     icon: EnvelopeIcon,
     label: 'Send Email',
     color: 'text-blue-600 dark:text-blue-400',
     bg: 'bg-blue-100 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800',
   },
-  wait: {
-    icon: ClockIcon,
-    label: 'Wait',
-    color: 'text-amber-600 dark:text-amber-400',
-    bg: 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800',
-  },
+  wait: WAIT_STEP_CONFIG,
   task: {
     icon: ClipboardDocumentListIcon,
     label: 'Create Task',
@@ -73,7 +82,7 @@ export function SequenceStepBuilder({ steps, onChange }: SequenceStepBuilderProp
     const newIndex = index + direction;
     if (newIndex < 0 || newIndex >= steps.length) return;
     const reordered = [...steps];
-    [reordered[index], reordered[newIndex]] = [reordered[newIndex], reordered[index]];
+    [reordered[index], reordered[newIndex]] = [reordered[newIndex]!, reordered[index]!];
     onChange(reordered.map((s, i) => ({ ...s, step_number: i })));
   }, [steps, onChange]);
 
@@ -90,7 +99,7 @@ export function SequenceStepBuilder({ steps, onChange }: SequenceStepBuilderProp
 
       {/* Steps with connectors */}
       {steps.map((step, index) => {
-        const config = STEP_CONFIG[step.type] || STEP_CONFIG.wait;
+        const config: StepConfig = STEP_CONFIG[step.type] ?? WAIT_STEP_CONFIG;
         const Icon = config.icon;
         const templateName = step.type === 'email' && step.template_id
           ? templates.find(t => t.id === step.template_id)?.name
