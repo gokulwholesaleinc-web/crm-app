@@ -3,6 +3,7 @@
 from typing import List, Dict, Any
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from src.core.constants import ErrorMessages, EntityNames
 from src.opportunities.models import Opportunity, PipelineStage
 
@@ -17,9 +18,11 @@ class PipelineManager:
         """
         Get pipeline data formatted for Kanban board.
 
-        Returns list of stages with their opportunities.
+        Returns list of stages with their opportunities. Runs exactly two
+        queries (one for stages, one for all opportunities with eager-loaded
+        contact and company) regardless of stage count.
         """
-        # Get all active opportunity stages ordered
+        # Query 1: all active opportunity stages ordered.
         stages_result = await self.db.execute(
             select(PipelineStage)
             .where(PipelineStage.is_active == True)
@@ -28,23 +31,30 @@ class PipelineManager:
         )
         stages = stages_result.scalars().all()
 
-        kanban_data = []
-
-        for stage in stages:
-            # Get opportunities for this stage
-            opp_query = (
-                select(Opportunity)
-                .where(Opportunity.pipeline_stage_id == stage.id)
+        # Query 2: all opportunities for these stages with eager-loaded
+        # contact and company. Contact.company is lazy="joined" so it loads
+        # automatically when contact is loaded — no extra round trip per row.
+        opp_query = (
+            select(Opportunity)
+            .options(
+                selectinload(Opportunity.contact),
+                selectinload(Opportunity.company),
             )
-            if owner_id:
-                opp_query = opp_query.where(Opportunity.owner_id == owner_id)
+            .where(Opportunity.pipeline_stage_id.in_([s.id for s in stages]))
+            .order_by(Opportunity.expected_close_date.asc().nullslast())
+        )
+        if owner_id:
+            opp_query = opp_query.where(Opportunity.owner_id == owner_id)
 
-            opp_query = opp_query.order_by(Opportunity.expected_close_date.asc().nullslast())
+        opp_result = await self.db.execute(opp_query)
+        opps_by_stage: Dict[int, List[Opportunity]] = {stage.id: [] for stage in stages}
+        for opp in opp_result.scalars().all():
+            opps_by_stage[opp.pipeline_stage_id].append(opp)
 
-            opp_result = await self.db.execute(opp_query)
-            opportunities = opp_result.scalars().all()
-
-            stage_data = {
+        kanban_data = []
+        for stage in stages:
+            stage_opps = opps_by_stage[stage.id]
+            kanban_data.append({
                 "stage_id": stage.id,
                 "stage_name": stage.name,
                 "color": stage.color,
@@ -63,14 +73,12 @@ class PipelineManager:
                         "company_name": opp.company.name if opp.company else None,
                         "owner_id": opp.owner_id,
                     }
-                    for opp in opportunities
+                    for opp in stage_opps
                 ],
-                "total_amount": sum(opp.amount or 0 for opp in opportunities),
-                "total_weighted": sum(opp.weighted_amount or 0 for opp in opportunities),
-                "count": len(opportunities),
-            }
-            kanban_data.append(stage_data)
-
+                "total_amount": sum(opp.amount or 0 for opp in stage_opps),
+                "total_weighted": sum(opp.weighted_amount or 0 for opp in stage_opps),
+                "count": len(stage_opps),
+            })
         return kanban_data
 
     async def move_opportunity(

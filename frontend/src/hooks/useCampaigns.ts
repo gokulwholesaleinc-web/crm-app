@@ -170,7 +170,8 @@ export function useVolumeStats() {
   return useQuery({
     queryKey: ['email', 'volume-stats'] as const,
     queryFn: () => campaignsApi.getVolumeStats(),
-    refetchInterval: 60_000,
+    refetchInterval: 5 * 60 * 1000,
+    refetchIntervalInBackground: false,
   });
 }
 

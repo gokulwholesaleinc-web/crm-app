@@ -39,21 +39,28 @@ def _is_local_db(url: str) -> bool:
         return True
     return False
 
-if not _is_local_db(_db_url):
+_is_local = _is_local_db(_db_url)
+
+if not _is_local:
     _ssl_ctx = ssl_module.create_default_context()
     if not settings.DATABASE_SSL_VERIFY:
         _ssl_ctx.check_hostname = False
         _ssl_ctx.verify_mode = ssl_module.CERT_NONE
     _connect_args["ssl"] = _ssl_ctx
 
+# Pool tuning differs by environment:
+# - Local Postgres: pre-ping is cheap and catches docker restarts.
+# - Neon (remote): pre-ping issues an extra round-trip on every checkout
+#   that can wake the compute pointlessly. Rely on pool_recycle instead and
+#   keep max_overflow small so idle peaks don't pin extra connections.
 engine = create_async_engine(
     _db_url,
     echo=False,
     future=True,
     pool_size=5,
-    max_overflow=20,
-    pool_pre_ping=True,
-    pool_recycle=3600,
+    max_overflow=20 if _is_local else 5,
+    pool_pre_ping=_is_local,
+    pool_recycle=3600 if _is_local else 1800,
     connect_args=_connect_args,
 )
 
