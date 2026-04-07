@@ -30,9 +30,12 @@ def _parse_date(date_str: Optional[str]) -> Optional[date]:
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
-# Result-level cache for expensive dashboard queries (keyed by user_id)
+# Result-level cache for expensive dashboard queries (keyed by user_id).
+# TTL is deliberately modest — dashboards are read-heavy and the data-scope /
+# sharing layer does not currently invalidate this cache when role or share
+# grants change, so stale data is bounded by the TTL below.
 _dashboard_cache: dict[str, tuple[float, Any]] = {}
-_DASHBOARD_CACHE_TTL = 60  # seconds
+_DASHBOARD_CACHE_TTL = 180  # 3 minutes — long enough to let Neon auto-suspend
 
 
 def _get_cached(key: str) -> Any | None:

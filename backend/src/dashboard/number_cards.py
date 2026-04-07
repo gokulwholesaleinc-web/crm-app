@@ -27,11 +27,16 @@ class NumberCardGenerator:
         self.date_to = date_to
 
     async def get_all_kpis(self, user_id: Optional[int] = None) -> List[Dict[str, Any]]:
-        """Get all KPI data for number cards."""
+        """Get all KPI data for number cards.
+
+        Caching is handled one layer up in src.dashboard.router._dashboard_cache
+        (keyed by user/date range with a short TTL) so we don't add a second
+        redundant cache here.
+        """
         # Use passed user_id or fall back to instance user_id
         if user_id and not self.user_id:
             self.user_id = user_id
-        kpis = [
+        return [
             await self.get_total_contacts(),
             await self.get_total_leads(),
             await self.get_open_opportunities(),
@@ -44,7 +49,6 @@ class NumberCardGenerator:
             await self.get_new_leads_this_week(),
             await self.get_conversion_rate(),
         ]
-        return kpis
 
     def _apply_date_filter(self, filters: list, date_column) -> list:
         """Apply date_from/date_to filters to a filter list."""

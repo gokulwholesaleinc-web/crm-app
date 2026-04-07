@@ -50,19 +50,19 @@ def start_scheduler():
     """Register jobs and start the scheduler."""
     scheduler.add_job(
         _process_due_sequence_steps,
-        trigger=IntervalTrigger(minutes=5),
+        trigger=IntervalTrigger(minutes=15),
         id="process_due_sequence_steps",
         replace_existing=True,
     )
     scheduler.add_job(
         _process_email_retries,
-        trigger=IntervalTrigger(minutes=2),
+        trigger=IntervalTrigger(minutes=10),
         id="process_email_retries",
         replace_existing=True,
     )
     scheduler.add_job(
         _process_due_campaign_steps,
-        trigger=IntervalTrigger(minutes=5),
+        trigger=IntervalTrigger(minutes=15),
         id="process_due_campaign_steps",
         replace_existing=True,
     )
