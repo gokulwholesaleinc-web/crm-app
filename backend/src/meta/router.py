@@ -2,11 +2,15 @@
 
 import hashlib
 import hmac
-from typing import Optional
-from fastapi import APIRouter, HTTPException, Query, Request
+from typing import Annotated, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
-from src.core.router_utils import DBSession, CurrentUser
-from src.core.constants import HTTPStatus
+from sqlalchemy import select
+
+from src.companies.models import Company
+from src.core.data_scope import DataScope, get_data_scope, check_record_access_or_shared
+from src.core.router_utils import DBSession, CurrentUser, raise_forbidden
+from src.core.constants import HTTPStatus, ENTITY_TYPE_COMPANIES
 from src.meta.schemas import (
     MetaSyncRequest,
     CompanyMetaDataResponse,
@@ -20,6 +24,22 @@ from src.meta.schemas import (
 from src.meta.service import MetaService
 
 router = APIRouter(prefix="/api/meta", tags=["meta"])
+
+
+async def _require_company_access(
+    db, company_id: int, current_user, data_scope: DataScope,
+) -> Company:
+    """Load the Company and enforce caller access."""
+    result = await db.execute(select(Company).where(Company.id == company_id))
+    company = result.scalar_one_or_none()
+    if company is None:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Company not found")
+    check_record_access_or_shared(
+        company, current_user, data_scope.role_name,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_COMPANIES),
+        entity_type=ENTITY_TYPE_COMPANIES,
+    )
+    return company
 
 
 # =========================================================================
@@ -91,8 +111,10 @@ async def get_company_meta(
     company_id: int,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Get Meta data for a company."""
+    await _require_company_access(db, company_id, current_user, data_scope)
     service = MetaService(db)
     meta = await service.get_by_company(company_id)
     if not meta:
@@ -106,8 +128,10 @@ async def sync_company_meta(
     request_data: MetaSyncRequest,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Sync Meta page data for a company."""
+    await _require_company_access(db, company_id, current_user, data_scope)
     service = MetaService(db)
     meta = await service.sync_page(company_id, request_data.page_id)
     return CompanyMetaDataResponse.model_validate(meta)
@@ -119,8 +143,10 @@ async def sync_instagram(
     request_data: MetaSyncRequest,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Sync Instagram business account data for a company (linked to Facebook page)."""
+    await _require_company_access(db, company_id, current_user, data_scope)
     service = MetaService(db)
     credential = await service.get_credential(current_user.id)
     if not credential or not credential.access_token:
@@ -137,8 +163,10 @@ async def export_meta_csv(
     company_id: int,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Export Meta data as CSV."""
+    await _require_company_access(db, company_id, current_user, data_scope)
     service = MetaService(db)
     csv_content = await service.export_csv(company_id)
     if not csv_content:

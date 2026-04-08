@@ -5,6 +5,7 @@ Tests CRUD operations, round-robin assignment, load-balance assignment, and filt
 """
 
 import pytest
+import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -13,6 +14,13 @@ from src.auth.models import User
 from src.leads.models import Lead, LeadSource
 from src.assignment.models import AssignmentRule
 from src.assignment.service import AssignmentService
+
+
+# Assignment rule writes require manager+. Override the conftest-level
+# auth_headers for this file to use admin credentials.
+@pytest_asyncio.fixture
+async def auth_headers(admin_auth_headers) -> dict:
+    return admin_auth_headers
 
 
 @pytest.fixture

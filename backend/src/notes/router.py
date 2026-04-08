@@ -1,8 +1,10 @@
 """Note API routes."""
 
-from typing import Optional
-from fastapi import APIRouter, Query, HTTPException
+from typing import Annotated, Optional
+from fastapi import APIRouter, Depends, Query, HTTPException
 from src.core.constants import HTTPStatus, EntityNames
+from src.core.data_scope import DataScope, get_data_scope
+from src.core.entity_access import require_entity_access
 from src.core.router_utils import (
     DBSession,
     CurrentUser,
@@ -66,10 +68,18 @@ async def get_note(
     note_id: int,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Get a note by ID."""
     service = NoteService(db)
     note = await get_entity_or_404(service, note_id, EntityNames.NOTE)
+    # Ownership check: caller must also have access to the parent entity.
+    # (Note.created_by_id alone is not enough because a shared-contact
+    # viewer should be able to read notes on that contact.)
+    if note.created_by_id != current_user.id and not data_scope.can_see_all():
+        await require_entity_access(
+            db, note.entity_type, note.entity_id, current_user, data_scope,
+        )
     # Note doesn't have author_name attribute, need to fetch it
     notes, _ = await service.get_list(page=1, page_size=1, entity_type=note.entity_type, entity_id=note.entity_id)
     for n in notes:

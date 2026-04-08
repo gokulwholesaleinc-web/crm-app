@@ -1,12 +1,13 @@
 """Saved filters CRUD API routes."""
 
 import json
-from typing import List, Optional, Any, Dict
-from fastapi import APIRouter, Query
+from typing import Annotated, List, Optional, Any, Dict
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select, func, or_
 
 from src.core.router_utils import DBSession, CurrentUser
 from src.core.constants import HTTPStatus
+from src.core.data_scope import DataScope, get_data_scope
 from src.core.filtering import parse_filter_group, apply_filters_to_query
 from src.filters.models import SavedFilter
 from src.filters.schemas import (
@@ -106,22 +107,44 @@ async def create_saved_filter(
     return _filter_to_response(saved_filter)
 
 
+def _apply_owner_scope(query, model, data_scope: DataScope):
+    """Constrain a query to the caller's data scope via owner_id.
+
+    Admin/manager/superuser bypass (data_scope.can_see_all() is True).
+    Models without an owner_id column are rejected to avoid accidental
+    leakage — an entity that cannot be owner-scoped should not be exposed
+    via a raw aggregate endpoint.
+    """
+    if data_scope.can_see_all():
+        return query
+    if not hasattr(model, "owner_id"):
+        from src.core.router_utils import raise_forbidden
+        raise_forbidden(
+            "This entity type cannot be aggregated by non-privileged users"
+        )
+    return query.where(model.owner_id == data_scope.owner_id)
+
+
 @router.post("/aggregate", response_model=AggregateResponse)
 async def aggregate_filters(
     data: AggregateRequest,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Run aggregate queries against filtered entity data.
 
     Supports metrics: count, sum:<field>, avg:<field>.
     Returns count, computed metrics, and first 5 matching entities.
+
+    Sales reps only see their own records; admin/manager see everything.
     """
     model = _get_entity_model(data.entity_type)
 
     # Build the base filtered query for count
     count_query = select(func.count()).select_from(model)
     count_query = apply_filters_to_query(count_query, model, data.filters)
+    count_query = _apply_owner_scope(count_query, model, data_scope)
     count_result = await db.execute(count_query)
     count = count_result.scalar() or 0
 
@@ -142,6 +165,7 @@ async def aggregate_filters(
             else:
                 continue
             agg_query = apply_filters_to_query(agg_query, model, data.filters)
+            agg_query = _apply_owner_scope(agg_query, model, data_scope)
             agg_result = await db.execute(agg_query)
             value = agg_result.scalar()
             metrics[metric] = float(value) if value is not None else 0
@@ -149,6 +173,7 @@ async def aggregate_filters(
     # Get sample entities (first 5)
     sample_query = select(model)
     sample_query = apply_filters_to_query(sample_query, model, data.filters)
+    sample_query = _apply_owner_scope(sample_query, model, data_scope)
     sample_query = sample_query.limit(5)
     sample_result = await db.execute(sample_query)
     sample_entities = sample_result.scalars().all()

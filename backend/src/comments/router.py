@@ -1,8 +1,10 @@
 """Comment API routes."""
 
-from typing import Optional
-from fastapi import APIRouter, Query, HTTPException
+from typing import Annotated, Optional
+from fastapi import APIRouter, Depends, Query, HTTPException
 from src.core.constants import HTTPStatus
+from src.core.data_scope import DataScope, get_data_scope
+from src.core.entity_access import require_entity_access
 from src.core.router_utils import DBSession, CurrentUser, calculate_pages
 from src.comments.schemas import (
     CommentCreate,
@@ -19,12 +21,14 @@ router = APIRouter(prefix="/api/comments", tags=["comments"])
 async def list_comments(
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
     entity_type: str = Query(..., description="Entity type (e.g. opportunity, contact)"),
     entity_id: int = Query(..., description="Entity ID"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ):
     """List comments for an entity with pagination."""
+    await require_entity_access(db, entity_type, entity_id, current_user, data_scope)
     service = CommentService(db)
 
     items, total = await service.get_list(
@@ -48,8 +52,12 @@ async def create_comment(
     comment_data: CommentCreate,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Create a new comment."""
+    await require_entity_access(
+        db, comment_data.entity_type, comment_data.entity_id, current_user, data_scope,
+    )
     service = CommentService(db)
 
     # If replying, verify parent comment exists
@@ -77,6 +85,7 @@ async def get_comment(
     comment_id: int,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Get a comment by ID."""
     service = CommentService(db)
@@ -86,6 +95,10 @@ async def get_comment(
             status_code=HTTPStatus.NOT_FOUND,
             detail="Comment not found",
         )
+
+    await require_entity_access(
+        db, comment.entity_type, comment.entity_id, current_user, data_scope,
+    )
 
     comment_dict = await service._build_comment_dict(comment)
     # Get author name
@@ -106,6 +119,7 @@ async def update_comment(
     comment_data: CommentUpdate,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Update a comment."""
     service = CommentService(db)
@@ -115,6 +129,10 @@ async def update_comment(
             status_code=HTTPStatus.NOT_FOUND,
             detail="Comment not found",
         )
+
+    await require_entity_access(
+        db, comment.entity_type, comment.entity_id, current_user, data_scope,
+    )
 
     # Only the author can edit their comment
     if comment.user_id != current_user.id:

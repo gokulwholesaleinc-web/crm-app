@@ -4,10 +4,13 @@ import os
 import asyncio
 from pathlib import Path
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
+from typing import Annotated, Any
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+
+from src.core.permissions import require_manager_or_above
 from sqlalchemy import text
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -563,11 +566,24 @@ async def list_tags(current_user: CurrentUser):
 
 
 @app.post("/api/tags")
-async def create_tag(current_user: CurrentUser, name: str, color: str = "#6366f1"):
-    """Create a new tag."""
+async def create_tag(
+    current_user: Annotated[Any, Depends(require_manager_or_above)],
+    name: str,
+    color: str = "#6366f1",
+):
+    """Create a new tag. Manager+ only — tags are global shared state."""
     from src.database import async_session_maker
     from src.core.models import Tag
     from src.core.cache import invalidate_tags_cache
+
+    # Basic input sanity: tag name/color length + character set.
+    name = (name or "").strip()
+    if not name or len(name) > 100:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Tag name required (1-100 chars)")
+    if not color.startswith("#") or len(color) > 10:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Color must be a hex string")
 
     async with async_session_maker() as session:
         tag = Tag(name=name, color=color)

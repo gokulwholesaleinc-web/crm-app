@@ -1,8 +1,9 @@
 """Workflow automation API routes."""
 
-from typing import Optional, List
-from fastapi import APIRouter, Query
+from typing import Annotated, Any, Optional, List
+from fastapi import APIRouter, Depends, Query
 from src.core.constants import HTTPStatus
+from src.core.permissions import require_manager_or_above
 from src.core.router_utils import DBSession, CurrentUser, raise_not_found
 from src.workflows.schemas import (
     WorkflowRuleCreate,
@@ -15,14 +16,16 @@ from src.workflows.service import WorkflowService
 
 router = APIRouter(prefix="/api/workflows", tags=["workflows"])
 
+ManagerOrAbove = Annotated[Any, Depends(require_manager_or_above)]
+
 
 @router.post("", response_model=WorkflowRuleResponse, status_code=HTTPStatus.CREATED)
 async def create_workflow_rule(
     rule_data: WorkflowRuleCreate,
-    current_user: CurrentUser,
+    current_user: ManagerOrAbove,
     db: DBSession,
 ):
-    """Create a new workflow rule."""
+    """Create a new workflow rule. Manager+ only."""
     service = WorkflowService(db)
     rule = await service.create_rule(rule_data, current_user.id)
     return WorkflowRuleResponse.model_validate(rule)
@@ -66,10 +69,10 @@ async def get_workflow_rule(
 async def update_workflow_rule(
     rule_id: int,
     rule_data: WorkflowRuleUpdate,
-    current_user: CurrentUser,
+    current_user: ManagerOrAbove,
     db: DBSession,
 ):
-    """Update a workflow rule."""
+    """Update a workflow rule. Manager+ only."""
     service = WorkflowService(db)
     rule = await service.get_by_id(rule_id)
     if not rule:
@@ -81,10 +84,10 @@ async def update_workflow_rule(
 @router.delete("/{rule_id}", status_code=HTTPStatus.NO_CONTENT)
 async def delete_workflow_rule(
     rule_id: int,
-    current_user: CurrentUser,
+    current_user: ManagerOrAbove,
     db: DBSession,
 ):
-    """Delete a workflow rule."""
+    """Delete a workflow rule. Manager+ only."""
     service = WorkflowService(db)
     rule = await service.get_by_id(rule_id)
     if not rule:

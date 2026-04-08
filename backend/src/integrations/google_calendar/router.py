@@ -97,7 +97,34 @@ async def push_to_calendar(
     current_user: CurrentUser,
     db: DBSession,
 ):
-    """Push a CRM activity to Google Calendar."""
+    """Push a CRM activity to Google Calendar.
+
+    Verifies the caller owns the activity (or is admin/manager) before
+    calling Google so you can't push another user's private activity
+    into your own calendar.
+    """
+    from sqlalchemy import select
+    from src.activities.models import Activity
+    from src.core.router_utils import raise_forbidden
+
+    activity_result = await db.execute(
+        select(Activity).where(Activity.id == data.activity_id)
+    )
+    activity = activity_result.scalar_one_or_none()
+    if activity is None:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND, detail="Activity not found"
+        )
+    is_privileged = current_user.is_superuser or getattr(current_user, "role", "sales_rep") in ("admin", "manager")
+    if not is_privileged:
+        owns = (
+            activity.owner_id == current_user.id
+            or activity.assigned_to_id == current_user.id
+            or activity.created_by_id == current_user.id
+        )
+        if not owns:
+            raise_forbidden("You do not have permission to push this activity")
+
     service = GoogleCalendarService(db)
     try:
         sync_event = await service.create_calendar_event(current_user.id, data.activity_id)
