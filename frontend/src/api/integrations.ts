@@ -27,8 +27,11 @@ export const getCalendarAuthUrl = async (redirectUri: string): Promise<{ auth_ur
   return response.data;
 };
 
-export const calendarCallback = async (code: string): Promise<unknown> => {
-  const response = await apiClient.post('/api/integrations/google-calendar/callback', { code });
+export const calendarCallback = async (code: string, redirectUri: string): Promise<unknown> => {
+  const response = await apiClient.post('/api/integrations/google-calendar/callback', {
+    code,
+    redirect_uri: redirectUri,
+  });
   return response.data;
 };
 

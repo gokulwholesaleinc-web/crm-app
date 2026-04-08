@@ -151,6 +151,11 @@ async def _run_production_migrations():
                 "ALTER TABLE email_queue ADD COLUMN IF NOT EXISTS from_email VARCHAR(255)",
                 "ALTER TABLE email_queue ADD COLUMN IF NOT EXISTS cc TEXT",
                 "ALTER TABLE email_queue ADD COLUMN IF NOT EXISTS bcc TEXT",
+                # Google OAuth sign-in: identity columns + nullable password
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS google_sub VARCHAR(255)",
+                "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(20) NOT NULL DEFAULT 'password'",
+                "ALTER TABLE users ALTER COLUMN hashed_password DROP NOT NULL",
             ]
             for sql in column_migrations:
                 try:

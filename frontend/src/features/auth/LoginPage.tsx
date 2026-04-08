@@ -6,6 +6,7 @@ import { authApi } from '../../api/auth';
 import { useAuthStore } from '../../store/authStore';
 import { setTenantSlugOnLogin, useTenant } from '../../providers/TenantProvider';
 import type { LoginRequest } from '../../types';
+import GoogleSignInButton, { AuthDivider } from './GoogleSignInButton';
 
 const REMEMBER_KEY = 'crm-remember:v1';
 
@@ -238,6 +239,8 @@ function LoginPage() {
           </div>
         </form>
 
+        <AuthDivider />
+        <GoogleSignInButton onError={setError} disabled={isLoading} />
       </div>
     </div>
   );

@@ -14,6 +14,7 @@ class GoogleCalendarCallback(BaseModel):
     """OAuth2 callback data."""
     code: str
     state: Optional[str] = None
+    redirect_uri: Optional[str] = None
 
 
 class GoogleCalendarCredentialResponse(BaseModel):

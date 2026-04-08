@@ -1,9 +1,11 @@
 """Authentication API routes."""
 
+import secrets
 from typing import Annotated, List
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
+from src.config import settings
 from src.core.constants import HTTPStatus, ErrorMessages, EntityNames
 from src.core.router_utils import DBSession, CurrentUser, raise_bad_request
 from src.auth.models import User
@@ -14,10 +16,14 @@ from src.auth.schemas import (
     Token,
     LoginRequest,
     TenantInfo,
+    GoogleAuthorizeRequest,
+    GoogleAuthorizeResponse,
+    GoogleCallbackRequest,
 )
 from src.auth.service import AuthService
 from src.auth.security import create_access_token
 from src.auth.dependencies import get_current_active_user, get_current_superuser
+from src.auth import google_oauth
 from src.whitelabel.models import TenantUser, Tenant, TenantSettings
 
 from src.core.rate_limit import limiter
@@ -136,6 +142,155 @@ async def login_json(
     access_token = create_access_token(data={"sub": str(user.id)})
     tenants = await _get_user_tenant_info(db, user.id)
     return Token(access_token=access_token, tenants=tenants)
+
+
+# =============================================================================
+# Google OAuth2 sign-in
+# =============================================================================
+#
+# This flow is independent from /api/integrations/google-calendar:
+# - Only requests openid/email/profile scopes (no calendar access)
+# - Does NOT require the user to already be logged in (public endpoints)
+# - Creates a user on first sign-in, or links google_sub to an existing
+#   email-matched account.
+#
+# The HTTP factory used to talk to Google is overridable via
+# `app.dependency_overrides[get_google_http_factory]` so tests can stub the
+# token + userinfo endpoints without a live network.
+
+def get_google_http_factory() -> google_oauth.HttpClientFactory:
+    """Default httpx.AsyncClient factory used by Google sign-in endpoints."""
+    return google_oauth.default_client_factory
+
+
+GoogleHttpFactory = Annotated[
+    google_oauth.HttpClientFactory, Depends(get_google_http_factory)
+]
+
+
+@router.post("/google/authorize", response_model=GoogleAuthorizeResponse)
+@limiter.limit("15/minute")
+async def google_authorize(
+    request: Request,
+    data: GoogleAuthorizeRequest,
+):
+    """Return the Google consent URL to start sign-in."""
+    client_id = settings.GOOGLE_CLIENT_ID
+    if not client_id:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail="Google sign-in is not configured",
+        )
+    state = secrets.token_urlsafe(24)
+    auth_url = google_oauth.build_authorize_url(
+        client_id=client_id,
+        redirect_uri=data.redirect_uri,
+        state=state,
+    )
+    return GoogleAuthorizeResponse(auth_url=auth_url, state=state)
+
+
+@router.post("/google/callback", response_model=Token)
+@limiter.limit("15/minute")
+async def google_callback(
+    request: Request,
+    data: GoogleCallbackRequest,
+    db: DBSession,
+    http_factory: GoogleHttpFactory,
+):
+    """Exchange Google's code for a CRM session.
+
+    Creates or links a user from the verified Google profile and returns a
+    CRM JWT + tenant list, mirroring `/login/json` so the frontend can reuse
+    the same post-login flow.
+    """
+    client_id = settings.GOOGLE_CLIENT_ID
+    client_secret = settings.GOOGLE_CLIENT_SECRET
+    if not client_id or not client_secret:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail="Google sign-in is not configured",
+        )
+
+    try:
+        token_data = await google_oauth.exchange_code_for_tokens(
+            code=data.code,
+            client_id=client_id,
+            client_secret=client_secret,
+            redirect_uri=data.redirect_uri,
+            client_factory=http_factory,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail=f"Google token exchange failed: {str(exc)}",
+        )
+
+    access_token = token_data.get("access_token")
+    if not access_token:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail="Google did not return an access_token",
+        )
+
+    try:
+        profile = await google_oauth.fetch_userinfo(
+            access_token=access_token,
+            client_factory=http_factory,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail=f"Failed to fetch Google profile: {str(exc)}",
+        )
+
+    google_sub = profile.get("sub")
+    email = profile.get("email")
+    if not google_sub or not email:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail="Google profile missing sub or email",
+        )
+    if profile.get("email_verified") is False:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail="Google account email is not verified",
+        )
+
+    service = AuthService(db)
+    user = await service.upsert_google_user(
+        google_sub=str(google_sub),
+        email=email,
+        full_name=profile.get("name") or email.split("@")[0],
+        avatar_url=profile.get("picture"),
+    )
+
+    # Attach to default tenant if the user is brand new (no tenant memberships).
+    existing_membership = await db.execute(
+        select(TenantUser).where(TenantUser.user_id == user.id)
+    )
+    if existing_membership.scalar_one_or_none() is None:
+        tenant_slug = getattr(request.state, "tenant_slug_hint", None) or "default"
+        result = await db.execute(
+            select(Tenant).where(Tenant.slug == tenant_slug)
+        )
+        tenant = result.scalar_one_or_none()
+        if tenant:
+            db.add(
+                TenantUser(
+                    user_id=user.id,
+                    tenant_id=tenant.id,
+                    role="member",
+                    is_primary=True,
+                )
+            )
+
+    await db.commit()
+    await db.refresh(user)
+
+    jwt_token = create_access_token(data={"sub": str(user.id)})
+    tenants = await _get_user_tenant_info(db, user.id)
+    return Token(access_token=jwt_token, tenants=tenants)
 
 
 @router.get("/me", response_model=UserResponse)

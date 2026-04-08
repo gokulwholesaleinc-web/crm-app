@@ -27,7 +27,8 @@ function OAuthCallbackPage() {
     (async () => {
       try {
         if (isGoogle) {
-          await calendarCallback(code);
+          const redirectUri = window.location.origin + '/settings/integrations/google-calendar/callback';
+          await calendarCallback(code, redirectUri);
           showSuccess('Google Calendar connected successfully');
         } else if (isMeta) {
           const redirectUri = window.location.origin + '/settings/integrations/meta/callback';

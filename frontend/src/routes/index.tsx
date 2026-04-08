@@ -12,6 +12,7 @@ import { ErrorBoundary } from '../components/ErrorBoundary';
 // Authentication pages
 const LoginPage = lazy(() => import('../features/auth/LoginPage'));
 const RegisterPage = lazy(() => import('../features/auth/RegisterPage'));
+const GoogleAuthCallbackPage = lazy(() => import('../features/auth/GoogleAuthCallbackPage'));
 
 // Dashboard
 const DashboardPage = lazy(() => import('../features/dashboard/DashboardPage'));
@@ -91,6 +92,7 @@ function AppRoutes() {
       {/* Public routes */}
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/auth/google/callback" element={<GoogleAuthCallbackPage />} />
       <Route path="/proposals/public/:token" element={<PublicProposalView />} />
       <Route path="/quotes/public/:quoteNumber" element={<PublicQuoteView />} />
 
