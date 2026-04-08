@@ -61,3 +61,19 @@ class TokenData(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+
+class GoogleAuthorizeRequest(BaseModel):
+    """Client sends the redirect_uri it will be returning to."""
+    redirect_uri: str
+
+
+class GoogleAuthorizeResponse(BaseModel):
+    auth_url: str
+    state: str
+
+
+class GoogleCallbackRequest(BaseModel):
+    code: str
+    redirect_uri: str
+    state: Optional[str] = None

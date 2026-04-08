@@ -14,8 +14,19 @@ class User(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
-    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Nullable for OAuth-only accounts (Google sign-in).
+    hashed_password: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    # OAuth identity (currently only Google; nullable for password-only users).
+    google_sub: Mapped[Optional[str]] = mapped_column(
+        String(255), unique=True, nullable=True, index=True
+    )
+    # "password" or "google". Lets the UI show provenance and blocks password
+    # reset flows on OAuth-only accounts.
+    auth_provider: Mapped[str] = mapped_column(
+        String(20), default="password", server_default="password", nullable=False
+    )
 
     # Status
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

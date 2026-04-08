@@ -52,7 +52,12 @@ async def handle_callback(
 ):
     """Handle the OAuth2 callback and store credentials."""
     service = GoogleCalendarService(db)
-    redirect_uri = ""  # Must match the redirect_uri used in connect
+    redirect_uri = data.redirect_uri or ""
+    if not redirect_uri:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail="redirect_uri is required and must match the one used in /connect",
+        )
     try:
         credential = await service.exchange_code(data.code, redirect_uri, current_user.id)
     except Exception as exc:

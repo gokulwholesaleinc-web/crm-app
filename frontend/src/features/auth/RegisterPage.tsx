@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { authApi } from '../../api/auth';
+import GoogleSignInButton, { AuthDivider } from './GoogleSignInButton';
 
 interface RegisterFormData {
   firstName: string;
@@ -222,6 +223,9 @@ function RegisterPage() {
             </Button>
           </div>
         </form>
+
+        <AuthDivider label="Or sign up with" />
+        <GoogleSignInButton label="Sign up with Google" onError={setError} disabled={isLoading} />
       </div>
     </div>
   );
