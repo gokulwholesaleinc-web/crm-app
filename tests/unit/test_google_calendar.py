@@ -227,22 +227,36 @@ class TestGoogleCalendarPush:
 
     @pytest.mark.asyncio
     async def test_push_without_connection_returns_400(
-        self, client: AsyncClient, test_user,
+        self, client: AsyncClient, test_user, test_activity,
     ):
-        """Pushing without a Google Calendar connection should return 400."""
+        """Pushing a real activity without a Google Calendar connection should return 400."""
         response = await client.post(
             "/api/integrations/google-calendar/push",
-            json={"activity_id": 99999},
+            json={"activity_id": test_activity.id},
             headers=_token(test_user),
         )
         assert response.status_code == 400
 
     @pytest.mark.asyncio
-    async def test_push_endpoint_exists(self, client: AsyncClient, test_user):
-        """Endpoint should exist and not return 404 or 405."""
+    async def test_push_missing_activity_returns_404(
+        self, client: AsyncClient, test_user,
+    ):
+        """Pushing a non-existent activity should return 404."""
         response = await client.post(
             "/api/integrations/google-calendar/push",
-            json={"activity_id": 1},
+            json={"activity_id": 99999},
+            headers=_token(test_user),
+        )
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_push_endpoint_exists(
+        self, client: AsyncClient, test_user, test_activity,
+    ):
+        """Endpoint should exist and not return 404 or 405 for a real activity."""
+        response = await client.post(
+            "/api/integrations/google-calendar/push",
+            json={"activity_id": test_activity.id},
             headers=_token(test_user),
         )
         assert response.status_code != 404
