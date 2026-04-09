@@ -39,7 +39,7 @@ from src.opportunities.schemas import (
     PipelineSummaryResponse,
     TagBrief,
 )
-from src.opportunities.models import PipelineStage
+from src.opportunities.models import Opportunity, PipelineStage
 from src.opportunities.service import OpportunityService, PipelineStageService
 from src.opportunities.pipeline import PipelineManager
 from src.opportunities.forecasting import RevenueForecast
@@ -169,13 +169,20 @@ async def reorder_stages(
 async def get_kanban_view(
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
     owner_id: Optional[int] = None,
 ):
-    """Get Kanban board view of pipeline."""
-    # Auto-scope to current user's data by default
-    effective_owner_id = owner_id if owner_id is not None else current_user.id
+    """Get Kanban board view of pipeline.
+
+    Sales reps can only see their own kanban; admin/manager can pass
+    owner_id to view another user's board. Spoofed owner_id from a
+    sales_rep is ignored and collapsed back to the caller.
+    """
+    resolved_owner_id = effective_owner_id(data_scope, owner_id)
+    if resolved_owner_id is None and not data_scope.can_see_all():
+        resolved_owner_id = current_user.id
     manager = PipelineManager(db)
-    kanban_data = await manager.get_kanban_data(owner_id=effective_owner_id)
+    kanban_data = await manager.get_kanban_data(owner_id=resolved_owner_id)
 
     return KanbanResponse(stages=[KanbanStage(**stage) for stage in kanban_data])
 
@@ -210,16 +217,18 @@ async def move_opportunity(
 async def get_forecast(
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
     months_ahead: int = Query(6, ge=1, le=12),
     owner_id: Optional[int] = None,
 ):
-    """Get revenue forecast."""
-    # Auto-scope to current user's data by default
-    effective_owner_id = owner_id if owner_id is not None else current_user.id
+    """Get revenue forecast. Sales reps cannot spoof owner_id."""
+    resolved_owner_id = effective_owner_id(data_scope, owner_id)
+    if resolved_owner_id is None and not data_scope.can_see_all():
+        resolved_owner_id = current_user.id
     forecaster = RevenueForecast(db)
     forecast = await forecaster.get_forecast(
         months_ahead=months_ahead,
-        owner_id=effective_owner_id,
+        owner_id=resolved_owner_id,
     )
     return forecast
 
@@ -228,13 +237,15 @@ async def get_forecast(
 async def get_pipeline_summary(
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
     owner_id: Optional[int] = None,
 ):
-    """Get pipeline summary."""
-    # Auto-scope to current user's data by default
-    effective_owner_id = owner_id if owner_id is not None else current_user.id
+    """Get pipeline summary. Sales reps cannot spoof owner_id."""
+    resolved_owner_id = effective_owner_id(data_scope, owner_id)
+    if resolved_owner_id is None and not data_scope.can_see_all():
+        resolved_owner_id = current_user.id
     forecaster = RevenueForecast(db)
-    summary = await forecaster.get_pipeline_summary(owner_id=effective_owner_id)
+    summary = await forecaster.get_pipeline_summary(owner_id=resolved_owner_id)
     return summary
 
 

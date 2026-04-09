@@ -5,7 +5,10 @@ from datetime import date
 from typing import Any, List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
-from src.core.router_utils import DBSession, CurrentUser
+from typing import Annotated as _Annotated  # alias to avoid shadowing existing Annotated-free code
+from fastapi import Depends
+from src.core.router_utils import DBSession, CurrentUser, effective_owner_id
+from src.core.data_scope import DataScope, get_data_scope
 from src.dashboard.schemas import (
     NumberCardData,
     ChartData,
@@ -551,10 +554,17 @@ async def get_converted_revenue(
 async def get_unified_pipeline(
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: _Annotated[DataScope, Depends(get_data_scope)],
     owner_id: Optional[int] = Query(None, description="Filter by owner ID"),
 ):
-    """Get unified pipeline view with both lead and opportunity stages."""
-    effective_owner_id = owner_id if owner_id is not None else current_user.id
+    """Get unified pipeline view with both lead and opportunity stages.
+
+    Sales reps can only see their own pipeline; admin/manager may pass
+    owner_id to view another user's. Spoofed owner_id is ignored.
+    """
+    resolved_owner_id = effective_owner_id(data_scope, owner_id)
+    if resolved_owner_id is None and not data_scope.can_see_all():
+        resolved_owner_id = current_user.id
 
     # Get lead pipeline stages
     lead_stages_result = await db.execute(
@@ -568,8 +578,8 @@ async def get_unified_pipeline(
     lead_stages_data = []
     for stage in lead_stages:
         leads_query = select(Lead).where(Lead.pipeline_stage_id == stage.id)
-        if effective_owner_id:
-            leads_query = leads_query.where(Lead.owner_id == effective_owner_id)
+        if resolved_owner_id is not None:
+            leads_query = leads_query.where(Lead.owner_id == resolved_owner_id)
         leads_query = leads_query.order_by(Lead.score.desc())
 
         leads_result = await db.execute(leads_query)
@@ -607,8 +617,8 @@ async def get_unified_pipeline(
     opp_stages_data = []
     for stage in opp_stages:
         opps_query = select(Opportunity).where(Opportunity.pipeline_stage_id == stage.id)
-        if effective_owner_id:
-            opps_query = opps_query.where(Opportunity.owner_id == effective_owner_id)
+        if resolved_owner_id is not None:
+            opps_query = opps_query.where(Opportunity.owner_id == resolved_owner_id)
         opps_query = opps_query.order_by(Opportunity.expected_close_date.asc().nullslast())
 
         opps_result = await db.execute(opps_query)

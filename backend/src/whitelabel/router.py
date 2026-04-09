@@ -25,13 +25,38 @@ from src.whitelabel.schemas import (
     TenantUserResponse,
     PublicTenantConfig,
 )
+from src.whitelabel.models import TenantUser
 from src.whitelabel.service import TenantService, TenantSettingsService, TenantUserService
 from src.whitelabel.dependencies import get_current_tenant, require_tenant
+from sqlalchemy import select
 
 router = APIRouter(prefix="/api/tenants", tags=["tenants"])
 
 # Type alias for superuser dependency
 SuperUser = Annotated[Any, Depends(get_current_superuser)]
+
+
+async def _require_tenant_member(db, tenant_id: int, current_user) -> None:
+    """Raise 403 unless the caller is a member of the given tenant.
+
+    Superusers bypass. Used on read endpoints that return tenant config
+    without requiring full admin privileges.
+    """
+    if current_user.is_superuser:
+        return
+    result = await db.execute(
+        select(TenantUser).where(
+            TenantUser.tenant_id == tenant_id,
+            TenantUser.user_id == current_user.id,
+        )
+    )
+    if result.scalar_one_or_none() is None:
+        raise_bad_request_or_forbidden()
+
+
+def raise_bad_request_or_forbidden():
+    from src.core.router_utils import raise_forbidden
+    raise_forbidden("You are not a member of this tenant")
 
 
 def _build_public_tenant_config(tenant: Tenant) -> PublicTenantConfig:
@@ -141,7 +166,8 @@ async def get_tenant(
     current_user: CurrentUser,
     db: DBSession,
 ):
-    """Get a tenant by ID."""
+    """Get a tenant by ID. Caller must be a member of the tenant."""
+    await _require_tenant_member(db, tenant_id, current_user)
     service = TenantService(db)
     tenant = await service.get_by_id(tenant_id)
 
@@ -193,7 +219,8 @@ async def get_tenant_settings(
     db: DBSession,
     response: Response,
 ):
-    """Get tenant settings."""
+    """Get tenant settings. Caller must be a member of the tenant."""
+    await _require_tenant_member(db, tenant_id, current_user)
     service = TenantSettingsService(db)
     settings = await service.get_by_tenant_id(tenant_id)
 
@@ -208,10 +235,11 @@ async def get_tenant_settings(
 async def update_tenant_settings(
     tenant_id: int,
     settings_data: TenantSettingsUpdate,
-    current_user: CurrentUser,
+    current_user: SuperUser,
     db: DBSession,
 ):
-    """Update tenant settings."""
+    """Update tenant settings. Superuser only — branding config + custom_css
+    is a stored-XSS surface and must not be writable by sales reps."""
     service = TenantSettingsService(db)
     settings = await service.get_by_tenant_id(tenant_id)
 
@@ -229,7 +257,8 @@ async def list_tenant_users(
     current_user: CurrentUser,
     db: DBSession,
 ):
-    """List users in a tenant."""
+    """List users in a tenant. Caller must be a member of the tenant."""
+    await _require_tenant_member(db, tenant_id, current_user)
     service = TenantUserService(db)
     users = await service.get_tenant_users(tenant_id)
     return users
@@ -239,10 +268,10 @@ async def list_tenant_users(
 async def add_user_to_tenant(
     tenant_id: int,
     user_data: TenantUserCreate,
-    current_user: CurrentUser,
+    current_user: SuperUser,
     db: DBSession,
 ):
-    """Add a user to a tenant."""
+    """Add a user to a tenant. Superuser only."""
     # Ensure tenant_id matches
     user_data.tenant_id = tenant_id
 
@@ -255,10 +284,10 @@ async def add_user_to_tenant(
 async def remove_user_from_tenant(
     tenant_id: int,
     user_id: int,
-    current_user: CurrentUser,
+    current_user: SuperUser,
     db: DBSession,
 ):
-    """Remove a user from a tenant."""
+    """Remove a user from a tenant. Superuser only."""
     service = TenantUserService(db)
     users = await service.get_tenant_users(tenant_id)
 

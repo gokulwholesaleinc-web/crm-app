@@ -3,6 +3,7 @@
 import logging
 from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import select
 from src.core.constants import HTTPStatus, EntityNames, ENTITY_TYPE_PAYMENTS
 from src.core.router_utils import (
     DBSession,
@@ -10,8 +11,10 @@ from src.core.router_utils import (
     get_entity_or_404,
     calculate_pages,
     check_ownership,
+    raise_forbidden,
 )
 from src.core.data_scope import DataScope, get_data_scope, check_record_access_or_shared
+from src.payments.models import StripeCustomer
 from src.payments.schemas import (
     PaymentCreate,
     PaymentResponse,
@@ -44,6 +47,89 @@ from src.events.service import emit, PAYMENT_RECEIVED
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/payments", tags=["payments"])
+
+
+def _is_privileged(current_user) -> bool:
+    """Admin/manager/superuser bypass ownership checks in this module."""
+    if current_user.is_superuser:
+        return True
+    return getattr(current_user, "role", "sales_rep") in ("admin", "manager")
+
+
+async def _verify_contact_access(db, contact_id: Optional[int], current_user) -> None:
+    """Raise 403 if the caller cannot access the referenced contact."""
+    if contact_id is None or _is_privileged(current_user):
+        return
+    from src.contacts.models import Contact
+    result = await db.execute(select(Contact).where(Contact.id == contact_id))
+    contact = result.scalar_one_or_none()
+    if contact is None:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Contact not found")
+    if contact.owner_id != current_user.id:
+        raise_forbidden("You do not have permission to reference this contact")
+
+
+async def _verify_company_access(db, company_id: Optional[int], current_user) -> None:
+    """Raise 403 if the caller cannot access the referenced company."""
+    if company_id is None or _is_privileged(current_user):
+        return
+    from src.companies.models import Company
+    result = await db.execute(select(Company).where(Company.id == company_id))
+    company = result.scalar_one_or_none()
+    if company is None:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Company not found")
+    if company.owner_id != current_user.id:
+        raise_forbidden("You do not have permission to reference this company")
+
+
+async def _verify_quote_access(db, quote_id: Optional[int], current_user) -> None:
+    """Raise 403 if the caller cannot access the referenced quote."""
+    if quote_id is None or _is_privileged(current_user):
+        return
+    from src.quotes.models import Quote
+    result = await db.execute(select(Quote).where(Quote.id == quote_id))
+    quote = result.scalar_one_or_none()
+    if quote is None:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Quote not found")
+    if quote.owner_id != current_user.id:
+        raise_forbidden("You do not have permission to reference this quote")
+
+
+async def _verify_opportunity_access(db, opportunity_id: Optional[int], current_user) -> None:
+    """Raise 403 if the caller cannot access the referenced opportunity."""
+    if opportunity_id is None or _is_privileged(current_user):
+        return
+    from src.opportunities.models import Opportunity
+    result = await db.execute(select(Opportunity).where(Opportunity.id == opportunity_id))
+    opp = result.scalar_one_or_none()
+    if opp is None:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Opportunity not found")
+    if opp.owner_id != current_user.id:
+        raise_forbidden("You do not have permission to reference this opportunity")
+
+
+async def _verify_stripe_customer_access(db, stripe_customer_id: int, current_user) -> StripeCustomer:
+    """Load a StripeCustomer and raise 403 unless caller owns the linked contact/company.
+
+    StripeCustomer has no `owner_id` column itself, so access is derived from
+    whichever CRM entity (contact or company) it points at.
+    """
+    result = await db.execute(
+        select(StripeCustomer).where(StripeCustomer.id == stripe_customer_id)
+    )
+    sc = result.scalar_one_or_none()
+    if sc is None:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Stripe customer not found")
+    if _is_privileged(current_user):
+        return sc
+    owner_ids = {
+        sc.contact.owner_id if sc.contact else None,
+        sc.company.owner_id if sc.company else None,
+    }
+    owner_ids.discard(None)
+    if current_user.id not in owner_ids:
+        raise_forbidden("You do not have permission to use this Stripe customer")
+    return sc
 
 
 # =============================================================================
@@ -102,11 +188,14 @@ async def create_checkout(
     """Create a Stripe Checkout Session."""
     service = PaymentService(db)
 
+    await _verify_quote_access(db, request_data.quote_id, current_user)
+    if request_data.customer_id is not None:
+        await _verify_stripe_customer_access(db, request_data.customer_id, current_user)
+
     # Determine amount from quote if quote_id is provided
     amount = request_data.amount
     if request_data.quote_id and not amount:
         from src.quotes.models import Quote
-        from sqlalchemy import select
         result = await db.execute(select(Quote).where(Quote.id == request_data.quote_id))
         quote = result.scalar_one_or_none()
         if not quote:
@@ -152,6 +241,11 @@ async def create_payment_intent(
             status_code=HTTPStatus.BAD_REQUEST,
             detail="Amount must be greater than 0",
         )
+
+    await _verify_quote_access(db, request_data.quote_id, current_user)
+    await _verify_opportunity_access(db, request_data.opportunity_id, current_user)
+    if request_data.customer_id is not None:
+        await _verify_stripe_customer_access(db, request_data.customer_id, current_user)
 
     service = PaymentService(db)
 
@@ -218,12 +312,26 @@ async def stripe_webhook(request: Request, db: DBSession):
 async def list_customers(
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ):
-    """List Stripe customers."""
+    """List Stripe customers.
+
+    Admin/manager see everyone; sales reps only see customers whose linked
+    contact or company they own. StripeCustomer has no owner_id column, so
+    visibility is derived from the contact/company joined relationships.
+    """
     service = StripeCustomerService(db)
     customers, total = await service.get_list(page=page, page_size=page_size)
+
+    if not data_scope.can_see_all():
+        customers = [
+            c for c in customers
+            if (c.contact and c.contact.owner_id == current_user.id)
+            or (c.company and c.company.owner_id == current_user.id)
+        ]
+        total = len(customers)
 
     return StripeCustomerListResponse(
         items=[StripeCustomerResponse.model_validate(c) for c in customers],
@@ -247,6 +355,9 @@ async def sync_customer(
             detail="Either contact_id or company_id is required",
         )
 
+    await _verify_contact_access(db, request_data.contact_id, current_user)
+    await _verify_company_access(db, request_data.company_id, current_user)
+
     service = PaymentService(db)
     customer = await service.sync_customer(
         contact_id=request_data.contact_id,
@@ -267,6 +378,9 @@ async def create_onboarding_link(
             status_code=HTTPStatus.BAD_REQUEST,
             detail="Either contact_id or company_id is required",
         )
+
+    await _verify_contact_access(db, request_data.contact_id, current_user)
+    await _verify_company_access(db, request_data.company_id, current_user)
 
     service = PaymentService(db)
     try:
@@ -300,6 +414,9 @@ async def create_and_send_invoice(
             status_code=HTTPStatus.BAD_REQUEST,
             detail="Amount must be greater than 0",
         )
+
+    await _verify_stripe_customer_access(db, request_data.customer_id, current_user)
+    await _verify_quote_access(db, request_data.quote_id, current_user)
 
     service = PaymentService(db)
     try:
@@ -413,6 +530,7 @@ async def get_subscription(
             status_code=HTTPStatus.NOT_FOUND,
             detail="Subscription not found",
         )
+    check_ownership(subscription, current_user, "subscription")
     return SubscriptionResponse.model_validate(subscription)
 
 
@@ -430,6 +548,7 @@ async def cancel_subscription(
             status_code=HTTPStatus.NOT_FOUND,
             detail="Subscription not found",
         )
+    check_ownership(subscription, current_user, "subscription")
     subscription = await service.cancel(subscription)
     return SubscriptionResponse.model_validate(subscription)
 
@@ -443,12 +562,17 @@ async def download_invoice(
     payment_id: int,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Generate and return branded invoice PDF (HTML) for a payment."""
     from fastapi.responses import Response
 
     service = PaymentService(db)
     payment = await get_entity_or_404(service, payment_id, EntityNames.PAYMENT)
+    check_record_access_or_shared(
+        payment, current_user, data_scope.role_name,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_PAYMENTS),
+    )
 
     try:
         pdf_bytes = await service.generate_invoice_pdf(payment_id)
@@ -472,10 +596,15 @@ async def send_receipt(
     payment_id: int,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Manually resend receipt email for a payment."""
     service = PaymentService(db)
     payment = await get_entity_or_404(service, payment_id, EntityNames.PAYMENT)
+    check_record_access_or_shared(
+        payment, current_user, data_scope.role_name,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_PAYMENTS),
+    )
 
     try:
         await service.send_payment_receipt(payment_id)

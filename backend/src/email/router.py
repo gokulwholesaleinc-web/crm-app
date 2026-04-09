@@ -8,8 +8,14 @@ from typing import Optional
 from fastapi import APIRouter, Query, HTTPException, Request
 from fastapi.responses import Response, RedirectResponse
 
-from src.core.constants import HTTPStatus
-from src.core.router_utils import DBSession, CurrentUser, calculate_pages
+from src.core.constants import HTTPStatus, EntityNames
+from src.core.router_utils import (
+    DBSession,
+    CurrentUser,
+    calculate_pages,
+    get_entity_or_404,
+    check_ownership,
+)
 from src.email.schemas import (
     SendEmailRequest,
     SendTemplateEmailRequest,
@@ -88,6 +94,12 @@ async def send_campaign_email(
     db: DBSession,
 ):
     """Send campaign emails to all members."""
+    from src.campaigns.service import CampaignService
+
+    campaign_service = CampaignService(db)
+    campaign = await get_entity_or_404(campaign_service, data.campaign_id, EntityNames.CAMPAIGN)
+    check_ownership(campaign, current_user, EntityNames.CAMPAIGN)
+
     service = EmailService(db)
     try:
         emails = await service.send_campaign_emails(

@@ -243,15 +243,18 @@ class TestAuditEndpoint:
         db_session: AsyncSession,
         auth_headers: dict,
     ):
-        """Test audit log for entity with no history."""
+        """Test audit log for a missing entity returns 404.
+
+        Previously returned 200-empty for any nonexistent entity, which
+        leaked "is this ID in use anywhere?". The access check now rejects
+        with 404 for entities that don't exist and aren't in the caller's
+        audit history.
+        """
         response = await client.get(
             "/api/audit/contact/999",
             headers=auth_headers,
         )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["total"] == 0
-        assert data["items"] == []
+        assert response.status_code == 404
 
     @pytest.mark.asyncio
     async def test_get_audit_log_unauthorized(

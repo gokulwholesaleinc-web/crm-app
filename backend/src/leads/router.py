@@ -174,10 +174,18 @@ async def get_lead_pipeline_stages(
 async def get_lead_kanban(
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
     owner_id: Optional[int] = None,
 ):
-    """Get Kanban board view of lead pipeline."""
-    effective_owner_id = owner_id if owner_id is not None else current_user.id
+    """Get Kanban board view of lead pipeline.
+
+    Sales reps can only see their own pipeline; admin/manager can pass
+    owner_id to view another user's kanban. Spoofed owner_id from a
+    sales_rep is ignored and collapsed back to the caller.
+    """
+    # effective_owner_id() honors the scope: admin/manager keep the
+    # requested owner_id; sales_rep/viewer gets their own id regardless.
+    resolved_owner_id = effective_owner_id(data_scope, owner_id) or current_user.id
 
     # Get all active lead pipeline stages
     stages_result = await db.execute(
@@ -200,8 +208,8 @@ async def get_lead_kanban(
             select(Lead)
             .where(Lead.pipeline_stage_id == stage.id)
         )
-        if effective_owner_id:
-            leads_query = leads_query.where(Lead.owner_id == effective_owner_id)
+        if resolved_owner_id:
+            leads_query = leads_query.where(Lead.owner_id == resolved_owner_id)
         leads_query = leads_query.order_by(Lead.score.desc())
 
         leads_result = await db.execute(leads_query)
@@ -242,18 +250,32 @@ async def send_campaign(
     request_data: SendCampaignRequest,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
-    """Send personalized email campaign to selected leads."""
+    """Send personalized email campaign to selected leads.
+
+    Only sends to leads the caller can access (owned or shared). Leads
+    outside the caller's data scope are silently filtered out of the
+    batch — we intentionally do NOT surface "forbidden" per lead to
+    avoid leaking which IDs exist in other users' pipelines.
+    """
     from src.email.service import EmailService, render_template
 
     email_service = EmailService(db)
     sent_count = 0
     errors = []
+    shared_ids = set(data_scope.get_shared_ids(ENTITY_TYPE_LEADS))
+    can_see_all = data_scope.can_see_all()
 
     for lead_id in request_data.lead_ids:
         service = LeadService(db)
         lead = await service.get_by_id(lead_id)
         if not lead or not lead.email:
+            errors.append({"lead_id": lead_id, "error": "Lead not found or no email"})
+            continue
+
+        if not can_see_all and lead.owner_id != current_user.id and lead.id not in shared_ids:
+            # Don't reveal whether the lead exists; treat as inaccessible.
             errors.append({"lead_id": lead_id, "error": "Lead not found or no email"})
             continue
 
@@ -290,6 +312,7 @@ async def move_lead(
     request: MoveLeadRequest,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Move a lead to a different pipeline stage with status sync.
 
@@ -298,6 +321,10 @@ async def move_lead(
     # Get the lead
     service = LeadService(db)
     lead = await get_entity_or_404(service, lead_id, EntityNames.LEAD)
+    check_record_access_or_shared(
+        lead, current_user, data_scope.role_name,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_LEADS),
+    )
 
     # Verify the new stage exists and is a lead stage
     stage_result = await db.execute(
@@ -460,10 +487,15 @@ async def convert_to_contact(
     request: LeadConvertToContactRequest,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Convert a lead to a contact."""
     service = LeadService(db)
     lead = await get_entity_or_404(service, lead_id, EntityNames.LEAD)
+    check_record_access_or_shared(
+        lead, current_user, data_scope.role_name,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_LEADS),
+    )
 
     if lead.converted_contact_id:
         raise_bad_request(ErrorMessages.already_converted_to(EntityNames.LEAD, "contact"))
@@ -490,10 +522,15 @@ async def convert_to_opportunity(
     request: LeadConvertToOpportunityRequest,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Convert a lead to an opportunity."""
     service = LeadService(db)
     lead = await get_entity_or_404(service, lead_id, EntityNames.LEAD)
+    check_record_access_or_shared(
+        lead, current_user, data_scope.role_name,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_LEADS),
+    )
 
     if lead.converted_opportunity_id:
         raise_bad_request(
@@ -522,10 +559,15 @@ async def full_conversion(
     request: LeadFullConversionRequest,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Full lead conversion: Lead -> Contact + Company + Opportunity."""
     service = LeadService(db)
     lead = await get_entity_or_404(service, lead_id, EntityNames.LEAD)
+    check_record_access_or_shared(
+        lead, current_user, data_scope.role_name,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_LEADS),
+    )
 
     if lead.converted_contact_id or lead.converted_opportunity_id:
         raise_bad_request(ErrorMessages.already_converted(EntityNames.LEAD))

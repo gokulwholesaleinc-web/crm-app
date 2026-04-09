@@ -5,6 +5,7 @@ Tests for tenant CRUD, public config, settings, and tenant user management.
 """
 
 import pytest
+import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -27,6 +28,15 @@ async def superuser_token(test_superuser: User) -> str:
 async def superuser_headers(superuser_token: str) -> dict:
     """Create authorization headers for superuser API requests."""
     return {"Authorization": f"Bearer {superuser_token}"}
+
+
+# Tenant write endpoints and cross-tenant reads now require superuser
+# (or tenant membership). Override the conftest-level `auth_headers` for
+# this file so existing tests that exercise tenant CRUD continue to work
+# as a privileged caller without being individually rewritten.
+@pytest_asyncio.fixture
+async def auth_headers(superuser_headers) -> dict:
+    return superuser_headers
 
 
 @pytest.fixture
@@ -276,10 +286,10 @@ class TestTenantsList:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        sales_rep_auth_headers: dict,
     ):
         """Test listing tenants with non-superuser fails."""
-        response = await client.get("/api/tenants", headers=auth_headers)
+        response = await client.get("/api/tenants", headers=sales_rep_auth_headers)
 
         assert response.status_code == 403
 
@@ -468,12 +478,12 @@ class TestTenantsCreate:
 
     @pytest.mark.asyncio
     async def test_create_tenant_non_superuser(
-        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+        self, client: AsyncClient, db_session: AsyncSession, sales_rep_auth_headers: dict
     ):
         """Test creating tenant with non-superuser fails."""
         response = await client.post(
             "/api/tenants",
-            headers=auth_headers,
+            headers=sales_rep_auth_headers,
             json={
                 "name": "Non-Superuser Tenant",
                 "slug": "non-superuser",
@@ -643,13 +653,13 @@ class TestTenantsUpdate:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        sales_rep_auth_headers: dict,
         test_tenant: Tenant,
     ):
         """Test updating tenant with non-superuser fails."""
         response = await client.patch(
             f"/api/tenants/{test_tenant.id}",
-            headers=auth_headers,
+            headers=sales_rep_auth_headers,
             json={"name": "Updated by Non-Superuser"},
         )
 
@@ -727,13 +737,13 @@ class TestTenantsDelete:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        sales_rep_auth_headers: dict,
         test_tenant: Tenant,
     ):
         """Test deleting tenant with non-superuser fails."""
         response = await client.delete(
             f"/api/tenants/{test_tenant.id}",
-            headers=auth_headers,
+            headers=sales_rep_auth_headers,
         )
 
         assert response.status_code == 403
