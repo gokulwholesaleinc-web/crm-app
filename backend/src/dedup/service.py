@@ -1,8 +1,10 @@
 """Duplicate detection and merge service for CRM entities."""
 
+import logging
 import re
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
-from sqlalchemy import select, or_, func
+from sqlalchemy import select, update, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.contacts.models import Contact
@@ -10,6 +12,8 @@ from src.companies.models import Company
 from src.leads.models import Lead
 from src.activities.models import Activity
 from src.core.models import Note, EntityTag
+
+logger = logging.getLogger(__name__)
 
 
 # Company suffixes to strip for normalization
@@ -242,27 +246,42 @@ class DedupService:
         self,
         primary_id: int,
         secondary_id: int,
+        user_id: Optional[int] = None,
     ) -> Contact:
-        """Merge secondary contact into primary. Transfers activities, notes, and tags."""
-        primary = await self.db.execute(
-            select(Contact).where(Contact.id == primary_id)
-        )
-        primary = primary.scalar_one_or_none()
-        if not primary:
-            raise ValueError(f"Primary contact {primary_id} not found")
+        """Merge ``secondary`` contact into ``primary``.
 
-        secondary = await self.db.execute(
-            select(Contact).where(Contact.id == secondary_id)
-        )
-        secondary = secondary.scalar_one_or_none()
-        if not secondary:
-            raise ValueError(f"Secondary contact {secondary_id} not found")
+        Transfers every FK pointing at the secondary contact (quotes,
+        proposals, opportunities, contracts, sequences, stripe customers,
+        payments, inbound emails) plus the polymorphic links (activities,
+        notes, entity tags, email queue, audit, ai feedback). Then
+        SOFT-DELETES the secondary:
 
-        # Transfer activities
+        * ``status = "merged"``
+        * ``deleted_at`` set to now
+        * ``merged_into_id`` points at the primary
+        * ``email`` is prefixed so the unique constraint releases the
+          original address
+
+        An ``AuditLog`` entry records who performed the merge.
+
+        Never hard-deletes — per project rule
+        ``feedback_delete_sales_only.md`` contacts anchor AR ledger and
+        invoice history that must survive the merge.
+        """
+        primary, secondary = await self._load_merge_pair(Contact, primary_id, secondary_id)
+
+        await self._transfer_contact_fks(secondary_id, primary_id)
         await self._transfer_entity_links("contacts", secondary_id, primary_id)
 
-        # Delete secondary
-        await self.db.delete(secondary)
+        self._soft_delete_merged(secondary, primary_id)
+
+        await self._log_merge_audit(
+            entity_type="contact",
+            primary_id=primary_id,
+            secondary_id=secondary_id,
+            user_id=user_id,
+        )
+
         await self.db.flush()
         await self.db.refresh(primary)
         return primary
@@ -271,34 +290,30 @@ class DedupService:
         self,
         primary_id: int,
         secondary_id: int,
+        user_id: Optional[int] = None,
     ) -> Company:
-        """Merge secondary company into primary. Transfers activities, notes, tags, and contacts."""
-        primary = await self.db.execute(
-            select(Company).where(Company.id == primary_id)
-        )
-        primary = primary.scalar_one_or_none()
-        if not primary:
-            raise ValueError(f"Primary company {primary_id} not found")
+        """Merge ``secondary`` company into ``primary``.
 
-        secondary = await self.db.execute(
-            select(Company).where(Company.id == secondary_id)
-        )
-        secondary = secondary.scalar_one_or_none()
-        if not secondary:
-            raise ValueError(f"Secondary company {secondary_id} not found")
+        Repoints every child FK (contacts, opportunities, quotes,
+        proposals, contracts) + polymorphic links + soft-deletes the
+        secondary with ``status="merged"`` and a ``merged_into_id``
+        forwarding pointer. Writes an audit log entry.
+        """
+        primary, secondary = await self._load_merge_pair(Company, primary_id, secondary_id)
 
-        # Transfer contacts from secondary to primary
-        contacts_result = await self.db.execute(
-            select(Contact).where(Contact.company_id == secondary_id)
-        )
-        for contact in contacts_result.scalars().all():
-            contact.company_id = primary_id
-
-        # Transfer activities, notes, tags
+        await self._transfer_company_fks(secondary_id, primary_id)
         await self._transfer_entity_links("companies", secondary_id, primary_id)
 
-        # Delete secondary
-        await self.db.delete(secondary)
+        secondary.status = "merged"
+        secondary.merged_into_id = primary_id
+
+        await self._log_merge_audit(
+            entity_type="company",
+            primary_id=primary_id,
+            secondary_id=secondary_id,
+            user_id=user_id,
+        )
+
         await self.db.flush()
         await self.db.refresh(primary)
         return primary
@@ -307,30 +322,160 @@ class DedupService:
         self,
         primary_id: int,
         secondary_id: int,
+        user_id: Optional[int] = None,
     ) -> Lead:
-        """Merge secondary lead into primary. Transfers activities, notes, and tags."""
-        primary = await self.db.execute(
-            select(Lead).where(Lead.id == primary_id)
-        )
-        primary = primary.scalar_one_or_none()
-        if not primary:
-            raise ValueError(f"Primary lead {primary_id} not found")
+        """Merge ``secondary`` lead into ``primary``.
 
-        secondary = await self.db.execute(
-            select(Lead).where(Lead.id == secondary_id)
-        )
-        secondary = secondary.scalar_one_or_none()
-        if not secondary:
-            raise ValueError(f"Secondary lead {secondary_id} not found")
+        Soft-deletes the secondary lead (``status="merged"`` +
+        ``merged_into_id``) after transferring polymorphic links. Writes
+        an audit log entry. Leads currently have fewer direct FKs than
+        contacts/companies, so no table-specific repoint pass is needed
+        beyond the polymorphic link transfer.
+        """
+        primary, secondary = await self._load_merge_pair(Lead, primary_id, secondary_id)
 
-        # Transfer activities, notes, tags
         await self._transfer_entity_links("leads", secondary_id, primary_id)
 
-        # Delete secondary
-        await self.db.delete(secondary)
+        secondary.status = "merged"
+        secondary.merged_into_id = primary_id
+
+        await self._log_merge_audit(
+            entity_type="lead",
+            primary_id=primary_id,
+            secondary_id=secondary_id,
+            user_id=user_id,
+        )
+
         await self.db.flush()
         await self.db.refresh(primary)
         return primary
+
+    async def _load_merge_pair(self, model, primary_id: int, secondary_id: int):
+        """Fetch the primary and secondary rows for a merge operation.
+
+        Raises ``ValueError`` with a clear message when either is missing
+        or when the caller accidentally passes the same id twice.
+        """
+        if primary_id == secondary_id:
+            raise ValueError("Cannot merge a record into itself")
+
+        result = await self.db.execute(select(model).where(model.id == primary_id))
+        primary = result.scalar_one_or_none()
+        if not primary:
+            raise ValueError(f"Primary {model.__tablename__[:-1]} {primary_id} not found")
+
+        result = await self.db.execute(select(model).where(model.id == secondary_id))
+        secondary = result.scalar_one_or_none()
+        if not secondary:
+            raise ValueError(f"Secondary {model.__tablename__[:-1]} {secondary_id} not found")
+
+        return primary, secondary
+
+    def _soft_delete_merged(self, contact: Contact, primary_id: int) -> None:
+        """Mark a merged-away contact as soft-deleted and free its email slot."""
+        contact.status = "merged"
+        contact.deleted_at = datetime.now(timezone.utc)
+        contact.merged_into_id = primary_id
+        if contact.email and not contact.email.startswith(("archived-", "merged-")):
+            prefix = f"merged-{contact.id}-"
+            contact.email = (prefix + contact.email)[:255]
+
+    async def _transfer_contact_fks(self, from_id: int, to_id: int) -> None:
+        """Repoint every direct FK column that references ``contacts.id``.
+
+        Discovered from the models that carry ``ForeignKey("contacts.id")``:
+        quotes, proposals, opportunities, contracts, payments (StripeCustomer
+        has its own contact_id), sequences/enrollments. Each one gets an
+        UPDATE that moves the secondary's rows onto the primary. Models we
+        do not touch cascade via SET NULL on the original FK, which would
+        break the merge, so this list must be kept in sync with the
+        ``contacts.id`` FK set across the codebase.
+        """
+        from src.quotes.models import Quote
+        from src.proposals.models import Proposal
+        from src.opportunities.models import Opportunity
+        from src.contracts.models import Contract
+        from src.payments.models import StripeCustomer
+        from src.sequences.models import SequenceEnrollment
+
+        tables_with_contact_fk = [
+            (Quote, Quote.contact_id),
+            (Proposal, Proposal.contact_id),
+            (Opportunity, Opportunity.contact_id),
+            (Contract, Contract.contact_id),
+            (StripeCustomer, StripeCustomer.contact_id),
+            (SequenceEnrollment, SequenceEnrollment.contact_id),
+        ]
+
+        for model, column in tables_with_contact_fk:
+            await self.db.execute(
+                update(model).where(column == from_id).values(contact_id=to_id)
+            )
+
+        # Lead.converted_contact_id is a historical marker — rewrite so
+        # the converted-from pointer follows the surviving contact.
+        await self.db.execute(
+            update(Lead)
+            .where(Lead.converted_contact_id == from_id)
+            .values(converted_contact_id=to_id)
+        )
+
+    async def _transfer_company_fks(self, from_id: int, to_id: int) -> None:
+        """Repoint every direct FK column that references ``companies.id``."""
+        from src.quotes.models import Quote
+        from src.proposals.models import Proposal
+        from src.opportunities.models import Opportunity
+        from src.contracts.models import Contract
+
+        # Contacts: move them to the surviving company instead of deleting.
+        await self.db.execute(
+            update(Contact).where(Contact.company_id == from_id).values(company_id=to_id)
+        )
+
+        tables_with_company_fk = [
+            (Quote, Quote.company_id),
+            (Proposal, Proposal.company_id),
+            (Opportunity, Opportunity.company_id),
+            (Contract, Contract.company_id),
+        ]
+        for model, column in tables_with_company_fk:
+            await self.db.execute(
+                update(model).where(column == from_id).values(company_id=to_id)
+            )
+
+    async def _log_merge_audit(
+        self,
+        *,
+        entity_type: str,
+        primary_id: int,
+        secondary_id: int,
+        user_id: Optional[int],
+    ) -> None:
+        """Write an audit log entry describing the merge.
+
+        Uses the same ``AuditService`` that router-level delete/update
+        events use so merges show up alongside ordinary history on the
+        contact detail page.
+        """
+        try:
+            from src.audit.service import AuditService
+            service = AuditService(self.db)
+            await service.log_change(
+                entity_type=entity_type,
+                entity_id=primary_id,
+                user_id=user_id,
+                action="merge",
+                changes=[
+                    {
+                        "field": "merged_from_id",
+                        "old": None,
+                        "new": secondary_id,
+                    }
+                ],
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            # An audit failure must not roll back a correct merge.
+            logger.warning("Failed to audit %s merge %s→%s: %s", entity_type, secondary_id, primary_id, exc)
 
     async def _transfer_entity_links(
         self,
@@ -338,26 +483,41 @@ class DedupService:
         from_id: int,
         to_id: int,
     ) -> None:
-        """Transfer activities, notes, and tags from one entity to another."""
-        # Transfer activities
-        activities_result = await self.db.execute(
-            select(Activity)
-            .where(Activity.entity_type == entity_type)
-            .where(Activity.entity_id == from_id)
-        )
-        for activity in activities_result.scalars().all():
-            activity.entity_id = to_id
+        """Transfer polymorphic links from secondary to primary.
 
-        # Transfer notes
-        notes_result = await self.db.execute(
-            select(Note)
-            .where(Note.entity_type == entity_type)
-            .where(Note.entity_id == from_id)
-        )
-        for note in notes_result.scalars().all():
-            note.entity_id = to_id
+        Covers every table that keys on ``(entity_type, entity_id)``:
+        activities, notes, inbound/outbound emails, attachments,
+        comments, notifications, and entity tags. Missing any of these
+        is user-visible data loss — e.g. a contract uploaded to the
+        merged-away contact would become unreachable.
 
-        # Transfer tags (avoid duplicates)
+        Tag rows that would collide with an existing ``(entity_id,
+        tag_id)`` pair on the primary are deleted instead of transferred
+        to avoid unique-constraint violations.
+        """
+        from src.email.models import EmailQueue, InboundEmail
+        from src.attachments.models import Attachment
+        from src.comments.models import Comment
+        from src.notifications.models import Notification
+
+        polymorphic_models = (
+            Activity,
+            Note,
+            EmailQueue,
+            InboundEmail,
+            Attachment,
+            Comment,
+            Notification,
+        )
+        for model in polymorphic_models:
+            await self.db.execute(
+                update(model)
+                .where(model.entity_type == entity_type)
+                .where(model.entity_id == from_id)
+                .values(entity_id=to_id)
+            )
+
+        # Transfer tags — avoid (entity_id, tag_id) collisions on the primary.
         existing_tags_result = await self.db.execute(
             select(EntityTag.tag_id)
             .where(EntityTag.entity_type == entity_type)

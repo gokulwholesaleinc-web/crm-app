@@ -1,7 +1,8 @@
 """Bulk operations for mass updates and assignments."""
 
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
-from sqlalchemy import select, update, delete
+from sqlalchemy import select, update, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.leads.models import Lead
 from src.contacts.models import Contact
@@ -111,11 +112,17 @@ class BulkOperationsHandler:
         entity_type: str,
         entity_ids: List[int],
     ) -> Dict[str, Any]:
-        """
-        Mass delete entities of a given type.
+        """Mass delete entities of a given type.
 
-        Deletes each entity individually to track successes/failures.
-        Returns summary with success_count, error_count, and errors list.
+        For ``contacts`` this is routed through the soft-delete path
+        (``deleted_at`` + ``status="archived"`` + email prefix) per
+        project rule ``feedback_delete_sales_only.md`` — contacts anchor
+        AR ledger, invoice, and activity history that must not be
+        destroyed even in a bulk operation.
+
+        For every other entity type the original hard-delete behavior
+        is preserved. Returns a summary with ``success_count``,
+        ``error_count``, and a per-ID ``errors`` list.
         """
         model = ENTITY_MODELS.get(entity_type)
         if not model:
@@ -130,16 +137,63 @@ class BulkOperationsHandler:
         )
         existing_ids = set(result.scalars().all())
 
-        # Batch delete all existing entities in a single query
-        if existing_ids:
-            await self.db.execute(
-                delete(model).where(model.id.in_(existing_ids))
-            )
-
-        success_count = len(existing_ids)
         missing_ids = set(entity_ids) - existing_ids
-        error_count = len(missing_ids)
-        errors = [{"id": eid, "error": "Not found"} for eid in missing_ids]
+        errors: list[dict] = [{"id": eid, "error": "Not found"} for eid in missing_ids]
+        changed_ids: set[int] = set()
+
+        if existing_ids:
+            if entity_type == "contacts":
+                # Soft-delete path: load each live contact and mark it
+                # archived. A bulk UPDATE would be faster but we need
+                # per-row ``id`` access to prefix the email correctly
+                # and we want to skip rows that are already archived
+                # (otherwise ``success_count`` would overstate the work
+                # actually done).
+                contacts_result = await self.db.execute(
+                    select(Contact)
+                    .where(Contact.id.in_(existing_ids))
+                    .where(Contact.deleted_at.is_(None))
+                )
+                now = datetime.now(timezone.utc)
+                for contact in contacts_result.scalars().all():
+                    contact.deleted_at = now
+                    contact.status = "archived"
+                    if contact.email and not contact.email.startswith("archived-"):
+                        contact.email = (f"archived-{contact.id}-" + contact.email)[:255]
+                    changed_ids.add(contact.id)
+                for skipped in existing_ids - changed_ids:
+                    errors.append({"id": skipped, "error": "Already archived"})
+            elif entity_type == "companies":
+                # Mirror the single-delete router guard: block company
+                # rows that still have contacts attached. Callers would
+                # otherwise sneak around ``delete_company``'s 409.
+                counts = await self.db.execute(
+                    select(Contact.company_id, func.count(Contact.id))
+                    .where(Contact.company_id.in_(existing_ids))
+                    .group_by(Contact.company_id)
+                )
+                blocked = {cid: count for cid, count in counts.all() if count > 0}
+                deletable = existing_ids - blocked.keys()
+                if deletable:
+                    await self.db.execute(
+                        delete(Company).where(Company.id.in_(deletable))
+                    )
+                changed_ids = deletable
+                for cid, count in blocked.items():
+                    errors.append(
+                        {"id": cid, "error": f"Has {count} contacts — reassign or delete contacts first"}
+                    )
+            else:
+                # Hard-delete for non-contact/non-company entities —
+                # preserves legacy behavior for leads/opportunities/
+                # activities.
+                await self.db.execute(
+                    delete(model).where(model.id.in_(existing_ids))
+                )
+                changed_ids = existing_ids
+
+        success_count = len(changed_ids)
+        error_count = len(errors)
 
         await self.db.flush()
 

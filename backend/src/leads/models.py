@@ -109,6 +109,13 @@ class Lead(Base, AuditableMixin):
         ForeignKey("opportunities.id", ondelete="SET NULL"),
     )
 
+    # Dedup merge forwarding pointer — see Contact.merged_into_id.
+    merged_into_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("leads.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
     # Relationships
     source: Mapped[Optional["LeadSource"]] = relationship("LeadSource", lazy="joined")
     pipeline_stage = relationship("PipelineStage", lazy="joined")

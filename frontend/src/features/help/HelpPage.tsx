@@ -94,8 +94,7 @@ const SECTIONS: Section[] = [
           </h4>
           <ul className="space-y-1.5">
             <Bullet>
-              Log in with your email and password on the <code>/login</code> page. Tick{' '}
-              <em>Remember me</em> to have the browser auto-fill on next visit.
+              Log in with your email and password on the <code>/login</code> page.
             </Bullet>
             <Bullet>
               New users register from <code>/register</code> with first name, last name, email, and

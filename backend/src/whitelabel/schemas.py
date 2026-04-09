@@ -2,19 +2,33 @@
 
 from datetime import datetime
 from typing import Optional, Dict, Any
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator
 
 
-def _validate_url_field(v: Optional[str], field_name: str) -> Optional[str]:
-    """Validate a URL field: strip whitespace, enforce http(s) scheme, or allow None to clear."""
-    if v is None or v == '':
+# Human-readable labels for the URL fields validated below. Keeps error
+# messages consistent across :class:`TenantSettingsBase` and
+# :class:`TenantSettingsUpdate` without duplicating per-field validators.
+_URL_FIELD_LABELS = {
+    'logo_url': 'Logo URL',
+    'favicon_url': 'Favicon URL',
+    'privacy_policy_url': 'Privacy policy URL',
+    'terms_of_service_url': 'Terms of service URL',
+}
+
+
+def _validate_url_field(v: Optional[str], info: ValidationInfo) -> Optional[str]:
+    """Validate a URL field: strip whitespace, enforce http(s) scheme, or allow None to clear.
+
+    Case-insensitive scheme check blocks mixed-case bypasses like
+    ``Javascript:`` or ``JAVASCRIPT:`` from slipping past ``startswith``.
+    """
+    stripped = (v or '').strip()
+    if not stripped:
         return None
-    v = v.strip()
-    if v == '':
-        return None
-    if not v.startswith(('http://', 'https://')):
-        raise ValueError(f'{field_name} must start with http:// or https://')
-    return v
+    if not stripped.lower().startswith(('http://', 'https://')):
+        label = _URL_FIELD_LABELS.get(info.field_name, info.field_name)
+        raise ValueError(f'{label} must start with http:// or https://')
+    return stripped
 
 
 class TenantSettingsBase(BaseModel):
@@ -36,15 +50,10 @@ class TenantSettingsBase(BaseModel):
     default_currency: str = "USD"
     date_format: str = "MM/DD/YYYY"
 
-    @field_validator('logo_url', mode='before')
+    @field_validator(*_URL_FIELD_LABELS.keys(), mode='before')
     @classmethod
-    def validate_logo_url(cls, v):
-        return _validate_url_field(v, 'Logo URL')
-
-    @field_validator('favicon_url', mode='before')
-    @classmethod
-    def validate_favicon_url(cls, v):
-        return _validate_url_field(v, 'Favicon URL')
+    def _validate_urls(cls, v, info: ValidationInfo):
+        return _validate_url_field(v, info)
 
 
 class TenantSettingsCreate(TenantSettingsBase):
@@ -70,15 +79,10 @@ class TenantSettingsUpdate(BaseModel):
     default_currency: Optional[str] = None
     date_format: Optional[str] = None
 
-    @field_validator('logo_url', mode='before')
+    @field_validator(*_URL_FIELD_LABELS.keys(), mode='before')
     @classmethod
-    def validate_logo_url(cls, v):
-        return _validate_url_field(v, 'Logo URL')
-
-    @field_validator('favicon_url', mode='before')
-    @classmethod
-    def validate_favicon_url(cls, v):
-        return _validate_url_field(v, 'Favicon URL')
+    def _validate_urls(cls, v, info: ValidationInfo):
+        return _validate_url_field(v, info)
 
 
 class TenantSettingsResponse(TenantSettingsBase):

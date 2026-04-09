@@ -218,7 +218,14 @@ async def delete_contact(
     current_user: CurrentUser,
     db: DBSession,
 ):
-    """Delete a contact."""
+    """Soft-delete a contact.
+
+    Contacts are never hard-deleted: they anchor AR ledger entries,
+    invoices, activities, and email threads. Setting ``deleted_at`` + a
+    status of ``archived`` hides the row from list views while preserving
+    every reference that points at it. Per project rule
+    ``feedback_delete_sales_only.md``.
+    """
     service = ContactService(db)
     contact = await get_entity_or_404(service, contact_id, EntityNames.CONTACT)
     check_ownership(contact, current_user, EntityNames.CONTACT)
@@ -226,7 +233,8 @@ async def delete_contact(
     ip_address = request.client.host if request.client else None
     await audit_entity_delete(db, "contact", contact.id, current_user.id, ip_address)
 
-    # Delete embedding before deleting entity
+    # Remove the semantic-search embedding so archived contacts no longer
+    # surface in AI-assistant suggestions, but leave the row itself in place.
     await delete_entity_embedding(db, "contact", contact.id)
 
-    await service.delete(contact)
+    await service.soft_delete(contact)

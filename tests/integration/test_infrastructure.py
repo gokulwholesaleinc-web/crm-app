@@ -492,6 +492,28 @@ class TestScheduledReportDelivery:
         assert service._parse_recipients(None) == []
         assert service._parse_recipients("invalid json") == []
 
+    async def test_build_report_email_escapes_cells_and_metadata(
+        self, db_session: AsyncSession
+    ):
+        """Cells, report name, and description must be HTML-escaped."""
+        service = ReportDeliveryService(db_session)
+        csv_content = (
+            "Name,Note\r\n"
+            "<script>alert('x')</script>,<img src=x onerror=alert(1)>\r\n"
+        )
+        body = service._build_report_email(
+            name="<b>Weekly</b>",
+            description="<script>evil()</script>",
+            csv_content=csv_content,
+        )
+        # No active tags should survive from attacker-controlled inputs.
+        assert "<script>" not in body
+        assert "<img src=x" not in body
+        assert "<b>Weekly</b>" not in body
+        # Their escaped forms should be present.
+        assert "&lt;script&gt;" in body
+        assert "&lt;b&gt;Weekly" in body
+
     async def test_schedule_field_in_report_response(
         self, client: AsyncClient, auth_headers: dict, db_session: AsyncSession, test_user: User
     ):

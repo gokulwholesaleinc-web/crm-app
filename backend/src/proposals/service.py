@@ -1,6 +1,8 @@
 """Proposal service layer."""
 
+import logging
 import os
+import re
 import secrets
 from datetime import datetime, timezone
 from html import escape
@@ -12,8 +14,49 @@ from src.proposals.schemas import ProposalCreate, ProposalUpdate
 from src.core.base_service import CRUDService, StatusTransitionMixin
 from src.core.constants import DEFAULT_PAGE_SIZE
 from src.core.filtering import build_token_search
+from src.core.url_safety import UnsafeUrlError, validate_public_url
 from src.email.branded_templates import TenantBrandingHelper, render_proposal_email
 from src.email.service import EmailService
+
+logger = logging.getLogger(__name__)
+
+_TEMPLATE_VAR_PATTERN = re.compile(r"\{\{(\w+)\}\}")
+
+
+def _proposal_logo_allowed_hosts() -> Optional[List[str]]:
+    """Return the optional allowlist of hostnames permitted for logo fetches.
+
+    Read from ``PROPOSAL_LOGO_ALLOWED_HOSTS`` (comma-separated). When unset,
+    :func:`validate_public_url` falls back to ``https`` + non-private-IP
+    enforcement, which is the minimum safe baseline. Operators that know
+    their tenant assets live on a single CDN can tighten this further via
+    env var without a code change.
+    """
+    raw = os.getenv("PROPOSAL_LOGO_ALLOWED_HOSTS", "").strip()
+    if not raw:
+        return None
+    return [h.strip().lower() for h in raw.split(",") if h.strip()]
+
+
+def _safe_pdf_url_fetcher(url: str):
+    """weasyprint url_fetcher that blocks SSRF attempts.
+
+    weasyprint will fetch any URL you hand it — including ``file://`` for
+    local disk reads and private-IP HTTP for internal metadata endpoints.
+    This wrapper gates every outbound fetch through the shared SSRF
+    validator before delegating to weasyprint's default fetcher.
+    """
+    try:
+        validate_public_url(
+            url,
+            allowed_schemes=("https",),
+            allowed_hostnames=_proposal_logo_allowed_hosts(),
+        )
+    except UnsafeUrlError as exc:
+        logger.warning("Rejected unsafe PDF resource URL: %s", exc)
+        raise
+    from weasyprint import default_url_fetcher
+    return default_url_fetcher(url)
 
 
 class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreate, ProposalUpdate]):
@@ -237,12 +280,26 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         company_name = escape(branding.get("company_name", "CRM"))
         primary_color = escape(branding.get("primary_color", "#6366f1"))
         secondary_color = escape(branding.get("secondary_color", "#8b5cf6"))
-        logo_url = branding.get("logo_url", "")
-
-        logo_html = (
-            f'<img src="{escape(logo_url)}" alt="{company_name}" '
-            f'style="max-height:48px;margin-right:16px;" />'
-        ) if logo_url else ""
+        # Pre-validate the logo URL: if it fails the SSRF check, omit the
+        # <img> entirely rather than handing weasyprint a URL that it will
+        # later refuse and log as an error per page render.
+        logo_html = ""
+        logo_url = branding.get("logo_url") or ""
+        if logo_url:
+            try:
+                validate_public_url(
+                    logo_url,
+                    allowed_schemes=("https",),
+                    allowed_hostnames=_proposal_logo_allowed_hosts(),
+                )
+                logo_html = (
+                    f'<img src="{escape(logo_url)}" alt="{company_name}" '
+                    f'style="max-height:48px;margin-right:16px;" />'
+                )
+            except UnsafeUrlError as exc:
+                logger.warning(
+                    "Skipping proposal logo for tenant user %s: %s", user_id, exc
+                )
 
         sections_html = ""
         section_data = [
@@ -307,10 +364,16 @@ body {{ font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 0; color:
 </div>
 </body></html>"""
 
-        # Convert HTML to PDF bytes
+        # Convert HTML to PDF bytes. The custom url_fetcher enforces the
+        # SSRF allowlist on every resource weasyprint tries to load (logo,
+        # font, CSS) so a tenant cannot point the renderer at internal IPs
+        # or ``file://`` paths.
         try:
             import weasyprint
-            pdf_bytes = weasyprint.HTML(string=html).write_pdf()
+            pdf_bytes = weasyprint.HTML(
+                string=html,
+                url_fetcher=_safe_pdf_url_fetcher,
+            ).write_pdf()
         except ImportError:
             # Fallback: return HTML as bytes if weasyprint is not available
             pdf_bytes = html.encode("utf-8")
@@ -326,11 +389,20 @@ body {{ font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 0; color:
     async def substitute_template_variables(
         self, template_content: str, variables: dict
     ) -> str:
-        """Replace {{variable}} placeholders in template content."""
-        result = template_content
-        for key, value in variables.items():
-            result = result.replace(f"{{{{{key}}}}}", str(value) if value else "")
-        return result
+        """Replace {{variable}} placeholders in template content.
+
+        Single-pass substitution so a value that itself contains ``{{x}}``
+        is not re-expanded. Missing keys are left as-is; present-but-falsy
+        values (None, empty string) substitute to an empty string.
+        """
+        def _replacer(match: "re.Match[str]") -> str:
+            key = match.group(1)
+            if key not in variables:
+                return match.group(0)
+            value = variables[key]
+            return str(value) if value else ""
+
+        return _TEMPLATE_VAR_PATTERN.sub(_replacer, template_content)
 
 
 class ProposalTemplateService(CRUDService[ProposalTemplate, None, None]):

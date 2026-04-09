@@ -1,7 +1,7 @@
 """Webhook API routes."""
 
 from typing import Optional, List
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 from src.core.constants import HTTPStatus
 from src.core.router_utils import DBSession, CurrentUser, raise_not_found
 from src.webhooks.schemas import (
@@ -23,7 +23,10 @@ async def create_webhook(
 ):
     """Create a new webhook."""
     service = WebhookService(db)
-    webhook = await service.create_webhook(data, current_user.id)
+    try:
+        webhook = await service.create_webhook(data, current_user.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return WebhookResponse.model_validate(webhook)
 
 
@@ -69,7 +72,10 @@ async def update_webhook(
     webhook = await service.get_by_id(webhook_id)
     if not webhook:
         raise_not_found("Webhook", webhook_id)
-    updated = await service.update_webhook(webhook, data)
+    try:
+        updated = await service.update_webhook(webhook, data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return WebhookResponse.model_validate(updated)
 
 

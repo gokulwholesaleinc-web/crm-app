@@ -343,6 +343,96 @@ class TestGenerateProposalPDF:
 
 
 # =============================================================================
+# Proposal PDF SSRF Defense Tests (Session 3 3a.4)
+# =============================================================================
+
+
+class TestProposalPdfSsrfDefense:
+    """Logo URLs supplied via TenantSettings must not enable SSRF.
+
+    The audit flagged weasyprint as an open proxy for whatever URL it is
+    handed. These tests exercise the url_fetcher wrapper directly so that
+    a malicious logo URL can never cause the renderer to touch internal
+    services.
+    """
+
+    def test_safe_pdf_url_fetcher_rejects_http_scheme(self):
+        from src.core.url_safety import UnsafeUrlError
+        from src.proposals.service import _safe_pdf_url_fetcher
+
+        with pytest.raises(UnsafeUrlError):
+            _safe_pdf_url_fetcher("http://example.com/logo.png")
+
+    def test_safe_pdf_url_fetcher_rejects_file_scheme(self):
+        from src.core.url_safety import UnsafeUrlError
+        from src.proposals.service import _safe_pdf_url_fetcher
+
+        with pytest.raises(UnsafeUrlError):
+            _safe_pdf_url_fetcher("file:///etc/passwd")
+
+    def test_safe_pdf_url_fetcher_rejects_loopback_ip(self):
+        from src.core.url_safety import UnsafeUrlError
+        from src.proposals.service import _safe_pdf_url_fetcher
+
+        with pytest.raises(UnsafeUrlError):
+            _safe_pdf_url_fetcher("https://127.0.0.1/logo.png")
+
+    def test_safe_pdf_url_fetcher_rejects_aws_metadata_ip(self):
+        """``169.254.169.254`` is the AWS/GCP instance metadata endpoint."""
+        from src.core.url_safety import UnsafeUrlError
+        from src.proposals.service import _safe_pdf_url_fetcher
+
+        with pytest.raises(UnsafeUrlError):
+            _safe_pdf_url_fetcher("https://169.254.169.254/latest/meta-data/")
+
+    def test_safe_pdf_url_fetcher_hostname_allowlist_enforced(self, monkeypatch):
+        """When ``PROPOSAL_LOGO_ALLOWED_HOSTS`` is set, off-list hosts are blocked."""
+        monkeypatch.setenv("PROPOSAL_LOGO_ALLOWED_HOSTS", "cdn.example.com")
+        from src.core.url_safety import UnsafeUrlError
+        from src.proposals.service import _safe_pdf_url_fetcher
+
+        with pytest.raises(UnsafeUrlError):
+            _safe_pdf_url_fetcher("https://attacker.example.net/logo.png")
+
+    def test_validate_public_url_rejects_multi_address_dns_with_private(
+        self, monkeypatch
+    ):
+        """A host returning both a public and a private address is rejected.
+
+        This is the DNS-rebinding/multi-record bypass the previous
+        ``gethostbyname`` implementation was vulnerable to — it would
+        return only the first answer and pass validation even though a
+        subsequent fetch could pick the private address instead. The
+        helper now enumerates every ``getaddrinfo`` entry.
+        """
+        from src.core import url_safety
+        from src.core.url_safety import UnsafeUrlError, validate_public_url
+
+        monkeypatch.setattr(
+            url_safety,
+            "_resolve_all_addresses",
+            lambda host: ["93.184.216.34", "127.0.0.1"],
+        )
+
+        with pytest.raises(UnsafeUrlError, match="127.0.0.1"):
+            validate_public_url("https://split.example.com/resource")
+
+    def test_validate_public_url_rejects_ipv6_metadata(self, monkeypatch):
+        """IPv6 private ranges (``fd00::/8`` etc.) must also be rejected."""
+        from src.core import url_safety
+        from src.core.url_safety import UnsafeUrlError, validate_public_url
+
+        monkeypatch.setattr(
+            url_safety,
+            "_resolve_all_addresses",
+            lambda host: ["fd00:ec2::254"],
+        )
+
+        with pytest.raises(UnsafeUrlError):
+            validate_public_url("https://ipv6-meta.example.com/data")
+
+
+# =============================================================================
 # Public View Branding Tests
 # =============================================================================
 
@@ -444,3 +534,65 @@ class TestPublicViewBranding:
         data = response.json()
         branding = data["branding"]
         assert branding["footer_text"] == "Acme Corp - Excellence in Everything"
+
+
+# =============================================================================
+# substitute_template_variables Tests
+# =============================================================================
+
+
+class TestSubstituteTemplateVariables:
+    """Tests for single-pass template variable substitution."""
+
+    @pytest.mark.asyncio
+    async def test_normal_substitution(self, db_session: AsyncSession):
+        from src.proposals.service import ProposalService
+
+        service = ProposalService(db_session)
+        result = await service.substitute_template_variables(
+            "Hello {{name}}", {"name": "Alice"}
+        )
+        assert result == "Hello Alice"
+
+    @pytest.mark.asyncio
+    async def test_missing_keys_left_intact(self, db_session: AsyncSession):
+        from src.proposals.service import ProposalService
+
+        service = ProposalService(db_session)
+        result = await service.substitute_template_variables(
+            "Hello {{name}}, order {{id}}", {"name": "Bob"}
+        )
+        assert result == "Hello Bob, order {{id}}"
+
+    @pytest.mark.asyncio
+    async def test_single_pass_no_reexpansion(self, db_session: AsyncSession):
+        """A value that itself looks like a placeholder must NOT be re-expanded."""
+        from src.proposals.service import ProposalService
+
+        service = ProposalService(db_session)
+        result = await service.substitute_template_variables(
+            "{{a}}", {"a": "{{b}}", "b": "SECRET"}
+        )
+        assert result == "{{b}}"
+        assert "SECRET" not in result
+
+    @pytest.mark.asyncio
+    async def test_none_value_becomes_empty(self, db_session: AsyncSession):
+        from src.proposals.service import ProposalService
+
+        service = ProposalService(db_session)
+        result = await service.substitute_template_variables(
+            "v={{x}}", {"x": None}
+        )
+        assert result == "v="
+
+    @pytest.mark.asyncio
+    async def test_regex_metacharacters_in_value(self, db_session: AsyncSession):
+        """Values with regex backreference syntax must be substituted literally."""
+        from src.proposals.service import ProposalService
+
+        service = ProposalService(db_session)
+        result = await service.substitute_template_variables(
+            "{{x}}", {"x": "$1\\2"}
+        )
+        assert result == "$1\\2"

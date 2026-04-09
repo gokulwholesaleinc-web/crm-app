@@ -616,3 +616,411 @@ class TestMergeUnauthorized:
         )
 
         assert response.status_code == 401
+
+
+class TestDedupMergeSoftDelete:
+    """Service-level tests for the Session 3 dedup soft-delete + FK transfer.
+
+    These exercise ``DedupService`` directly to avoid the manager-role
+    gate on the ``/api/dedup/merge`` router, so they cover both the
+    legacy regular-user path and the fix regardless of RBAC changes.
+    """
+
+    @pytest.mark.asyncio
+    async def test_merge_contacts_soft_deletes_secondary(
+        self,
+        db_session: AsyncSession,
+        test_user: User,
+    ):
+        """Secondary contact must be soft-deleted, not dropped from the table."""
+        from src.dedup.service import DedupService
+
+        primary = Contact(
+            first_name="Primary",
+            last_name="SoftMerge",
+            email="primary.soft@example.com",
+            status="active",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        secondary = Contact(
+            first_name="Secondary",
+            last_name="SoftMerge",
+            email="secondary.soft@example.com",
+            status="active",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add_all([primary, secondary])
+        await db_session.commit()
+        await db_session.refresh(primary)
+        await db_session.refresh(secondary)
+
+        await DedupService(db_session).merge_contacts(
+            primary.id, secondary.id, user_id=test_user.id
+        )
+        await db_session.commit()
+
+        # Secondary row MUST still exist — project rule forbids hard delete.
+        row = await db_session.execute(
+            select(Contact).where(Contact.id == secondary.id)
+        )
+        archived = row.scalar_one_or_none()
+        assert archived is not None
+        assert archived.status == "merged"
+        assert archived.deleted_at is not None
+        assert archived.merged_into_id == primary.id
+        # Email slot must be released so the address can be reused.
+        assert archived.email != "secondary.soft@example.com"
+
+    @pytest.mark.asyncio
+    async def test_merge_contacts_transfers_quote_fk(
+        self,
+        db_session: AsyncSession,
+        test_user: User,
+    ):
+        """Quotes pointing at the secondary contact must follow the merge."""
+        from src.dedup.service import DedupService
+        from src.quotes.models import Quote
+
+        primary = Contact(
+            first_name="Q", last_name="Primary",
+            email="qprimary@example.com",
+            owner_id=test_user.id, created_by_id=test_user.id,
+        )
+        secondary = Contact(
+            first_name="Q", last_name="Secondary",
+            email="qsecondary@example.com",
+            owner_id=test_user.id, created_by_id=test_user.id,
+        )
+        db_session.add_all([primary, secondary])
+        await db_session.commit()
+        await db_session.refresh(primary)
+        await db_session.refresh(secondary)
+
+        quote = Quote(
+            quote_number="Q-MERGE-1",
+            title="Merge test",
+            contact_id=secondary.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+            subtotal=0, tax_rate=0, tax_amount=0, total=0,
+        )
+        db_session.add(quote)
+        await db_session.commit()
+        await db_session.refresh(quote)
+
+        await DedupService(db_session).merge_contacts(
+            primary.id, secondary.id, user_id=test_user.id
+        )
+        await db_session.commit()
+        await db_session.refresh(quote)
+
+        assert quote.contact_id == primary.id
+
+    @pytest.mark.asyncio
+    async def test_merge_contacts_transfers_notes_and_audit(
+        self,
+        db_session: AsyncSession,
+        test_user: User,
+    ):
+        """Notes + audit log entry must be written when merging."""
+        from src.dedup.service import DedupService
+        from src.audit.models import AuditLog
+
+        primary = Contact(
+            first_name="NotePrimary", last_name="X",
+            email="note.primary@example.com",
+            owner_id=test_user.id, created_by_id=test_user.id,
+        )
+        secondary = Contact(
+            first_name="NoteSecondary", last_name="X",
+            email="note.secondary@example.com",
+            owner_id=test_user.id, created_by_id=test_user.id,
+        )
+        db_session.add_all([primary, secondary])
+        await db_session.commit()
+        await db_session.refresh(primary)
+        await db_session.refresh(secondary)
+
+        note = Note(
+            content="Secondary note",
+            entity_type="contacts",
+            entity_id=secondary.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(note)
+        await db_session.commit()
+        await db_session.refresh(note)
+
+        await DedupService(db_session).merge_contacts(
+            primary.id, secondary.id, user_id=test_user.id
+        )
+        await db_session.commit()
+        await db_session.refresh(note)
+
+        assert note.entity_id == primary.id
+
+        audit_rows = await db_session.execute(
+            select(AuditLog)
+            .where(AuditLog.entity_type == "contact")
+            .where(AuditLog.entity_id == primary.id)
+            .where(AuditLog.action == "merge")
+        )
+        entries = list(audit_rows.scalars().all())
+        assert len(entries) == 1
+        assert entries[0].user_id == test_user.id
+
+    @pytest.mark.asyncio
+    async def test_merge_companies_soft_deletes_and_reassigns_contacts(
+        self,
+        db_session: AsyncSession,
+        test_user: User,
+    ):
+        """Company merge moves child contacts and soft-deletes the secondary."""
+        from src.dedup.service import DedupService
+
+        primary = Company(
+            name="Acme Primary",
+            status="customer",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        secondary = Company(
+            name="Acme Secondary",
+            status="prospect",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add_all([primary, secondary])
+        await db_session.commit()
+        await db_session.refresh(primary)
+        await db_session.refresh(secondary)
+
+        child = Contact(
+            first_name="Child",
+            last_name="Contact",
+            email="childco@example.com",
+            company_id=secondary.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(child)
+        await db_session.commit()
+        await db_session.refresh(child)
+
+        await DedupService(db_session).merge_companies(
+            primary.id, secondary.id, user_id=test_user.id
+        )
+        await db_session.commit()
+        await db_session.refresh(child)
+
+        # Child contact now points at primary.
+        assert child.company_id == primary.id
+
+        # Secondary still in table, soft-deleted with forwarding pointer.
+        row = await db_session.execute(
+            select(Company).where(Company.id == secondary.id)
+        )
+        archived = row.scalar_one_or_none()
+        assert archived is not None
+        assert archived.status == "merged"
+        assert archived.merged_into_id == primary.id
+
+    @pytest.mark.asyncio
+    async def test_merge_same_id_raises(
+        self,
+        db_session: AsyncSession,
+        test_user: User,
+    ):
+        """Passing the same id as primary and secondary must raise."""
+        from src.dedup.service import DedupService
+
+        with pytest.raises(ValueError, match="itself"):
+            await DedupService(db_session).merge_contacts(1, 1)
+
+    @pytest.mark.asyncio
+    async def test_merge_leads_soft_deletes(
+        self,
+        db_session: AsyncSession,
+        test_user: User,
+    ):
+        from src.dedup.service import DedupService
+
+        primary = Lead(
+            first_name="LeadP", last_name="X",
+            email="leadp@example.com",
+            owner_id=test_user.id, created_by_id=test_user.id,
+        )
+        secondary = Lead(
+            first_name="LeadS", last_name="X",
+            email="leads@example.com",
+            owner_id=test_user.id, created_by_id=test_user.id,
+        )
+        db_session.add_all([primary, secondary])
+        await db_session.commit()
+        await db_session.refresh(primary)
+        await db_session.refresh(secondary)
+
+        await DedupService(db_session).merge_leads(
+            primary.id, secondary.id, user_id=test_user.id
+        )
+        await db_session.commit()
+
+        row = await db_session.execute(select(Lead).where(Lead.id == secondary.id))
+        archived = row.scalar_one_or_none()
+        assert archived is not None
+        assert archived.status == "merged"
+        assert archived.merged_into_id == primary.id
+
+    @pytest.mark.asyncio
+    async def test_merge_contacts_transfers_attachments_and_comments(
+        self,
+        db_session: AsyncSession,
+        test_user: User,
+    ):
+        """Polymorphic attachments/comments/notifications must follow the merge.
+
+        Covers the Session 3 review finding that the original merge
+        implementation only repointed Activity/Note/EntityTag and
+        silently orphaned every other (entity_type, entity_id) table.
+        """
+        from src.dedup.service import DedupService
+        from src.attachments.models import Attachment
+        from src.comments.models import Comment
+        from src.notifications.models import Notification
+
+        primary = Contact(
+            first_name="Attach", last_name="Primary",
+            email="attach.primary@example.com",
+            owner_id=test_user.id, created_by_id=test_user.id,
+        )
+        secondary = Contact(
+            first_name="Attach", last_name="Secondary",
+            email="attach.secondary@example.com",
+            owner_id=test_user.id, created_by_id=test_user.id,
+        )
+        db_session.add_all([primary, secondary])
+        await db_session.commit()
+        await db_session.refresh(primary)
+        await db_session.refresh(secondary)
+
+        attachment = Attachment(
+            filename="stored.pdf",
+            original_filename="Contract.pdf",
+            file_path="/tmp/stored.pdf",
+            file_size=1024,
+            mime_type="application/pdf",
+            entity_type="contacts",
+            entity_id=secondary.id,
+            uploaded_by=test_user.id,
+        )
+        comment = Comment(
+            content="Called the secondary, follow up next week.",
+            entity_type="contacts",
+            entity_id=secondary.id,
+            user_id=test_user.id,
+        )
+        notification = Notification(
+            user_id=test_user.id,
+            type="mention",
+            title="You were mentioned",
+            message="about secondary",
+            entity_type="contacts",
+            entity_id=secondary.id,
+        )
+        db_session.add_all([attachment, comment, notification])
+        await db_session.commit()
+        await db_session.refresh(attachment)
+        await db_session.refresh(comment)
+        await db_session.refresh(notification)
+
+        await DedupService(db_session).merge_contacts(
+            primary.id, secondary.id, user_id=test_user.id
+        )
+        await db_session.commit()
+        await db_session.refresh(attachment)
+        await db_session.refresh(comment)
+        await db_session.refresh(notification)
+
+        assert attachment.entity_id == primary.id
+        assert comment.entity_id == primary.id
+        assert notification.entity_id == primary.id
+
+    @pytest.mark.asyncio
+    async def test_merged_companies_hidden_from_list(
+        self,
+        db_session: AsyncSession,
+        test_user: User,
+    ):
+        """Companies soft-deleted via merge must not leak into list views."""
+        from src.dedup.service import DedupService
+        from src.companies.service import CompanyService
+
+        primary = Company(
+            name="Visible Primary Co",
+            status="customer",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        secondary = Company(
+            name="Hidden Secondary Co",
+            status="prospect",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add_all([primary, secondary])
+        await db_session.commit()
+        await db_session.refresh(primary)
+        await db_session.refresh(secondary)
+
+        await DedupService(db_session).merge_companies(
+            primary.id, secondary.id, user_id=test_user.id
+        )
+        await db_session.commit()
+
+        items, _ = await CompanyService(db_session).get_list()
+        ids = [c.id for c in items]
+        assert primary.id in ids
+        assert secondary.id not in ids
+
+        # Explicit merged filter still surfaces the tombstone.
+        merged_items, _ = await CompanyService(db_session).get_list(
+            status="merged"
+        )
+        assert any(c.id == secondary.id for c in merged_items)
+
+    @pytest.mark.asyncio
+    async def test_merged_leads_hidden_from_list(
+        self,
+        db_session: AsyncSession,
+        test_user: User,
+    ):
+        """Leads soft-deleted via merge must not leak into list views."""
+        from src.dedup.service import DedupService
+        from src.leads.service import LeadService
+
+        primary = Lead(
+            first_name="LeadVisible", last_name="Primary",
+            email="lead.visible@example.com",
+            owner_id=test_user.id, created_by_id=test_user.id,
+        )
+        secondary = Lead(
+            first_name="LeadHidden", last_name="Secondary",
+            email="lead.hidden@example.com",
+            owner_id=test_user.id, created_by_id=test_user.id,
+        )
+        db_session.add_all([primary, secondary])
+        await db_session.commit()
+        await db_session.refresh(primary)
+        await db_session.refresh(secondary)
+
+        await DedupService(db_session).merge_leads(
+            primary.id, secondary.id, user_id=test_user.id
+        )
+        await db_session.commit()
+
+        items, _ = await LeadService(db_session).get_list()
+        ids = [l.id for l in items]
+        assert primary.id in ids
+        assert secondary.id not in ids

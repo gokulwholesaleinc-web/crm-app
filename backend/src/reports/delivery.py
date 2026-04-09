@@ -4,6 +4,7 @@ Finds SavedReports with a schedule (daily/weekly/monthly), checks if they're
 due based on last_sent_at, executes the report, and emails the CSV to recipients.
 """
 
+import html
 import json
 import logging
 from datetime import datetime, timedelta, timezone
@@ -121,7 +122,13 @@ class ReportDeliveryService:
         return await executor.export_csv(definition)
 
     def _build_report_email(self, name: str, description: Optional[str], csv_content: str) -> str:
-        """Build HTML email body with report data as an inline table."""
+        """Build HTML email body with report data as an inline table.
+
+        Every value that originates from report data or user-supplied fields
+        (report name, description, cell contents) is HTML-escaped before being
+        interpolated into the template to prevent stored XSS via crafted
+        record values or report metadata.
+        """
         import csv
         import io
 
@@ -134,7 +141,10 @@ class ReportDeliveryService:
             style = "border:1px solid #ddd;padding:8px;text-align:left;"
             if i == 0:
                 style += "background-color:#f8f9fa;font-weight:bold;"
-            cells = "".join(f"<{tag} style='{style}'>{cell}</{tag}>" for cell in row)
+            cells = "".join(
+                f"<{tag} style='{style}'>{html.escape(str(cell))}</{tag}>"
+                for cell in row
+            )
             table_html += f"<tr>{cells}</tr>"
         table_html += "</table>"
 
@@ -142,11 +152,14 @@ class ReportDeliveryService:
         if len(rows) > 50:
             truncated = f"<p style='color:#666;font-size:14px;'>Showing first 50 of {len(rows) - 1} rows.</p>"
 
-        desc_html = f"<p style='color:#666;'>{description}</p>" if description else ""
+        desc_html = (
+            f"<p style='color:#666;'>{html.escape(description)}</p>" if description else ""
+        )
+        safe_name = html.escape(name or "")
 
         return f"""
         <div style="font-family:sans-serif;max-width:800px;margin:0 auto;">
-            <h2 style="color:#1a1a1a;">{name}</h2>
+            <h2 style="color:#1a1a1a;">{safe_name}</h2>
             {desc_html}
             <p style="color:#888;font-size:13px;">Generated on {datetime.now(timezone.utc).strftime('%B %d, %Y at %H:%M UTC')}</p>
             {table_html}

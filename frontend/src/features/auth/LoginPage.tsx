@@ -8,20 +8,6 @@ import { setTenantSlugOnLogin, useTenant } from '../../providers/TenantProvider'
 import type { LoginRequest } from '../../types';
 import GoogleSignInButton, { AuthDivider } from './GoogleSignInButton';
 
-const REMEMBER_KEY = 'crm-remember:v1';
-
-function getSavedCredentials(): { email: string; password: string } | null {
-  try {
-    const raw = localStorage.getItem(REMEMBER_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(atob(raw));
-    if (parsed.email && parsed.password) return parsed;
-    return null;
-  } catch {
-    return null;
-  }
-}
-
 function LoginPage() {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
@@ -30,23 +16,27 @@ function LoginPage() {
   const { login: storeLogin } = useAuthStore();
   const { tenant } = useTenant();
   const [logoError, setLogoError] = useState(false);
-  const saved = useState(() => getSavedCredentials())[0];
-  const [rememberMe, setRememberMe] = useState(saved !== null);
 
   useEffect(() => {
     setLogoError(false);
   }, [tenant?.logo_url]);
 
+  // Sweep the pre-Session-3 "Remember me" key. Users who checked the
+  // box before the upgrade still have their plaintext base64-encoded
+  // password sitting in localStorage; wipe it on next login visit.
+  useEffect(() => {
+    try {
+      localStorage.removeItem('crm-remember:v1');
+    } catch {
+      // storage blocked — nothing to clean up anyway
+    }
+  }, []);
+
   const {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<LoginRequest>({
-    defaultValues: {
-      email: saved?.email ?? '',
-      password: saved?.password ?? '',
-    },
-  });
+  } = useForm<LoginRequest>();
 
   const onSubmit = async (data: LoginRequest) => {
     if (!data.email || !data.password) return;
@@ -64,20 +54,10 @@ function LoginPage() {
         }
       }
 
-      if (rememberMe) {
-        try {
-          localStorage.setItem(REMEMBER_KEY, btoa(JSON.stringify({ email: data.email, password: data.password })));
-        } catch { /* storage full or blocked */ }
-      } else {
-        localStorage.removeItem(REMEMBER_KEY);
-      }
-
       storeLogin(user, tokenResult.access_token);
 
       navigate('/');
     } catch (err: unknown) {
-      // Clear saved credentials when login fails so a stale prefilled password can't lock the user out
-      localStorage.removeItem(REMEMBER_KEY);
       let errorMessage = 'An error occurred';
       if (err instanceof Error) {
         errorMessage = err.message;
@@ -204,21 +184,7 @@ function LoginPage() {
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
-            <div className="flex items-center">
-              <input
-                id="remember-me"
-                name="remember-me"
-                type="checkbox"
-                checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
-                className="h-4 w-4 text-primary-600 focus-visible:ring-primary-500 border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded"
-              />
-              <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900 dark:text-gray-300">
-                Remember me
-              </label>
-            </div>
-
+          <div className="flex justify-end">
             <div className="text-sm">
               <Link to="/forgot-password" className="font-medium text-primary-600 hover:text-primary-500">
                 Forgot your password?

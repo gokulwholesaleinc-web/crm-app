@@ -66,6 +66,46 @@ class TestRenderTemplate:
         assert "Bob" in result
         assert "{{order_id}}" in result
 
+    def test_escapes_html_in_variables(self):
+        """Attacker-controlled variable values must not inject HTML tags."""
+        result = render_template(
+            "<p>Hello {{name}}</p>",
+            {"name": "<script>alert('xss')</script>"},
+        )
+        assert "<script>" not in result
+        assert "&lt;script&gt;" in result
+        # The surrounding template markup is preserved.
+        assert result.startswith("<p>Hello ")
+        assert result.endswith("</p>")
+
+    def test_escapes_quote_attribute_injection(self):
+        """Variables that land inside attribute quotes must not escape them."""
+        result = render_template(
+            '<a href="{{url}}">click</a>',
+            {"url": '" onmouseover="alert(1)'},
+        )
+        assert 'onmouseover="alert(1)"' not in result
+        assert "&quot;" in result
+
+    def test_single_pass_substitution_prevents_reexpansion(self):
+        """A variable whose value contains {{other}} must not be re-expanded."""
+        result = render_template(
+            "Hello {{greeting}}",
+            {"greeting": "{{name}}", "name": "Eve"},
+        )
+        # {{greeting}} is replaced with the literal "{{name}}", not re-expanded.
+        assert "Eve" not in result
+        assert "{{name}}" in result
+
+    def test_plain_text_mode_skips_escape(self):
+        """is_html=False (used for subjects) leaves ampersands alone."""
+        result = render_template(
+            "Order #{{id}} from {{company}}",
+            {"id": "42", "company": "Acme & Co"},
+            is_html=False,
+        )
+        assert result == "Order #42 from Acme & Co"
+
 
 # =========================================================================
 # Campaign branded email service tests (integration)

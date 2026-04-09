@@ -15,6 +15,33 @@ from sqlalchemy.orm import selectinload
 from src.whitelabel.models import Tenant, TenantSettings, TenantUser
 
 
+# Schemes allowed in outbound email links. ``html.escape`` does not block
+# ``javascript:``/``data:`` URLs inside ``href``/``src`` attributes, so every
+# externally-sourced URL that lands in an email must also pass this filter.
+_SAFE_URL_SCHEMES = ("https://", "http://", "mailto:")
+
+
+def _safe_url(url: Optional[str]) -> str:
+    """Return ``url`` if it uses an allowlisted scheme, else an empty string.
+
+    Defensive second layer: values in :class:`TenantSettings` should already
+    be validated at write time (see ``whitelabel/schemas.py``), but rendering
+    should never emit an ``href``/``src`` with a ``javascript:``/``data:``
+    scheme even if historical rows or a schema bypass slipped such a value
+    into the database. Site-relative paths (``/foo``) are also allowed so
+    in-app links like campaign unsubscribe URLs keep working.
+    """
+    stripped = (url or "").strip()
+    if not stripped:
+        return ""
+    # Site-relative paths are safe — there is no scheme to abuse.
+    if stripped.startswith("/") and not stripped.startswith("//"):
+        return stripped
+    if stripped.lower().startswith(_SAFE_URL_SCHEMES):
+        return stripped
+    return ""
+
+
 # ---------------------------------------------------------------------------
 # Default branding (used when no tenant is configured)
 # ---------------------------------------------------------------------------
@@ -105,10 +132,11 @@ def _base_email_html(
     secondary = escape(branding.get("secondary_color", "#8b5cf6"))
     accent = escape(branding.get("accent_color", "#22c55e"))
     company = escape(branding.get("company_name", "CRM"))
-    logo_url = branding.get("logo_url", "")
+    logo_url = _safe_url(branding.get("logo_url", ""))
     footer_text = escape(branding.get("footer_text", ""))
-    privacy_url = escape(branding.get("privacy_policy_url", ""))
-    terms_url = escape(branding.get("terms_of_service_url", ""))
+    privacy_url = _safe_url(branding.get("privacy_policy_url", ""))
+    terms_url = _safe_url(branding.get("terms_of_service_url", ""))
+    safe_cta_url = _safe_url(cta_url)
 
     # Logo block
     if logo_url:
@@ -121,14 +149,14 @@ def _base_email_html(
     else:
         logo_html = ""
 
-    # CTA button
-    if cta_text and cta_url:
+    # CTA button — only render if the URL passed the scheme allowlist.
+    if cta_text and safe_cta_url:
         cta_html = (
             f'<table role="presentation" cellpadding="0" cellspacing="0" '
             f'style="margin:24px auto 0;">'
             f'<tr><td style="background-color:{accent};border-radius:6px;'
             f'text-align:center;">'
-            f'<a href="{escape(cta_url)}" target="_blank" '
+            f'<a href="{escape(safe_cta_url)}" target="_blank" '
             f'style="display:inline-block;padding:12px 28px;color:#ffffff;'
             f'font-family:Arial,Helvetica,sans-serif;font-size:15px;'
             f'font-weight:600;text-decoration:none;">{escape(cta_text)}</a>'
@@ -141,12 +169,12 @@ def _base_email_html(
     footer_links_parts = []
     if privacy_url:
         footer_links_parts.append(
-            f'<a href="{privacy_url}" style="color:#9ca3af;text-decoration:underline;">'
+            f'<a href="{escape(privacy_url)}" style="color:#9ca3af;text-decoration:underline;">'
             f'Privacy Policy</a>'
         )
     if terms_url:
         footer_links_parts.append(
-            f'<a href="{terms_url}" style="color:#9ca3af;text-decoration:underline;">'
+            f'<a href="{escape(terms_url)}" style="color:#9ca3af;text-decoration:underline;">'
             f'Terms of Service</a>'
         )
     footer_links = " &middot; ".join(footer_links_parts)
@@ -448,11 +476,15 @@ def render_campaign_wrapper(
     unsubscribe_url: str,
 ) -> str:
     """Wraps campaign content in branded template with unsubscribe link."""
-    unsub_html = (
-        f'<p style="margin:16px 0 0;font-size:12px;color:#9ca3af;text-align:center;">'
-        f'<a href="{escape(unsubscribe_url)}" style="color:#9ca3af;text-decoration:underline;">'
-        f'Unsubscribe</a></p>'
-    )
+    safe_unsub = _safe_url(unsubscribe_url)
+    if safe_unsub:
+        unsub_html = (
+            f'<p style="margin:16px 0 0;font-size:12px;color:#9ca3af;text-align:center;">'
+            f'<a href="{escape(safe_unsub)}" style="color:#9ca3af;text-decoration:underline;">'
+            f'Unsubscribe</a></p>'
+        )
+    else:
+        unsub_html = ""
     body_with_unsub = campaign_body + unsub_html
 
     return _base_email_html(

@@ -5,7 +5,7 @@
  */
 
 // Client and utilities
-export { apiClient, getToken, setToken, clearToken, isAuthenticated } from './client';
+export { apiClient, getToken } from './client';
 
 // Auth API
 export { authApi } from './auth';
