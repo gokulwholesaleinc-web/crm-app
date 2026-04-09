@@ -1,10 +1,12 @@
 """Attachment API routes for file upload, download, listing, and deletion."""
 
-from typing import Optional
-from fastapi import APIRouter, UploadFile, File, Form, Query
+from typing import Annotated, Optional
+from fastapi import APIRouter, Depends, UploadFile, File, Form, Query
 from fastapi.responses import FileResponse, RedirectResponse
 
 from src.core.constants import HTTPStatus, EntityNames
+from src.core.data_scope import DataScope, get_data_scope
+from src.core.entity_access import require_entity_access
 from src.core.router_utils import DBSession, CurrentUser, raise_not_found, raise_bad_request
 from src.attachments.schemas import AttachmentResponse, AttachmentListResponse
 from src.attachments.service import AttachmentService
@@ -16,6 +18,7 @@ router = APIRouter(prefix="/api/attachments", tags=["attachments"])
 async def upload_file(
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
     file: UploadFile = File(...),
     entity_type: str = Form(...),
     entity_id: int = Form(...),
@@ -25,6 +28,8 @@ async def upload_file(
     valid_entity_types = {"contacts", "companies", "leads", "opportunities", "expenses"}
     if entity_type not in valid_entity_types:
         raise_bad_request(f"Invalid entity_type. Must be one of: {', '.join(sorted(valid_entity_types))}")
+
+    await require_entity_access(db, entity_type, entity_id, current_user, data_scope)
 
     valid_categories = {"document", "contract", "image", "report", "receipt", "invoice", "other"}
     if category and category not in valid_categories:
@@ -50,12 +55,17 @@ async def download_attachment(
     attachment_id: int,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Download an attachment file."""
     service = AttachmentService(db)
     attachment = await service.get_attachment(attachment_id)
     if not attachment:
         raise_not_found(EntityNames.NOTE, attachment_id)
+
+    await require_entity_access(
+        db, attachment.entity_type, attachment.entity_id, current_user, data_scope,
+    )
 
     try:
         download_url = await service.get_download_url(attachment)
@@ -82,9 +92,12 @@ async def list_attachments(
     entity_id: int,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
     category: Optional[str] = Query(None),
 ):
     """List all attachments for a given entity, optionally filtered by category."""
+    await require_entity_access(db, entity_type, entity_id, current_user, data_scope)
+
     service = AttachmentService(db)
     items, total = await service.list_attachments(entity_type, entity_id, category=category)
     return AttachmentListResponse(
@@ -98,11 +111,16 @@ async def delete_attachment(
     attachment_id: int,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Delete an attachment."""
     service = AttachmentService(db)
     attachment = await service.get_attachment(attachment_id)
     if not attachment:
         raise_not_found("Attachment", attachment_id)
+
+    await require_entity_access(
+        db, attachment.entity_type, attachment.entity_id, current_user, data_scope,
+    )
 
     await service.delete_attachment(attachment)

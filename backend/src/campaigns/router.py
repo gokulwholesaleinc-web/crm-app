@@ -1,7 +1,7 @@
 """Campaign API routes."""
 
-from typing import Optional, List
-from fastapi import APIRouter, Query
+from typing import Annotated, Optional, List
+from fastapi import APIRouter, Depends, Query
 from src.core.constants import HTTPStatus, EntityNames
 from src.core.router_utils import (
     DBSession,
@@ -9,8 +9,11 @@ from src.core.router_utils import (
     get_entity_or_404,
     calculate_pages,
     raise_not_found,
+    raise_forbidden,
     check_ownership,
+    effective_owner_id,
 )
+from src.core.data_scope import DataScope, get_data_scope
 from src.campaigns.schemas import (
     CampaignCreate,
     CampaignUpdate,
@@ -39,6 +42,19 @@ from src.campaigns.service import (
 router = APIRouter(prefix="/api/campaigns", tags=["campaigns"])
 
 
+def _can_manage_template(template, current_user) -> bool:
+    """Email templates use `created_by_id` instead of `owner_id`, so
+    `check_ownership` can't be applied directly. Mirror its rules here:
+    superusers and admin/manager bypass; otherwise owner-only.
+    """
+    if current_user.is_superuser:
+        return True
+    user_role = getattr(current_user, "role", "sales_rep")
+    if user_role in ("admin", "manager"):
+        return True
+    return template.created_by_id == current_user.id
+
+
 # =========================================================================
 # Email Template endpoints (MUST be before /{campaign_id} routes)
 # =========================================================================
@@ -59,13 +75,16 @@ async def create_email_template(
 async def list_email_templates(
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     category: Optional[str] = None,
 ):
-    """List email templates."""
+    """List email templates — scoped to caller unless admin/manager."""
     service = EmailTemplateService(db)
     templates, _ = await service.get_list(page=page, page_size=page_size, category=category)
+    if not data_scope.can_see_all():
+        templates = [t for t in templates if t.created_by_id == current_user.id]
     return [EmailTemplateResponse.model_validate(t) for t in templates]
 
 
@@ -80,6 +99,8 @@ async def get_email_template(
     template = await service.get_by_id(template_id)
     if not template:
         raise_not_found("Email template", template_id)
+    if not _can_manage_template(template, current_user):
+        raise_forbidden("You do not have permission to access this email template")
     return EmailTemplateResponse.model_validate(template)
 
 
@@ -95,6 +116,8 @@ async def update_email_template(
     template = await service.get_by_id(template_id)
     if not template:
         raise_not_found("Email template", template_id)
+    if not _can_manage_template(template, current_user):
+        raise_forbidden("You do not have permission to modify this email template")
     updated = await service.update_template(template, template_data)
     return EmailTemplateResponse.model_validate(updated)
 
@@ -110,6 +133,8 @@ async def delete_email_template(
     template = await service.get_by_id(template_id)
     if not template:
         raise_not_found("Email template", template_id)
+    if not _can_manage_template(template, current_user):
+        raise_forbidden("You do not have permission to delete this email template")
     await service.delete_template(template)
 
 
@@ -167,6 +192,7 @@ async def create_campaign_from_import(
 async def list_campaigns(
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     search: Optional[str] = None,
@@ -174,10 +200,14 @@ async def list_campaigns(
     status: Optional[str] = None,
     owner_id: Optional[int] = None,
 ):
-    """List campaigns with pagination and filters."""
-    effective_owner_id = owner_id
-    if effective_owner_id is None:
-        effective_owner_id = current_user.id
+    """List campaigns with pagination and filters.
+
+    Sales reps can only see their own campaigns; admin/manager can pass
+    owner_id to filter. Spoofed owner_id from a sales_rep is ignored.
+    """
+    resolved_owner_id = effective_owner_id(data_scope, owner_id)
+    if resolved_owner_id is None and not data_scope.can_see_all():
+        resolved_owner_id = current_user.id
 
     service = CampaignService(db)
 
@@ -187,7 +217,7 @@ async def list_campaigns(
         search=search,
         campaign_type=campaign_type,
         status=status,
-        owner_id=effective_owner_id,
+        owner_id=resolved_owner_id,
     )
 
     return CampaignListResponse(
@@ -206,7 +236,10 @@ async def create_campaign(
     db: DBSession,
 ):
     """Create a new campaign."""
-    if campaign_data.owner_id is None:
+    # Sales reps cannot create campaigns owned by someone else; admins can.
+    user_role = getattr(current_user, "role", "sales_rep")
+    is_privileged = current_user.is_superuser or user_role in ("admin", "manager")
+    if campaign_data.owner_id is None or not is_privileged:
         campaign_data.owner_id = current_user.id
 
     service = CampaignService(db)
@@ -223,6 +256,7 @@ async def get_campaign(
     """Get a campaign by ID."""
     service = CampaignService(db)
     campaign = await get_entity_or_404(service, campaign_id, EntityNames.CAMPAIGN)
+    check_ownership(campaign, current_user, EntityNames.CAMPAIGN)
     return CampaignResponse.model_validate(campaign)
 
 
@@ -263,6 +297,7 @@ async def get_campaign_stats(
     """Get campaign statistics."""
     service = CampaignService(db)
     campaign = await get_entity_or_404(service, campaign_id, EntityNames.CAMPAIGN)
+    check_ownership(campaign, current_user, EntityNames.CAMPAIGN)
     stats = await service.get_campaign_stats(campaign_id)
     return CampaignStats(**stats)
 
@@ -275,7 +310,8 @@ async def get_campaign_analytics(
 ):
     """Get email analytics (open/click/bounce rates) for a campaign, per step."""
     service = CampaignService(db)
-    await get_entity_or_404(service, campaign_id, EntityNames.CAMPAIGN)
+    campaign = await get_entity_or_404(service, campaign_id, EntityNames.CAMPAIGN)
+    check_ownership(campaign, current_user, EntityNames.CAMPAIGN)
     return await service.get_campaign_analytics(campaign_id)
 
 
@@ -293,6 +329,10 @@ async def list_campaign_members(
     page_size: int = Query(50, ge=1, le=100),
 ):
     """List members of a campaign."""
+    campaign_service = CampaignService(db)
+    campaign = await get_entity_or_404(campaign_service, campaign_id, EntityNames.CAMPAIGN)
+    check_ownership(campaign, current_user, EntityNames.CAMPAIGN)
+
     member_service = CampaignMemberService(db)
     members, _ = await member_service.get_campaign_members(
         campaign_id=campaign_id,
@@ -312,7 +352,8 @@ async def add_campaign_members(
 ):
     """Add members to a campaign."""
     campaign_service = CampaignService(db)
-    await get_entity_or_404(campaign_service, campaign_id, EntityNames.CAMPAIGN)
+    campaign = await get_entity_or_404(campaign_service, campaign_id, EntityNames.CAMPAIGN)
+    check_ownership(campaign, current_user, EntityNames.CAMPAIGN)
 
     member_service = CampaignMemberService(db)
     added = await member_service.add_members_bulk(
@@ -333,6 +374,10 @@ async def update_campaign_member(
     db: DBSession,
 ):
     """Update a campaign member."""
+    campaign_service = CampaignService(db)
+    campaign = await get_entity_or_404(campaign_service, campaign_id, EntityNames.CAMPAIGN)
+    check_ownership(campaign, current_user, EntityNames.CAMPAIGN)
+
     member_service = CampaignMemberService(db)
     member = await member_service.get_by_id(member_id)
 
@@ -351,6 +396,10 @@ async def remove_campaign_member(
     db: DBSession,
 ):
     """Remove a member from a campaign."""
+    campaign_service = CampaignService(db)
+    campaign = await get_entity_or_404(campaign_service, campaign_id, EntityNames.CAMPAIGN)
+    check_ownership(campaign, current_user, EntityNames.CAMPAIGN)
+
     member_service = CampaignMemberService(db)
     member = await member_service.get_by_id(member_id)
 
@@ -373,7 +422,8 @@ async def add_campaign_step(
 ):
     """Add a step to a campaign sequence."""
     campaign_service = CampaignService(db)
-    await get_entity_or_404(campaign_service, campaign_id, EntityNames.CAMPAIGN)
+    campaign = await get_entity_or_404(campaign_service, campaign_id, EntityNames.CAMPAIGN)
+    check_ownership(campaign, current_user, EntityNames.CAMPAIGN)
 
     step_service = EmailCampaignStepService(db)
     step = await step_service.create_step(campaign_id, step_data)
@@ -388,7 +438,8 @@ async def get_campaign_steps(
 ):
     """Get all steps for a campaign."""
     campaign_service = CampaignService(db)
-    await get_entity_or_404(campaign_service, campaign_id, EntityNames.CAMPAIGN)
+    campaign = await get_entity_or_404(campaign_service, campaign_id, EntityNames.CAMPAIGN)
+    check_ownership(campaign, current_user, EntityNames.CAMPAIGN)
 
     step_service = EmailCampaignStepService(db)
     steps = await step_service.get_steps(campaign_id)
@@ -404,6 +455,10 @@ async def update_campaign_step(
     db: DBSession,
 ):
     """Update a campaign step."""
+    campaign_service = CampaignService(db)
+    campaign = await get_entity_or_404(campaign_service, campaign_id, EntityNames.CAMPAIGN)
+    check_ownership(campaign, current_user, EntityNames.CAMPAIGN)
+
     step_service = EmailCampaignStepService(db)
     step = await step_service.get_by_id(step_id)
     if not step or step.campaign_id != campaign_id:
@@ -420,6 +475,10 @@ async def delete_campaign_step(
     db: DBSession,
 ):
     """Delete a campaign step."""
+    campaign_service = CampaignService(db)
+    campaign = await get_entity_or_404(campaign_service, campaign_id, EntityNames.CAMPAIGN)
+    check_ownership(campaign, current_user, EntityNames.CAMPAIGN)
+
     step_service = EmailCampaignStepService(db)
     step = await step_service.get_by_id(step_id)
     if not step or step.campaign_id != campaign_id:

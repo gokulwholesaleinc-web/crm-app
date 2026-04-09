@@ -1,8 +1,9 @@
 """Authentication API routes."""
 
+import hmac as _hmac
 import secrets
 from typing import Annotated, List
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
 from src.config import settings
@@ -154,9 +155,20 @@ async def login_json(
 # - Creates a user on first sign-in, or links google_sub to an existing
 #   email-matched account.
 #
+# CSRF defense: the state nonce is minted by /authorize and stored in an
+# HttpOnly, short-TTL cookie on the client's browser. The /callback
+# endpoint reads that cookie and requires an `hmac.compare_digest` match
+# with the `state` query string Google echoed back. A victim tricked
+# into landing on the callback URL directly has no matching cookie in
+# their browser, so the exchange is rejected.
+#
 # The HTTP factory used to talk to Google is overridable via
-# `app.dependency_overrides[get_google_http_factory]` so tests can stub the
-# token + userinfo endpoints without a live network.
+# `app.dependency_overrides[get_google_http_factory]` so tests can stub
+# the token + userinfo endpoints without a live network.
+
+GOOGLE_OAUTH_STATE_COOKIE = "crm_google_oauth_state"
+GOOGLE_OAUTH_STATE_TTL_SECONDS = 600  # 10 minutes: plenty for a consent screen
+
 
 def get_google_http_factory() -> google_oauth.HttpClientFactory:
     """Default httpx.AsyncClient factory used by Google sign-in endpoints."""
@@ -172,9 +184,16 @@ GoogleHttpFactory = Annotated[
 @limiter.limit("15/minute")
 async def google_authorize(
     request: Request,
+    response: Response,
     data: GoogleAuthorizeRequest,
 ):
-    """Return the Google consent URL to start sign-in."""
+    """Return the Google consent URL to start sign-in.
+
+    Also sets an HttpOnly cookie containing the state nonce so the
+    callback handler can verify it server-side. The response body still
+    carries `state` for backwards compat with the previous frontend
+    (which wrote it to sessionStorage); new clients can ignore it.
+    """
     client_id = settings.GOOGLE_CLIENT_ID
     if not client_id:
         raise HTTPException(
@@ -187,6 +206,20 @@ async def google_authorize(
         redirect_uri=data.redirect_uri,
         state=state,
     )
+
+    # HttpOnly so XSS can't read it. SameSite=Lax is required because the
+    # cookie needs to survive a top-level navigation from Google back to
+    # our callback — SameSite=Strict would drop it. Secure is on outside
+    # debug builds so the cookie only travels over HTTPS in prod.
+    response.set_cookie(
+        key=GOOGLE_OAUTH_STATE_COOKIE,
+        value=state,
+        max_age=GOOGLE_OAUTH_STATE_TTL_SECONDS,
+        httponly=True,
+        secure=not settings.DEBUG,
+        samesite="lax",
+        path="/",
+    )
     return GoogleAuthorizeResponse(auth_url=auth_url, state=state)
 
 
@@ -194,6 +227,7 @@ async def google_authorize(
 @limiter.limit("15/minute")
 async def google_callback(
     request: Request,
+    response: Response,
     data: GoogleCallbackRequest,
     db: DBSession,
     http_factory: GoogleHttpFactory,
@@ -203,6 +237,9 @@ async def google_callback(
     Creates or links a user from the verified Google profile and returns a
     CRM JWT + tenant list, mirroring `/login/json` so the frontend can reuse
     the same post-login flow.
+
+    CSRF: requires the state query (echoed by Google) to match the
+    HttpOnly cookie set by /authorize. Missing cookie = reject.
     """
     client_id = settings.GOOGLE_CLIENT_ID
     client_secret = settings.GOOGLE_CLIENT_SECRET
@@ -211,6 +248,17 @@ async def google_callback(
             status_code=HTTPStatus.BAD_REQUEST,
             detail="Google sign-in is not configured",
         )
+
+    # Server-side CSRF state verification.
+    cookie_state = request.cookies.get(GOOGLE_OAUTH_STATE_COOKIE) or ""
+    body_state = data.state or ""
+    if not cookie_state or not body_state or not _hmac.compare_digest(cookie_state, body_state):
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail="OAuth state mismatch. Please start sign-in again from the login page.",
+        )
+    # Burn the cookie so it can't be replayed.
+    response.delete_cookie(GOOGLE_OAUTH_STATE_COOKIE, path="/")
 
     try:
         token_data = await google_oauth.exchange_code_for_tokens(

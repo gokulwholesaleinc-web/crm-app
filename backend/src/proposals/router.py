@@ -283,17 +283,22 @@ async def generate_proposal(
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
 
 
-@router.get("/public/{proposal_number}", response_model=ProposalPublicResponse)
+@router.get("/public/{token}", response_model=ProposalPublicResponse)
 async def get_public_proposal(
-    proposal_number: str,
+    token: str,
     request: Request,
     db: DBSession,
 ):
-    """Public view of a proposal (no auth required). Increments view count."""
-    service = ProposalService(db)
-    proposal = await service.get_public_proposal(proposal_number)
+    """Public view of a proposal (no auth required). Increments view count.
 
-    if not proposal:
+    Keyed on Proposal.public_token instead of proposal_number — the old
+    numeric identifier was enumerable.
+    """
+    import hmac as _hmac
+
+    service = ProposalService(db)
+    proposal = await service.get_public_proposal(token)
+    if not proposal or not _hmac.compare_digest(proposal.public_token or "", token):
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Proposal not found")
 
     # Record the view

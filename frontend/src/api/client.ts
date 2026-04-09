@@ -40,6 +40,11 @@ const createApiClient = (): AxiosInstance => {
       'Content-Type': 'application/json',
     },
     timeout: 30000,
+    // withCredentials is required so the HttpOnly Google OAuth state
+    // cookie set by /api/auth/google/authorize flows back to /callback.
+    // Backend CORS must be configured with allow_credentials=True and a
+    // concrete origin (no "*") for this to work in prod.
+    withCredentials: true,
   });
 
   client.interceptors.request.use(

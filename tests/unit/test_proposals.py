@@ -7,6 +7,7 @@ AI generation, and data isolation.
 """
 
 import pytest
+import secrets
 from datetime import date, timedelta
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,6 +30,7 @@ async def test_proposal(db_session: AsyncSession, test_user: User) -> Proposal:
     """Create a test proposal."""
     proposal = Proposal(
         proposal_number="PR-2026-0001",
+        public_token=secrets.token_urlsafe(32),
         title="Test Proposal",
         content="Test proposal content",
         status="draft",
@@ -633,9 +635,9 @@ class TestPublicView:
         db_session: AsyncSession,
         test_proposal: Proposal,
     ):
-        """Test viewing a proposal publicly by proposal_number."""
+        """Test viewing a proposal publicly by public_token."""
         response = await client.get(
-            f"/api/proposals/public/{test_proposal.proposal_number}",
+            f"/api/proposals/public/{test_proposal.public_token}",
         )
 
         assert response.status_code == 200
@@ -653,6 +655,7 @@ class TestPublicView:
         """Test that public views increment the view_count."""
         proposal = Proposal(
             proposal_number="PR-2026-VIEW",
+            public_token=secrets.token_urlsafe(32),
             title="Viewable Proposal",
             status="sent",
             view_count=0,
@@ -664,8 +667,8 @@ class TestPublicView:
         await db_session.refresh(proposal)
 
         # View it twice
-        await client.get(f"/api/proposals/public/{proposal.proposal_number}")
-        await client.get(f"/api/proposals/public/{proposal.proposal_number}")
+        await client.get(f"/api/proposals/public/{proposal.public_token}")
+        await client.get(f"/api/proposals/public/{proposal.public_token}")
 
         # Check the count via the DB
         await db_session.refresh(proposal)
@@ -681,6 +684,7 @@ class TestPublicView:
         """Test that public viewing creates a ProposalView record."""
         proposal = Proposal(
             proposal_number="PR-2026-VREC",
+            public_token=secrets.token_urlsafe(32),
             title="View Record Proposal",
             status="sent",
             view_count=0,
@@ -691,7 +695,7 @@ class TestPublicView:
         await db_session.commit()
         await db_session.refresh(proposal)
 
-        await client.get(f"/api/proposals/public/{proposal.proposal_number}")
+        await client.get(f"/api/proposals/public/{proposal.public_token}")
 
         result = await db_session.execute(
             select(ProposalView).where(ProposalView.proposal_id == proposal.id)
@@ -709,6 +713,7 @@ class TestPublicView:
         """Test that viewing a 'sent' proposal transitions status to 'viewed'."""
         proposal = Proposal(
             proposal_number="PR-2026-AVTV",
+            public_token=secrets.token_urlsafe(32),
             title="Auto View Transition",
             status="sent",
             view_count=0,
@@ -719,18 +724,24 @@ class TestPublicView:
         await db_session.commit()
         await db_session.refresh(proposal)
 
-        await client.get(f"/api/proposals/public/{proposal.proposal_number}")
+        await client.get(f"/api/proposals/public/{proposal.public_token}")
 
         await db_session.refresh(proposal)
         assert proposal.status == "viewed"
 
     @pytest.mark.asyncio
-    async def test_public_view_not_found(
+    async def test_public_view_rejects_short_token(
         self,
         client: AsyncClient,
         db_session: AsyncSession,
     ):
-        """Test viewing a non-existent proposal returns 404."""
+        """Short/malformed public tokens are rejected as 404.
+
+        Previously an attacker could walk sequential PR-2026-NNNN IDs
+        to enumerate every customer's proposal. After the switch to
+        unguessable tokens, anything less than 16 chars is treated as
+        'does not exist'.
+        """
         response = await client.get("/api/proposals/public/PR-NONEXISTENT")
 
         assert response.status_code == 404

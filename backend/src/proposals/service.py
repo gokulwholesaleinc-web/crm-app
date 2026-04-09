@@ -3,6 +3,7 @@
 import logging
 import os
 import re
+import secrets
 from datetime import datetime, timezone
 from html import escape
 from typing import Optional, List, Tuple
@@ -149,11 +150,12 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         return proposals, total
 
     async def create(self, data: ProposalCreate, user_id: int) -> Proposal:
-        """Create a new proposal with auto-generated number."""
+        """Create a new proposal with auto-generated number + public token."""
         proposal_number = await self._generate_proposal_number()
 
         proposal_data = data.model_dump()
         proposal_data["proposal_number"] = proposal_number
+        proposal_data["public_token"] = secrets.token_urlsafe(32)
         proposal_data["created_by_id"] = user_id
 
         proposal = Proposal(**proposal_data)
@@ -191,15 +193,22 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         await self.db.refresh(proposal)
         return proposal
 
-    async def get_public_proposal(self, proposal_number: str) -> Optional[Proposal]:
-        """Get a proposal by its number for public viewing."""
+    async def get_public_proposal(self, token: str) -> Optional[Proposal]:
+        """Get a proposal by its unguessable public token.
+
+        Token-based lookup replaces the old sequential proposal_number
+        enumeration. Caller should also use hmac.compare_digest on the
+        returned row's public_token before trusting it.
+        """
+        if not token or len(token) < 16:
+            return None
         query = (
             select(Proposal)
             .options(
                 selectinload(Proposal.contact),
                 selectinload(Proposal.company),
             )
-            .where(Proposal.proposal_number == proposal_number)
+            .where(Proposal.public_token == token)
         )
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
@@ -224,9 +233,14 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
 
         branding = await TenantBrandingHelper.get_branding_for_user(self.db, user_id)
 
-        # Build public view URL
+        # Build public view URL using the unguessable token (not
+        # proposal_number, which is enumerable). Mint one on the fly
+        # for pre-migration rows.
+        if not proposal.public_token:
+            proposal.public_token = secrets.token_urlsafe(32)
+            await self.db.flush()
         base_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
-        view_url = f"{base_url}/proposals/public/{proposal.proposal_number}"
+        view_url = f"{base_url}/proposals/public/{proposal.public_token}"
 
         proposal_data = {
             "proposal_title": proposal.title,

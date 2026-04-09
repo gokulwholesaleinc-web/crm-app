@@ -123,12 +123,14 @@ async def manager_user(db_session):
 
 
 @pytest.fixture
-async def test_stripe_customer(db_session):
-    """Create a test Stripe customer."""
+async def test_stripe_customer(db_session, test_contact):
+    """Create a test Stripe customer linked to test_contact so owner-scoped
+    endpoints can see it. test_contact is owned by test_user (conftest)."""
     customer = StripeCustomer(
         stripe_customer_id="cus_test_123",
         email="stripe_customer@test.com",
         name="Test Stripe Customer",
+        contact_id=test_contact.id,
     )
     db_session.add(customer)
     await db_session.commit()

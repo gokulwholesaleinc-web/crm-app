@@ -45,12 +45,14 @@ def _make_signed_payload(event_type: str, obj: dict, secret: str) -> tuple:
 
 
 @pytest.fixture
-async def stripe_customer(db_session):
-    """Create a StripeCustomer for invoice/onboarding tests."""
+async def stripe_customer(db_session, test_contact):
+    """StripeCustomer linked to test_contact (owned by test_user) so owner
+    scoping in invoice/onboarding endpoints treats the caller as authorized."""
     customer = StripeCustomer(
         stripe_customer_id="cus_enhance_test",
         email="enhance@test.com",
         name="Enhance Test Customer",
+        contact_id=test_contact.id,
     )
     db_session.add(customer)
     await db_session.commit()
@@ -182,10 +184,15 @@ class TestCreateAndSendInvoice:
         assert "Stripe is not configured" in response.json()["detail"]
 
     @pytest.mark.asyncio
-    async def test_create_invoice_missing_customer_returns_400(
+    async def test_create_invoice_missing_customer_returns_404(
         self, client: AsyncClient, test_user,
     ):
-        """Invoice with nonexistent customer_id should return 400."""
+        """Invoice with nonexistent customer_id should return 404.
+
+        Previously returned 400 because the check was on the Stripe API
+        side. The ownership pre-check now surfaces a 404 for missing
+        customers, which is more correct.
+        """
         response = await client.post(
             "/api/payments/invoices/create-and-send",
             json={
@@ -195,7 +202,7 @@ class TestCreateAndSendInvoice:
             },
             headers=_token(test_user),
         )
-        assert response.status_code == 400
+        assert response.status_code == 404
 
 
 # =========================================================================

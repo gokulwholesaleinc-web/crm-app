@@ -5,6 +5,7 @@ Tests for CRUD operations on workflow rules, execution history, and dry-run test
 """
 
 import pytest
+import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -12,6 +13,14 @@ from sqlalchemy import select
 from src.auth.models import User
 from src.leads.models import Lead, LeadSource
 from src.workflows.models import WorkflowRule, WorkflowExecution
+
+
+# All workflow mutation endpoints require manager+. Override the
+# conftest-level `auth_headers` fixture for this file so existing CRUD
+# tests run as admin without needing to be rewritten.
+@pytest_asyncio.fixture
+async def auth_headers(admin_auth_headers) -> dict:
+    return admin_auth_headers
 
 
 @pytest.fixture

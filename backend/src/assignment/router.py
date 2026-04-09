@@ -1,8 +1,9 @@
 """Assignment rule API routes."""
 
-from typing import Optional, List
-from fastapi import APIRouter, Query
+from typing import Annotated, Any, Optional, List
+from fastapi import APIRouter, Depends, Query
 from src.core.constants import HTTPStatus
+from src.core.permissions import require_manager_or_above
 from src.core.router_utils import DBSession, CurrentUser, raise_not_found
 from src.assignment.schemas import (
     AssignmentRuleCreate,
@@ -14,14 +15,18 @@ from src.assignment.service import AssignmentService
 
 router = APIRouter(prefix="/api/assignment-rules", tags=["assignment"])
 
+# Rule writes funnel leads to specific users, so a sales_rep with rule
+# access could silently route everyone's incoming leads to themselves.
+ManagerOrAbove = Annotated[Any, Depends(require_manager_or_above)]
+
 
 @router.post("", response_model=AssignmentRuleResponse, status_code=HTTPStatus.CREATED)
 async def create_rule(
     data: AssignmentRuleCreate,
-    current_user: CurrentUser,
+    current_user: ManagerOrAbove,
     db: DBSession,
 ):
-    """Create a new assignment rule."""
+    """Create a new assignment rule. Manager+ only."""
     service = AssignmentService(db)
     rule = await service.create_rule(data, current_user.id)
     return AssignmentRuleResponse.model_validate(rule)
@@ -59,10 +64,10 @@ async def get_rule(
 async def update_rule(
     rule_id: int,
     data: AssignmentRuleUpdate,
-    current_user: CurrentUser,
+    current_user: ManagerOrAbove,
     db: DBSession,
 ):
-    """Update an assignment rule."""
+    """Update an assignment rule. Manager+ only."""
     service = AssignmentService(db)
     rule = await service.get_by_id(rule_id)
     if not rule:
@@ -74,10 +79,10 @@ async def update_rule(
 @router.delete("/{rule_id}", status_code=HTTPStatus.NO_CONTENT)
 async def delete_rule(
     rule_id: int,
-    current_user: CurrentUser,
+    current_user: ManagerOrAbove,
     db: DBSession,
 ):
-    """Delete an assignment rule."""
+    """Delete an assignment rule. Manager+ only."""
     service = AssignmentService(db)
     rule = await service.get_by_id(rule_id)
     if not rule:

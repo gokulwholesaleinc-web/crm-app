@@ -448,20 +448,20 @@ class TestEmailSettingsEndpoints:
     """Tests for /api/settings/email and /api/email/settings."""
 
     @pytest.mark.asyncio
-    async def test_get_email_settings(self, client: AsyncClient, auth_headers: dict):
-        """Should return default email settings."""
-        response = await client.get("/api/settings/email", headers=auth_headers)
+    async def test_get_email_settings(self, client: AsyncClient, manager_auth_headers: dict):
+        """Should return default email settings (manager+ only)."""
+        response = await client.get("/api/settings/email", headers=manager_auth_headers)
         assert response.status_code == 200
         data = response.json()
         assert data["daily_send_limit"] == 200
         assert data["warmup_enabled"] is False
 
     @pytest.mark.asyncio
-    async def test_update_email_settings(self, client: AsyncClient, auth_headers: dict):
-        """Should update and return email settings."""
+    async def test_update_email_settings(self, client: AsyncClient, admin_auth_headers: dict):
+        """Should update and return email settings (superuser/admin only)."""
         response = await client.put(
             "/api/settings/email",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "daily_send_limit": 500,
                 "warmup_enabled": True,

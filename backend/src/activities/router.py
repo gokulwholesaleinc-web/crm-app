@@ -215,10 +215,13 @@ async def get_entity_timeline(
     entity_id: int,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
     limit: int = Query(50, ge=1, le=100),
     activity_types: Optional[str] = None,
 ):
     """Get activity timeline for an entity."""
+    from src.core.entity_access import require_entity_access
+    await require_entity_access(db, entity_type, entity_id, current_user, data_scope)
     timeline = ActivityTimeline(db)
 
     items = await timeline.get_entity_timeline(
@@ -290,9 +293,12 @@ async def get_unified_timeline(
     entity_id: int,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
     limit: int = Query(50, ge=1, le=200),
 ):
     """Get unified timeline combining activities, emails, and sequence events for an entity."""
+    from src.core.entity_access import require_entity_access
+    await require_entity_access(db, entity_type, entity_id, current_user, data_scope)
     timeline = ActivityTimeline(db)
     items = await timeline.get_unified_timeline(
         entity_type=entity_type,

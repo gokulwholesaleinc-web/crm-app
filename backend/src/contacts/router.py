@@ -136,9 +136,15 @@ async def get_contact_payment_summary(
     contact_id: int,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Get payment summary for a contact via their StripeCustomer link."""
     service = ContactService(db)
+    contact = await get_entity_or_404(service, contact_id, EntityNames.CONTACT)
+    check_record_access_or_shared(
+        contact, current_user, data_scope.role_name,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_CONTACTS),
+    )
     return await service.get_payment_summary(contact_id)
 
 

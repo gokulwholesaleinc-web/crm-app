@@ -4,10 +4,10 @@ import hashlib
 import hmac
 import json
 import logging
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, timezone
 from html import escape
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Union
 
 from sqlalchemy import select, func, or_, String
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,9 +28,23 @@ from src.payments.schemas import (
     PriceCreate,
     StripeCustomerCreate,
 )
+from src.webhooks.stripe_events import WebhookEvent
 from src.core.base_service import CRUDService
 from src.core.constants import DEFAULT_PAGE_SIZE
 from src.config import settings
+
+
+# Common: rounding money to integer cents. Stripe expects amounts as ints.
+# Use banker's-rounding-free half-up so $19.995 → 2000¢, not 1999¢.
+def _to_cents(amount: Union[float, int, Decimal, str]) -> int:
+    """Convert a user-facing money amount to integer cents.
+
+    Uses Decimal + ROUND_HALF_UP so values like 19.995 round to 2000
+    (not 1999, which is what naive int/truncation produces).
+    """
+    dec = amount if isinstance(amount, Decimal) else Decimal(str(amount))
+    cents = (dec * Decimal("100")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    return int(cents)
 
 logger = logging.getLogger(__name__)
 
@@ -198,7 +212,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         price_data: dict = {
             "currency": currency.lower(),
             "product_data": {"name": f"Payment to {company_name} - {currency} {amount}"},
-            "unit_amount": int(Decimal(str(amount)) * 100),
+            "unit_amount": _to_cents(amount),
         }
 
         if is_subscription and recurring_interval:
@@ -286,7 +300,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
                 stripe_customer_id = customer.stripe_customer_id
 
         intent_params = {
-            "amount": int(Decimal(str(amount)) * 100),
+            "amount": _to_cents(amount),
             "currency": currency.lower(),
         }
         if stripe_customer_id:
@@ -395,30 +409,76 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         await self.db.refresh(customer)
         return customer
 
+    # Stripe recommends 5-minute tolerance between payload timestamp and now
+    # to defend against captured-payload replays. Our own constant so tests
+    # can override it if needed.
+    WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 300
+
     async def process_webhook(self, payload: bytes, sig_header: str) -> dict:
         """Process a Stripe webhook event.
 
-        Verifies the webhook signature using HMAC-SHA256 and processes
-        the event idempotently.
+        Verifies the signature + freshness (5 min tolerance) then dedups
+        by the Stripe event_id against the webhook_events table. Replayed
+        payloads return a "replayed: True" marker without re-running
+        handlers.
 
-        Returns dict with event type and processing result.
-        Raises ValueError on invalid signature or missing config.
+        Raises ValueError on invalid signature, stale timestamp, or
+        missing config.
         """
         webhook_secret = getattr(settings, "STRIPE_WEBHOOK_SECRET", "")
         if not webhook_secret:
             raise ValueError("Stripe webhook secret is not configured.")
 
-        # Verify HMAC-SHA256 signature
-        if not self._verify_webhook_signature(payload, sig_header, webhook_secret):
-            raise ValueError("Invalid webhook signature.")
+        # Prefer the official stripe.Webhook.construct_event when the
+        # library is installed: it does signature + timestamp tolerance
+        # in one shot and rejects both stale and tampered payloads. Fall
+        # back to our hand-rolled HMAC verify when stripe isn't available
+        # (e.g. unit tests running without the package) so callers still
+        # get signature verification — but still enforce a timestamp
+        # tolerance using the t=<unix> field.
+        event_id: str
+        event_type: str
+        obj: dict
+        event: dict
 
-        event_data = json.loads(payload)
-        event_type = event_data.get("type", "")
-        event_id = event_data.get("id", "")
+        stripe = _get_stripe()
+        if stripe is not None:
+            try:
+                event = stripe.Webhook.construct_event(
+                    payload,
+                    sig_header,
+                    webhook_secret,
+                    tolerance=self.WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS,
+                )
+            except Exception as exc:
+                raise ValueError(f"Invalid webhook: {exc}") from exc
+            # `event` behaves as a mapping; normalize for the rest of the
+            # code path which expects dict lookups.
+            event_id = event["id"]
+            event_type = event["type"]
+            obj = event["data"]["object"]
+        else:
+            if not self._verify_webhook_signature(
+                payload, sig_header, webhook_secret,
+                tolerance=self.WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS,
+            ):
+                raise ValueError("Invalid webhook signature.")
+            event_data = json.loads(payload)
+            event_id = event_data.get("id", "")
+            event_type = event_data.get("type", "")
+            obj = event_data.get("data", {}).get("object", {})
 
-        # Idempotency check: see if we already processed this event
-        # We use the payment_intent_id or checkout_session_id to check
-        obj = event_data.get("data", {}).get("object", {})
+        # Dedup: skip replays (same event_id seen previously).
+        if event_id:
+            seen = await self.db.execute(
+                select(WebhookEvent).where(WebhookEvent.event_id == event_id)
+            )
+            if seen.scalar_one_or_none() is not None:
+                return {
+                    "event_type": event_type,
+                    "event_id": event_id,
+                    "status": "replayed",
+                }
 
         if event_type == "checkout.session.completed":
             await self._handle_checkout_completed(obj)
@@ -428,7 +488,9 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             await self._handle_payment_failed(obj)
         elif event_type == "charge.refunded":
             await self._handle_charge_refunded(obj)
-        elif event_type in ("customer.subscription.created", "customer.subscription.updated"):
+        elif event_type == "customer.subscription.created":
+            await self._handle_subscription_created(obj)
+        elif event_type == "customer.subscription.updated":
             await self._handle_subscription_updated(obj)
         elif event_type == "customer.subscription.deleted":
             await self._handle_subscription_deleted(obj)
@@ -445,14 +507,30 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         elif event_type == "setup_intent.succeeded":
             await self._handle_setup_intent_succeeded(obj)
 
+        # Mark processed AFTER all handlers ran so a mid-processing crash
+        # allows Stripe to retry. The dedup above still protects against
+        # the common case of duplicate deliveries from Stripe's own retry
+        # machinery.
+        if event_id:
+            self.db.add(
+                WebhookEvent(event_id=event_id, event_type=event_type or "unknown")
+            )
+            await self.db.flush()
+
         return {"event_type": event_type, "event_id": event_id, "status": "processed"}
 
     @staticmethod
-    def _verify_webhook_signature(payload: bytes, sig_header: str, secret: str) -> bool:
-        """Verify Stripe webhook HMAC-SHA256 signature.
+    def _verify_webhook_signature(
+        payload: bytes,
+        sig_header: str,
+        secret: str,
+        tolerance: int = 300,
+    ) -> bool:
+        """Verify Stripe webhook HMAC-SHA256 signature with timestamp
+        tolerance. Stripe sends the signature as ``t=<unix>,v1=<hex>``.
 
-        Stripe sends the signature in the format:
-        t=<timestamp>,v1=<signature>
+        Returns False on malformed header, bad signature, OR a timestamp
+        more than `tolerance` seconds old (or in the future).
         """
         try:
             elements = dict(
@@ -462,6 +540,15 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             signature = elements.get("v1", "")
 
             if not timestamp or not signature:
+                return False
+
+            # Reject stale / future-dated payloads.
+            try:
+                payload_ts = int(timestamp)
+            except ValueError:
+                return False
+            now_ts = int(datetime.now(timezone.utc).timestamp())
+            if abs(now_ts - payload_ts) > tolerance:
                 return False
 
             # Compute expected signature
@@ -746,8 +833,89 @@ body {{ font-family: Arial, Helvetica, sans-serif; margin: 40px; color: #111827;
         )
         await self._set_payment_status(payment, "refunded", guard_statuses=())
 
+    async def _handle_subscription_created(self, sub_obj: dict) -> None:
+        """Handle customer.subscription.created — insert local Subscription
+        row so the table actually reflects what Stripe has.
+
+        Before this fix no handler ran on subscription.created (it was
+        collapsed into subscription.updated which only did UPDATEs), so
+        subscriptions created via Stripe Checkout were silently missing
+        from the local database forever.
+        """
+        sub_id = sub_obj.get("id")
+        if not sub_id:
+            return
+
+        # Dedup: if we already have this subscription, fall through to
+        # the updated handler so we still refresh mutable fields.
+        existing = await self.db.execute(
+            select(Subscription).where(Subscription.stripe_subscription_id == sub_id)
+        )
+        if existing.scalar_one_or_none() is not None:
+            await self._handle_subscription_updated(sub_obj)
+            return
+
+        # Resolve the local StripeCustomer by Stripe's customer id.
+        stripe_customer_id = sub_obj.get("customer")
+        customer_row = None
+        if stripe_customer_id:
+            cust_result = await self.db.execute(
+                select(StripeCustomer).where(
+                    StripeCustomer.stripe_customer_id == stripe_customer_id
+                )
+            )
+            customer_row = cust_result.scalar_one_or_none()
+        if customer_row is None:
+            logger.warning(
+                "subscription.created for unknown customer %s — skipping local row insert",
+                stripe_customer_id,
+            )
+            return
+
+        # Derive owner_id from the linked contact/company so admin lists
+        # still work with the new row.
+        owner_id = None
+        if customer_row.contact and customer_row.contact.owner_id:
+            owner_id = customer_row.contact.owner_id
+        elif customer_row.company and customer_row.company.owner_id:
+            owner_id = customer_row.company.owner_id
+
+        # Optional: resolve local Price if we happen to have one matching
+        # the Stripe price id. `price_id` is now nullable (migration 003)
+        # so the miss case is fine.
+        local_price_id = None
+        items = (sub_obj.get("items") or {}).get("data") or []
+        if items:
+            stripe_price_id = (items[0].get("price") or {}).get("id")
+            if stripe_price_id:
+                price_result = await self.db.execute(
+                    select(Price).where(Price.stripe_price_id == stripe_price_id)
+                )
+                local_price = price_result.scalar_one_or_none()
+                if local_price is not None:
+                    local_price_id = local_price.id
+
+        def _ts_to_dt(ts):
+            if ts is None:
+                return None
+            return datetime.fromtimestamp(int(ts), tz=timezone.utc)
+
+        subscription = Subscription(
+            stripe_subscription_id=sub_id,
+            customer_id=customer_row.id,
+            price_id=local_price_id,
+            status=sub_obj.get("status") or "active",
+            current_period_start=_ts_to_dt(sub_obj.get("current_period_start")),
+            current_period_end=_ts_to_dt(sub_obj.get("current_period_end")),
+            cancel_at_period_end=bool(sub_obj.get("cancel_at_period_end")),
+            owner_id=owner_id,
+            created_by_id=owner_id,
+        )
+        self.db.add(subscription)
+        await self.db.flush()
+
     async def _handle_subscription_updated(self, sub_obj: dict) -> None:
-        """Handle subscription created/updated events."""
+        """Handle customer.subscription.updated — refresh mutable fields."""
         sub_id = sub_obj.get("id")
         if not sub_id:
             return
@@ -778,7 +946,14 @@ body {{ font-family: Arial, Helvetica, sans-serif; margin: 40px; color: #111827;
             await self.db.flush()
 
     async def _handle_invoice_paid(self, invoice_obj: dict) -> None:
-        """Handle invoice.paid event -- marks payment as succeeded."""
+        """Handle invoice.paid — covers both initial invoices we created
+        in-app and Stripe-initiated subscription renewal invoices.
+
+        For the first case, mark the existing Payment row succeeded.
+        For subscription renewals, the invoice ID is brand new to us, so
+        insert a fresh Payment row linked to the matching Subscription —
+        otherwise recurring revenue is silently dropped.
+        """
         invoice_id = invoice_obj.get("id")
         if not invoice_id:
             return
@@ -787,9 +962,81 @@ body {{ font-family: Arial, Helvetica, sans-serif; margin: 40px; color: #111827;
             select(Payment).where(Payment.stripe_invoice_id == invoice_id)
         )
         payment = result.scalar_one_or_none()
-        if payment and payment.status != "succeeded":
-            payment.status = "succeeded"
+        if payment is not None:
+            if payment.status != "succeeded":
+                payment.status = "succeeded"
+                await self.db.flush()
+            return
+
+        # ------------------------------------------------------------------
+        # Subscription renewal path: no existing Payment row for this
+        # invoice. Try to attach to a local Subscription + StripeCustomer
+        # and create a new Payment so MRR/ARR reporting stays correct.
+        # ------------------------------------------------------------------
+        stripe_subscription_id = invoice_obj.get("subscription")
+        subscription = None
+        if stripe_subscription_id:
+            sub_result = await self.db.execute(
+                select(Subscription).where(
+                    Subscription.stripe_subscription_id == stripe_subscription_id
+                )
+            )
+            subscription = sub_result.scalar_one_or_none()
+
+        stripe_customer_id = invoice_obj.get("customer")
+        customer_row = None
+        if stripe_customer_id:
+            cust_result = await self.db.execute(
+                select(StripeCustomer).where(
+                    StripeCustomer.stripe_customer_id == stripe_customer_id
+                )
+            )
+            customer_row = cust_result.scalar_one_or_none()
+
+        if subscription is None and customer_row is None:
+            # Nothing to link to — log and drop instead of inserting an
+            # orphan Payment row.
+            logger.warning(
+                "invoice.paid for unknown invoice %s with no matching subscription/customer",
+                invoice_id,
+            )
+            return
+
+        owner_id = None
+        if subscription is not None:
+            owner_id = subscription.owner_id
+        if owner_id is None and customer_row is not None:
+            if customer_row.contact and customer_row.contact.owner_id:
+                owner_id = customer_row.contact.owner_id
+            elif customer_row.company and customer_row.company.owner_id:
+                owner_id = customer_row.company.owner_id
+
+        amount_cents = invoice_obj.get("amount_paid") or invoice_obj.get("total") or 0
+        amount_dollars = (Decimal(int(amount_cents)) / Decimal("100")).quantize(
+            Decimal("0.01")
+        )
+        currency = (invoice_obj.get("currency") or "usd").upper()
+
+        renewal_payment = Payment(
+            stripe_invoice_id=invoice_id,
+            amount=amount_dollars,
+            currency=currency,
+            status="succeeded",
+            customer_id=customer_row.id if customer_row else None,
+            owner_id=owner_id,
+            created_by_id=owner_id,
+        )
+        self.db.add(renewal_payment)
+        try:
             await self.db.flush()
+        except Exception as exc:
+            # Extremely tight race: another worker inserted the same
+            # invoice row between our SELECT and INSERT. Roll back via
+            # savepoint and fall through — the other worker handled it.
+            logger.warning(
+                "invoice.paid renewal insert race for %s: %s", invoice_id, exc
+            )
+            await self.db.rollback()
 
     async def _handle_invoice_payment_failed(self, invoice_obj: dict) -> None:
         """Handle invoice.payment_failed event -- marks payment as failed."""
@@ -897,27 +1144,36 @@ body {{ font-family: Arial, Helvetica, sans-serif; margin: 40px; color: #111827;
             raise ValueError("Stripe is not configured. Set STRIPE_SECRET_KEY environment variable.")
 
         customer = await self.sync_customer_from_id(customer_id)
-        amount_cents = int(Decimal(str(amount)) * 100)
+        amount_cents = _to_cents(amount)
 
+        # Create the draft Invoice FIRST (auto_advance=False so Stripe
+        # doesn't finalize it behind our back), then attach a line item
+        # pinned to that invoice. If anything after the Invoice.create
+        # fails, the InvoiceItem is scoped to this invoice and gets
+        # reaped when we void the draft — so it can't orphan-attach to
+        # the customer's NEXT invoice (which was the silent double-
+        # charge bug).
         invoice = None
         try:
-            stripe.InvoiceItem.create(
-                customer=customer.stripe_customer_id,
-                amount=amount_cents,
-                currency=currency.lower(),
-                description=description,
-            )
-
             invoice_params = {
                 "customer": customer.stripe_customer_id,
                 "collection_method": "send_invoice",
                 "days_until_due": due_days,
+                "auto_advance": False,
             }
             if payment_method_types:
                 invoice_params["payment_settings"] = {
                     "payment_method_types": payment_method_types,
                 }
             invoice = stripe.Invoice.create(**invoice_params)
+
+            stripe.InvoiceItem.create(
+                customer=customer.stripe_customer_id,
+                amount=amount_cents,
+                currency=currency.lower(),
+                description=description,
+                invoice=invoice.id,
+            )
 
             invoice = stripe.Invoice.finalize_invoice(invoice.id)
             invoice = stripe.Invoice.send_invoice(invoice.id)

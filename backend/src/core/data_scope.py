@@ -158,6 +158,14 @@ def check_record_access_or_shared(
 
     Raises HTTPException if access is denied.
 
+    Access is granted when any of these are true:
+    - admin / manager / superuser
+    - caller is the owner (owner_id == user.id)
+    - caller created the record (created_by_id == user.id) — many create
+      paths set `created_by_id` without setting `owner_id`, so the creator
+      of a record should still be able to read it.
+    - entity is in the caller's shared list.
+
     Args:
         entity: The entity to check access for.
         current_user: The authenticated user.
@@ -178,6 +186,10 @@ def check_record_access_or_shared(
 
     # Owner can access own records
     if hasattr(entity, 'owner_id') and entity.owner_id == current_user.id:
+        return
+
+    # Creator can access own records even when owner_id is unset
+    if hasattr(entity, 'created_by_id') and entity.created_by_id == current_user.id:
         return
 
     # Check if shared

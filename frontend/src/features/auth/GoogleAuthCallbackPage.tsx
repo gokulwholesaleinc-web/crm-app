@@ -4,6 +4,12 @@
  * Runs BEFORE the user is authenticated (not wrapped in PrivateRoute), so it
  * cannot rely on the auth store. Finishes the token exchange, persists the
  * JWT + tenant slug, then redirects to the dashboard.
+ *
+ * CSRF: the state nonce is stored server-side in an HttpOnly cookie set
+ * by /api/auth/google/authorize. This page just forwards whatever state
+ * Google echoed back; the server compares it to the cookie and rejects
+ * mismatches. A victim lured directly to this URL has no cookie and
+ * the callback will 400 out.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -12,7 +18,7 @@ import { Spinner } from '../../components/ui/Spinner';
 import { authApi } from '../../api/auth';
 import { setTenantSlugOnLogin } from '../../providers/TenantProvider';
 import { useAuthStore } from '../../store/authStore';
-import { GOOGLE_OAUTH_STATE_KEY, GOOGLE_OAUTH_CALLBACK_PATH } from './GoogleSignInButton';
+import { GOOGLE_OAUTH_CALLBACK_PATH } from './GoogleSignInButton';
 
 function GoogleAuthCallbackPage() {
   const navigate = useNavigate();
@@ -38,21 +44,12 @@ function GoogleAuthCallbackPage() {
       return;
     }
 
-    // CSRF: the sign-in button writes a nonce to sessionStorage before
-    // redirecting to Google. If the nonce is missing OR doesn't match the
-    // `state` Google returned, treat it as a forged callback and bail out.
-    // A victim lured here directly will have no nonce in their sessionStorage,
-    // so this strictly rejects them.
-    let expectedState: string | null = null;
-    try {
-      expectedState = sessionStorage.getItem(GOOGLE_OAUTH_STATE_KEY);
-    } catch {
-      /* storage blocked */
-    }
-    if (!expectedState || !returnedState || expectedState !== returnedState) {
-      setError(
-        'Sign-in state mismatch. Please start again from the sign-in page.'
-      );
+    // State verification happens server-side now: /authorize sets an
+    // HttpOnly cookie, /callback compares it against the `state` we
+    // forward from Google's query string. Nothing for this page to
+    // check client-side.
+    if (!returnedState) {
+      setError('Sign-in state mismatch. Please start again from the sign-in page.');
       return;
     }
 
@@ -71,12 +68,6 @@ function GoogleAuthCallbackPage() {
         }
 
         storeLogin(user, tokenResult.access_token);
-
-        try {
-          sessionStorage.removeItem(GOOGLE_OAUTH_STATE_KEY);
-        } catch {
-          /* ignore */
-        }
 
         navigate('/', { replace: true });
       } catch (err: unknown) {
