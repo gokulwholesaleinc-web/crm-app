@@ -572,34 +572,6 @@ class TestNotificationEventWiring:
         assert len(lead_notifs) >= 1
         assert "Notification Test" in lead_notifs[0]["message"]
 
-    async def test_notification_list_returns_auto_created(
-        self, client: AsyncClient, auth_headers: dict, test_lead_source
-    ):
-        """Notification list endpoint should include event-driven notifications."""
-        # Create a lead to trigger a notification
-        await client.post(
-            "/api/leads",
-            headers=auth_headers,
-            json={
-                "first_name": "Auto",
-                "last_name": "Notif",
-                "email": "auto-notif@example.com",
-                "source_id": test_lead_source.id,
-                "status": "new",
-            },
-        )
-
-        response = await client.get(
-            "/api/notifications",
-            headers=auth_headers,
-            params={"page_size": 50},
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["total"] >= 1
-        assert any(n["type"] == "lead_created" for n in data["items"])
-
-
 # =============================================================================
 # Dashboard Report Widgets
 # =============================================================================

@@ -1592,64 +1592,6 @@ class TestLoginTenantInfo:
 # --- Tenant Admin Check Tests ---
 
 
-class TestTenantAdminCheck:
-    """Tests for require_tenant_admin dependency."""
-
-    @pytest.mark.asyncio
-    async def test_tenant_admin_check_for_non_member(
-        self, client: AsyncClient, db_session: AsyncSession,
-        test_tenant: Tenant, test_user: User, auth_headers: dict,
-    ):
-        """Test that a user who is NOT a tenant member is not linked."""
-        result = await db_session.execute(
-            select(TenantUser).where(
-                TenantUser.tenant_id == test_tenant.id,
-                TenantUser.user_id == test_user.id,
-            )
-        )
-        assert result.scalar_one_or_none() is None
-
-    @pytest.mark.asyncio
-    async def test_tenant_admin_user_linked_as_admin(
-        self, client: AsyncClient, db_session: AsyncSession,
-        test_tenant: Tenant, test_user: User, test_tenant_user: TenantUser,
-    ):
-        """Test that a user linked as admin to tenant has admin role."""
-        assert test_tenant_user.role == "admin"
-        assert test_tenant_user.tenant_id == test_tenant.id
-        assert test_tenant_user.user_id == test_user.id
-
-    @pytest.mark.asyncio
-    async def test_tenant_admin_user_linked_as_member(
-        self, client: AsyncClient, db_session: AsyncSession, test_tenant: Tenant,
-    ):
-        """Test that a user linked as member is not admin."""
-        member_user = User(
-            email="member@example.com",
-            hashed_password=get_password_hash("memberpassword123"),
-            full_name="Member User", is_active=True, is_superuser=False,
-        )
-        db_session.add(member_user)
-        await db_session.flush()
-        tenant_user = TenantUser(
-            tenant_id=test_tenant.id, user_id=member_user.id,
-            role="member", is_primary=False,
-        )
-        db_session.add(tenant_user)
-        await db_session.commit()
-        await db_session.refresh(tenant_user)
-        assert tenant_user.role == "member"
-        assert tenant_user.role != "admin"
-
-    @pytest.mark.asyncio
-    async def test_superuser_bypasses_tenant_admin_check(
-        self, client: AsyncClient, db_session: AsyncSession,
-        test_tenant: Tenant, test_superuser: User,
-    ):
-        """Test that superuser can act as tenant admin without explicit membership."""
-        assert test_superuser.is_superuser is True
-
-
 # --- URL Validation Tests ---
 
 

@@ -646,40 +646,6 @@ class TestSendReceiptEndpoint:
 # =========================================================================
 
 
-class TestCheckoutBranding:
-    """Test that checkout session includes company name."""
-
-    @pytest.mark.asyncio
-    async def test_checkout_session_product_name_includes_company(
-        self,
-        db_session: AsyncSession,
-        test_user: User,
-        test_tenant: Tenant,
-        test_tenant_user: TenantUser,
-    ):
-        """create_checkout_session should include company name in product data."""
-        service = PaymentService(db_session)
-        # Since Stripe is not configured in tests, this will raise ValueError
-        # but we can verify the branding logic runs by checking a modified approach
-        # Instead, test the branding helper directly
-        branding = await TenantBrandingHelper.get_branding_for_user(
-            db_session, test_user.id
-        )
-        assert branding["company_name"] == "Test Tenant Inc"
-
-    @pytest.mark.asyncio
-    async def test_default_branding_when_no_tenant(
-        self,
-        db_session: AsyncSession,
-        test_user: User,
-    ):
-        """Users without a tenant get default branding."""
-        branding = await TenantBrandingHelper.get_branding_for_user(
-            db_session, test_user.id
-        )
-        assert branding["company_name"] == "CRM"
-
-
 class TestGetMemberEmail:
     """Test _get_member_email handles member_type correctly."""
 

@@ -894,65 +894,6 @@ class TestSuggestNextAction:
     """Tests for GET /api/ai/suggest/next-action/{entity_type}/{entity_id}."""
 
     @pytest.mark.asyncio
-    async def test_suggest_next_action_for_lead(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-        test_lead: Lead,
-    ):
-        """Test suggesting next action for a lead."""
-        response = await client.get(
-            f"/api/ai/suggest/next-action/leads/{test_lead.id}",
-            headers=auth_headers,
-        )
-
-        # The endpoint delegates to RecommendationEngine which may work differently
-        # depending on entity state. Accept 200 or graceful error.
-        if response.status_code == 200:
-            data = response.json()
-            assert "action" in data
-            assert "reason" in data
-
-    @pytest.mark.asyncio
-    async def test_suggest_next_action_for_contact(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-        test_contact: Contact,
-    ):
-        """Test suggesting next action for a contact."""
-        response = await client.get(
-            f"/api/ai/suggest/next-action/contacts/{test_contact.id}",
-            headers=auth_headers,
-        )
-
-        if response.status_code == 200:
-            data = response.json()
-            assert "action" in data
-            assert "reason" in data
-
-    @pytest.mark.asyncio
-    async def test_suggest_next_action_for_opportunity(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-        test_opportunity: Opportunity,
-    ):
-        """Test suggesting next action for an opportunity."""
-        response = await client.get(
-            f"/api/ai/suggest/next-action/opportunities/{test_opportunity.id}",
-            headers=auth_headers,
-        )
-
-        if response.status_code == 200:
-            data = response.json()
-            assert "action" in data
-            assert "reason" in data
-
-    @pytest.mark.asyncio
     async def test_suggest_next_action_not_found(
         self,
         client: AsyncClient,

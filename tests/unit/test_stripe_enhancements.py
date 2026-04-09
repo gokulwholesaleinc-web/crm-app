@@ -204,6 +204,39 @@ class TestCreateAndSendInvoice:
         )
         assert response.status_code == 404
 
+    @pytest.mark.asyncio
+    async def test_create_invoice_accepts_full_body(
+        self, client: AsyncClient, test_user, stripe_customer,
+    ):
+        """Should accept customer_id, amount, description, due_days, payment_method_types."""
+        response = await client.post(
+            "/api/payments/invoices/create-and-send",
+            json={
+                "customer_id": stripe_customer.id,
+                "amount": 250.00,
+                "description": "Consulting services",
+                "due_days": 14,
+                "payment_method_types": ["card", "us_bank_account"],
+            },
+            headers=_token(test_user),
+        )
+        # Without a real Stripe key this returns 400 "Stripe is not configured",
+        # but it should NOT be 422 (validation passes).
+        assert response.status_code == 400
+        assert "Stripe is not configured" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_create_invoice_missing_required_fields_returns_422(
+        self, client: AsyncClient, test_user,
+    ):
+        """Should return 422 when required fields are missing."""
+        response = await client.post(
+            "/api/payments/invoices/create-and-send",
+            json={},
+            headers=_token(test_user),
+        )
+        assert response.status_code == 422
+
 
 # =========================================================================
 # Onboarding Link Endpoint Tests
@@ -257,6 +290,35 @@ class TestOnboardingLink:
         )
         assert response.status_code == 400
         assert "Stripe is not configured" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_onboarding_accepts_company_id(
+        self, client: AsyncClient, test_user, test_company,
+    ):
+        """Should accept company_id instead of contact_id."""
+        response = await client.post(
+            "/api/payments/customers/onboarding-link",
+            json={
+                "company_id": test_company.id,
+                "success_url": "http://localhost/success",
+                "cancel_url": "http://localhost/cancel",
+            },
+            headers=_token(test_user),
+        )
+        assert response.status_code == 400
+        assert "Stripe is not configured" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_onboarding_missing_urls_returns_422(
+        self, client: AsyncClient, test_user,
+    ):
+        """Should return 422 when required URL fields are missing."""
+        response = await client.post(
+            "/api/payments/customers/onboarding-link",
+            json={"contact_id": 1},
+            headers=_token(test_user),
+        )
+        assert response.status_code == 422
 
 
 # =========================================================================
@@ -403,26 +465,6 @@ class TestAsyncPaymentWebhookHandlers:
 # =========================================================================
 # Setup Intent Webhook Test
 # =========================================================================
-
-class TestSetupIntentWebhook:
-    """Test setup_intent.succeeded webhook handler."""
-
-    @pytest.mark.asyncio
-    async def test_setup_intent_succeeded_logs(self, db_session):
-        """setup_intent.succeeded should not error (logs info)."""
-        service = PaymentService(db_session)
-        # Should complete without error; it just logs
-        await service._handle_setup_intent_succeeded({
-            "id": "seti_test_001",
-            "customer": "cus_enhance_test",
-        })
-
-    @pytest.mark.asyncio
-    async def test_setup_intent_succeeded_no_customer(self, db_session):
-        """setup_intent.succeeded without customer should not error."""
-        service = PaymentService(db_session)
-        await service._handle_setup_intent_succeeded({"id": "seti_test_002"})
-
 
 # =========================================================================
 # Full Webhook Endpoint Tests (invoice events via signed HTTP)

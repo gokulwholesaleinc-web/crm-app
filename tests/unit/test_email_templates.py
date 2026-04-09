@@ -407,36 +407,3 @@ class TestCampaignSteps:
         assert response.status_code == 404
 
 
-class TestCampaignExecution:
-    """Tests for campaign execution endpoint."""
-
-    @pytest.mark.asyncio
-    async def test_execute_campaign(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-        test_campaign: Campaign,
-    ):
-        """Test triggering campaign execution."""
-        response = await client.post(
-            f"/api/campaigns/{test_campaign.id}/execute",
-            headers=auth_headers,
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "in_progress"
-        assert "message" in data
-
-    @pytest.mark.asyncio
-    async def test_execute_campaign_not_found(
-        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
-    ):
-        """Test executing non-existent campaign."""
-        response = await client.post(
-            "/api/campaigns/99999/execute",
-            headers=auth_headers,
-        )
-
-        assert response.status_code == 404

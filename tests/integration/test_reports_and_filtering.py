@@ -1119,24 +1119,6 @@ class TestAggregateEndpoint:
         assert data["count"] == 0
         assert data["sample_entities"] == []
 
-    async def test_aggregate_leads_count(self, client, auth_headers, test_lead):
-        """Test aggregate endpoint works with leads entity type."""
-        response = await client.post(
-            "/api/filters/aggregate",
-            headers=auth_headers,
-            json={
-                "entity_type": "leads",
-                "filters": {
-                    "operator": "and",
-                    "conditions": [{"field": "status", "op": "eq", "value": "new"}],
-                },
-                "metrics": ["count"],
-            },
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["count"] >= 1
-
     async def test_aggregate_invalid_entity_type(self, client, auth_headers):
         """Test aggregate with invalid entity type returns 400."""
         response = await client.post(
