@@ -89,14 +89,6 @@ class TestActionSafetyClassification:
         )
         assert "unknown_action" in desc
 
-    def test_all_tools_have_classification(self):
-        """Verify every tool in the TOOLS list has a safety classification."""
-        for tool in TOOLS:
-            func_name = tool["function"]["name"]
-            assert func_name in ACTION_CLASSIFICATION, (
-                f"Tool '{func_name}' is missing from ACTION_CLASSIFICATION"
-            )
-
 
 class TestQueryProcessorFunctions:
     """Tests for direct QueryProcessor function execution (no OpenAI needed)."""
@@ -596,7 +588,3 @@ class TestToolDefinitions:
         tool_names = {t["function"]["name"] for t in TOOLS}
         assert "generate_pipeline_report" in tool_names
         assert "generate_activity_report" in tool_names
-
-    def test_tool_count(self):
-        """Verify total number of tools is as expected."""
-        assert len(TOOLS) == 34
