@@ -76,25 +76,19 @@ function LoginPage() {
 
       navigate('/');
     } catch (err: unknown) {
-      // Clear saved credentials if auto-login failed (e.g. password changed)
+      // Clear saved credentials when login fails so a stale prefilled password can't lock the user out
       localStorage.removeItem(REMEMBER_KEY);
-      const errorMessage = err instanceof Error ? err.message :
-        (typeof err === 'object' && err !== null && 'detail' in err)
-          ? String((err as { detail: unknown }).detail)
-          : 'An error occurred';
+      let errorMessage = 'An error occurred';
+      if (err instanceof Error) {
+        errorMessage = err.message;
+      } else if (typeof err === 'object' && err !== null && 'detail' in err) {
+        errorMessage = String((err as { detail: unknown }).detail);
+      }
       setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
-
-  // Auto-login when saved "Remember me" credentials exist
-  useEffect(() => {
-    if (saved) {
-      handleSubmit(onSubmit)();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-8 sm:py-12 px-4 sm:px-6 lg:px-8">
