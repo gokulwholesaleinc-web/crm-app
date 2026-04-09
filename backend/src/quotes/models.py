@@ -23,6 +23,12 @@ class Quote(Base, AuditableMixin):
     quote_number: Mapped[str] = mapped_column(
         String(50), unique=True, index=True, nullable=False
     )
+    # Unguessable token used for the public /accept endpoint. Separate from
+    # quote_number so the user-facing identifier can stay short and readable
+    # while the public URL remains non-enumerable.
+    public_token: Mapped[Optional[str]] = mapped_column(
+        String(64), unique=True, index=True, nullable=True
+    )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text)
 

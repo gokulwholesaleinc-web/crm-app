@@ -78,6 +78,21 @@ def _clear_google_http_factory_override():
     app.dependency_overrides.pop(get_google_http_factory, None)
 
 
+async def _prime_google_state(client, redirect_uri: str) -> str:
+    """Call /api/auth/google/authorize so the httpx client picks up the
+    HttpOnly state cookie, and return the state nonce for use in the
+    subsequent /callback body.
+
+    Caller must set settings.GOOGLE_CLIENT_ID before calling this.
+    """
+    resp = await client.post(
+        "/api/auth/google/authorize",
+        json={"redirect_uri": redirect_uri},
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()["state"]
+
+
 # =============================================================================
 # /google/authorize
 # =============================================================================
@@ -218,12 +233,18 @@ class TestGoogleCallback:
         settings.GOOGLE_CLIENT_SECRET = "test-client-secret"
 
         try:
+            # Prime the state cookie by calling /authorize; the cookie
+            # flows into the subsequent /callback request via the shared
+            # httpx client jar.
+            state = await _prime_google_state(
+                client, "http://localhost:3000/auth/google/callback",
+            )
             response = await client.post(
                 "/api/auth/google/callback",
                 json={
                     "code": "real-looking-code",
                     "redirect_uri": "http://localhost:3000/auth/google/callback",
-                    "state": "nonce-xyz",
+                    "state": state,
                 },
             )
             assert response.status_code == 200, response.text
@@ -303,11 +324,15 @@ class TestGoogleCallback:
         settings.GOOGLE_CLIENT_SECRET = "test-client-secret"
 
         try:
+            state = await _prime_google_state(
+                client, "http://localhost:3000/auth/google/callback",
+            )
             response = await client.post(
                 "/api/auth/google/callback",
                 json={
                     "code": "link-code",
                     "redirect_uri": "http://localhost:3000/auth/google/callback",
+                    "state": state,
                 },
             )
             assert response.status_code == 200, response.text
@@ -351,17 +376,53 @@ class TestGoogleCallback:
         settings.GOOGLE_CLIENT_SECRET = "test-client-secret"
 
         try:
+            state = await _prime_google_state(
+                client, "http://localhost:3000/auth/google/callback",
+            )
             response = await client.post(
                 "/api/auth/google/callback",
                 json={
                     "code": "any",
                     "redirect_uri": "http://localhost:3000/auth/google/callback",
+                    "state": state,
                 },
             )
             assert response.status_code == 400
             assert "not verified" in response.json()["detail"].lower()
         finally:
             _clear_google_http_factory_override()
+            settings.GOOGLE_CLIENT_ID = original_id
+            settings.GOOGLE_CLIENT_SECRET = original_secret
+
+    @pytest.mark.asyncio
+    async def test_state_mismatch_rejected(self, client):
+        """Callback without a matching state cookie must 400.
+
+        This is the server-side CSRF defense. An attacker who tricks a
+        victim into landing on /auth/google/callback?code=... has no
+        matching cookie in the victim's browser, so the exchange is
+        rejected before we ever talk to Google.
+        """
+        from src.config import settings
+
+        original_id = settings.GOOGLE_CLIENT_ID
+        original_secret = settings.GOOGLE_CLIENT_SECRET
+        settings.GOOGLE_CLIENT_ID = "test-client-id.apps.googleusercontent.com"
+        settings.GOOGLE_CLIENT_SECRET = "test-client-secret"
+        try:
+            # Note: NOT calling /authorize first, so no state cookie
+            # exists on the client.
+            response = await client.post(
+                "/api/auth/google/callback",
+                json={
+                    "code": "whatever",
+                    "redirect_uri": "http://localhost:3000/auth/google/callback",
+                    "state": "attacker-crafted-state",
+                },
+            )
+            assert response.status_code == 400
+            assert "state mismatch" in response.json()["detail"].lower()
+        finally:
             settings.GOOGLE_CLIENT_ID = original_id
             settings.GOOGLE_CLIENT_SECRET = original_secret
 
@@ -381,11 +442,15 @@ class TestGoogleCallback:
         settings.GOOGLE_CLIENT_SECRET = "test-client-secret"
 
         try:
+            state = await _prime_google_state(
+                client, "http://localhost:3000/auth/google/callback",
+            )
             response = await client.post(
                 "/api/auth/google/callback",
                 json={
                     "code": "bad-code",
                     "redirect_uri": "http://localhost:3000/auth/google/callback",
+                    "state": state,
                 },
             )
             assert response.status_code == 400

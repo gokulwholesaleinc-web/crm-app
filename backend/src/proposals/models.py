@@ -24,6 +24,10 @@ class Proposal(Base, AuditableMixin):
     proposal_number: Mapped[str] = mapped_column(
         String(50), unique=True, index=True, nullable=False
     )
+    # Unguessable public-link token — see Quote.public_token for rationale.
+    public_token: Mapped[Optional[str]] = mapped_column(
+        String(64), unique=True, index=True, nullable=True
+    )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     content: Mapped[Optional[str]] = mapped_column(Text)
 

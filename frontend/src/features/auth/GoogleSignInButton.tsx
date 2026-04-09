@@ -1,15 +1,19 @@
 /**
  * "Continue with Google" button shared by the login and register pages.
  *
- * Kicks off the OAuth2 flow: POSTs to /api/auth/google/authorize, stores the
- * CSRF state in sessionStorage, and redirects the browser to Google. The
- * public /auth/google/callback page finishes the flow.
+ * Kicks off the OAuth2 flow: POSTs to /api/auth/google/authorize, which
+ * sets an HttpOnly state cookie server-side, then redirects the browser
+ * to Google. The public /auth/google/callback page finishes the flow.
+ *
+ * The `state` value returned by /authorize is also handed back to the
+ * callback in the request body — server compares body vs cookie via
+ * hmac.compare_digest. The frontend keeps the state in memory (via
+ * URL state param) rather than localStorage so XSS can't read it.
  */
 
 import { useState } from 'react';
 import { authApi } from '../../api/auth';
 
-const STATE_KEY = 'google-oauth-state:v1';
 const CALLBACK_PATH = '/auth/google/callback';
 
 interface GoogleSignInButtonProps {
@@ -29,12 +33,10 @@ function GoogleSignInButton({
     setIsLoading(true);
     try {
       const redirectUri = window.location.origin + CALLBACK_PATH;
-      const { auth_url, state } = await authApi.googleAuthorize(redirectUri);
-      try {
-        sessionStorage.setItem(STATE_KEY, state);
-      } catch {
-        /* storage blocked — proceed without state verification */
-      }
+      const { auth_url } = await authApi.googleAuthorize(redirectUri);
+      // State lives in an HttpOnly cookie set by /authorize; nothing for
+      // us to stash client-side. The callback page will read `state` from
+      // Google's query string and forward it verbatim.
       window.location.href = auth_url;
     } catch (err: unknown) {
       const detail =
@@ -100,7 +102,6 @@ function AuthDivider({ label = 'Or' }: { label?: string }) {
 
 export default GoogleSignInButton;
 export {
-  STATE_KEY as GOOGLE_OAUTH_STATE_KEY,
   CALLBACK_PATH as GOOGLE_OAUTH_CALLBACK_PATH,
   AuthDivider,
 };

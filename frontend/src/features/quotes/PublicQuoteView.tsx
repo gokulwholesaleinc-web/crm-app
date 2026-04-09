@@ -1,7 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
-import { apiClient } from '../../api/client';
+import axios from 'axios';
+
+// Bare axios for public (unauthenticated) quote endpoints. Does NOT
+// attach CRM Bearer token or X-Tenant-Slug header so a CRM staff user
+// previewing their own public link doesn't leak credentials or get
+// logged out on a 401. See audit Session 2 report.
+const publicClient = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || '',
+  headers: { 'Content-Type': 'application/json' },
+  timeout: 30000,
+});
 
 interface QuoteBranding {
   company_name: string | null;
@@ -68,7 +78,11 @@ function formatDate(dateStr: string): string {
 }
 
 function PublicQuoteView() {
-  const { quoteNumber } = useParams<{ quoteNumber: string }>();
+  // URL parameter is now the unguessable Quote.public_token, not the
+  // sequential quote_number. The React Router path still uses the
+  // :quoteNumber name for backwards compatibility — we just treat its
+  // value as an opaque token.
+  const { quoteNumber: token } = useParams<{ quoteNumber: string }>();
   const [quote, setQuote] = useState<PublicQuote | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -87,12 +101,12 @@ function PublicQuoteView() {
   }, [quote?.branding?.logo_url]);
 
   useEffect(() => {
-    if (!quoteNumber) return;
+    if (!token) return;
 
     const fetchQuote = async () => {
       try {
-        const response = await apiClient.get<PublicQuote>(
-          `/api/quotes/public/${quoteNumber}`
+        const response = await publicClient.get<PublicQuote>(
+          `/api/quotes/public/${token}`
         );
         setQuote(response.data);
       } catch {
@@ -103,7 +117,7 @@ function PublicQuoteView() {
     };
 
     fetchQuote();
-  }, [quoteNumber]);
+  }, [token]);
 
   const handleAcceptClick = useCallback(() => {
     setEsignError(null);
@@ -119,36 +133,45 @@ function PublicQuoteView() {
     setActionPending(true);
     setEsignError(null);
     try {
-      const response = await apiClient.post<PublicQuote>(
-        `/api/quotes/public/${quoteNumber}/accept`,
+      const response = await publicClient.post<PublicQuote>(
+        `/api/quotes/public/${token}/accept`,
         { signer_name: signerName.trim(), signer_email: signerEmail.trim() }
       );
       setQuote(response.data);
       setActionDone('accepted');
       setShowEsignModal(false);
-    } catch {
-      setEsignError('Failed to accept the quote. Please try again.');
+    } catch (err) {
+      // Surface server error if available — the backend returns
+      // "Signer email does not match the quote recipient" when the
+      // customer types an email that doesn't match their own contact.
+      const detail =
+        (typeof err === 'object' && err !== null && 'response' in err
+          ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+          : null) || 'Failed to accept the quote. Please try again.';
+      setEsignError(detail);
     } finally {
       setActionPending(false);
     }
-  }, [quoteNumber, signerName, signerEmail]);
+  }, [token, signerName, signerEmail]);
 
   const handleReject = useCallback(async () => {
     if (!quote) return;
     setActionPending(true);
     try {
-      const response = await apiClient.post<PublicQuote>(
-        `/api/quotes/public/${quoteNumber}/reject`,
+      const response = await publicClient.post<PublicQuote>(
+        `/api/quotes/public/${token}/reject`,
         {}
       );
       setQuote(response.data);
       setActionDone('rejected');
     } catch {
-      setActionDone('rejected');
+      // Unlike the old version, do NOT mark the quote rejected on a
+      // failed network call — the actual server-side state is unknown.
+      setError('Unable to record rejection. Please contact your account manager.');
     } finally {
       setActionPending(false);
     }
-  }, [quote, quoteNumber]);
+  }, [quote, token]);
 
   if (loading) {
     return (

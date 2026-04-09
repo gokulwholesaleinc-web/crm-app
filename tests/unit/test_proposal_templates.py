@@ -113,8 +113,10 @@ async def branded_proposal(
     db_session: AsyncSession, branded_user: User, branded_contact: Contact
 ) -> Proposal:
     """Create a proposal owned by the branded user with a contact."""
+    import secrets
     proposal = Proposal(
         proposal_number="PR-2026-BRAND01",
+        public_token=secrets.token_urlsafe(32),
         title="Branded Test Proposal",
         content="Full proposal content",
         status="draft",
@@ -201,7 +203,9 @@ class TestSendProposalEmail:
         )
         email = result.scalars().first()
         assert email is not None
-        assert branded_proposal.proposal_number in email.body
+        # Public-view CTA now uses the unguessable public_token, not the
+        # enumerable proposal_number.
+        assert branded_proposal.public_token in email.body
         assert "proposals/public/" in email.body
 
     @pytest.mark.asyncio
@@ -354,7 +358,7 @@ class TestPublicViewBranding:
     ):
         """Test that the public view response includes branding data."""
         response = await client.get(
-            f"/api/proposals/public/{branded_proposal.proposal_number}",
+            f"/api/proposals/public/{branded_proposal.public_token}",
         )
 
         assert response.status_code == 200
@@ -376,8 +380,10 @@ class TestPublicViewBranding:
         test_user: User,
     ):
         """Test that proposals without tenant owner get default branding."""
+        import secrets as _secrets
         proposal = Proposal(
             proposal_number="PR-2026-NOBRAND",
+            public_token=_secrets.token_urlsafe(32),
             title="No Brand Proposal",
             status="draft",
             owner_id=test_user.id,
@@ -388,7 +394,7 @@ class TestPublicViewBranding:
         await db_session.refresh(proposal)
 
         response = await client.get(
-            f"/api/proposals/public/{proposal.proposal_number}",
+            f"/api/proposals/public/{proposal.public_token}",
         )
 
         assert response.status_code == 200
@@ -409,7 +415,7 @@ class TestPublicViewBranding:
     ):
         """Test that public view still includes all proposal sections."""
         response = await client.get(
-            f"/api/proposals/public/{branded_proposal.proposal_number}",
+            f"/api/proposals/public/{branded_proposal.public_token}",
         )
 
         assert response.status_code == 200
@@ -431,7 +437,7 @@ class TestPublicViewBranding:
     ):
         """Test that branding includes footer text from tenant settings."""
         response = await client.get(
-            f"/api/proposals/public/{branded_proposal.proposal_number}",
+            f"/api/proposals/public/{branded_proposal.public_token}",
         )
 
         assert response.status_code == 200
