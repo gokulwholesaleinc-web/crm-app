@@ -71,8 +71,13 @@ export function ConfirmDialog({
           <h3 className="text-base font-semibold leading-6 text-gray-900 dark:text-gray-100">
             {title}
           </h3>
-          <div className="mt-2">
-            <p className="text-sm text-gray-500 dark:text-gray-400">{message}</p>
+          {/* `message` is typed as ReactNode so callers can pass rich content
+              (fragments, block-level spans, warnings, lists). Use a div so
+              block children are valid — a `<p>` wrapper would trigger
+              React's validateDOMNesting warning and silently break layout
+              when callers pass anything other than inline text. */}
+          <div className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+            {message}
           </div>
         </div>
       </div>

@@ -76,13 +76,26 @@ function DuplicatesPage() {
       // Run duplicate checks with bounded concurrency instead of
       // sequentially. The previous loop awaited each mutation one-at-a-time,
       // so scanning 100 records meant 100 serial round-trips (tens of
-      // seconds). A concurrency of 5 keeps the backend load reasonable
-      // while cutting wall-clock time by ~5x. See interactive-pages.md #6.
+      // seconds). Concurrency of 5 keeps the backend load reasonable while
+      // cutting wall-clock time substantially. See interactive-pages.md #6.
+      //
+      // The `seen` set is checked BEFORE each batch is scheduled so we
+      // don't re-fire mutations for entities that already appeared as
+      // matches in an earlier source's result — matching the original
+      // sequential loop's request-count behavior.
       const CONCURRENCY = 5;
-      type DuplicateResult = { entity: (typeof entities)[number]; matches: DuplicateMatch[] };
-      const results: DuplicateResult[] = [];
-      for (let i = 0; i < entities.length; i += CONCURRENCY) {
-        const batch = entities.slice(i, i + CONCURRENCY);
+      const groups: DuplicateGroup[] = [];
+      const seen = new Set<number>();
+      let cursor = 0;
+      while (cursor < entities.length) {
+        const batch: typeof entities = [];
+        while (batch.length < CONCURRENCY && cursor < entities.length) {
+          const next = entities[cursor];
+          cursor += 1;
+          if (next && !seen.has(next.id)) batch.push(next);
+        }
+        if (batch.length === 0) continue;
+
         const settled = await Promise.all(
           batch.map(async (entity) => {
             const result = await checkDuplicatesMutation.mutateAsync({
@@ -95,18 +108,13 @@ function DuplicatesPage() {
             };
           })
         );
-        results.push(...settled);
-      }
 
-      // Group results after all checks complete so the "already seen"
-      // filter stays stable regardless of request ordering.
-      const groups: DuplicateGroup[] = [];
-      const seen = new Set<number>();
-      for (const { entity, matches } of results) {
-        if (seen.has(entity.id) || matches.length === 0) continue;
-        groups.push({ source: entity, matches });
-        seen.add(entity.id);
-        matches.forEach((m) => seen.add(m.id));
+        for (const { entity, matches } of settled) {
+          if (seen.has(entity.id) || matches.length === 0) continue;
+          groups.push({ source: entity, matches });
+          seen.add(entity.id);
+          matches.forEach((m) => seen.add(m.id));
+        }
       }
 
       setDuplicateGroups(groups);

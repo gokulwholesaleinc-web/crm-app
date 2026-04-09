@@ -44,6 +44,12 @@ const suggestedPrompts = [
   'Create a quote for my top opportunity and send it',
 ];
 
+const PRIORITY_DOT_COLOR: Record<string, string> = {
+  high: 'bg-red-500',
+  medium: 'bg-amber-500',
+  low: 'bg-green-500',
+};
+
 function QuickAction({
   icon: Icon,
   label,
@@ -459,8 +465,7 @@ export function AIAssistantPage() {
                         aria-hidden="true"
                         className={clsx(
                           'mt-0.5 inline-block h-2 w-2 rounded-full flex-shrink-0',
-                          suggestion.priority === 'high' ? 'bg-red-500' :
-                          suggestion.priority === 'medium' ? 'bg-amber-500' : 'bg-green-500'
+                          PRIORITY_DOT_COLOR[suggestion.priority] ?? 'bg-green-500'
                         )}
                       />
                       <div className="min-w-0">

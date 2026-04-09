@@ -39,10 +39,18 @@ const dateFormatter = new Intl.DateTimeFormat(undefined, {
   minute: '2-digit',
 });
 
-const ACTION_BADGE_VARIANT: Record<string, 'green' | 'blue' | 'red' | 'gray'> = {
+type BadgeVariant = 'green' | 'blue' | 'red' | 'gray' | 'indigo';
+
+const ACTION_BADGE_VARIANT: Record<string, BadgeVariant> = {
   create: 'green',
   update: 'blue',
   delete: 'red',
+};
+
+const ROLE_BADGE_VARIANT: Record<string, BadgeVariant> = {
+  admin: 'indigo',
+  manager: 'blue',
+  sales_rep: 'green',
 };
 
 interface StatCardProps {
@@ -82,18 +90,7 @@ const teamColumns: Column<TeamMemberOverview>[] = [
     header: 'Role',
     sortable: true,
     render: (row) => (
-      <Badge
-        variant={
-          row.role === 'admin'
-            ? 'indigo'
-            : row.role === 'manager'
-            ? 'blue'
-            : row.role === 'sales_rep'
-            ? 'green'
-            : 'gray'
-        }
-        size="sm"
-      >
+      <Badge variant={ROLE_BADGE_VARIANT[row.role] ?? 'gray'} size="sm">
         {row.role.replace('_', ' ')}
       </Badge>
     ),
