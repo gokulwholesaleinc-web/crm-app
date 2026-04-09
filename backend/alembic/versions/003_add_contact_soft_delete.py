@@ -19,8 +19,14 @@ This migration adds:
 new ``"archived"`` and ``"merged"`` values require no type change.
 
 Revision ID: 003_contact_soft_delete
-Revises: 002_google_oauth
+Revises: 003_audit_s2
 Create Date: 2026-04-09
+
+Chained after ``003_audit_s2`` (the Session 2 webhook_events / public_token
+migration) so alembic stays on a single linear head. Both migrations
+originally targeted ``002_google_oauth`` as their parent when authored on
+independent branches; this file is the later of the two and takes the
+merge-point slot.
 """
 
 from alembic import op
@@ -28,7 +34,7 @@ import sqlalchemy as sa
 
 
 revision = "003_contact_soft_delete"
-down_revision = "002_google_oauth"
+down_revision = "003_audit_s2"
 branch_labels = None
 depends_on = None
 
