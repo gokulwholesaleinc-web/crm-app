@@ -199,8 +199,15 @@ export function AIAssistantPage() {
       <div className="flex-1 overflow-hidden">
         {activeTab === 'chat' && (
           <div className="h-full flex flex-col">
-            {/* Messages Area - full width on mobile */}
-            <div className="flex-1 overflow-y-auto p-2 sm:p-4 space-y-3 sm:space-y-4">
+            {/* Messages Area - full width on mobile. aria-live="polite"
+                announces assistant responses as they stream in; aria-atomic
+                is false so only the delta is read, not the whole backlog. */}
+            <div
+              className="flex-1 overflow-y-auto p-2 sm:p-4 space-y-3 sm:space-y-4"
+              aria-live="polite"
+              aria-atomic="false"
+              aria-busy={isChatLoading}
+            >
               {messages.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center px-4">
                   <div className="p-3 sm:p-4 bg-purple-50 dark:bg-purple-900/30 rounded-full mb-3 sm:mb-4">

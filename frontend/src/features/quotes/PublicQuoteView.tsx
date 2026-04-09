@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
+import { sanitizeHexColor } from '../../utils/colorValidation';
 
 // Bare axios for public (unauthenticated) quote endpoints. Does NOT
 // attach CRM Bearer token or X-Tenant-Slug header so a CRM staff user
@@ -213,7 +214,17 @@ function PublicQuoteView() {
     );
   }
 
-  const branding = quote.branding ?? DEFAULT_BRANDING;
+  const rawBranding = quote.branding ?? DEFAULT_BRANDING;
+  // Tenant branding colors come from the server as arbitrary strings. Strip
+  // any value that isn't a strict hex color before it hits an inline
+  // `style={{ backgroundColor: ... }}` — a malformed color otherwise gets
+  // echoed into the DOM verbatim.
+  const branding = {
+    ...rawBranding,
+    primary_color: sanitizeHexColor(rawBranding.primary_color, DEFAULT_BRANDING.primary_color),
+    secondary_color: sanitizeHexColor(rawBranding.secondary_color, DEFAULT_BRANDING.secondary_color),
+    accent_color: sanitizeHexColor(rawBranding.accent_color, DEFAULT_BRANDING.accent_color),
+  };
   const companyDisplayName = branding.company_name || quote.company?.name || 'Quote';
 
   const isExpired =

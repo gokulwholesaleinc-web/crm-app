@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { PlusIcon, FunnelIcon, BookmarkIcon, XMarkIcon } from '@heroicons/react/24/outline';
-import { Button, Modal, ConfirmDialog, PaginationBar } from '../../components/ui';
+import { Button, Modal, PaginationBar } from '../../components/ui';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { DuplicateWarningModal } from '../../components/shared/DuplicateWarningModal';
 import { ContactForm, ContactFormData } from './components/ContactForm';
 import { SmartListBuilder } from './components/SmartListBuilder';
-import { useContacts, useCreateContact, useUpdateContact, useDeleteContact } from '../../hooks/useContacts';
+import { useContacts, useCreateContact, useUpdateContact } from '../../hooks/useContacts';
 import { useCheckDuplicates } from '../../hooks/useDedup';
 import { useSavedFilters, useDeleteSavedFilter } from '../../hooks/useFilters';
 import { formatDate, formatPhoneNumber } from '../../utils/formatters';
@@ -29,10 +29,6 @@ function ContactsPage() {
   const [showSmartListBuilder, setShowSmartListBuilder] = useState(false);
   const [activeFilters, setActiveFilters] = useState<FilterGroup | null>(null);
   const [activeSmartListName, setActiveSmartListName] = useState<string | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; contact: Contact | null }>({
-    isOpen: false,
-    contact: null,
-  });
   const [pageSize, setPageSize] = useState(25);
   const [pendingFormData, setPendingFormData] = useState<ContactFormData | null>(null);
   const [duplicateResults, setDuplicateResults] = useState<DuplicateMatch[]>([]);
@@ -69,31 +65,11 @@ function ContactsPage() {
 
   const createContactMutation = useCreateContact();
   const updateContactMutation = useUpdateContact();
-  const deleteContactMutation = useDeleteContact();
   const checkDuplicatesMutation = useCheckDuplicates();
 
   const contacts = contactsData?.items ?? [];
   const totalPages = contactsData?.pages ?? 1;
   const total = contactsData?.total ?? 0;
-
-  const handleDeleteClick = (contact: Contact) => {
-    setDeleteConfirm({ isOpen: true, contact });
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (!deleteConfirm.contact) return;
-    try {
-      await deleteContactMutation.mutateAsync(deleteConfirm.contact.id);
-      setDeleteConfirm({ isOpen: false, contact: null });
-      showSuccess('Contact deleted successfully');
-    } catch (err) {
-      showError('Failed to delete contact');
-    }
-  };
-
-  const handleDeleteCancel = () => {
-    setDeleteConfirm({ isOpen: false, contact: null });
-  };
 
   const handleEdit = (contact: Contact) => {
     setEditingContact(contact);
@@ -360,19 +336,6 @@ function ContactsPage() {
         </div>
       )}
 
-      {/* Delete Error Message */}
-      {deleteContactMutation.isError && (
-        <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-4">
-          <div className="flex">
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-red-800 dark:text-red-300">
-                Failed to delete contact
-              </h3>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Contacts Table */}
       <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden border border-transparent dark:border-gray-700">
         {isLoading ? (
@@ -432,13 +395,6 @@ function ContactsPage() {
                         className="p-2 text-primary-600 hover:text-primary-900 dark:hover:text-primary-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                       >
                         Edit
-                      </button>
-                      <button
-                        onClick={() => handleDeleteClick(contact)}
-                        className="p-2 text-red-600 hover:text-red-900 dark:hover:text-red-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
-                        disabled={deleteContactMutation.isPending}
-                      >
-                        Delete
                       </button>
                     </div>
                   </div>
@@ -590,16 +546,9 @@ function ContactsPage() {
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button
                           onClick={() => handleEdit(contact)}
-                          className="text-primary-600 hover:text-primary-900 dark:hover:text-primary-300 mr-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
+                          className="text-primary-600 hover:text-primary-900 dark:hover:text-primary-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
                         >
                           Edit
-                        </button>
-                        <button
-                          onClick={() => handleDeleteClick(contact)}
-                          className="text-red-600 hover:text-red-900 dark:hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded"
-                          disabled={deleteContactMutation.isPending}
-                        >
-                          Delete
                         </button>
                       </td>
                     </tr>
@@ -669,19 +618,6 @@ function ContactsPage() {
           submitLabel={editingContact ? 'Update Contact' : 'Create Contact'}
         />
       </Modal>
-
-      {/* Delete Confirmation Dialog */}
-      <ConfirmDialog
-        isOpen={deleteConfirm.isOpen}
-        onClose={handleDeleteCancel}
-        onConfirm={handleDeleteConfirm}
-        title="Delete Contact"
-        message={`Are you sure you want to delete ${deleteConfirm.contact?.first_name} ${deleteConfirm.contact?.last_name}? This action cannot be undone.`}
-        confirmLabel="Delete"
-        cancelLabel="Cancel"
-        variant="danger"
-        isLoading={deleteContactMutation.isPending}
-      />
 
       {/* Duplicate Warning Modal */}
       <DuplicateWarningModal

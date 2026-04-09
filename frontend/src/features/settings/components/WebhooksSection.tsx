@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { Card, CardHeader, CardBody } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { Spinner } from '../../../components/ui/Spinner';
+import { ConfirmDialog } from '../../../components/ui/ConfirmDialog';
 import {
   useWebhooks,
   useCreateWebhook,
@@ -221,6 +222,7 @@ export function WebhooksSection() {
   const [showForm, setShowForm] = useState(false);
   const [editingWebhook, setEditingWebhook] = useState<Webhook | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [deletingWebhook, setDeletingWebhook] = useState<Webhook | null>(null);
 
   const handleCreate = (data: WebhookCreate | WebhookUpdate) => {
     createMutation.mutate(data as WebhookCreate, {
@@ -332,11 +334,7 @@ export function WebhooksSection() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => {
-                            if (window.confirm('Delete this webhook?')) {
-                              deleteMutation.mutate(webhook.id);
-                            }
-                          }}
+                          onClick={() => setDeletingWebhook(webhook)}
                           aria-label="Delete webhook"
                         >
                           <TrashIcon className="h-4 w-4 text-red-500" aria-hidden="true" />
@@ -384,6 +382,31 @@ export function WebhooksSection() {
           </div>
         )}
       </CardBody>
+      <ConfirmDialog
+        isOpen={deletingWebhook !== null}
+        onClose={() => setDeletingWebhook(null)}
+        onConfirm={() => {
+          if (!deletingWebhook) return;
+          deleteMutation.mutate(deletingWebhook.id, {
+            onSuccess: () => setDeletingWebhook(null),
+          });
+        }}
+        title="Delete webhook?"
+        message={
+          deletingWebhook ? (
+            <>
+              This will permanently delete <strong>{deletingWebhook.name}</strong>. The
+              webhook will stop receiving events, but existing delivery logs will be
+              retained.
+            </>
+          ) : (
+            ''
+          )
+        }
+        confirmLabel="Delete webhook"
+        variant="danger"
+        isLoading={deleteMutation.isPending}
+      />
     </Card>
   );
 }

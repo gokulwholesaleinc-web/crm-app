@@ -199,6 +199,7 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
           <input
             type="text"
             id="quote-title"
+            name="title"
             required
             value={formData.title}
             onChange={(e) => updateField('title', e.target.value)}
@@ -213,6 +214,7 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
           </label>
           <textarea
             id="quote-description"
+            name="description"
             rows={2}
             value={formData.description}
             onChange={(e) => updateField('description', e.target.value)}
@@ -228,6 +230,7 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
             </label>
             <select
               id="quote-currency"
+              name="currency"
               value={formData.currency}
               onChange={(e) => updateField('currency', e.target.value)}
               className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
@@ -246,6 +249,7 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
             <input
               type="date"
               id="quote-valid-until"
+              name="valid_until"
               value={formData.validUntil}
               onChange={(e) => updateField('validUntil', e.target.value)}
               className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
@@ -295,6 +299,7 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
             </label>
             <select
               id="quote-recurring-interval"
+              name="recurring_interval"
               value={formData.recurringInterval}
               onChange={(e) => updateField('recurringInterval', e.target.value)}
               className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"

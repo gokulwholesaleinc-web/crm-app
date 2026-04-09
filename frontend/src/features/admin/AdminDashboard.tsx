@@ -8,6 +8,7 @@ import {
   useActivityFeed,
 } from '../../hooks/useAdmin';
 import { usePageTitle } from '../../hooks/usePageTitle';
+import { useAuthStore } from '../../store/authStore';
 import UserManagement from './UserManagement';
 import type { TeamMemberOverview } from '../../types';
 import type { Column } from '../../components/ui/Table';
@@ -21,6 +22,7 @@ import {
   DocumentDuplicateIcon,
   CreditCardIcon,
   ClockIcon,
+  LockClosedIcon,
 } from '@heroicons/react/24/outline';
 
 const currencyFormatter = new Intl.NumberFormat(undefined, {
@@ -134,10 +136,35 @@ const teamColumns: Column<TeamMemberOverview>[] = [
 
 export default function AdminDashboard() {
   usePageTitle('Admin Dashboard');
+  const user = useAuthStore((s) => s.user);
 
+  // Client-side role gate. The backend already rejects admin mutations from
+  // non-admins, but without this gate a non-admin route-hacking to /admin
+  // sees the full dashboard UI (users, stats, activity feed) until they
+  // click something and hit a 403. See `settings-admin.md` audit P0 #1.
+  const isAdmin = user?.role === 'admin' || user?.is_superuser === true;
+
+  // Hooks must run unconditionally — call them before the early return so
+  // React's hook order stays stable. The backend enforces real
+  // authorization; the queries will 403 for non-admins and show an empty
+  // state below the access-denied banner.
   const { data: stats, isLoading: statsLoading } = useSystemStats();
   const { data: team, isLoading: teamLoading } = useTeamOverview();
   const { data: feed, isLoading: feedLoading } = useActivityFeed(30);
+
+  if (!isAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <LockClosedIcon className="h-12 w-12 text-gray-400 dark:text-gray-500 mb-4" aria-hidden="true" />
+        <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
+          Access Denied
+        </h1>
+        <p className="max-w-md text-sm text-gray-500 dark:text-gray-400">
+          You don&rsquo;t have permission to view the admin dashboard. If you believe this is a mistake, contact your workspace administrator.
+        </p>
+      </div>
+    );
+  }
 
   if (statsLoading) {
     return (

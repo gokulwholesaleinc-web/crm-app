@@ -73,24 +73,40 @@ function DuplicatesPage() {
         }));
       }
 
+      // Run duplicate checks with bounded concurrency instead of
+      // sequentially. The previous loop awaited each mutation one-at-a-time,
+      // so scanning 100 records meant 100 serial round-trips (tens of
+      // seconds). A concurrency of 5 keeps the backend load reasonable
+      // while cutting wall-clock time by ~5x. See interactive-pages.md #6.
+      const CONCURRENCY = 5;
+      type DuplicateResult = { entity: (typeof entities)[number]; matches: DuplicateMatch[] };
+      const results: DuplicateResult[] = [];
+      for (let i = 0; i < entities.length; i += CONCURRENCY) {
+        const batch = entities.slice(i, i + CONCURRENCY);
+        const settled = await Promise.all(
+          batch.map(async (entity) => {
+            const result = await checkDuplicatesMutation.mutateAsync({
+              entityType: selectedEntityType,
+              data: entity.data,
+            });
+            return {
+              entity,
+              matches: result.duplicates.filter((d) => d.id !== entity.id),
+            };
+          })
+        );
+        results.push(...settled);
+      }
+
+      // Group results after all checks complete so the "already seen"
+      // filter stays stable regardless of request ordering.
       const groups: DuplicateGroup[] = [];
       const seen = new Set<number>();
-
-      for (const entity of entities) {
-        if (seen.has(entity.id)) continue;
-
-        const result = await checkDuplicatesMutation.mutateAsync({
-          entityType: selectedEntityType,
-          data: entity.data,
-        });
-
-        // Filter out self-matches
-        const matches = result.duplicates.filter((d) => d.id !== entity.id);
-        if (matches.length > 0) {
-          groups.push({ source: entity, matches });
-          seen.add(entity.id);
-          matches.forEach((m) => seen.add(m.id));
-        }
+      for (const { entity, matches } of results) {
+        if (seen.has(entity.id) || matches.length === 0) continue;
+        groups.push({ source: entity, matches });
+        seen.add(entity.id);
+        matches.forEach((m) => seen.add(m.id));
       }
 
       setDuplicateGroups(groups);

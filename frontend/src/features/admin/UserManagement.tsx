@@ -4,13 +4,22 @@ import { Card, CardHeader, CardBody } from '../../components/ui/Card';
 import { Table } from '../../components/ui/Table';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { useAdminUsers, useUpdateAdminUser, useAssignUserRole } from '../../hooks/useAdmin';
+import { useAuthStore } from '../../store/authStore';
 import { authApi } from '../../api/auth';
 import { deleteUserPermanently } from '../../api/admin';
 import toast from 'react-hot-toast';
 import type { AdminUser } from '../../types';
 import type { Column } from '../../components/ui/Table';
 import { PencilSquareIcon, XMarkIcon, TrashIcon } from '@heroicons/react/24/outline';
+
+const ROLE_LABELS: Record<string, string> = {
+  admin: 'Admin',
+  manager: 'Manager',
+  sales_rep: 'Sales Rep',
+  viewer: 'Viewer',
+};
 
 const ROLE_OPTIONS = ['admin', 'manager', 'sales_rep', 'viewer'] as const;
 
@@ -43,6 +52,7 @@ const INITIAL_FORM: QuickAddFormData = {
 
 export default function UserManagement() {
   const { data: users, isLoading, refetch } = useAdminUsers();
+  const currentUser = useAuthStore((s) => s.user);
   const updateUser = useUpdateAdminUser();
   const assignRole = useAssignUserRole();
 
@@ -57,6 +67,14 @@ export default function UserManagement() {
   const [editForm, setEditForm] = useState<EditUserFormData>({ full_name: '', email: '' });
   const [editError, setEditError] = useState<string | null>(null);
   const [deletingUser, setDeletingUser] = useState<AdminUser | null>(null);
+  // Pending role change — held in state so we can show a ConfirmDialog
+  // before the mutation runs. Users previously could click the role
+  // dropdown and instantly demote themselves from admin. See
+  // settings-admin.md audit P0 #2.
+  const [pendingRoleChange, setPendingRoleChange] = useState<{
+    user: AdminUser;
+    newRole: string;
+  } | null>(null);
   const queryClient = useQueryClient();
 
   const deleteMutation = useMutation({
@@ -137,11 +155,32 @@ export default function UserManagement() {
   }, [sortColumn]);
 
   const handleRoleChange = useCallback(
-    (userId: number, role: string) => {
-      updateUser.mutate({ userId, data: { role } });
+    (user: AdminUser, newRole: string) => {
+      if (newRole === user.role) return;
+      setPendingRoleChange({ user, newRole });
     },
-    [updateUser]
+    []
   );
+
+  const handleConfirmRoleChange = useCallback(() => {
+    if (!pendingRoleChange) return;
+    updateUser.mutate(
+      { userId: pendingRoleChange.user.id, data: { role: pendingRoleChange.newRole } },
+      {
+        onSuccess: () => {
+          toast.success(
+            `${pendingRoleChange.user.full_name} is now ${ROLE_LABELS[pendingRoleChange.newRole] ?? pendingRoleChange.newRole}`
+          );
+          setPendingRoleChange(null);
+        },
+        onError: (err: unknown) => {
+          const msg = err instanceof Error ? err.message : 'Failed to change role';
+          toast.error(msg);
+          setPendingRoleChange(null);
+        },
+      }
+    );
+  }, [pendingRoleChange, updateUser]);
 
   const handleToggleActive = useCallback(
     (userId: number, currentlyActive: boolean) => {
@@ -196,13 +235,13 @@ export default function UserManagement() {
       render: (row) => (
         <select
           value={row.role}
-          onChange={(e) => handleRoleChange(row.id, e.target.value)}
+          onChange={(e) => handleRoleChange(row, e.target.value)}
           className="text-sm border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
           aria-label={`Change role for ${row.full_name}`}
         >
           {ROLE_OPTIONS.map((r) => (
             <option key={r} value={r}>
-              {r.replace('_', ' ')}
+              {ROLE_LABELS[r] ?? r}
             </option>
           ))}
         </select>
@@ -518,6 +557,38 @@ export default function UserManagement() {
           </div>
         </div>
       )}
+      {/* Role Change Confirmation — prevents accidental one-click
+          self-demotion or permission escalation. */}
+      <ConfirmDialog
+        isOpen={pendingRoleChange !== null}
+        onClose={() => setPendingRoleChange(null)}
+        onConfirm={handleConfirmRoleChange}
+        title={
+          pendingRoleChange && currentUser?.id === pendingRoleChange.user.id
+            ? 'Change your own role?'
+            : 'Change user role?'
+        }
+        message={
+          pendingRoleChange ? (
+            <>
+              Change <strong>{pendingRoleChange.user.full_name}</strong>&rsquo;s role from{' '}
+              <strong>{ROLE_LABELS[pendingRoleChange.user.role] ?? pendingRoleChange.user.role}</strong>{' '}
+              to <strong>{ROLE_LABELS[pendingRoleChange.newRole] ?? pendingRoleChange.newRole}</strong>?
+              {currentUser?.id === pendingRoleChange.user.id && pendingRoleChange.newRole !== 'admin' && (
+                <span className="mt-2 block font-medium text-red-600 dark:text-red-400">
+                  Warning: you are changing your own role. You may lose access to admin features immediately.
+                </span>
+              )}
+            </>
+          ) : (
+            ''
+          )
+        }
+        confirmLabel="Change role"
+        variant="warning"
+        isLoading={updateUser.isPending}
+      />
+
       {/* Delete Confirmation Modal */}
       {deletingUser && (
         <div

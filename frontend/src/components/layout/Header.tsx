@@ -74,7 +74,7 @@ export function Header({
       {/* Mobile menu button (hamburger) */}
       <button
         type="button"
-        className="lg:hidden p-2 -ml-1 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 focus-visible:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
+        className="lg:hidden p-2 -ml-1 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 touch-manipulation"
         onClick={onMenuClick}
         aria-label="Open navigation menu"
       >
@@ -96,7 +96,7 @@ export function Header({
               id="desktop-search"
               type="search"
               placeholder="Search contacts, companies, deals..."
-              className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg leading-5 bg-white dark:bg-gray-700 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 text-sm focus-visible:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg leading-5 bg-white dark:bg-gray-700 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:border-primary-500"
               onChange={(e) => onSearch?.(e.target.value)}
             />
           </div>
@@ -107,7 +107,7 @@ export function Header({
       {showSearch && (
         <button
           type="button"
-          className="sm:hidden ml-2 p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 focus-visible:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
+          className="sm:hidden ml-2 p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 touch-manipulation"
           onClick={() => setMobileSearchOpen(true)}
           aria-label="Open search"
         >
@@ -132,14 +132,14 @@ export function Header({
                 id="mobile-search"
                 type="search"
                 placeholder="Search..."
-                className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg leading-5 bg-white dark:bg-gray-700 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 text-base focus-visible:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg leading-5 bg-white dark:bg-gray-700 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:border-primary-500"
                 onChange={(e) => onSearch?.(e.target.value)}
               />
             </div>
             <button
               type="button"
               onClick={() => setMobileSearchOpen(false)}
-              className="ml-2 p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 focus-visible:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
+              className="ml-2 p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 touch-manipulation"
               aria-label="Close search"
             >
               <XMarkIcon className="h-6 w-6" aria-hidden="true" />
@@ -156,7 +156,7 @@ export function Header({
         {/* Theme Toggle */}
         <button
           type="button"
-          className="p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 focus-visible:outline-none focus:ring-2 focus:ring-primary-500 touch-manipulation"
+          className="p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 touch-manipulation"
           onClick={toggleTheme}
           aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
         >
@@ -172,7 +172,7 @@ export function Header({
 
         {/* User Menu - touch-friendly with larger tap targets */}
         <Menu as="div" className="relative">
-          <Menu.Button className="flex items-center p-1 sm:p-0 rounded-full text-sm focus-visible:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 touch-manipulation">
+          <Menu.Button className="flex items-center p-1 sm:p-0 rounded-full text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-800 touch-manipulation">
             <span className="sr-only">Open user menu</span>
             <div className="flex items-center">
               <Avatar

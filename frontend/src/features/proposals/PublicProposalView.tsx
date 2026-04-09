@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
+import { sanitizeHexColor } from '../../utils/colorValidation';
 
 // Bare axios instance for public (unauthenticated) proposal endpoints.
 // Deliberately does NOT attach the CRM Bearer token or X-Tenant-Slug
@@ -56,6 +57,11 @@ function PublicProposalView() {
   const [error, setError] = useState<string | null>(null);
   const [actionPending, setActionPending] = useState(false);
   const [actionDone, setActionDone] = useState<'accepted' | 'rejected' | null>(null);
+  const [logoError, setLogoError] = useState(false);
+
+  useEffect(() => {
+    setLogoError(false);
+  }, [proposal?.branding?.logo_url]);
 
   useEffect(() => {
     if (!token) return;
@@ -146,7 +152,17 @@ function PublicProposalView() {
     );
   }
 
-  const branding = proposal.branding ?? DEFAULT_BRANDING;
+  const rawBranding = proposal.branding ?? DEFAULT_BRANDING;
+  // Tenant branding colors come from the server as arbitrary strings. Strip
+  // any value that isn't a strict hex color before it hits an inline
+  // `style={{ backgroundColor: ... }}` — a malformed color otherwise gets
+  // echoed into the DOM verbatim.
+  const branding = {
+    ...rawBranding,
+    primary_color: sanitizeHexColor(rawBranding.primary_color, DEFAULT_BRANDING.primary_color),
+    secondary_color: sanitizeHexColor(rawBranding.secondary_color, DEFAULT_BRANDING.secondary_color),
+    accent_color: sanitizeHexColor(rawBranding.accent_color, DEFAULT_BRANDING.accent_color),
+  };
   const companyDisplayName = branding.company_name || proposal.company?.name || 'Proposal';
 
   const isExpired =
@@ -175,7 +191,7 @@ function PublicProposalView() {
       >
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
-            {branding.logo_url ? (
+            {branding.logo_url && !logoError ? (
               <img
                 src={branding.logo_url}
                 alt={companyDisplayName}
@@ -183,8 +199,18 @@ function PublicProposalView() {
                 height={36}
                 className="rounded"
                 style={{ maxHeight: 36 }}
+                onError={() => setLogoError(true)}
               />
-            ) : null}
+            ) : (
+              <div
+                className="h-9 w-9 rounded flex items-center justify-center flex-shrink-0"
+                style={{ backgroundColor: branding.secondary_color }}
+              >
+                <span className="text-white font-bold text-lg">
+                  {companyDisplayName[0]?.toUpperCase() || 'P'}
+                </span>
+              </div>
+            )}
             <span className="text-lg font-semibold text-white truncate">
               {companyDisplayName}
             </span>
