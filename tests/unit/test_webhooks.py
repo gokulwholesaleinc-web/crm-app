@@ -178,6 +178,37 @@ class TestWebhookCRUD:
         assert data["url"] == "https://example.com/webhook"
 
     @pytest.mark.asyncio
+    async def test_update_webhook_rejects_private_ip_url(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_webhook: Webhook,
+    ):
+        """PATCHing a webhook URL to a private IP must be rejected.
+
+        Without this check an attacker could create the webhook with a
+        public URL (passes create-time validation) and then flip the URL
+        to ``http://169.254.169.254/...`` to target cloud metadata.
+        """
+        response = await client.put(
+            f"/api/webhooks/{test_webhook.id}",
+            headers=auth_headers,
+            json={"url": "http://127.0.0.1/evil"},
+        )
+
+        # 400 from raise-value-error wrapping or 422 depending on router
+        # — the key assertion is that the URL does NOT get persisted.
+        assert response.status_code >= 400
+
+        # Verify the stored URL was not flipped.
+        result = await db_session.execute(
+            select(Webhook).where(Webhook.id == test_webhook.id)
+        )
+        fresh = result.scalar_one()
+        assert fresh.url == "https://example.com/webhook"
+
+    @pytest.mark.asyncio
     async def test_delete_webhook(
         self,
         client: AsyncClient,

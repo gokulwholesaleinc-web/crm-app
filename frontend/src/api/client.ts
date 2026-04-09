@@ -1,5 +1,9 @@
 /**
- * Axios HTTP Client with authentication interceptors
+ * Axios HTTP Client with authentication interceptors.
+ *
+ * The access token is owned by the zustand auth store (see store/authStore.ts).
+ * This module exposes `registerAuthTokenGetter` so the store can inject a
+ * getter without creating a circular import between the two modules.
  */
 
 import axios, {
@@ -12,8 +16,19 @@ import type { ApiError } from '../types';
 
 const BASE_URL = import.meta.env.VITE_API_URL || '';
 
-const TOKEN_KEY = 'crm_access_token';
 const TENANT_SLUG_KEY = 'crm_tenant_slug:v1';
+
+// Token getter injected by the auth store. Defaults to returning null so the
+// client is safe to import before the store has initialized.
+let tokenGetter: () => string | null = () => null;
+
+/**
+ * Register a function the axios request interceptor should call to read the
+ * current access token. The auth store calls this at module init.
+ */
+export const registerAuthTokenGetter = (getter: () => string | null): void => {
+  tokenGetter = getter;
+};
 
 /**
  * Create configured Axios instance
@@ -29,7 +44,7 @@ const createApiClient = (): AxiosInstance => {
 
   client.interceptors.request.use(
     (config: InternalAxiosRequestConfig) => {
-      const token = getToken();
+      const token = tokenGetter();
       if (token && config.headers) {
         config.headers.Authorization = `Bearer ${token}`;
       }
@@ -54,7 +69,6 @@ const createApiClient = (): AxiosInstance => {
     },
     (error: AxiosError<ApiError>) => {
       if (error.response?.status === 401) {
-        clearToken();
         window.dispatchEvent(new CustomEvent('auth:unauthorized'));
       }
 
@@ -71,31 +85,12 @@ const createApiClient = (): AxiosInstance => {
 };
 
 /**
- * Get stored authentication token
+ * Read the current authentication token. Thin wrapper around the getter the
+ * auth store registered — used by a handful of raw-fetch call sites that need
+ * to attach a bearer header manually (file downloads, etc.).
  */
 export const getToken = (): string | null => {
-  return localStorage.getItem(TOKEN_KEY);
-};
-
-/**
- * Store authentication token
- */
-export const setToken = (token: string): void => {
-  localStorage.setItem(TOKEN_KEY, token);
-};
-
-/**
- * Clear authentication token
- */
-export const clearToken = (): void => {
-  localStorage.removeItem(TOKEN_KEY);
-};
-
-/**
- * Check if user is authenticated
- */
-export const isAuthenticated = (): boolean => {
-  return !!getToken();
+  return tokenGetter();
 };
 
 export const apiClient = createApiClient();

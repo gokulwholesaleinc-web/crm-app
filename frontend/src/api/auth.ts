@@ -2,7 +2,8 @@
  * Authentication API
  */
 
-import { apiClient, setToken, clearToken } from './client';
+import { apiClient } from './client';
+import { useAuthStore } from '../store/authStore';
 import type {
   User,
   UserCreate,
@@ -26,8 +27,9 @@ export const register = async (userData: UserCreate): Promise<User> => {
  */
 export const login = async (credentials: LoginRequest): Promise<Token> => {
   const response = await apiClient.post<Token>(`${AUTH_BASE}/login/json`, credentials);
-  // Store token after successful login
-  setToken(response.data.access_token);
+  // Push the token into the auth store so the axios interceptor can attach it
+  // on the immediate follow-up /me call.
+  useAuthStore.getState().setToken(response.data.access_token);
   return response.data;
 };
 
@@ -44,8 +46,7 @@ export const loginWithForm = async (email: string, password: string): Promise<To
       'Content-Type': 'application/x-www-form-urlencoded',
     },
   });
-  // Store token after successful login
-  setToken(response.data.access_token);
+  useAuthStore.getState().setToken(response.data.access_token);
   return response.data;
 };
 
@@ -76,10 +77,10 @@ export const listUsers = async (skip = 0, limit = 100): Promise<User[]> => {
 };
 
 /**
- * Logout - clear stored token
+ * Logout - clear the store-held token and broadcast the logout event.
  */
 export const logout = (): void => {
-  clearToken();
+  useAuthStore.getState().logout();
   window.dispatchEvent(new CustomEvent('auth:logout'));
 };
 
@@ -112,7 +113,7 @@ export const googleCallback = async (
     redirect_uri: redirectUri,
     state: state ?? undefined,
   });
-  setToken(response.data.access_token);
+  useAuthStore.getState().setToken(response.data.access_token);
   return response.data;
 };
 

@@ -265,7 +265,7 @@ async def send_campaign(
             "company_name": lead.company_name or "",
         }
         body = render_template(request_data.body_template, variables)
-        subject = render_template(request_data.subject, variables)
+        subject = render_template(request_data.subject, variables, is_html=False)
 
         await email_service.queue_email(
             to_email=lead.email,

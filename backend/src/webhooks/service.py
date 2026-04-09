@@ -58,20 +58,23 @@ class WebhookService(BaseService[Webhook]):
 
     @staticmethod
     def _validate_webhook_url(url: str) -> None:
-        """Reject private/internal URLs to prevent SSRF."""
-        from urllib.parse import urlparse
-        import ipaddress, socket
-        parsed = urlparse(url)
-        if parsed.scheme not in ("https",):
-            raise ValueError("Webhook URL must use HTTPS")
-        if not parsed.hostname:
-            raise ValueError("Invalid webhook URL")
+        """Reject private/internal URLs to prevent SSRF.
+
+        Delegates to :func:`src.core.url_safety.validate_public_url`. A
+        resolution failure at validation time is tolerated because webhook
+        hosts may resolve only at delivery time (e.g. short-lived DNS),
+        matching the legacy behavior. Any other failure surfaces as a
+        ``ValueError`` because ``UnsafeUrlError`` is a ``ValueError``
+        subclass, so the router's existing 400 handler picks it up.
+        """
+        from src.core.url_safety import UnsafeUrlError, validate_public_url
+
         try:
-            ip = socket.gethostbyname(parsed.hostname)
-            if ipaddress.ip_address(ip).is_private:
-                raise ValueError("Webhook URL must not point to a private IP")
-        except socket.gaierror:
-            pass  # allow unresolvable hosts (may resolve at delivery time)
+            validate_public_url(url)
+        except UnsafeUrlError as exc:
+            if "Could not resolve host" in str(exc):
+                return  # legacy behavior: allow unresolvable hosts
+            raise
 
     async def create_webhook(self, data: WebhookCreate, user_id: int) -> Webhook:
         """Create a new webhook."""
@@ -83,8 +86,16 @@ class WebhookService(BaseService[Webhook]):
         return webhook
 
     async def update_webhook(self, webhook: Webhook, data: WebhookUpdate) -> Webhook:
-        """Update a webhook."""
+        """Update a webhook.
+
+        Re-runs SSRF validation on any URL change so an attacker cannot
+        create a webhook pointing at ``https://example.com`` and then
+        PATCH it to ``http://169.254.169.254/...`` to bypass the
+        create-time check.
+        """
         update_data = data.model_dump(exclude_unset=True)
+        if "url" in update_data and update_data["url"]:
+            self._validate_webhook_url(update_data["url"])
         for field, value in update_data.items():
             setattr(webhook, field, value)
         await self.db.flush()

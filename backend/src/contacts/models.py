@@ -1,7 +1,8 @@
 """Contact model for CRM contacts."""
 
+from datetime import datetime
 from typing import Optional, TYPE_CHECKING
-from sqlalchemy import String, Integer, ForeignKey, Text, Index, UniqueConstraint
+from sqlalchemy import String, Integer, ForeignKey, Text, Index, UniqueConstraint, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.database import Base
 from src.core.mixins.auditable import AuditableMixin
@@ -51,7 +52,25 @@ class Contact(Base, AuditableMixin):
     avatar_url: Mapped[Optional[str]] = mapped_column(String(500))
 
     # Status
-    status: Mapped[str] = mapped_column(String(20), default="active", index=True)  # active, inactive
+    status: Mapped[str] = mapped_column(String(20), default="active", index=True)  # active, inactive, archived
+
+    # Soft-delete timestamp. Contacts are never hard-deleted — per project
+    # rule (feedback_delete_sales_only.md) deleting a contact would destroy
+    # history tied to their AR ledger and activities. ``deleted_at`` is NULL
+    # for live contacts; set to the archive time when the delete endpoint or
+    # a dedup merge soft-deletes the row. Code paths that read active
+    # contacts MUST filter by ``deleted_at IS NULL``.
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+
+    # Forwarding pointer set by the dedup merge flow. When two contacts are
+    # merged, the secondary is soft-deleted and ``merged_into_id`` points at
+    # the surviving primary. Downstream code can follow the pointer to find
+    # the canonical record without looking up the audit log.
+    merged_into_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("contacts.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     # Owner (assigned user)
     owner_id: Mapped[Optional[int]] = mapped_column(

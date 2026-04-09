@@ -48,8 +48,12 @@ class LeadService(
             if search_condition is not None:
                 query = query.where(search_condition)
 
+        # Hide dedup-merged tombstones by default. Callers that want to
+        # inspect merged rows can still pass ``status="merged"``.
         if status:
             query = query.where(Lead.status == status)
+        else:
+            query = query.where(Lead.status != "merged")
 
         if source_id:
             query = query.where(Lead.source_id == source_id)

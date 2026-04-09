@@ -477,15 +477,20 @@ class TestContactsDelete:
     """Tests for contact delete endpoint."""
 
     @pytest.mark.asyncio
-    async def test_delete_contact_success(
+    async def test_delete_contact_soft_deletes(
         self,
         client: AsyncClient,
         db_session: AsyncSession,
         auth_headers: dict,
         test_user: User,
     ):
-        """Test deleting contact."""
-        # Create a contact to delete
+        """Deleting a contact must soft-delete it.
+
+        The row stays in the table (so AR ledger, activities, and notes
+        anchored to it remain valid), with ``deleted_at`` set and status
+        flipped to ``archived``. Hard-delete is forbidden by project rule
+        ``feedback_delete_sales_only.md``.
+        """
         contact = Contact(
             first_name="ToDelete",
             last_name="Contact",
@@ -506,12 +511,124 @@ class TestContactsDelete:
 
         assert response.status_code == 204
 
-        # Verify deletion
+        # Row must still exist — soft delete only.
         result = await db_session.execute(
             select(Contact).where(Contact.id == contact_id)
         )
-        deleted_contact = result.scalar_one_or_none()
-        assert deleted_contact is None
+        archived = result.scalar_one_or_none()
+        assert archived is not None
+        assert archived.deleted_at is not None
+        assert archived.status == "archived"
+        # Email is prefixed so the unique constraint frees up the address.
+        assert archived.email != "delete.me@example.com"
+        assert archived.email.startswith(f"archived-{contact_id}-")
+
+    @pytest.mark.asyncio
+    async def test_delete_contact_hidden_from_list(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """Soft-deleted contacts must not appear in the default list view."""
+        contact = Contact(
+            first_name="Hidden",
+            last_name="FromList",
+            email="hidden@example.com",
+            status="active",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(contact)
+        await db_session.commit()
+        await db_session.refresh(contact)
+        contact_id = contact.id
+
+        delete_response = await client.delete(
+            f"/api/contacts/{contact_id}",
+            headers=auth_headers,
+        )
+        assert delete_response.status_code == 204
+
+        list_response = await client.get("/api/contacts", headers=auth_headers)
+        assert list_response.status_code == 200
+        items = list_response.json()["items"]
+        assert not any(c["id"] == contact_id for c in items)
+
+    @pytest.mark.asyncio
+    async def test_archived_list_filter_returns_soft_deleted(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """Passing ``status=archived`` surfaces the soft-deleted rows."""
+        contact = Contact(
+            first_name="OnlyArchived",
+            last_name="Visible",
+            email="only.archived@example.com",
+            status="active",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(contact)
+        await db_session.commit()
+        await db_session.refresh(contact)
+        contact_id = contact.id
+
+        await client.delete(f"/api/contacts/{contact_id}", headers=auth_headers)
+
+        response = await client.get(
+            "/api/contacts?status=archived", headers=auth_headers
+        )
+        assert response.status_code == 200
+        items = response.json()["items"]
+        assert any(c["id"] == contact_id for c in items)
+
+    @pytest.mark.asyncio
+    async def test_email_reusable_after_soft_delete(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """After soft-delete, a new contact can take the old email back.
+
+        The unique index on ``contacts.email`` must not block this —
+        otherwise users would be blocked from re-adding someone they
+        previously archived by mistake.
+        """
+        original = Contact(
+            first_name="Original",
+            last_name="Owner",
+            email="reuse@example.com",
+            status="active",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(original)
+        await db_session.commit()
+        await db_session.refresh(original)
+
+        delete_response = await client.delete(
+            f"/api/contacts/{original.id}", headers=auth_headers
+        )
+        assert delete_response.status_code == 204
+
+        create_response = await client.post(
+            "/api/contacts",
+            headers=auth_headers,
+            json={
+                "first_name": "Fresh",
+                "last_name": "Start",
+                "email": "reuse@example.com",
+            },
+        )
+        assert create_response.status_code == 201
+        assert create_response.json()["email"] == "reuse@example.com"
 
     @pytest.mark.asyncio
     async def test_delete_contact_not_found(

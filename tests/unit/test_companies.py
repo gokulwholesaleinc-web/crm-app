@@ -563,6 +563,85 @@ class TestCompaniesDelete:
 
         assert response.status_code == 404
 
+    @pytest.mark.asyncio
+    async def test_delete_company_with_contacts_returns_409(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """Deleting a company that still has contacts must 409, not cascade-null."""
+        company = Company(
+            name="Guarded Company",
+            website="https://guarded.com",
+            status="prospect",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(company)
+        await db_session.commit()
+        await db_session.refresh(company)
+
+        contact = Contact(
+            first_name="Guard",
+            last_name="Rail",
+            email="guard.rail@guarded.com",
+            company_id=company.id,
+            status="active",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(contact)
+        await db_session.commit()
+
+        response = await client.delete(
+            f"/api/companies/{company.id}",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 409
+        detail = response.json()["detail"]
+        assert "1 contacts" in detail
+
+        # Company must still exist
+        result = await db_session.execute(
+            select(Company).where(Company.id == company.id)
+        )
+        assert result.scalar_one_or_none() is not None
+
+    @pytest.mark.asyncio
+    async def test_delete_company_without_contacts_succeeds(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """A company with zero contacts deletes cleanly with 204."""
+        company = Company(
+            name="Empty Company",
+            website="https://empty.com",
+            status="prospect",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(company)
+        await db_session.commit()
+        await db_session.refresh(company)
+        company_id = company.id
+
+        response = await client.delete(
+            f"/api/companies/{company_id}",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 204
+        result = await db_session.execute(
+            select(Company).where(Company.id == company_id)
+        )
+        assert result.scalar_one_or_none() is None
+
 
 class TestCompaniesUnauthorized:
     """Tests for unauthorized access to companies endpoints."""

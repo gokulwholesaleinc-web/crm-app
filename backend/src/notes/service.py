@@ -1,5 +1,6 @@
 """Note service layer."""
 
+import html
 from typing import Optional, List, Tuple
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +10,7 @@ from src.auth.models import User
 from src.comments.service import parse_mentions
 from src.notes.schemas import NoteCreate, NoteUpdate
 from src.core.constants import DEFAULT_PAGE_SIZE
+from src.whitelabel.models import TenantUser
 
 
 class NoteService:
@@ -127,16 +129,34 @@ class NoteService:
         if not usernames:
             return
 
+        # Look up the author's tenant memberships so we only match mentioned
+        # users who share at least one tenant with the author. If the author
+        # has no TenantUser rows (older/single-org data), fall back to the
+        # legacy unscoped lookup so production isn't regressed.
+        author_tenant_rows = await self.db.execute(
+            select(TenantUser.tenant_id).where(TenantUser.user_id == author_id)
+        )
+        author_tenant_ids = [row[0] for row in author_tenant_rows.all()]
+
         for username in usernames:
             full_name = username.replace('.', ' ')
             # Normalize whitespace: collapse double spaces to single (works on SQLite + PostgreSQL)
-            user_result = await self.db.execute(
-                select(User).where(
-                    func.lower(func.replace(func.trim(User.full_name), '  ', ' '))
-                    == func.lower(full_name)
-                )
+            name_filter = (
+                func.lower(func.replace(func.trim(User.full_name), '  ', ' '))
+                == func.lower(full_name)
             )
-            mentioned_user = user_result.scalar_one_or_none()
+            if author_tenant_ids:
+                user_query = (
+                    select(User)
+                    .join(TenantUser, TenantUser.user_id == User.id)
+                    .where(name_filter)
+                    .where(TenantUser.tenant_id.in_(author_tenant_ids))
+                    .limit(1)
+                )
+            else:
+                user_query = select(User).where(name_filter)
+            user_result = await self.db.execute(user_query)
+            mentioned_user = user_result.scalars().first()
             if not mentioned_user or mentioned_user.id == author_id:
                 continue
 
@@ -152,10 +172,11 @@ class NoteService:
 
             if mentioned_user.email:
                 email_service = EmailService(self.db)
+                safe_content = html.escape(note.content)
                 await email_service.queue_email(
                     to_email=mentioned_user.email,
                     subject="You were mentioned in a note",
-                    body=f"<p>You were mentioned in a note:</p><blockquote>{note.content}</blockquote>",
+                    body=f"<p>You were mentioned in a note:</p><blockquote>{safe_content}</blockquote>",
                     sent_by_id=author_id,
                     entity_type=note.entity_type,
                     entity_id=note.entity_id,

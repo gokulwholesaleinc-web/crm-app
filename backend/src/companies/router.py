@@ -2,7 +2,9 @@
 
 import logging
 from typing import Annotated, Optional
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import func, select
+from src.contacts.models import Contact
 from src.core.constants import HTTPStatus, EntityNames, ENTITY_TYPE_COMPANIES
 from src.core.router_utils import (
     DBSession,
@@ -202,6 +204,18 @@ async def delete_company(
     service = CompanyService(db)
     company = await get_entity_or_404(service, company_id, EntityNames.COMPANY)
     check_ownership(company, current_user, EntityNames.COMPANY)
+
+    # Block delete when contacts still reference this company — otherwise
+    # the FK set-null cascade would silently orphan them.
+    count_result = await db.execute(
+        select(func.count()).select_from(Contact).where(Contact.company_id == company_id)
+    )
+    contact_count = count_result.scalar() or 0
+    if contact_count > 0:
+        raise HTTPException(
+            status_code=HTTPStatus.CONFLICT,
+            detail=f"Cannot delete company with {contact_count} contacts. Reassign or delete the contacts first.",
+        )
 
     ip_address = request.client.host if request.client else None
     await audit_entity_delete(db, "company", company.id, current_user.id, ip_address)

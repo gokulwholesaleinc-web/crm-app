@@ -434,3 +434,192 @@ class TestNotesPermissions:
         )
 
         assert response.status_code == 403
+
+
+class TestNotesMentions:
+    """Tests for @-mention tenant scoping and HTML escaping in note emails."""
+
+    @pytest.mark.asyncio
+    async def test_mention_does_not_cross_tenants(
+        self,
+        db_session: AsyncSession,
+        test_user: User,
+        test_contact: Contact,
+    ):
+        """@-mentioning a user in a different tenant must not notify them."""
+        from sqlalchemy import select
+        from src.auth.security import get_password_hash
+        from src.whitelabel.models import Tenant, TenantUser
+        from src.notifications.models import Notification
+        from src.email.models import EmailQueue
+        from src.notes.schemas import NoteCreate
+        from src.notes.service import NoteService
+
+        # Two separate tenants
+        tenant_a = Tenant(name="Tenant A", slug="tenant-a", is_active=True)
+        tenant_b = Tenant(name="Tenant B", slug="tenant-b", is_active=True)
+        db_session.add_all([tenant_a, tenant_b])
+        await db_session.flush()
+
+        # Author belongs only to tenant A
+        db_session.add(
+            TenantUser(tenant_id=tenant_a.id, user_id=test_user.id, role="admin")
+        )
+
+        # Bob Jones exists only in tenant B
+        bob_b = User(
+            email="bob.b@example.com",
+            hashed_password=get_password_hash("password123"),
+            full_name="Bob Jones",
+            is_active=True,
+        )
+        db_session.add(bob_b)
+        await db_session.flush()
+        db_session.add(
+            TenantUser(tenant_id=tenant_b.id, user_id=bob_b.id, role="member")
+        )
+        await db_session.commit()
+
+        # Author in tenant A mentions @bob.jones
+        service = NoteService(db_session)
+        await service.create(
+            NoteCreate(
+                content="Hey @bob.jones please review",
+                entity_type="contact",
+                entity_id=test_contact.id,
+            ),
+            user_id=test_user.id,
+        )
+        await db_session.commit()
+
+        # Tenant-B Bob must NOT have been notified
+        notif_rows = await db_session.execute(
+            select(Notification).where(Notification.user_id == bob_b.id)
+        )
+        assert notif_rows.scalars().first() is None
+
+        email_rows = await db_session.execute(
+            select(EmailQueue).where(EmailQueue.to_email == bob_b.email)
+        )
+        assert email_rows.scalars().first() is None
+
+    @pytest.mark.asyncio
+    async def test_mention_prefers_same_tenant_user(
+        self,
+        db_session: AsyncSession,
+        test_user: User,
+        test_contact: Contact,
+    ):
+        """A Bob Jones in the author's tenant must be notified over a foreign one."""
+        from sqlalchemy import select
+        from src.auth.security import get_password_hash
+        from src.whitelabel.models import Tenant, TenantUser
+        from src.notifications.models import Notification
+        from src.notes.schemas import NoteCreate
+        from src.notes.service import NoteService
+
+        tenant_a = Tenant(name="Tenant A", slug="tenant-a", is_active=True)
+        tenant_b = Tenant(name="Tenant B", slug="tenant-b", is_active=True)
+        db_session.add_all([tenant_a, tenant_b])
+        await db_session.flush()
+
+        db_session.add(
+            TenantUser(tenant_id=tenant_a.id, user_id=test_user.id, role="admin")
+        )
+
+        bob_a = User(
+            email="bob.a@example.com",
+            hashed_password=get_password_hash("password123"),
+            full_name="Bob Jones",
+            is_active=True,
+        )
+        bob_b = User(
+            email="bob.b@example.com",
+            hashed_password=get_password_hash("password123"),
+            full_name="Bob Jones",
+            is_active=True,
+        )
+        db_session.add_all([bob_a, bob_b])
+        await db_session.flush()
+        db_session.add_all([
+            TenantUser(tenant_id=tenant_a.id, user_id=bob_a.id, role="member"),
+            TenantUser(tenant_id=tenant_b.id, user_id=bob_b.id, role="member"),
+        ])
+        await db_session.commit()
+
+        service = NoteService(db_session)
+        await service.create(
+            NoteCreate(
+                content="Hey @bob.jones please review",
+                entity_type="contact",
+                entity_id=test_contact.id,
+            ),
+            user_id=test_user.id,
+        )
+        await db_session.commit()
+
+        # Only tenant-A Bob should be notified
+        notif_a = await db_session.execute(
+            select(Notification).where(Notification.user_id == bob_a.id)
+        )
+        assert notif_a.scalars().first() is not None
+
+        notif_b = await db_session.execute(
+            select(Notification).where(Notification.user_id == bob_b.id)
+        )
+        assert notif_b.scalars().first() is None
+
+    @pytest.mark.asyncio
+    async def test_mention_email_body_escapes_html(
+        self,
+        db_session: AsyncSession,
+        test_user: User,
+        test_contact: Contact,
+    ):
+        """Note content with <script> must be HTML-escaped in the queued email."""
+        from sqlalchemy import select
+        from src.auth.security import get_password_hash
+        from src.whitelabel.models import Tenant, TenantUser
+        from src.email.models import EmailQueue
+        from src.notes.schemas import NoteCreate
+        from src.notes.service import NoteService
+
+        tenant_a = Tenant(name="Tenant A", slug="tenant-a", is_active=True)
+        db_session.add(tenant_a)
+        await db_session.flush()
+        db_session.add(
+            TenantUser(tenant_id=tenant_a.id, user_id=test_user.id, role="admin")
+        )
+
+        bob = User(
+            email="bob@example.com",
+            hashed_password=get_password_hash("password123"),
+            full_name="Bob Jones",
+            is_active=True,
+        )
+        db_session.add(bob)
+        await db_session.flush()
+        db_session.add(
+            TenantUser(tenant_id=tenant_a.id, user_id=bob.id, role="member")
+        )
+        await db_session.commit()
+
+        service = NoteService(db_session)
+        malicious = "@bob.jones <script>alert(1)</script>"
+        await service.create(
+            NoteCreate(
+                content=malicious,
+                entity_type="contact",
+                entity_id=test_contact.id,
+            ),
+            user_id=test_user.id,
+        )
+        await db_session.commit()
+
+        email_row = await db_session.execute(
+            select(EmailQueue).where(EmailQueue.to_email == bob.email)
+        )
+        email = email_row.scalars().first()
+        assert email is not None
+        assert "&lt;script&gt;" in email.body
+        assert "<script>" not in email.body

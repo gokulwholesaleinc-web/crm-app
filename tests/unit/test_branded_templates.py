@@ -553,3 +553,131 @@ class TestSendBrandedEmail:
 
         assert "Review Now" in email.body
         assert "https://app.example.com/review/123" in email.body
+
+
+# ---------------------------------------------------------------------------
+# URL scheme allowlist tests (Session 3 3a.3)
+# ---------------------------------------------------------------------------
+
+
+class TestUrlSchemeAllowlist:
+    """Branded templates must reject dangerous URL schemes at render time."""
+
+    def test_javascript_privacy_url_is_dropped(self):
+        """``javascript:`` privacy URL must not end up in the rendered HTML."""
+        branding = dict(SAMPLE_BRANDING)
+        branding["privacy_policy_url"] = "javascript:alert('pwn')"
+        html_out = render_branded_email(
+            branding=branding,
+            subject="s",
+            headline="h",
+            body_html="<p>b</p>",
+        )
+        assert "javascript:" not in html_out
+        # Link should be omitted entirely rather than rendered with a broken href.
+        assert "Privacy Policy" not in html_out
+
+    def test_javascript_terms_url_is_dropped(self):
+        branding = dict(SAMPLE_BRANDING)
+        branding["terms_of_service_url"] = "JavaScript:alert(1)"  # mixed case bypass attempt
+        html_out = render_branded_email(
+            branding=branding,
+            subject="s",
+            headline="h",
+            body_html="<p>b</p>",
+        )
+        assert "javascript:" not in html_out.lower()
+        assert "Terms of Service" not in html_out
+
+    def test_data_url_logo_is_dropped(self):
+        """``data:`` URLs in logos are blocked to stop HTML-in-image bombs."""
+        branding = dict(SAMPLE_BRANDING)
+        branding["logo_url"] = "data:text/html,<script>alert(1)</script>"
+        html_out = render_branded_email(
+            branding=branding,
+            subject="s",
+            headline="h",
+            body_html="<p>b</p>",
+        )
+        assert "data:text/html" not in html_out
+        assert "<script>" not in html_out
+
+    def test_javascript_cta_url_is_dropped(self):
+        """A ``javascript:`` cta_url must not emit an ``href=javascript:...``."""
+        html_out = render_branded_email(
+            branding=SAMPLE_BRANDING,
+            subject="s",
+            headline="h",
+            body_html="<p>b</p>",
+            cta_text="Click me",
+            cta_url="javascript:alert('xss')",
+        )
+        assert "javascript:" not in html_out
+        # The CTA is entirely suppressed when the URL is rejected.
+        assert "Click me" not in html_out
+
+    def test_valid_https_urls_pass_through(self):
+        """Valid https:// URLs must still render unchanged."""
+        html_out = render_branded_email(
+            branding=SAMPLE_BRANDING,
+            subject="s",
+            headline="h",
+            body_html="<p>b</p>",
+            cta_text="Accept",
+            cta_url="https://app.example.com/accept",
+        )
+        assert "https://app.example.com/accept" in html_out
+        assert "https://acme.com/privacy" in html_out
+        assert "https://acme.com/terms" in html_out
+
+    def test_campaign_unsubscribe_blocks_javascript(self):
+        """``render_campaign_wrapper`` must not emit ``javascript:`` unsubscribe links."""
+        html_out = render_campaign_wrapper(
+            branding=SAMPLE_BRANDING,
+            campaign_body="<p>Hello</p>",
+            unsubscribe_url="javascript:alert(1)",
+        )
+        assert "javascript:" not in html_out
+        assert "Unsubscribe" not in html_out
+
+    def test_campaign_unsubscribe_allows_relative_path(self):
+        """Site-relative unsubscribe paths (existing behavior) remain supported."""
+        html_out = render_campaign_wrapper(
+            branding=SAMPLE_BRANDING,
+            campaign_body="<p>Hello</p>",
+            unsubscribe_url="/api/campaigns/1/unsubscribe?member_id=2",
+        )
+        assert "Unsubscribe" in html_out
+        assert "/api/campaigns/1/unsubscribe" in html_out
+
+
+class TestTenantSettingsUrlValidation:
+    """Schema must reject dangerous URL schemes before they reach the DB."""
+
+    def test_privacy_policy_javascript_rejected(self):
+        from pydantic import ValidationError
+        from src.whitelabel.schemas import TenantSettingsUpdate
+
+        with pytest.raises(ValidationError):
+            TenantSettingsUpdate(privacy_policy_url="javascript:alert(1)")
+
+    def test_terms_of_service_javascript_rejected(self):
+        from pydantic import ValidationError
+        from src.whitelabel.schemas import TenantSettingsUpdate
+
+        with pytest.raises(ValidationError):
+            TenantSettingsUpdate(terms_of_service_url="JAVASCRIPT:alert(1)")
+
+    def test_privacy_policy_https_accepted(self):
+        from src.whitelabel.schemas import TenantSettingsUpdate
+
+        payload = TenantSettingsUpdate(privacy_policy_url="https://example.com/privacy")
+        assert payload.privacy_policy_url == "https://example.com/privacy"
+
+    def test_mixed_case_javascript_logo_url_rejected(self):
+        """Case-insensitive scheme check blocks ``Javascript:`` logo URLs."""
+        from pydantic import ValidationError
+        from src.whitelabel.schemas import TenantSettingsUpdate
+
+        with pytest.raises(ValidationError):
+            TenantSettingsUpdate(logo_url="Javascript:alert(1)")

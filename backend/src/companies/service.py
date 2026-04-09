@@ -31,7 +31,14 @@ class CompanyService(
         filters: Optional[Dict[str, Any]] = None,
         shared_entity_ids: Optional[List[int]] = None,
     ) -> Tuple[List[Company], int]:
-        """Get paginated list of companies with filters."""
+        """Get paginated list of companies with filters.
+
+        Soft-deleted companies (``status="merged"``, written by
+        :class:`DedupService.merge_companies`) are hidden unless the
+        caller explicitly asks for ``status="merged"`` — otherwise
+        tombstones from the dedup flow would reappear in list/kanban
+        views after a merge.
+        """
         query = select(Company)
 
         if filters:
@@ -44,6 +51,8 @@ class CompanyService(
 
         if status:
             query = query.where(Company.status == status)
+        else:
+            query = query.where(Company.status != "merged")
 
         if industry:
             query = query.where(Company.industry == industry)

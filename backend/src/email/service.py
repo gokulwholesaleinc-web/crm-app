@@ -1,6 +1,7 @@
 """Email service layer - handles sending, tracking, and queue management."""
 
 import asyncio
+import html
 import logging
 import re
 from datetime import datetime, timedelta, timezone
@@ -44,11 +45,23 @@ def send_email(
     resend.Emails.send(payload)
 
 
-def render_template(template: str, variables: Dict[str, str]) -> str:
-    """Render a template string by replacing {{var}} placeholders."""
+def render_template(
+    template: str, variables: Dict[str, str], is_html: bool = True
+) -> str:
+    """Render a template by replacing {{var}} placeholders with substituted values.
+
+    Substitution is single-pass so attacker-controlled values cannot re-expand
+    as placeholders. When ``is_html`` is True (the default, used for email
+    bodies) values are HTML-escaped so variables cannot inject tags, attributes,
+    or event handlers. Pass ``is_html=False`` for plain-text contexts like the
+    email subject line where escaping would produce ``&amp;`` artifacts.
+    """
     def replacer(match):
         key = match.group(1)
-        return variables.get(key, match.group(0))
+        if key not in variables:
+            return match.group(0)
+        value = str(variables[key])
+        return html.escape(value, quote=True) if is_html else value
 
     return re.sub(r"\{\{(\w+)\}\}", replacer, template)
 
@@ -259,7 +272,7 @@ class EmailService:
             raise ValueError(f"Template {template_id} not found")
 
         vars_dict = variables or {}
-        subject = render_template(template.subject_template, vars_dict)
+        subject = render_template(template.subject_template, vars_dict, is_html=False)
         body = render_template(template.body_template or "", vars_dict)
 
         if use_branded_wrapper and branding:
@@ -311,7 +324,7 @@ class EmailService:
             raise ValueError(f"Template {template_id} not found")
 
         vars_dict = variables or {}
-        subject = render_template(template.subject_template, vars_dict)
+        subject = render_template(template.subject_template, vars_dict, is_html=False)
         raw_body = render_template(template.body_template or "", vars_dict)
 
         result = await self.db.execute(

@@ -1,5 +1,6 @@
 """Contact service layer."""
 
+from datetime import datetime, timezone
 from typing import Optional, List, Tuple, Any, Dict
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -36,7 +37,12 @@ class ContactService(
         filters: Optional[Dict[str, Any]] = None,
         shared_entity_ids: Optional[List[int]] = None,
     ) -> Tuple[List[Contact], int]:
-        """Get paginated list of contacts with filters."""
+        """Get paginated list of contacts with filters.
+
+        Soft-deleted contacts (``deleted_at IS NOT NULL``) are hidden unless
+        the caller explicitly passes ``status="archived"`` — in which case
+        only archived rows are returned, matching the UX of a "trash" view.
+        """
         query = select(Contact).options(selectinload(Contact.company))
 
         if filters:
@@ -50,8 +56,12 @@ class ContactService(
         if company_id:
             query = query.where(Contact.company_id == company_id)
 
-        if status:
-            query = query.where(Contact.status == status)
+        if status == "archived":
+            query = query.where(Contact.deleted_at.is_not(None))
+        else:
+            query = query.where(Contact.deleted_at.is_(None))
+            if status:
+                query = query.where(Contact.status == status)
 
         query = self.apply_owner_filter(query, owner_id, shared_entity_ids)
 
@@ -59,6 +69,29 @@ class ContactService(
             query = await self._filter_by_tags(query, tag_ids)
 
         return await self.paginate_query(query, page, page_size)
+
+    async def soft_delete(self, contact: Contact) -> Contact:
+        """Soft-delete a contact by setting ``deleted_at`` and ``status``.
+
+        Never hard-deletes: the row is kept so AR ledger, activities, and
+        invoice history referencing this contact stay intact. Idempotent —
+        calling on an already-archived contact is a no-op.
+
+        The email is prefixed with ``archived-<id>-`` rather than cleared
+        so that (a) the unique constraint on ``contacts.email`` no longer
+        blocks a new contact from reusing the original address, and
+        (b) the original email remains recoverable (e.g. un-archive
+        workflow, support lookups) by stripping the prefix.
+        """
+        if contact.deleted_at is None:
+            contact.deleted_at = datetime.now(timezone.utc)
+            contact.status = "archived"
+            if contact.email and not contact.email.startswith("archived-"):
+                prefix = f"archived-{contact.id}-"
+                # Truncate to fit the 255-char column width.
+                contact.email = (prefix + contact.email)[:255]
+            await self.db.flush()
+        return contact
 
     async def get_payment_summary(self, contact_id: int) -> dict:
         """Get payment summary for a contact via their StripeCustomer link."""

@@ -55,7 +55,16 @@ class Company(Base, AuditableMixin):
     account_manager: Mapped[Optional[str]] = mapped_column(String(255))
 
     # Status
-    status: Mapped[str] = mapped_column(String(20), default="prospect", index=True)  # prospect, customer, churned
+    status: Mapped[str] = mapped_column(String(20), default="prospect", index=True)  # prospect, customer, churned, merged
+
+    # Forwarding pointer set by the dedup merge flow. When two companies are
+    # merged the secondary is soft-deleted (status="merged") and this column
+    # points at the surviving primary so lookups can follow the redirect.
+    merged_into_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("companies.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     # Owner
     owner_id: Mapped[Optional[int]] = mapped_column(

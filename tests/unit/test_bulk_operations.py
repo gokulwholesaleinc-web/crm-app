@@ -346,3 +346,140 @@ class TestBulkOperationsUnauthorized:
             },
         )
         assert response.status_code == 401
+
+
+class TestBulkDeleteContacts:
+    """Session 3 3b.4 — bulk_delete on contacts must soft-delete, not hard-delete."""
+
+    @pytest.mark.asyncio
+    async def test_bulk_delete_contacts_soft_deletes(
+        self,
+        db_session: AsyncSession,
+        test_user: User,
+    ):
+        """``bulk_delete("contacts", ids)`` must archive, not drop rows.
+
+        Exercises the service directly so the test doesn't depend on the
+        import-export router auth wiring. Creates two contacts, runs
+        bulk_delete, and asserts both rows still exist with
+        ``deleted_at`` set and status ``archived``.
+        """
+        from src.import_export.bulk_operations import BulkOperationsHandler
+
+        contact_a = Contact(
+            first_name="BulkA",
+            last_name="SoftDel",
+            email="bulk.a@example.com",
+            status="active",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        contact_b = Contact(
+            first_name="BulkB",
+            last_name="SoftDel",
+            email="bulk.b@example.com",
+            status="active",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add_all([contact_a, contact_b])
+        await db_session.commit()
+        await db_session.refresh(contact_a)
+        await db_session.refresh(contact_b)
+
+        handler = BulkOperationsHandler(db_session)
+        result = await handler.bulk_delete(
+            entity_type="contacts",
+            entity_ids=[contact_a.id, contact_b.id],
+        )
+        await db_session.commit()
+
+        assert result["success"] is True
+        assert result["success_count"] == 2
+
+        # Both rows must still exist — soft delete only.
+        rows = await db_session.execute(
+            select(Contact).where(Contact.id.in_([contact_a.id, contact_b.id]))
+        )
+        archived_rows = list(rows.scalars().all())
+        assert len(archived_rows) == 2
+        for row in archived_rows:
+            assert row.deleted_at is not None
+            assert row.status == "archived"
+            assert row.email.startswith(f"archived-{row.id}-")
+
+    @pytest.mark.asyncio
+    async def test_bulk_delete_contacts_frees_email_slot(
+        self,
+        db_session: AsyncSession,
+        test_user: User,
+    ):
+        """After a bulk delete a new contact can take the old email back."""
+        from src.import_export.bulk_operations import BulkOperationsHandler
+
+        original = Contact(
+            first_name="Bulk",
+            last_name="Reuse",
+            email="bulk.reuse@example.com",
+            status="active",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(original)
+        await db_session.commit()
+        await db_session.refresh(original)
+
+        await BulkOperationsHandler(db_session).bulk_delete(
+            entity_type="contacts",
+            entity_ids=[original.id],
+        )
+        await db_session.commit()
+
+        # Insert a brand-new contact with the same email — must succeed.
+        reused = Contact(
+            first_name="New",
+            last_name="Holder",
+            email="bulk.reuse@example.com",
+            status="active",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(reused)
+        await db_session.commit()
+        await db_session.refresh(reused)
+
+        assert reused.id != original.id
+        assert reused.email == "bulk.reuse@example.com"
+
+    @pytest.mark.asyncio
+    async def test_bulk_delete_leads_still_hard_deletes(
+        self,
+        db_session: AsyncSession,
+        test_user: User,
+        test_lead_source: LeadSource,
+    ):
+        """Non-contact entities must retain hard-delete semantics."""
+        from src.import_export.bulk_operations import BulkOperationsHandler
+
+        lead = Lead(
+            first_name="HardDel",
+            last_name="Lead",
+            email="hard.del@example.com",
+            status="new",
+            source_id=test_lead_source.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(lead)
+        await db_session.commit()
+        await db_session.refresh(lead)
+        lead_id = lead.id
+
+        await BulkOperationsHandler(db_session).bulk_delete(
+            entity_type="leads",
+            entity_ids=[lead_id],
+        )
+        await db_session.commit()
+
+        row = await db_session.execute(select(Lead).where(Lead.id == lead_id))
+        assert row.scalar_one_or_none() is None

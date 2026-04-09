@@ -5,7 +5,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { authApi } from '../api/auth';
 import { useAuthStore, User as StoreUser } from '../store/authStore';
-import { clearTenantSlugOnLogout } from '../providers/TenantProvider';
 import type { User, UserCreate, UserUpdate, LoginRequest } from '../types';
 
 // Helper to convert types/index.ts User to store User type
@@ -100,14 +99,13 @@ export function useRegister() {
  * Hook for user logout
  */
 export function useLogout() {
-  const { logout: storeLogout } = useAuthStore();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async () => {
+      // authApi.logout clears the token, user, and tenant slug via the
+      // store's centralized logout and broadcasts the auth:logout event.
       authApi.logout();
-      clearTenantSlugOnLogout();
-      storeLogout();
     },
     onSuccess: () => {
       // Clear all cached queries
