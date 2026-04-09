@@ -177,10 +177,12 @@ class Subscription(Base, AuditableMixin):
         nullable=False,
         index=True,
     )
-    price_id: Mapped[int] = mapped_column(
+    # Nullable: subscriptions created via Stripe Checkout / webhook flow
+    # don't necessarily map to a local Price row at creation time.
+    price_id: Mapped[Optional[int]] = mapped_column(
         Integer,
         ForeignKey("prices.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
 

@@ -159,12 +159,60 @@ async def _run_production_migrations():
                 "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL",
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(20) NOT NULL DEFAULT 'password'",
                 "ALTER TABLE users ALTER COLUMN hashed_password DROP NOT NULL",
+                # Audit Session 2: unguessable public tokens on sales docs
+                "ALTER TABLE quotes ADD COLUMN IF NOT EXISTS public_token VARCHAR(64)",
+                "CREATE UNIQUE INDEX IF NOT EXISTS ix_quotes_public_token ON quotes(public_token) WHERE public_token IS NOT NULL",
+                "ALTER TABLE proposals ADD COLUMN IF NOT EXISTS public_token VARCHAR(64)",
+                "CREATE UNIQUE INDEX IF NOT EXISTS ix_proposals_public_token ON proposals(public_token) WHERE public_token IS NOT NULL",
+                # Audit Session 2: relax subscriptions.price_id so webhook-driven
+                # subscription creation (no matching local Price row) can insert
+                "ALTER TABLE subscriptions ALTER COLUMN price_id DROP NOT NULL",
             ]
             for sql in column_migrations:
                 try:
                     await conn.execute(sql)
                 except Exception:
                     pass
+
+            # Audit Session 2: Stripe webhook idempotency log
+            try:
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS webhook_events (
+                        id SERIAL PRIMARY KEY,
+                        event_id VARCHAR(255) NOT NULL,
+                        event_type VARCHAR(100) NOT NULL,
+                        received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                """)
+                await conn.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ix_webhook_events_event_id ON webhook_events(event_id)"
+                )
+            except Exception:
+                pass
+
+            # Audit Session 2: backfill public_token on any pre-existing quote
+            # / proposal rows that pre-date the column. Per-row UPDATE so each
+            # token is unique. Prod row count is small at time of the fix.
+            try:
+                import secrets as _secrets
+                quote_rows = await conn.fetch(
+                    "SELECT id FROM quotes WHERE public_token IS NULL"
+                )
+                for row in quote_rows:
+                    await conn.execute(
+                        "UPDATE quotes SET public_token = $1 WHERE id = $2",
+                        _secrets.token_urlsafe(32), row["id"],
+                    )
+                proposal_rows = await conn.fetch(
+                    "SELECT id FROM proposals WHERE public_token IS NULL"
+                )
+                for row in proposal_rows:
+                    await conn.execute(
+                        "UPDATE proposals SET public_token = $1 WHERE id = $2",
+                        _secrets.token_urlsafe(32), row["id"],
+                    )
+            except Exception:
+                pass
 
             # Create inbound_emails table if it doesn't exist
             try:

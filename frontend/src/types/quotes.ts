@@ -68,6 +68,9 @@ export interface QuoteUpdate {
 export interface Quote extends QuoteBase {
   id: number;
   quote_number: string;
+  /** Unguessable token used for the public accept/reject link. Nullable
+   * only for pre-migration rows; new quotes get one on create. */
+  public_token?: string | null;
   subtotal: number;
   tax_amount: number;
   total: number;

@@ -202,17 +202,26 @@ async def delete_bundle(
 # Public quote endpoints (no auth, BEFORE /{quote_id} to avoid path conflicts)
 # =============================================================================
 
-@router.get("/public/{quote_number}", response_model=QuotePublicResponse)
+# Public quote routes use an unguessable `token` (Quote.public_token),
+# NOT the sequential `quote_number`. The previous version keyed by
+# quote_number, which let an attacker enumerate every customer quote in
+# the system and forge e-signatures.
+@router.get("/public/{token}", response_model=QuotePublicResponse)
 async def get_public_quote(
-    quote_number: str,
+    token: str,
     request: Request,
     db: DBSession,
 ):
-    """Public view of a quote (no auth required). Auto-transitions sent to viewed."""
-    service = QuoteService(db)
-    quote = await service.get_public_quote(quote_number)
+    """Public view of a quote (no auth required). Auto-transitions sent to viewed.
 
-    if not quote:
+    Returns 404 for both 'token not found' and 'token malformed' so
+    observers can't distinguish the two cases.
+    """
+    import hmac as _hmac
+
+    service = QuoteService(db)
+    quote = await service.get_public_quote(token)
+    if not quote or not _hmac.compare_digest(quote.public_token or "", token):
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Quote not found")
 
     # Record the view (auto-transitions sent -> viewed)
@@ -222,18 +231,19 @@ async def get_public_quote(
     return _build_branded_response(await service.get_branding_for_quote(quote), quote)
 
 
-@router.post("/public/{quote_number}/accept", response_model=QuotePublicResponse)
+@router.post("/public/{token}/accept", response_model=QuotePublicResponse)
 async def accept_quote_public(
-    quote_number: str,
+    token: str,
     accept_data: QuoteAcceptRequest,
     request: Request,
     db: DBSession,
 ):
     """Accept a quote via public link with e-signature data (no auth required)."""
-    service = QuoteService(db)
-    quote = await service.get_public_quote(quote_number)
+    import hmac as _hmac
 
-    if not quote:
+    service = QuoteService(db)
+    quote = await service.get_public_quote(token)
+    if not quote or not _hmac.compare_digest(quote.public_token or "", token):
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Quote not found")
 
     signer_ip = request.client.host if request.client else None
@@ -250,18 +260,19 @@ async def accept_quote_public(
     return _build_branded_response(await service.get_branding_for_quote(quote), quote)
 
 
-@router.post("/public/{quote_number}/reject", response_model=QuotePublicResponse)
+@router.post("/public/{token}/reject", response_model=QuotePublicResponse)
 async def reject_quote_public(
-    quote_number: str,
+    token: str,
     request: Request,
     db: DBSession,
     reject_data: Optional[QuoteRejectRequest] = None,
 ):
     """Reject a quote via public link (no auth required)."""
-    service = QuoteService(db)
-    quote = await service.get_public_quote(quote_number)
+    import hmac as _hmac
 
-    if not quote:
+    service = QuoteService(db)
+    quote = await service.get_public_quote(token)
+    if not quote or not _hmac.compare_digest(quote.public_token or "", token):
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Quote not found")
 
     signer_ip = request.client.host if request.client else None

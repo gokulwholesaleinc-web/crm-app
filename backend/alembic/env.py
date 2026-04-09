@@ -33,6 +33,7 @@ from src.email.models import EmailQueue, InboundEmail
 from src.reports.models import SavedReport
 from src.sequences.models import Sequence, SequenceEnrollment
 from src.notifications.models import Notification
+from src.webhooks.stripe_events import WebhookEvent
 
 # Alembic Config object
 config = context.config

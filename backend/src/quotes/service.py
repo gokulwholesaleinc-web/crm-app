@@ -1,6 +1,7 @@
 """Quote service layer."""
 
 import os
+import secrets
 from datetime import datetime, timezone
 from typing import Optional, List, Tuple
 from sqlalchemy import select, func, or_
@@ -143,6 +144,10 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
         # Create quote without line_items field
         quote_data = data.model_dump(exclude={"line_items"})
         quote_data["quote_number"] = quote_number
+        # Unguessable public token — see Quote.public_token for rationale.
+        # 32 url-safe bytes = ~43 chars of base64url, well above
+        # guessing-resistance thresholds.
+        quote_data["public_token"] = secrets.token_urlsafe(32)
         quote_data["created_by_id"] = user_id
 
         quote = Quote(**quote_data)
@@ -242,9 +247,15 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
         if quote.contact and quote.contact.email:
             branding = await TenantBrandingHelper.get_branding_for_user(self.db, user_id)
 
-            # Build public view URL for CTA button in email
+            # Build public view URL for the CTA button in the email.
+            # We use the unguessable public_token (not quote_number) so
+            # the link can't be enumerated. If the row pre-dates the
+            # public_token column for any reason, mint one on the fly.
+            if not quote.public_token:
+                quote.public_token = secrets.token_urlsafe(32)
+                await self.db.flush()
             base_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
-            view_url = f"{base_url}/quotes/public/{quote.quote_number}"
+            view_url = f"{base_url}/quotes/public/{quote.public_token}"
 
             quote_data = {
                 "quote_number": quote.quote_number,
@@ -324,8 +335,15 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
         generator = BrandedPDFGenerator()
         return generator.generate_quote_pdf(quote_data, branding)
 
-    async def get_public_quote(self, quote_number: str) -> Optional[Quote]:
-        """Get a quote by its number for public viewing."""
+    async def get_public_quote(self, token: str) -> Optional[Quote]:
+        """Get a quote by its unguessable public token.
+
+        Looks up rows with `public_token == token` (no longer
+        enumerable via sequential quote_number). Caller should use
+        `hmac.compare_digest` to compare inbound tokens.
+        """
+        if not token or len(token) < 16:
+            return None
         query = (
             select(Quote)
             .options(
@@ -333,7 +351,7 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
                 selectinload(Quote.contact),
                 selectinload(Quote.company),
             )
-            .where(Quote.quote_number == quote_number)
+            .where(Quote.public_token == token)
         )
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
@@ -355,9 +373,24 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
     async def accept_quote_public(
         self, quote: Quote, signer_name: str, signer_email: str, signer_ip: Optional[str] = None
     ) -> Quote:
-        """Accept a quote via the public link with e-signature data."""
+        """Accept a quote via the public link with e-signature data.
+
+        Raises ValueError if:
+        - the quote is not in sent/viewed state, OR
+        - the signer_email does not match the quote's recipient contact
+          email (case-insensitive) — this prevents a third party who
+          somehow gets the public link from signing on the customer's
+          behalf with an attacker-controlled email.
+        """
         if quote.status not in ("sent", "viewed"):
             raise ValueError(f"Cannot accept quote in '{quote.status}' status")
+
+        expected_email = (quote.contact.email or "").strip().lower() if quote.contact else ""
+        given_email = (signer_email or "").strip().lower()
+        if not expected_email:
+            raise ValueError("Quote has no recipient contact on file")
+        if not given_email or given_email != expected_email:
+            raise ValueError("Signer email does not match the quote recipient")
 
         now = datetime.now(timezone.utc)
         quote.status = "accepted"

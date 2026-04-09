@@ -3,7 +3,12 @@
  */
 
 /**
- * Format a number as currency
+ * Format a number as currency.
+ *
+ * Default fraction digits are **2**, so dollars/cents display
+ * accurately on money-facing surfaces (quotes, payments, receipts).
+ * Pass `minimumFractionDigits: 0` explicitly for compact displays
+ * (e.g. pipeline summary headline cards).
  *
  * @param amount - The numeric amount to format
  * @param currency - The currency code (default: 'USD')
@@ -11,8 +16,8 @@
  * @returns Formatted currency string
  *
  * @example
- * formatCurrency(50000) // '$50,000'
- * formatCurrency(1234.56, 'EUR') // '1.235 EUR' (in EUR format)
+ * formatCurrency(1234.56) // '$1,234.56'
+ * formatCurrency(50000, 'USD', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) // '$50,000'
  */
 export function formatCurrency(
   amount: number | null | undefined,
@@ -27,7 +32,7 @@ export function formatCurrency(
     return '-';
   }
 
-  const { minimumFractionDigits = 0, maximumFractionDigits = 0 } = options ?? {};
+  const { minimumFractionDigits = 2, maximumFractionDigits = 2 } = options ?? {};
 
   return new Intl.NumberFormat(undefined, {
     style: 'currency',

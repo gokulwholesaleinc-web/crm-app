@@ -137,7 +137,13 @@ function ProposalDetailPage() {
   };
 
   const handleCopyPublicLink = () => {
-    const url = `${window.location.origin}/api/proposals/public/${proposal.proposal_number}`;
+    // Use the SPA route — not the raw JSON API path — and key on the
+    // unguessable public_token, not the enumerable proposal_number.
+    if (!proposal.public_token) {
+      showError('This proposal has no public link yet; save or send it first.');
+      return;
+    }
+    const url = `${window.location.origin}/proposals/public/${proposal.public_token}`;
     navigator.clipboard.writeText(url).then(
       () => showSuccess('Public link copied to clipboard'),
       () => showError('Failed to copy link')

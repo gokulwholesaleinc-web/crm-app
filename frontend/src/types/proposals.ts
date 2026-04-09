@@ -45,6 +45,9 @@ export interface ProposalUpdate {
 export interface Proposal extends ProposalBase {
   id: number;
   proposal_number: string;
+  /** Unguessable token used for the public /accept link. Nullable only
+   * for pre-migration rows; all new proposals get one on create. */
+  public_token?: string | null;
   view_count: number;
   last_viewed_at?: string | null;
   sent_at?: string | null;

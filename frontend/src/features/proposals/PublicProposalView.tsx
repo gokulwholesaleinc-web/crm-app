@@ -1,7 +1,18 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
-import { apiClient } from '../../api/client';
+import axios from 'axios';
+
+// Bare axios instance for public (unauthenticated) proposal endpoints.
+// Deliberately does NOT attach the CRM Bearer token or X-Tenant-Slug
+// header — customers clicking a proposal link aren't logged in, and a
+// 401 from this client should NOT wipe a CRM staff user's own session
+// if they happen to preview their own link.
+const publicClient = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || '',
+  headers: { 'Content-Type': 'application/json' },
+  timeout: 30000,
+});
 
 interface ProposalBranding {
   company_name: string | null;
@@ -51,7 +62,7 @@ function PublicProposalView() {
 
     const fetchProposal = async () => {
       try {
-        const response = await apiClient.get<PublicProposal>(
+        const response = await publicClient.get<PublicProposal>(
           `/api/proposals/public/${token}`
         );
         setProposal(response.data);
@@ -69,11 +80,13 @@ function PublicProposalView() {
     if (!proposal) return;
     setActionPending(true);
     try {
-      await apiClient.post(`/api/proposals/public/${token}/accept`);
+      await publicClient.post(`/api/proposals/public/${token}/accept`);
       setProposal((prev) => prev ? { ...prev, status: 'accepted' } : null);
       setActionDone('accepted');
     } catch {
-      setActionDone('accepted');
+      // IMPORTANT: do NOT mark the proposal accepted on failure. These
+      // are legally binding signatures — surface the error.
+      setError('Unable to record acceptance. Please contact your account manager.');
     } finally {
       setActionPending(false);
     }
@@ -83,11 +96,11 @@ function PublicProposalView() {
     if (!proposal) return;
     setActionPending(true);
     try {
-      await apiClient.post(`/api/proposals/public/${token}/reject`);
+      await publicClient.post(`/api/proposals/public/${token}/reject`);
       setProposal((prev) => prev ? { ...prev, status: 'rejected' } : null);
       setActionDone('rejected');
     } catch {
-      setActionDone('rejected');
+      setError('Unable to record rejection. Please contact your account manager.');
     } finally {
       setActionPending(false);
     }

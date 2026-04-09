@@ -13,6 +13,7 @@ Tests for:
 """
 
 import pytest
+import secrets
 from datetime import date, timedelta
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -84,6 +85,7 @@ async def sent_quote_with_items(
     """Create a sent quote with line items for public view testing."""
     quote = Quote(
         quote_number="QT-2026-PUB-001",
+        public_token=secrets.token_urlsafe(32),
         title="Website Redesign Package",
         description="Complete website overhaul",
         status="sent",
@@ -135,6 +137,7 @@ async def draft_quote(
     """Create a draft quote for testing status guards."""
     quote = Quote(
         quote_number="QT-2026-PUB-DRAFT",
+        public_token=secrets.token_urlsafe(32),
         title="Draft Quote",
         status="draft",
         currency="USD",
@@ -156,6 +159,7 @@ async def accepted_quote(
     """Create an already-accepted quote."""
     quote = Quote(
         quote_number="QT-2026-PUB-ACCEPTED",
+        public_token=secrets.token_urlsafe(32),
         title="Already Accepted Quote",
         status="accepted",
         currency="USD",
@@ -188,7 +192,7 @@ class TestPublicQuoteRetrieval:
     ):
         """Test that the public endpoint returns quote data without auth."""
         response = await client.get(
-            f"/api/quotes/public/{sent_quote_with_items.quote_number}"
+            f"/api/quotes/public/{sent_quote_with_items.public_token}"
         )
 
         assert response.status_code == 200
@@ -208,7 +212,7 @@ class TestPublicQuoteRetrieval:
     ):
         """Test that line items are included in public response."""
         response = await client.get(
-            f"/api/quotes/public/{sent_quote_with_items.quote_number}"
+            f"/api/quotes/public/{sent_quote_with_items.public_token}"
         )
 
         assert response.status_code == 200
@@ -228,7 +232,7 @@ class TestPublicQuoteRetrieval:
     ):
         """Test that branding data is included in the response."""
         response = await client.get(
-            f"/api/quotes/public/{sent_quote_with_items.quote_number}"
+            f"/api/quotes/public/{sent_quote_with_items.public_token}"
         )
 
         assert response.status_code == 200
@@ -252,7 +256,7 @@ class TestPublicQuoteRetrieval:
         assert sent_quote_with_items.status == "sent"
 
         response = await client.get(
-            f"/api/quotes/public/{sent_quote_with_items.quote_number}"
+            f"/api/quotes/public/{sent_quote_with_items.public_token}"
         )
 
         assert response.status_code == 200
@@ -284,7 +288,7 @@ class TestPublicQuoteRetrieval:
     ):
         """Test that contact info is included in public response."""
         response = await client.get(
-            f"/api/quotes/public/{sent_quote_with_items.quote_number}"
+            f"/api/quotes/public/{sent_quote_with_items.public_token}"
         )
 
         assert response.status_code == 200
@@ -302,7 +306,7 @@ class TestPublicQuoteRetrieval:
     ):
         """Test that company info is included in public response."""
         response = await client.get(
-            f"/api/quotes/public/{sent_quote_with_items.quote_number}"
+            f"/api/quotes/public/{sent_quote_with_items.public_token}"
         )
 
         assert response.status_code == 200
@@ -326,14 +330,19 @@ class TestPublicQuoteAccept:
         db_session: AsyncSession,
         sent_quote_with_items: Quote,
         branded_tenant_user: TenantUser,
+        test_contact: Contact,
     ):
-        """Test accepting a quote captures e-sign data."""
+        """Test accepting a quote captures e-sign data.
+
+        signer_email must match the quote's recipient contact — using
+        test_contact.email so the signer-email guard is satisfied.
+        """
         response = await client.post(
-            f"/api/quotes/public/{sent_quote_with_items.quote_number}/accept",
-            json={"signer_name": "John Doe", "signer_email": "john@example.com"},
+            f"/api/quotes/public/{sent_quote_with_items.public_token}/accept",
+            json={"signer_name": "John Doe", "signer_email": test_contact.email},
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 200, response.text
         data = response.json()
         assert data["status"] == "accepted"
 
@@ -341,7 +350,7 @@ class TestPublicQuoteAccept:
         await db_session.refresh(sent_quote_with_items)
         assert sent_quote_with_items.status == "accepted"
         assert sent_quote_with_items.signer_name == "John Doe"
-        assert sent_quote_with_items.signer_email == "john@example.com"
+        assert sent_quote_with_items.signer_email == test_contact.email
         assert sent_quote_with_items.signer_ip is not None
         assert sent_quote_with_items.signed_at is not None
         assert sent_quote_with_items.accepted_at is not None
@@ -353,17 +362,34 @@ class TestPublicQuoteAccept:
         db_session: AsyncSession,
         sent_quote_with_items: Quote,
         branded_tenant_user: TenantUser,
+        test_contact: Contact,
     ):
         """Test that accept response includes branding data."""
         response = await client.post(
-            f"/api/quotes/public/{sent_quote_with_items.quote_number}/accept",
-            json={"signer_name": "Jane Doe", "signer_email": "jane@example.com"},
+            f"/api/quotes/public/{sent_quote_with_items.public_token}/accept",
+            json={"signer_name": "Jane Doe", "signer_email": test_contact.email},
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 200, response.text
         data = response.json()
         assert data["branding"] is not None
         assert data["branding"]["company_name"] == "Public View Inc"
+
+    @pytest.mark.asyncio
+    async def test_accept_rejects_mismatched_signer_email(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        sent_quote_with_items: Quote,
+        branded_tenant_user: TenantUser,
+    ):
+        """A signer_email that doesn't match the quote's contact must be rejected."""
+        response = await client.post(
+            f"/api/quotes/public/{sent_quote_with_items.public_token}/accept",
+            json={"signer_name": "Imposter", "signer_email": "not-the-contact@evil.com"},
+        )
+        assert response.status_code == 400
+        assert "signer email" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
     async def test_cannot_accept_draft_quote(
@@ -374,7 +400,7 @@ class TestPublicQuoteAccept:
     ):
         """Test that accepting a draft quote returns 400."""
         response = await client.post(
-            f"/api/quotes/public/{draft_quote.quote_number}/accept",
+            f"/api/quotes/public/{draft_quote.public_token}/accept",
             json={"signer_name": "Test", "signer_email": "test@example.com"},
         )
 
@@ -389,7 +415,7 @@ class TestPublicQuoteAccept:
     ):
         """Test that accepting an already-accepted quote returns 400."""
         response = await client.post(
-            f"/api/quotes/public/{accepted_quote.quote_number}/accept",
+            f"/api/quotes/public/{accepted_quote.public_token}/accept",
             json={"signer_name": "Test", "signer_email": "test@example.com"},
         )
 
@@ -428,7 +454,7 @@ class TestPublicQuoteReject:
     ):
         """Test rejecting a quote via public link."""
         response = await client.post(
-            f"/api/quotes/public/{sent_quote_with_items.quote_number}/reject",
+            f"/api/quotes/public/{sent_quote_with_items.public_token}/reject",
             json={"reason": "Budget constraints"},
         )
 
@@ -452,7 +478,7 @@ class TestPublicQuoteReject:
     ):
         """Test rejecting a quote without providing a reason."""
         response = await client.post(
-            f"/api/quotes/public/{sent_quote_with_items.quote_number}/reject",
+            f"/api/quotes/public/{sent_quote_with_items.public_token}/reject",
             json={},
         )
 
@@ -473,7 +499,7 @@ class TestPublicQuoteReject:
     ):
         """Test that reject response includes branding."""
         response = await client.post(
-            f"/api/quotes/public/{sent_quote_with_items.quote_number}/reject",
+            f"/api/quotes/public/{sent_quote_with_items.public_token}/reject",
             json={},
         )
 
@@ -490,7 +516,7 @@ class TestPublicQuoteReject:
     ):
         """Test that rejecting a draft quote returns 400."""
         response = await client.post(
-            f"/api/quotes/public/{draft_quote.quote_number}/reject",
+            f"/api/quotes/public/{draft_quote.public_token}/reject",
             json={},
         )
 
@@ -505,7 +531,7 @@ class TestPublicQuoteReject:
     ):
         """Test that rejecting an already-accepted quote returns 400."""
         response = await client.post(
-            f"/api/quotes/public/{accepted_quote.quote_number}/reject",
+            f"/api/quotes/public/{accepted_quote.public_token}/reject",
             json={},
         )
 
@@ -533,6 +559,7 @@ class TestQuoteEmailViewUrl:
         """Test that sent quote email includes a public view URL CTA."""
         quote = Quote(
             quote_number="QT-2026-VIEWURL-001",
+            public_token=secrets.token_urlsafe(32),
             title="View URL Test Quote",
             status="draft",
             currency="USD",
@@ -564,4 +591,4 @@ class TestQuoteEmailViewUrl:
         # Check the email body contains the CTA with the public URL
         assert "Review" in email.body
         assert "Accept Quote" in email.body
-        assert f"/quotes/public/{quote.quote_number}" in email.body
+        assert f"/quotes/public/{quote.public_token}" in email.body
