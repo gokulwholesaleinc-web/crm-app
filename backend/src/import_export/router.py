@@ -129,7 +129,7 @@ async def import_contacts(
             status_code=HTTPStatus.BAD_REQUEST,
             detail={"imported_count": result.get("imported", 0), "errors": result.get("errors", [])},
         )
-    return {"success": True, "detail": "Import complete", "imported_count": result["imported"], "errors": result.get("errors", []), "duplicates_skipped": result.get("duplicates_skipped", 0)}
+    return {"success": True, "detail": "Import complete", "imported_count": result["imported"], "errors": result.get("errors", []), "duplicates_skipped": result.get("duplicates_skipped", 0), "duplicates": result.get("duplicates", [])}
 
 
 @router.post("/import/companies")
@@ -173,6 +173,7 @@ async def import_companies(
         "contacts_linked": result.get("contacts_linked", 0),
         "errors": result.get("errors", []),
         "duplicates_skipped": result.get("duplicates_skipped", 0),
+        "duplicates": result.get("duplicates", []),
     }
 
 
@@ -198,7 +199,7 @@ async def import_leads(
             status_code=HTTPStatus.BAD_REQUEST,
             detail={"imported_count": result.get("imported", 0), "errors": result.get("errors", [])},
         )
-    return {"success": True, "detail": "Import complete", "imported_count": result["imported"], "errors": result.get("errors", []), "duplicates_skipped": result.get("duplicates_skipped", 0)}
+    return {"success": True, "detail": "Import complete", "imported_count": result["imported"], "errors": result.get("errors", []), "duplicates_skipped": result.get("duplicates_skipped", 0), "duplicates": result.get("duplicates", [])}
 
 
 # Preview endpoint

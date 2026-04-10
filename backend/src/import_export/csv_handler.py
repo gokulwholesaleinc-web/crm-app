@@ -387,6 +387,7 @@ class CSVHandler:
         contacts_linked = 0
         errors = []
         duplicates_skipped = 0
+        duplicates = []
         row_num = 1
 
         for row in reader:
@@ -417,7 +418,8 @@ class CSVHandler:
                 if email:
                     if email in existing_emails or email in seen_emails:
                         duplicates_skipped += 1
-                        errors.append(f"Row {row_num}: skipped duplicate email '{email}'")
+                        label = entity_data.get("name") or ""
+                        duplicates.append({"row": row_num, "email": email, "label": label})
                         continue
                     seen_emails.add(email)
 
@@ -426,7 +428,7 @@ class CSVHandler:
                 if company_name and not email:
                     if company_name in existing_names or company_name in seen_names:
                         duplicates_skipped += 1
-                        errors.append(f"Row {row_num}: skipped duplicate company '{entity_data.get('name')}'")
+                        duplicates.append({"row": row_num, "email": "", "label": entity_data.get("name") or ""})
                         continue
                     seen_names.add(company_name)
 
@@ -497,6 +499,7 @@ class CSVHandler:
             "errors": errors,
             "success": True,
             "duplicates_skipped": duplicates_skipped,
+            "duplicates": duplicates,
         }
 
     async def import_leads(self, csv_content: str, user_id: int, skip_errors: bool = True) -> Dict[str, Any]:
@@ -731,6 +734,7 @@ class CSVHandler:
         imported = 0
         errors = []
         duplicates_skipped = 0
+        duplicates = []
         row_num = 1
 
         for row in reader:
@@ -771,7 +775,11 @@ class CSVHandler:
                 if email:
                     if email in existing_emails or email in seen_emails:
                         duplicates_skipped += 1
-                        errors.append(f"Row {row_num}: skipped duplicate email '{email}'")
+                        first = entity_data.get("first_name") or ""
+                        last = entity_data.get("last_name") or ""
+                        label = f"{first} {last}".strip()
+                        label = label or entity_data.get("company_name") or entity_data.get("name") or ""
+                        duplicates.append({"row": row_num, "email": email, "label": label})
                         continue
                     seen_emails.add(email)
 
@@ -802,6 +810,7 @@ class CSVHandler:
             "errors": errors,
             "success": True,
             "duplicates_skipped": duplicates_skipped,
+            "duplicates": duplicates,
         }
 
     def get_template(self, entity_type: str) -> str:
