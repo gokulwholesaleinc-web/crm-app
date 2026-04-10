@@ -246,8 +246,8 @@ function LeadsPage() {
   const getInitialFormData = (): Partial<LeadFormData> | undefined => {
     if (!editingLead) return undefined;
     return {
-      firstName: editingLead.first_name,
-      lastName: editingLead.last_name,
+      firstName: editingLead.first_name || '',
+      lastName: editingLead.last_name || '',
       email: editingLead.email || '',
       phone: editingLead.phone || '',
       company: editingLead.company_name || '',
@@ -463,7 +463,7 @@ function LeadsPage() {
                         type="checkbox"
                         checked={selectedIds.includes(lead.id)}
                         onChange={() => toggleSelectOne(lead.id)}
-                        aria-label={`Select ${lead.first_name} ${lead.last_name}`}
+                        aria-label={`Select ${lead.full_name || lead.company_name || 'lead'}`}
                         className="mt-1 rounded border-gray-300 text-primary-600 focus-visible:ring-primary-500"
                       />
                       <div className="min-w-0 flex-1">
@@ -471,7 +471,7 @@ function LeadsPage() {
                           to={`/leads/${lead.id}`}
                           className="text-sm font-medium text-primary-600 hover:text-primary-900 dark:hover:text-primary-300 block truncate"
                         >
-                          {lead.first_name} {lead.last_name}
+                          {lead.full_name || lead.company_name || 'Unnamed Lead'}
                         </Link>
                         <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{lead.email || '-'}</p>
                         {lead.company_name && (
@@ -577,7 +577,7 @@ function LeadsPage() {
                           type="checkbox"
                           checked={selectedIds.includes(lead.id)}
                           onChange={() => toggleSelectOne(lead.id)}
-                          aria-label={`Select ${lead.first_name} ${lead.last_name}`}
+                          aria-label={`Select ${lead.full_name || lead.company_name || 'lead'}`}
                           className="rounded border-gray-300 text-primary-600 focus-visible:ring-primary-500"
                         />
                       </td>
@@ -586,7 +586,7 @@ function LeadsPage() {
                           to={`/leads/${lead.id}`}
                           className="text-sm font-medium text-primary-600 hover:text-primary-900"
                         >
-                          {lead.first_name} {lead.last_name}
+                          {lead.full_name || lead.company_name || 'Unnamed Lead'}
                         </Link>
                         <p className="text-sm text-gray-500 dark:text-gray-400">{lead.email || '-'}</p>
                       </td>
@@ -611,7 +611,7 @@ function LeadsPage() {
                         <button
                           onClick={() => handleEdit(lead)}
                           className="text-primary-600 hover:text-primary-900 dark:hover:text-primary-300 mr-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
-                          aria-label={`Edit ${lead.first_name} ${lead.last_name}`}
+                          aria-label={`Edit ${lead.full_name || lead.company_name || 'lead'}`}
                         >
                           Edit
                         </button>
@@ -619,7 +619,7 @@ function LeadsPage() {
                           onClick={() => handleDeleteClick(lead)}
                           className="text-red-600 hover:text-red-900 dark:hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded"
                           disabled={deleteLeadMutation.isPending}
-                          aria-label={`Delete ${lead.first_name} ${lead.last_name}`}
+                          aria-label={`Delete ${lead.full_name || lead.company_name || 'lead'}`}
                         >
                           Delete
                         </button>
@@ -698,7 +698,7 @@ function LeadsPage() {
         onClose={handleDeleteCancel}
         onConfirm={handleDeleteConfirm}
         title="Delete Lead"
-        message={`Are you sure you want to delete ${deleteConfirm.lead?.first_name} ${deleteConfirm.lead?.last_name}? This action cannot be undone.`}
+        message={`Are you sure you want to delete ${deleteConfirm.lead?.full_name || deleteConfirm.lead?.company_name || 'this lead'}? This action cannot be undone.`}
         confirmLabel="Delete"
         cancelLabel="Cancel"
         variant="danger"

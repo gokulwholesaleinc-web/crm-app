@@ -23,8 +23,8 @@ class LeadSourceResponse(LeadSourceBase):
 
 
 class LeadBase(BaseModel):
-    first_name: str
-    last_name: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     email: Optional[EmailStr] = None
     phone: Optional[str] = None
     mobile: Optional[str] = None
@@ -152,8 +152,8 @@ class ConversionResponse(BaseModel):
 
 class KanbanLead(BaseModel):
     id: int
-    first_name: str
-    last_name: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     full_name: str
     email: Optional[str] = None
     company_name: Optional[str] = None

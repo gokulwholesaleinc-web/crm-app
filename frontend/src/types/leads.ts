@@ -19,8 +19,8 @@ export interface LeadSourceCreate {
 }
 
 export interface LeadBase {
-  first_name: string;
-  last_name: string;
+  first_name?: string | null;
+  last_name?: string | null;
   email?: string | null;
   phone?: string | null;
   mobile?: string | null;
@@ -113,8 +113,8 @@ export interface ConversionResponse {
 // Lead Kanban Types
 export interface KanbanLead {
   id: number;
-  first_name: string;
-  last_name: string;
+  first_name?: string | null;
+  last_name?: string | null;
   full_name: string;
   email?: string | null;
   company_name?: string | null;

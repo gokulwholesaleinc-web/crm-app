@@ -167,6 +167,9 @@ async def _run_production_migrations():
                 # Audit Session 2: relax subscriptions.price_id so webhook-driven
                 # subscription creation (no matching local Price row) can insert
                 "ALTER TABLE subscriptions ALTER COLUMN price_id DROP NOT NULL",
+                # Lead import: allow company-only leads without a contact name
+                "ALTER TABLE leads ALTER COLUMN first_name DROP NOT NULL",
+                "ALTER TABLE leads ALTER COLUMN last_name DROP NOT NULL",
             ]
             for sql in column_migrations:
                 try:
