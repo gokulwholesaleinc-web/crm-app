@@ -188,9 +188,21 @@ function ImportSection({ entityType, label, state, contactDecisions, onContactDe
                 </p>
               )}
               {state.result.duplicates_skipped > 0 && (
-                <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-1">
-                  {state.result.duplicates_skipped} duplicate{state.result.duplicates_skipped !== 1 ? 's' : ''} skipped (email already exists)
-                </p>
+                <div className="mt-2">
+                  <p className="text-xs font-medium text-yellow-700 dark:text-yellow-400">
+                    {state.result.duplicates_skipped} already in CRM (skipped):
+                  </p>
+                  {state.result.duplicates && state.result.duplicates.length > 0 && (
+                    <ul className="mt-1 text-xs text-yellow-600 dark:text-yellow-400 max-h-40 overflow-y-auto space-y-0.5">
+                      {state.result.duplicates.map((d, i) => (
+                        <li key={i} className="flex justify-between gap-2">
+                          <span className="font-medium truncate">{d.label || 'Unknown'}</span>
+                          <span className="text-yellow-500 dark:text-yellow-500 flex-shrink-0">{d.email}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               )}
               {state.result.errors.length > 0 && (
                 <div className="mt-2">
