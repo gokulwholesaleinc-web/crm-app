@@ -100,8 +100,8 @@ export function LeadForm({
   const [formError, setFormError] = useState<string | null>(null);
 
   const onFormSubmit = (data: LeadFormData) => {
-    const hasName = (data.firstName?.trim() || data.lastName?.trim());
-    const hasCompany = data.company?.trim();
+    const hasName = !!(data.firstName?.trim() || data.lastName?.trim());
+    const hasCompany = !!data.company?.trim();
     if (!hasName && !hasCompany) {
       setFormError('Either a name or company name is required.');
       return;
@@ -113,7 +113,7 @@ export function LeadForm({
   return (
     <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-6">
       {formError && (
-        <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-4">
+        <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-4" aria-live="polite">
           <p className="text-sm text-red-700 dark:text-red-400">{formError}</p>
         </div>
       )}

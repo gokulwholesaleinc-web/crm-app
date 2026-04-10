@@ -201,7 +201,7 @@ function LeadDetailPage() {
           </Link>
           <div className="min-w-0">
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">
-              {lead.full_name || lead.company_name || 'Unnamed Lead'}
+              {lead.full_name || 'Unnamed Lead'}
             </h1>
             {lead.job_title && lead.company_name && (
               <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
@@ -221,7 +221,7 @@ function LeadDetailPage() {
           <AIInsightsCard
             entityType="lead"
             entityId={lead.id}
-            entityName={lead.full_name || lead.company_name || 'Lead'}
+            entityName={lead.full_name || 'Lead'}
           />
           {lead.status === 'qualified' && (
             <Button onClick={() => setShowConvertModal(true)} className="flex-1 sm:flex-none">
@@ -575,7 +575,7 @@ function LeadDetailPage() {
       <ConvertLeadModal
         isOpen={showConvertModal}
         leadId={String(lead.id)}
-        leadName={lead.full_name || lead.company_name || 'Lead'}
+        leadName={lead.full_name || 'Lead'}
         onClose={() => setShowConvertModal(false)}
         onConvert={handleConvert}
       />
@@ -603,7 +603,7 @@ function LeadDetailPage() {
         onClose={() => setShowDeleteConfirm(false)}
         onConfirm={handleDeleteConfirm}
         title="Delete Lead"
-        message={`Are you sure you want to delete ${lead.full_name || lead.company_name || 'this lead'}? This action cannot be undone.`}
+        message={`Are you sure you want to delete ${lead.full_name || 'this lead'}? This action cannot be undone.`}
         confirmLabel="Delete"
         cancelLabel="Cancel"
         variant="danger"

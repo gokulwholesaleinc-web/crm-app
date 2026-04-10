@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, EmailStr, ConfigDict, model_validator
 from src.core.schemas import TagBrief
 
 
@@ -52,6 +52,14 @@ class LeadCreate(LeadBase):
     status: str = "new"
     pipeline_stage_id: Optional[int] = None
     tag_ids: Optional[List[int]] = None
+
+    @model_validator(mode="after")
+    def require_name_or_company(self) -> "LeadCreate":
+        has_name = bool((self.first_name or "").strip() or (self.last_name or "").strip())
+        has_company = bool((self.company_name or "").strip())
+        if not has_name and not has_company:
+            raise ValueError("Either a name (first or last) or company_name is required")
+        return self
 
 
 class LeadUpdate(BaseModel):

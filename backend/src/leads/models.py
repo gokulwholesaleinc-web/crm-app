@@ -126,7 +126,5 @@ class Lead(Base, AuditableMixin):
 
     @property
     def full_name(self) -> str:
-        parts = [p for p in (self.first_name, self.last_name) if p]
-        if parts:
-            return " ".join(parts)
-        return self.company_name or ""
+        name = " ".join(p for p in (self.first_name, self.last_name) if p)
+        return name or self.company_name or ""
