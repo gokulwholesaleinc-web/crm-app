@@ -166,6 +166,16 @@ class TestGoogleAuthorize:
 class TestGoogleCallback:
     """POST /api/auth/google/callback exchanges a code and issues a JWT."""
 
+    @pytest.fixture(autouse=True)
+    def _debug_mode(self):
+        """Enable DEBUG so the state cookie's secure flag is False,
+        allowing it to flow over the HTTP test client."""
+        from src.config import settings
+        original = settings.DEBUG
+        settings.DEBUG = True
+        yield
+        settings.DEBUG = original
+
     @pytest.mark.asyncio
     async def test_missing_config_returns_400(self, client):
         """Callback needs GOOGLE_CLIENT_ID + SECRET to be set."""

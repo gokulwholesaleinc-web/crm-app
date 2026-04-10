@@ -6,7 +6,7 @@ email templates, campaign steps, stats, and execute.
 """
 
 import pytest
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -651,7 +651,7 @@ class TestCampaignMembers:
             headers=auth_headers,
             json={
                 "status": "sent",
-                "sent_at": date.today().isoformat(),
+                "sent_at": datetime.now(timezone.utc).isoformat(),
             },
         )
 
@@ -1156,14 +1156,14 @@ class TestCampaignExecute:
     """Tests for campaign execute endpoint."""
 
     @pytest.mark.asyncio
-    async def test_execute_campaign_success(
+    async def test_execute_campaign_no_steps(
         self,
         client: AsyncClient,
         db_session: AsyncSession,
         auth_headers: dict,
         test_campaign: Campaign,
     ):
-        """Test executing a campaign sets status to in_progress."""
+        """Execute with no steps configured returns the existing status."""
         response = await client.post(
             f"/api/campaigns/{test_campaign.id}/execute",
             headers=auth_headers,
@@ -1171,7 +1171,52 @@ class TestCampaignExecute:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["status"] == "in_progress"
+        assert data["status"] == "planned"
+        assert "no steps" in data["message"].lower()
+
+    @pytest.mark.asyncio
+    async def test_execute_campaign_with_step(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_campaign: Campaign,
+        test_contact: Contact,
+    ):
+        """Execute with steps configured sets status to active."""
+        # Create template + step + member so the campaign can actually execute
+        template = EmailTemplate(
+            name="Test Exec Template",
+            subject="Hello {{first_name}}",
+            body="<p>Hi</p>",
+            owner_id=test_campaign.owner_id,
+        )
+        db_session.add(template)
+        await db_session.flush()
+
+        step = EmailCampaignStep(
+            campaign_id=test_campaign.id,
+            template_id=template.id,
+            delay_days=0,
+            step_order=1,
+        )
+        member = CampaignMember(
+            campaign_id=test_campaign.id,
+            member_type="contact",
+            member_id=test_contact.id,
+            status="pending",
+        )
+        db_session.add_all([step, member])
+        await db_session.commit()
+
+        response = await client.post(
+            f"/api/campaigns/{test_campaign.id}/execute",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "active"
         assert "message" in data
 
     @pytest.mark.asyncio

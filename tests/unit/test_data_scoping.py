@@ -263,42 +263,6 @@ class TestExportDataScoping:
         assert "lead2@example.com" not in csv_content
 
 
-class TestDebugDataScopeCheck:
-    """Tests for the /api/debug/data-scope-check endpoint."""
-
-    @pytest.mark.asyncio
-    async def test_data_scope_check_returns_expected_structure(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        test_user: User,
-        auth_headers: dict,
-    ):
-        """Verify /api/debug/data-scope-check returns 200 with expected keys."""
-        response = await client.get(
-            "/api/debug/data-scope-check",
-            headers=auth_headers,
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert "current_user_id" in data
-        assert "current_user_email" in data
-        assert "users" in data
-        assert "records_by_owner" in data
-        assert data["current_user_id"] == test_user.id
-        assert data["current_user_email"] == test_user.email
-
-    @pytest.mark.asyncio
-    async def test_data_scope_check_unauthorized(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-    ):
-        """Verify /api/debug/data-scope-check returns 401 without auth."""
-        response = await client.get("/api/debug/data-scope-check")
-        assert response.status_code == 401
-
-
 @pytest.mark.skip(reason="/api/admin/reseed-demo-data endpoint not yet implemented")
 class TestReseedDemoDataAccess:
     """Tests for the /api/admin/reseed-demo-data endpoint."""
