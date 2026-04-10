@@ -280,8 +280,8 @@ async def send_campaign(
             continue
 
         variables = {
-            "first_name": lead.first_name,
-            "last_name": lead.last_name,
+            "first_name": lead.first_name or "",
+            "last_name": lead.last_name or "",
             "full_name": lead.full_name,
             "email": lead.email or "",
             "company_name": lead.company_name or "",

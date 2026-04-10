@@ -90,6 +90,7 @@ COLUMN_ALIASES: Dict[str, str] = {
     "linkedinprofile": "linkedin_url",
     "geography": "city",
     "industry": "industry",
+    "category": "industry",
     # Domain / URL aliases
     "domain": "website",
     "domainname": "website",

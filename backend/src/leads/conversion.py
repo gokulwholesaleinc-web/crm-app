@@ -55,10 +55,11 @@ class LeadConverter:
             await self.db.flush()
             company_id = created_company.id
 
-        # Create contact from lead data
+        # Create contact from lead data — contacts require first_name, so
+        # fall back to company_name for company-only leads.
         contact = Contact(
-            first_name=lead.first_name,
-            last_name=lead.last_name,
+            first_name=lead.first_name or lead.company_name or "Unknown",
+            last_name=lead.last_name or "",
             email=lead.email,
             phone=lead.phone,
             mobile=lead.mobile,

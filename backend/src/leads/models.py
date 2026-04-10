@@ -34,8 +34,8 @@ class Lead(Base, AuditableMixin):
     id: Mapped[int] = mapped_column(primary_key=True)
 
     # Basic info
-    first_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    last_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    first_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    last_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     email: Mapped[Optional[str]] = mapped_column(String(255), index=True)
     phone: Mapped[Optional[str]] = mapped_column(String(50))
     mobile: Mapped[Optional[str]] = mapped_column(String(50))
@@ -126,4 +126,5 @@ class Lead(Base, AuditableMixin):
 
     @property
     def full_name(self) -> str:
-        return f"{self.first_name} {self.last_name}"
+        name = " ".join(p for p in (self.first_name, self.last_name) if p)
+        return name or self.company_name or ""

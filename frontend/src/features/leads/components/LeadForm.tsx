@@ -7,9 +7,9 @@ import { useLeadSources, useLeadPipelineStages } from '../../../hooks/useLeads';
 import { useUnsavedChangesWarning } from '../../../hooks/useUnsavedChangesWarning';
 
 export interface LeadFormData {
-  firstName: string;
-  lastName: string;
-  email: string;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
   phone?: string;
   company?: string;
   jobTitle?: string;
@@ -97,12 +97,26 @@ export function LeadForm({
     [pipelineStagesData]
   );
 
+  const [formError, setFormError] = useState<string | null>(null);
+
   const onFormSubmit = (data: LeadFormData) => {
+    const hasName = !!(data.firstName?.trim() || data.lastName?.trim());
+    const hasCompany = !!data.company?.trim();
+    if (!hasName && !hasCompany) {
+      setFormError('Either a name or company name is required.');
+      return;
+    }
+    setFormError(null);
     return onSubmit({ ...data, source_id: sourceId, company_id: companyId, pipeline_stage_id: pipelineStageId });
   };
 
   return (
     <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-6">
+      {formError && (
+        <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-4" aria-live="polite">
+          <p className="text-sm text-red-700 dark:text-red-400">{formError}</p>
+        </div>
+      )}
       {/* Basic Information */}
       <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
         <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
@@ -112,20 +126,14 @@ export function LeadForm({
           <FormInput
             label="First Name"
             name="firstName"
-            required
-            register={register('firstName', {
-              required: 'First name is required',
-            })}
+            register={register('firstName')}
             error={errors.firstName?.message}
           />
 
           <FormInput
             label="Last Name"
             name="lastName"
-            required
-            register={register('lastName', {
-              required: 'Last name is required',
-            })}
+            register={register('lastName')}
             error={errors.lastName?.message}
           />
 
@@ -133,9 +141,7 @@ export function LeadForm({
             label="Email"
             name="email"
             type="email"
-            required
             register={register('email', {
-              required: 'Email is required',
               pattern: {
                 value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
                 message: 'Invalid email address',
