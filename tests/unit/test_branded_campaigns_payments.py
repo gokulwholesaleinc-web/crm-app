@@ -665,7 +665,7 @@ class TestGetMemberEmail:
         )
         # Don't persist, just test the helper
         email_service = EmailService(db_session)
-        email = await email_service._get_member_email(member)
+        email = await email_service.get_member_email(member)
         assert email == test_contact.email
 
     @pytest.mark.asyncio
@@ -683,7 +683,7 @@ class TestGetMemberEmail:
             status="pending",
         )
         email_service = EmailService(db_session)
-        email = await email_service._get_member_email(member)
+        email = await email_service.get_member_email(member)
         assert email == test_lead.email
 
     @pytest.mark.asyncio
@@ -699,5 +699,5 @@ class TestGetMemberEmail:
             status="pending",
         )
         email_service = EmailService(db_session)
-        email = await email_service._get_member_email(member)
+        email = await email_service.get_member_email(member)
         assert email is None

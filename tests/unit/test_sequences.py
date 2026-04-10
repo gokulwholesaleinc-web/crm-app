@@ -518,13 +518,13 @@ class TestProcessDueEndpoint:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_enrollment: SequenceEnrollment,
     ):
         """Test the POST /sequences/process-due endpoint."""
         response = await client.post(
             "/api/sequences/process-due",
-            headers=auth_headers,
+            headers=admin_auth_headers,
         )
 
         assert response.status_code == 200

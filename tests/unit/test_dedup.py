@@ -313,7 +313,7 @@ class TestMergeContacts:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_user: User,
     ):
         """Test successful merge of two contacts."""
@@ -341,7 +341,7 @@ class TestMergeContacts:
 
         response = await client.post(
             "/api/dedup/merge",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "entity_type": "contacts",
                 "primary_id": primary.id,
@@ -366,7 +366,7 @@ class TestMergeContacts:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_user: User,
     ):
         """Test that merge transfers activities from secondary to primary."""
@@ -407,7 +407,7 @@ class TestMergeContacts:
 
         response = await client.post(
             "/api/dedup/merge",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "entity_type": "contacts",
                 "primary_id": primary.id,
@@ -426,7 +426,7 @@ class TestMergeContacts:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_user: User,
     ):
         """Test that merge transfers notes from secondary to primary."""
@@ -464,7 +464,7 @@ class TestMergeContacts:
 
         await client.post(
             "/api/dedup/merge",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "entity_type": "contacts",
                 "primary_id": primary.id,
@@ -481,12 +481,12 @@ class TestMergeContacts:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
     ):
         """Test that merging an entity with itself fails."""
         response = await client.post(
             "/api/dedup/merge",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "entity_type": "contacts",
                 "primary_id": 1,
@@ -506,7 +506,7 @@ class TestMergeCompanies:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_user: User,
     ):
         """Test successful company merge."""
@@ -529,7 +529,7 @@ class TestMergeCompanies:
 
         response = await client.post(
             "/api/dedup/merge",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "entity_type": "companies",
                 "primary_id": primary.id,
@@ -546,7 +546,7 @@ class TestMergeCompanies:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_user: User,
     ):
         """Test that company merge moves contacts from secondary to primary."""
@@ -583,7 +583,7 @@ class TestMergeCompanies:
 
         await client.post(
             "/api/dedup/merge",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "entity_type": "companies",
                 "primary_id": primary.id,

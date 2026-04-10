@@ -48,8 +48,8 @@ class TestSendEmail:
         assert data["entity_type"] == "contacts"
         assert data["entity_id"] == test_contact.id
         assert "id" in data
-        # Status will be either pending, sent, or failed depending on SMTP config
-        assert data["status"] in ("pending", "sent", "failed")
+        # Status will be pending, sent, failed, or retry depending on SMTP config
+        assert data["status"] in ("pending", "sent", "failed", "retry")
         assert data["open_count"] == 0
         assert data["click_count"] == 0
 

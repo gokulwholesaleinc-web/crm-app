@@ -8,6 +8,11 @@ Tests for:
 """
 
 import pytest
+import json
+import time
+import base64
+import hashlib
+import hmac as hmac_mod
 from datetime import datetime, timezone
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,9 +22,38 @@ from src.auth.models import User
 from src.contacts.models import Contact
 from src.email.models import EmailQueue, InboundEmail
 
+# Real svix-compatible signing for webhook tests (no mocking)
+_WEBHOOK_SECRET = "whsec_dGVzdHNlY3JldGZvcnRlc3Rpbmc="  # base64("testsecretfortesting")
+_MSG_COUNTER = 0
+
+
+def _svix_headers(payload: dict) -> dict:
+    """Generate valid svix webhook headers for a JSON payload."""
+    global _MSG_COUNTER
+    _MSG_COUNTER += 1
+    msg_id = f"msg_test_{_MSG_COUNTER}"
+    timestamp = str(int(time.time()))
+    body = json.dumps(payload).encode()
+    secret_bytes = base64.b64decode(_WEBHOOK_SECRET.removeprefix("whsec_"))
+    to_sign = f"{msg_id}.{timestamp}.".encode() + body
+    sig = base64.b64encode(
+        hmac_mod.new(secret_bytes, to_sign, hashlib.sha256).digest()
+    ).decode()
+    return {
+        "svix-id": msg_id,
+        "svix-timestamp": timestamp,
+        "svix-signature": f"v1,{sig}",
+    }
+
 
 class TestInboundWebhook:
     """Tests for the inbound email webhook endpoint."""
+
+    @pytest.fixture(autouse=True)
+    def _set_webhook_secret(self, monkeypatch):
+        """Set the Resend webhook secret so the endpoint doesn't return 503."""
+        from src.config import settings
+        monkeypatch.setattr(settings, "RESEND_WEBHOOK_SECRET", _WEBHOOK_SECRET)
 
     @pytest.mark.asyncio
     async def test_inbound_webhook_stores_email(
@@ -41,7 +75,11 @@ class TestInboundWebhook:
             },
         }
 
-        response = await client.post("/api/email/inbound-webhook", json=payload)
+        response = await client.post(
+            "/api/email/inbound-webhook",
+            json=payload,
+            headers=_svix_headers(payload),
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -78,7 +116,11 @@ class TestInboundWebhook:
             },
         }
 
-        response = await client.post("/api/email/inbound-webhook", json=payload)
+        response = await client.post(
+            "/api/email/inbound-webhook",
+            json=payload,
+            headers=_svix_headers(payload),
+        )
         assert response.status_code == 200
 
         result = await db_session.execute(
@@ -109,7 +151,11 @@ class TestInboundWebhook:
             },
         }
 
-        response = await client.post("/api/email/inbound-webhook", json=payload)
+        response = await client.post(
+            "/api/email/inbound-webhook",
+            json=payload,
+            headers=_svix_headers(payload),
+        )
         assert response.status_code == 200
 
         result = await db_session.execute(
@@ -142,7 +188,11 @@ class TestInboundWebhook:
             },
         }
 
-        response = await client.post("/api/email/inbound-webhook", json=payload)
+        response = await client.post(
+            "/api/email/inbound-webhook",
+            json=payload,
+            headers=_svix_headers(payload),
+        )
         assert response.status_code == 200
 
         result = await db_session.execute(
@@ -164,7 +214,11 @@ class TestInboundWebhook:
             "data": {"id": "resend-email-005"},
         }
 
-        response = await client.post("/api/email/inbound-webhook", json=payload)
+        response = await client.post(
+            "/api/email/inbound-webhook",
+            json=payload,
+            headers=_svix_headers(payload),
+        )
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "ignored"
@@ -188,7 +242,11 @@ class TestInboundWebhook:
             },
         }
 
-        response = await client.post("/api/email/inbound-webhook", json=payload)
+        response = await client.post(
+            "/api/email/inbound-webhook",
+            json=payload,
+            headers=_svix_headers(payload),
+        )
         assert response.status_code == 200
 
         result = await db_session.execute(
