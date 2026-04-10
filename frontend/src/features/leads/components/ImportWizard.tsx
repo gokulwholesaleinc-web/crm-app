@@ -40,6 +40,7 @@ interface ImportResult {
   imported_count: number;
   errors: string[];
   duplicates_skipped: number;
+  duplicates: Array<{ row: number; email: string; label: string }>;
   imported_ids?: number[];
 }
 
@@ -484,6 +485,21 @@ export function ImportWizard({ isOpen, onClose, entityType, onSuccess, defaultCa
                     {campaignResult.count} {entityType} imported and added to campaign &ldquo;{campaignResult.name}&rdquo;
                   </p>
                 </div>
+              </div>
+            )}
+            {result.duplicates.length > 0 && (
+              <div className="mt-4 max-h-40 overflow-y-auto text-left bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3">
+                <p className="text-xs font-medium text-amber-700 dark:text-amber-400 mb-1">
+                  Already in CRM ({result.duplicates.length})
+                </p>
+                <ul className="text-xs text-amber-600 dark:text-amber-300 space-y-0.5">
+                  {result.duplicates.map((d, i) => (
+                    <li key={i} className="flex justify-between gap-2">
+                      <span className="font-medium truncate">{d.label || 'Unknown'}</span>
+                      <span className="text-amber-500 dark:text-amber-400 flex-shrink-0">{d.email}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
             {result.errors.length > 0 && (

@@ -188,11 +188,18 @@ export interface TagCreate {
 /**
  * Result of an import operation
  */
+export interface DuplicateEntry {
+  row: number;
+  email: string;
+  label: string;
+}
+
 export interface ImportResult {
   success: boolean;
   imported_count: number;
   errors: string[];
   duplicates_skipped: number;
+  duplicates: DuplicateEntry[];
   contacts_created?: number;
   contacts_linked?: number;
 }
