@@ -8,6 +8,7 @@ import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
 import { Select } from '../../../components/ui/Select';
 import { FormTextarea } from '../../../components/forms';
+import { useUnsavedChangesWarning } from '../../../hooks/useUnsavedChangesWarning';
 import type { Activity, ActivityCreate, ActivityUpdate } from '../../../types';
 
 interface ActivityFormProps {
@@ -98,7 +99,7 @@ export function ActivityForm({
     watch,
     control,
     reset,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm<FormValues>({
     defaultValues: {
       activity_type: activity?.activity_type || 'task',
@@ -118,6 +119,8 @@ export function ActivityForm({
   });
 
   const activityType = watch('activity_type');
+
+  useUnsavedChangesWarning(isDirty);
 
   // Reset form when activity prop changes
   useEffect(() => {

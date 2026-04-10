@@ -8,6 +8,7 @@ import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
 import { Select } from '../../../components/ui/Select';
 import { FormTextarea } from '../../../components/forms';
+import { useUnsavedChangesWarning } from '../../../hooks/useUnsavedChangesWarning';
 import type { Campaign, CampaignCreate, CampaignUpdate } from '../../../types';
 
 interface CampaignFormProps {
@@ -77,7 +78,7 @@ export function CampaignForm({
     handleSubmit,
     control,
     reset,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm<FormValues>({
     defaultValues: {
       name: campaign?.name || '',
@@ -93,6 +94,8 @@ export function CampaignForm({
       expected_response: campaign?.expected_response?.toString() || '',
     },
   });
+
+  useUnsavedChangesWarning(isDirty);
 
   // Reset form when campaign prop changes
   useEffect(() => {

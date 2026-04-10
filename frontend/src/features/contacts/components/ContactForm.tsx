@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import { Button, SearchableSelect } from '../../../components/ui';
 import { FormInput, FormTextarea } from '../../../components/forms';
 import { useCompanies } from '../../../hooks/useCompanies';
+import { useUnsavedChangesWarning } from '../../../hooks/useUnsavedChangesWarning';
 
 export interface ContactFormData {
   firstName: string;
@@ -39,7 +40,7 @@ export function ContactForm({
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm<ContactFormData>({
     defaultValues: {
       firstName: '',
@@ -59,6 +60,9 @@ export function ContactForm({
   });
 
   const [companyId, setCompanyId] = useState<number | null>(initialData?.company_id ?? null);
+  const companyChanged = companyId !== (initialData?.company_id ?? null);
+  useUnsavedChangesWarning(isDirty || companyChanged);
+
   const { data: companiesData } = useCompanies({ page_size: 100 });
 
   const companyOptions = useMemo(

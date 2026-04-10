@@ -8,6 +8,7 @@ import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
 import { Select } from '../../../components/ui/Select';
 import { FormTextarea } from '../../../components/forms';
+import { useUnsavedChangesWarning } from '../../../hooks/useUnsavedChangesWarning';
 import type { WorkflowRule, WorkflowRuleCreate, WorkflowRuleUpdate } from '../../../types';
 
 interface WorkflowFormProps {
@@ -74,7 +75,7 @@ export function WorkflowForm({
     handleSubmit,
     control,
     reset,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm<FormValues>({
     defaultValues: {
       name: workflow?.name || '',
@@ -86,6 +87,8 @@ export function WorkflowForm({
       actions: safeJsonStringify(workflow?.actions),
     },
   });
+
+  useUnsavedChangesWarning(isDirty);
 
   useEffect(() => {
     if (workflow) {

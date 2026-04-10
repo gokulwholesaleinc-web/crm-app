@@ -6,6 +6,7 @@ import { useContacts } from '../../hooks/useContacts';
 import { useCompanies } from '../../hooks/useCompanies';
 import { useOpportunities, useOpportunity } from '../../hooks/useOpportunities';
 import { useBundles } from '../../hooks/useQuotes';
+import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
 import type { QuoteCreate, QuoteLineItemCreate, ProductBundle } from '../../types';
 
 interface QuoteFormProps {
@@ -62,8 +63,16 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
     recurringInterval: initialData?.recurring_interval ?? DEFAULT_FORM_STATE.recurringInterval,
   }));
 
+  // `touched` is a one-way sentinel that flips true the first time the
+  // user edits any field or line item. Drives the beforeunload warning
+  // — the form uses `useState` instead of react-hook-form so we can't
+  // lean on `formState.isDirty` the way the other forms do.
+  const [touched, setTouched] = useState(false);
+  useUnsavedChangesWarning(touched);
+
   const updateField = <K extends keyof typeof formData>(field: K, value: typeof formData[K]) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+    setTouched(true);
   };
 
   // Fetch entity lists for dropdowns
@@ -133,20 +142,24 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
     }));
     setLineItems((curr) => [...curr.filter((i) => i.description.trim() !== '' || curr.length === 1), ...newItems]);
     setShowBundleMenu(false);
+    setTouched(true);
   };
 
   const addLineItem = () => {
     setLineItems((curr) => [...curr, { ...EMPTY_LINE_ITEM, sort_order: curr.length }]);
+    setTouched(true);
   };
 
   const removeLineItem = (index: number) => {
     setLineItems((curr) => curr.filter((_, i) => i !== index));
+    setTouched(true);
   };
 
   const updateLineItem = (index: number, field: keyof QuoteLineItemCreate, value: string | number) => {
     setLineItems((curr) =>
       curr.map((item, i) => (i === index ? { ...item, [field]: value } : item))
     );
+    setTouched(true);
   };
 
   const calculateItemTotal = (item: QuoteLineItemCreate): number => {
@@ -271,6 +284,7 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
                 checked={formData.paymentType === 'one_time'}
                 onChange={() => {
                   setFormData((prev) => ({ ...prev, paymentType: 'one_time', recurringInterval: '' }));
+                  setTouched(true);
                 }}
                 className="text-primary-600 focus-visible:ring-primary-500"
               />
@@ -284,6 +298,7 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
                 checked={formData.paymentType === 'subscription'}
                 onChange={() => {
                   setFormData((prev) => ({ ...prev, paymentType: 'subscription', recurringInterval: prev.recurringInterval || 'monthly' }));
+                  setTouched(true);
                 }}
                 className="text-primary-600 focus-visible:ring-primary-500"
               />
@@ -331,6 +346,7 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
                 }
                 return { ...prev, ...updates };
               });
+              setTouched(true);
             }}
             options={opportunityOptions}
             placeholder="Search opportunities..."
