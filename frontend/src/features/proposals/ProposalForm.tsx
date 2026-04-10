@@ -111,6 +111,7 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
           <input
             type="text"
             id="proposal-title"
+            name="title"
             required
             value={formData.title}
             onChange={(e) => updateField('title', e.target.value)}
@@ -125,6 +126,7 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
           </label>
           <textarea
             id="proposal-content"
+            name="content"
             rows={3}
             value={formData.content}
             onChange={(e) => updateField('content', e.target.value)}
@@ -139,6 +141,7 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
           </label>
           <textarea
             id="proposal-exec-summary"
+            name="executive_summary"
             rows={3}
             value={formData.executiveSummary}
             onChange={(e) => updateField('executiveSummary', e.target.value)}
@@ -153,6 +156,7 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
           </label>
           <textarea
             id="proposal-scope"
+            name="scope_of_work"
             rows={3}
             value={formData.scopeOfWork}
             onChange={(e) => updateField('scopeOfWork', e.target.value)}
@@ -167,6 +171,7 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
           </label>
           <textarea
             id="proposal-pricing"
+            name="pricing_section"
             rows={3}
             value={formData.pricingSection}
             onChange={(e) => updateField('pricingSection', e.target.value)}
@@ -182,6 +187,7 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
             </label>
             <textarea
               id="proposal-timeline"
+              name="timeline"
               rows={2}
               value={formData.timelineField}
               onChange={(e) => updateField('timelineField', e.target.value)}
@@ -196,6 +202,7 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
             <input
               type="date"
               id="proposal-valid-until"
+              name="valid_until"
               value={formData.validUntil}
               onChange={(e) => updateField('validUntil', e.target.value)}
               className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
@@ -209,6 +216,7 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
           </label>
           <textarea
             id="proposal-terms"
+            name="terms"
             rows={2}
             value={formData.terms}
             onChange={(e) => updateField('terms', e.target.value)}

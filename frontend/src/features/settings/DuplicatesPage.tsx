@@ -73,20 +73,44 @@ function DuplicatesPage() {
         }));
       }
 
+      // Run duplicate checks with bounded concurrency instead of
+      // sequentially. The previous loop awaited each mutation one-at-a-time,
+      // so scanning 100 records meant 100 serial round-trips (tens of
+      // seconds). Concurrency of 5 keeps the backend load reasonable while
+      // cutting wall-clock time substantially. See interactive-pages.md #6.
+      //
+      // The `seen` set is checked BEFORE each batch is scheduled so we
+      // don't re-fire mutations for entities that already appeared as
+      // matches in an earlier source's result — matching the original
+      // sequential loop's request-count behavior.
+      const CONCURRENCY = 5;
       const groups: DuplicateGroup[] = [];
       const seen = new Set<number>();
+      let cursor = 0;
+      while (cursor < entities.length) {
+        const batch: typeof entities = [];
+        while (batch.length < CONCURRENCY && cursor < entities.length) {
+          const next = entities[cursor];
+          cursor += 1;
+          if (next && !seen.has(next.id)) batch.push(next);
+        }
+        if (batch.length === 0) continue;
 
-      for (const entity of entities) {
-        if (seen.has(entity.id)) continue;
+        const settled = await Promise.all(
+          batch.map(async (entity) => {
+            const result = await checkDuplicatesMutation.mutateAsync({
+              entityType: selectedEntityType,
+              data: entity.data,
+            });
+            return {
+              entity,
+              matches: result.duplicates.filter((d) => d.id !== entity.id),
+            };
+          })
+        );
 
-        const result = await checkDuplicatesMutation.mutateAsync({
-          entityType: selectedEntityType,
-          data: entity.data,
-        });
-
-        // Filter out self-matches
-        const matches = result.duplicates.filter((d) => d.id !== entity.id);
-        if (matches.length > 0) {
+        for (const { entity, matches } of settled) {
+          if (seen.has(entity.id) || matches.length === 0) continue;
           groups.push({ source: entity, matches });
           seen.add(entity.id);
           matches.forEach((m) => seen.add(m.id));
