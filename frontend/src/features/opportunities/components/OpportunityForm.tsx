@@ -2,6 +2,7 @@ import { useForm } from 'react-hook-form';
 import { Button } from '../../../components/ui/Button';
 import { FormInput, FormSelect, FormTextarea } from '../../../components/forms';
 import { usePipelineStages } from '../../../hooks/useOpportunities';
+import { useUnsavedChangesWarning } from '../../../hooks/useUnsavedChangesWarning';
 
 export interface OpportunityFormData {
   name: string;
@@ -64,7 +65,7 @@ export function OpportunityForm({
     handleSubmit,
     watch,
     setValue,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm<OpportunityFormData>({
     defaultValues: {
       name: '',
@@ -81,6 +82,8 @@ export function OpportunityForm({
   });
 
   const selectedStage = watch('stage');
+
+  useUnsavedChangesWarning(isDirty);
 
   // Update probability when stage changes
   const handleStageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {

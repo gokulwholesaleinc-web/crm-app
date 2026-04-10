@@ -4,6 +4,7 @@ import { Button, SearchableSelect } from '../../../components/ui';
 import { FormInput, FormSelect, FormTextarea } from '../../../components/forms';
 import { useCompanies } from '../../../hooks/useCompanies';
 import { useLeadSources, useLeadPipelineStages } from '../../../hooks/useLeads';
+import { useUnsavedChangesWarning } from '../../../hooks/useUnsavedChangesWarning';
 
 export interface LeadFormData {
   firstName: string;
@@ -49,7 +50,7 @@ export function LeadForm({
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm<LeadFormData>({
     defaultValues: {
       firstName: '',
@@ -70,6 +71,12 @@ export function LeadForm({
   const [sourceId, setSourceId] = useState<number | null>(initialData?.source_id ?? null);
   const [companyId, setCompanyId] = useState<number | null>(initialData?.company_id ?? null);
   const [pipelineStageId, setPipelineStageId] = useState<number | null>(initialData?.pipeline_stage_id ?? null);
+
+  const sidecarChanged =
+    sourceId !== (initialData?.source_id ?? null) ||
+    companyId !== (initialData?.company_id ?? null) ||
+    pipelineStageId !== (initialData?.pipeline_stage_id ?? null);
+  useUnsavedChangesWarning(isDirty || sidecarChanged);
 
   const { data: leadSourcesData } = useLeadSources();
   const { data: companiesData } = useCompanies({ page_size: 100 });

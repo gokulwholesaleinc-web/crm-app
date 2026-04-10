@@ -5,6 +5,7 @@ import { useContacts } from '../../hooks/useContacts';
 import { useCompanies } from '../../hooks/useCompanies';
 import { useOpportunities, useOpportunity } from '../../hooks/useOpportunities';
 import { useQuotes } from '../../hooks/useQuotes';
+import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
 import type { ProposalCreate } from '../../types';
 
 interface ProposalFormProps {
@@ -33,8 +34,15 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
     validUntil: initialData?.valid_until ?? '',
   });
 
+  // `touched` flips true on first edit; drives the beforeunload warning.
+  // ProposalForm uses `useState` so we can't lean on react-hook-form's
+  // `formState.isDirty`. Auto-fill from URL opportunity does NOT count.
+  const [touched, setTouched] = useState(false);
+  useUnsavedChangesWarning(touched);
+
   const updateField = <K extends keyof typeof formData>(field: K, value: typeof formData[K]) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+    setTouched(true);
   };
 
   // Fetch entity lists for dropdowns
@@ -245,6 +253,7 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
                 }
                 return { ...prev, ...updates };
               });
+              setTouched(true);
             }}
             options={opportunityOptions}
             placeholder="Search opportunities..."

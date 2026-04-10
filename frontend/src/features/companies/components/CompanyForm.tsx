@@ -8,6 +8,7 @@ import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
 import { Select } from '../../../components/ui/Select';
 import { FormTextarea } from '../../../components/forms';
+import { useUnsavedChangesWarning } from '../../../hooks/useUnsavedChangesWarning';
 import type { Company, CompanyCreate, CompanyUpdate } from '../../../types';
 
 interface CompanyFormProps {
@@ -106,7 +107,7 @@ export function CompanyForm({
     handleSubmit,
     control,
     reset,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm<FormValues>({
     defaultValues: {
       name: company?.name || '',
@@ -133,6 +134,8 @@ export function CompanyForm({
       segment: company?.segment || '',
     },
   });
+
+  useUnsavedChangesWarning(isDirty);
 
   // Reset form when company prop changes
   useEffect(() => {
