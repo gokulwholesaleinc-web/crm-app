@@ -6,8 +6,9 @@ Covers:
    shape and eager-loads contact.full_name and company.name.
 2. Router dashboard cache TTL: bumped to 3 minutes so repeat dashboard
    loads don't thrash Neon.
-3. Scheduler intervals: start_scheduler registers jobs at the lengthened
-   intervals (10/15/15/30 minutes) so Neon can auto-suspend.
+3. Scheduler consolidation: start_scheduler registers a single 15-minute
+   tick that runs all four handlers so Neon's compute only wakes once per
+   interval (4 wakeups/hr) instead of once per staggered job (8+/hr).
 """
 
 import pytest
@@ -152,28 +153,36 @@ class TestDashboardCacheTTL:
 # =============================================================================
 
 
-class TestSchedulerIntervals:
-    """start_scheduler should use the lengthened intervals so Neon can
-    auto-suspend the compute."""
+class TestSchedulerConsolidation:
+    """start_scheduler should register a single consolidated tick so Neon's
+    compute only wakes once per interval."""
 
-    def test_scheduler_jobs_use_lengthened_intervals(self):
-        """start_scheduler registers jobs at 10/15/15/30 minutes."""
+    def test_scheduler_uses_single_consolidated_tick(self):
+        """Only one job ('background_tick') is registered, every 15 minutes."""
         from src.core.scheduler import scheduler, start_scheduler, stop_scheduler
 
         was_running = scheduler.running
         if not was_running:
             start_scheduler()
         try:
-            expected_minutes = {
-                "process_email_retries": 10,
-                "process_due_sequence_steps": 15,
-                "process_due_campaign_steps": 15,
-                "deliver_scheduled_reports": 30,
-            }
-            for job_id, minutes in expected_minutes.items():
-                job = scheduler.get_job(job_id)
-                assert job is not None, f"job {job_id} not registered"
-                assert job.trigger.interval.total_seconds() == minutes * 60
+            jobs = scheduler.get_jobs()
+            assert len(jobs) == 1, (
+                f"expected 1 consolidated job, got {len(jobs)}: "
+                f"{[j.id for j in jobs]}"
+            )
+
+            tick = scheduler.get_job("background_tick")
+            assert tick is not None, "background_tick job not registered"
+            assert tick.trigger.interval.total_seconds() == 15 * 60
+            assert tick.coalesce is True
+            assert tick.max_instances == 1
         finally:
             if not was_running:
                 stop_scheduler()
+
+    def test_background_tick_is_async_callable(self):
+        """_background_tick exists and is an async coroutine function."""
+        import inspect
+        from src.core.scheduler import _background_tick
+
+        assert inspect.iscoroutinefunction(_background_tick)
