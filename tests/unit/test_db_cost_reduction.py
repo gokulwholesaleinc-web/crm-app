@@ -158,7 +158,7 @@ class TestSchedulerConsolidation:
     compute only wakes once per interval."""
 
     def test_scheduler_uses_single_consolidated_tick(self):
-        """Only one job ('background_tick') is registered, every 15 minutes."""
+        """Only one job ('background_tick') is registered, every 90 minutes."""
         from src.core.scheduler import scheduler, start_scheduler, stop_scheduler
 
         was_running = scheduler.running
@@ -173,7 +173,7 @@ class TestSchedulerConsolidation:
 
             tick = scheduler.get_job("background_tick")
             assert tick is not None, "background_tick job not registered"
-            assert tick.trigger.interval.total_seconds() == 15 * 60
+            assert tick.trigger.interval.total_seconds() == 90 * 60
             assert tick.coalesce is True
             assert tick.max_instances == 1
         finally:

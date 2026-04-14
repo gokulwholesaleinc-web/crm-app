@@ -59,14 +59,14 @@ def start_scheduler():
     """Register the consolidated background tick and start the scheduler."""
     scheduler.add_job(
         _background_tick,
-        trigger=IntervalTrigger(minutes=15),
+        trigger=IntervalTrigger(minutes=90),
         id="background_tick",
         replace_existing=True,
         coalesce=True,
         max_instances=1,
     )
     scheduler.start()
-    logger.info("Background scheduler started (consolidated tick every 15m)")
+    logger.info("Background scheduler started (consolidated tick every 90m)")
 
 
 def stop_scheduler():
