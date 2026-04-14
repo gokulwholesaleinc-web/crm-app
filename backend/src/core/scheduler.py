@@ -46,34 +46,27 @@ async def _deliver_scheduled_reports():
     await _run_scheduled_job("report_delivery", ReportDeliveryService, "deliver_due_reports")
 
 
+async def _background_tick():
+    # Single periodic wakeup runs all four handlers sequentially so Neon's
+    # compute only has to come out of autosuspend once per interval.
+    await _process_email_retries()
+    await _process_due_sequence_steps()
+    await _process_due_campaign_steps()
+    await _deliver_scheduled_reports()
+
+
 def start_scheduler():
-    """Register jobs and start the scheduler."""
+    """Register the consolidated background tick and start the scheduler."""
     scheduler.add_job(
-        _process_due_sequence_steps,
+        _background_tick,
         trigger=IntervalTrigger(minutes=15),
-        id="process_due_sequence_steps",
+        id="background_tick",
         replace_existing=True,
-    )
-    scheduler.add_job(
-        _process_email_retries,
-        trigger=IntervalTrigger(minutes=10),
-        id="process_email_retries",
-        replace_existing=True,
-    )
-    scheduler.add_job(
-        _process_due_campaign_steps,
-        trigger=IntervalTrigger(minutes=15),
-        id="process_due_campaign_steps",
-        replace_existing=True,
-    )
-    scheduler.add_job(
-        _deliver_scheduled_reports,
-        trigger=IntervalTrigger(minutes=30),
-        id="deliver_scheduled_reports",
-        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
     )
     scheduler.start()
-    logger.info("Background scheduler started with 4 jobs")
+    logger.info("Background scheduler started (consolidated tick every 15m)")
 
 
 def stop_scheduler():
