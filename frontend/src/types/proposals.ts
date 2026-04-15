@@ -31,7 +31,6 @@ export interface ProposalUpdate {
   contact_id?: number | null;
   company_id?: number | null;
   quote_id?: number | null;
-  status?: string;
   cover_letter?: string | null;
   executive_summary?: string | null;
   scope_of_work?: string | null;

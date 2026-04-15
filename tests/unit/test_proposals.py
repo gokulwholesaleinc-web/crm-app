@@ -375,6 +375,29 @@ class TestProposalsUpdate:
         assert data["executive_summary"] == "Updated summary"
 
     @pytest.mark.asyncio
+    async def test_update_proposal_ignores_status_field(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_proposal: Proposal,
+    ):
+        """PATCH must not let a caller rewind an accepted proposal via status."""
+        test_proposal.status = "accepted"
+        await db_session.commit()
+
+        response = await client.patch(
+            f"/api/proposals/{test_proposal.id}",
+            headers=auth_headers,
+            json={"title": "Rewritten", "status": "draft"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["title"] == "Rewritten"
+        assert data["status"] == "accepted"
+
+    @pytest.mark.asyncio
     async def test_update_proposal_not_found(
         self,
         client: AsyncClient,

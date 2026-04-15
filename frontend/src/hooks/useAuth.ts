@@ -5,7 +5,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { authApi } from '../api/auth';
 import { useAuthStore, User as StoreUser } from '../store/authStore';
-import type { User, UserCreate, UserUpdate, LoginRequest } from '../types';
+import type { User, UserUpdate } from '../types';
 
 // Helper to convert types/index.ts User to store User type
 // The difference is phone field: types has string | null | undefined, store has string | undefined
@@ -26,9 +26,6 @@ export const authKeys = {
   users: (skip?: number, limit?: number) => [...authKeys.all, 'users', { skip, limit }] as const,
 };
 
-/**
- * Hook to fetch current user profile
- */
 export function useUser() {
   const { token } = useAuthStore();
 
@@ -36,87 +33,24 @@ export function useUser() {
     queryKey: authKeys.user(),
     queryFn: () => authApi.getMe(),
     enabled: !!token,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
     retry: false,
   });
 }
 
-/**
- * Hook for user login
- */
-export function useLogin() {
-  const { login: storeLogin } = useAuthStore();
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (credentials: LoginRequest) => authApi.login(credentials),
-    onSuccess: async (data) => {
-      // Clear all cached data from previous session before loading new user data
-      queryClient.clear();
-
-      // Token is already stored by authApi.login
-      useAuthStore.getState().setToken(data.access_token);
-
-      // Fetch user profile
-      const user = await authApi.getMe();
-      storeLogin(toStoreUser(user), data.access_token);
-    },
-  });
-}
-
-/**
- * Hook for user registration
- */
-export function useRegister() {
-  const { login: storeLogin } = useAuthStore();
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (data: UserCreate) => {
-      // Register user
-      await authApi.register(data);
-
-      // Login after registration
-      const token = await authApi.login({
-        email: data.email,
-        password: data.password,
-      });
-
-      return token;
-    },
-    onSuccess: async (data) => {
-      queryClient.clear();
-      useAuthStore.getState().setToken(data.access_token);
-
-      // Fetch user profile
-      const user = await authApi.getMe();
-      storeLogin(toStoreUser(user), data.access_token);
-    },
-  });
-}
-
-/**
- * Hook for user logout
- */
 export function useLogout() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async () => {
-      // authApi.logout clears the token, user, and tenant slug via the
-      // store's centralized logout and broadcasts the auth:logout event.
       authApi.logout();
     },
     onSuccess: () => {
-      // Clear all cached queries
       queryClient.clear();
     },
   });
 }
 
-/**
- * Hook to update current user profile
- */
 export function useUpdateProfile() {
   const { updateUser } = useAuthStore();
   const queryClient = useQueryClient();
@@ -130,14 +64,11 @@ export function useUpdateProfile() {
   });
 }
 
-/**
- * Hook to fetch all users (for dropdowns, assignments, etc.)
- */
 export function useUsers(skip = 0, limit = 100, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: authKeys.users(skip, limit),
     queryFn: () => authApi.listUsers(skip, limit),
-    staleTime: 10 * 60 * 1000, // 10 minutes
+    staleTime: 10 * 60 * 1000,
     ...options,
   });
 }

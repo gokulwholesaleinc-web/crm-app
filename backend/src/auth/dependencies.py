@@ -11,7 +11,7 @@ from src.auth.models import User
 from src.auth.security import decode_token
 from src.auth.service import AuthService
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/google/authorize")
 
 _user_cache: TTLCache = TTLCache(maxsize=500, ttl=30)
 

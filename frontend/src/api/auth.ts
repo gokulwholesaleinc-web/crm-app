@@ -6,69 +6,22 @@ import { apiClient } from './client';
 import { useAuthStore } from '../store/authStore';
 import type {
   User,
-  UserCreate,
   UserUpdate,
-  LoginRequest,
   Token,
 } from '../types';
 
 const AUTH_BASE = '/api/auth';
 
-/**
- * Register a new user
- */
-export const register = async (userData: UserCreate): Promise<User> => {
-  const response = await apiClient.post<User>(`${AUTH_BASE}/register`, userData);
-  return response.data;
-};
-
-/**
- * Login with email and password (JSON body)
- */
-export const login = async (credentials: LoginRequest): Promise<Token> => {
-  const response = await apiClient.post<Token>(`${AUTH_BASE}/login/json`, credentials);
-  // Push the token into the auth store so the axios interceptor can attach it
-  // on the immediate follow-up /me call.
-  useAuthStore.getState().setToken(response.data.access_token);
-  return response.data;
-};
-
-/**
- * Login with form data (OAuth2 compatible)
- */
-export const loginWithForm = async (email: string, password: string): Promise<Token> => {
-  const params = new URLSearchParams();
-  params.append('username', email);
-  params.append('password', password);
-
-  const response = await apiClient.post<Token>(`${AUTH_BASE}/login`, params, {
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-  });
-  useAuthStore.getState().setToken(response.data.access_token);
-  return response.data;
-};
-
-/**
- * Get current user profile
- */
 export const getMe = async (): Promise<User> => {
   const response = await apiClient.get<User>(`${AUTH_BASE}/me`);
   return response.data;
 };
 
-/**
- * Update current user profile
- */
 export const updateProfile = async (userData: UserUpdate): Promise<User> => {
   const response = await apiClient.patch<User>(`${AUTH_BASE}/me`, userData);
   return response.data;
 };
 
-/**
- * List all users (for dropdowns, assignments, etc.)
- */
 export const listUsers = async (skip = 0, limit = 100): Promise<User[]> => {
   const response = await apiClient.get<User[]>(`${AUTH_BASE}/users`, {
     params: { skip, limit },
@@ -76,9 +29,6 @@ export const listUsers = async (skip = 0, limit = 100): Promise<User[]> => {
   return response.data;
 };
 
-/**
- * Logout - clear the store-held token and broadcast the logout event.
- */
 export const logout = (): void => {
   useAuthStore.getState().logout();
   window.dispatchEvent(new CustomEvent('auth:logout'));
@@ -119,9 +69,6 @@ export const googleCallback = async (
 
 // Export all auth functions
 export const authApi = {
-  register,
-  login,
-  loginWithForm,
   getMe,
   updateProfile,
   listUsers,

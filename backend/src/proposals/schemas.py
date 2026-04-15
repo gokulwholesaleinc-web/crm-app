@@ -38,7 +38,6 @@ class ProposalUpdate(BaseModel):
     contact_id: Optional[int] = None
     company_id: Optional[int] = None
     quote_id: Optional[int] = None
-    status: Optional[str] = None
     cover_letter: Optional[str] = None
     executive_summary: Optional[str] = None
     scope_of_work: Optional[str] = None

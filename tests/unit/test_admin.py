@@ -119,6 +119,28 @@ class TestAdminUpdateUser:
         assert data["role"] == "manager"
 
     @pytest.mark.asyncio
+    async def test_update_role_invalidates_auth_cache(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_headers: dict,
+        test_superuser: User,
+        test_user: User,
+    ):
+        """Role changes must flush the 30s auth cache so new perms take effect immediately."""
+        from src.auth.dependencies import _user_cache
+        _user_cache[test_user.id] = test_user
+
+        response = await client.patch(
+            f"/api/admin/users/{test_user.id}",
+            json={"role": "manager"},
+            headers=admin_headers,
+        )
+
+        assert response.status_code == 200
+        assert test_user.id not in _user_cache
+
+    @pytest.mark.asyncio
     async def test_deactivate_user_via_patch(
         self,
         client: AsyncClient,

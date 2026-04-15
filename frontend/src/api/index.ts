@@ -10,9 +10,6 @@ export { apiClient, getToken } from './client';
 // Auth API
 export { authApi } from './auth';
 export {
-  register,
-  login,
-  loginWithForm,
   getMe,
   updateProfile,
   listUsers,

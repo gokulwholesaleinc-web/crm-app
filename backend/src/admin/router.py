@@ -12,6 +12,7 @@ from sqlalchemy import select, func, update
 from src.core.constants import HTTPStatus
 from src.core.rate_limit import limiter
 from src.core.router_utils import DBSession, CurrentUser, raise_forbidden, raise_not_found
+from src.auth.dependencies import invalidate_user_cache
 from src.auth.models import User, RejectedAccessEmail
 from src.contacts.models import Contact
 from src.companies.models import Company
@@ -145,6 +146,7 @@ async def update_admin_user(
 
     await db.commit()
     await db.refresh(user)
+    invalidate_user_cache(user.id)
 
     return AdminUserResponse(
         id=user.id,
@@ -179,6 +181,7 @@ async def deactivate_user(
 
     user.is_active = False
     await db.commit()
+    invalidate_user_cache(user_id)
     return {"detail": f"User {user_id} deactivated"}
 
 
@@ -219,6 +222,7 @@ async def permanently_delete_user(
 
     await db.delete(user)
     await db.commit()
+    invalidate_user_cache(user_id)
     return {"detail": f"User {user_id} permanently deleted"}
 
 
@@ -409,6 +413,7 @@ async def assign_role(
     user.role = data.role
     await db.commit()
     await db.refresh(user)
+    invalidate_user_cache(user.id)
 
     return AdminUserResponse(
         id=user.id,
@@ -530,6 +535,7 @@ async def approve_user(
     user.is_approved = True
     user.role = data.role.value
     await db.commit()
+    invalidate_user_cache(user.id)
 
 
 @router.post("/users/{user_id}/reject")
@@ -559,6 +565,7 @@ async def reject_user(
     await db.delete(user)
     await db.commit()
     await db.refresh(rejected)
+    invalidate_user_cache(user_id)
     return {"rejected_email_id": rejected.id}
 
 

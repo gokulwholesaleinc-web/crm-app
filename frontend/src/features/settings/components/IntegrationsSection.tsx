@@ -233,17 +233,19 @@ function MetaCard() {
 
 export function IntegrationsSection() {
   return (
-    <Card>
-      <CardHeader
-        title="Integrations"
-        description="Connect third-party services to your CRM"
-      />
-      <CardBody className="p-4 sm:p-6">
-        <div className="divide-y divide-gray-200 dark:divide-gray-700">
-          <GoogleCalendarCard />
-          <MetaCard />
-        </div>
-      </CardBody>
-    </Card>
+    <div id="integrations" className="scroll-mt-20">
+      <Card>
+        <CardHeader
+          title="Integrations"
+          description="Connect third-party services to your CRM"
+        />
+        <CardBody className="p-4 sm:p-6">
+          <div className="divide-y divide-gray-200 dark:divide-gray-700">
+            <GoogleCalendarCard />
+            <MetaCard />
+          </div>
+        </CardBody>
+      </Card>
+    </div>
   );
 }

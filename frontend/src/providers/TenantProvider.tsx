@@ -122,7 +122,7 @@ function applyBrandingToDOM(config: TenantConfig | null) {
     document.title = `${config.company_name} - CRM`;
   }
 
-  // Update favicon
+  // Update favicon — fall back to /favicon.svg if the tenant URL 404s
   if (config.favicon_url) {
     let link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
     if (!link) {
@@ -130,7 +130,10 @@ function applyBrandingToDOM(config: TenantConfig | null) {
       link.rel = 'icon';
       document.head.appendChild(link);
     }
-    link.href = config.favicon_url;
+    const img = new Image();
+    img.onload = () => { link!.href = config.favicon_url!; };
+    img.onerror = () => { link!.href = '/favicon.svg'; };
+    img.src = config.favicon_url;
   }
 
   // Inject custom CSS

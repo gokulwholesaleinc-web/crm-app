@@ -1,19 +1,9 @@
-import { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
-import { Link, useNavigate } from 'react-router-dom';
-import { Button } from '../../components/ui/Button';
-import { authApi } from '../../api/auth';
-import { useAuthStore } from '../../store/authStore';
-import { setTenantSlugOnLogin, useTenant } from '../../providers/TenantProvider';
-import type { LoginRequest } from '../../types';
-import GoogleSignInButton, { AuthDivider } from './GoogleSignInButton';
+import { useEffect, useState } from 'react';
+import { useTenant } from '../../providers/TenantProvider';
+import GoogleSignInButton from './GoogleSignInButton';
 
 function LoginPage() {
-  const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showPassword, setShowPassword] = useState(false);
-  const { login: storeLogin } = useAuthStore();
   const { tenant } = useTenant();
   const [logoError, setLogoError] = useState(false);
 
@@ -21,9 +11,6 @@ function LoginPage() {
     setLogoError(false);
   }, [tenant?.logo_url]);
 
-  // Sweep the pre-Session-3 "Remember me" key. Users who checked the
-  // box before the upgrade still have their plaintext base64-encoded
-  // password sitting in localStorage; wipe it on next login visit.
   useEffect(() => {
     try {
       localStorage.removeItem('crm-remember:v1');
@@ -31,44 +18,6 @@ function LoginPage() {
       // storage blocked — nothing to clean up anyway
     }
   }, []);
-
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<LoginRequest>();
-
-  const onSubmit = async (data: LoginRequest) => {
-    if (!data.email || !data.password) return;
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const tokenResult = await authApi.login(data);
-      const user = await authApi.getMe();
-
-      if (tokenResult.tenants && tokenResult.tenants.length > 0) {
-        const primaryTenant = tokenResult.tenants.find(t => t.is_primary) ?? tokenResult.tenants[0];
-        if (primaryTenant) {
-          setTenantSlugOnLogin(primaryTenant.tenant_slug);
-        }
-      }
-
-      storeLogin(user, tokenResult.access_token);
-
-      navigate('/');
-    } catch (err: unknown) {
-      let errorMessage = 'An error occurred';
-      if (err instanceof Error) {
-        errorMessage = err.message;
-      } else if (typeof err === 'object' && err !== null && 'detail' in err) {
-        errorMessage = String((err as { detail: unknown }).detail);
-      }
-      setError(errorMessage);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-8 sm:py-12 px-4 sm:px-6 lg:px-8">
@@ -100,99 +49,18 @@ function LoginPage() {
           <h2 className="mt-4 sm:mt-6 text-center text-2xl sm:text-3xl font-extrabold text-gray-900 dark:text-gray-100">
             {tenant?.company_name ? `Sign in to ${tenant.company_name}` : 'Sign in to your account'}
           </h2>
-
+          <p className="mt-2 text-center text-sm text-gray-500 dark:text-gray-400">
+            Sign in with your Google account to continue.
+          </p>
         </div>
 
-        <form className="mt-6 sm:mt-8 space-y-4 sm:space-y-6" onSubmit={handleSubmit(onSubmit)}>
-          {error && (
-            <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-3 sm:p-4" role="alert" aria-live="polite">
-              <div className="flex">
-                <div className="ml-3">
-                  <h3 className="text-sm font-medium text-red-800 dark:text-red-300">{error}</h3>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="rounded-md shadow-sm -space-y-px">
-            <div>
-              <label htmlFor="email" className="sr-only">
-                Email address
-              </label>
-              <input
-                id="email"
-                type="email"
-                autoComplete="email"
-                spellCheck={false}
-                {...register('email', {
-                  required: 'Email is required',
-                  pattern: {
-                    value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                    message: 'Invalid email address',
-                  },
-                })}
-                className="appearance-none rounded-none relative block w-full px-3 py-2.5 sm:py-2 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 text-base sm:text-sm rounded-t-md focus-visible:outline-none focus-visible:ring-primary-500 focus-visible:border-primary-500 focus-visible:z-10"
-                placeholder="Email address..."
-              />
-              {errors.email && (
-                <p className="mt-1 text-xs sm:text-sm text-red-600 dark:text-red-400">{errors.email.message}</p>
-              )}
-            </div>
-            <div className="relative">
-              <label htmlFor="password" className="sr-only">
-                Password
-              </label>
-              <input
-                id="password"
-                type={showPassword ? 'text' : 'password'}
-                autoComplete="current-password"
-                {...register('password', {
-                  required: 'Password is required',
-                })}
-                className="appearance-none rounded-none relative block w-full px-3 py-2.5 sm:py-2 pr-10 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 text-base sm:text-sm rounded-b-md focus-visible:outline-none focus-visible:ring-primary-500 focus-visible:border-primary-500 focus-visible:z-10"
-                placeholder="Password..."
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                tabIndex={-1}
-                className="absolute top-1/2 -translate-y-1/2 right-0 pr-3 flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 focus-visible:outline-none focus-visible:text-gray-600 dark:focus-visible:text-gray-300 z-10 cursor-pointer"
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-              >
-                {showPassword ? (
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                  </svg>
-                ) : (
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
-                )}
-              </button>
-              {errors.password && (
-                <p className="mt-1 text-xs sm:text-sm text-red-600 dark:text-red-400">{errors.password.message}</p>
-              )}
-            </div>
+        {error && (
+          <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-3 sm:p-4" role="alert" aria-live="polite">
+            <h3 className="text-sm font-medium text-red-800 dark:text-red-300">{error}</h3>
           </div>
+        )}
 
-          <div className="flex justify-end">
-            <div className="text-sm">
-              <Link to="/forgot-password" className="font-medium text-primary-600 hover:text-primary-500">
-                Forgot your password?
-              </Link>
-            </div>
-          </div>
-
-          <div>
-            <Button type="submit" fullWidth isLoading={isLoading} size="lg" className="sm:text-sm sm:py-2">
-              Sign in
-            </Button>
-          </div>
-        </form>
-
-        <AuthDivider />
-        <GoogleSignInButton onError={setError} disabled={isLoading} />
+        <GoogleSignInButton onError={setError} />
       </div>
     </div>
   );

@@ -518,6 +518,29 @@ class TestQuotesUpdate:
         assert response.status_code == 404
 
     @pytest.mark.asyncio
+    async def test_update_quote_ignores_status_field(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_quote: Quote,
+    ):
+        """PATCH must not let a caller re-price an accepted quote by flipping status."""
+        test_quote.status = "accepted"
+        await db_session.commit()
+
+        response = await client.patch(
+            f"/api/quotes/{test_quote.id}",
+            headers=auth_headers,
+            json={"title": "Renegotiated", "status": "draft"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["title"] == "Renegotiated"
+        assert data["status"] == "accepted"
+
+    @pytest.mark.asyncio
     async def test_update_quote_tax_rate(
         self,
         client: AsyncClient,

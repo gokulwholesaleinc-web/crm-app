@@ -71,7 +71,6 @@ class QuoteUpdate(BaseModel):
     opportunity_id: Optional[int] = None
     contact_id: Optional[int] = None
     company_id: Optional[int] = None
-    status: Optional[str] = None
     valid_until: Optional[date] = None
     currency: Optional[str] = None
     discount_type: Optional[str] = None

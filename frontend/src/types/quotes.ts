@@ -52,7 +52,6 @@ export interface QuoteUpdate {
   opportunity_id?: number | null;
   contact_id?: number | null;
   company_id?: number | null;
-  status?: string | null;
   valid_until?: string | null;
   currency?: string | null;
   discount_type?: string | null;

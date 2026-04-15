@@ -15,24 +15,11 @@ export interface User {
   last_login?: string | null;
 }
 
-export interface UserCreate {
-  email: string;
-  full_name: string;
-  password: string;
-  phone?: string | null;
-  job_title?: string | null;
-}
-
 export interface UserUpdate {
   full_name?: string | null;
   phone?: string | null;
   job_title?: string | null;
   avatar_url?: string | null;
-}
-
-export interface LoginRequest {
-  email: string;
-  password: string;
 }
 
 export interface TenantInfo {

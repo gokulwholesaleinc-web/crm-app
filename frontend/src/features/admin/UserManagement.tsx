@@ -5,9 +5,8 @@ import { Table } from '../../components/ui/Table';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
-import { useAdminUsers, useUpdateAdminUser, useAssignUserRole } from '../../hooks/useAdmin';
+import { useAdminUsers, useUpdateAdminUser } from '../../hooks/useAdmin';
 import { useAuthStore } from '../../store/authStore';
-import { authApi } from '../../api/auth';
 import { deleteUserPermanently } from '../../api/admin';
 import toast from 'react-hot-toast';
 import type { AdminUser } from '../../types';
@@ -31,38 +30,18 @@ const dateFormatter = new Intl.DateTimeFormat(undefined, {
   minute: '2-digit',
 });
 
-interface QuickAddFormData {
-  full_name: string;
-  email: string;
-  password: string;
-  role: string;
-}
-
 interface EditUserFormData {
   full_name: string;
   email: string;
 }
 
-const INITIAL_FORM: QuickAddFormData = {
-  full_name: '',
-  email: '',
-  password: '',
-  role: 'sales_rep',
-};
-
 export default function UserManagement() {
-  const { data: users, isLoading, refetch } = useAdminUsers();
+  const { data: users, isLoading } = useAdminUsers();
   const currentUser = useAuthStore((s) => s.user);
   const updateUser = useUpdateAdminUser();
-  const assignRole = useAssignUserRole();
-
   const [sortColumn, setSortColumn] = useState<string>('full_name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [filter, setFilter] = useState('');
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [addForm, setAddForm] = useState<QuickAddFormData>(INITIAL_FORM);
-  const [addLoading, setAddLoading] = useState(false);
-  const [addError, setAddError] = useState<string | null>(null);
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
   const [editForm, setEditForm] = useState<EditUserFormData>({ full_name: '', email: '' });
   const [editError, setEditError] = useState<string | null>(null);
@@ -89,34 +68,6 @@ export default function UserManagement() {
       toast.error(msg);
     },
   });
-
-  const handleQuickAdd = useCallback(async () => {
-    if (!addForm.full_name || !addForm.email || !addForm.password) {
-      setAddError('All fields are required');
-      return;
-    }
-    setAddLoading(true);
-    setAddError(null);
-    try {
-      const newUser = await authApi.register({
-        full_name: addForm.full_name,
-        email: addForm.email,
-        password: addForm.password,
-      });
-      if (addForm.role !== 'sales_rep') {
-        await assignRole.mutateAsync({ userId: newUser.id, data: { role: addForm.role } });
-      }
-      toast.success(`User ${addForm.full_name} created successfully`);
-      setShowAddModal(false);
-      setAddForm(INITIAL_FORM);
-      refetch();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to create user';
-      setAddError(msg);
-    } finally {
-      setAddLoading(false);
-    }
-  }, [addForm, assignRole, refetch]);
 
   const handleOpenEdit = useCallback((user: AdminUser) => {
     setEditingUser(user);
@@ -319,11 +270,6 @@ export default function UserManagement() {
       <CardHeader
         title="User Management"
         description="Manage users, roles, and account status"
-        action={
-          <Button onClick={() => setShowAddModal(true)}>
-            Quick Add User
-          </Button>
-        }
       />
       <CardBody>
         <div className="mb-4">
@@ -348,132 +294,6 @@ export default function UserManagement() {
         />
       </CardBody>
 
-      {/* Quick Add User Modal */}
-      {showAddModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setShowAddModal(false);
-          }}
-        >
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                Quick Add User
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowAddModal(false)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-                aria-label="Close modal"
-              >
-                <XMarkIcon className="h-5 w-5" aria-hidden="true" />
-              </button>
-            </div>
-
-            <div className="px-6 py-4 space-y-4">
-              {addError && (
-                <p className="text-sm text-red-600 dark:text-red-400" role="alert">
-                  {addError}
-                </p>
-              )}
-
-              <div>
-                <label
-                  htmlFor="quick-add-name"
-                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-                >
-                  Full Name
-                </label>
-                <input
-                  id="quick-add-name"
-                  type="text"
-                  value={addForm.full_name}
-                  onChange={(e) => setAddForm((f) => ({ ...f, full_name: e.target.value }))}
-                  placeholder="John Doe..."
-                  autoComplete="name"
-                  className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="quick-add-email"
-                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-                >
-                  Email
-                </label>
-                <input
-                  id="quick-add-email"
-                  type="email"
-                  value={addForm.email}
-                  onChange={(e) => setAddForm((f) => ({ ...f, email: e.target.value }))}
-                  placeholder="john@example.com..."
-                  autoComplete="email"
-                  spellCheck={false}
-                  className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="quick-add-password"
-                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-                >
-                  Password
-                </label>
-                <input
-                  id="quick-add-password"
-                  type="password"
-                  value={addForm.password}
-                  onChange={(e) => setAddForm((f) => ({ ...f, password: e.target.value }))}
-                  placeholder="Minimum 8 characters..."
-                  autoComplete="new-password"
-                  className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="quick-add-role"
-                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-                >
-                  Role
-                </label>
-                <select
-                  id="quick-add-role"
-                  value={addForm.role}
-                  onChange={(e) => setAddForm((f) => ({ ...f, role: e.target.value }))}
-                  className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-                  aria-label="Select role"
-                >
-                  {ROLE_OPTIONS.map((r) => (
-                    <option key={r} value={r}>
-                      {r.replace('_', ' ')}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setShowAddModal(false);
-                  setAddForm(INITIAL_FORM);
-                  setAddError(null);
-                }}
-              >
-                Cancel
-              </Button>
-              <Button onClick={handleQuickAdd} disabled={addLoading}>
-                {addLoading ? 'Creating...' : 'Create User'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
       {/* Edit User Modal */}
       {editingUser && (
         <div

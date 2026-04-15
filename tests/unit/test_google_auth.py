@@ -537,29 +537,18 @@ class TestUpsertGoogleUserRace:
 
 
 class TestPasswordLoginWithOAuthOnlyUser:
-    """Ensures /login/json doesn't crash when a user has no hashed_password."""
+    """Password login endpoint removed — must return 404 regardless of user type."""
 
     @pytest.mark.asyncio
-    async def test_password_login_rejected_for_google_only_user(
+    async def test_password_login_endpoint_removed(
         self, client, db_session
     ):
-        """Attempting password login on an OAuth-only account returns 401, not 500."""
-        user = User(
-            email="oauthonly@example.com",
-            hashed_password=None,
-            full_name="OAuth Only",
-            google_sub="oauth-only-sub-1",
-            auth_provider="google",
-            is_active=True,
-        )
-        db_session.add(user)
-        await db_session.commit()
-
+        """POST /api/auth/login/json must not accept password credentials."""
         response = await client.post(
             "/api/auth/login/json",
             json={"email": "oauthonly@example.com", "password": "whatever"},
         )
-        assert response.status_code == 401
+        assert response.status_code in (404, 405)
 
 
 # =============================================================================

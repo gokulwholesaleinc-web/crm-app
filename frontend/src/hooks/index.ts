@@ -5,9 +5,7 @@
 // Auth hooks
 export {
   useUser,
-  useLogin,
   useLogout,
-  useRegister,
   useUpdateProfile,
   useUsers,
   authKeys,

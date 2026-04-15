@@ -3,7 +3,8 @@
  * lead source management, and account settings sections.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { Card, CardHeader, CardBody } from '../../components/ui/Card';
 import { Avatar } from '../../components/ui/Avatar';
@@ -30,6 +31,16 @@ import { EmailSettingsSection } from './components/EmailSettingsSection';
 function SettingsPage() {
   const { user, isLoading } = useAuthStore();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const { hash } = useLocation();
+
+  useEffect(() => {
+    if (isLoading || !hash) return;
+    const id = hash.slice(1);
+    const target = document.getElementById(id);
+    if (!target) return;
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    target.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'start' });
+  }, [hash, isLoading]);
 
   if (isLoading) {
     return (

@@ -1519,74 +1519,29 @@ class TestBrandingEndpoint:
 
 
 class TestLoginTenantInfo:
-    """Tests for tenant info in login response."""
+    """Password login endpoints removed — verify they reject."""
 
     @pytest.mark.asyncio
-    async def test_login_includes_tenant_info(
-        self, client: AsyncClient, db_session: AsyncSession,
-        test_tenant: Tenant, test_user: User,
-    ):
-        """Test login response includes tenant info when user is in a tenant."""
-        tenant_user = TenantUser(
-            tenant_id=test_tenant.id, user_id=test_user.id,
-            role="admin", is_primary=True,
-        )
-        db_session.add(tenant_user)
-        await db_session.commit()
-
-        response = await client.post(
-            "/api/auth/login/json",
-            json={"email": "testuser@example.com", "password": "testpassword123"},
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert "access_token" in data
-        assert data["tenants"] is not None
-        assert len(data["tenants"]) >= 1
-        tenant_info = data["tenants"][0]
-        assert tenant_info["tenant_slug"] == test_tenant.slug
-        assert tenant_info["company_name"] == "Test Tenant Inc"
-        assert tenant_info["role"] == "admin"
-        assert tenant_info["is_primary"] is True
-        assert tenant_info["primary_color"] == "#6366f1"
-
-    @pytest.mark.asyncio
-    async def test_login_no_tenants(
+    async def test_login_json_rejected(
         self, client: AsyncClient, db_session: AsyncSession, test_user: User,
     ):
-        """Test login response has no tenants when user is not in any tenant."""
+        """POST /api/auth/login/json must not accept password credentials."""
         response = await client.post(
             "/api/auth/login/json",
             json={"email": "testuser@example.com", "password": "testpassword123"},
         )
-        assert response.status_code == 200
-        data = response.json()
-        assert "access_token" in data
-        assert data["tenants"] is None
+        assert response.status_code in (404, 405)
 
     @pytest.mark.asyncio
-    async def test_form_login_includes_tenant_info(
-        self, client: AsyncClient, db_session: AsyncSession,
-        test_tenant: Tenant, test_user: User,
+    async def test_form_login_rejected(
+        self, client: AsyncClient, db_session: AsyncSession, test_user: User,
     ):
-        """Test form login also includes tenant info."""
-        tenant_user = TenantUser(
-            tenant_id=test_tenant.id, user_id=test_user.id,
-            role="member", is_primary=False,
-        )
-        db_session.add(tenant_user)
-        await db_session.commit()
-
+        """POST /api/auth/login must not accept password credentials."""
         response = await client.post(
             "/api/auth/login",
             data={"username": "testuser@example.com", "password": "testpassword123"},
         )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["tenants"] is not None
-        assert len(data["tenants"]) >= 1
-        assert data["tenants"][0]["tenant_slug"] == test_tenant.slug
-        assert data["tenants"][0]["role"] == "member"
+        assert response.status_code in (404, 405)
 
 
 # --- Tenant Admin Check Tests ---

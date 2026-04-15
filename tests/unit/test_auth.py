@@ -1,7 +1,7 @@
 """
 Unit tests for authentication endpoints.
 
-Tests for register, login, and get_me endpoints.
+Tests for auth endpoints — password login removed, Google OAuth is the sole flow.
 """
 
 import pytest
@@ -10,93 +10,31 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.models import User
-from src.auth.security import verify_password, get_password_hash
+from src.auth.security import get_password_hash, verify_password
 from src.whitelabel.models import Tenant, TenantUser
 
 
 
-class TestAuthLogin:
-    """Tests for login endpoints."""
+class TestPasswordLoginRemoved:
+    """Password login endpoints must be gone — Google OAuth is the only flow."""
 
     @pytest.mark.asyncio
-    async def test_login_success(
-        self, client: AsyncClient, db_session: AsyncSession, test_user: User
-    ):
-        """Test successful login with form data."""
+    async def test_login_form_rejected(self, client: AsyncClient, db_session: AsyncSession):
+        """POST /api/auth/login must not accept password credentials."""
         response = await client.post(
             "/api/auth/login",
-            data={
-                "username": test_user.email,
-                "password": "testpassword123",
-            },
+            data={"username": "any@example.com", "password": "any"},
         )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert "access_token" in data
-        assert data["token_type"] == "bearer"
+        assert response.status_code in (404, 405)
 
     @pytest.mark.asyncio
-    async def test_login_json_success(
-        self, client: AsyncClient, db_session: AsyncSession, test_user: User
-    ):
-        """Test successful login with JSON body."""
+    async def test_login_json_rejected(self, client: AsyncClient, db_session: AsyncSession):
+        """POST /api/auth/login/json must not accept password credentials."""
         response = await client.post(
             "/api/auth/login/json",
-            json={
-                "email": test_user.email,
-                "password": "testpassword123",
-            },
+            json={"email": "any@example.com", "password": "any"},
         )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert "access_token" in data
-        assert data["token_type"] == "bearer"
-
-    @pytest.mark.asyncio
-    async def test_login_wrong_password(
-        self, client: AsyncClient, db_session: AsyncSession, test_user: User
-    ):
-        """Test login with wrong password fails."""
-        response = await client.post(
-            "/api/auth/login",
-            data={
-                "username": test_user.email,
-                "password": "wrongpassword",
-            },
-        )
-
-        assert response.status_code == 401
-        assert "incorrect" in response.json()["detail"].lower()
-
-    @pytest.mark.asyncio
-    async def test_login_nonexistent_user(self, client: AsyncClient, db_session: AsyncSession):
-        """Test login with non-existent email fails."""
-        response = await client.post(
-            "/api/auth/login",
-            data={
-                "username": "nonexistent@example.com",
-                "password": "anypassword",
-            },
-        )
-
-        assert response.status_code == 401
-
-    @pytest.mark.asyncio
-    async def test_login_json_wrong_password(
-        self, client: AsyncClient, db_session: AsyncSession, test_user: User
-    ):
-        """Test JSON login with wrong password fails."""
-        response = await client.post(
-            "/api/auth/login/json",
-            json={
-                "email": test_user.email,
-                "password": "wrongpassword",
-            },
-        )
-
-        assert response.status_code == 401
+        assert response.status_code in (404, 405)
 
 
 class TestAuthGetMe:

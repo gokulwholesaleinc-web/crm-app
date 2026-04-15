@@ -5,7 +5,7 @@ from typing import Callable, Any
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
-from src.database import async_session_maker
+import src.database as db_module
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +15,7 @@ scheduler = AsyncIOScheduler()
 async def _run_scheduled_job(job_name: str, service_factory: Callable, method: str) -> Any:
     """Run a scheduled job with session management, commit, and logging."""
     try:
-        async with async_session_maker() as session:
+        async with db_module.async_session_maker() as session:
             service = service_factory(session)
             result = await getattr(service, method)()
             await session.commit()
@@ -46,13 +46,35 @@ async def _deliver_scheduled_reports():
     await _run_scheduled_job("report_delivery", ReportDeliveryService, "deliver_due_reports")
 
 
+async def _sync_google_calendars():
+    from sqlalchemy import select
+    from src.integrations.google_calendar.models import GoogleCalendarCredential
+    from src.integrations.google_calendar.service import GoogleCalendarService
+
+    async with db_module.async_session_maker() as session:
+        result = await session.execute(select(GoogleCalendarCredential))
+        credentials = result.scalars().all()
+
+    for credential in credentials:
+        try:
+            async with db_module.async_session_maker() as session:
+                service = GoogleCalendarService(session)
+                synced = await service.sync_from_google(credential.user_id)
+                await session.commit()
+                if synced:
+                    logger.info("[google_calendar_sync] user_id=%s synced %s event(s)", credential.user_id, len(synced))
+        except Exception as e:
+            logger.error("[google_calendar_sync] user_id=%s error: %s", credential.user_id, e)
+
+
 async def _background_tick():
-    # Single periodic wakeup runs all four handlers sequentially so Neon's
+    # Single periodic wakeup runs all five handlers sequentially so Neon's
     # compute only has to come out of autosuspend once per interval.
     await _process_email_retries()
     await _process_due_sequence_steps()
     await _process_due_campaign_steps()
     await _deliver_scheduled_reports()
+    await _sync_google_calendars()
 
 
 def start_scheduler():

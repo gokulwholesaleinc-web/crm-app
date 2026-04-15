@@ -4,7 +4,6 @@ import hmac as _hmac
 import secrets
 from typing import Annotated, List
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
 from src.config import settings
 from src.core.constants import HTTPStatus, ErrorMessages, EntityNames
@@ -14,7 +13,6 @@ from src.auth.schemas import (
     UserUpdate,
     UserResponse,
     Token,
-    LoginRequest,
     TenantInfo,
     GoogleAuthorizeRequest,
     GoogleAuthorizeResponse,
@@ -59,51 +57,6 @@ async def _get_user_tenant_info(db, user_id: int) -> list | None:
             ).model_dump()
         )
     return tenants
-
-
-@router.post("/login", response_model=Token)
-@limiter.limit("15/minute")
-async def login(
-    request: Request,
-    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
-    db: DBSession,
-):
-    """Login and get access token."""
-    service = AuthService(db)
-    user = await service.authenticate_user(form_data.username, form_data.password)
-
-    if not user:
-        raise HTTPException(
-            status_code=HTTPStatus.UNAUTHORIZED,
-            detail="Incorrect email or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    access_token = create_access_token(data={"sub": str(user.id)})
-    tenants = await _get_user_tenant_info(db, user.id)
-    return Token(access_token=access_token, tenants=tenants)
-
-
-@router.post("/login/json", response_model=Token)
-@limiter.limit("15/minute")
-async def login_json(
-    request: Request,
-    login_data: LoginRequest,
-    db: DBSession,
-):
-    """Login with JSON body and get access token."""
-    service = AuthService(db)
-    user = await service.authenticate_user(login_data.email, login_data.password)
-
-    if not user:
-        raise HTTPException(
-            status_code=HTTPStatus.UNAUTHORIZED,
-            detail="Incorrect email or password",
-        )
-
-    access_token = create_access_token(data={"sub": str(user.id)})
-    tenants = await _get_user_tenant_info(db, user.id)
-    return Token(access_token=access_token, tenants=tenants)
 
 
 # =============================================================================

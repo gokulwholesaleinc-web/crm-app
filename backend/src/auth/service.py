@@ -7,7 +7,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth.models import User, RejectedAccessEmail
 from src.auth.schemas import UserUpdate
-from src.auth.security import verify_password
 
 
 class RejectedAccessError(Exception):
@@ -136,18 +135,6 @@ class AuthService:
             setattr(user, field, value)
         await self.db.flush()
         await self.db.refresh(user)
-        return user
-
-    async def authenticate_user(self, email: str, password: str) -> Optional[User]:
-        user = await self.get_user_by_email(email)
-        if not user:
-            return None
-        if not user.hashed_password:
-            return None
-        if not verify_password(password, user.hashed_password):
-            return None
-        user.last_login = datetime.now(timezone.utc)
-        await self.db.flush()
         return user
 
     async def get_all_users(self, page: int = 1, page_size: int = 100) -> list[User]:

@@ -29,7 +29,7 @@ function CalendarPage() {
             </Button>
           ) : (
             <Link
-              to="/settings"
+              to="/settings#integrations"
               className="text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 font-medium"
             >
               Connect Google Calendar in Settings →
