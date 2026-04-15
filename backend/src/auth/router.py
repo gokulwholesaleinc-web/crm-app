@@ -207,17 +207,21 @@ async def google_authorize(
         state=state,
     )
 
-    # HttpOnly so XSS can't read it. SameSite=Lax is required because the
-    # cookie needs to survive a top-level navigation from Google back to
-    # our callback — SameSite=Strict would drop it. Secure is on outside
-    # debug builds so the cookie only travels over HTTPS in prod.
+    # HttpOnly so XSS can't read it. In prod the frontend and backend run
+    # on different Railway subdomains (both under the `up.railway.app`
+    # public suffix), so the callback XHR is cross-site — SameSite=Lax
+    # would drop the cookie and the callback would 400. SameSite=None
+    # requires Secure, which is already enforced outside debug builds.
+    # In debug we stay on Lax because local dev is same-site and None
+    # without Secure would be rejected.
+    cross_site = not settings.DEBUG
     response.set_cookie(
         key=GOOGLE_OAUTH_STATE_COOKIE,
         value=state,
         max_age=GOOGLE_OAUTH_STATE_TTL_SECONDS,
         httponly=True,
-        secure=not settings.DEBUG,
-        samesite="lax",
+        secure=cross_site,
+        samesite="none" if cross_site else "lax",
         path="/",
     )
     return GoogleAuthorizeResponse(auth_url=auth_url, state=state)
