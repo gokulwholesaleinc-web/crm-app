@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import String, Boolean, DateTime, func
+from sqlalchemy import String, Boolean, DateTime, Integer, Text, ForeignKey, func, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.database import Base
 from src.core.mixins.auditable import TimestampMixin
@@ -31,6 +31,11 @@ class User(Base, TimestampMixin):
     # Status
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_superuser: Mapped[bool] = mapped_column(Boolean, default=False)
+    # False for new Google sign-ups until an admin approves. Grandfathered rows
+    # (and password-created accounts) default to True via server_default.
+    is_approved: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
 
     # RBAC
     role: Mapped[str] = mapped_column(String(50), default="sales_rep", server_default="sales_rep")
@@ -45,3 +50,21 @@ class User(Base, TimestampMixin):
 
     # Relationships
     user_roles: Mapped[list] = relationship("UserRole", backref="user", lazy="select")
+
+
+class RejectedAccessEmail(Base):
+    """Hard-block list for emails rejected by an admin."""
+    __tablename__ = "rejected_access_emails"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    rejected_by_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    rejected_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

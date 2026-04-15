@@ -35,7 +35,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
 from src.database import Base, get_db
 from src.auth.security import get_password_hash, create_access_token
-from src.auth.models import User
+from src.auth.models import User, RejectedAccessEmail
 from src.contacts.models import Contact
 from src.companies.models import Company
 from src.leads.models import Lead, LeadSource

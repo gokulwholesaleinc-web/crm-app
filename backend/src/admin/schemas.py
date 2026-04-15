@@ -4,6 +4,8 @@ from datetime import datetime
 from typing import Any, Optional, List
 from pydantic import BaseModel, EmailStr
 
+from src.roles.models import RoleName
+
 
 class AdminUserResponse(BaseModel):
     """User record with role, status, and record counts."""
@@ -89,3 +91,37 @@ class ActivityFeedEntry(BaseModel):
     model_config = {"from_attributes": True}
 
 
+
+
+# ---------------------------------------------------------------------------
+# User approval schemas
+# ---------------------------------------------------------------------------
+
+class PendingUserResponse(BaseModel):
+    id: int
+    email: str
+    full_name: str
+    avatar_url: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+class ApproveUserRequest(BaseModel):
+    role: RoleName = RoleName.SALES_REP
+
+
+class RejectUserRequest(BaseModel):
+    reason: Optional[str] = None
+
+
+class RejectedEmailResponse(BaseModel):
+    id: int
+    email: str
+    rejected_by_id: Optional[int] = None
+    rejected_by_email: Optional[str] = None
+    rejected_at: datetime
+    reason: Optional[str] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

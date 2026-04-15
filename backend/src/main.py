@@ -170,12 +170,32 @@ async def _run_production_migrations():
                 # Lead import: allow company-only leads without a contact name
                 "ALTER TABLE leads ALTER COLUMN first_name DROP NOT NULL",
                 "ALTER TABLE leads ALTER COLUMN last_name DROP NOT NULL",
+                # User approval gate
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_approved BOOLEAN NOT NULL DEFAULT TRUE",
             ]
             for sql in column_migrations:
                 try:
                     await conn.execute(sql)
                 except Exception:
                     pass
+
+            # User approval gate: rejected emails block list
+            try:
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS rejected_access_emails (
+                        id SERIAL PRIMARY KEY,
+                        email VARCHAR(255) NOT NULL,
+                        rejected_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                        rejected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        reason TEXT,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                """)
+                await conn.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ix_rejected_access_emails_email ON rejected_access_emails(email)"
+                )
+            except Exception:
+                pass
 
             # Audit Session 2: Stripe webhook idempotency log
             try:
@@ -284,7 +304,7 @@ async def _init_database():
         async with engine.begin() as conn:
             await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
 
-        from src.auth.models import User
+        from src.auth.models import User, RejectedAccessEmail
         from src.core.models import Note, Tag, EntityTag, EntityShare
         from src.contacts.models import Contact
         from src.companies.models import Company
