@@ -40,7 +40,7 @@ async def get_auth_url(
 
     service = GoogleCalendarService(db)
     redirect_uri = data.redirect_uri or ""
-    auth_url = service.get_authorization_url(redirect_uri, state=str(current_user.id))
+    auth_url = service.get_authorization_url(redirect_uri, state=str(current_user.id), login_hint=current_user.email)
     return {"auth_url": auth_url}
 
 
