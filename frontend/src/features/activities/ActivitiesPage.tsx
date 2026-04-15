@@ -29,6 +29,9 @@ import {
   useDeleteActivity,
   useCompleteActivity,
 } from '../../hooks/useActivities';
+import { useGoogleCalendarSync } from '../../hooks/useGoogleCalendarSync';
+import { usePushToGoogleCalendar } from '../../hooks/usePushToGoogleCalendar';
+import toast from 'react-hot-toast';
 import { showError } from '../../utils/toast';
 import type { Activity, ActivityCreate, ActivityUpdate, ActivityFilters } from '../../types';
 
@@ -81,6 +84,10 @@ export function ActivitiesPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; activity: Activity | null }>(INITIAL_DELETE_CONFIRM);
+  const [pushAfterCreate, setPushAfterCreate] = useState(false);
+
+  const { connected } = useGoogleCalendarSync();
+  const { pushAsync: pushActivityToCalendar } = usePushToGoogleCalendar({ silent: true });
 
   // Get filter values from URL params
   const filters: ActivityFilters = useMemo(
@@ -164,11 +171,25 @@ export function ActivitiesPage() {
     try {
       if (editingActivity) {
         await updateActivity.mutateAsync({ id: editingActivity.id, data: data as ActivityUpdate });
+        setShowForm(false);
+        setEditingActivity(null);
       } else {
-        await createActivity.mutateAsync(data as ActivityCreate);
+        const newActivity = await createActivity.mutateAsync(data as ActivityCreate);
+        setShowForm(false);
+        setEditingActivity(null);
+        if (pushAfterCreate && connected) {
+          try {
+            await pushActivityToCalendar(newActivity.id);
+            toast.success('Activity created and pushed to Google Calendar');
+          } catch (pushError) {
+            const detail =
+              (pushError as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
+              'push failed';
+            toast.error(`Activity created, but push failed: ${detail}`);
+          }
+        }
+        setPushAfterCreate(false);
       }
-      setShowForm(false);
-      setEditingActivity(null);
     } catch (error) {
       showError('Failed to save activity');
     }
@@ -177,6 +198,7 @@ export function ActivitiesPage() {
   const handleFormCancel = () => {
     setShowForm(false);
     setEditingActivity(null);
+    setPushAfterCreate(false);
   };
 
   const isLoading = viewMode === 'list' ? isLoadingList : viewMode === 'timeline' ? isLoadingTimeline : false;
@@ -510,6 +532,9 @@ export function ActivitiesPage() {
           onSubmit={handleFormSubmit}
           onCancel={handleFormCancel}
           isLoading={createActivity.isPending || updateActivity.isPending}
+          pushToCalendar={pushAfterCreate}
+          onPushToCalendarChange={setPushAfterCreate}
+          calendarConnected={connected}
         />
       </Modal>
 

@@ -1,9 +1,12 @@
 import { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
+import { ArrowUpOnSquareIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import { getCalendarActivities } from '../../../api/activities';
 import type { CalendarActivity } from '../../../api/activities';
 import { Spinner, Modal } from '../../../components/ui';
+import { useGoogleCalendarSync } from '../../../hooks/useGoogleCalendarSync';
+import { usePushToGoogleCalendar } from '../../../hooks/usePushToGoogleCalendar';
 import clsx from 'clsx';
 
 type ViewMode = 'year' | 'month' | 'week' | 'day' | 'agenda';
@@ -69,6 +72,11 @@ function CalendarView() {
   const [selectedActivity, setSelectedActivity] = useState<CalendarActivity | null>(null);
   const [activityTypeFilter, setActivityTypeFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
+
+  const { connected } = useGoogleCalendarSync();
+  const { push: pushToCalendar, isPushing } = usePushToGoogleCalendar({
+    onSuccess: () => setSelectedActivity(null),
+  });
 
   const today = formatDateKey(new Date());
 
@@ -662,6 +670,42 @@ function CalendarView() {
               <div className="text-sm">
                 <span className="font-medium text-gray-500 dark:text-gray-400">Description</span>
                 <p className="mt-1 text-gray-700 dark:text-gray-300">{selectedActivity.description}</p>
+              </div>
+            )}
+
+            {/* Push to Google Calendar footer */}
+            {selectedActivity.entity_type !== GOOGLE_SYNC_ENTITY_TYPE && (
+              <div className="border-t pt-4 flex flex-col gap-1.5">
+                <button
+                  type="button"
+                  disabled={!connected || isPushing}
+                  onClick={() => pushToCalendar(selectedActivity.id)}
+                  className={clsx(
+                    'inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
+                    connected
+                      ? 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
+                      : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 border-gray-200 dark:border-gray-700 cursor-not-allowed'
+                  )}
+                  aria-label="Push to Google Calendar"
+                >
+                  {isPushing ? (
+                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                    </svg>
+                  ) : (
+                    <ArrowUpOnSquareIcon className="h-4 w-4" aria-hidden="true" />
+                  )}
+                  Push to Google Calendar
+                </button>
+                {!connected && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    <Link to="/settings" className="underline hover:text-primary-600 dark:hover:text-primary-400">
+                      Connect Google Calendar in Settings
+                    </Link>
+                    {' '}to push events.
+                  </p>
+                )}
               </div>
             )}
           </div>

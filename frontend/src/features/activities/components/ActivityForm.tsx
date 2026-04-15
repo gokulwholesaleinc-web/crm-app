@@ -18,6 +18,12 @@ interface ActivityFormProps {
   onSubmit: (data: ActivityCreate | ActivityUpdate) => Promise<void>;
   onCancel: () => void;
   isLoading?: boolean;
+  /** Controlled: whether "Also add to Google Calendar" checkbox is checked */
+  pushToCalendar?: boolean;
+  /** Called when checkbox value changes */
+  onPushToCalendarChange?: (checked: boolean) => void;
+  /** Whether Google Calendar is connected — controls disabled state of the checkbox */
+  calendarConnected?: boolean;
 }
 
 interface FormValues {
@@ -90,8 +96,12 @@ export function ActivityForm({
   onSubmit,
   onCancel,
   isLoading,
+  pushToCalendar,
+  onPushToCalendarChange,
+  calendarConnected,
 }: ActivityFormProps) {
   const isEditing = !!activity;
+  const PUSH_ELIGIBLE_TYPES = new Set(['call', 'meeting', 'task']);
 
   const {
     register,
@@ -256,6 +266,27 @@ export function ActivityForm({
           error={errors.due_date?.message}
         />
       </div>
+
+      {/* Also add to Google Calendar — only shown on create, only for push-eligible types */}
+      {!isEditing && PUSH_ELIGIBLE_TYPES.has(activityType) && (
+        <div className="flex flex-col gap-1">
+          <label className={`flex items-center gap-2 select-none ${!calendarConnected ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+            <input
+              type="checkbox"
+              checked={pushToCalendar ?? false}
+              disabled={!calendarConnected}
+              onChange={(e) => onPushToCalendarChange?.(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
+            />
+            <span className="text-sm text-gray-700 dark:text-gray-300">Also add to Google Calendar</span>
+          </label>
+          {!calendarConnected && (
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Connect Google Calendar in Settings to enable.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Call-specific fields */}
       {activityType === 'call' && (
