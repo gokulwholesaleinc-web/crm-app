@@ -3,6 +3,7 @@
  */
 
 import { apiClient } from './client';
+import type { RoleName } from '../store/authStore';
 import type {
   AdminUser,
   AdminUserUpdate,
@@ -14,6 +15,8 @@ import type {
   RejectedEmail,
   User,
 } from '../types';
+
+export type ApprovalRole = Exclude<RoleName, 'viewer'>;
 
 const ADMIN_BASE = '/api/admin';
 
@@ -87,7 +90,7 @@ export const getPendingUsers = async (): Promise<PendingUser[]> => {
 
 export const approveUser = async (
   id: number,
-  role: 'sales_rep' | 'manager' | 'admin'
+  role: ApprovalRole
 ): Promise<User> => {
   const response = await apiClient.patch<User>(`${ADMIN_BASE}/users/${id}/approve`, { role });
   return response.data;

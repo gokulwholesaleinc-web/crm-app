@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { Card, CardHeader, CardBody } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Spinner } from '../../components/ui/Spinner';
+import { Modal } from '../../components/ui/Modal';
 import { useAuthStore } from '../../store/authStore';
 import {
   getPendingUsers,
@@ -13,15 +14,9 @@ import {
   getRejectedEmails,
   unblockRejectedEmail,
 } from '../../api/admin';
+import type { ApprovalRole } from '../../api/admin';
 import type { PendingUser, RejectedEmail } from '../../types';
-
-type ApprovalRole = 'sales_rep' | 'manager' | 'admin';
-
-const dateFormatter = new Intl.DateTimeFormat(undefined, {
-  year: 'numeric',
-  month: 'short',
-  day: 'numeric',
-});
+import { formatDate } from '../../utils/formatters';
 
 function RejectModal({
   user,
@@ -36,40 +31,39 @@ function RejectModal({
 }) {
   const [reason, setReason] = useState('');
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-      <div className="w-full max-w-md rounded-lg bg-white dark:bg-gray-800 p-6 shadow-xl">
-        <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1">
-          Reject {user.full_name || user.email}
-        </h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          Optionally provide a reason. The email will be added to the reject list.
-        </p>
-        <label htmlFor="reject-reason" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Reason (optional)
-        </label>
-        <textarea
-          id="reject-reason"
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          rows={3}
-          className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-          placeholder="Optional reason..."
-        />
-        <div className="mt-4 flex justify-end gap-3">
-          <Button variant="secondary" size="sm" onClick={onCancel} disabled={isPending}>
-            Cancel
-          </Button>
-          <Button
-            variant="danger"
-            size="sm"
-            isLoading={isPending}
-            onClick={() => onConfirm(reason)}
-          >
-            Reject
-          </Button>
-        </div>
+    <Modal
+      isOpen
+      onClose={onCancel}
+      title={`Reject ${user.full_name || user.email}`}
+      description="Optionally provide a reason. The email will be added to the reject list."
+      size="md"
+      closeOnOverlayClick={!isPending}
+    >
+      <label htmlFor="reject-reason" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+        Reason (optional)
+      </label>
+      <textarea
+        id="reject-reason"
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        rows={3}
+        className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+        placeholder="Optional reason..."
+      />
+      <div className="mt-4 flex justify-end gap-3">
+        <Button variant="secondary" size="sm" onClick={onCancel} disabled={isPending}>
+          Cancel
+        </Button>
+        <Button
+          variant="danger"
+          size="sm"
+          isLoading={isPending}
+          onClick={() => onConfirm(reason)}
+        >
+          Reject
+        </Button>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -170,7 +164,7 @@ export default function UserApprovalsPage() {
                       <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{u.email}</td>
                       <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{u.full_name || '—'}</td>
                       <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
-                        {dateFormatter.format(new Date(u.created_at))}
+                        {formatDate(u.created_at, 'short')}
                       </td>
                       <td className="px-4 py-3">
                         <select
@@ -241,7 +235,7 @@ export default function UserApprovalsPage() {
                       <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{r.email}</td>
                       <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{r.rejected_by_email ?? '—'}</td>
                       <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
-                        {dateFormatter.format(new Date(r.rejected_at))}
+                        {formatDate(r.rejected_at, 'short')}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{r.reason || '—'}</td>
                       <td className="px-4 py-3 text-right">
