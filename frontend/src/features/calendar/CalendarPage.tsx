@@ -9,7 +9,7 @@ import CalendarView from '../activities/components/CalendarView';
 function CalendarPage() {
   const queryClient = useQueryClient();
 
-  const { data: calendarStatus } = useQuery({
+  const { data: calendarStatus, isLoading: isLoadingStatus } = useQuery({
     queryKey: ['integrations', 'google-calendar', 'status'],
     queryFn: getCalendarStatus,
   });
@@ -38,27 +38,24 @@ function CalendarPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {connected ? (
+          {!isLoadingStatus && (connected ? (
             <Button
               variant="primary"
               leftIcon={<ArrowPathIcon className="h-4 w-4" />}
               onClick={() => syncMutation.mutate()}
               disabled={syncMutation.isPending}
               isLoading={syncMutation.isPending}
-              aria-label="Sync from Google Calendar"
             >
               Sync from Google
             </Button>
           ) : (
-            calendarStatus !== undefined && (
-              <Link
-                to="/settings"
-                className="text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 font-medium"
-              >
-                Connect Google Calendar in Settings →
-              </Link>
-            )
-          )}
+            <Link
+              to="/settings"
+              className="text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 font-medium"
+            >
+              Connect Google Calendar in Settings →
+            </Link>
+          ))}
         </div>
       </div>
 
