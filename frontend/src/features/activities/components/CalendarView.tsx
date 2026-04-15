@@ -211,7 +211,7 @@ function CalendarView() {
                   <span className="text-xs text-gray-400 dark:text-gray-500">{dayActivities.length}</span>
                 )}
               </div>
-              <div className="mt-1 space-y-0.5 overflow-hidden max-h-[60px]">
+              <div className="mt-1 space-y-0.5">
                 {dayActivities.slice(0, 3).map((act) => (
                   <button
                     key={act.id}
