@@ -11,7 +11,6 @@ import { ErrorBoundary } from '../components/ErrorBoundary';
 // Lazy load all page components for code splitting
 // Authentication pages
 const LoginPage = lazy(() => import('../features/auth/LoginPage'));
-const RegisterPage = lazy(() => import('../features/auth/RegisterPage'));
 const GoogleAuthCallbackPage = lazy(() => import('../features/auth/GoogleAuthCallbackPage'));
 
 // Dashboard
@@ -80,6 +79,7 @@ const OAuthCallbackPage = lazy(() => import('../features/settings/OAuthCallbackP
 
 // Admin
 const AdminDashboardPage = lazy(() => import('../features/admin/AdminDashboard'));
+const UserApprovalsPage = lazy(() => import('../features/admin/UserApprovalsPage'));
 
 // Help
 const HelpPage = lazy(() => import('../features/help/HelpPage'));
@@ -92,7 +92,6 @@ function AppRoutes() {
     <Routes>
       {/* Public routes */}
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
       <Route path="/auth/google/callback" element={<GoogleAuthCallbackPage />} />
       <Route path="/proposals/public/:token" element={<PublicProposalView />} />
       <Route path="/quotes/public/:quoteNumber" element={<PublicQuoteView />} />
@@ -391,6 +390,16 @@ function AppRoutes() {
           <PrivateRoute>
             <ErrorBoundary>
               <AdminDashboardPage />
+            </ErrorBoundary>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/admin/user-approvals"
+        element={
+          <PrivateRoute>
+            <ErrorBoundary>
+              <UserApprovalsPage />
             </ErrorBoundary>
           </PrivateRoute>
         }

@@ -797,3 +797,24 @@ export interface ContractFilters {
   status?: string;
   owner_id?: number;
 }
+
+// =============================================================================
+// User Approval Types
+// =============================================================================
+
+export interface PendingUser {
+  id: number;
+  email: string;
+  full_name: string;
+  avatar_url?: string | null;
+  created_at: string;
+}
+
+export interface RejectedEmail {
+  id: number;
+  email: string;
+  rejected_by_id?: number | null;
+  rejected_by_email?: string | null;
+  rejected_at: string;
+  reason?: string | null;
+}

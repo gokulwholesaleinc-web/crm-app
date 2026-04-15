@@ -20,11 +20,17 @@ import { setTenantSlugOnLogin } from '../../providers/TenantProvider';
 import { useAuthStore } from '../../store/authStore';
 import { GOOGLE_OAUTH_CALLBACK_PATH } from './GoogleSignInButton';
 
+type CallbackState =
+  | { kind: 'loading' }
+  | { kind: 'pending' }
+  | { kind: 'rejected' }
+  | { kind: 'error'; message: string };
+
 function GoogleAuthCallbackPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const processed = useRef(false);
-  const [error, setError] = useState<string | null>(null);
+  const [state, setState] = useState<CallbackState>({ kind: 'loading' });
   const { login: storeLogin } = useAuthStore();
 
   useEffect(() => {
@@ -36,11 +42,11 @@ function GoogleAuthCallbackPage() {
     const errorParam = searchParams.get('error');
 
     if (errorParam) {
-      setError(`Google returned an error: ${errorParam}`);
+      setState({ kind: 'error', message: `Google returned an error: ${errorParam}` });
       return;
     }
     if (!code) {
-      setError('Missing authorization code');
+      setState({ kind: 'error', message: 'Missing authorization code' });
       return;
     }
 
@@ -49,7 +55,7 @@ function GoogleAuthCallbackPage() {
     // forward from Google's query string. Nothing for this page to
     // check client-side.
     if (!returnedState) {
-      setError('Sign-in state mismatch. Please start again from the sign-in page.');
+      setState({ kind: 'error', message: 'Sign-in state mismatch. Please start again from the sign-in page.' });
       return;
     }
 
@@ -71,13 +77,29 @@ function GoogleAuthCallbackPage() {
 
         navigate('/', { replace: true });
       } catch (err: unknown) {
+        // Check for structured 403 detail objects from the approval gate
         const detail =
-          (typeof err === 'object' && err !== null && 'detail' in err
-            ? String((err as { detail: unknown }).detail)
-            : null) ||
+          typeof err === 'object' && err !== null && 'detail' in err
+            ? (err as { detail: unknown }).detail
+            : null;
+
+        if (typeof detail === 'object' && detail !== null) {
+          const d = detail as Record<string, unknown>;
+          if (d.pending_approval === true) {
+            setState({ kind: 'pending' });
+            return;
+          }
+          if (d.rejected === true) {
+            setState({ kind: 'rejected' });
+            return;
+          }
+        }
+
+        const message =
+          (typeof detail === 'string' ? detail : null) ||
           (err instanceof Error ? err.message : null) ||
           'Failed to sign in with Google.';
-        setError(detail);
+        setState({ kind: 'error', message });
       }
     })();
   }, [searchParams, navigate, storeLogin]);
@@ -85,14 +107,21 @@ function GoogleAuthCallbackPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
       <div className="text-center max-w-md">
-        {error ? (
+        {state.kind === 'loading' && (
+          <>
+            <Spinner size="lg" className="mx-auto mb-4 text-blue-600" />
+            <p className="text-gray-600 dark:text-gray-300">Finishing Google sign-in...</p>
+          </>
+        )}
+
+        {state.kind === 'pending' && (
           <>
             <div
               role="alert"
               aria-live="polite"
-              className="rounded-md bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-800 dark:text-red-300"
+              className="rounded-md bg-yellow-50 dark:bg-yellow-900/20 p-4 text-sm text-yellow-800 dark:text-yellow-300"
             >
-              {error}
+              Your account is pending admin approval. You'll receive a notification when approved.
             </div>
             <button
               type="button"
@@ -102,10 +131,43 @@ function GoogleAuthCallbackPage() {
               Back to sign in
             </button>
           </>
-        ) : (
+        )}
+
+        {state.kind === 'rejected' && (
           <>
-            <Spinner size="lg" className="mx-auto mb-4 text-blue-600" />
-            <p className="text-gray-600 dark:text-gray-300">Finishing Google sign-in...</p>
+            <div
+              role="alert"
+              aria-live="polite"
+              className="rounded-md bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-800 dark:text-red-300"
+            >
+              Access denied. Contact an admin if this is a mistake.
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('/login', { replace: true })}
+              className="mt-4 text-sm font-medium text-primary-600 hover:text-primary-500"
+            >
+              Back to sign in
+            </button>
+          </>
+        )}
+
+        {state.kind === 'error' && (
+          <>
+            <div
+              role="alert"
+              aria-live="polite"
+              className="rounded-md bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-800 dark:text-red-300"
+            >
+              {state.message}
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('/login', { replace: true })}
+              className="mt-4 text-sm font-medium text-primary-600 hover:text-primary-500"
+            >
+              Back to sign in
+            </button>
           </>
         )}
       </div>
