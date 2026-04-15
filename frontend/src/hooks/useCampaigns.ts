@@ -14,6 +14,7 @@ import type {
   AddMembersRequest,
   EmailSettingsUpdate,
   CreateCampaignFromImportRequest,
+  EmailTemplate,
 } from '../types';
 
 // =============================================================================
@@ -202,6 +203,86 @@ export function useCreateCampaignFromImport() {
       campaignsApi.createFromImport(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: campaignKeys.lists() });
+    },
+  });
+}
+
+// =============================================================================
+// Campaign Steps Hooks
+// =============================================================================
+
+export function useCampaignSteps(id: number | undefined) {
+  return useQuery({
+    queryKey: ['campaigns', 'steps', id] as const,
+    queryFn: () => campaignsApi.getSteps(id!),
+    enabled: !!id,
+  });
+}
+
+export function useAddCampaignStep() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      campaignId,
+      data,
+    }: {
+      campaignId: number;
+      data: import('../types').EmailCampaignStepCreate;
+    }) => campaignsApi.addStep(campaignId, data),
+    onSuccess: (_, { campaignId }) => {
+      queryClient.invalidateQueries({ queryKey: ['campaigns', 'steps', campaignId] });
+    },
+  });
+}
+
+export function useUpdateCampaignStep() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      campaignId,
+      stepId,
+      data,
+    }: {
+      campaignId: number;
+      stepId: number;
+      data: import('../types').EmailCampaignStepUpdate;
+    }) => campaignsApi.updateStep(campaignId, stepId, data),
+    onSuccess: (_, { campaignId }) => {
+      queryClient.invalidateQueries({ queryKey: ['campaigns', 'steps', campaignId] });
+    },
+  });
+}
+
+export function useDeleteCampaignStep() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ campaignId, stepId }: { campaignId: number; stepId: number }) =>
+      campaignsApi.deleteStep(campaignId, stepId),
+    onSuccess: (_, { campaignId }) => {
+      queryClient.invalidateQueries({ queryKey: ['campaigns', 'steps', campaignId] });
+    },
+  });
+}
+
+export function useEmailTemplates(params?: { page?: number; page_size?: number; category?: string }) {
+  return useQuery({
+    queryKey: ['campaigns', 'templates', params] as const,
+    queryFn: () => campaignsApi.listTemplates(params),
+  });
+}
+
+export function useExecuteCampaign() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (campaignId: number) => campaignsApi.execute(campaignId),
+    onSuccess: (_, campaignId) => {
+      queryClient.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) });
+      queryClient.invalidateQueries({ queryKey: campaignKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: campaignKeys.stats(campaignId) });
     },
   });
 }

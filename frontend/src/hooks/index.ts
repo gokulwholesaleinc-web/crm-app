@@ -102,6 +102,13 @@ export {
   useCampaignMembers,
   useAddCampaignMembers,
   useRemoveCampaignMember,
+  useCampaignSteps,
+  useAddCampaignStep,
+  useUpdateCampaignStep,
+  useDeleteCampaignStep,
+  useExecuteCampaign,
+  useEmailTemplates,
+  useCampaignAnalytics,
   campaignKeys,
 } from './useCampaigns';
 
