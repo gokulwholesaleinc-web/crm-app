@@ -72,10 +72,10 @@ describe('UserApprovalsPage', () => {
     await screen.findByText('alice@example.com');
 
     const selects = screen.getAllByRole('combobox');
-    fireEvent.change(selects[0], { target: { value: 'manager' } });
+    fireEvent.change(selects[0]!, { target: { value: 'manager' } });
 
     const approveBtns = screen.getAllByRole('button', { name: /approve/i });
-    fireEvent.click(approveBtns[0]);
+    fireEvent.click(approveBtns[0]!);
 
     await waitFor(() => {
       expect(approveUser).toHaveBeenCalledWith(1, 'manager');
@@ -87,7 +87,7 @@ describe('UserApprovalsPage', () => {
     await screen.findByText('alice@example.com');
 
     const rejectBtns = screen.getAllByRole('button', { name: /reject/i });
-    fireEvent.click(rejectBtns[0]);
+    fireEvent.click(rejectBtns[0]!);
 
     expect(screen.getByRole('heading', { name: /reject alice smith/i })).toBeInTheDocument();
   });
@@ -97,13 +97,13 @@ describe('UserApprovalsPage', () => {
     await screen.findByText('alice@example.com');
 
     const rejectBtns = screen.getAllByRole('button', { name: /reject/i });
-    fireEvent.click(rejectBtns[0]);
+    fireEvent.click(rejectBtns[0]!);
 
     const textarea = screen.getByRole('textbox');
     fireEvent.change(textarea, { target: { value: 'not trusted' } });
 
     const confirmBtns = screen.getAllByRole('button', { name: /^reject$/i });
-    fireEvent.click(confirmBtns[confirmBtns.length - 1]);
+    fireEvent.click(confirmBtns[confirmBtns.length - 1]!);
 
     await waitFor(() => {
       expect(rejectUser).toHaveBeenCalledWith(1, 'not trusted');

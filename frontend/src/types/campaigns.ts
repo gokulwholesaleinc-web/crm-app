@@ -38,6 +38,7 @@ export interface Campaign extends CampaignBase {
   response_rate?: number | null;
   conversion_rate?: number | null;
   roi?: number | null;
+  is_executing: boolean;
   created_at: string;
   updated_at: string;
 }

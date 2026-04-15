@@ -3,12 +3,12 @@ import { renderHook } from '@testing-library/react';
 import { useUnsavedChangesWarning } from './useUnsavedChangesWarning';
 
 describe('useUnsavedChangesWarning', () => {
-  let addSpy: ReturnType<typeof vi.spyOn>;
-  let removeSpy: ReturnType<typeof vi.spyOn>;
+  let addSpy: ReturnType<typeof vi.spyOn> & { mock: { calls: unknown[][] } };
+  let removeSpy: ReturnType<typeof vi.spyOn> & { mock: { calls: unknown[][] } };
 
   beforeEach(() => {
-    addSpy = vi.spyOn(window, 'addEventListener');
-    removeSpy = vi.spyOn(window, 'removeEventListener');
+    addSpy = vi.spyOn(window, 'addEventListener') as typeof addSpy;
+    removeSpy = vi.spyOn(window, 'removeEventListener') as typeof removeSpy;
   });
 
   afterEach(() => {
