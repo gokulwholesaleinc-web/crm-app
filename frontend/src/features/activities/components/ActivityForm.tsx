@@ -18,11 +18,8 @@ interface ActivityFormProps {
   onSubmit: (data: ActivityCreate | ActivityUpdate) => Promise<void>;
   onCancel: () => void;
   isLoading?: boolean;
-  /** Controlled: whether "Also add to Google Calendar" checkbox is checked */
   pushToCalendar?: boolean;
-  /** Called when checkbox value changes */
   onPushToCalendarChange?: (checked: boolean) => void;
-  /** Whether Google Calendar is connected — controls disabled state of the checkbox */
   calendarConnected?: boolean;
 }
 
@@ -101,7 +98,7 @@ export function ActivityForm({
   calendarConnected,
 }: ActivityFormProps) {
   const isEditing = !!activity;
-  const PUSH_ELIGIBLE_TYPES = new Set(['call', 'meeting', 'task']);
+  const PUSH_ELIGIBLE_TYPES = ['call', 'meeting', 'task'];
 
   const {
     register,
@@ -267,8 +264,7 @@ export function ActivityForm({
         />
       </div>
 
-      {/* Also add to Google Calendar — only shown on create, only for push-eligible types */}
-      {!isEditing && PUSH_ELIGIBLE_TYPES.has(activityType) && (
+      {!isEditing && PUSH_ELIGIBLE_TYPES.includes(activityType) && (
         <div className="flex flex-col gap-1">
           <label className={`flex items-center gap-2 select-none ${!calendarConnected ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
             <input

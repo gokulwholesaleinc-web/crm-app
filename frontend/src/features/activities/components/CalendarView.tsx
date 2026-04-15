@@ -673,7 +673,6 @@ function CalendarView() {
               </div>
             )}
 
-            {/* Push to Google Calendar footer */}
             {selectedActivity.entity_type !== GOOGLE_SYNC_ENTITY_TYPE && (
               <div className="border-t pt-4 flex flex-col gap-1.5">
                 <button

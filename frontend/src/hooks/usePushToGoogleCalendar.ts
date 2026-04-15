@@ -1,19 +1,10 @@
-/**
- * Hook for pushing a CRM activity to Google Calendar.
- * Wraps the pushToCalendar API call with toast feedback.
- */
-
 import { useMutation } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { pushToCalendar } from '../api/integrations';
 
 export interface UsePushToGoogleCalendarOptions {
-  /** Called after a successful push */
   onSuccess?: (activityId: number) => void;
-  /**
-   * When true, suppresses built-in toasts so the caller can show its own.
-   * Errors are still propagated as thrown exceptions.
-   */
+  // When true, suppresses built-in toasts so the caller can show its own.
   silent?: boolean;
 }
 
