@@ -11,7 +11,6 @@ from src.core.constants import HTTPStatus, ErrorMessages, EntityNames
 from src.core.router_utils import DBSession, CurrentUser, raise_bad_request
 from src.auth.models import User
 from src.auth.schemas import (
-    UserCreate,
     UserUpdate,
     UserResponse,
     Token,
@@ -21,11 +20,12 @@ from src.auth.schemas import (
     GoogleAuthorizeResponse,
     GoogleCallbackRequest,
 )
-from src.auth.service import AuthService
+from src.auth.service import AuthService, RejectedAccessError
 from src.auth.security import create_access_token
 from src.auth.dependencies import get_current_active_user, get_current_superuser
 from src.auth import google_oauth
 from src.whitelabel.models import TenantUser, Tenant, TenantSettings
+from src.notifications.service import NotificationService
 
 from src.core.rate_limit import limiter
 
@@ -33,10 +33,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 async def _get_user_tenant_info(db, user_id: int) -> list | None:
-    """Fetch tenant memberships for a user and return as TenantInfo dicts.
-
-    Uses a join query since TenantUser does not have a relationship to Tenant.
-    """
+    """Fetch tenant memberships for a user and return as TenantInfo dicts."""
     result = await db.execute(
         select(TenantUser, Tenant, TenantSettings)
         .join(Tenant, TenantUser.tenant_id == Tenant.id)
@@ -47,57 +44,42 @@ async def _get_user_tenant_info(db, user_id: int) -> list | None:
     if not rows:
         return None
     tenants = []
-    for tu, tenant, settings in rows:
+    for tu, tenant, tenant_settings in rows:
         tenants.append(
             TenantInfo(
                 tenant_id=tenant.id,
                 tenant_slug=tenant.slug,
-                company_name=settings.company_name if settings else tenant.name,
+                company_name=tenant_settings.company_name if tenant_settings else tenant.name,
                 role=tu.role,
                 is_primary=tu.is_primary,
-                primary_color=settings.primary_color if settings else None,
-                secondary_color=settings.secondary_color if settings else None,
-                accent_color=settings.accent_color if settings else None,
-                logo_url=settings.logo_url if settings else None,
+                primary_color=tenant_settings.primary_color if tenant_settings else None,
+                secondary_color=tenant_settings.secondary_color if tenant_settings else None,
+                accent_color=tenant_settings.accent_color if tenant_settings else None,
+                logo_url=tenant_settings.logo_url if tenant_settings else None,
             ).model_dump()
         )
     return tenants
 
 
-@router.post("/register", response_model=UserResponse, status_code=HTTPStatus.CREATED)
-@limiter.limit("3/minute")
-async def register(
-    request: Request,
-    user_data: UserCreate,
-    db: DBSession,
-):
-    """Register a new user and auto-link to the default tenant."""
-    service = AuthService(db)
-
-    # Check if user already exists
-    existing_user = await service.get_user_by_email(user_data.email)
-    if existing_user:
-        raise_bad_request("Email already registered")
-
-    user = await service.create_user(user_data)
-
-    tenant_slug = getattr(request.state, "tenant_slug_hint", None) or "default"
+async def _notify_admins_of_pending_user(db, user: User) -> None:
+    """Create a notification for every admin when a new user is pending approval."""
     result = await db.execute(
-        select(Tenant).where(Tenant.slug == tenant_slug)
-    )
-    tenant = result.scalar_one_or_none()
-    if tenant:
-        tenant_user = TenantUser(
-            user_id=user.id,
-            tenant_id=tenant.id,
-            role="member",
-            is_primary=True,
+        select(User).where(
+            (User.is_superuser == True) | (User.role == "admin"),
+            User.is_active == True,
         )
-        db.add(tenant_user)
-        await db.commit()
-        await db.refresh(user)
-
-    return user
+    )
+    admins = result.scalars().all()
+    notif_service = NotificationService(db)
+    for admin in admins:
+        await notif_service.create_notification(
+            user_id=admin.id,
+            type="pending_approval",
+            title="New access request",
+            message=f"New access request: {user.full_name} ({user.email})",
+            entity_type="users",
+            entity_id=user.id,
+        )
 
 
 @router.post("/login", response_model=Token)
@@ -148,23 +130,6 @@ async def login_json(
 # =============================================================================
 # Google OAuth2 sign-in
 # =============================================================================
-#
-# This flow is independent from /api/integrations/google-calendar:
-# - Only requests openid/email/profile scopes (no calendar access)
-# - Does NOT require the user to already be logged in (public endpoints)
-# - Creates a user on first sign-in, or links google_sub to an existing
-#   email-matched account.
-#
-# CSRF defense: the state nonce is minted by /authorize and stored in an
-# HttpOnly, short-TTL cookie on the client's browser. The /callback
-# endpoint reads that cookie and requires an `hmac.compare_digest` match
-# with the `state` query string Google echoed back. A victim tricked
-# into landing on the callback URL directly has no matching cookie in
-# their browser, so the exchange is rejected.
-#
-# The HTTP factory used to talk to Google is overridable via
-# `app.dependency_overrides[get_google_http_factory]` so tests can stub
-# the token + userinfo endpoints without a live network.
 
 GOOGLE_OAUTH_STATE_COOKIE = "crm_google_oauth_state"
 GOOGLE_OAUTH_STATE_TTL_SECONDS = 600  # 10 minutes: plenty for a consent screen
@@ -187,13 +152,7 @@ async def google_authorize(
     response: Response,
     data: GoogleAuthorizeRequest,
 ):
-    """Return the Google consent URL to start sign-in.
-
-    Also sets an HttpOnly cookie containing the state nonce so the
-    callback handler can verify it server-side. The response body still
-    carries `state` for backwards compat with the previous frontend
-    (which wrote it to sessionStorage); new clients can ignore it.
-    """
+    """Return the Google consent URL to start sign-in."""
     client_id = settings.GOOGLE_CLIENT_ID
     if not client_id:
         raise HTTPException(
@@ -207,13 +166,6 @@ async def google_authorize(
         state=state,
     )
 
-    # HttpOnly so XSS can't read it. In prod the frontend and backend run
-    # on different Railway subdomains (both under the `up.railway.app`
-    # public suffix), so the callback XHR is cross-site — SameSite=Lax
-    # would drop the cookie and the callback would 400. SameSite=None
-    # requires Secure, which is already enforced outside debug builds.
-    # In debug we stay on Lax because local dev is same-site and None
-    # without Secure would be rejected.
     cross_site = not settings.DEBUG
     response.set_cookie(
         key=GOOGLE_OAUTH_STATE_COOKIE,
@@ -236,15 +188,7 @@ async def google_callback(
     db: DBSession,
     http_factory: GoogleHttpFactory,
 ):
-    """Exchange Google's code for a CRM session.
-
-    Creates or links a user from the verified Google profile and returns a
-    CRM JWT + tenant list, mirroring `/login/json` so the frontend can reuse
-    the same post-login flow.
-
-    CSRF: requires the state query (echoed by Google) to match the
-    HttpOnly cookie set by /authorize. Missing cookie = reject.
-    """
+    """Exchange Google's code for a CRM session."""
     client_id = settings.GOOGLE_CLIENT_ID
     client_secret = settings.GOOGLE_CLIENT_SECRET
     if not client_id or not client_secret:
@@ -253,7 +197,6 @@ async def google_callback(
             detail="Google sign-in is not configured",
         )
 
-    # Server-side CSRF state verification.
     cookie_state = request.cookies.get(GOOGLE_OAUTH_STATE_COOKIE) or ""
     body_state = data.state or ""
     if not cookie_state or not body_state or not _hmac.compare_digest(cookie_state, body_state):
@@ -261,7 +204,6 @@ async def google_callback(
             status_code=HTTPStatus.BAD_REQUEST,
             detail="OAuth state mismatch. Please start sign-in again from the login page.",
         )
-    # Burn the cookie so it can't be replayed.
     response.delete_cookie(GOOGLE_OAUTH_STATE_COOKIE, path="/")
 
     try:
@@ -310,12 +252,44 @@ async def google_callback(
         )
 
     service = AuthService(db)
-    user = await service.upsert_google_user(
-        google_sub=str(google_sub),
-        email=email,
-        full_name=profile.get("name") or email.split("@")[0],
-        avatar_url=profile.get("picture"),
-    )
+
+    try:
+        user = await service.upsert_google_user(
+            google_sub=str(google_sub),
+            email=email,
+            full_name=profile.get("name") or email.split("@")[0],
+            avatar_url=profile.get("picture"),
+        )
+    except RejectedAccessError:
+        raise HTTPException(
+            status_code=403,
+            detail={"rejected": True, "detail": "Access denied. Contact an admin if this is a mistake."},
+        )
+
+    if not user.is_approved:
+        # Notify admins on first pending sign-in (no tenant yet means brand new)
+        existing_membership = await db.execute(
+            select(TenantUser).where(TenantUser.user_id == user.id)
+        )
+        if existing_membership.scalar_one_or_none() is None:
+            await _notify_admins_of_pending_user(db, user)
+            # Attach to tenant so repeat sign-ins don't re-notify
+            tenant_slug = getattr(request.state, "tenant_slug_hint", None) or "default"
+            result = await db.execute(select(Tenant).where(Tenant.slug == tenant_slug))
+            tenant = result.scalar_one_or_none()
+            if tenant:
+                db.add(TenantUser(
+                    user_id=user.id,
+                    tenant_id=tenant.id,
+                    role="member",
+                    is_primary=True,
+                ))
+
+        await db.commit()
+        raise HTTPException(
+            status_code=403,
+            detail={"pending_approval": True, "detail": "Your account is pending admin approval. You'll receive a notification when approved."},
+        )
 
     # Attach to default tenant if the user is brand new (no tenant memberships).
     existing_membership = await db.execute(
@@ -323,19 +297,15 @@ async def google_callback(
     )
     if existing_membership.scalar_one_or_none() is None:
         tenant_slug = getattr(request.state, "tenant_slug_hint", None) or "default"
-        result = await db.execute(
-            select(Tenant).where(Tenant.slug == tenant_slug)
-        )
+        result = await db.execute(select(Tenant).where(Tenant.slug == tenant_slug))
         tenant = result.scalar_one_or_none()
         if tenant:
-            db.add(
-                TenantUser(
-                    user_id=user.id,
-                    tenant_id=tenant.id,
-                    role="member",
-                    is_primary=True,
-                )
-            )
+            db.add(TenantUser(
+                user_id=user.id,
+                tenant_id=tenant.id,
+                role="member",
+                is_primary=True,
+            ))
 
     await db.commit()
     await db.refresh(user)
@@ -358,12 +328,7 @@ async def get_my_tenants(
     current_user: CurrentUser,
     db: DBSession,
 ):
-    """Get tenant memberships for the current user.
-
-    Used by the frontend to recover tenant context when a user is
-    already authenticated but has no tenant slug stored locally
-    (e.g. logged in before the tenant-slug feature was deployed).
-    """
+    """Get tenant memberships for the current user."""
     tenants = await _get_user_tenant_info(db, current_user.id)
     return tenants or []
 

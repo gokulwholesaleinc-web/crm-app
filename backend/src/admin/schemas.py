@@ -89,3 +89,36 @@ class ActivityFeedEntry(BaseModel):
     model_config = {"from_attributes": True}
 
 
+
+
+# ---------------------------------------------------------------------------
+# User approval schemas
+# ---------------------------------------------------------------------------
+
+class PendingUserResponse(BaseModel):
+    id: int
+    email: str
+    full_name: str
+    avatar_url: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+class ApproveUserRequest(BaseModel):
+    role: str = "sales_rep"
+
+
+class RejectUserRequest(BaseModel):
+    reason: Optional[str] = None
+
+
+class RejectedEmailResponse(BaseModel):
+    id: int
+    email: str
+    rejected_by_id: Optional[int] = None
+    rejected_at: datetime
+    reason: Optional[str] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

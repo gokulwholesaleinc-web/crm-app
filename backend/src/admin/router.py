@@ -477,3 +477,135 @@ async def link_user_to_tenant(
         role=data.role,
         is_primary=data.is_primary,
     )
+
+
+# ---------------------------------------------------------------------------
+# Approval endpoints
+# ---------------------------------------------------------------------------
+from src.auth.models import RejectedAccessEmail
+from src.admin.schemas import (
+    PendingUserResponse,
+    ApproveUserRequest,
+    RejectUserRequest,
+    RejectedEmailResponse,
+)
+
+VALID_ROLES = {"admin", "manager", "sales_rep", "viewer"}
+
+
+@router.get("/users/pending", response_model=List[PendingUserResponse])
+@limiter.limit("30/minute")
+async def list_pending_users(
+    request: Request,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """List users awaiting admin approval."""
+    _require_admin(current_user)
+    result = await db.execute(
+        select(User).where(User.is_approved == False).order_by(User.created_at.desc())
+    )
+    return result.scalars().all()
+
+
+@router.patch("/users/{user_id}/approve", status_code=204)
+@limiter.limit("10/minute")
+async def approve_user(
+    request: Request,
+    user_id: int,
+    data: ApproveUserRequest,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Approve a pending user and assign their role."""
+    _require_admin(current_user)
+
+    if data.role not in VALID_ROLES:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail=f"Invalid role. Must be one of: {', '.join(sorted(VALID_ROLES))}",
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise_not_found("User", user_id)
+
+    if user.is_approved:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail="User is already approved",
+        )
+
+    user.is_approved = True
+    user.role = data.role
+    await db.commit()
+
+
+@router.post("/users/{user_id}/reject")
+@limiter.limit("10/minute")
+async def reject_user(
+    request: Request,
+    user_id: int,
+    data: RejectUserRequest,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Reject and delete a pending user, adding their email to the block list."""
+    _require_admin(current_user)
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise_not_found("User", user_id)
+
+    email_lower = user.email.lower()
+    async with db.begin_nested():
+        rejected = RejectedAccessEmail(
+            email=email_lower,
+            rejected_by_id=current_user.id,
+            reason=data.reason,
+        )
+        db.add(rejected)
+        await db.flush()
+        await db.delete(user)
+        await db.flush()
+
+    await db.commit()
+    await db.refresh(rejected)
+    return {"rejected_email_id": rejected.id}
+
+
+@router.get("/rejected-emails", response_model=List[RejectedEmailResponse])
+@limiter.limit("30/minute")
+async def list_rejected_emails(
+    request: Request,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """List all rejected email addresses."""
+    _require_admin(current_user)
+    result = await db.execute(
+        select(RejectedAccessEmail).order_by(RejectedAccessEmail.rejected_at.desc())
+    )
+    return result.scalars().all()
+
+
+@router.delete("/rejected-emails/{rejected_id}", status_code=204)
+@limiter.limit("10/minute")
+async def delete_rejected_email(
+    request: Request,
+    rejected_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Remove an email from the reject list so the person can retry sign-in."""
+    _require_admin(current_user)
+    result = await db.execute(
+        select(RejectedAccessEmail).where(RejectedAccessEmail.id == rejected_id)
+    )
+    entry = result.scalar_one_or_none()
+    if not entry:
+        raise_not_found("RejectedEmail", rejected_id)
+    await db.delete(entry)
+    await db.commit()
