@@ -583,12 +583,25 @@ async def list_rejected_emails(
     current_user: CurrentUser,
     db: DBSession,
 ):
-    """List all rejected email addresses."""
+    """List all rejected email addresses with the admin's email who rejected them."""
     _require_admin(current_user)
     result = await db.execute(
-        select(RejectedAccessEmail).order_by(RejectedAccessEmail.rejected_at.desc())
+        select(RejectedAccessEmail, User.email)
+        .outerjoin(User, User.id == RejectedAccessEmail.rejected_by_id)
+        .order_by(RejectedAccessEmail.rejected_at.desc())
     )
-    return result.scalars().all()
+    return [
+        RejectedEmailResponse(
+            id=r.id,
+            email=r.email,
+            rejected_by_id=r.rejected_by_id,
+            rejected_by_email=by_email,
+            rejected_at=r.rejected_at,
+            reason=r.reason,
+            created_at=r.created_at,
+        )
+        for r, by_email in result.all()
+    ]
 
 
 @router.delete("/rejected-emails/{rejected_id}", status_code=204)

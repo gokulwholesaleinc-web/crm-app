@@ -117,6 +117,7 @@ class RejectedEmailResponse(BaseModel):
     id: int
     email: str
     rejected_by_id: Optional[int] = None
+    rejected_by_email: Optional[str] = None
     rejected_at: datetime
     reason: Optional[str] = None
     created_at: datetime
