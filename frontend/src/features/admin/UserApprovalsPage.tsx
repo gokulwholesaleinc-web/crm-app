@@ -50,15 +50,20 @@ function RejectModal({
         className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
         placeholder="Optional reason..."
       />
-      <div className="mt-4 flex justify-end gap-3">
-        <Button variant="secondary" size="sm" onClick={onCancel} disabled={isPending}>
+      <div className="mt-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
+        <Button
+          variant="secondary"
+          onClick={onCancel}
+          disabled={isPending}
+          className="w-full sm:w-auto min-h-[44px] sm:min-h-0"
+        >
           Cancel
         </Button>
         <Button
           variant="danger"
-          size="sm"
           isLoading={isPending}
           onClick={() => onConfirm(reason)}
+          className="w-full sm:w-auto min-h-[44px] sm:min-h-0"
         >
           Reject
         </Button>
@@ -172,7 +177,7 @@ export default function UserApprovalsPage() {
                           onChange={(e) =>
                             setSelectedRoles((prev) => ({ ...prev, [u.id]: e.target.value as ApprovalRole }))
                           }
-                          className="text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                          className="text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-2 sm:py-1 min-h-[44px] sm:min-h-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                           aria-label={`Role for ${u.email}`}
                         >
                           <option value="sales_rep">Sales Rep</option>
@@ -180,23 +185,27 @@ export default function UserApprovalsPage() {
                           <option value="admin">Admin</option>
                         </select>
                       </td>
-                      <td className="px-4 py-3 text-right space-x-2">
-                        <Button
-                          size="sm"
-                          isLoading={approveMutation.isPending && approveMutation.variables?.id === u.id}
-                          onClick={() => approveMutation.mutate({ id: u.id, role: getRoleForUser(u.id) })}
-                          disabled={rejectMutation.isPending}
-                        >
-                          Approve
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="danger"
-                          onClick={() => setRejectTarget(u)}
-                          disabled={approveMutation.isPending || rejectMutation.isPending}
-                        >
-                          Reject
-                        </Button>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <Button
+                            size="sm"
+                            className="min-h-[44px] sm:min-h-0"
+                            isLoading={approveMutation.isPending && approveMutation.variables?.id === u.id}
+                            onClick={() => approveMutation.mutate({ id: u.id, role: getRoleForUser(u.id) })}
+                            disabled={rejectMutation.isPending}
+                          >
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            className="min-h-[44px] sm:min-h-0"
+                            onClick={() => setRejectTarget(u)}
+                            disabled={approveMutation.isPending || rejectMutation.isPending}
+                          >
+                            Reject
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -238,15 +247,18 @@ export default function UserApprovalsPage() {
                         {formatDate(r.rejected_at, 'short')}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{r.reason || '—'}</td>
-                      <td className="px-4 py-3 text-right">
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          isLoading={unblockMutation.isPending && unblockMutation.variables === r.id}
-                          onClick={() => unblockMutation.mutate(r.id)}
-                        >
-                          Unblock
-                        </Button>
+                      <td className="px-4 py-3">
+                        <div className="flex justify-end">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className="min-h-[44px] sm:min-h-0"
+                            isLoading={unblockMutation.isPending && unblockMutation.variables === r.id}
+                            onClick={() => unblockMutation.mutate(r.id)}
+                          >
+                            Unblock
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
