@@ -25,7 +25,14 @@ import {
   useDeleteCampaign,
   useRemoveCampaignMember,
   useAddCampaignMembers,
+  useCampaignSteps,
+  useAddCampaignStep,
+  useUpdateCampaignStep,
+  useDeleteCampaignStep,
+  useExecuteCampaign,
+  useEmailTemplates,
 } from '../../hooks/useCampaigns';
+import { CampaignStepBuilder } from './components/CampaignStepBuilder';
 import { getStatusColor, formatStatusLabel } from '../../utils/statusColors';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { showError } from '../../utils/toast';
@@ -183,6 +190,13 @@ export function CampaignDetailPage() {
   const deleteCampaign = useDeleteCampaign();
   const removeMember = useRemoveCampaignMember();
   const addMembers = useAddCampaignMembers();
+  const addStep = useAddCampaignStep();
+  const updateStep = useUpdateCampaignStep();
+  const deleteStep = useDeleteCampaignStep();
+  const executeCampaign = useExecuteCampaign();
+
+  const { data: steps = [] } = useCampaignSteps(campaignId);
+  const { data: templates = [] } = useEmailTemplates();
 
   // Compute existing member IDs to filter them out in the modal
   const existingMemberIds = useMemo(() => {
@@ -231,6 +245,30 @@ export function CampaignDetailPage() {
       setRemoveMemberConfirm({ isOpen: false, memberId: null });
     } catch (error) {
       showError('Failed to remove member');
+    }
+  };
+
+  const handleAddStep = async (templateId: number, delayDays: number, stepOrder: number) => {
+    if (!campaignId) return;
+    await addStep.mutateAsync({ campaignId, data: { template_id: templateId, delay_days: delayDays, step_order: stepOrder } });
+  };
+
+  const handleUpdateStep = async (stepId: number, data: { delay_days?: number; step_order?: number }) => {
+    if (!campaignId) return;
+    await updateStep.mutateAsync({ campaignId, stepId, data });
+  };
+
+  const handleDeleteStep = async (stepId: number) => {
+    if (!campaignId) return;
+    await deleteStep.mutateAsync({ campaignId, stepId });
+  };
+
+  const handleExecute = async () => {
+    if (!campaignId) return;
+    try {
+      await executeCampaign.mutateAsync(campaignId);
+    } catch {
+      showError('Failed to start campaign');
     }
   };
 
@@ -301,6 +339,15 @@ export function CampaignDetailPage() {
           )}
         </div>
         <div className="flex items-center gap-2 w-full sm:w-auto">
+          {campaign.campaign_type === 'email' && !campaign.is_executing && campaign.status !== 'completed' && (
+            <Button
+              onClick={handleExecute}
+              isLoading={executeCampaign.isPending}
+              className="flex-1 sm:flex-none"
+            >
+              Send Campaign
+            </Button>
+          )}
           <Button variant="secondary" onClick={() => setShowEditForm(true)} className="flex-1 sm:flex-none">
             Edit
           </Button>
@@ -404,6 +451,20 @@ export function CampaignDetailPage() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Campaign Steps */}
+      {campaign.campaign_type === 'email' && campaignId && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
+          <CampaignStepBuilder
+            steps={steps}
+            templates={templates}
+            onAddStep={handleAddStep}
+            onUpdateStep={handleUpdateStep}
+            onDeleteStep={handleDeleteStep}
+            isLoading={addStep.isPending || updateStep.isPending || deleteStep.isPending}
+          />
         </div>
       )}
 
