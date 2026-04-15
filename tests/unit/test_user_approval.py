@@ -123,7 +123,7 @@ class TestAdminNotificationOnPendingSignup:
         self, db_session: AsyncSession
     ):
         """Each admin gets a notification when a new pending user signs up."""
-        from src.auth.router import _notify_admins_of_pending_user
+        from src.notifications.service import notify_admins_of_pending_user
 
         admin1 = User(
             email="adminnotif1@example.com",
@@ -153,7 +153,7 @@ class TestAdminNotificationOnPendingSignup:
         await db_session.refresh(admin2)
         await db_session.refresh(pending)
 
-        await _notify_admins_of_pending_user(db_session, pending)
+        await notify_admins_of_pending_user(db_session, pending)
         await db_session.flush()
 
         notifs = (await db_session.execute(

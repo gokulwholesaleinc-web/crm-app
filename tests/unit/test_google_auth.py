@@ -257,10 +257,12 @@ class TestGoogleCallback:
                     "state": state,
                 },
             )
-            assert response.status_code == 200, response.text
-            body = response.json()
-            assert body["access_token"]
-            assert body["token_type"] == "bearer"
+            # First-time Google sign-ups land in pending approval — admin must
+            # approve before a JWT is issued. The user row + tenant membership
+            # are still created so admins can approve and the user's next
+            # callback returns a real token.
+            assert response.status_code == 403, response.text
+            assert response.json()["detail"]["pending_approval"] is True
 
             # Token exchange was called with the exact redirect_uri + code we supplied.
             token_body = captured["token_request"]["body"]
@@ -290,9 +292,10 @@ class TestGoogleCallback:
             assert user.hashed_password is None
             assert user.full_name == "New Google User"
             assert user.avatar_url == "https://lh3.googleusercontent.com/a/default-user"
-            assert user.last_login is not None
+            assert user.is_approved is False
 
-            # Tenant membership auto-linked.
+            # Tenant membership auto-linked so admins see the pending user
+            # scoped to the right tenant.
             membership_result = await db_session.execute(
                 select(TenantUser).where(TenantUser.user_id == user.id)
             )

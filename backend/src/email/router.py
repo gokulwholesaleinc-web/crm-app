@@ -28,6 +28,7 @@ from src.email.schemas import (
     ThreadResponse,
 )
 from src.email.service import EmailService
+from svix.webhooks import Webhook, WebhookVerificationError
 from src.email.throttle import EmailThrottleService
 
 logger = logging.getLogger(__name__)
@@ -132,7 +133,6 @@ async def inbound_webhook(request: Request, db: DBSession):
         raise HTTPException(status_code=503, detail="Webhook secret not configured")
 
     try:
-        from svix.webhooks import Webhook, WebhookVerificationError
         wh = Webhook(app_settings.RESEND_WEBHOOK_SECRET)
         wh.verify(body, {
             "svix-id": headers.get("svix-id", ""),

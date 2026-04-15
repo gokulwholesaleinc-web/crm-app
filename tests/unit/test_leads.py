@@ -239,13 +239,12 @@ class TestLeadsCreate:
     async def test_create_lead_missing_first_name(
         self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
     ):
-        """Test creating lead without first_name fails."""
+        """Test creating a lead without a name or company fails validation."""
         response = await client.post(
             "/api/leads",
             headers=auth_headers,
             json={
-                "last_name": "Lead",
-                "email": "nofirst@example.com",
+                "email": "noname@example.com",
             },
         )
 

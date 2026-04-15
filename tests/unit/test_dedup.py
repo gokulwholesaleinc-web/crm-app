@@ -355,11 +355,16 @@ class TestMergeContacts:
         assert data["primary_id"] == primary.id
         assert "merged" in data["message"].lower()
 
-        # Verify secondary was deleted
+        # Contacts are soft-deleted on merge (deleted_at set, merged_into_id
+        # points at primary) — the "never delete contacts" rule means the row
+        # stays in the table so AR history and activities remain linkable.
         result = await db_session.execute(
             select(Contact).where(Contact.id == secondary.id)
         )
-        assert result.scalar_one_or_none() is None
+        merged = result.scalar_one_or_none()
+        assert merged is not None
+        assert merged.deleted_at is not None
+        assert merged.merged_into_id == primary.id
 
     @pytest.mark.asyncio
     async def test_merge_contacts_transfers_activities(

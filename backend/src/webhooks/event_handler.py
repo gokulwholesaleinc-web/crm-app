@@ -3,7 +3,6 @@
 import logging
 from typing import Dict, Any
 
-from src.database import async_session_maker
 from src.webhooks.service import WebhookService
 
 logger = logging.getLogger(__name__)
@@ -12,9 +11,11 @@ logger = logging.getLogger(__name__)
 async def webhook_event_handler(event_type: str, payload: Dict[str, Any]) -> None:
     """Handle CRM events by delivering to subscribed webhooks.
 
-    This handler is registered with the event emitter and called
-    whenever a CRM event is emitted.
+    Imports async_session_maker lazily so test fixtures that swap the
+    session maker on src.database take effect for this handler too.
     """
+    from src.database import async_session_maker
+
     async with async_session_maker() as session:
         try:
             service = WebhookService(session)
