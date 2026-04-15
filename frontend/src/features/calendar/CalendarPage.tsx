@@ -1,32 +1,11 @@
 import { Link } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowPathIcon } from '@heroicons/react/24/outline';
-import toast from 'react-hot-toast';
-import { getCalendarStatus, syncCalendar } from '../../api/integrations';
+import { useGoogleCalendarSync } from '../../hooks/useGoogleCalendarSync';
 import { Button } from '../../components/ui/Button';
 import CalendarView from '../activities/components/CalendarView';
 
 function CalendarPage() {
-  const queryClient = useQueryClient();
-
-  const { data: calendarStatus, isLoading: isLoadingStatus } = useQuery({
-    queryKey: ['integrations', 'google-calendar', 'status'],
-    queryFn: getCalendarStatus,
-  });
-
-  const syncMutation = useMutation({
-    mutationFn: syncCalendar,
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['calendar'] });
-      queryClient.invalidateQueries({ queryKey: ['integrations', 'google-calendar', 'status'] });
-      toast.success(`Synced ${data.synced} events from Google Calendar`);
-    },
-    onError: () => {
-      toast.error('Failed to sync calendar');
-    },
-  });
-
-  const connected = calendarStatus?.connected ?? false;
+  const { connected, isLoadingStatus, sync, isSyncing } = useGoogleCalendarSync();
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -42,9 +21,9 @@ function CalendarPage() {
             <Button
               variant="primary"
               leftIcon={<ArrowPathIcon className="h-4 w-4" />}
-              onClick={() => syncMutation.mutate()}
-              disabled={syncMutation.isPending}
-              isLoading={syncMutation.isPending}
+              onClick={sync}
+              disabled={isSyncing}
+              isLoading={isSyncing}
             >
               Sync from Google
             </Button>

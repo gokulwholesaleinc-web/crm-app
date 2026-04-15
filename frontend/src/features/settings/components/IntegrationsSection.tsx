@@ -9,15 +9,13 @@ import { Card, CardHeader, CardBody } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { Spinner } from '../../../components/ui/Spinner';
 import {
-  getCalendarStatus,
   getCalendarAuthUrl,
   disconnectCalendar,
-  syncCalendar,
   getMetaStatus,
   getMetaAuthUrl,
   disconnectMeta,
 } from '../../../api/integrations';
-import type { CalendarSyncStatus, MetaConnectionStatus } from '../../../api/integrations';
+import type { MetaConnectionStatus } from '../../../api/integrations';
 import {
   CalendarDaysIcon,
   ArrowPathIcon,
@@ -26,6 +24,7 @@ import {
   CheckCircleIcon,
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
+import { useGoogleCalendarSync } from '../../../hooks/useGoogleCalendarSync';
 
 function ConnectionBadge({ connected }: { connected: boolean }) {
   return connected ? (
@@ -42,11 +41,7 @@ function ConnectionBadge({ connected }: { connected: boolean }) {
 
 function GoogleCalendarCard() {
   const queryClient = useQueryClient();
-
-  const { data: status, isLoading } = useQuery<CalendarSyncStatus>({
-    queryKey: ['integrations', 'google-calendar', 'status'],
-    queryFn: getCalendarStatus,
-  });
+  const { status, connected, isLoadingStatus, sync, isSyncing } = useGoogleCalendarSync();
 
   const connectMutation = useMutation({
     mutationFn: () => {
@@ -69,22 +64,9 @@ function GoogleCalendarCard() {
     },
   });
 
-  const syncMutation = useMutation({
-    mutationFn: syncCalendar,
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['integrations', 'google-calendar'] });
-      toast.success(`Synced ${data.synced} events from Google Calendar`);
-    },
-    onError: () => {
-      toast.error('Failed to sync calendar');
-    },
-  });
-
-  if (isLoading) {
+  if (isLoadingStatus) {
     return <Spinner size="sm" />;
   }
-
-  const connected = status?.connected ?? false;
 
   return (
     <div className="flex items-start gap-4 py-4 first:pt-0 last:pb-0">
@@ -116,8 +98,8 @@ function GoogleCalendarCard() {
               variant="secondary"
               size="sm"
               leftIcon={<ArrowPathIcon className="h-4 w-4" />}
-              onClick={() => syncMutation.mutate()}
-              disabled={syncMutation.isPending}
+              onClick={sync}
+              disabled={isSyncing}
               aria-label="Sync Google Calendar"
             >
               Sync
