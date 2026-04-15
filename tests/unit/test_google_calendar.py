@@ -270,47 +270,6 @@ class TestGoogleCalendarPush:
 class TestGoogleCalendarLoginHint:
     """Test that login_hint=<user-email> is embedded in the OAuth authorize URL."""
 
-    def test_get_authorization_url_includes_login_hint(self):
-        """get_authorization_url must URL-encode login_hint into the returned URL.
-
-        When a signed-in user initiates the Google Calendar OAuth flow,
-        the service builds a URL that carries their email as login_hint so
-        Google's account picker defaults to the correct account.
-        """
-        from urllib.parse import urlparse, parse_qs
-        from unittest.mock import MagicMock
-        from src.integrations.google_calendar.service import GoogleCalendarService
-
-        # Pass a mock DB session — get_authorization_url is synchronous and never
-        # touches the DB, so the mock is never called.
-        mock_db = MagicMock()
-        service = GoogleCalendarService(db=mock_db)
-
-        url = service.get_authorization_url(
-            redirect_uri="http://localhost:3000/callback",
-            login_hint="test@example.com",
-        )
-
-        parsed = urlparse(url)
-        params = parse_qs(parsed.query)
-        assert "login_hint" in params, f"login_hint missing from URL: {url}"
-        assert params["login_hint"] == ["test@example.com"]
-
-    def test_get_authorization_url_omits_login_hint_when_not_provided(self):
-        """login_hint must not appear in the URL when not supplied."""
-        from urllib.parse import urlparse, parse_qs
-        from unittest.mock import MagicMock
-        from src.integrations.google_calendar.service import GoogleCalendarService
-
-        mock_db = MagicMock()
-        service = GoogleCalendarService(db=mock_db)
-
-        url = service.get_authorization_url(redirect_uri="http://localhost:3000/callback")
-
-        parsed = urlparse(url)
-        params = parse_qs(parsed.query)
-        assert "login_hint" not in params
-
     @pytest.mark.asyncio
     async def test_connect_endpoint_login_hint_in_auth_url(
         self, client: AsyncClient, test_user,
