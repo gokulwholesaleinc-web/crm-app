@@ -34,7 +34,7 @@ const PENDING_FIXTURES = [
 ];
 
 const REJECTED_FIXTURES = [
-  { id: 10, email: 'spammer@bad.com', rejected_by: 'admin@crm.com', rejected_at: '2026-04-03T10:00:00Z', reason: 'spam' },
+  { id: 10, email: 'spammer@bad.com', rejected_by_id: 1, rejected_by_email: 'admin@crm.com', rejected_at: '2026-04-03T10:00:00Z', reason: 'spam' },
 ];
 
 function renderPage() {

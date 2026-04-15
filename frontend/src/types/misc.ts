@@ -813,7 +813,8 @@ export interface PendingUser {
 export interface RejectedEmail {
   id: number;
   email: string;
-  rejected_by: string;
+  rejected_by_id?: number | null;
+  rejected_by_email?: string | null;
   rejected_at: string;
   reason?: string | null;
 }

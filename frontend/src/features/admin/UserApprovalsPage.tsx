@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -121,11 +121,15 @@ export default function UserApprovalsPage() {
   });
 
   const isAdmin = user?.is_superuser || user?.role === 'admin';
-  if (!isAdmin) {
-    toast.error('Access denied');
-    navigate('/', { replace: true });
-    return null;
-  }
+
+  useEffect(() => {
+    if (!isAdmin) {
+      toast.error('Access denied');
+      navigate('/', { replace: true });
+    }
+  }, [isAdmin, navigate]);
+
+  if (!isAdmin) return null;
 
   const getRoleForUser = (id: number): ApprovalRole => selectedRoles[id] ?? 'sales_rep';
 
@@ -235,7 +239,7 @@ export default function UserApprovalsPage() {
                   {rejected.map((r: RejectedEmail) => (
                     <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
                       <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{r.email}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{r.rejected_by}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{r.rejected_by_email ?? '—'}</td>
                       <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
                         {dateFormatter.format(new Date(r.rejected_at))}
                       </td>
