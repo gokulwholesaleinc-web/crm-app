@@ -26,6 +26,7 @@ import {
   DocumentDuplicateIcon,
   CreditCardIcon,
   CalendarIcon,
+  CalendarDaysIcon,
   MegaphoneIcon,
   BoltIcon,
   ArrowsRightLeftIcon,
@@ -64,6 +65,7 @@ const DEFAULT_MAIN_NAVIGATION: NavItem[] = [
   { id: 'proposals', name: 'Proposals', href: '/proposals', icon: DocumentDuplicateIcon },
   { id: 'payments', name: 'Payments', href: '/payments', icon: CreditCardIcon },
   { id: 'activities', name: 'Activities', href: '/activities', icon: CalendarIcon },
+  { id: 'calendar', name: 'Calendar', href: '/calendar', icon: CalendarDaysIcon },
   { id: 'campaigns', name: 'Campaigns', href: '/campaigns', icon: MegaphoneIcon },
 ];
 
