@@ -43,6 +43,7 @@ import {
   ArrowPathIcon,
   ShieldCheckIcon,
   QuestionMarkCircleIcon,
+  UserPlusIcon,
 } from '@heroicons/react/24/outline';
 import { useTenant } from '../../providers/TenantProvider';
 import { useAuthStore } from '../../store/authStore';
@@ -79,6 +80,7 @@ const DEFAULT_SECONDARY_NAVIGATION: NavItem[] = [
   { id: 'settings', name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
   { id: 'help', name: 'Help', href: '/help', icon: QuestionMarkCircleIcon },
   { id: 'admin', name: 'Admin', href: '/admin', icon: ShieldCheckIcon },
+  { id: 'approvals', name: 'User Approvals', href: '/admin/user-approvals', icon: UserPlusIcon },
 ];
 
 const STORAGE_KEY_MAIN = 'crm-sidebar-order:v1';
@@ -283,7 +285,7 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
     applyOrder(DEFAULT_SECONDARY_NAVIGATION, readStoredOrder(STORAGE_KEY_SECONDARY))
   );
 
-  const ADMIN_ONLY_IDS = new Set(['admin']);
+  const ADMIN_ONLY_IDS = new Set(['admin', 'approvals']);
   const { user } = useAuthStore();
   const isAdminUser = user?.is_superuser || user?.role === 'admin';
   const filteredSecondaryNav = isAdminUser
@@ -547,7 +549,7 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
   const isMobileAdmin = mobileUser?.is_superuser || mobileUser?.role === 'admin';
   const mobileSecondaryNav = isMobileAdmin
     ? DEFAULT_SECONDARY_NAVIGATION
-    : DEFAULT_SECONDARY_NAVIGATION.filter(item => item.id !== 'admin');
+    : DEFAULT_SECONDARY_NAVIGATION.filter(item => item.id !== 'admin' && item.id !== 'approvals');
 
   // Close sidebar on route change
   useEffect(() => {

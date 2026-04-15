@@ -10,6 +10,9 @@ import type {
   SystemStats,
   TeamMemberOverview,
   ActivityFeedEntry,
+  PendingUser,
+  RejectedEmail,
+  User,
 } from '../types';
 
 const ADMIN_BASE = '/api/admin';
@@ -77,6 +80,39 @@ export const deleteUserPermanently = async (userId: number): Promise<{ detail: s
   return response.data;
 };
 
+export const getPendingUsers = async (): Promise<PendingUser[]> => {
+  const response = await apiClient.get<PendingUser[]>(`${ADMIN_BASE}/users/pending`);
+  return response.data;
+};
+
+export const approveUser = async (
+  id: number,
+  role: 'sales_rep' | 'manager' | 'admin'
+): Promise<User> => {
+  const response = await apiClient.patch<User>(`${ADMIN_BASE}/users/${id}/approve`, { role });
+  return response.data;
+};
+
+export const rejectUser = async (
+  id: number,
+  reason?: string
+): Promise<{ rejected_email_id: number }> => {
+  const response = await apiClient.post<{ rejected_email_id: number }>(
+    `${ADMIN_BASE}/users/${id}/reject`,
+    { reason }
+  );
+  return response.data;
+};
+
+export const getRejectedEmails = async (): Promise<RejectedEmail[]> => {
+  const response = await apiClient.get<RejectedEmail[]>(`${ADMIN_BASE}/rejected-emails`);
+  return response.data;
+};
+
+export const unblockRejectedEmail = async (id: number): Promise<void> => {
+  await apiClient.delete(`${ADMIN_BASE}/rejected-emails/${id}`);
+};
+
 export const adminApi = {
   getAdminUsers,
   updateAdminUser,
@@ -86,6 +122,11 @@ export const adminApi = {
   getTeamOverview,
   getActivityFeed,
   assignUserRole,
+  getPendingUsers,
+  approveUser,
+  rejectUser,
+  getRejectedEmails,
+  unblockRejectedEmail,
 };
 
 export default adminApi;
