@@ -12,7 +12,7 @@ from sqlalchemy import select, func, update
 from src.core.constants import HTTPStatus
 from src.core.rate_limit import limiter
 from src.core.router_utils import DBSession, CurrentUser, raise_forbidden, raise_not_found
-from src.auth.models import User
+from src.auth.models import User, RejectedAccessEmail
 from src.contacts.models import Contact
 from src.companies.models import Company
 from src.leads.models import Lead
@@ -21,12 +21,17 @@ from src.quotes.models import Quote
 from src.proposals.models import Proposal
 from src.payments.models import Payment
 from src.audit.models import AuditLog
+from src.roles.models import RoleName
 from src.admin.schemas import (
     AdminUserResponse,
     AdminUserUpdate,
+    ApproveUserRequest,
     AssignRoleRequest,
     LinkTenantRequest,
     LinkTenantResponse,
+    PendingUserResponse,
+    RejectUserRequest,
+    RejectedEmailResponse,
     SystemStats,
     TeamMemberOverview,
     ActivityFeedEntry,
@@ -482,15 +487,6 @@ async def link_user_to_tenant(
 # ---------------------------------------------------------------------------
 # Approval endpoints
 # ---------------------------------------------------------------------------
-from src.auth.models import RejectedAccessEmail
-from src.admin.schemas import (
-    PendingUserResponse,
-    ApproveUserRequest,
-    RejectUserRequest,
-    RejectedEmailResponse,
-)
-
-VALID_ROLES = {"admin", "manager", "sales_rep", "viewer"}
 
 
 @router.get("/users/pending", response_model=List[PendingUserResponse])
@@ -520,12 +516,6 @@ async def approve_user(
     """Approve a pending user and assign their role."""
     _require_admin(current_user)
 
-    if data.role not in VALID_ROLES:
-        raise HTTPException(
-            status_code=HTTPStatus.BAD_REQUEST,
-            detail=f"Invalid role. Must be one of: {', '.join(sorted(VALID_ROLES))}",
-        )
-
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
@@ -538,7 +528,7 @@ async def approve_user(
         )
 
     user.is_approved = True
-    user.role = data.role
+    user.role = data.role.value
     await db.commit()
 
 
@@ -559,18 +549,14 @@ async def reject_user(
     if not user:
         raise_not_found("User", user_id)
 
-    email_lower = user.email.lower()
-    async with db.begin_nested():
-        rejected = RejectedAccessEmail(
-            email=email_lower,
-            rejected_by_id=current_user.id,
-            reason=data.reason,
-        )
-        db.add(rejected)
-        await db.flush()
-        await db.delete(user)
-        await db.flush()
-
+    rejected = RejectedAccessEmail(
+        email=user.email.lower(),
+        rejected_by_id=current_user.id,
+        reason=data.reason,
+    )
+    db.add(rejected)
+    await db.flush()
+    await db.delete(user)
     await db.commit()
     await db.refresh(rejected)
     return {"rejected_email_id": rejected.id}

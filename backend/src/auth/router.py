@@ -25,7 +25,7 @@ from src.auth.security import create_access_token
 from src.auth.dependencies import get_current_active_user, get_current_superuser
 from src.auth import google_oauth
 from src.whitelabel.models import TenantUser, Tenant, TenantSettings
-from src.notifications.service import NotificationService
+from src.notifications.service import notify_admins_of_pending_user
 
 from src.core.rate_limit import limiter
 
@@ -59,27 +59,6 @@ async def _get_user_tenant_info(db, user_id: int) -> list | None:
             ).model_dump()
         )
     return tenants
-
-
-async def _notify_admins_of_pending_user(db, user: User) -> None:
-    """Create a notification for every admin when a new user is pending approval."""
-    result = await db.execute(
-        select(User).where(
-            (User.is_superuser == True) | (User.role == "admin"),
-            User.is_active == True,
-        )
-    )
-    admins = result.scalars().all()
-    notif_service = NotificationService(db)
-    for admin in admins:
-        await notif_service.create_notification(
-            user_id=admin.id,
-            type="pending_approval",
-            title="New access request",
-            message=f"New access request: {user.full_name} ({user.email})",
-            entity_type="users",
-            entity_id=user.id,
-        )
 
 
 @router.post("/login", response_model=Token)
@@ -166,6 +145,13 @@ async def google_authorize(
         state=state,
     )
 
+    # HttpOnly so XSS can't read it. In prod the frontend and backend run
+    # on different Railway subdomains (both under the `up.railway.app`
+    # public suffix), so the callback XHR is cross-site — SameSite=Lax
+    # would drop the cookie and the callback would 400. SameSite=None
+    # requires Secure, which is already enforced outside debug builds.
+    # In debug we stay on Lax because local dev is same-site and None
+    # without Secure would be rejected.
     cross_site = not settings.DEBUG
     response.set_cookie(
         key=GOOGLE_OAUTH_STATE_COOKIE,
@@ -272,7 +258,7 @@ async def google_callback(
             select(TenantUser).where(TenantUser.user_id == user.id)
         )
         if existing_membership.scalar_one_or_none() is None:
-            await _notify_admins_of_pending_user(db, user)
+            await notify_admins_of_pending_user(db, user)
             # Attach to tenant so repeat sign-ins don't re-notify
             tenant_slug = getattr(request.state, "tenant_slug_hint", None) or "default"
             result = await db.execute(select(Tenant).where(Tenant.slug == tenant_slug))

@@ -4,6 +4,8 @@ from datetime import datetime
 from typing import Any, Optional, List
 from pydantic import BaseModel, EmailStr
 
+from src.roles.models import RoleName
+
 
 class AdminUserResponse(BaseModel):
     """User record with role, status, and record counts."""
@@ -106,7 +108,7 @@ class PendingUserResponse(BaseModel):
 
 
 class ApproveUserRequest(BaseModel):
-    role: str = "sales_rep"
+    role: RoleName = RoleName.SALES_REP
 
 
 class RejectUserRequest(BaseModel):

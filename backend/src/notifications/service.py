@@ -1,12 +1,16 @@
 """Notification service layer."""
 
+import logging
 from typing import Optional, List, Tuple
 
 from sqlalchemy import select, func, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.auth.models import User
 from src.notifications.models import Notification
 from src.core.constants import DEFAULT_PAGE_SIZE
+
+logger = logging.getLogger(__name__)
 
 
 class NotificationService:
@@ -201,3 +205,37 @@ async def notify_on_activity_due(
         entity_type="activities",
         entity_id=activity_id,
     )
+
+
+async def notify_admins_of_pending_user(db: AsyncSession, user: User) -> None:
+    """Notify every active admin that a new user is awaiting approval.
+
+    Best-effort: a failure to create a single notification is logged and
+    swallowed so it can't abort the sign-up transaction (which would
+    silently rollback the newly-created user row and leave the requester
+    stuck in a retry loop).
+    """
+    result = await db.execute(
+        select(User).where(
+            (User.is_superuser == True) | (User.role == "admin"),
+            User.is_active == True,
+        )
+    )
+    admins = result.scalars().all()
+    service = NotificationService(db)
+    for admin in admins:
+        try:
+            await service.create_notification(
+                user_id=admin.id,
+                type="pending_approval",
+                title="New access request",
+                message=f"New access request: {user.full_name} ({user.email})",
+                entity_type="users",
+                entity_id=user.id,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to notify admin %s of pending user %s",
+                admin.id,
+                user.id,
+            )
