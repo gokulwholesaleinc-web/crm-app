@@ -6,7 +6,11 @@ import type { CalendarActivity } from '../../../api/activities';
 import { Spinner, Modal } from '../../../components/ui';
 import clsx from 'clsx';
 
-type ViewMode = 'month' | 'week' | 'day';
+type ViewMode = 'year' | 'month' | 'week' | 'day' | 'agenda';
+type SourceFilter = 'all' | 'manual' | 'google';
+
+// Google-synced events are stored with entity_type="users" (see constants.ENTITY_TYPE_USERS).
+const GOOGLE_SYNC_ENTITY_TYPE = 'users';
 
 const ACTIVITY_COLORS: Record<string, string> = {
   call: 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800',
@@ -16,7 +20,9 @@ const ACTIVITY_COLORS: Record<string, string> = {
   note: 'bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600',
 };
 
+const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const WEEKDAY_MINI = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 function formatDateKey(d: Date): string {
   const year = d.getFullYear();
@@ -31,22 +37,16 @@ function getMonthDays(year: number, month: number): Date[] {
   const startOffset = firstDay.getDay();
   const days: Date[] = [];
 
-  // Fill in days from previous month
   for (let i = startOffset - 1; i >= 0; i--) {
     days.push(new Date(year, month, -i));
   }
-
-  // Current month days
   for (let d = 1; d <= lastDay.getDate(); d++) {
     days.push(new Date(year, month, d));
   }
-
-  // Fill remaining cells
   const remaining = 42 - days.length;
   for (let i = 1; i <= remaining; i++) {
     days.push(new Date(year, month + 1, i));
   }
-
   return days;
 }
 
@@ -67,12 +67,16 @@ function CalendarView() {
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedActivity, setSelectedActivity] = useState<CalendarActivity | null>(null);
+  const [activityTypeFilter, setActivityTypeFilter] = useState<string>('all');
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
 
   const today = formatDateKey(new Date());
 
-  // Calculate date range based on view
   const dateRange = useMemo(() => {
-    if (viewMode === 'month') {
+    if (viewMode === 'year') {
+      const year = currentDate.getFullYear();
+      return { start: `${year}-01-01`, end: `${year}-12-31` };
+    } else if (viewMode === 'month') {
       const year = currentDate.getFullYear();
       const month = currentDate.getMonth();
       const start = new Date(year, month, 1);
@@ -83,20 +87,50 @@ function CalendarView() {
     } else if (viewMode === 'week') {
       const days = getWeekDays(currentDate);
       return { start: formatDateKey(days[0]!), end: formatDateKey(days[6]!) };
+    } else if (viewMode === 'agenda') {
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth();
+      const start = new Date(year, month - 1, 1);
+      const end = new Date(year, month + 2, 0);
+      return { start: formatDateKey(start), end: formatDateKey(end) };
     } else {
       const key = formatDateKey(currentDate);
       return { start: key, end: key };
     }
   }, [viewMode, currentDate]);
 
+  const apiActivityType = activityTypeFilter === 'all' ? undefined : activityTypeFilter;
+
   const { data: calendarData, isLoading } = useQuery({
-    queryKey: ['calendar', dateRange.start, dateRange.end],
-    queryFn: () => getCalendarActivities(dateRange.start, dateRange.end),
+    queryKey: ['calendar', dateRange.start, dateRange.end, apiActivityType],
+    queryFn: () => getCalendarActivities(dateRange.start, dateRange.end, apiActivityType),
   });
+
+  const activitiesByDate = useMemo(() => {
+    const raw = calendarData?.dates ?? {};
+    if (sourceFilter === 'all') return raw;
+    const filtered: Record<string, CalendarActivity[]> = {};
+    for (const [day, acts] of Object.entries(raw)) {
+      const kept = acts.filter((a) =>
+        sourceFilter === 'google'
+          ? a.entity_type === GOOGLE_SYNC_ENTITY_TYPE
+          : a.entity_type !== GOOGLE_SYNC_ENTITY_TYPE
+      );
+      if (kept.length) filtered[day] = kept;
+    }
+    return filtered;
+  }, [calendarData, sourceFilter]);
+
+  const visibleTotal = useMemo(
+    () => Object.values(activitiesByDate).reduce((n, acts) => n + acts.length, 0),
+    [activitiesByDate]
+  );
 
   const navigate = (direction: -1 | 1) => {
     const d = new Date(currentDate);
-    if (viewMode === 'month') {
+    if (viewMode === 'year') {
+      d.setFullYear(d.getFullYear() + direction);
+    } else if (viewMode === 'month' || viewMode === 'agenda') {
       d.setMonth(d.getMonth() + direction);
     } else if (viewMode === 'week') {
       d.setDate(d.getDate() + direction * 7);
@@ -109,7 +143,9 @@ function CalendarView() {
   const goToToday = () => setCurrentDate(new Date());
 
   const headerLabel = useMemo(() => {
-    if (viewMode === 'month') {
+    if (viewMode === 'year') {
+      return String(currentDate.getFullYear());
+    } else if (viewMode === 'month' || viewMode === 'agenda') {
       return currentDate.toLocaleString(undefined, { month: 'long', year: 'numeric' });
     } else if (viewMode === 'week') {
       const days = getWeekDays(currentDate);
@@ -126,8 +162,6 @@ function CalendarView() {
     }
   }, [viewMode, currentDate]);
 
-  const activitiesByDate = calendarData?.dates ?? {};
-
   const renderMonthView = () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
@@ -135,13 +169,11 @@ function CalendarView() {
 
     return (
       <div className="grid grid-cols-7 border-t border-l border-gray-200 dark:border-gray-700">
-        {/* Header row */}
         {WEEKDAY_LABELS.map((label) => (
           <div key={label} className="border-r border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-2 py-2 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
             {label}
           </div>
         ))}
-        {/* Day cells */}
         {days.map((day) => {
           const key = formatDateKey(day);
           const isCurrentMonth = day.getMonth() === month;
@@ -260,9 +292,6 @@ function CalendarView() {
         {dayActivities.length === 0 ? (
           <div className="text-center py-12 text-gray-500 dark:text-gray-400">
             <p>No activities scheduled for this day.</p>
-            <span className="mt-2 text-primary-600 text-sm font-medium">
-              No activities yet
-            </span>
           </div>
         ) : (
           <div className="space-y-3">
@@ -302,6 +331,171 @@ function CalendarView() {
     );
   };
 
+  const renderYearView = () => {
+    const year = currentDate.getFullYear();
+
+    const countsByMonth: number[] = Array(12).fill(0);
+    for (const [key, acts] of Object.entries(activitiesByDate)) {
+      const [y, m] = key.split('-').map(Number);
+      if (y === year && typeof m === 'number') countsByMonth[m - 1] = (countsByMonth[m - 1] ?? 0) + acts.length;
+    }
+    const maxCount = Math.max(1, ...countsByMonth);
+
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 p-3">
+        {MONTH_LABELS.map((label, monthIdx) => {
+          const days = getMonthDays(year, monthIdx);
+          const count = countsByMonth[monthIdx] ?? 0;
+          const intensity = count / maxCount;
+          const isCurrentMonth = year === new Date().getFullYear() && monthIdx === new Date().getMonth();
+
+          return (
+            <button
+              key={label}
+              onClick={() => {
+                setCurrentDate(new Date(year, monthIdx, 1));
+                setViewMode('month');
+              }}
+              className={clsx(
+                'text-left bg-white dark:bg-gray-800 border rounded-lg p-3 transition-colors hover:border-primary-400 dark:hover:border-primary-500',
+                isCurrentMonth ? 'border-primary-500 dark:border-primary-500' : 'border-gray-200 dark:border-gray-700'
+              )}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className={clsx('font-semibold', isCurrentMonth ? 'text-primary-600 dark:text-primary-400' : 'text-gray-900 dark:text-gray-100')}>
+                  {label}
+                </span>
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  {count} {count === 1 ? 'event' : 'events'}
+                </span>
+              </div>
+              <div className="grid grid-cols-7 gap-px text-[10px]">
+                {WEEKDAY_MINI.map((d, i) => (
+                  <div key={`${d}-${i}`} className="text-center text-gray-400 dark:text-gray-500 font-medium">
+                    {d}
+                  </div>
+                ))}
+                {days.map((day, i) => {
+                  const key = formatDateKey(day);
+                  const isInMonth = day.getMonth() === monthIdx;
+                  const dayCount = (activitiesByDate[key] ?? []).length;
+                  const isToday = key === today;
+                  const heat = isInMonth && dayCount > 0 ? Math.min(1, dayCount / 5) : 0;
+
+                  return (
+                    <div
+                      key={`${key}-${i}`}
+                      className={clsx(
+                        'h-5 rounded flex items-center justify-center',
+                        !isInMonth && 'text-gray-300 dark:text-gray-600',
+                        isInMonth && dayCount === 0 && 'text-gray-500 dark:text-gray-400',
+                        isToday && 'ring-1 ring-primary-500'
+                      )}
+                      style={
+                        heat > 0
+                          ? { backgroundColor: `rgba(37, 99, 235, ${0.15 + heat * 0.55})`, color: 'white' }
+                          : undefined
+                      }
+                      title={dayCount > 0 ? `${dayCount} on ${key}` : undefined}
+                    >
+                      {day.getDate()}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-2 h-1 rounded bg-gray-100 dark:bg-gray-700 overflow-hidden">
+                <div
+                  className="h-full bg-primary-500"
+                  style={{ width: `${Math.round(intensity * 100)}%` }}
+                />
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderAgendaView = () => {
+    const sortedDays = Object.keys(activitiesByDate).sort();
+
+    if (sortedDays.length === 0) {
+      return (
+        <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+          <p>No activities in this range.</p>
+          <p className="text-xs mt-1">Try clearing filters or navigating to a different month.</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="divide-y divide-gray-200 dark:divide-gray-700">
+        {sortedDays.map((dayKey) => {
+          const acts = activitiesByDate[dayKey] ?? [];
+          const d = new Date(`${dayKey}T00:00:00`);
+          const label = d.toLocaleDateString(undefined, {
+            weekday: 'long',
+            month: 'long',
+            day: 'numeric',
+            year: 'numeric',
+          });
+          const isToday = dayKey === today;
+
+          return (
+            <div key={dayKey} className="py-3 px-4">
+              <div className="flex items-center gap-3 mb-2">
+                <span className={clsx('text-sm font-semibold', isToday ? 'text-primary-600 dark:text-primary-400' : 'text-gray-900 dark:text-gray-100')}>
+                  {label}
+                </span>
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  {acts.length} {acts.length === 1 ? 'event' : 'events'}
+                </span>
+              </div>
+              <div className="space-y-1.5">
+                {acts.map((act) => {
+                  const isGoogle = act.entity_type === GOOGLE_SYNC_ENTITY_TYPE;
+                  return (
+                    <button
+                      key={act.id}
+                      onClick={() => setSelectedActivity(act)}
+                      className={clsx(
+                        'flex items-start gap-3 w-full text-left p-2 rounded border hover:shadow-sm transition-shadow',
+                        ACTIVITY_COLORS[act.activity_type] ?? ACTIVITY_COLORS.note,
+                        act.is_completed && 'opacity-50 line-through'
+                      )}
+                    >
+                      <span className="text-xs font-mono mt-0.5 opacity-75 min-w-[48px]">
+                        {act.scheduled_at
+                          ? new Date(act.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                          : 'All day'}
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block font-medium truncate">{act.subject}</span>
+                        {act.description && (
+                          <span className="block text-xs opacity-75 line-clamp-1">{act.description}</span>
+                        )}
+                      </span>
+                      <span className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-xs capitalize px-1.5 py-0.5 rounded bg-white/60 dark:bg-black/20">
+                          {act.activity_type}
+                        </span>
+                        {isGoogle && (
+                          <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-white/60 dark:bg-black/20" title="Synced from Google Calendar">
+                            Google
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-4">
       {/* Calendar Header */}
@@ -331,17 +525,16 @@ function CalendarView() {
             Today
           </button>
         </div>
-        <div className="flex items-center gap-2">
-          {/* View toggle */}
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="inline-flex rounded-md shadow-sm">
-            {(['month', 'week', 'day'] as ViewMode[]).map((mode) => (
+            {(['year', 'month', 'week', 'day', 'agenda'] as ViewMode[]).map((mode, idx, arr) => (
               <button
                 key={mode}
                 onClick={() => setViewMode(mode)}
                 className={clsx(
                   'px-3 py-1.5 text-sm font-medium border',
-                  mode === 'month' && 'rounded-l-md',
-                  mode === 'day' && 'rounded-r-md',
+                  idx === 0 && 'rounded-l-md',
+                  idx === arr.length - 1 && 'rounded-r-md',
                   viewMode === mode
                     ? 'bg-primary-600 text-white border-primary-600'
                     : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
@@ -351,18 +544,53 @@ function CalendarView() {
               </button>
             ))}
           </div>
-          {/* Legend */}
-          <div className="hidden sm:flex items-center gap-2 ml-4 text-xs text-gray-700 dark:text-gray-300">
-            <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded bg-blue-200 dark:bg-blue-800 border border-blue-300 dark:border-blue-700" />Call
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded bg-green-200 dark:bg-green-800 border border-green-300 dark:border-green-700" />Meeting
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded bg-orange-200 dark:bg-orange-800 border border-orange-300 dark:border-orange-700" />Task
-            </span>
-          </div>
+        </div>
+      </div>
+
+      {/* Filter row */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-white dark:bg-gray-800 rounded-lg shadow dark:border dark:border-gray-700 px-4 py-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <label className="text-xs font-medium text-gray-500 dark:text-gray-400">
+            Type
+            <select
+              value={activityTypeFilter}
+              onChange={(e) => setActivityTypeFilter(e.target.value)}
+              className="ml-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1"
+            >
+              <option value="all">All</option>
+              <option value="call">Call</option>
+              <option value="meeting">Meeting</option>
+              <option value="task">Task</option>
+              <option value="email">Email</option>
+              <option value="note">Note</option>
+            </select>
+          </label>
+          <label className="text-xs font-medium text-gray-500 dark:text-gray-400">
+            Source
+            <select
+              value={sourceFilter}
+              onChange={(e) => setSourceFilter(e.target.value as SourceFilter)}
+              className="ml-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1"
+            >
+              <option value="all">All</option>
+              <option value="manual">CRM only</option>
+              <option value="google">Google only</option>
+            </select>
+          </label>
+          {(activityTypeFilter !== 'all' || sourceFilter !== 'all') && (
+            <button
+              onClick={() => {
+                setActivityTypeFilter('all');
+                setSourceFilter('all');
+              }}
+              className="text-xs text-primary-600 dark:text-primary-400 hover:underline"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+        <div className="text-xs text-gray-500 dark:text-gray-400">
+          {isLoading ? 'Loading…' : `${visibleTotal} ${visibleTotal === 1 ? 'event' : 'events'} in view`}
         </div>
       </div>
 
@@ -374,9 +602,11 @@ function CalendarView() {
           </div>
         ) : (
           <>
+            {viewMode === 'year' && renderYearView()}
             {viewMode === 'month' && renderMonthView()}
             {viewMode === 'week' && renderWeekView()}
             {viewMode === 'day' && renderDayView()}
+            {viewMode === 'agenda' && renderAgendaView()}
           </>
         )}
       </div>
@@ -394,6 +624,12 @@ function CalendarView() {
               <div>
                 <span className="font-medium text-gray-500 dark:text-gray-400">Type</span>
                 <p className="capitalize text-gray-900 dark:text-gray-100">{selectedActivity.activity_type}</p>
+              </div>
+              <div>
+                <span className="font-medium text-gray-500 dark:text-gray-400">Source</span>
+                <p className="text-gray-900 dark:text-gray-100">
+                  {selectedActivity.entity_type === GOOGLE_SYNC_ENTITY_TYPE ? 'Google Calendar' : 'CRM'}
+                </p>
               </div>
               <div>
                 <span className="font-medium text-gray-500 dark:text-gray-400">Priority</span>
