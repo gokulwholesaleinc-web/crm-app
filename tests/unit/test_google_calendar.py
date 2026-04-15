@@ -261,3 +261,44 @@ class TestGoogleCalendarPush:
         )
         assert response.status_code != 404
         assert response.status_code != 405
+
+
+# =========================================================================
+# login_hint Tests
+# =========================================================================
+
+class TestGoogleCalendarLoginHint:
+    """Test that login_hint=<user-email> is embedded in the OAuth authorize URL."""
+
+    @pytest.mark.asyncio
+    async def test_connect_endpoint_login_hint_in_auth_url(
+        self, client: AsyncClient, test_user,
+    ):
+        """POST /connect with GOOGLE_CLIENT_ID set returns auth_url with login_hint.
+
+        Uses monkeypatching on settings so the router passes the 400 guard and
+        actually builds the URL. Verifies the endpoint wires current_user.email
+        through to the URL — the integration between the router and service.
+        """
+        import os
+        from urllib.parse import urlparse, parse_qs
+        from src.config import settings as real_settings
+
+        original = getattr(real_settings, "GOOGLE_CLIENT_ID", "")
+        try:
+            real_settings.GOOGLE_CLIENT_ID = "test-client-id"
+            response = await client.post(
+                "/api/integrations/google-calendar/connect",
+                json={"redirect_uri": "http://localhost:3000/callback"},
+                headers=_token(test_user),
+            )
+        finally:
+            real_settings.GOOGLE_CLIENT_ID = original
+
+        assert response.status_code == 200, response.text
+        auth_url = response.json()["auth_url"]
+        parsed = urlparse(auth_url)
+        params = parse_qs(parsed.query)
+        assert "login_hint" in params, f"login_hint missing from auth_url: {auth_url}"
+        # test_user email is testuser@example.com
+        assert params["login_hint"] == ["testuser@example.com"]

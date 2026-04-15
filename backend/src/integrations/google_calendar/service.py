@@ -33,7 +33,7 @@ class GoogleCalendarService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    def get_authorization_url(self, redirect_uri: str, state: Optional[str] = None) -> str:
+    def get_authorization_url(self, redirect_uri: str, state: Optional[str] = None, login_hint: Optional[str] = None) -> str:
         """Build the Google OAuth2 authorization URL."""
         params = {
             "client_id": getattr(settings, "GOOGLE_CLIENT_ID", ""),
@@ -45,6 +45,8 @@ class GoogleCalendarService:
         }
         if state:
             params["state"] = state
+        if login_hint:
+            params["login_hint"] = login_hint
         return f"{GOOGLE_AUTH_URL}?{urlencode(params)}"
 
     async def exchange_code(self, code: str, redirect_uri: str, user_id: int) -> GoogleCalendarCredential:
