@@ -819,6 +819,65 @@ class TestActivityTimeline:
         assert "items" in data
 
 
+class TestActivitiesCalendar:
+    """Regression: PG rejects `date >= varchar` in the calendar range filter."""
+
+    @pytest.mark.asyncio
+    async def test_calendar_range_returns_activities(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_contact: Contact,
+    ):
+        """Test calendar filters activities by scheduled_at and due_date within range."""
+        today = date.today()
+        scheduled = Activity(
+            activity_type="meeting",
+            subject="In range (scheduled)",
+            entity_type="contacts",
+            entity_id=test_contact.id,
+            scheduled_at=datetime.combine(today, datetime.min.time(), tzinfo=timezone.utc),
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        due = Activity(
+            activity_type="task",
+            subject="In range (due)",
+            entity_type="contacts",
+            entity_id=test_contact.id,
+            due_date=today + timedelta(days=1),
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        out_of_range = Activity(
+            activity_type="task",
+            subject="Out of range",
+            entity_type="contacts",
+            entity_id=test_contact.id,
+            due_date=today + timedelta(days=60),
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add_all([scheduled, due, out_of_range])
+        await db_session.commit()
+
+        start = today - timedelta(days=1)
+        end = today + timedelta(days=7)
+        response = await client.get(
+            "/api/activities/calendar",
+            headers=auth_headers,
+            params={"start_date": start.isoformat(), "end_date": end.isoformat()},
+        )
+
+        assert response.status_code == 200, response.text
+        subjects = {a["subject"] for day in response.json()["dates"].values() for a in day}
+        assert "In range (scheduled)" in subjects
+        assert "In range (due)" in subjects
+        assert "Out of range" not in subjects
+
+
 class TestActivitiesUnauthorized:
     """Tests for unauthorized access to activities endpoints."""
 

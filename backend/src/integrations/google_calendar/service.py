@@ -16,6 +16,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
+from src.core.constants import ENTITY_TYPE_USERS
 from src.integrations.google_calendar.models import GoogleCalendarCredential, CalendarSyncEvent
 from src.activities.models import Activity
 
@@ -275,16 +276,23 @@ class GoogleCalendarService:
     def _event_to_activity(self, event: dict, user_id: int) -> Activity:
         """Convert a Google Calendar event to a CRM activity."""
         due_date = None
+        scheduled_at = None
         start = event.get("start", {})
-        if "date" in start:
+        if "dateTime" in start:
+            scheduled_at = datetime.fromisoformat(start["dateTime"].replace("Z", "+00:00"))
+            due_date = scheduled_at.date()
+        elif "date" in start:
             due_date = datetime.strptime(start["date"], "%Y-%m-%d").date()
-        elif "dateTime" in start:
-            due_date = datetime.fromisoformat(start["dateTime"].replace("Z", "+00:00")).date()
 
+        # Google events aren't tied to a CRM entity; link them to the owning user
+        # so the polymorphic (entity_type, entity_id) NOT NULL columns are satisfied.
         return Activity(
             activity_type="meeting",
             subject=event.get("summary", "Google Calendar Event"),
             description=event.get("description", ""),
+            entity_type=ENTITY_TYPE_USERS,
+            entity_id=user_id,
+            scheduled_at=scheduled_at,
             due_date=due_date,
             is_completed=False,
             priority="normal",

@@ -54,11 +54,12 @@ async def get_calendar_activities(
     query = select(ActivityModel)
     filters = []
 
-    # Use func.date() for cross-database compatibility (works in both PostgreSQL and SQLite)
+    # func.date() works on both PostgreSQL and SQLite; pass date objects because
+    # Postgres refuses to compare `date >= varchar`.
     scheduled_filter = and_(
         ActivityModel.scheduled_at.isnot(None),
-        sa_func.date(ActivityModel.scheduled_at) >= start.isoformat(),
-        sa_func.date(ActivityModel.scheduled_at) <= end.isoformat(),
+        sa_func.date(ActivityModel.scheduled_at) >= start,
+        sa_func.date(ActivityModel.scheduled_at) <= end,
     )
     due_filter = and_(
         ActivityModel.due_date.isnot(None),

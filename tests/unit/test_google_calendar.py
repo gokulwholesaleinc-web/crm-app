@@ -264,6 +264,64 @@ class TestGoogleCalendarPush:
 
 
 # =========================================================================
+# _event_to_activity Tests — regression: Activity requires entity_type/entity_id
+# =========================================================================
+
+class TestEventToActivity:
+    """Google events synced into CRM must satisfy Activity's NOT NULL columns."""
+
+    @pytest.mark.asyncio
+    async def test_timed_event_sets_entity_and_scheduled_at(
+        self, db_session, test_user,
+    ):
+        from src.integrations.google_calendar.service import GoogleCalendarService
+
+        service = GoogleCalendarService(db_session)
+        activity = service._event_to_activity(
+            event={
+                "id": "abc123",
+                "summary": "Client call",
+                "description": "Quarterly review",
+                "start": {"dateTime": "2026-05-01T15:00:00Z"},
+            },
+            user_id=test_user.id,
+        )
+
+        assert activity.entity_type == "users"
+        assert activity.entity_id == test_user.id
+        assert activity.scheduled_at is not None
+
+        db_session.add(activity)
+        await db_session.flush()
+        assert activity.id is not None
+
+    @pytest.mark.asyncio
+    async def test_all_day_event_sets_entity_and_due_date(
+        self, db_session, test_user,
+    ):
+        from src.integrations.google_calendar.service import GoogleCalendarService
+
+        service = GoogleCalendarService(db_session)
+        activity = service._event_to_activity(
+            event={
+                "id": "def456",
+                "summary": "Holiday",
+                "start": {"date": "2026-07-04"},
+            },
+            user_id=test_user.id,
+        )
+
+        assert activity.entity_type == "users"
+        assert activity.entity_id == test_user.id
+        assert activity.due_date is not None
+        assert activity.scheduled_at is None
+
+        db_session.add(activity)
+        await db_session.flush()
+        assert activity.id is not None
+
+
+# =========================================================================
 # login_hint Tests
 # =========================================================================
 

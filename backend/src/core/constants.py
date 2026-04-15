@@ -31,6 +31,7 @@ ENTITY_TYPE_QUOTES = "quotes"
 ENTITY_TYPE_PAYMENTS = "payments"
 ENTITY_TYPE_PROPOSALS = "proposals"
 ENTITY_TYPE_CONTRACTS = "contracts"
+ENTITY_TYPE_USERS = "users"
 
 
 # HTTP Status Codes - commonly used codes as constants
