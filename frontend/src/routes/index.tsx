@@ -48,6 +48,7 @@ const PublicProposalView = lazy(() => import('../features/proposals/PublicPropos
 
 // Activities
 const ActivitiesPage = lazy(() => import('../features/activities/ActivitiesPage'));
+const CalendarPage = lazy(() => import('../features/calendar/CalendarPage'));
 
 // Campaigns
 const CampaignsPage = lazy(() => import('../features/campaigns/CampaignsPage'));
@@ -260,6 +261,18 @@ function AppRoutes() {
           <PrivateRoute>
             <ErrorBoundary>
               <ActivitiesPage />
+            </ErrorBoundary>
+          </PrivateRoute>
+        }
+      />
+
+      {/* Calendar */}
+      <Route
+        path="/calendar"
+        element={
+          <PrivateRoute>
+            <ErrorBoundary>
+              <CalendarPage />
             </ErrorBoundary>
           </PrivateRoute>
         }

@@ -512,21 +512,26 @@ class TestGoogleOAuthStateCookie:
 
     @pytest.mark.asyncio
     async def test_authorize_sets_httponly_cookie(self, client: AsyncClient):
-        """/authorize sets the state cookie as HttpOnly + SameSite=Lax."""
+        """/authorize sets the state cookie as HttpOnly + SameSite=None; Secure
+        in prod-like (DEBUG=False) configs so cross-site XHR from the frontend
+        can carry it back to the backend for verification."""
         from src.config import settings
 
         original_id = settings.GOOGLE_CLIENT_ID
+        original_debug = settings.DEBUG
         settings.GOOGLE_CLIENT_ID = "test-client-id.apps.googleusercontent.com"
+        settings.DEBUG = False
         try:
             resp = await client.post(
                 "/api/auth/google/authorize",
                 json={"redirect_uri": "http://localhost:3000/auth/google/callback"},
             )
             assert resp.status_code == 200
-            # Starlette sets cookies via Set-Cookie; httpx exposes via response.cookies
-            raw = resp.headers.get("set-cookie", "")
+            raw = resp.headers.get("set-cookie", "").lower()
             assert "crm_google_oauth_state=" in raw
-            assert "HttpOnly" in raw
-            assert "SameSite=lax" in raw.lower() or "samesite=lax" in raw.lower()
+            assert "httponly" in raw
+            assert "samesite=none" in raw
+            assert "secure" in raw
         finally:
             settings.GOOGLE_CLIENT_ID = original_id
+            settings.DEBUG = original_debug
