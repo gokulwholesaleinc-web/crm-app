@@ -4,11 +4,10 @@ Pytest fixtures for CRM application tests.
 Provides async test database setup, test client, and user fixtures.
 """
 
-import asyncio
 import os
 import sys
 import time
-from typing import AsyncGenerator, Generator
+from typing import AsyncGenerator
 
 import pytest
 import pytest_asyncio
@@ -97,14 +96,6 @@ def clear_user_cache():
     _dashboard_cache.clear()
     _scope_cache.clear()
     invalidate_all_caches()
-
-
-@pytest.fixture(scope="session")
-def event_loop() -> Generator:
-    """Create an instance of the default event loop for the test session."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
 
 
 @pytest_asyncio.fixture(scope="function")

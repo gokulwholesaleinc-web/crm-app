@@ -40,8 +40,9 @@ def _is_local_db(url: str) -> bool:
     return False
 
 _is_local = _is_local_db(_db_url)
+_is_sqlite = _db_url.startswith("sqlite")
 
-if not _is_local:
+if not _is_local and not _is_sqlite:
     _ssl_ctx = ssl_module.create_default_context()
     if not settings.DATABASE_SSL_VERIFY:
         _ssl_ctx.check_hostname = False
@@ -53,16 +54,22 @@ if not _is_local:
 # - Neon (remote): pre-ping issues an extra round-trip on every checkout
 #   that can wake the compute pointlessly. Rely on pool_recycle instead and
 #   keep max_overflow small so idle peaks don't pin extra connections.
-engine = create_async_engine(
-    _db_url,
-    echo=False,
-    future=True,
-    pool_size=5,
-    max_overflow=20 if _is_local else 5,
-    pool_pre_ping=_is_local,
-    pool_recycle=3600 if _is_local else 1800,
-    connect_args=_connect_args,
-)
+# - SQLite (tests): the in-memory DB uses StaticPool which rejects pool_size
+#   and max_overflow, so skip pool tuning entirely.
+_engine_kwargs: dict = {
+    "echo": False,
+    "future": True,
+    "connect_args": _connect_args,
+}
+if not _is_sqlite:
+    _engine_kwargs.update(
+        pool_size=5,
+        max_overflow=20 if _is_local else 5,
+        pool_pre_ping=_is_local,
+        pool_recycle=3600 if _is_local else 1800,
+    )
+
+engine = create_async_engine(_db_url, **_engine_kwargs)
 
 async_session_maker = async_sessionmaker(
     engine,

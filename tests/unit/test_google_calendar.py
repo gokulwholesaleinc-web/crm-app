@@ -322,6 +322,18 @@ class TestEventToActivity:
 
 
 # =========================================================================
+# Pagination Tests
+# =========================================================================
+
+class TestSyncPagination:
+    """sync_from_google must paginate at Google's 2500/page ceiling."""
+
+    def test_page_size_is_google_api_max(self):
+        from src.integrations.google_calendar.service import GOOGLE_CALENDAR_PAGE_SIZE
+        assert GOOGLE_CALENDAR_PAGE_SIZE == 2500
+
+
+# =========================================================================
 # login_hint Tests
 # =========================================================================
 

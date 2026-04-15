@@ -7,7 +7,7 @@ Requires GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in env.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
 from urllib.parse import urlencode
 
@@ -26,6 +26,8 @@ GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_CALENDAR_API = "https://www.googleapis.com/calendar/v3"
 SCOPES = "https://www.googleapis.com/auth/calendar"
+
+GOOGLE_CALENDAR_PAGE_SIZE = 2500
 
 
 class GoogleCalendarService:
@@ -90,7 +92,6 @@ class GoogleCalendarService:
         if "refresh_token" in token_data:
             credential.refresh_token = token_data["refresh_token"]
         if "expires_in" in token_data:
-            from datetime import timedelta
             credential.token_expiry = datetime.now(timezone.utc) + timedelta(seconds=token_data["expires_in"])
         await self.db.flush()
         return credential
@@ -177,54 +178,70 @@ class GoogleCalendarService:
         return sync_event
 
     async def sync_from_google(self, user_id: int) -> List[Dict[str, Any]]:
-        """Pull events from Google Calendar and create CRM activities.
+        """Pull upcoming events from Google Calendar and create CRM activities.
 
-        Returns a list of created activity summaries.
+        Paginates with nextPageToken so users with thousands of events sync in one run.
         """
         credential = await self.get_credential(user_id)
         if not credential or not credential.is_active:
             return []
 
         token = await self._get_valid_token(credential)
-
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{GOOGLE_CALENDAR_API}/calendars/{credential.calendar_id}/events",
-                params={
-                    "maxResults": 50,
-                    "orderBy": "updated",
-                    "singleEvents": True,
-                    "timeMin": datetime.now(timezone.utc).isoformat(),
-                },
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            response.raise_for_status()
-            events_data = response.json()
+        time_min_iso = datetime.now(timezone.utc).isoformat()
 
         created = []
-        for event in events_data.get("items", []):
-            existing = await self.db.execute(
-                select(CalendarSyncEvent).where(
-                    CalendarSyncEvent.user_id == user_id,
-                    CalendarSyncEvent.google_event_id == event["id"],
+        page_token: Optional[str] = None
+
+        async with httpx.AsyncClient() as client:
+            while True:
+                params = {
+                    "maxResults": GOOGLE_CALENDAR_PAGE_SIZE,
+                    "orderBy": "updated",
+                    "singleEvents": True,
+                    "timeMin": time_min_iso,
+                }
+                if page_token:
+                    params["pageToken"] = page_token
+
+                response = await client.get(
+                    f"{GOOGLE_CALENDAR_API}/calendars/{credential.calendar_id}/events",
+                    params=params,
+                    headers={"Authorization": f"Bearer {token}"},
                 )
-            )
-            if existing.scalar_one_or_none():
-                continue
+                response.raise_for_status()
+                events_data = response.json()
 
-            activity = self._event_to_activity(event, user_id)
-            self.db.add(activity)
-            await self.db.flush()
+                for event in events_data.get("items", []):
+                    existing = await self.db.execute(
+                        select(CalendarSyncEvent).where(
+                            CalendarSyncEvent.user_id == user_id,
+                            CalendarSyncEvent.google_event_id == event["id"],
+                        )
+                    )
+                    if existing.scalar_one_or_none():
+                        continue
 
-            sync_event = CalendarSyncEvent(
-                user_id=user_id,
-                activity_id=activity.id,
-                google_event_id=event["id"],
-                google_calendar_id=credential.calendar_id,
-                sync_direction="google_to_crm",
-            )
-            self.db.add(sync_event)
-            created.append({"activity_id": activity.id, "google_event_id": event["id"], "summary": event.get("summary")})
+                    activity = self._event_to_activity(event, user_id)
+                    self.db.add(activity)
+                    await self.db.flush()
+
+                    sync_event = CalendarSyncEvent(
+                        user_id=user_id,
+                        activity_id=activity.id,
+                        google_event_id=event["id"],
+                        google_calendar_id=credential.calendar_id,
+                        sync_direction="google_to_crm",
+                    )
+                    self.db.add(sync_event)
+                    created.append({
+                        "activity_id": activity.id,
+                        "google_event_id": event["id"],
+                        "summary": event.get("summary"),
+                    })
+
+                page_token = events_data.get("nextPageToken")
+                if not page_token:
+                    break
 
         credential.last_synced_at = datetime.now(timezone.utc)
         await self.db.flush()
@@ -232,8 +249,6 @@ class GoogleCalendarService:
 
     async def _upsert_credential(self, user_id: int, token_data: dict) -> GoogleCalendarCredential:
         """Create or update Google Calendar credentials for a user."""
-        from datetime import timedelta
-
         existing = await self.get_credential(user_id)
         expiry = None
         if "expires_in" in token_data:
