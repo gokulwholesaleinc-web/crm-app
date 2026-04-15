@@ -14,7 +14,8 @@ import type {
   AddMembersRequest,
   EmailSettingsUpdate,
   CreateCampaignFromImportRequest,
-  EmailTemplate,
+  EmailCampaignStepCreate,
+  EmailCampaignStepUpdate,
 } from '../types';
 
 // =============================================================================
@@ -228,7 +229,7 @@ export function useAddCampaignStep() {
       data,
     }: {
       campaignId: number;
-      data: import('../types').EmailCampaignStepCreate;
+      data: EmailCampaignStepCreate;
     }) => campaignsApi.addStep(campaignId, data),
     onSuccess: (_, { campaignId }) => {
       queryClient.invalidateQueries({ queryKey: ['campaigns', 'steps', campaignId] });
@@ -247,7 +248,7 @@ export function useUpdateCampaignStep() {
     }: {
       campaignId: number;
       stepId: number;
-      data: import('../types').EmailCampaignStepUpdate;
+      data: EmailCampaignStepUpdate;
     }) => campaignsApi.updateStep(campaignId, stepId, data),
     onSuccess: (_, { campaignId }) => {
       queryClient.invalidateQueries({ queryKey: ['campaigns', 'steps', campaignId] });
