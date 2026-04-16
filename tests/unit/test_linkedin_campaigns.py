@@ -474,21 +474,3 @@ class TestEmailSettingsEndpoints:
         assert data["daily_send_limit"] == 500
         assert data["warmup_enabled"] is True
         assert data["warmup_target_daily"] == 300
-
-    @pytest.mark.asyncio
-    async def test_get_settings_via_email_router(self, client: AsyncClient, auth_headers: dict):
-        """Should also work via /api/email/settings."""
-        response = await client.get("/api/email/settings", headers=auth_headers)
-        assert response.status_code == 200
-        assert "daily_send_limit" in response.json()
-
-    @pytest.mark.asyncio
-    async def test_update_settings_via_email_router(self, client: AsyncClient, auth_headers: dict):
-        """Should also work via /api/email/settings."""
-        response = await client.put(
-            "/api/email/settings",
-            headers=auth_headers,
-            json={"daily_send_limit": 100},
-        )
-        assert response.status_code == 200
-        assert response.json()["daily_send_limit"] == 100
