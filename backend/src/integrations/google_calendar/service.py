@@ -12,7 +12,7 @@ from typing import Optional, Dict, Any, List
 from urllib.parse import urlencode
 
 import httpx
-from sqlalchemy import select, func
+from sqlalchemy import select, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
@@ -28,6 +28,8 @@ GOOGLE_CALENDAR_API = "https://www.googleapis.com/calendar/v3"
 SCOPES = "https://www.googleapis.com/auth/calendar"
 
 GOOGLE_CALENDAR_PAGE_SIZE = 2500
+CALENDAR_SYNC_HORIZON_DAYS = 90
+CALENDAR_SYNC_LOCK_NAMESPACE = 100_001
 
 
 class GoogleCalendarService:
@@ -180,14 +182,41 @@ class GoogleCalendarService:
     async def sync_from_google(self, user_id: int) -> List[Dict[str, Any]]:
         """Pull upcoming events from Google Calendar and create CRM activities.
 
-        Paginates with nextPageToken so users with thousands of events sync in one run.
+        Uses pg_try_advisory_lock to prevent concurrent syncs for the same user.
+        Commits after each page to avoid holding a single long transaction.
+        Caps timeMax at 90 days to prevent recurring-event expansion to 2056.
         """
+        has_lock = False
+        try:
+            locked = await self.db.execute(
+                text("SELECT pg_try_advisory_lock(:ns, :uid)"),
+                {"ns": CALENDAR_SYNC_LOCK_NAMESPACE, "uid": user_id},
+            )
+            if not locked.scalar():
+                logger.info("Calendar sync already running for user_id=%s, skipping", user_id)
+                return []
+            has_lock = True
+        except Exception:
+            pass
+
+        try:
+            return await self._sync_from_google_locked(user_id)
+        finally:
+            if has_lock:
+                await self.db.execute(
+                    text("SELECT pg_advisory_unlock(:ns, :uid)"),
+                    {"ns": CALENDAR_SYNC_LOCK_NAMESPACE, "uid": user_id},
+                )
+
+    async def _sync_from_google_locked(self, user_id: int) -> List[Dict[str, Any]]:
         credential = await self.get_credential(user_id)
         if not credential or not credential.is_active:
             return []
 
         token = await self._get_valid_token(credential)
-        time_min_iso = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(timezone.utc)
+        time_min_iso = now.isoformat()
+        time_max_iso = (now + timedelta(days=CALENDAR_SYNC_HORIZON_DAYS)).isoformat()
 
         created = []
         page_token: Optional[str] = None
@@ -199,6 +228,7 @@ class GoogleCalendarService:
                     "orderBy": "updated",
                     "singleEvents": True,
                     "timeMin": time_min_iso,
+                    "timeMax": time_max_iso,
                 }
                 if page_token:
                     params["pageToken"] = page_token
@@ -239,12 +269,14 @@ class GoogleCalendarService:
                         "summary": event.get("summary"),
                     })
 
+                await self.db.commit()
+
                 page_token = events_data.get("nextPageToken")
                 if not page_token:
                     break
 
         credential.last_synced_at = datetime.now(timezone.utc)
-        await self.db.flush()
+        await self.db.commit()
         return created
 
     async def _upsert_credential(self, user_id: int, token_data: dict) -> GoogleCalendarCredential:

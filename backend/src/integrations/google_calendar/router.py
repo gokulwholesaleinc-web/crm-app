@@ -1,5 +1,7 @@
 """Google Calendar integration API routes."""
 
+import logging
+
 from fastapi import APIRouter, HTTPException
 from src.core.router_utils import DBSession, CurrentUser
 from src.core.constants import HTTPStatus
@@ -11,6 +13,8 @@ from src.integrations.google_calendar.schemas import (
     GoogleCalendarEventCreate,
     CalendarSyncStatus,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/integrations/google-calendar", tags=["google-calendar"])
 
@@ -87,6 +91,14 @@ async def sync_calendar(
     try:
         created = await service.sync_from_google(current_user.id)
     except Exception as exc:
+        response_text = getattr(getattr(exc, "response", None), "text", None)
+        logger.exception(
+            "Calendar sync failed for user_id=%s: %s(%s)%s",
+            current_user.id,
+            type(exc).__name__,
+            exc,
+            f" | response: {response_text}" if response_text else "",
+        )
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=f"Sync failed: {str(exc)}")
     return {"synced": len(created), "events": created}
 

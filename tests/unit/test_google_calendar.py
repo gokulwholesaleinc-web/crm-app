@@ -333,6 +333,28 @@ class TestSyncPagination:
         assert GOOGLE_CALENDAR_PAGE_SIZE == 2500
 
 
+class TestSyncHorizon:
+    """sync_from_google must cap timeMax to prevent recurring-event explosion."""
+
+    def test_horizon_is_90_days(self):
+        from src.integrations.google_calendar.service import CALENDAR_SYNC_HORIZON_DAYS
+        assert CALENDAR_SYNC_HORIZON_DAYS == 90
+
+    @pytest.mark.asyncio
+    async def test_sync_without_connection_still_returns_empty(
+        self, client: AsyncClient, test_user,
+    ):
+        """timeMax cap shouldn't break the no-connection fast path."""
+        response = await client.post(
+            "/api/integrations/google-calendar/sync",
+            headers=_token(test_user),
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["synced"] == 0
+        assert data["events"] == []
+
+
 # =========================================================================
 # login_hint Tests
 # =========================================================================
