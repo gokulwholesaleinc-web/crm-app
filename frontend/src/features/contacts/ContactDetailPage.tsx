@@ -145,7 +145,7 @@ function ContactDetailPage() {
             className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 flex-shrink-0"
             aria-label="Back to contacts"
           >
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
           </Link>

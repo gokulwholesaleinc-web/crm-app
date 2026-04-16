@@ -40,7 +40,6 @@ import {
 export type { NavItem };
 export { DEFAULT_MAIN_NAVIGATION, DEFAULT_SECONDARY_NAVIGATION };
 
-// Re-export MobileSidebar so existing imports from Sidebar still work
 export { MobileSidebar } from './MobileSidebar';
 export type { MobileSidebarProps } from './MobileSidebar';
 

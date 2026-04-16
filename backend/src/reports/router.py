@@ -71,6 +71,8 @@ async def execute_report(
     executor = ReportExecutor(db, user_id=current_user.id, is_admin=data_scope.can_see_all())
     try:
         return await executor.execute(definition)
+    except PermissionError as exc:
+        raise HTTPException(status_code=HTTPStatus.FORBIDDEN, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -84,7 +86,10 @@ async def export_report_csv(
 ):
     """Execute a report and return results as CSV download."""
     executor = ReportExecutor(db, user_id=current_user.id, is_admin=data_scope.can_see_all())
-    csv_content = await executor.export_csv(definition)
+    try:
+        csv_content = await executor.export_csv(definition)
+    except PermissionError as exc:
+        raise HTTPException(status_code=HTTPStatus.FORBIDDEN, detail=str(exc))
 
     return StreamingResponse(
         io.StringIO(csv_content),
@@ -175,9 +180,16 @@ Default to bar chart if no chart preference is stated."""
         logger.error(f"AI report generation error: {exc}")
         raise HTTPException(status_code=400, detail=f"Failed to generate report: {str(exc)}")
 
+    # Gate on entity scope before executing — avoids unnecessary DB work for a guaranteed 403.
+    entity_model = ENTITY_MODEL_MAP.get(definition.entity_type)
+    if entity_model and not hasattr(entity_model, "owner_id") and not data_scope.can_see_all():
+        raise HTTPException(status_code=HTTPStatus.FORBIDDEN, detail="Reports on this entity require admin role")
+
     executor = ReportExecutor(db, user_id=current_user.id, is_admin=data_scope.can_see_all())
     try:
         result = await executor.execute(definition)
+    except PermissionError as exc:
+        raise HTTPException(status_code=HTTPStatus.FORBIDDEN, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 

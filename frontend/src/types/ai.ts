@@ -47,7 +47,7 @@ export interface FeedbackRequest {
 
 export interface FeedbackResponse {
   id: number;
-  feedback: string;
+  feedback: 'positive' | 'negative' | 'correction';
   created_at: string;
 }
 

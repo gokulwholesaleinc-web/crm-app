@@ -15,7 +15,7 @@ import hmac
 import json
 import time
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from sqlalchemy import select
@@ -139,7 +139,7 @@ def payment_service(db_session: AsyncSession) -> PaymentService:
 
 
 @pytest.fixture
-def patched_settings(monkeypatch):
+def patched_settings():
     """Patch settings so process_webhook uses the hand-rolled fallback path."""
     with patch("src.payments.service._get_stripe", return_value=None):
         with patch("src.payments.service.settings") as mock_settings:
@@ -162,12 +162,11 @@ class TestProcessWebhookIdempotency:
         db_session: AsyncSession,
         payment_service: PaymentService,
         patched_settings,
-        test_user: User,
     ):
         """Second delivery of same event_id returns status='replayed', no duplicate row."""
         event = _make_event(
-            "payment_intent.payment_failed",
-            {"id": "pi_idem_test"},
+            "unknown.event",
+            {"id": "obj_idem_test"},
             event_id="evt_idem_001",
         )
         payload = _encode(event)

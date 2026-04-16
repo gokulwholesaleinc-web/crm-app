@@ -3,7 +3,6 @@
 import csv
 import io
 from typing import List, Optional, Dict, Any, Type
-from fastapi import HTTPException
 from sqlalchemy import select, func, extract, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,7 +16,6 @@ from src.payments.models import Payment
 from src.contracts.models import Contract
 from src.core.filtering import apply_filters_to_query
 from src.reports.schemas import ReportDataPoint, ReportResult, ReportDefinition
-from src.core.constants import HTTPStatus
 
 # Mapping from entity_type string to SQLAlchemy model
 ENTITY_MODEL_MAP: Dict[str, Type] = {
@@ -96,10 +94,7 @@ class ReportExecutor:
         """
         if not hasattr(model, "owner_id"):
             if not self.is_admin:
-                raise HTTPException(
-                    status_code=HTTPStatus.FORBIDDEN,
-                    detail="Reports on this entity require admin role",
-                )
+                raise PermissionError("Reports on this entity require admin role")
             return query
         if self.user_id:
             query = query.where(model.owner_id == self.user_id)
@@ -126,17 +121,8 @@ class ReportExecutor:
 
         if group_col is not None:
             query = select(group_col, metric_col.label("metric_value"))
-            # Apply owner scoping
             query = self._apply_owner_filter(query, model)
-            # Apply filters
-            if definition.filters:
-                base_q = select(model)
-                base_q = apply_filters_to_query(base_q, model, definition.filters)
-                # Extract the where clauses from the filtered query
-                query = select(group_col, metric_col.label("metric_value"))
-                query = self._apply_owner_filter(query, model)
-                for clause in base_q.whereclause.clauses if hasattr(base_q.whereclause, 'clauses') else ([base_q.whereclause] if base_q.whereclause is not None else []):
-                    query = query.where(clause)
+            query = apply_filters_to_query(query, model, definition.filters)
 
             # Handle special join for opportunities grouped by stage
             if definition.entity_type == "opportunities" and definition.group_by == "pipeline_stage_id":
@@ -145,8 +131,7 @@ class ReportExecutor:
                     metric_col.label("metric_value"),
                 ).select_from(Opportunity).join(PipelineStage)
                 query = self._apply_owner_filter(query, Opportunity)
-                if definition.filters:
-                    query = apply_filters_to_query(query, Opportunity, definition.filters)
+                query = apply_filters_to_query(query, Opportunity, definition.filters)
                 query = query.group_by(PipelineStage.name).order_by(metric_col.label("metric_value").desc())
             else:
                 query = query.group_by(group_col).order_by(metric_col.label("metric_value").desc())
@@ -154,12 +139,7 @@ class ReportExecutor:
             # No grouping - return single aggregate value
             query = select(metric_col.label("metric_value"))
             query = self._apply_owner_filter(query, model)
-            if definition.filters:
-                query = apply_filters_to_query(
-                    select(model).with_only_columns(metric_col.label("metric_value")),
-                    model,
-                    definition.filters,
-                )
+            query = apply_filters_to_query(query, model, definition.filters)
 
         result = await self.db.execute(query)
         rows = result.all()

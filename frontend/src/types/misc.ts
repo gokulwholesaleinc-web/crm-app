@@ -58,31 +58,6 @@ export interface EmailTemplateUpdate {
 }
 
 // =============================================================================
-// Email Campaign Step Types
-// =============================================================================
-
-export interface EmailCampaignStep {
-  id: number;
-  campaign_id: number;
-  template_id: number;
-  delay_days: number;
-  step_order: number;
-  created_at: string;
-}
-
-export interface EmailCampaignStepCreate {
-  template_id: number;
-  delay_days: number;
-  step_order: number;
-}
-
-export interface EmailCampaignStepUpdate {
-  template_id?: number | null;
-  delay_days?: number | null;
-  step_order?: number | null;
-}
-
-// =============================================================================
 // Sales Funnel Types
 // =============================================================================
 

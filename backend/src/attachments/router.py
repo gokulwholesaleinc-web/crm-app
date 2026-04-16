@@ -73,7 +73,7 @@ async def download_attachment(
     try:
         download_url = await service.get_download_url(attachment)
     except Exception as exc:
-        logger.warning("Failed to get download URL for attachment %s: %s", attachment_id, exc)
+        logger.info("Failed to get download URL for attachment %s: %s", attachment_id, exc)
         download_url = None
 
     if download_url:
