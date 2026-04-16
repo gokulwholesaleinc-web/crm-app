@@ -6,7 +6,6 @@ content to a caller, we need to verify the caller has access to the parent
 entity — otherwise they can enumerate across users via ID guessing.
 """
 
-from typing import Optional
 
 from fastapi import HTTPException
 from sqlalchemy import select

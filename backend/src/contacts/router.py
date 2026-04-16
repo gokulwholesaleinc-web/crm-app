@@ -2,7 +2,7 @@
 
 import logging
 from typing import Annotated, Optional
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from src.core.constants import HTTPStatus, EntityNames, ENTITY_TYPE_CONTACTS
 from src.core.router_utils import (
     DBSession,

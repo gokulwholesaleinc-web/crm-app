@@ -1,6 +1,5 @@
 """Notification API routes."""
 
-from typing import Optional
 from fastapi import APIRouter, Query, HTTPException
 from src.core.constants import HTTPStatus
 from src.core.router_utils import DBSession, CurrentUser, calculate_pages

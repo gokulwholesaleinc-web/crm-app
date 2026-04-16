@@ -1,6 +1,6 @@
 """Comment API routes."""
 
-from typing import Annotated, Optional
+from typing import Annotated
 from fastapi import APIRouter, Depends, Query, HTTPException
 from src.core.constants import HTTPStatus
 from src.core.data_scope import DataScope, get_data_scope

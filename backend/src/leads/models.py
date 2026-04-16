@@ -1,7 +1,7 @@
 """Lead model for CRM lead management."""
 
 from typing import Optional
-from sqlalchemy import String, Integer, ForeignKey, Text, Float, Enum as SQLEnum, Index, Boolean
+from sqlalchemy import String, Integer, ForeignKey, Text, Float, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.database import Base
 from src.core.mixins.auditable import AuditableMixin

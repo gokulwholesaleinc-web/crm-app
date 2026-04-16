@@ -1,6 +1,4 @@
 from src.core.mixins.auditable import AuditableMixin, TimestampMixin
-from src.core.mixins.crm_note import CRMNoteMixin
-from src.core.mixins.taggable import TaggableMixin
 from src.core.base_service import BaseService, CRUDService, TaggableServiceMixin
 from src.core.constants import (
     DEFAULT_CURRENCY,
@@ -34,8 +32,6 @@ __all__ = [
     # Mixins
     "AuditableMixin",
     "TimestampMixin",
-    "CRMNoteMixin",
-    "TaggableMixin",
     # Base Services
     "BaseService",
     "CRUDService",

@@ -5,7 +5,7 @@ import csv
 from typing import List, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.ai.models import AIKnowledgeDocument, AIEmbedding
+from src.ai.models import AIKnowledgeDocument
 from src.ai.embeddings import EmbeddingService
 
 

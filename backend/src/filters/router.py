@@ -2,13 +2,13 @@
 
 import json
 from typing import Annotated, List, Optional, Any, Dict
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends
 from sqlalchemy import select, func, or_
 
 from src.core.router_utils import DBSession, CurrentUser
 from src.core.constants import HTTPStatus
 from src.core.data_scope import DataScope, get_data_scope
-from src.core.filtering import parse_filter_group, apply_filters_to_query
+from src.core.filtering import apply_filters_to_query
 from src.filters.models import SavedFilter
 from src.filters.schemas import (
     SavedFilterCreate,

@@ -1,8 +1,7 @@
 """Comment model for team collaboration."""
 
-from datetime import datetime
 from typing import Optional, List
-from sqlalchemy import String, Integer, ForeignKey, Text, Boolean, DateTime, func, Index
+from sqlalchemy import String, Integer, ForeignKey, Text, Boolean, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.database import Base
 from src.core.mixins.auditable import TimestampMixin

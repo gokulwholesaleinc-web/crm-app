@@ -7,7 +7,7 @@ Rates can be overridden via environment variables with the pattern:
 """
 
 import os
-from typing import Dict, Optional
+from typing import Dict
 
 # Supported currencies with ISO 4217 codes
 SUPPORTED_CURRENCIES = {

@@ -5,9 +5,8 @@ import secrets
 from datetime import datetime, timezone
 from typing import Optional, List, Tuple
 from sqlalchemy import select, func, or_
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from src.quotes.models import Quote, QuoteLineItem, QuoteTemplate, ProductBundle, ProductBundleItem
+from src.quotes.models import Quote, QuoteLineItem, ProductBundle, ProductBundleItem
 from src.quotes.schemas import (
     QuoteCreate, QuoteUpdate, QuoteLineItemCreate,
     ProductBundleCreate, ProductBundleUpdate,

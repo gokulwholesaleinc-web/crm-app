@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import String, Boolean, DateTime, Integer, Text, ForeignKey, func, Index
+from sqlalchemy import String, Boolean, DateTime, Integer, Text, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.database import Base
 from src.core.mixins.auditable import TimestampMixin

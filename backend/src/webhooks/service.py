@@ -4,12 +4,10 @@ import hashlib
 import hmac
 import json
 import logging
-from datetime import datetime, timezone
 from typing import Optional, List, Tuple, Dict, Any
 
 import httpx
 from sqlalchemy import select, func
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.webhooks.models import Webhook, WebhookDelivery
 from src.webhooks.schemas import WebhookCreate, WebhookUpdate

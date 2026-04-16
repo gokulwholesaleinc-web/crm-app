@@ -11,7 +11,6 @@ attachment.
 """
 
 from html import escape
-from typing import Optional
 
 
 class BrandedPDFGenerator:

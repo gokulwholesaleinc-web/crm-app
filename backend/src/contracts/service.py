@@ -1,7 +1,7 @@
 """Contract service layer."""
 
-from typing import Optional, List, Tuple, Any, Dict
-from sqlalchemy import select, func, or_
+from typing import Optional, List, Tuple
+from sqlalchemy import select, func
 from src.contracts.models import Contract
 from src.contracts.schemas import ContractCreate, ContractUpdate
 from src.core.base_service import CRUDService

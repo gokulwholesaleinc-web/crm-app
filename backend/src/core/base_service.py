@@ -5,7 +5,7 @@ from typing import TypeVar, Generic, Optional, List, Tuple, Type, Any, Dict
 from collections import defaultdict
 from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload, InstrumentedAttribute
+from sqlalchemy.orm import InstrumentedAttribute
 from pydantic import BaseModel
 from src.core.models import Tag, EntityTag
 from src.core.constants import DEFAULT_PAGE_SIZE

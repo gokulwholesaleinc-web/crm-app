@@ -2,7 +2,7 @@
 
 import enum
 from typing import Optional
-from sqlalchemy import String, Integer, ForeignKey, Text, JSON, UniqueConstraint
+from sqlalchemy import String, Integer, ForeignKey, JSON, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.database import Base
 from src.core.mixins.auditable import TimestampMixin

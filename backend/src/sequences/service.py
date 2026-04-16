@@ -5,7 +5,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Tuple, Dict, Any
 
 from sqlalchemy import select, func
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.sequences.models import Sequence, SequenceEnrollment
 from src.sequences.schemas import SequenceCreate, SequenceUpdate

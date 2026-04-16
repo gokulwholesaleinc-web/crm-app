@@ -1,7 +1,7 @@
 """Opportunity service layer."""
 
 from typing import Optional, List, Tuple, Any, Dict
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from src.opportunities.models import Opportunity, PipelineStage
 from src.core.filtering import apply_filters_to_query, build_token_search

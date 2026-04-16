@@ -1,7 +1,7 @@
 """Pydantic schemas for opportunities."""
 
 from datetime import date, datetime
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict
 from pydantic import BaseModel, ConfigDict
 from src.core.schemas import TagBrief
 

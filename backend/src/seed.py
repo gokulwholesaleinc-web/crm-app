@@ -4,7 +4,6 @@ Idempotent: safe to run multiple times without duplicating data.
 Controlled by SEED_ON_STARTUP env var (default True for dev).
 """
 
-import os
 from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import select

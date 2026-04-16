@@ -1,8 +1,8 @@
 """Revenue forecasting utilities."""
 
 from datetime import date, timedelta
-from typing import Dict, List, Any
-from sqlalchemy import select, func, and_
+from typing import Dict, Any
+from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.opportunities.models import Opportunity, PipelineStage
 

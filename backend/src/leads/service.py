@@ -1,7 +1,7 @@
 """Lead service layer."""
 
 from typing import Optional, List, Tuple, Any, Dict
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from src.leads.models import Lead, LeadSource
 from src.core.filtering import apply_filters_to_query, build_token_search

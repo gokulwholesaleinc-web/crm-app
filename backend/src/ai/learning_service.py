@@ -2,14 +2,12 @@
 
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional
-from sqlalchemy import select, func, and_, update, delete
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.ai.models import AILearning, AIInteractionLog
 from src.contacts.models import Contact
-from src.leads.models import Lead
 from src.opportunities.models import Opportunity, PipelineStage
 from src.activities.models import Activity
-from src.companies.models import Company
 
 
 class AILearningService:

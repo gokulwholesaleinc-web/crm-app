@@ -4,7 +4,7 @@ import json
 import logging
 import os
 from typing import Annotated, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, or_
 from openai import AsyncOpenAI

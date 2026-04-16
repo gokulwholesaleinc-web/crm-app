@@ -1,7 +1,7 @@
 """White-label/tenant API routes."""
 
 from typing import Annotated, List, Any
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 from fastapi.responses import Response
 from src.core.constants import (
     HTTPStatus,
@@ -27,7 +27,7 @@ from src.whitelabel.schemas import (
 )
 from src.whitelabel.models import TenantUser
 from src.whitelabel.service import TenantService, TenantSettingsService, TenantUserService
-from src.whitelabel.dependencies import get_current_tenant, require_tenant
+from src.whitelabel.dependencies import require_tenant
 from sqlalchemy import select
 
 router = APIRouter(prefix="/api/tenants", tags=["tenants"])

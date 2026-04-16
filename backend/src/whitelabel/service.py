@@ -8,7 +8,6 @@ from src.whitelabel.models import Tenant, TenantSettings, TenantUser
 from src.whitelabel.schemas import (
     TenantCreate,
     TenantUpdate,
-    TenantSettingsCreate,
     TenantSettingsUpdate,
     TenantUserCreate,
     TenantUserUpdate,
