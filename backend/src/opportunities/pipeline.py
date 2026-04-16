@@ -1,7 +1,7 @@
 """Pipeline management utilities."""
 
 from typing import List, Dict, Any
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from src.core.constants import ErrorMessages, EntityNames

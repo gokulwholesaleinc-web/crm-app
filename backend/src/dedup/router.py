@@ -5,7 +5,6 @@ from pydantic import BaseModel
 from fastapi import APIRouter, Depends
 
 from src.auth.models import User
-from src.core.constants import HTTPStatus
 from src.core.router_utils import DBSession, CurrentUser, raise_bad_request
 from src.core.permissions import require_manager_or_above
 from src.dedup.service import DedupService

@@ -4,7 +4,6 @@ import html
 from typing import Optional, List, Tuple
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 from src.core.models import Note
 from src.auth.models import User
 from src.comments.service import parse_mentions

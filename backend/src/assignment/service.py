@@ -4,7 +4,6 @@ import logging
 from typing import Optional, List, Tuple, Dict, Any
 
 from sqlalchemy import select, func
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.assignment.models import AssignmentRule
 from src.assignment.schemas import AssignmentRuleCreate, AssignmentRuleUpdate

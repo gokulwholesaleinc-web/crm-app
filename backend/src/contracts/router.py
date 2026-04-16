@@ -3,7 +3,7 @@
 import logging
 from typing import Optional
 from fastapi import APIRouter, Query, Request
-from src.core.constants import HTTPStatus, EntityNames
+from src.core.constants import HTTPStatus
 from src.core.router_utils import (
     DBSession,
     CurrentUser,

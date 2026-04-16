@@ -19,7 +19,7 @@ Supports AND/OR filter groups:
 }
 """
 
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, Dict, Optional, Type
 from sqlalchemy import and_, or_, String, cast
 
 

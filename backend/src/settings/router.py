@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends
 
 from src.auth.dependencies import get_current_superuser
 from src.core.permissions import require_manager_or_above
-from src.core.router_utils import DBSession, CurrentUser
+from src.core.router_utils import DBSession
 from src.email.schemas import EmailSettingsResponse, EmailSettingsUpdate
 from src.email.throttle import EmailThrottleService
 

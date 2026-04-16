@@ -2,14 +2,14 @@
 
 import hashlib
 import hmac
-from typing import Annotated, Optional
+from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 from sqlalchemy import select
 
 from src.companies.models import Company
 from src.core.data_scope import DataScope, get_data_scope, check_record_access_or_shared
-from src.core.router_utils import DBSession, CurrentUser, raise_forbidden
+from src.core.router_utils import DBSession, CurrentUser
 from src.core.constants import HTTPStatus, ENTITY_TYPE_COMPANIES
 from src.meta.schemas import (
     MetaSyncRequest,

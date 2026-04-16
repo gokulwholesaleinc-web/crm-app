@@ -6,9 +6,8 @@ from typing import Annotated, List
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import select
 from src.config import settings
-from src.core.constants import HTTPStatus, ErrorMessages, EntityNames
-from src.core.router_utils import DBSession, CurrentUser, raise_bad_request
-from src.auth.models import User
+from src.core.constants import HTTPStatus
+from src.core.router_utils import DBSession, CurrentUser
 from src.auth.schemas import (
     UserUpdate,
     UserResponse,
@@ -20,7 +19,6 @@ from src.auth.schemas import (
 )
 from src.auth.service import AuthService, RejectedAccessError
 from src.auth.security import create_access_token
-from src.auth.dependencies import get_current_active_user, get_current_superuser
 from src.auth import google_oauth
 from src.whitelabel.models import TenantUser, Tenant, TenantSettings
 from src.notifications.service import notify_admins_of_pending_user

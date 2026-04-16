@@ -1,6 +1,6 @@
 """Permission dependencies for role-based access control."""
 
-from typing import Annotated, Optional
+from typing import Annotated
 from fastapi import Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 

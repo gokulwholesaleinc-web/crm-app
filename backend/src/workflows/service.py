@@ -2,7 +2,6 @@
 
 from typing import Optional, List, Tuple, Dict, Any
 from sqlalchemy import select, func
-from sqlalchemy.ext.asyncio import AsyncSession
 from src.workflows.models import WorkflowRule, WorkflowExecution
 from src.workflows.schemas import WorkflowRuleCreate, WorkflowRuleUpdate
 from src.core.base_service import BaseService

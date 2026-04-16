@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from sqlalchemy import select, func, update
+from sqlalchemy import select, func
 
 from src.core.constants import HTTPStatus
 from src.core.rate_limit import limiter
@@ -22,7 +22,6 @@ from src.quotes.models import Quote
 from src.proposals.models import Proposal
 from src.payments.models import Payment
 from src.audit.models import AuditLog
-from src.roles.models import RoleName
 from src.admin.schemas import (
     AdminUserResponse,
     AdminUserUpdate,

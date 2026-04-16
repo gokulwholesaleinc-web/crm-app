@@ -500,10 +500,8 @@ async def get_entity_insights(
 # Predictive AI endpoints
 # =========================================================================
 
-from src.opportunities.models import Opportunity, PipelineStage
+from src.opportunities.models import Opportunity
 from src.activities.models import Activity
-from src.contacts.models import Contact
-from src.leads.models import Lead
 
 
 @router.get("/predict/opportunity/{opportunity_id}")

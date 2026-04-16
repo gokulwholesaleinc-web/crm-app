@@ -1,7 +1,7 @@
 """Auditable mixin for tracking creation and modification metadata."""
 
 from datetime import datetime
-from sqlalchemy import Column, DateTime, Integer, ForeignKey, func
+from sqlalchemy import DateTime, Integer, ForeignKey, func
 from sqlalchemy.orm import declared_attr, Mapped, mapped_column
 
 

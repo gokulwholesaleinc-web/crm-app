@@ -1,16 +1,12 @@
 """Dashboard chart data generators."""
 
-import json
 from datetime import datetime, timedelta, date
-from typing import Dict, Any, List, Optional
-from sqlalchemy import select, func, and_, case
+from typing import Dict, Any, Optional
+from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.contacts.models import Contact
-from src.companies.models import Company
 from src.leads.models import Lead
 from src.opportunities.models import Opportunity, PipelineStage
 from src.activities.models import Activity
-from src.campaigns.models import Campaign
 
 
 class ChartDataGenerator:

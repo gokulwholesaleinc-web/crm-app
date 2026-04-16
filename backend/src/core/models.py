@@ -1,8 +1,7 @@
 """Core models used across the CRM application."""
 
-from datetime import datetime
 from typing import Optional
-from sqlalchemy import String, Text, Integer, ForeignKey, DateTime, func, Index, UniqueConstraint
+from sqlalchemy import String, Text, Integer, ForeignKey, Index, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.database import Base
 from src.core.mixins.auditable import TimestampMixin

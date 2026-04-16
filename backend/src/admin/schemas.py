@@ -1,7 +1,7 @@
 """Admin dashboard Pydantic schemas."""
 
 from datetime import datetime
-from typing import Any, Optional, List
+from typing import Any, Optional
 from pydantic import BaseModel, EmailStr
 
 from src.roles.models import RoleName

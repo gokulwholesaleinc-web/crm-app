@@ -15,7 +15,6 @@ from src.core.router_utils import (
     get_entity_or_404,
     calculate_pages,
     check_ownership,
-    build_response_with_tags,
 )
 from src.core.data_scope import DataScope, get_data_scope, check_record_access_or_shared
 from src.companies.schemas import (

@@ -16,7 +16,6 @@ from src.core.router_utils import (
 from src.core.data_scope import DataScope, get_data_scope, check_record_access_or_shared
 from src.payments.models import StripeCustomer
 from src.payments.schemas import (
-    PaymentCreate,
     PaymentResponse,
     PaymentListResponse,
     ProductCreate,

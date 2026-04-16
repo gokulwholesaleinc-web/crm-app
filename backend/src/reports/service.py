@@ -2,8 +2,8 @@
 
 import csv
 import io
-from typing import List, Optional, Dict, Any, Type
-from sqlalchemy import select, func, extract, case
+from typing import List, Optional, Dict, Type
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.leads.models import Lead

@@ -1,14 +1,14 @@
 """AI-powered insights and recommendations."""
 
-from typing import Dict, Any, List
+from typing import Dict, Any
 from datetime import datetime, timedelta
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from openai import AsyncOpenAI
 from src.config import settings
 from src.core.constants import ErrorMessages, EntityNames
 from src.leads.models import Lead
-from src.opportunities.models import Opportunity, PipelineStage
+from src.opportunities.models import Opportunity
 from src.activities.models import Activity
 
 

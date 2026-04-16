@@ -1,12 +1,12 @@
 """Sharing endpoints for record collaboration between users."""
 
-from typing import Optional, List
+from typing import List
 from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException
-from sqlalchemy import select, delete
+from sqlalchemy import select
 
 from src.core.constants import HTTPStatus
-from src.core.router_utils import DBSession, CurrentUser, check_ownership
+from src.core.router_utils import DBSession, CurrentUser
 from src.core.models import EntityShare
 from src.core.data_scope import invalidate_scope_cache
 

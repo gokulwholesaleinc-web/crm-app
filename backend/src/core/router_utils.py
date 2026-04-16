@@ -2,7 +2,7 @@
 
 import json as _json
 from typing import Annotated, Optional, List, TypeVar, Any
-from fastapi import Depends, HTTPException, Query
+from fastapi import Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database import get_db
 from src.core.constants import HTTPStatus, ErrorMessages
