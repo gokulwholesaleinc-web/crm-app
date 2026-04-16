@@ -24,6 +24,7 @@ class ProposalBase(BaseModel):
     timeline: Optional[str] = None
     terms: Optional[str] = None
     valid_until: Optional[date] = None
+    designated_signer_email: Optional[str] = None
     owner_id: Optional[int] = None
 
 
@@ -45,7 +46,18 @@ class ProposalUpdate(BaseModel):
     timeline: Optional[str] = None
     terms: Optional[str] = None
     valid_until: Optional[date] = None
+    designated_signer_email: Optional[str] = None
     owner_id: Optional[int] = None
+
+
+class ProposalAcceptRequest(BaseModel):
+    """E-signature payload submitted from the public accept page."""
+    signer_name: str
+    signer_email: str
+
+
+class ProposalRejectRequest(BaseModel):
+    reason: Optional[str] = None
 
 
 from src.core.schemas import ContactBrief, CompanyBrief, OpportunityBrief, QuoteBrief  # noqa: E402
@@ -70,6 +82,12 @@ class ProposalResponse(ProposalBase):
     viewed_at: Optional[datetime] = None
     accepted_at: Optional[datetime] = None
     rejected_at: Optional[datetime] = None
+    signer_name: Optional[str] = None
+    signer_email: Optional[str] = None
+    signer_ip: Optional[str] = None
+    signer_user_agent: Optional[str] = None
+    signed_at: Optional[datetime] = None
+    rejection_reason: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     contact: Optional[ContactBrief] = None

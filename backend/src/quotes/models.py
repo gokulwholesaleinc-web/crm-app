@@ -94,8 +94,11 @@ class Quote(Base, AuditableMixin):
     signer_name: Mapped[Optional[str]] = mapped_column(String(255))
     signer_email: Mapped[Optional[str]] = mapped_column(String(255))
     signer_ip: Mapped[Optional[str]] = mapped_column(String(45))
+    signer_user_agent: Mapped[Optional[str]] = mapped_column(Text)
     signed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     rejection_reason: Mapped[Optional[str]] = mapped_column(Text)
+    # Optional override for who may sign. NULL falls back to contact.email.
+    designated_signer_email: Mapped[Optional[str]] = mapped_column(String(255))
 
     # ORM relationships
     line_items: Mapped[List["QuoteLineItem"]] = relationship(

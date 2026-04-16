@@ -51,6 +51,7 @@ class QuoteBase(BaseModel):
     owner_id: Optional[int] = None
     payment_type: str = "one_time"
     recurring_interval: Optional[str] = None
+    designated_signer_email: Optional[str] = None
 
     @model_validator(mode="after")
     def validate_recurring_interval(self):
@@ -81,6 +82,7 @@ class QuoteUpdate(BaseModel):
     owner_id: Optional[int] = None
     payment_type: Optional[str] = None
     recurring_interval: Optional[str] = None
+    designated_signer_email: Optional[str] = None
 
 
 from src.core.schemas import ContactBrief, CompanyBrief, OpportunityBrief  # noqa: E402
@@ -97,6 +99,8 @@ class QuoteResponse(QuoteBase):
     rejected_at: Optional[datetime] = None
     signer_name: Optional[str] = None
     signer_email: Optional[str] = None
+    signer_ip: Optional[str] = None
+    signer_user_agent: Optional[str] = None
     signed_at: Optional[datetime] = None
     rejection_reason: Optional[str] = None
     created_at: datetime

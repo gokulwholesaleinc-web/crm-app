@@ -247,12 +247,14 @@ async def accept_quote_public(
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Quote not found")
 
     signer_ip = request.client.host if request.client else None
+    signer_user_agent = request.headers.get("user-agent")
     try:
         quote = await service.accept_quote_public(
             quote,
             signer_name=accept_data.signer_name,
             signer_email=accept_data.signer_email,
             signer_ip=signer_ip,
+            signer_user_agent=signer_user_agent,
         )
     except ValueError as e:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
@@ -276,9 +278,12 @@ async def reject_quote_public(
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Quote not found")
 
     signer_ip = request.client.host if request.client else None
+    signer_user_agent = request.headers.get("user-agent")
     reason = reject_data.reason if reject_data else None
     try:
-        quote = await service.reject_quote_public(quote, reason=reason, signer_ip=signer_ip)
+        quote = await service.reject_quote_public(
+            quote, reason=reason, signer_ip=signer_ip, signer_user_agent=signer_user_agent,
+        )
     except ValueError as e:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
 

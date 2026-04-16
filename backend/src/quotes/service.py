@@ -20,6 +20,19 @@ from src.email.pdf_service import BrandedPDFGenerator
 from src.email.service import EmailService
 
 
+def _designated_email_for(quote: Quote) -> str:
+    """Lowercased email that is authorized to sign this quote.
+
+    Explicit ``designated_signer_email`` wins; otherwise fall back to the
+    linked contact's email. Returns "" when neither is available.
+    """
+    if quote.designated_signer_email:
+        return quote.designated_signer_email.strip().lower()
+    if quote.contact and quote.contact.email:
+        return quote.contact.email.strip().lower()
+    return ""
+
+
 class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteUpdate]):
     """Service for Quote CRUD operations."""
 
@@ -371,24 +384,30 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
         return quote
 
     async def accept_quote_public(
-        self, quote: Quote, signer_name: str, signer_email: str, signer_ip: Optional[str] = None
+        self,
+        quote: Quote,
+        signer_name: str,
+        signer_email: str,
+        signer_ip: Optional[str] = None,
+        signer_user_agent: Optional[str] = None,
     ) -> Quote:
         """Accept a quote via the public link with e-signature data.
 
-        Raises ValueError if:
-        - the quote is not in sent/viewed state, OR
-        - the signer_email does not match the quote's recipient contact
-          email (case-insensitive) — this prevents a third party who
-          somehow gets the public link from signing on the customer's
-          behalf with an attacker-controlled email.
+        Signer-email check uses ``designated_signer_email`` when set, otherwise
+        falls back to the linked contact's email. Prevents a third party who
+        somehow gets the public URL from signing on the customer's behalf with
+        an attacker-controlled email.
+
+        Raises ValueError if the quote is not in sent/viewed state or the
+        signer_email doesn't match.
         """
         if quote.status not in ("sent", "viewed"):
             raise ValueError(f"Cannot accept quote in '{quote.status}' status")
 
-        expected_email = (quote.contact.email or "").strip().lower() if quote.contact else ""
+        expected_email = _designated_email_for(quote)
         given_email = (signer_email or "").strip().lower()
         if not expected_email:
-            raise ValueError("Quote has no recipient contact on file")
+            raise ValueError("Quote has no recipient email on file")
         if not given_email or given_email != expected_email:
             raise ValueError("Signer email does not match the quote recipient")
 
@@ -398,13 +417,18 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
         quote.signer_name = signer_name
         quote.signer_email = signer_email
         quote.signer_ip = signer_ip
+        quote.signer_user_agent = signer_user_agent
         quote.signed_at = now
         await self.db.flush()
         await self.db.refresh(quote)
         return quote
 
     async def reject_quote_public(
-        self, quote: Quote, reason: Optional[str] = None, signer_ip: Optional[str] = None
+        self,
+        quote: Quote,
+        reason: Optional[str] = None,
+        signer_ip: Optional[str] = None,
+        signer_user_agent: Optional[str] = None,
     ) -> Quote:
         """Reject a quote via the public link."""
         if quote.status not in ("sent", "viewed"):
@@ -415,6 +439,7 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
         quote.rejected_at = now
         quote.rejection_reason = reason
         quote.signer_ip = signer_ip
+        quote.signer_user_agent = signer_user_agent
         await self.db.flush()
         await self.db.refresh(quote)
         return quote

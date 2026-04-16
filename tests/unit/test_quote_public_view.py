@@ -376,6 +376,51 @@ class TestPublicQuoteAccept:
         assert data["branding"]["company_name"] == "Public View Inc"
 
     @pytest.mark.asyncio
+    async def test_accept_captures_user_agent(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        sent_quote_with_items: Quote,
+        branded_tenant_user: TenantUser,
+        test_contact: Contact,
+    ):
+        """User-agent header is persisted alongside IP for forensic audit."""
+        response = await client.post(
+            f"/api/quotes/public/{sent_quote_with_items.public_token}/accept",
+            json={"signer_name": "John Doe", "signer_email": test_contact.email},
+            headers={"User-Agent": "Mozilla/5.0 (Macintosh) TestAgent/1.0"},
+        )
+        assert response.status_code == 200, response.text
+        await db_session.refresh(sent_quote_with_items)
+        assert sent_quote_with_items.signer_user_agent == "Mozilla/5.0 (Macintosh) TestAgent/1.0"
+
+    @pytest.mark.asyncio
+    async def test_designated_signer_email_overrides_contact(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        sent_quote_with_items: Quote,
+        branded_tenant_user: TenantUser,
+    ):
+        """When designated_signer_email is set, signer must match it — not contact.email."""
+        sent_quote_with_items.designated_signer_email = "cfo@client.example"
+        await db_session.commit()
+
+        # Contact email should now be rejected
+        response = await client.post(
+            f"/api/quotes/public/{sent_quote_with_items.public_token}/accept",
+            json={"signer_name": "Contact", "signer_email": "testcontact@example.com"},
+        )
+        assert response.status_code == 400
+
+        # Designated email should be accepted (case-insensitive)
+        response = await client.post(
+            f"/api/quotes/public/{sent_quote_with_items.public_token}/accept",
+            json={"signer_name": "CFO", "signer_email": "CFO@Client.Example"},
+        )
+        assert response.status_code == 200, response.text
+
+    @pytest.mark.asyncio
     async def test_accept_rejects_mismatched_signer_email(
         self,
         client: AsyncClient,

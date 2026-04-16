@@ -21,6 +21,8 @@ from src.proposals.schemas import (
     ProposalPublicResponse,
     ProposalBranding,
     ProposalSendRequest,
+    ProposalAcceptRequest,
+    ProposalRejectRequest,
     ProposalTemplateCreate,
     ProposalTemplateUpdate,
     ProposalTemplateResponse,
@@ -319,6 +321,94 @@ async def get_public_proposal(
 
     response = ProposalPublicResponse.model_validate(proposal)
     response.branding = branding
+    return response
+
+
+@router.post("/public/{token}/accept", response_model=ProposalPublicResponse)
+async def accept_proposal_public(
+    token: str,
+    accept_data: ProposalAcceptRequest,
+    request: Request,
+    db: DBSession,
+):
+    """Accept a proposal via public link with e-signature data (no auth required).
+
+    Captures signer name/email/IP/user-agent and transitions the proposal to
+    ``accepted``. Rejects submissions whose signer_email does not match the
+    proposal's ``designated_signer_email`` (or, failing that, the linked
+    contact's email).
+    """
+    import hmac as _hmac
+
+    service = ProposalService(db)
+    proposal = await service.get_public_proposal(token)
+    if not proposal or not _hmac.compare_digest(proposal.public_token or "", token):
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Proposal not found")
+
+    signer_ip = request.client.host if request.client else None
+    signer_user_agent = request.headers.get("user-agent")
+    try:
+        proposal = await service.accept_proposal_public(
+            proposal,
+            signer_name=accept_data.signer_name,
+            signer_email=accept_data.signer_email,
+            signer_ip=signer_ip,
+            signer_user_agent=signer_user_agent,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
+
+    branding_data = await service.get_branding_for_proposal(proposal)
+    response = ProposalPublicResponse.model_validate(proposal)
+    response.branding = ProposalBranding(
+        company_name=branding_data.get("company_name"),
+        logo_url=branding_data.get("logo_url"),
+        primary_color=branding_data.get("primary_color", "#6366f1"),
+        secondary_color=branding_data.get("secondary_color", "#8b5cf6"),
+        accent_color=branding_data.get("accent_color", "#22c55e"),
+        footer_text=branding_data.get("footer_text"),
+    )
+    return response
+
+
+@router.post("/public/{token}/reject", response_model=ProposalPublicResponse)
+async def reject_proposal_public(
+    token: str,
+    request: Request,
+    db: DBSession,
+    reject_data: Optional[ProposalRejectRequest] = None,
+):
+    """Reject a proposal via public link (no auth required)."""
+    import hmac as _hmac
+
+    service = ProposalService(db)
+    proposal = await service.get_public_proposal(token)
+    if not proposal or not _hmac.compare_digest(proposal.public_token or "", token):
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Proposal not found")
+
+    signer_ip = request.client.host if request.client else None
+    signer_user_agent = request.headers.get("user-agent")
+    reason = reject_data.reason if reject_data else None
+    try:
+        proposal = await service.reject_proposal_public(
+            proposal,
+            reason=reason,
+            signer_ip=signer_ip,
+            signer_user_agent=signer_user_agent,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
+
+    branding_data = await service.get_branding_for_proposal(proposal)
+    response = ProposalPublicResponse.model_validate(proposal)
+    response.branding = ProposalBranding(
+        company_name=branding_data.get("company_name"),
+        logo_url=branding_data.get("logo_url"),
+        primary_color=branding_data.get("primary_color", "#6366f1"),
+        secondary_color=branding_data.get("secondary_color", "#8b5cf6"),
+        accent_color=branding_data.get("accent_color", "#22c55e"),
+        footer_text=branding_data.get("footer_text"),
+    )
     return response
 
 

@@ -23,6 +23,19 @@ logger = logging.getLogger(__name__)
 _TEMPLATE_VAR_PATTERN = re.compile(r"\{\{(\w+)\}\}")
 
 
+def _designated_email_for(proposal: Proposal) -> str:
+    """Lowercased email authorized to sign this proposal.
+
+    Explicit ``designated_signer_email`` wins; otherwise fall back to the
+    linked contact's email. Returns "" when neither is available.
+    """
+    if proposal.designated_signer_email:
+        return proposal.designated_signer_email.strip().lower()
+    if proposal.contact and proposal.contact.email:
+        return proposal.contact.email.strip().lower()
+    return ""
+
+
 def _proposal_logo_allowed_hosts() -> Optional[List[str]]:
     """Return the optional allowlist of hostnames permitted for logo fetches.
 
@@ -163,6 +176,67 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         await self.db.flush()
         await self.db.refresh(proposal)
 
+        return proposal
+
+    async def accept_proposal_public(
+        self,
+        proposal: Proposal,
+        signer_name: str,
+        signer_email: str,
+        signer_ip: Optional[str] = None,
+        signer_user_agent: Optional[str] = None,
+    ) -> Proposal:
+        """Accept a proposal via the public link with e-signature data.
+
+        Signer-email check uses ``designated_signer_email`` when set, otherwise
+        falls back to the linked contact's email. Prevents a third party who
+        got hold of the public URL from signing as the customer with an
+        attacker-controlled email.
+
+        Raises ValueError if the proposal is not in sent/viewed state or the
+        signer_email doesn't match.
+        """
+        if proposal.status not in ("sent", "viewed"):
+            raise ValueError(f"Cannot accept proposal in '{proposal.status}' status")
+
+        expected_email = _designated_email_for(proposal)
+        given_email = (signer_email or "").strip().lower()
+        if not expected_email:
+            raise ValueError("Proposal has no recipient email on file")
+        if not given_email or given_email != expected_email:
+            raise ValueError("Signer email does not match the proposal recipient")
+
+        now = datetime.now(timezone.utc)
+        proposal.status = "accepted"
+        proposal.accepted_at = now
+        proposal.signer_name = signer_name
+        proposal.signer_email = signer_email
+        proposal.signer_ip = signer_ip
+        proposal.signer_user_agent = signer_user_agent
+        proposal.signed_at = now
+        await self.db.flush()
+        await self.db.refresh(proposal)
+        return proposal
+
+    async def reject_proposal_public(
+        self,
+        proposal: Proposal,
+        reason: Optional[str] = None,
+        signer_ip: Optional[str] = None,
+        signer_user_agent: Optional[str] = None,
+    ) -> Proposal:
+        """Reject a proposal via the public link."""
+        if proposal.status not in ("sent", "viewed"):
+            raise ValueError(f"Cannot reject proposal in '{proposal.status}' status")
+
+        now = datetime.now(timezone.utc)
+        proposal.status = "rejected"
+        proposal.rejected_at = now
+        proposal.rejection_reason = reason
+        proposal.signer_ip = signer_ip
+        proposal.signer_user_agent = signer_user_agent
+        await self.db.flush()
+        await self.db.refresh(proposal)
         return proposal
 
     async def record_view(

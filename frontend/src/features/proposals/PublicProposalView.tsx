@@ -58,6 +58,9 @@ function PublicProposalView() {
   const [actionPending, setActionPending] = useState(false);
   const [actionDone, setActionDone] = useState<'accepted' | 'rejected' | null>(null);
   const [logoError, setLogoError] = useState(false);
+  const [signerName, setSignerName] = useState('');
+  const [signerEmail, setSignerEmail] = useState('');
+  const [signError, setSignError] = useState<string | null>(null);
 
   useEffect(() => {
     setLogoError(false);
@@ -84,15 +87,30 @@ function PublicProposalView() {
 
   const handleAccept = async () => {
     if (!proposal) return;
+    const name = signerName.trim();
+    const email = signerEmail.trim();
+    if (!name || !email) {
+      setSignError('Please enter your full name and email address.');
+      return;
+    }
     setActionPending(true);
+    setSignError(null);
     try {
-      await publicClient.post(`/api/proposals/public/${token}/accept`);
+      await publicClient.post(`/api/proposals/public/${token}/accept`, {
+        signer_name: name,
+        signer_email: email,
+      });
       setProposal((prev) => prev ? { ...prev, status: 'accepted' } : null);
       setActionDone('accepted');
-    } catch {
-      // IMPORTANT: do NOT mark the proposal accepted on failure. These
-      // are legally binding signatures — surface the error.
-      setError('Unable to record acceptance. Please contact your account manager.');
+    } catch (err) {
+      // IMPORTANT: do NOT mark the proposal accepted on failure. Surface
+      // the backend detail (e.g. "Signer email does not match...") so the
+      // customer can correct it.
+      const detail =
+        (typeof err === 'object' && err !== null && 'response' in err
+          ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+          : null) || 'Unable to record acceptance. Please contact your account manager.';
+      setSignError(detail);
     } finally {
       setActionPending(false);
     }
@@ -373,8 +391,59 @@ function PublicProposalView() {
               Your Response
             </h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-              Please review the proposal above and accept or reject it.
+              Please review the proposal above and accept or reject it. Typing
+              your name and email below and clicking Accept is your legally
+              binding electronic signature.
             </p>
+            <div className="grid gap-3 sm:grid-cols-2 mb-4">
+              <div>
+                <label
+                  htmlFor="signer-name"
+                  className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1"
+                >
+                  Full name
+                </label>
+                <input
+                  id="signer-name"
+                  type="text"
+                  autoComplete="name"
+                  value={signerName}
+                  onChange={(e) => setSignerName(e.target.value)}
+                  disabled={actionPending}
+                  className="w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm px-3 py-2 shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                  style={{ outlineColor: branding.primary_color }}
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="signer-email"
+                  className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1"
+                >
+                  Email address
+                </label>
+                <input
+                  id="signer-email"
+                  type="email"
+                  autoComplete="email"
+                  inputMode="email"
+                  spellCheck={false}
+                  value={signerEmail}
+                  onChange={(e) => setSignerEmail(e.target.value)}
+                  disabled={actionPending}
+                  className="w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm px-3 py-2 shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                  style={{ outlineColor: branding.primary_color }}
+                />
+              </div>
+            </div>
+            {signError && (
+              <p
+                role="alert"
+                aria-live="polite"
+                className="mb-4 text-sm text-red-600 dark:text-red-400"
+              >
+                {signError}
+              </p>
+            )}
             <div className="flex flex-col sm:flex-row gap-3">
               <button
                 type="button"

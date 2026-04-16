@@ -19,6 +19,9 @@ export interface ProposalBase {
   timeline?: string | null;
   terms?: string | null;
   valid_until?: string | null;
+  /** Optional override for who is authorized to sign via the public link.
+   * When unset, the linked contact's email is used. */
+  designated_signer_email?: string | null;
   owner_id?: number | null;
 }
 
@@ -38,6 +41,7 @@ export interface ProposalUpdate {
   timeline?: string | null;
   terms?: string | null;
   valid_until?: string | null;
+  designated_signer_email?: string | null;
   owner_id?: number | null;
 }
 
@@ -53,6 +57,12 @@ export interface Proposal extends ProposalBase {
   viewed_at?: string | null;
   accepted_at?: string | null;
   rejected_at?: string | null;
+  signer_name?: string | null;
+  signer_email?: string | null;
+  signer_ip?: string | null;
+  signer_user_agent?: string | null;
+  signed_at?: string | null;
+  rejection_reason?: string | null;
   created_at: string;
   updated_at: string;
   contact?: { id: number; full_name: string } | null;
