@@ -1,63 +1,66 @@
 """FastAPI CRM Application - Main Entry Point."""
 
-import os
 import asyncio
-from pathlib import Path
+import logging
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Annotated, Any
-from fastapi import Depends, FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
 
-from src.core.permissions import require_manager_or_above
-from sqlalchemy import text
+from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from sqlalchemy import text
 
-from src.config import settings
-from src.database import engine, init_db
-from src.core.router_utils import CurrentUser
-from src.core.rate_limit import limiter
-from src.whitelabel.middleware import TenantMiddleware
+from src.activities.router import router as activities_router
+from src.admin.router import router as admin_router
+from src.ai.router import router as ai_router
+from src.assignment.router import router as assignment_router
+from src.attachments.router import router as attachments_router
+from src.audit.router import router as audit_router
 
 # Import routers
 from src.auth.router import router as auth_router
-from src.contacts.router import router as contacts_router
-from src.companies.router import router as companies_router
-from src.leads.router import router as leads_router
-from src.opportunities.router import router as opportunities_router
-from src.activities.router import router as activities_router
 from src.campaigns.router import router as campaigns_router
+from src.comments.router import router as comments_router
+from src.companies.router import router as companies_router
+from src.config import settings
+from src.contacts.router import router as contacts_router
+from src.contracts.router import router as contracts_router
+from src.core.permissions import require_manager_or_above
+from src.core.rate_limit import limiter
+from src.core.router_utils import CurrentUser
+from src.core.sharing_router import router as sharing_router
 from src.dashboard.router import router as dashboard_router
-from src.whitelabel.router import router as whitelabel_router
-from src.import_export.router import router as import_export_router
-from src.notes.router import router as notes_router
-from src.workflows.router import router as workflows_router
-from src.attachments.router import router as attachments_router
+from src.database import engine
 from src.dedup.router import router as dedup_router
 from src.email.router import router as email_router
-from src.notifications.router import router as notifications_router
+from src.expenses.router import router as expenses_router
 from src.filters.router import router as filters_router
-from src.reports.router import router as reports_router
-from src.audit.router import router as audit_router
-from src.comments.router import router as comments_router
-from src.roles.router import router as roles_router
-from src.webhooks.router import router as webhooks_router
-from src.assignment.router import router as assignment_router
-from src.sequences.router import router as sequences_router
-from src.core.sharing_router import router as sharing_router
-from src.quotes.router import router as quotes_router
+from src.import_export.router import router as import_export_router
+from src.integrations.gmail.router import router as gmail_router
+from src.integrations.google_calendar.router import router as google_calendar_router
+from src.leads.router import router as leads_router
+from src.meta.router import router as meta_router
+from src.notes.router import router as notes_router
+from src.notifications.router import router as notifications_router
+from src.opportunities.router import router as opportunities_router
 from src.payments.router import router as payments_router
 from src.proposals.router import router as proposals_router
-from src.contracts.router import router as contracts_router
-from src.admin.router import router as admin_router
-from src.ai.router import router as ai_router
-from src.meta.router import router as meta_router
-from src.expenses.router import router as expenses_router
-from src.integrations.google_calendar.router import router as google_calendar_router
-from src.integrations.gmail.router import router as gmail_router
+from src.quotes.router import router as quotes_router
+from src.reports.router import router as reports_router
+from src.roles.router import router as roles_router
+from src.sequences.router import router as sequences_router
 from src.settings.router import router as settings_router
+from src.webhooks.router import router as webhooks_router
+from src.whitelabel.middleware import TenantMiddleware
+from src.whitelabel.router import router as whitelabel_router
+from src.workflows.router import router as workflows_router
+
+logger = logging.getLogger(__name__)
 
 
 async def _run_production_migrations():
@@ -106,8 +109,8 @@ async def _run_production_migrations():
             ]:
                 try:
                     await conn.execute(idx_sql)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Migration DDL skipped: %s", exc)
 
             column_migrations = [
                 "ALTER TABLE leads ADD COLUMN IF NOT EXISTS sales_code VARCHAR(100)",
@@ -177,8 +180,8 @@ async def _run_production_migrations():
             for sql in column_migrations:
                 try:
                     await conn.execute(sql)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Column migration skipped: %s", exc)
 
             # User approval gate: rejected emails block list
             try:
@@ -195,8 +198,8 @@ async def _run_production_migrations():
                 await conn.execute(
                     "CREATE UNIQUE INDEX IF NOT EXISTS ix_rejected_access_emails_email ON rejected_access_emails(email)"
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Failed to create rejected_access_emails table: %s", exc)
 
             # Audit Session 2: Stripe webhook idempotency log
             try:
@@ -211,8 +214,8 @@ async def _run_production_migrations():
                 await conn.execute(
                     "CREATE UNIQUE INDEX IF NOT EXISTS ix_webhook_events_event_id ON webhook_events(event_id)"
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Failed to create webhook_events table: %s", exc)
 
             # Audit Session 2: backfill public_token on any pre-existing quote
             # / proposal rows that pre-date the column. Per-row UPDATE so each
@@ -235,8 +238,8 @@ async def _run_production_migrations():
                         "UPDATE proposals SET public_token = $1 WHERE id = $2",
                         _secrets.token_urlsafe(32), row["id"],
                     )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Failed to backfill public_token on quotes/proposals: %s", exc)
 
             # Create inbound_emails table if it doesn't exist
             try:
@@ -262,8 +265,8 @@ async def _run_production_migrations():
                 """)
                 await conn.execute("CREATE INDEX IF NOT EXISTS ix_inbound_emails_entity ON inbound_emails(entity_type, entity_id)")
                 await conn.execute("CREATE INDEX IF NOT EXISTS ix_inbound_emails_from ON inbound_emails(from_email)")
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Failed to create inbound_emails table: %s", exc)
 
             # Create email_settings table if it doesn't exist
             try:
@@ -278,8 +281,8 @@ async def _run_production_migrations():
                         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                     )
                 """)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Failed to create email_settings table: %s", exc)
 
             try:
                 await conn.execute("""
@@ -287,8 +290,8 @@ async def _run_production_migrations():
                     WHERE LOWER(name) IN ('new', 'contacted', 'qualified', 'nurturing', 'unqualified', 'converted')
                     AND pipeline_type != 'lead'
                 """)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Failed to update pipeline_stages pipeline_type: %s", exc)
 
             print("Production migrations completed successfully")
         finally:
@@ -305,35 +308,6 @@ async def _init_database():
         async with engine.begin() as conn:
             await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
 
-        from src.auth.models import User, RejectedAccessEmail
-        from src.core.models import Note, Tag, EntityTag, EntityShare
-        from src.contacts.models import Contact
-        from src.companies.models import Company
-        from src.leads.models import Lead, LeadSource
-        from src.opportunities.models import Opportunity, PipelineStage
-        from src.activities.models import Activity
-        from src.campaigns.models import Campaign, CampaignMember, EmailTemplate, EmailCampaignStep
-        from src.dashboard.models import DashboardNumberCard, DashboardChart
-        from src.workflows.models import WorkflowRule, WorkflowExecution
-        from src.ai.models import AIEmbedding, AIConversation, AIFeedback, AIKnowledgeDocument, AIUserPreferences
-        from src.whitelabel.models import Tenant, TenantSettings, TenantUser
-        from src.attachments.models import Attachment
-        from src.email.models import EmailQueue, InboundEmail, EmailSettings
-        from src.notifications.models import Notification
-        from src.filters.models import SavedFilter
-        from src.reports.models import SavedReport
-        from src.audit.models import AuditLog
-        from src.comments.models import Comment
-        from src.roles.models import Role, UserRole
-        from src.webhooks.models import Webhook, WebhookDelivery
-        from src.assignment.models import AssignmentRule
-        from src.sequences.models import Sequence, SequenceEnrollment
-        from src.quotes.models import Quote, QuoteLineItem, QuoteTemplate, ProductBundle, ProductBundleItem
-        from src.payments.models import StripeCustomer, Product, Price, Payment, Subscription
-        from src.proposals.models import Proposal, ProposalTemplate, ProposalView
-        from src.contracts.models import Contract
-        from src.meta.models import CompanyMetaData
-        from src.expenses.models import Expense
 
         skip_create_all = os.environ.get("SKIP_CREATE_ALL", "").lower() in ("true", "1")
         if not skip_create_all:
@@ -445,19 +419,26 @@ app.include_router(settings_router)
 
 
 # Register webhook event handler with event system
-from src.events.service import on as event_on
-from src.webhooks.event_handler import webhook_event_handler
-from src.notifications.event_handler import notification_event_handler
 from src.events.service import (
-    LEAD_CREATED, LEAD_UPDATED,
-    CONTACT_CREATED, CONTACT_UPDATED,
-    OPPORTUNITY_CREATED, OPPORTUNITY_UPDATED, OPPORTUNITY_STAGE_CHANGED,
     ACTIVITY_CREATED,
-    COMPANY_CREATED, COMPANY_UPDATED,
-    QUOTE_SENT, QUOTE_ACCEPTED,
-    PROPOSAL_SENT, PROPOSAL_ACCEPTED,
+    COMPANY_CREATED,
+    COMPANY_UPDATED,
+    CONTACT_CREATED,
+    CONTACT_UPDATED,
+    LEAD_CREATED,
+    LEAD_UPDATED,
+    OPPORTUNITY_CREATED,
+    OPPORTUNITY_STAGE_CHANGED,
+    OPPORTUNITY_UPDATED,
     PAYMENT_RECEIVED,
+    PROPOSAL_ACCEPTED,
+    PROPOSAL_SENT,
+    QUOTE_ACCEPTED,
+    QUOTE_SENT,
 )
+from src.events.service import on as event_on
+from src.notifications.event_handler import notification_event_handler
+from src.webhooks.event_handler import webhook_event_handler
 
 for _evt in [
     LEAD_CREATED, LEAD_UPDATED,
@@ -490,15 +471,16 @@ if settings.DEBUG:
     @app.get("/api/debug/data-scope-check")
     async def debug_data_scope_check(current_user: CurrentUser):
         """Check data ownership for the currently logged-in user."""
-        from sqlalchemy import select, func
-        from src.database import async_session_maker
+        from sqlalchemy import func, select
+
+        from src.activities.models import Activity
         from src.auth.models import User
-        from src.contacts.models import Contact
+        from src.campaigns.models import Campaign
         from src.companies.models import Company
+        from src.contacts.models import Contact
+        from src.database import async_session_maker
         from src.leads.models import Lead
         from src.opportunities.models import Opportunity
-        from src.activities.models import Activity
-        from src.campaigns.models import Campaign
 
         async with async_session_maker() as session:
             # Get all users
@@ -539,16 +521,17 @@ async def reseed_demo_data(current_user: CurrentUser):
         from src.core.router_utils import raise_forbidden
         raise_forbidden("Only superusers can reseed data")
 
-    from sqlalchemy import select, delete
-    from src.database import async_session_maker
+    from sqlalchemy import delete, select
+
+    from src.activities.models import Activity
     from src.auth.models import User
-    from src.contacts.models import Contact
+    from src.campaigns.models import Campaign
     from src.companies.models import Company
+    from src.contacts.models import Contact
+    from src.core.models import EntityTag, Note
+    from src.database import async_session_maker
     from src.leads.models import Lead
     from src.opportunities.models import Opportunity
-    from src.activities.models import Activity
-    from src.campaigns.models import Campaign
-    from src.core.models import Note, EntityTag
 
     async with async_session_maker() as session:
         # Find the demo user
@@ -627,9 +610,10 @@ else:
 async def list_tags(current_user: CurrentUser):
     """List all tags (cached for 5 minutes)."""
     from sqlalchemy import select
-    from src.database import async_session_maker
+
+    from src.core.cache import CACHE_TAGS, cached_fetch
     from src.core.models import Tag
-    from src.core.cache import cached_fetch, CACHE_TAGS
+    from src.database import async_session_maker
 
     async def fetch_tags():
         async with async_session_maker() as session:
@@ -647,9 +631,9 @@ async def create_tag(
     color: str = "#6366f1",
 ):
     """Create a new tag. Manager+ only — tags are global shared state."""
-    from src.database import async_session_maker
-    from src.core.models import Tag
     from src.core.cache import invalidate_tags_cache
+    from src.core.models import Tag
+    from src.database import async_session_maker
 
     # Basic input sanity: tag name/color length + character set.
     name = (name or "").strip()

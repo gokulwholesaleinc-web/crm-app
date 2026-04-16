@@ -1,17 +1,20 @@
 """Attachment API routes for file upload, download, listing, and deletion."""
 
-from typing import Annotated, Optional
-from fastapi import APIRouter, Depends, UploadFile, File, Form, Query
+import logging
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse
 
-from src.core.constants import HTTPStatus, EntityNames
+from src.attachments.schemas import AttachmentListResponse, AttachmentResponse
+from src.attachments.service import AttachmentService
+from src.core.constants import EntityNames, HTTPStatus
 from src.core.data_scope import DataScope, get_data_scope
 from src.core.entity_access import require_entity_access
-from src.core.router_utils import DBSession, CurrentUser, raise_not_found, raise_bad_request
-from src.attachments.schemas import AttachmentResponse, AttachmentListResponse
-from src.attachments.service import AttachmentService
+from src.core.router_utils import CurrentUser, DBSession, raise_bad_request, raise_not_found
 
 router = APIRouter(prefix="/api/attachments", tags=["attachments"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("/upload", response_model=AttachmentResponse, status_code=HTTPStatus.CREATED)
@@ -22,7 +25,7 @@ async def upload_file(
     file: UploadFile = File(...),
     entity_type: str = Form(...),
     entity_id: int = Form(...),
-    category: Optional[str] = Form(None),
+    category: str | None = Form(None),
 ):
     """Upload a file attachment for an entity."""
     valid_entity_types = {"contacts", "companies", "leads", "opportunities", "expenses"}
@@ -69,7 +72,8 @@ async def download_attachment(
 
     try:
         download_url = await service.get_download_url(attachment)
-    except Exception:
+    except Exception as exc:
+        logger.warning("Failed to get download URL for attachment %s: %s", attachment_id, exc)
         download_url = None
 
     if download_url:
@@ -93,7 +97,7 @@ async def list_attachments(
     current_user: CurrentUser,
     db: DBSession,
     data_scope: Annotated[DataScope, Depends(get_data_scope)],
-    category: Optional[str] = Query(None),
+    category: str | None = Query(None),
 ):
     """List all attachments for a given entity, optionally filtered by category."""
     await require_entity_access(db, entity_type, entity_id, current_user, data_scope)
