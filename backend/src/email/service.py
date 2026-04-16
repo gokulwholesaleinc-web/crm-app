@@ -212,12 +212,10 @@ class EmailService:
         self.db.add(email)
         await self.db.flush()
 
-        # Check daily send limit before sending
         from src.email.throttle import EmailThrottleService
         throttle = EmailThrottleService(self.db)
         if not await throttle.can_send():
             email.status = "throttled"
-            # Schedule for next day at 9 AM UTC
             tomorrow_9am = (datetime.now(timezone.utc) + timedelta(days=1)).replace(
                 hour=9, minute=0, second=0, microsecond=0
             )
@@ -225,18 +223,11 @@ class EmailService:
             await self.db.flush()
             return email
 
-        # Attempt immediate send
         await self._attempt_send(email)
         return email
 
     async def _attempt_send(self, email: EmailQueue) -> None:
-        """Attempt to send an email, updating status accordingly.
-
-        Tries Gmail first if the sending user has a connected account;
-        falls back to Resend. On failure, sets status to 'retry' with
-        exponential backoff (2^retry_count minutes) up to MAX_RETRIES,
-        then marks as 'failed'.
-        """
+        """Attempt to send via Gmail if connected, fall back to Resend."""
         email.attempts += 1
         try:
             sent_via_gmail = False
@@ -294,7 +285,6 @@ class EmailService:
         if sent_by_id is not None:
             filters.append(EmailQueue.sent_by_id == sent_by_id)
 
-        # Count + Fetch
         count_query = select(func.count()).select_from(EmailQueue)
         query = select(EmailQueue).order_by(EmailQueue.created_at.desc())
         if filters:
@@ -408,14 +398,12 @@ class EmailService:
         from src.campaigns.models import CampaignMember, EmailTemplate
         from src.email.branded_templates import render_campaign_wrapper
 
-        # Fetch tenant branding for the sending user
         branding = TenantBrandingHelper.get_default_branding()
         if sent_by_id:
             branding = await TenantBrandingHelper.get_branding_for_user(
                 self.db, sent_by_id
             )
 
-        # Resolve template body once
         tmpl_result = await self.db.execute(
             select(EmailTemplate).where(EmailTemplate.id == template_id)
         )
@@ -600,7 +588,6 @@ class EmailService:
 
         Uses SQL UNION ALL with ORDER BY + LIMIT/OFFSET at the database level.
         """
-        # Outbound subquery
         outbound_q = (
             select(
                 EmailQueue.id.label("id"),
@@ -622,7 +609,6 @@ class EmailService:
             )
         )
 
-        # Inbound subquery
         inbound_q = (
             select(
                 InboundEmail.id.label("id"),
@@ -646,11 +632,9 @@ class EmailService:
 
         combined = union_all(outbound_q, inbound_q).subquery()
 
-        # Count total
         count_q = select(func.count()).select_from(combined)
         total = (await self.db.execute(count_q)).scalar() or 0
 
-        # Fetch paginated results
         offset = (page - 1) * page_size
         data_q = (
             select(combined)
