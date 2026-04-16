@@ -91,14 +91,7 @@ async def sync_calendar(
     try:
         created = await service.sync_from_google(current_user.id)
     except Exception as exc:
-        response_text = getattr(getattr(exc, "response", None), "text", None)
-        logger.exception(
-            "Calendar sync failed for user_id=%s: %s(%s)%s",
-            current_user.id,
-            type(exc).__name__,
-            exc,
-            f" | response: {response_text}" if response_text else "",
-        )
+        logger.exception("Calendar sync failed for user_id=%s", current_user.id)
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=f"Sync failed: {str(exc)}")
     return {"synced": len(created), "events": created}
 

@@ -180,12 +180,7 @@ class GoogleCalendarService:
         return sync_event
 
     async def sync_from_google(self, user_id: int) -> List[Dict[str, Any]]:
-        """Pull upcoming events from Google Calendar and create CRM activities.
-
-        Uses pg_try_advisory_lock to prevent concurrent syncs for the same user.
-        Commits after each page to avoid holding a single long transaction.
-        Caps timeMax at 90 days to prevent recurring-event expansion to 2056.
-        """
+        """Pull upcoming events from Google Calendar into CRM activities."""
         has_lock = False
         try:
             locked = await self.db.execute(
@@ -197,7 +192,7 @@ class GoogleCalendarService:
                 return []
             has_lock = True
         except Exception:
-            pass
+            logger.debug("Advisory lock unavailable (non-PostgreSQL?), proceeding without lock")
 
         try:
             return await self._sync_from_google_locked(user_id)

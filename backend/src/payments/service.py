@@ -226,31 +226,23 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
 
         checkout_mode = "subscription" if is_subscription else "payment"
 
-        # Build session params with ACH support
         session_params = {
             "payment_method_types": ["card", "us_bank_account"],
-            "line_items": [{
-                "price_data": price_data,
-                "quantity": 1,
-            }],
+            "line_items": [{"price_data": price_data, "quantity": 1}],
             "mode": checkout_mode,
             "success_url": success_url,
             "cancel_url": cancel_url,
-            "customer": stripe_customer_id,
             "payment_method_options": {
                 "us_bank_account": {
                     "financial_connections": {"permissions": ["payment_method"]},
                 },
             },
         }
-
-        # For one-time payments, save bank details for future use
+        if stripe_customer_id:
+            session_params["customer"] = stripe_customer_id
         if checkout_mode == "payment":
-            session_params["payment_intent_data"] = {
-                "setup_future_usage": "off_session",
-            }
+            session_params["payment_intent_data"] = {"setup_future_usage": "off_session"}
 
-        # Create Stripe checkout session
         session = stripe.checkout.Session.create(**session_params)
 
         # Create local payment record
@@ -394,8 +386,6 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             stripe_cust = stripe.Customer.create(**stripe_params)
             stripe_customer_id = stripe_cust.id
         else:
-            # Generate a local placeholder ID when Stripe is not configured
-            import uuid
             stripe_customer_id = f"local_{uuid.uuid4().hex[:16]}"
 
         customer = StripeCustomer(
