@@ -4,7 +4,7 @@ import { ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { Spinner } from '../../components/ui/Spinner';
 import { Button } from '../../components/ui/Button';
 import { showSuccess } from '../../utils/toast';
-import { calendarCallback, metaCallback } from '../../api/integrations';
+import { calendarCallback, metaCallback, gmailCallback } from '../../api/integrations';
 import { useAuthStore } from '../../store/authStore';
 
 type CallbackStatus = 'pending' | 'error';
@@ -20,6 +20,9 @@ function resolveIntegration(pathname: string): IntegrationInfo | null {
   }
   if (pathname.includes('meta')) {
     return { label: 'Meta', settingsPath: '/settings' };
+  }
+  if (pathname.includes('gmail')) {
+    return { label: 'Gmail', settingsPath: '/settings' };
   }
   return null;
 }
@@ -86,6 +89,9 @@ function OAuthCallbackPage() {
           const redirectUri =
             window.location.origin + '/settings/integrations/meta/callback';
           await metaCallback(code, redirectUri);
+        } else if (integration.label === 'Gmail') {
+          const state = searchParams.get('state') ?? '';
+          await gmailCallback(code, state);
         }
         showSuccess(`${integration.label} connected successfully`);
         navigate(integration.settingsPath, { replace: true });

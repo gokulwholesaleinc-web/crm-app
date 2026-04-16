@@ -450,6 +450,16 @@ function AppRoutes() {
           </PrivateRoute>
         }
       />
+      <Route
+        path="/settings/integrations/gmail/callback"
+        element={
+          <PrivateRoute>
+            <ErrorBoundary>
+              <OAuthCallbackPage />
+            </ErrorBoundary>
+          </PrivateRoute>
+        }
+      />
 
       {/* Catch-all redirect to dashboard */}
       <Route path="*" element={<Navigate to="/" replace />} />
