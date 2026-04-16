@@ -75,7 +75,6 @@ class ActivityService(CRUDService[Activity, ActivityCreate, ActivityUpdate]):
         return activities, total
 
     async def create(self, data: ActivityCreate, user_id: int) -> Activity:
-        """Create a new activity."""
         activity_data = data.model_dump()
         if not activity_data.get("entity_type"):
             activity_data["entity_type"] = "user"
@@ -91,7 +90,6 @@ class ActivityService(CRUDService[Activity, ActivityCreate, ActivityUpdate]):
         return activity
 
     async def update(self, activity: Activity, data: ActivityUpdate, user_id: int) -> Activity:
-        """Update an activity."""
         return await super().update(activity, data, user_id)
 
     async def complete(self, activity: Activity, user_id: int, notes: Optional[str] = None) -> Activity:

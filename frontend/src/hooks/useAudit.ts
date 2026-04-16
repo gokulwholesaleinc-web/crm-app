@@ -5,9 +5,7 @@
 import { useAuthQuery } from './useAuthQuery';
 import { auditApi } from '../api/audit';
 
-// =============================================================================
 // Query Keys
-// =============================================================================
 
 export const auditKeys = {
   all: ['audit'] as const,
@@ -17,9 +15,7 @@ export const auditKeys = {
     [...auditKeys.entity(entityType, entityId), page] as const,
 };
 
-// =============================================================================
 // Hooks
-// =============================================================================
 
 /**
  * Hook to fetch audit history for a specific entity

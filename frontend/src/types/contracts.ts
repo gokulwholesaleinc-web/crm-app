@@ -1,8 +1,6 @@
 import type { PaginatedResponse, ContactBrief, CompanyBrief } from './common';
 
-// =============================================================================
 // Contract Types
-// =============================================================================
 
 export interface ContractCreate {
   title: string;

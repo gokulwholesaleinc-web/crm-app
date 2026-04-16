@@ -67,9 +67,7 @@ export const deleteLead = async (leadId: number): Promise<void> => {
   await apiClient.delete(`${LEADS_BASE}/${leadId}`);
 };
 
-// =============================================================================
 // Lead Sources
-// =============================================================================
 
 /**
  * List all lead sources
@@ -89,9 +87,7 @@ export const createLeadSource = async (sourceData: LeadSourceCreate): Promise<Le
   return response.data;
 };
 
-// =============================================================================
 // Lead Conversion
-// =============================================================================
 
 /**
  * Convert a lead to a contact
@@ -135,9 +131,7 @@ export const fullConversion = async (
   return response.data;
 };
 
-// =============================================================================
 // Lead Pipeline / Kanban
-// =============================================================================
 
 /**
  * Get pipeline stages for leads
@@ -171,9 +165,7 @@ export const moveLeadStage = async (
   return response.data;
 };
 
-// =============================================================================
 // Email Campaigns
-// =============================================================================
 
 export interface SendCampaignRequest {
   lead_ids: number[];

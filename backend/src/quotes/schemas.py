@@ -5,9 +5,7 @@ from typing import Optional, List
 from pydantic import BaseModel, ConfigDict, model_validator
 
 
-# =============================================================================
 # Line Item Schemas
-# =============================================================================
 
 class QuoteLineItemCreate(BaseModel):
     description: str
@@ -30,9 +28,7 @@ class QuoteLineItemResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-# =============================================================================
 # Quote Schemas
-# =============================================================================
 
 class QuoteBase(BaseModel):
     title: str
@@ -121,9 +117,7 @@ class QuoteListResponse(BaseModel):
     pages: int
 
 
-# =============================================================================
 # Public Quote View Schemas
-# =============================================================================
 
 class QuoteBranding(BaseModel):
     """Tenant branding data for public quote view."""
@@ -181,9 +175,7 @@ class QuoteRejectRequest(BaseModel):
     reason: Optional[str] = None
 
 
-# =============================================================================
 # Template Schemas
-# =============================================================================
 
 class QuoteTemplateCreate(BaseModel):
     name: str
@@ -206,9 +198,7 @@ class QuoteTemplateResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-# =============================================================================
 # Product Bundle Schemas
-# =============================================================================
 
 class ProductBundleItemCreate(BaseModel):
     description: str

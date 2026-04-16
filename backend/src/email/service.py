@@ -259,7 +259,6 @@ class EmailService:
         await self.db.flush()
 
     async def get_by_id(self, email_id: int) -> Optional[EmailQueue]:
-        """Get an email by ID."""
         result = await self.db.execute(
             select(EmailQueue).where(EmailQueue.id == email_id)
         )

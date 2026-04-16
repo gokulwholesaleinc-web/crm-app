@@ -54,7 +54,6 @@ class WorkflowService(BaseService[WorkflowRule]):
         return rules, total
 
     async def create_rule(self, data: WorkflowRuleCreate, user_id: int) -> WorkflowRule:
-        """Create a new workflow rule."""
         rule = WorkflowRule(**data.model_dump(), created_by_id=user_id)
         self.db.add(rule)
         await self.db.flush()
@@ -62,7 +61,6 @@ class WorkflowService(BaseService[WorkflowRule]):
         return rule
 
     async def update_rule(self, rule: WorkflowRule, data: WorkflowRuleUpdate) -> WorkflowRule:
-        """Update a workflow rule."""
         update_data = data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(rule, field, value)
@@ -71,7 +69,6 @@ class WorkflowService(BaseService[WorkflowRule]):
         return rule
 
     async def delete_rule(self, rule: WorkflowRule) -> None:
-        """Delete a workflow rule."""
         await self.db.delete(rule)
         await self.db.flush()
 

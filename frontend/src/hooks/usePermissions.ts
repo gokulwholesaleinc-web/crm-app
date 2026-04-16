@@ -12,9 +12,7 @@ import { rolesApi } from '../api/roles';
 import { CACHE_TIMES } from '../config/queryConfig';
 import type { UserRoleAssign } from '../types';
 
-// =============================================================================
 // Query Keys
-// =============================================================================
 
 export const roleKeys = {
   all: ['roles'] as const,
@@ -22,9 +20,7 @@ export const roleKeys = {
   myPermissions: () => [...roleKeys.all, 'my-permissions'] as const,
 };
 
-// =============================================================================
 // Server-side Roles & Permissions Hooks
-// =============================================================================
 
 /**
  * Hook to fetch all available roles from the server

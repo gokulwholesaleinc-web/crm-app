@@ -46,7 +46,6 @@ class SequenceService(BaseService[Sequence]):
         return sequences, total
 
     async def create_sequence(self, data: SequenceCreate, user_id: int) -> Sequence:
-        """Create a new sequence."""
         steps_data = [s.model_dump() for s in data.steps] if data.steps else []
         seq = Sequence(
             name=data.name,
@@ -61,7 +60,6 @@ class SequenceService(BaseService[Sequence]):
         return seq
 
     async def update_sequence(self, seq: Sequence, data: SequenceUpdate) -> Sequence:
-        """Update a sequence."""
         update_data = data.model_dump(exclude_unset=True)
         if "steps" in update_data and update_data["steps"] is not None:
             update_data["steps"] = [s if isinstance(s, dict) else s.model_dump() for s in update_data["steps"]]
@@ -72,12 +70,10 @@ class SequenceService(BaseService[Sequence]):
         return seq
 
     async def delete_sequence(self, seq: Sequence) -> None:
-        """Delete a sequence."""
         await self.db.delete(seq)
         await self.db.flush()
 
     async def enroll_contact(self, sequence_id: int, contact_id: int) -> SequenceEnrollment:
-        """Enroll a contact in a sequence."""
         # Check if already enrolled and active
         result = await self.db.execute(
             select(SequenceEnrollment).where(
@@ -111,7 +107,6 @@ class SequenceService(BaseService[Sequence]):
         return enrollment
 
     async def pause_enrollment(self, enrollment_id: int) -> Optional[SequenceEnrollment]:
-        """Pause an enrollment."""
         result = await self.db.execute(
             select(SequenceEnrollment).where(SequenceEnrollment.id == enrollment_id)
         )
@@ -124,7 +119,6 @@ class SequenceService(BaseService[Sequence]):
         return enrollment
 
     async def resume_enrollment(self, enrollment_id: int) -> Optional[SequenceEnrollment]:
-        """Resume a paused enrollment."""
         result = await self.db.execute(
             select(SequenceEnrollment).where(SequenceEnrollment.id == enrollment_id)
         )
@@ -163,14 +157,12 @@ class SequenceService(BaseService[Sequence]):
         return enrollments, total
 
     async def get_enrollment_by_id(self, enrollment_id: int) -> Optional[SequenceEnrollment]:
-        """Get a single enrollment by ID."""
         result = await self.db.execute(
             select(SequenceEnrollment).where(SequenceEnrollment.id == enrollment_id)
         )
         return result.scalar_one_or_none()
 
     async def get_contact_enrollments(self, contact_id: int) -> List[SequenceEnrollment]:
-        """Get all enrollments for a contact."""
         result = await self.db.execute(
             select(SequenceEnrollment).where(
                 SequenceEnrollment.contact_id == contact_id
@@ -213,7 +205,6 @@ class SequenceService(BaseService[Sequence]):
         return processed
 
     async def _get_contact(self, contact_id: int) -> Optional[Contact]:
-        """Get a contact by ID."""
         result = await self.db.execute(
             select(Contact).where(Contact.id == contact_id)
         )

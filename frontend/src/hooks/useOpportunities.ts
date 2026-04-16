@@ -16,9 +16,7 @@ import type {
   PipelineStageUpdate,
 } from '../types';
 
-// =============================================================================
 // Query Keys
-// =============================================================================
 
 export const opportunityKeys = createQueryKeys('opportunities');
 
@@ -31,9 +29,7 @@ export const pipelineKeys = {
   summary: (ownerId?: number) => [...pipelineKeys.all, 'summary', { ownerId }] as const,
 };
 
-// =============================================================================
 // Entity CRUD Hooks using Factory Pattern
-// =============================================================================
 
 const opportunityEntityHooks = createEntityHooks<
   Opportunity,
@@ -111,9 +107,7 @@ export function useDeleteOpportunity() {
   });
 }
 
-// =============================================================================
 // Pipeline Stage Hooks
-// =============================================================================
 
 /**
  * Hook to fetch all pipeline stages
@@ -188,9 +182,7 @@ export function useReorderPipelineStages() {
   });
 }
 
-// =============================================================================
 // Kanban / Pipeline View Hooks
-// =============================================================================
 
 /**
  * Hook to fetch Kanban board view of the pipeline
@@ -224,9 +216,7 @@ export function useMoveOpportunity() {
   });
 }
 
-// =============================================================================
 // Forecasting Hooks
-// =============================================================================
 
 /**
  * Hook to fetch revenue forecast
@@ -248,9 +238,7 @@ export function usePipelineSummary(ownerId?: number) {
   });
 }
 
-// =============================================================================
 // Unified Pipeline Hook
-// =============================================================================
 
 export const unifiedPipelineKeys = {
   all: ['unified-pipeline'] as const,
@@ -267,9 +255,7 @@ export function useUnifiedPipeline(ownerId?: number) {
   });
 }
 
-// =============================================================================
 // Search Hook
-// =============================================================================
 
 /**
  * Hook to search opportunities by name

@@ -107,7 +107,6 @@ def convert_amount(
 
 
 def get_currency_symbol(currency_code: str) -> str:
-    """Get the symbol for a currency code."""
     info = SUPPORTED_CURRENCIES.get(currency_code)
     return info["symbol"] if info else currency_code
 
@@ -126,5 +125,4 @@ def get_supported_currencies_list() -> list:
 
 
 def get_base_currency() -> str:
-    """Get the configured base currency."""
     return BASE_CURRENCY

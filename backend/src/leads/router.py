@@ -148,9 +148,7 @@ async def create_lead(
     return await _build_lead_response(service, lead)
 
 
-# =============================================================================
 # Lead Pipeline / Kanban endpoints (before parameterized routes)
-# =============================================================================
 
 @router.get("/pipeline-stages")
 async def get_lead_pipeline_stages(

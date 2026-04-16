@@ -11,9 +11,7 @@ import type {
   NoteFilters,
 } from '../types';
 
-// =============================================================================
 // Query Keys
-// =============================================================================
 
 export const noteKeys = {
   all: ['notes'] as const,
@@ -25,9 +23,7 @@ export const noteKeys = {
     [...noteKeys.all, 'entity', entityType, entityId] as const,
 };
 
-// =============================================================================
 // List and Detail Hooks
-// =============================================================================
 
 /**
  * Hook to fetch a paginated list of notes
@@ -66,9 +62,7 @@ export function useNote(id: number | undefined) {
   });
 }
 
-// =============================================================================
 // Mutation Hooks
-// =============================================================================
 
 /**
  * Hook to create a new note

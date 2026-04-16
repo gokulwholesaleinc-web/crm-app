@@ -154,9 +154,7 @@ export const generateExportFilename = (entityType: string): string => {
   return `${entityType}_export_${date}.csv`;
 };
 
-// =============================================================================
 // Bulk Operations
-// =============================================================================
 
 export const bulkUpdate = async (data: BulkUpdateRequest): Promise<BulkOperationResult> => {
   const response = await apiClient.post<BulkOperationResult>(
@@ -174,9 +172,7 @@ export const bulkAssign = async (data: BulkAssignRequest): Promise<BulkOperation
   return response.data;
 };
 
-// =============================================================================
 // Bulk Delete
-// =============================================================================
 
 export interface BulkDeleteRequest {
   entity_type: string;
@@ -199,9 +195,7 @@ export const bulkDelete = async (data: BulkDeleteRequest): Promise<BulkDeleteRes
   return response.data;
 };
 
-// =============================================================================
 // Mapped Import (user-specified column mapping)
-// =============================================================================
 
 export const importWithMapping = async (
   entityType: string,

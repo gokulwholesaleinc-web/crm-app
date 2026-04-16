@@ -13,15 +13,11 @@ import type {
   ContractFilters,
 } from '../types';
 
-// =============================================================================
 // Query Keys
-// =============================================================================
 
 export const contractKeys = createQueryKeys('contracts');
 
-// =============================================================================
 // Entity CRUD Hooks using Factory Pattern
-// =============================================================================
 
 const contractEntityHooks = createEntityHooks<
   Contract,

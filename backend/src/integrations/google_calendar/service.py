@@ -117,7 +117,6 @@ class GoogleCalendarService:
         return True
 
     async def get_sync_status(self, user_id: int) -> Dict[str, Any]:
-        """Get the sync status for a user."""
         credential = await self.get_credential(user_id)
         count_result = await self.db.execute(
             select(func.count()).select_from(

@@ -77,7 +77,6 @@ def parse_csv_content(content: bytes) -> str:
 
 
 def parse_text_content(content: bytes) -> str:
-    """Parse plain text content."""
     return content.decode("utf-8", errors="replace")
 
 

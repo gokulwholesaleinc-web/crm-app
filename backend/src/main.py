@@ -463,7 +463,6 @@ FRONTEND_DIST = Path(__file__).parent.parent.parent / "frontend" / "dist"
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint."""
     return {"status": "healthy"}
 
 
@@ -598,7 +597,6 @@ if FRONTEND_DIST.exists():
 else:
     @app.get("/")
     async def root():
-        """Root endpoint."""
         return {
             "name": "CRM API",
             "version": "1.0.0",

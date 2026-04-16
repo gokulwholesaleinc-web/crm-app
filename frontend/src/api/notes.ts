@@ -13,9 +13,7 @@ import type {
 
 const NOTES_BASE = '/api/notes';
 
-// =============================================================================
 // Notes CRUD
-// =============================================================================
 
 /**
  * List notes with pagination and filters
@@ -66,9 +64,7 @@ export const deleteNote = async (noteId: number): Promise<void> => {
   await apiClient.delete(`${NOTES_BASE}/${noteId}`);
 };
 
-// =============================================================================
 // Entity-specific helpers
-// =============================================================================
 
 /**
  * Get notes for a specific entity

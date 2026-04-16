@@ -26,7 +26,6 @@ class CommentService:
         self.db = db
 
     async def get_by_id(self, comment_id: int) -> Optional[Comment]:
-        """Get a comment by ID."""
         result = await self.db.execute(
             select(Comment).where(Comment.id == comment_id)
         )

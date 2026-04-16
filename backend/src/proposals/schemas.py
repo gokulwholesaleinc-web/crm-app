@@ -5,9 +5,7 @@ from typing import Optional, List
 from pydantic import BaseModel, ConfigDict
 
 
-# =============================================================================
 # Proposal Schemas
-# =============================================================================
 
 class ProposalBase(BaseModel):
     title: str
@@ -141,17 +139,13 @@ class ProposalSendRequest(BaseModel):
     attach_pdf: bool = False
 
 
-# =============================================================================
 # AI Generation Request
-# =============================================================================
 
 class AIGenerateRequest(BaseModel):
     opportunity_id: int
 
 
-# =============================================================================
 # Template Schemas
-# =============================================================================
 
 class ProposalTemplateCreate(BaseModel):
     name: str

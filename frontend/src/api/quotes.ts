@@ -136,9 +136,7 @@ export const quotesApi = {
 
 export default quotesApi;
 
-// =============================================================================
 // Product Bundle API
-// =============================================================================
 
 import type {
   ProductBundle,

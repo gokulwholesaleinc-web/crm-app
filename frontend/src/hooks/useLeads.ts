@@ -22,9 +22,7 @@ import type {
   LeadFullConversionRequest,
 } from '../types';
 
-// =============================================================================
 // Query Keys
-// =============================================================================
 
 export const leadKeys = createQueryKeys('leads');
 
@@ -33,9 +31,7 @@ export const leadSourceKeys = {
   list: (activeOnly?: boolean) => [...leadSourceKeys.all, 'list', { activeOnly }] as const,
 };
 
-// =============================================================================
 // Entity CRUD Hooks using Factory Pattern
-// =============================================================================
 
 const leadEntityHooks = createEntityHooks<
   Lead,
@@ -83,9 +79,7 @@ export function useDeleteLead() {
   return leadEntityHooks.useDelete();
 }
 
-// =============================================================================
 // Lead Conversion Hooks
-// =============================================================================
 
 /**
  * Hook to convert a lead to a contact
@@ -145,9 +139,7 @@ export function useConvertLead() {
   });
 }
 
-// =============================================================================
 // Lead Source Hooks
-// =============================================================================
 
 /**
  * Hook to fetch all lead sources
@@ -174,9 +166,7 @@ export function useCreateLeadSource() {
   });
 }
 
-// =============================================================================
 // Lead Pipeline / Kanban Hooks
-// =============================================================================
 
 export const leadPipelineKeys = {
   all: ['lead-pipeline'] as const,
@@ -235,9 +225,7 @@ export function useMoveLeadStage() {
   });
 }
 
-// =============================================================================
 // Email Campaign Hooks
-// =============================================================================
 
 export function useSendCampaign() {
   const queryClient = useQueryClient();
@@ -249,9 +237,7 @@ export function useSendCampaign() {
   });
 }
 
-// =============================================================================
 // Search Hook
-// =============================================================================
 
 /**
  * Hook to search leads by name or email

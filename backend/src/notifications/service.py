@@ -43,7 +43,6 @@ class NotificationService:
         return notif
 
     async def get_by_id(self, notification_id: int) -> Optional[Notification]:
-        """Get a notification by ID."""
         result = await self.db.execute(
             select(Notification).where(Notification.id == notification_id)
         )

@@ -20,9 +20,7 @@ import type {
   CreateOnboardingLinkRequest,
 } from '../types';
 
-// =============================================================================
 // Query Keys
-// =============================================================================
 
 export const paymentKeys = createQueryKeys('payments');
 
@@ -30,9 +28,7 @@ const productQueryKey = 'payment-products';
 const customerQueryKey = 'payment-customers';
 const subscriptionQueryKey = 'payment-subscriptions';
 
-// =============================================================================
 // Entity CRUD Hooks using Factory Pattern
-// =============================================================================
 
 const paymentEntityHooks = createEntityHooks<
   Payment,
@@ -59,9 +55,7 @@ export function usePayment(id: number | undefined) {
   return paymentEntityHooks.useOne(id);
 }
 
-// =============================================================================
 // Checkout & PaymentIntent Hooks
-// =============================================================================
 
 /**
  * Hook to create a Stripe Checkout Session
@@ -91,9 +85,7 @@ export function useCreatePaymentIntent() {
   });
 }
 
-// =============================================================================
 // Customer Hooks
-// =============================================================================
 
 /**
  * Hook to list Stripe customers
@@ -119,9 +111,7 @@ export function useSyncCustomer() {
   });
 }
 
-// =============================================================================
 // Product Hooks
-// =============================================================================
 
 /**
  * Hook to list products
@@ -147,9 +137,7 @@ export function useCreateProduct() {
   });
 }
 
-// =============================================================================
 // Subscription Hooks
-// =============================================================================
 
 /**
  * Hook to list subscriptions
@@ -175,9 +163,7 @@ export function useCancelSubscription() {
   });
 }
 
-// =============================================================================
 // Invoice & Onboarding Hooks
-// =============================================================================
 
 /**
  * Hook to create and send a Stripe Invoice

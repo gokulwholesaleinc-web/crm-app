@@ -57,9 +57,7 @@ async def _get_user_tenant_info(db, user_id: int) -> list | None:
     return tenants
 
 
-# =============================================================================
 # Google OAuth2 sign-in
-# =============================================================================
 
 GOOGLE_OAUTH_STATE_COOKIE = "crm_google_oauth_state"
 GOOGLE_OAUTH_STATE_TTL_SECONDS = 600  # 10 minutes: plenty for a consent screen

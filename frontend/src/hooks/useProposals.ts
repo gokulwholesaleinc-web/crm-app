@@ -17,15 +17,11 @@ import type {
   AIGenerateProposalRequest,
 } from '../types';
 
-// =============================================================================
 // Query Keys
-// =============================================================================
 
 export const proposalKeys = createQueryKeys('proposals');
 
-// =============================================================================
 // Entity CRUD Hooks using Factory Pattern
-// =============================================================================
 
 const proposalEntityHooks = createEntityHooks<
   Proposal,
@@ -73,9 +69,7 @@ export function useDeleteProposal() {
   return proposalEntityHooks.useDelete();
 }
 
-// =============================================================================
 // Status Action Hooks
-// =============================================================================
 
 /**
  * Hook to send a proposal with branded email
@@ -140,9 +134,7 @@ export function useRejectProposal() {
   });
 }
 
-// =============================================================================
 // AI Generation Hook
-// =============================================================================
 
 /**
  * Hook to generate a proposal using AI
@@ -158,9 +150,7 @@ export function useGenerateProposal() {
   });
 }
 
-// =============================================================================
 // Template Hooks
-// =============================================================================
 
 /**
  * Hook to fetch proposal templates

@@ -1,6 +1,4 @@
-// =============================================================================
 // Admin Dashboard Types
-// =============================================================================
 
 export interface AdminUser {
   id: number;
@@ -60,9 +58,7 @@ export interface ActivityFeedEntry {
   changes?: Record<string, unknown> | null;
 }
 
-// =============================================================================
 // Role & Permission Types
-// =============================================================================
 
 export interface Role {
   id: number;
@@ -83,9 +79,7 @@ export interface UserRoleAssign {
   role_id: number;
 }
 
-// =============================================================================
 // Assignment Rule Types
-// =============================================================================
 
 export interface AssignmentRule {
   id: number;
@@ -121,9 +115,7 @@ export interface AssignmentStats {
   period?: string;
 }
 
-// =============================================================================
 // User Approval Types
-// =============================================================================
 
 export interface PendingUser {
   id: number;

@@ -127,7 +127,6 @@ class NumberCardGenerator:
         }
 
     async def get_open_opportunities(self) -> Dict[str, Any]:
-        """Get count of open opportunities."""
         filters = [
             PipelineStage.is_won == False,
             PipelineStage.is_lost == False,
@@ -216,7 +215,6 @@ class NumberCardGenerator:
         return None
 
     async def get_total_companies(self) -> Dict[str, Any]:
-        """Get total companies count."""
         filters = []
         if self.user_id:
             filters.append(Company.owner_id == self.user_id)
@@ -327,7 +325,6 @@ class NumberCardGenerator:
         }
 
     async def get_tasks_due_today(self, user_id: Optional[int] = None) -> Dict[str, Any]:
-        """Get count of tasks due today."""
         today = date.today()
 
         filters = [

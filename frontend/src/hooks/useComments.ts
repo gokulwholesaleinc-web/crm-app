@@ -7,9 +7,7 @@ import { useAuthQuery } from './useAuthQuery';
 import { commentsApi } from '../api/comments';
 import type { CommentCreate, CommentUpdate } from '../types';
 
-// =============================================================================
 // Query Keys
-// =============================================================================
 
 export const commentKeys = {
   all: ['comments'] as const,
@@ -22,9 +20,7 @@ export const commentKeys = {
   detail: (id: number) => [...commentKeys.details(), id] as const,
 };
 
-// =============================================================================
 // List and Detail Hooks
-// =============================================================================
 
 /**
  * Hook to fetch comments for a specific entity
@@ -59,9 +55,7 @@ export function useComment(id: number | undefined) {
   });
 }
 
-// =============================================================================
 // Mutation Hooks
-// =============================================================================
 
 /**
  * Hook to create a new comment

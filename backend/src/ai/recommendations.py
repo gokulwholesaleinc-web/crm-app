@@ -31,7 +31,6 @@ class RecommendationEngine:
         return recommendations[:10]  # Return top 10
 
     async def _check_overdue_tasks(self, user_id: int) -> List[Dict[str, Any]]:
-        """Check for overdue tasks."""
         today = datetime.now().date()
 
         result = await self.db.execute(
@@ -189,7 +188,6 @@ class RecommendationEngine:
             return {"action": "Review and update", "reason": "Keep records current"}
 
     async def _get_lead_next_action(self, lead_id: int) -> Dict[str, Any]:
-        """Get next best action for a lead."""
         result = await self.db.execute(
             select(Lead).where(Lead.id == lead_id)
         )
@@ -240,7 +238,6 @@ class RecommendationEngine:
             }
 
     async def _get_opportunity_next_action(self, opp_id: int) -> Dict[str, Any]:
-        """Get next best action for an opportunity."""
         result = await self.db.execute(
             select(Opportunity).where(Opportunity.id == opp_id)
         )
@@ -277,7 +274,6 @@ class RecommendationEngine:
             }
 
     async def _get_contact_next_action(self, contact_id: int) -> Dict[str, Any]:
-        """Get next best action for a contact."""
         # Check for recent activity
         cutoff = datetime.now() - timedelta(days=30)
 

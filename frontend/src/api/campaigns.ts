@@ -30,9 +30,7 @@ import type {
 
 const CAMPAIGNS_BASE = '/api/campaigns';
 
-// =============================================================================
 // Campaigns CRUD
-// =============================================================================
 
 /**
  * List campaigns with pagination and filters
@@ -103,9 +101,7 @@ export const getCampaignAnalytics = async (campaignId: number): Promise<Campaign
   return response.data;
 };
 
-// =============================================================================
 // Campaign Members
-// =============================================================================
 
 /**
  * List members of a campaign
@@ -160,9 +156,7 @@ export const removeCampaignMember = async (
   await apiClient.delete(`${CAMPAIGNS_BASE}/${campaignId}/members/${memberId}`);
 };
 
-// =============================================================================
 // Email Templates
-// =============================================================================
 
 export const listEmailTemplates = async (
   params?: { page?: number; page_size?: number; category?: string }
@@ -196,9 +190,7 @@ export const deleteEmailTemplate = async (templateId: number): Promise<void> => 
   await apiClient.delete(`${CAMPAIGNS_BASE}/templates/${templateId}`);
 };
 
-// =============================================================================
 // Campaign Steps
-// =============================================================================
 
 export const getCampaignSteps = async (campaignId: number): Promise<EmailCampaignStep[]> => {
   const response = await apiClient.get<EmailCampaignStep[]>(
@@ -244,9 +236,7 @@ export const executeCampaign = async (
   return response.data;
 };
 
-// =============================================================================
 // Campaign from Import
-// =============================================================================
 
 export const createCampaignFromImport = async (
   data: CreateCampaignFromImportRequest
@@ -258,18 +248,14 @@ export const createCampaignFromImport = async (
   return response.data;
 };
 
-// =============================================================================
 // Email Volume Stats
-// =============================================================================
 
 export const getVolumeStats = async (): Promise<VolumeStats> => {
   const response = await apiClient.get<VolumeStats>('/api/email/volume-stats');
   return response.data;
 };
 
-// =============================================================================
 // Email Settings
-// =============================================================================
 
 export const getEmailSettings = async (): Promise<EmailSettings> => {
   const response = await apiClient.get<EmailSettings>('/api/settings/email');

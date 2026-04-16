@@ -1,6 +1,4 @@
-// =============================================================================
 // Audit / Change History Types
-// =============================================================================
 
 export interface AuditChangeDetail {
   field: string;
@@ -28,9 +26,7 @@ export interface AuditLogListResponse {
   pages: number;
 }
 
-// =============================================================================
 // Comment / Team Collaboration Types
-// =============================================================================
 
 export interface CommentCreate {
   content: string;

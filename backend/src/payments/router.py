@@ -131,9 +131,7 @@ async def _verify_stripe_customer_access(db, stripe_customer_id: int, current_us
     return sc
 
 
-# =============================================================================
 # Payment List Endpoint (no path param conflict)
-# =============================================================================
 
 @router.get("", response_model=PaymentListResponse)
 async def list_payments(
@@ -174,9 +172,7 @@ async def list_payments(
     )
 
 
-# =============================================================================
 # Checkout & Payment Intent Endpoints
-# =============================================================================
 
 @router.post("/create-checkout", response_model=CreateCheckoutResponse)
 async def create_checkout(
@@ -265,9 +261,7 @@ async def create_payment_intent(
         )
 
 
-# =============================================================================
 # Webhook Endpoint (no auth - uses Stripe signature verification)
-# =============================================================================
 
 @router.post("/webhook")
 async def stripe_webhook(request: Request, db: DBSession):
@@ -303,9 +297,7 @@ async def stripe_webhook(request: Request, db: DBSession):
     return result
 
 
-# =============================================================================
 # Customer Endpoints
-# =============================================================================
 
 @router.get("/customers", response_model=StripeCustomerListResponse)
 async def list_customers(
@@ -397,9 +389,7 @@ async def create_onboarding_link(
         )
 
 
-# =============================================================================
 # Invoice Endpoints
-# =============================================================================
 
 @router.post("/invoices/create-and-send", response_model=CreateAndSendInvoiceResponse)
 async def create_and_send_invoice(
@@ -437,9 +427,7 @@ async def create_and_send_invoice(
         )
 
 
-# =============================================================================
 # Product Endpoints
-# =============================================================================
 
 @router.get("/products", response_model=ProductListResponse)
 async def list_products(
@@ -478,9 +466,7 @@ async def create_product(
     return ProductResponse.model_validate(product)
 
 
-# =============================================================================
 # Subscription Endpoints
-# =============================================================================
 
 @router.get("/subscriptions", response_model=SubscriptionListResponse)
 async def list_subscriptions(
@@ -552,9 +538,7 @@ async def cancel_subscription(
     return SubscriptionResponse.model_validate(subscription)
 
 
-# =============================================================================
 # Invoice & Receipt Endpoints (MUST be before /{payment_id} catch-all)
-# =============================================================================
 
 @router.get("/{payment_id}/invoice")
 async def download_invoice(
@@ -616,9 +600,7 @@ async def send_receipt(
     return {"message": "Receipt email sent", "payment_id": payment_id}
 
 
-# =============================================================================
 # Payment Detail Endpoint (MUST be last - path param catches all)
-# =============================================================================
 
 @router.get("/{payment_id}", response_model=PaymentResponse)
 async def get_payment(

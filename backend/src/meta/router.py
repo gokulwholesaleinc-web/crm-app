@@ -42,9 +42,7 @@ async def _require_company_access(
     return company
 
 
-# =========================================================================
 # OAuth2 Flow
-# =========================================================================
 
 @router.get("/status", response_model=MetaConnectionStatus)
 async def get_connection_status(
@@ -102,9 +100,7 @@ async def disconnect(
         raise HTTPException(status_code=404, detail="No Meta connection found")
 
 
-# =========================================================================
 # Facebook Page Sync
-# =========================================================================
 
 @router.get("/companies/{company_id}", response_model=CompanyMetaDataResponse)
 async def get_company_meta(
@@ -178,9 +174,7 @@ async def export_meta_csv(
     )
 
 
-# =========================================================================
 # Lead Capture Webhook
-# =========================================================================
 
 @router.get("/webhook")
 async def verify_webhook(

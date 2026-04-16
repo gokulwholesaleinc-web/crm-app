@@ -15,9 +15,7 @@ import type {
   CompleteActivityRequest,
 } from '../types';
 
-// =============================================================================
 // Query Keys
-// =============================================================================
 
 export const activityKeys = {
   ...createQueryKeys('activities'),
@@ -25,9 +23,7 @@ export const activityKeys = {
     ['activities', 'timeline', entityType, entityId] as const,
 };
 
-// =============================================================================
 // Entity CRUD Hooks using Factory Pattern
-// =============================================================================
 
 const activityEntityHooks = createEntityHooks<
   Activity,
@@ -101,9 +97,7 @@ export function useDeleteActivity() {
   return activityEntityHooks.useDelete();
 }
 
-// =============================================================================
 // Timeline Hooks
-// =============================================================================
 
 /**
  * Hook to fetch timeline for an entity
@@ -130,9 +124,7 @@ export function useUserTimeline(
   });
 }
 
-// =============================================================================
 // Task and Activity Management Hooks
-// =============================================================================
 
 /**
  * Hook to fetch upcoming activities
