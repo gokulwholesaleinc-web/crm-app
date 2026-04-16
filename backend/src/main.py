@@ -56,6 +56,7 @@ from src.ai.router import router as ai_router
 from src.meta.router import router as meta_router
 from src.expenses.router import router as expenses_router
 from src.integrations.google_calendar.router import router as google_calendar_router
+from src.integrations.gmail.router import router as gmail_router
 from src.settings.router import router as settings_router
 
 
@@ -437,6 +438,7 @@ app.include_router(admin_router)
 app.include_router(meta_router)
 app.include_router(expenses_router)
 app.include_router(google_calendar_router)
+app.include_router(gmail_router)
 app.include_router(settings_router)
 
 

@@ -52,6 +52,41 @@ export const pushToCalendar = async (activityId: number): Promise<{ google_event
 };
 
 // =========================================================================
+// Gmail
+// =========================================================================
+
+export interface GmailStatus {
+  connected: boolean;
+  email: string | null;
+  last_synced_at: string | null;
+  last_error: string | null;
+}
+
+export const getGmailStatus = async (): Promise<GmailStatus> => {
+  const response = await apiClient.get<GmailStatus>('/api/integrations/gmail/status');
+  return response.data;
+};
+
+export const getGmailAuthUrl = async (): Promise<{ auth_url: string }> => {
+  const response = await apiClient.get<{ auth_url: string }>('/api/integrations/gmail/authorize');
+  return response.data;
+};
+
+export const gmailCallback = async (code: string, state: string): Promise<unknown> => {
+  const response = await apiClient.post('/api/integrations/gmail/callback', { code, state });
+  return response.data;
+};
+
+export const disconnectGmail = async (): Promise<void> => {
+  await apiClient.post('/api/integrations/gmail/disconnect');
+};
+
+export const syncGmail = async (): Promise<unknown> => {
+  const response = await apiClient.post('/api/integrations/gmail/sync');
+  return response.data;
+};
+
+// =========================================================================
 // Meta (Facebook/Instagram)
 // =========================================================================
 

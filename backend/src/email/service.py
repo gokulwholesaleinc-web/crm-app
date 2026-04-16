@@ -19,6 +19,102 @@ from src.core.constants import DEFAULT_PAGE_SIZE
 
 logger = logging.getLogger(__name__)
 
+
+async def _try_gmail_send(email: EmailQueue, db: AsyncSession) -> bool:
+    """If the sending user has a Gmail connection, send via Gmail API.
+
+    Returns True if sent successfully, False if no connection or error (caller
+    should fall back to Resend). On success, populates email.message_id,
+    email.thread_id, and sets email.sent_via='gmail'.
+    """
+    if not email.sent_by_id:
+        return False
+    from src.integrations.gmail.models import GmailConnection
+    result = await db.execute(
+        select(GmailConnection).where(
+            GmailConnection.user_id == email.sent_by_id,
+            GmailConnection.revoked_at.is_(None),
+        )
+    )
+    conn = result.scalar_one_or_none()
+    if not conn:
+        return False
+
+    from src.integrations.gmail.client import GmailClient
+    from src.integrations.gmail.sender import build_rfc822
+
+    prior_thread_id, prior_message_id = await _find_thread_context(
+        db, email.entity_type, email.entity_id, email.to_email
+    )
+
+    raw = build_rfc822(
+        to=email.to_email,
+        subject=email.subject,
+        body_html=email.body,
+        body_text=email.body,
+        from_email=conn.email,
+        from_name=conn.email.split("@")[0],
+        in_reply_to=prior_message_id,
+        references=prior_message_id,
+    )
+
+    async with GmailClient(conn, db) as client:
+        result = await client.send_message(raw, thread_id=prior_thread_id)
+
+    email.message_id = result.get("id", "")
+    email.thread_id = result.get("threadId", "")
+    email.sent_via = "gmail"
+    return True
+
+
+async def _find_thread_context(
+    db: AsyncSession,
+    entity_type: Optional[str],
+    entity_id: Optional[int],
+    to_email: str,
+) -> tuple[Optional[str], Optional[str]]:
+    """Look up the most recent EmailQueue row with the same entity+recipient to reuse threading."""
+    if not entity_type or not entity_id:
+        return None, None
+    result = await db.execute(
+        select(EmailQueue.thread_id, EmailQueue.message_id)
+        .where(
+            EmailQueue.entity_type == entity_type,
+            EmailQueue.entity_id == entity_id,
+            EmailQueue.to_email == to_email,
+            EmailQueue.thread_id.isnot(None),
+        )
+        .order_by(EmailQueue.created_at.desc())
+        .limit(1)
+    )
+    row = result.first()
+    if row:
+        return row.thread_id, row.message_id
+    return None, None
+
+
+async def _create_email_activity(
+    db: AsyncSession,
+    email: EmailQueue,
+) -> None:
+    """Mirror every successful outbound send as an Activity(type=EMAIL)."""
+    if not email.entity_type or not email.entity_id:
+        return
+    from src.activities.models import Activity, ActivityType
+    activity = Activity(
+        activity_type=ActivityType.EMAIL.value,
+        subject=f"Email sent: {email.subject[:200]}",
+        entity_type=email.entity_type,
+        entity_id=email.entity_id,
+        email_to=email.to_email,
+        email_cc=email.cc,
+        owner_id=email.sent_by_id,
+        is_completed=True,
+        completed_at=datetime.now(timezone.utc),
+    )
+    db.add(activity)
+    await db.flush()
+
 MAX_RETRIES = 5
 
 
@@ -144,17 +240,29 @@ class EmailService:
     async def _attempt_send(self, email: EmailQueue) -> None:
         """Attempt to send an email, updating status accordingly.
 
-        On failure, sets status to 'retry' with exponential backoff
-        (2^retry_count minutes) up to MAX_RETRIES, then marks as 'failed'.
+        Tries Gmail first if the sending user has a connected account;
+        falls back to Resend. On failure, sets status to 'retry' with
+        exponential backoff (2^retry_count minutes) up to MAX_RETRIES,
+        then marks as 'failed'.
         """
         email.attempts += 1
         try:
-            await asyncio.to_thread(
-                send_email, email.to_email, email.subject, email.body,
-                email.from_email, email.cc, email.bcc,
-            )
+            sent_via_gmail = False
+            try:
+                sent_via_gmail = await _try_gmail_send(email, self.db)
+            except Exception as gmail_exc:
+                logger.info("Gmail send failed for email %s, falling back to Resend: %s", email.id, gmail_exc)
+
+            if not sent_via_gmail:
+                await asyncio.to_thread(
+                    send_email, email.to_email, email.subject, email.body,
+                    email.from_email, email.cc, email.bcc,
+                )
+                email.sent_via = "resend"
+
             email.status = "sent"
             email.sent_at = datetime.now(timezone.utc)
+            await _create_email_activity(self.db, email)
         except Exception as exc:
             email.error = str(exc)[:500]
             email.retry_count += 1

@@ -65,10 +65,18 @@ class EmailQueue(Base):
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
 
+    # Provider routing + threading (populated when sent_via='gmail')
+    sent_via: Mapped[str] = mapped_column(
+        String(20), default="resend", server_default="resend", nullable=False
+    )
+    message_id: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    thread_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
     __table_args__ = (
         Index("ix_email_queue_entity", "entity_type", "entity_id"),
         Index("ix_email_queue_status", "status"),
         Index("ix_email_queue_sent_by", "sent_by_id"),
+        Index("ix_email_queue_thread_id", "thread_id"),
     )
 
 
