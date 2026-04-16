@@ -156,7 +156,7 @@ class TestGmailAuthorize:
             assert "gmail.readonly" in scope
             assert "openid" in scope
             assert params["access_type"] == ["offline"]
-            assert params["prompt"] == ["consent"]
+            assert params["prompt"] == ["consent select_account"]
         finally:
             settings.GOOGLE_CLIENT_ID = original
 

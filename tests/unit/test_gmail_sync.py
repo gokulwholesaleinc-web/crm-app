@@ -164,8 +164,8 @@ class TestSyncFirstRun:
             from src.integrations.gmail.client import GmailClient as _GC
             orig_init = _GC.__init__
 
-            def patched_init(self, conn, db_, http_=None):
-                orig_init(self, conn, db_, http_=http)
+            def patched_init(self, conn, db_, http=None):
+                orig_init(self, conn, db_, http=http)
 
             with patch.object(_GC, "__init__", patched_init):
                 await GmailSyncWorker.sync_account(connection, db)
@@ -218,8 +218,8 @@ class TestSyncInbound:
             from src.integrations.gmail.client import GmailClient as _GC
             orig_init = _GC.__init__
 
-            def patched_init(self, conn, db_, http_=None):
-                orig_init(self, conn, db_, http_=http)
+            def patched_init(self, conn, db_, http=None):
+                orig_init(self, conn, db_, http=http)
 
             with patch.object(_GC, "__init__", patched_init):
                 await GmailSyncWorker.sync_account(connection, db)
@@ -263,8 +263,8 @@ class TestSyncInbound:
             from src.integrations.gmail.client import GmailClient as _GC
             orig_init = _GC.__init__
 
-            def patched_init(self, conn, db_, http_=None):
-                orig_init(self, conn, db_, http_=http)
+            def patched_init(self, conn, db_, http=None):
+                orig_init(self, conn, db_, http=http)
 
             with patch.object(_GC, "__init__", patched_init):
                 await GmailSyncWorker.sync_account(connection, db)
@@ -318,8 +318,8 @@ class TestSyncOutbound:
             from src.integrations.gmail.client import GmailClient as _GC
             orig_init = _GC.__init__
 
-            def patched_init(self, conn, db_, http_=None):
-                orig_init(self, conn, db_, http_=http)
+            def patched_init(self, conn, db_, http=None):
+                orig_init(self, conn, db_, http=http)
 
             with patch.object(_GC, "__init__", patched_init):
                 await GmailSyncWorker.sync_account(connection, db)
@@ -386,8 +386,8 @@ class TestSyncDedupe:
             from src.integrations.gmail.client import GmailClient as _GC
             orig_init = _GC.__init__
 
-            def patched_init(self, conn, db_, http_=None):
-                orig_init(self, conn, db_, http_=http)
+            def patched_init(self, conn, db_, http=None):
+                orig_init(self, conn, db_, http=http)
 
             with patch.object(_GC, "__init__", patched_init):
                 await GmailSyncWorker.sync_account(connection, db)
@@ -440,8 +440,8 @@ class TestSyncDedupe:
             from src.integrations.gmail.client import GmailClient as _GC
             orig_init = _GC.__init__
 
-            def patched_init(self, conn, db_, http_=None):
-                orig_init(self, conn, db_, http_=http)
+            def patched_init(self, conn, db_, http=None):
+                orig_init(self, conn, db_, http=http)
 
             with patch.object(_GC, "__init__", patched_init):
                 await GmailSyncWorker.sync_account(connection, db)
