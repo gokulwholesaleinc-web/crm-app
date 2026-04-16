@@ -2,7 +2,7 @@
  * AI Assistant chat interface page
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
 import {
   SparklesIcon,
@@ -75,6 +75,26 @@ export function AIAssistantPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<'chat' | 'recommendations' | 'summary' | 'memory'>('chat');
 
+  const AUTO_SCROLL_KEY = 'crm:ai-assistant:autoscroll:v1';
+  const [autoScroll, setAutoScroll] = useState<boolean>(() => {
+    try {
+      const stored = localStorage.getItem(AUTO_SCROLL_KEY);
+      return stored === null ? true : stored === 'true';
+    } catch {
+      return true;
+    }
+  });
+
+  const toggleAutoScroll = useCallback(() => {
+    setAutoScroll((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(AUTO_SCROLL_KEY, String(next));
+      } catch {}
+      return next;
+    });
+  }, []);
+
   // Chat state
   const { messages, sendMessage, clearChat, confirmAction, isLoading: isChatLoading, pendingConfirmation, sessionId } = useChat();
 
@@ -88,12 +108,12 @@ export function AIAssistantPage() {
   const deleteLearningMutation = useDeleteAILearning();
   const { data: suggestionsData, isLoading: isLoadingSuggestions } = useSmartSuggestions();
 
-  // Scroll to bottom when new messages arrive
+  // Scroll to bottom when new messages arrive (only when auto-scroll is on)
   useEffect(() => {
-    if (messagesEndRef.current) {
+    if (autoScroll && messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages]);
+  }, [messages, autoScroll]);
 
   const handleSendMessage = async (content: string) => {
     try {
@@ -345,6 +365,22 @@ export function AIAssistantPage() {
                   </button>
                 </div>
               )}
+              <div className="flex items-center justify-between mb-1">
+                <button
+                  onClick={toggleAutoScroll}
+                  data-autoscroll={autoScroll}
+                  className={clsx(
+                    'flex items-center gap-1 text-xs transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
+                    autoScroll
+                      ? 'text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300'
+                      : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
+                  )}
+                  aria-label={autoScroll ? 'Auto-scroll on — click to disable' : 'Auto-scroll off — click to enable'}
+                  aria-pressed={autoScroll}
+                >
+                  Auto-scroll
+                </button>
+              </div>
               <ChatInput
                 onSend={handleSendMessage}
                 isLoading={isChatLoading}
