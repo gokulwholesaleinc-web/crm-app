@@ -14,14 +14,19 @@ import {
   getMetaStatus,
   getMetaAuthUrl,
   disconnectMeta,
+  getGmailStatus,
+  getGmailAuthUrl,
+  disconnectGmail,
+  syncGmail,
 } from '../../../api/integrations';
-import type { MetaConnectionStatus } from '../../../api/integrations';
+import type { MetaConnectionStatus, GmailStatus } from '../../../api/integrations';
 import {
   CalendarDaysIcon,
   ArrowPathIcon,
   LinkIcon,
   XMarkIcon,
   CheckCircleIcon,
+  EnvelopeIcon,
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import { useGoogleCalendarSync } from '../../../hooks/useGoogleCalendarSync';
@@ -231,6 +236,116 @@ function MetaCard() {
   );
 }
 
+function GmailCard() {
+  const queryClient = useQueryClient();
+
+  const { data: status, isLoading } = useQuery<GmailStatus>({
+    queryKey: ['integrations', 'gmail', 'status'],
+    queryFn: getGmailStatus,
+  });
+
+  const connected = status?.connected ?? false;
+
+  const connectMutation = useMutation({
+    mutationFn: getGmailAuthUrl,
+    onSuccess: (data) => {
+      window.location.href = data.auth_url;
+    },
+    onError: () => {
+      toast.error('Gmail integration is not configured. Contact your administrator.');
+    },
+  });
+
+  const disconnectMutation = useMutation({
+    mutationFn: disconnectGmail,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['integrations', 'gmail'] });
+      toast.success('Gmail disconnected');
+    },
+  });
+
+  const syncMutation = useMutation({
+    mutationFn: syncGmail,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['integrations', 'gmail'] });
+      toast.success('Gmail sync complete');
+    },
+    onError: () => {
+      toast.error('Gmail sync failed');
+    },
+  });
+
+  if (isLoading) {
+    return <Spinner size="sm" />;
+  }
+
+  return (
+    <div className="flex items-start gap-4 py-4 first:pt-0 last:pb-0">
+      <div className="flex-shrink-0">
+        <div className="h-10 w-10 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+          <EnvelopeIcon className="h-5 w-5 text-red-600 dark:text-red-400" aria-hidden="true" />
+        </div>
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Gmail</p>
+          <ConnectionBadge connected={connected} />
+        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+          {connected
+            ? `${status?.email ?? ''} · Emails sent via Gmail appear in your Sent folder`
+            : 'Send and receive emails through your Gmail account'}
+        </p>
+        {connected && status?.last_synced_at && (
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+            Last synced: {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(status.last_synced_at))}
+          </p>
+        )}
+        {connected && status?.last_error && (
+          <p className="text-xs text-red-500 mt-0.5">{status.last_error}</p>
+        )}
+      </div>
+      <div className="flex items-center gap-2 flex-shrink-0">
+        {connected ? (
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              leftIcon={<ArrowPathIcon className="h-4 w-4" />}
+              onClick={() => syncMutation.mutate()}
+              disabled={syncMutation.isPending}
+              aria-label="Sync Gmail"
+            >
+              Sync
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              leftIcon={<XMarkIcon className="h-4 w-4" />}
+              onClick={() => disconnectMutation.mutate()}
+              disabled={disconnectMutation.isPending}
+              aria-label="Disconnect Gmail"
+            >
+              Disconnect
+            </Button>
+          </>
+        ) : (
+          <Button
+            variant="primary"
+            size="sm"
+            leftIcon={<LinkIcon className="h-4 w-4" />}
+            onClick={() => connectMutation.mutate()}
+            disabled={connectMutation.isPending}
+            aria-label="Connect Gmail"
+          >
+            Connect
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function IntegrationsSection() {
   return (
     <div id="integrations" className="scroll-mt-20">
@@ -241,6 +356,7 @@ export function IntegrationsSection() {
         />
         <CardBody className="p-4 sm:p-6">
           <div className="divide-y divide-gray-200 dark:divide-gray-700">
+            <GmailCard />
             <GoogleCalendarCard />
             <MetaCard />
           </div>
