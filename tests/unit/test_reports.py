@@ -537,3 +537,45 @@ class TestReportsUnauthorized:
         """Test listing templates without auth returns 401."""
         response = await client.get("/api/reports/templates")
         assert response.status_code == 401
+
+
+class TestReportOwnerScopeGate:
+    """Tests that non-admin users cannot execute reports on unscoped entity types."""
+
+    @pytest.mark.asyncio
+    async def test_non_admin_execute_unscoped_entity_returns_403(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+    ):
+        """Non-admin querying an entity without owner_id must get 403.
+
+        Patches ENTITY_MODEL_MAP with a stub model that has no owner_id column,
+        then verifies the execute endpoint rejects the request with 403 and the
+        expected detail message (not a silent empty-result data leak).
+        """
+        import src.reports.service as reports_service
+
+        class _NoOwnerModel:
+            """Minimal stub: has 'id' but deliberately no owner_id."""
+            id = None
+
+        original_map = reports_service.ENTITY_MODEL_MAP.copy()
+        reports_service.ENTITY_MODEL_MAP["unscoped_entity"] = _NoOwnerModel
+
+        try:
+            response = await client.post(
+                "/api/reports/execute",
+                headers=auth_headers,
+                json={
+                    "entity_type": "unscoped_entity",
+                    "metric": "count",
+                    "chart_type": "bar",
+                },
+            )
+        finally:
+            reports_service.ENTITY_MODEL_MAP = original_map
+
+        assert response.status_code == 403
+        assert "admin" in response.json()["detail"].lower()
