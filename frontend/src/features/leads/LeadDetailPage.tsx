@@ -1,12 +1,8 @@
-import { useState, lazy, Suspense } from 'react';
+import { useState, Suspense } from 'react';
+import { lazy } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
-
-const NotesList = lazy(() => import('../../components/shared/NotesList'));
-const AttachmentList = lazy(() => import('../../components/shared/AttachmentList'));
-const AuditTimeline = lazy(() => import('../../components/shared/AuditTimeline'));
-const CommentSection = lazy(() => import('../../components/shared/CommentSection'));
-const SharePanel = lazy(() => import('../../components/shared/SharePanel'));
+import { TabBar, ActivitiesTab, CommonTabContent, SuspenseFallback } from '../../components/shared/DetailPageShell';
 import { EmailComposeModal, EmailHistory } from '../../components/email';
 import { ConvertLeadModal } from './components/ConvertLeadModal';
 import { LeadForm, LeadFormData } from './components/LeadForm';
@@ -15,11 +11,23 @@ import { getStatusBadgeClasses, formatStatusLabel, getScoreColor } from '../../u
 import { showError } from '../../utils/toast';
 import { formatDate, formatPhoneNumber } from '../../utils/formatters';
 import { useLead, useDeleteLead, useConvertLead, useUpdateLead } from '../../hooks/useLeads';
-import { useTimeline } from '../../hooks/useActivities';
 import type { LeadUpdate } from '../../types';
 import clsx from 'clsx';
 
+const CommentSection = lazy(() => import('../../components/shared/CommentSection'));
+
 type TabType = 'details' | 'activities' | 'notes' | 'emails' | 'attachments' | 'comments' | 'history' | 'sharing';
+
+const TABS: { id: TabType; name: string }[] = [
+  { id: 'details', name: 'Details' },
+  { id: 'activities', name: 'Activities' },
+  { id: 'notes', name: 'Notes' },
+  { id: 'emails', name: 'Emails' },
+  { id: 'attachments', name: 'Attachments' },
+  { id: 'comments', name: 'Comments' },
+  { id: 'history', name: 'History' },
+  { id: 'sharing', name: 'Sharing' },
+];
 
 function LeadDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -31,20 +39,10 @@ function LeadDetailPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEmailCompose, setShowEmailCompose] = useState(false);
 
-  // Use hooks for data fetching
   const { data: lead, isLoading, error } = useLead(leadId);
   const deleteLeadMutation = useDeleteLead();
   const convertLeadMutation = useConvertLead();
   const updateLeadMutation = useUpdateLead();
-
-  // Fetch timeline/activities - only when on activities tab
-  const shouldFetchActivities = activeTab === 'activities' && !!leadId;
-  const { data: timelineData, isLoading: isLoadingActivities } = useTimeline(
-    shouldFetchActivities ? 'lead' : '',
-    shouldFetchActivities ? leadId! : 0
-  );
-
-  const activities = timelineData?.items || [];
 
   const handleEditSubmit = async (data: LeadFormData) => {
     if (!leadId) return;
@@ -85,7 +83,6 @@ function LeadDetailPage() {
 
   const handleDeleteConfirm = async () => {
     if (!leadId) return;
-
     try {
       await deleteLeadMutation.mutateAsync(leadId);
       navigate('/leads');
@@ -102,10 +99,7 @@ function LeadDetailPage() {
     opportunityStage?: string;
   }) => {
     if (!leadId) return;
-
     try {
-      // Map stage string to stage ID (using default stage 1 for now)
-      // In a production app, you'd fetch pipeline stages and map properly
       const stageMapping: Record<string, number> = {
         discovery: 1,
         proposal: 2,
@@ -116,7 +110,6 @@ function LeadDetailPage() {
         lost: 7,
       };
       const stageId = data.opportunityStage ? (stageMapping[data.opportunityStage] || 1) : 1;
-
       const result = await convertLeadMutation.mutateAsync({
         leadId: leadId,
         data: {
@@ -124,8 +117,6 @@ function LeadDetailPage() {
           create_company: data.createContact,
         },
       });
-
-      // Navigate to the appropriate page based on what was created
       if (result.contact_id) {
         navigate(`/contacts/${result.contact_id}`);
       } else if (result.opportunity_id) {
@@ -134,7 +125,6 @@ function LeadDetailPage() {
         navigate('/leads');
       }
     } catch {
-      // Error handled by mutation
       throw new Error('Failed to convert lead');
     }
   };
@@ -168,35 +158,14 @@ function LeadDetailPage() {
     );
   }
 
-  const tabs: { id: TabType; name: string }[] = [
-    { id: 'details', name: 'Details' },
-    { id: 'activities', name: 'Activities' },
-    { id: 'notes', name: 'Notes' },
-    { id: 'emails', name: 'Emails' },
-    { id: 'attachments', name: 'Attachments' },
-    { id: 'comments', name: 'Comments' },
-    { id: 'history', name: 'History' },
-    { id: 'sharing', name: 'Sharing' },
-  ];
-
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center space-x-3 sm:space-x-4">
           <Link to="/leads" className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 p-1 -ml-1" aria-label="Back to leads">
-            <svg
-              className="h-6 w-6"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M10 19l-7-7m0 0l7-7m-7 7h18"
-              />
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
           </Link>
           <div className="min-w-0">
@@ -211,42 +180,20 @@ function LeadDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2 sm:gap-3">
-          <Button
-            variant="primary"
-            onClick={() => setShowEmailCompose(true)}
-            className="flex-1 sm:flex-none"
-          >
+          <Button variant="primary" onClick={() => setShowEmailCompose(true)} className="flex-1 sm:flex-none">
             Send Email
           </Button>
-          <AIInsightsCard
-            entityType="lead"
-            entityId={lead.id}
-            entityName={lead.full_name || 'Lead'}
-          />
+          <AIInsightsCard entityType="lead" entityId={lead.id} entityName={lead.full_name || 'Lead'} />
           {lead.status === 'qualified' && (
             <Button onClick={() => setShowConvertModal(true)} className="flex-1 sm:flex-none">
-              <svg
-                className="h-5 w-5 mr-1 sm:mr-2"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
+              <svg className="h-5 w-5 mr-1 sm:mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               <span className="hidden sm:inline">Convert Lead</span>
               <span className="sm:hidden">Convert</span>
             </Button>
           )}
-          <Button
-            variant="secondary"
-            onClick={() => setShowEditForm(true)}
-            className="flex-1 sm:flex-none"
-          >
+          <Button variant="secondary" onClick={() => setShowEditForm(true)} className="flex-1 sm:flex-none">
             Edit
           </Button>
           <Button
@@ -268,33 +215,18 @@ function LeadDetailPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Lead Score</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Based on engagement and fit criteria
-            </p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Based on engagement and fit criteria</p>
           </div>
           <div className="flex items-center justify-center sm:justify-end gap-4 sm:space-x-4">
             <div className="text-center">
-              <div
-                className={clsx(
-                  'text-3xl sm:text-4xl font-bold',
-                  getScoreColor(lead.score)
-                )}
-              >
+              <div className={clsx('text-3xl sm:text-4xl font-bold', getScoreColor(lead.score))}>
                 {lead.score}
               </div>
               <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">out of 100</div>
             </div>
             <div className="w-24 h-24 sm:w-32 sm:h-32 relative flex-shrink-0">
               <svg className="w-full h-full transform -rotate-90" viewBox="0 0 128 128">
-                <circle
-                  cx="64"
-                  cy="64"
-                  r="56"
-                  stroke="currentColor"
-                  strokeWidth="8"
-                  fill="none"
-                  className="text-gray-200 dark:text-gray-700"
-                />
+                <circle cx="64" cy="64" r="56" stroke="currentColor" strokeWidth="8" fill="none" className="text-gray-200 dark:text-gray-700" />
                 <circle
                   cx="64"
                   cy="64"
@@ -317,120 +249,70 @@ function LeadDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
-        <nav className="-mb-px flex space-x-4 sm:space-x-8 min-w-max px-1">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={clsx(
-                'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex-shrink-0',
-                activeTab === tab.id
-                  ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-              )}
-            >
-              {tab.name}
-            </button>
-          ))}
-        </nav>
-      </div>
+      <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
 
       {/* Tab Content */}
       {activeTab === 'details' && (
         <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
           <div className="px-4 py-5 sm:p-6">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
-              Lead Details
-            </h3>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Lead Details</h3>
             <dl className="grid grid-cols-1 gap-4 sm:gap-x-4 sm:gap-y-6 sm:grid-cols-2">
               <div>
                 <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Email</dt>
                 <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100 break-all">
-                  <a
-                    href={`mailto:${lead.email}`}
-                    className="text-primary-600 hover:text-primary-500"
-                  >
+                  <a href={`mailto:${lead.email}`} className="text-primary-600 hover:text-primary-500">
                     {lead.email}
                   </a>
                 </dd>
               </div>
-
               <div>
                 <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Phone</dt>
                 <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   {lead.phone ? (
-                    <a
-                      href={`tel:${lead.phone}`}
-                      className="text-primary-600 hover:text-primary-500"
-                    >
+                    <a href={`tel:${lead.phone}`} className="text-primary-600 hover:text-primary-500">
                       {formatPhoneNumber(lead.phone)}
                     </a>
-                  ) : (
-                    '-'
-                  )}
+                  ) : '-'}
                 </dd>
               </div>
-
               <div>
                 <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Company</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100 break-words">
-                  {lead.company_name || '-'}
-                </dd>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100 break-words">{lead.company_name || '-'}</dd>
               </div>
-
               <div>
                 <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Job Title</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100 break-words">
-                  {lead.job_title || '-'}
-                </dd>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100 break-words">{lead.job_title || '-'}</dd>
               </div>
-
               <div>
                 <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Status</dt>
                 <dd className="mt-1">
-                  <span className={getStatusBadgeClasses(lead.status, 'lead')}>
-                    {formatStatusLabel(lead.status)}
-                  </span>
+                  <span className={getStatusBadgeClasses(lead.status, 'lead')}>{formatStatusLabel(lead.status)}</span>
                 </dd>
               </div>
-
               <div>
                 <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Source</dt>
                 <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   {lead.source?.name ? formatStatusLabel(lead.source.name) : '-'}
                 </dd>
               </div>
-
               <div>
                 <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Sales Code</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
-                  {lead.sales_code || '-'}
-                </dd>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">{lead.sales_code || '-'}</dd>
               </div>
-
               <div className="sm:col-span-2">
                 <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Description</dt>
                 <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100 break-words">
                   {lead.description || 'No description'}
                 </dd>
               </div>
-
               <div>
                 <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Created</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
-                  {formatDate(lead.created_at)}
-                </dd>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">{formatDate(lead.created_at)}</dd>
               </div>
-
               <div>
                 <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Last Updated</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
-                  {formatDate(lead.updated_at)}
-                </dd>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">{formatDate(lead.updated_at)}</dd>
               </div>
-
-              {/* Converted Entity Links */}
               {(lead.converted_contact_id || lead.converted_opportunity_id) && (
                 <>
                   <div className="sm:col-span-2 pt-4 border-t border-gray-200 dark:border-gray-700">
@@ -440,10 +322,7 @@ function LeadDetailPage() {
                     <div>
                       <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Contact</dt>
                       <dd className="mt-1 text-sm">
-                        <Link
-                          to={`/contacts/${lead.converted_contact_id}`}
-                          className="text-primary-600 hover:text-primary-900 dark:hover:text-primary-300"
-                        >
+                        <Link to={`/contacts/${lead.converted_contact_id}`} className="text-primary-600 hover:text-primary-900 dark:hover:text-primary-300">
                           View Contact #{lead.converted_contact_id}
                         </Link>
                       </dd>
@@ -453,10 +332,7 @@ function LeadDetailPage() {
                     <div>
                       <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Opportunity</dt>
                       <dd className="mt-1 text-sm">
-                        <Link
-                          to={`/opportunities/${lead.converted_opportunity_id}`}
-                          className="text-primary-600 hover:text-primary-900 dark:hover:text-primary-300"
-                        >
+                        <Link to={`/opportunities/${lead.converted_opportunity_id}`} className="text-primary-600 hover:text-primary-900 dark:hover:text-primary-300">
                           View Opportunity #{lead.converted_opportunity_id}
                         </Link>
                       </dd>
@@ -469,61 +345,8 @@ function LeadDetailPage() {
         </div>
       )}
 
-      {activeTab === 'activities' && (
-        <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
-          <div className="px-4 py-5 sm:p-6">
-            {isLoadingActivities ? (
-              <div className="flex items-center justify-center py-4">
-                <Spinner />
-              </div>
-            ) : activities.length === 0 ? (
-              <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
-                No activities recorded yet.
-              </p>
-            ) : (
-              <ul className="space-y-4">
-                {activities.map((activity) => (
-                  <li
-                    key={activity.id}
-                    className="flex items-start space-x-3 pb-4 border-b border-gray-100 dark:border-gray-700 last:border-0"
-                  >
-                    <div className="flex-shrink-0">
-                      <div className="h-8 w-8 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
-                        <svg
-                          className="h-4 w-4 text-primary-600 dark:text-primary-400"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                          />
-                        </svg>
-                      </div>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-900 dark:text-gray-100">
-                        {activity.subject}
-                      </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        {formatDate(activity.created_at)}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'notes' && leadId && (
-        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
-          <NotesList entityType="lead" entityId={leadId} />
-        </Suspense>
+      {activeTab === 'activities' && leadId && (
+        <ActivitiesTab entityType="lead" entityId={leadId} />
       )}
 
       {activeTab === 'emails' && leadId && (
@@ -534,32 +357,20 @@ function LeadDetailPage() {
         </div>
       )}
 
-      {/* Attachments Tab */}
-      {activeTab === 'attachments' && leadId && (
-        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
-          <AttachmentList entityType="leads" entityId={leadId} />
-        </Suspense>
-      )}
-
-      {/* Comments Tab */}
-      {activeTab === 'comments' && leadId && (
-        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
-          <CommentSection entityType="leads" entityId={leadId} />
-        </Suspense>
-      )}
-
-      {/* History Tab */}
-      {activeTab === 'history' && leadId && (
-        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
-          <AuditTimeline entityType="leads" entityId={leadId} />
-        </Suspense>
-      )}
-
-      {/* Sharing Tab */}
-      {activeTab === 'sharing' && leadId && (
-        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
-          <SharePanel entityType="leads" entityId={leadId} />
-        </Suspense>
+      {leadId && (
+        <>
+          <CommonTabContent
+            activeTab={activeTab}
+            entityType="leads"
+            entityId={leadId}
+            enabledTabs={['notes', 'attachments', 'history', 'sharing']}
+          />
+          {activeTab === 'comments' && (
+            <Suspense fallback={<SuspenseFallback />}>
+              <CommentSection entityType="leads" entityId={leadId} />
+            </Suspense>
+          )}
+        </>
       )}
 
       {/* Email Compose Modal */}
@@ -581,13 +392,7 @@ function LeadDetailPage() {
       />
 
       {/* Edit Form Modal */}
-      <Modal
-        isOpen={showEditForm}
-        onClose={() => setShowEditForm(false)}
-        title="Edit Lead"
-        size="lg"
-        fullScreenOnMobile
-      >
+      <Modal isOpen={showEditForm} onClose={() => setShowEditForm(false)} title="Edit Lead" size="lg" fullScreenOnMobile>
         <LeadForm
           initialData={getInitialFormData()}
           onSubmit={handleEditSubmit}

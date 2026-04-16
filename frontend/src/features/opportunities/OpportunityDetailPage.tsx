@@ -1,16 +1,10 @@
-import { useState, lazy, Suspense } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
-
-const NotesList = lazy(() => import('../../components/shared/NotesList'));
-const AttachmentList = lazy(() => import('../../components/shared/AttachmentList'));
-const AuditTimeline = lazy(() => import('../../components/shared/AuditTimeline'));
-const CommentSection = lazy(() => import('../../components/shared/CommentSection'));
-const SharePanel = lazy(() => import('../../components/shared/SharePanel'));
+import { TabBar, ActivitiesTab, CommonTabContent } from '../../components/shared/DetailPageShell';
 import { OpportunityForm, OpportunityFormData } from './components/OpportunityForm';
 import { AIInsightsCard, NextBestActionCard } from '../../components/ai';
 import { useOpportunity, useDeleteOpportunity, useUpdateOpportunity } from '../../hooks/useOpportunities';
-import { useTimeline } from '../../hooks/useActivities';
 import { useQuotes } from '../../hooks/useQuotes';
 import { useProposals } from '../../hooks/useProposals';
 import { usePayments } from '../../hooks/usePayments';
@@ -22,6 +16,19 @@ import clsx from 'clsx';
 
 type TabType = 'details' | 'activities' | 'quotes' | 'proposals' | 'payments' | 'notes' | 'attachments' | 'comments' | 'history' | 'sharing';
 
+const TABS: { id: TabType; name: string }[] = [
+  { id: 'details', name: 'Details' },
+  { id: 'activities', name: 'Activities' },
+  { id: 'quotes', name: 'Quotes' },
+  { id: 'proposals', name: 'Proposals' },
+  { id: 'payments', name: 'Payments' },
+  { id: 'notes', name: 'Notes' },
+  { id: 'attachments', name: 'Attachments' },
+  { id: 'comments', name: 'Comments' },
+  { id: 'history', name: 'History' },
+  { id: 'sharing', name: 'Sharing' },
+];
+
 function OpportunityDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -30,36 +37,25 @@ function OpportunityDetailPage() {
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // Data fetching
   const { data: opportunity, isLoading, error } = useOpportunity(opportunityId);
   const deleteOpportunityMutation = useDeleteOpportunity();
   const updateOpportunityMutation = useUpdateOpportunity();
-  // Fetch timeline/activities - only when on activities tab
-  const shouldFetchActivities = activeTab === 'activities' && !!opportunityId;
-  const { data: timelineData, isLoading: isLoadingActivities } = useTimeline(
-    shouldFetchActivities ? 'opportunity' : '',
-    shouldFetchActivities ? opportunityId! : 0
-  );
 
-  // Fetch quotes for this opportunity
   const shouldFetchQuotes = activeTab === 'quotes' && !!opportunityId;
   const { data: quotesData, isLoading: isLoadingQuotes } = useQuotes(
     shouldFetchQuotes ? { opportunity_id: opportunityId, page_size: 50 } : undefined
   );
 
-  // Fetch proposals for this opportunity
   const shouldFetchProposals = activeTab === 'proposals' && !!opportunityId;
   const { data: proposalsData, isLoading: isLoadingProposals } = useProposals(
     shouldFetchProposals ? { opportunity_id: opportunityId, page_size: 50 } : undefined
   );
 
-  // Fetch payments for this opportunity
   const shouldFetchPayments = activeTab === 'payments' && !!opportunityId;
   const { data: paymentsData, isLoading: isLoadingPayments } = usePayments(
     shouldFetchPayments ? { opportunity_id: opportunityId, page_size: 50 } : undefined
   );
 
-  const activities = timelineData?.items || [];
   const quotes = quotesData?.items ?? [];
   const proposals = proposalsData?.items ?? [];
   const payments = paymentsData?.items ?? [];
@@ -77,10 +73,7 @@ function OpportunityDetailPage() {
         company_id: data.companyId ? parseInt(data.companyId, 10) : undefined,
         description: data.description,
       };
-      await updateOpportunityMutation.mutateAsync({
-        id: opportunityId,
-        data: updateData,
-      });
+      await updateOpportunityMutation.mutateAsync({ id: opportunityId, data: updateData });
       setShowEditForm(false);
     } catch (err) {
       showError('Failed to update opportunity');
@@ -119,8 +112,7 @@ function OpportunityDetailPage() {
     );
   }
 
-  const errorMessage =
-    error instanceof Error ? error.message : error ? String(error) : null;
+  const errorMessage = error instanceof Error ? error.message : error ? String(error) : null;
 
   if (errorMessage || !opportunity) {
     return (
@@ -131,10 +123,7 @@ function OpportunityDetailPage() {
               {errorMessage || 'Opportunity not found'}
             </h3>
             <div className="mt-4">
-              <Link
-                to="/opportunities"
-                className="text-red-600 hover:text-red-500 dark:text-red-400 dark:hover:text-red-300"
-              >
+              <Link to="/opportunities" className="text-red-600 hover:text-red-500 dark:text-red-400 dark:hover:text-red-300">
                 Back to opportunities
               </Link>
             </div>
@@ -144,21 +133,7 @@ function OpportunityDetailPage() {
     );
   }
 
-  const stageName =
-    opportunity.pipeline_stage?.name?.toLowerCase().replace(/\s+/g, '_') ?? '';
-
-  const tabs: { id: TabType; name: string }[] = [
-    { id: 'details', name: 'Details' },
-    { id: 'activities', name: 'Activities' },
-    { id: 'quotes', name: 'Quotes' },
-    { id: 'proposals', name: 'Proposals' },
-    { id: 'payments', name: 'Payments' },
-    { id: 'notes', name: 'Notes' },
-    { id: 'attachments', name: 'Attachments' },
-    { id: 'comments', name: 'Comments' },
-    { id: 'history', name: 'History' },
-    { id: 'sharing', name: 'Sharing' },
-  ];
+  const stageName = opportunity.pipeline_stage?.name?.toLowerCase().replace(/\s+/g, '_') ?? '';
 
   return (
     <div className="space-y-6">
@@ -170,19 +145,8 @@ function OpportunityDetailPage() {
             className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 flex-shrink-0"
             aria-label="Back to opportunities"
           >
-            <svg
-              className="h-6 w-6"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              aria-hidden="true"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M10 19l-7-7m0 0l7-7m-7 7h18"
-              />
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
           </Link>
           <div className="min-w-0">
@@ -190,25 +154,17 @@ function OpportunityDetailPage() {
               {opportunity.name}
             </h1>
             <div className="flex flex-wrap items-center gap-2 mt-1">
-              <span
-                className={getStatusBadgeClasses(stageName, 'opportunity')}
-              >
+              <span className={getStatusBadgeClasses(stageName, 'opportunity')}>
                 {opportunity.pipeline_stage?.name || stageName}
               </span>
               {opportunity.company?.name && (
-                <span className="text-sm text-gray-500 dark:text-gray-400">
-                  {opportunity.company.name}
-                </span>
+                <span className="text-sm text-gray-500 dark:text-gray-400">{opportunity.company.name}</span>
               )}
             </div>
           </div>
         </div>
         <div className="flex items-center gap-3 w-full sm:w-auto">
-          <Button
-            variant="secondary"
-            onClick={() => setShowEditForm(true)}
-            className="flex-1 sm:flex-none"
-          >
+          <Button variant="secondary" onClick={() => setShowEditForm(true)} className="flex-1 sm:flex-none">
             Edit
           </Button>
           <Button
@@ -252,32 +208,10 @@ function OpportunityDetailPage() {
 
       {/* AI Suggestions */}
       <NextBestActionCard entityType="opportunity" entityId={opportunity.id} />
-      <AIInsightsCard
-        entityType="opportunity"
-        entityId={opportunity.id}
-        variant="inline"
-        entityName={opportunity.name}
-      />
+      <AIInsightsCard entityType="opportunity" entityId={opportunity.id} variant="inline" entityName={opportunity.name} />
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
-        <nav className="-mb-px flex space-x-4 sm:space-x-8 min-w-max px-1">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={clsx(
-                'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex-shrink-0',
-                activeTab === tab.id
-                  ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-              )}
-            >
-              {tab.name}
-            </button>
-          ))}
-        </nav>
-      </div>
+      <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
 
       {/* Tab Content */}
       {activeTab === 'details' && (
@@ -287,201 +221,102 @@ function OpportunityDetailPage() {
               <div>
                 <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Value</dt>
                 <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
-                  {opportunity.amount
-                    ? formatCurrency(opportunity.amount, opportunity.currency)
-                    : '-'}
+                  {opportunity.amount ? formatCurrency(opportunity.amount, opportunity.currency) : '-'}
                 </dd>
               </div>
-
               <div>
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                  Probability
-                </dt>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Probability</dt>
                 <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
-                  {opportunity.probability != null
-                    ? formatPercentage(opportunity.probability)
-                    : '-'}
+                  {opportunity.probability != null ? formatPercentage(opportunity.probability) : '-'}
                 </dd>
               </div>
-
               <div>
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                  Weighted Value
-                </dt>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Weighted Value</dt>
                 <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
-                  {opportunity.weighted_amount
-                    ? formatCurrency(opportunity.weighted_amount, opportunity.currency)
-                    : '-'}
+                  {opportunity.weighted_amount ? formatCurrency(opportunity.weighted_amount, opportunity.currency) : '-'}
                 </dd>
               </div>
-
               <div>
                 <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Stage</dt>
                 <dd className="mt-1">
-                  <span
-                    className={getStatusBadgeClasses(stageName, 'opportunity')}
-                  >
+                  <span className={getStatusBadgeClasses(stageName, 'opportunity')}>
                     {opportunity.pipeline_stage?.name || '-'}
                   </span>
                 </dd>
               </div>
-
               <div>
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                  Expected Close Date
-                </dt>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Expected Close Date</dt>
                 <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   {formatDate(opportunity.expected_close_date) || '-'}
                 </dd>
               </div>
-
               {opportunity.actual_close_date && (
                 <div>
-                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                    Actual Close Date
-                  </dt>
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Actual Close Date</dt>
                   <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                     {formatDate(opportunity.actual_close_date)}
                   </dd>
                 </div>
               )}
-
               <div>
                 <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Contact</dt>
                 <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   {opportunity.contact ? (
-                    <Link
-                      to={`/contacts/${opportunity.contact.id}`}
-                      className="text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300"
-                    >
+                    <Link to={`/contacts/${opportunity.contact.id}`} className="text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300">
                       {opportunity.contact.full_name}
                     </Link>
-                  ) : (
-                    '-'
-                  )}
+                  ) : '-'}
                 </dd>
               </div>
-
               <div>
                 <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Company</dt>
                 <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   {opportunity.company ? (
-                    <Link
-                      to={`/companies/${opportunity.company.id}`}
-                      className="text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300"
-                    >
+                    <Link to={`/companies/${opportunity.company.id}`} className="text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300">
                       {opportunity.company.name}
                     </Link>
-                  ) : (
-                    '-'
-                  )}
+                  ) : '-'}
                 </dd>
               </div>
-
               <div className="sm:col-span-2">
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                  Description
-                </dt>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Description</dt>
                 <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   {opportunity.description || 'No description'}
                 </dd>
               </div>
-
               {opportunity.loss_reason && (
                 <div className="sm:col-span-2">
-                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                    Loss Reason
-                  </dt>
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Loss Reason</dt>
                   <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                     {opportunity.loss_reason}
                     {opportunity.loss_notes && (
-                      <p className="mt-1 text-gray-600 dark:text-gray-400">
-                        {opportunity.loss_notes}
-                      </p>
+                      <p className="mt-1 text-gray-600 dark:text-gray-400">{opportunity.loss_notes}</p>
                     )}
                   </dd>
                 </div>
               )}
-
               <div>
                 <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Created</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
-                  {formatDate(opportunity.created_at)}
-                </dd>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">{formatDate(opportunity.created_at)}</dd>
               </div>
-
               <div>
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                  Last Updated
-                </dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
-                  {formatDate(opportunity.updated_at)}
-                </dd>
+                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Last Updated</dt>
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">{formatDate(opportunity.updated_at)}</dd>
               </div>
             </dl>
           </div>
         </div>
       )}
 
-      {activeTab === 'activities' && (
-        <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
-          <div className="px-4 py-5 sm:p-6">
-            {isLoadingActivities ? (
-              <div className="flex items-center justify-center py-4">
-                <Spinner />
-              </div>
-            ) : activities.length === 0 ? (
-              <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
-                No activities recorded yet.
-              </p>
-            ) : (
-              <ul className="space-y-4">
-                {activities.map((activity) => (
-                  <li
-                    key={activity.id}
-                    className="flex items-start space-x-3 pb-4 border-b border-gray-100 dark:border-gray-700 last:border-0"
-                  >
-                    <div className="flex-shrink-0">
-                      <div className="h-8 w-8 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
-                        <svg
-                          className="h-4 w-4 text-primary-600"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                          />
-                        </svg>
-                      </div>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-900 dark:text-gray-100">
-                        {activity.subject}
-                      </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        {formatDate(activity.created_at)}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
+      {activeTab === 'activities' && opportunityId && (
+        <ActivitiesTab entityType="opportunity" entityId={opportunityId} />
       )}
 
-      {/* Quotes Tab */}
       {activeTab === 'quotes' && (
         <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
           <div className="px-4 py-5 sm:p-6">
             {isLoadingQuotes ? (
-              <div className="flex items-center justify-center py-4">
-                <Spinner />
-              </div>
+              <div className="flex items-center justify-center py-4"><Spinner /></div>
             ) : quotes.length === 0 ? (
               <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
                 No quotes linked to this opportunity.
@@ -491,10 +326,7 @@ function OpportunityDetailPage() {
                 {quotes.map((quote: Quote) => (
                   <li key={quote.id} className="py-3 flex items-center justify-between">
                     <div className="min-w-0 flex-1">
-                      <Link
-                        to={`/quotes/${quote.id}`}
-                        className="text-sm font-medium text-primary-600 hover:text-primary-500"
-                      >
+                      <Link to={`/quotes/${quote.id}`} className="text-sm font-medium text-primary-600 hover:text-primary-500">
                         {quote.title}
                       </Link>
                       <p className="text-xs text-gray-500 dark:text-gray-400">{quote.quote_number} - {formatDate(quote.created_at)}</p>
@@ -521,14 +353,11 @@ function OpportunityDetailPage() {
         </div>
       )}
 
-      {/* Proposals Tab */}
       {activeTab === 'proposals' && (
         <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
           <div className="px-4 py-5 sm:p-6">
             {isLoadingProposals ? (
-              <div className="flex items-center justify-center py-4">
-                <Spinner />
-              </div>
+              <div className="flex items-center justify-center py-4"><Spinner /></div>
             ) : proposals.length === 0 ? (
               <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
                 No proposals linked to this opportunity.
@@ -538,10 +367,7 @@ function OpportunityDetailPage() {
                 {proposals.map((proposal: Proposal) => (
                   <li key={proposal.id} className="py-3 flex items-center justify-between">
                     <div className="min-w-0 flex-1">
-                      <Link
-                        to={`/proposals/${proposal.id}`}
-                        className="text-sm font-medium text-primary-600 hover:text-primary-500"
-                      >
+                      <Link to={`/proposals/${proposal.id}`} className="text-sm font-medium text-primary-600 hover:text-primary-500">
                         {proposal.title}
                       </Link>
                       <p className="text-xs text-gray-500 dark:text-gray-400">{proposal.proposal_number} - {formatDate(proposal.created_at)}</p>
@@ -563,14 +389,11 @@ function OpportunityDetailPage() {
         </div>
       )}
 
-      {/* Payments Tab */}
       {activeTab === 'payments' && (
         <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
           <div className="px-4 py-5 sm:p-6">
             {isLoadingPayments ? (
-              <div className="flex items-center justify-center py-4">
-                <Spinner />
-              </div>
+              <div className="flex items-center justify-center py-4"><Spinner /></div>
             ) : payments.length === 0 ? (
               <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
                 No payments linked to this opportunity.
@@ -580,10 +403,7 @@ function OpportunityDetailPage() {
                 {payments.map((payment: Payment) => (
                   <li key={payment.id} className="py-3 flex items-center justify-between">
                     <div className="min-w-0 flex-1">
-                      <Link
-                        to={`/payments/${payment.id}`}
-                        className="text-sm font-medium text-primary-600 hover:text-primary-500"
-                      >
+                      <Link to={`/payments/${payment.id}`} className="text-sm font-medium text-primary-600 hover:text-primary-500">
                         Payment #{payment.id}
                       </Link>
                       <p className="text-xs text-gray-500 dark:text-gray-400">{formatDate(payment.created_at)}</p>
@@ -609,47 +429,17 @@ function OpportunityDetailPage() {
         </div>
       )}
 
-      {activeTab === 'notes' && opportunityId && (
-        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
-          <NotesList entityType="opportunity" entityId={opportunityId} />
-        </Suspense>
-      )}
-
-      {activeTab === 'attachments' && opportunityId && (
-        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
-          <AttachmentList entityType="opportunities" entityId={opportunityId} />
-        </Suspense>
-      )}
-
-      {/* Comments Tab */}
-      {activeTab === 'comments' && opportunityId && (
-        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
-          <CommentSection entityType="opportunities" entityId={opportunityId} />
-        </Suspense>
-      )}
-
-      {/* History Tab */}
-      {activeTab === 'history' && opportunityId && (
-        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
-          <AuditTimeline entityType="opportunities" entityId={opportunityId} />
-        </Suspense>
-      )}
-
-      {/* Sharing Tab */}
-      {activeTab === 'sharing' && opportunityId && (
-        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
-          <SharePanel entityType="opportunities" entityId={opportunityId} />
-        </Suspense>
+      {opportunityId && (
+        <CommonTabContent
+          activeTab={activeTab}
+          entityType="opportunities"
+          entityId={opportunityId}
+          enabledTabs={['notes', 'attachments', 'comments', 'history', 'sharing']}
+        />
       )}
 
       {/* Edit Form Modal */}
-      <Modal
-        isOpen={showEditForm}
-        onClose={() => setShowEditForm(false)}
-        title="Edit Opportunity"
-        size="full"
-        fullScreenOnMobile
-      >
+      <Modal isOpen={showEditForm} onClose={() => setShowEditForm(false)} title="Edit Opportunity" size="full" fullScreenOnMobile>
         <OpportunityForm
           initialData={getInitialFormData()}
           onSubmit={handleEditSubmit}

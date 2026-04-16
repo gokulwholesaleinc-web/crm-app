@@ -1,125 +1,46 @@
-/**
- * Company detail page with contacts list, activities, and notes tabs
- */
-
 import { useState, lazy, Suspense } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
-import {
-  ArrowLeftIcon,
-  BuildingOffice2Icon,
-  GlobeAltIcon,
-  EnvelopeIcon,
-  PhoneIcon,
-  MapPinIcon,
-  UsersIcon,
-  LinkIcon,
-  DocumentTextIcon,
-  UserCircleIcon,
-  SparklesIcon,
-} from '@heroicons/react/24/outline';
+import { BuildingOffice2Icon, ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { Button } from '../../components/ui/Button';
 import { Spinner } from '../../components/ui/Spinner';
 import { Modal } from '../../components/ui/Modal';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
-import { StatusBadge } from '../../components/ui/Badge';
-import type { StatusType } from '../../components/ui/Badge';
-
-const NotesList = lazy(() => import('../../components/shared/NotesList'));
-const AttachmentList = lazy(() => import('../../components/shared/AttachmentList'));
-const AuditTimeline = lazy(() => import('../../components/shared/AuditTimeline'));
-const SharePanel = lazy(() => import('../../components/shared/SharePanel'));
-const ContractsList = lazy(() => import('../../components/shared/ContractsList'));
-const MetaTab = lazy(() => import('./components/MetaTab'));
-const ExpensesTab = lazy(() => import('./components/ExpensesTab'));
+import { TabBar, ActivitiesTab, CommonTabContent, SuspenseFallback } from '../../components/shared/DetailPageShell';
+import { OverviewTab } from './components/tabs/OverviewTab';
+import { OpportunitiesTab } from './components/tabs/OpportunitiesTab';
+import { QuotesTab } from './components/tabs/QuotesTab';
+import { ProposalsTab } from './components/tabs/ProposalsTab';
 import { CompanyForm } from './components/CompanyForm';
 import { useCompany, useUpdateCompany, useDeleteCompany } from '../../hooks/useCompanies';
 import { useContacts } from '../../hooks/useContacts';
 import { useOpportunities } from '../../hooks/useOpportunities';
 import { useQuotes } from '../../hooks/useQuotes';
 import { useProposals } from '../../hooks/useProposals';
-import { useTimeline } from '../../hooks/useActivities';
 import { getStatusColor, formatStatusLabel } from '../../utils/statusColors';
-import { formatCurrency, formatDate } from '../../utils/formatters';
 import { showSuccess, showError } from '../../utils/toast';
-import type { CompanyUpdate, Contact, Opportunity, Quote, Proposal } from '../../types';
+import type { CompanyUpdate } from '../../types';
+
+const ContractsList = lazy(() => import('../../components/shared/ContractsList'));
+const MetaTab = lazy(() => import('./components/MetaTab'));
+const ExpensesTab = lazy(() => import('./components/ExpensesTab'));
 
 type TabType = 'overview' | 'opportunities' | 'contracts' | 'quotes' | 'proposals' | 'activities' | 'notes' | 'attachments' | 'history' | 'sharing' | 'meta' | 'expenses';
 
-function DetailItem({
-  icon: Icon,
-  label,
-  value,
-  link,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  value: string | null | undefined;
-  link?: string;
-}) {
-  if (!value) return null;
-
-  const content = (
-    <div className="flex items-start gap-3 py-2">
-      <Icon className="h-5 w-5 text-gray-400 mt-0.5" />
-      <div>
-        <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
-        <p className={clsx('text-sm text-gray-900 dark:text-gray-100', link && 'hover:text-primary-600')}>{value}</p>
-      </div>
-    </div>
-  );
-
-  if (link) {
-    return (
-      <a href={link} target="_blank" rel="noopener noreferrer">
-        {content}
-      </a>
-    );
-  }
-
-  return content;
-}
-
-function ContactRow({ contact }: { contact: Contact }) {
-  return (
-    <Link
-      to={`/contacts/${contact.id}`}
-      className="flex flex-col gap-2 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors sm:flex-row sm:items-center sm:gap-4"
-    >
-      <div className="flex items-center gap-3 sm:gap-4">
-        {contact.avatar_url ? (
-          <img
-            src={contact.avatar_url}
-            alt={contact.full_name}
-            width={40}
-            height={40}
-            className="h-10 w-10 rounded-full object-cover flex-shrink-0"
-          />
-        ) : (
-          <div className="h-10 w-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
-            <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
-              {contact.first_name[0]}
-              {contact.last_name[0]}
-            </span>
-          </div>
-        )}
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{contact.full_name}</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-            {contact.job_title || 'No title'}
-            {contact.department && ` - ${contact.department}`}
-          </p>
-        </div>
-      </div>
-      <div className="text-xs text-gray-500 dark:text-gray-400 pl-13 sm:pl-0 sm:ml-auto sm:text-right">
-        {contact.email && (
-          <p className="truncate">{contact.email}</p>
-        )}
-        {contact.phone && <p>{contact.phone}</p>}
-      </div>
-    </Link>
-  );
-}
+const TABS: { id: TabType; name: string }[] = [
+  { id: 'overview', name: 'Overview' },
+  { id: 'opportunities', name: 'Opportunities' },
+  { id: 'contracts', name: 'Contracts' },
+  { id: 'quotes', name: 'Quotes' },
+  { id: 'proposals', name: 'Proposals' },
+  { id: 'activities', name: 'Activities' },
+  { id: 'notes', name: 'Notes' },
+  { id: 'attachments', name: 'Attachments' },
+  { id: 'meta', name: 'Meta/Social' },
+  { id: 'expenses', name: 'Expenses' },
+  { id: 'history', name: 'History' },
+  { id: 'sharing', name: 'Sharing' },
+];
 
 export function CompanyDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -130,16 +51,13 @@ export function CompanyDetailPage() {
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // Fetch company data
   const { data: company, isLoading: isLoadingCompany } = useCompany(companyId);
 
-  // Fetch contacts for this company
   const { data: contactsData, isLoading: isLoadingContacts } = useContacts({
     company_id: companyId,
     page_size: 50,
   });
 
-  // Fetch opportunities, quotes, proposals for this company - only on active tab
   const { data: opportunitiesData } = useOpportunities(
     activeTab === 'opportunities' && companyId ? { company_id: companyId } : undefined
   );
@@ -153,16 +71,6 @@ export function CompanyDetailPage() {
   const companyQuotes = quotesData?.items ?? [];
   const companyProposals = proposalsData?.items ?? [];
 
-  // Fetch timeline/activities - only when on activities tab
-  const shouldFetchActivities = activeTab === 'activities' && !!companyId;
-  const { data: timelineData, isLoading: isLoadingActivities } = useTimeline(
-    shouldFetchActivities ? 'company' : '',
-    shouldFetchActivities ? companyId! : 0
-  );
-
-  const activities = timelineData?.items || [];
-
-  // Mutations
   const updateCompany = useUpdateCompany();
   const deleteCompany = useDeleteCompany();
 
@@ -209,31 +117,6 @@ export function CompanyDetailPage() {
 
   const statusStyle = getStatusColor(company.status, 'company');
   const contacts = contactsData?.items || [];
-
-  const fullAddress = [
-    company.address_line1,
-    company.address_line2,
-    [company.city, company.state].filter(Boolean).join(', '),
-    company.postal_code,
-    company.country,
-  ]
-    .filter(Boolean)
-    .join('\n');
-
-  const tabs: { id: TabType; name: string }[] = [
-    { id: 'overview', name: 'Overview' },
-    { id: 'opportunities', name: 'Opportunities' },
-    { id: 'contracts', name: 'Contracts' },
-    { id: 'quotes', name: 'Quotes' },
-    { id: 'proposals', name: 'Proposals' },
-    { id: 'activities', name: 'Activities' },
-    { id: 'notes', name: 'Notes' },
-    { id: 'attachments', name: 'Attachments' },
-    { id: 'meta', name: 'Meta/Social' },
-    { id: 'expenses', name: 'Expenses' },
-    { id: 'history', name: 'History' },
-    { id: 'sharing', name: 'Sharing' },
-  ];
 
   return (
     <div className="space-y-6">
@@ -291,476 +174,63 @@ export function CompanyDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
-        <nav className="-mb-px flex space-x-4 sm:space-x-8 min-w-max px-1">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={clsx(
-                'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex-shrink-0',
-                activeTab === tab.id
-                  ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-              )}
-            >
-              {tab.name}
-            </button>
-          ))}
-        </nav>
-      </div>
+      <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
 
       {/* Tab Content */}
-      {activeTab === 'overview' && (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {/* Main Info */}
-          <div className="space-y-6 lg:col-span-2">
-            {/* Description */}
-            {company.description && (
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 p-6">
-                <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">About</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap">{company.description}</p>
-              </div>
-            )}
-
-            {/* Contacts */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700">
-              <div className="px-4 py-4 border-b dark:border-gray-700 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                  Contacts ({contacts.length})
-                </h3>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => navigate(`/contacts?company_id=${companyId}&action=new`)}
-                  className="w-full sm:w-auto"
-                >
-                  Add Contact
-                </Button>
-              </div>
-              {isLoadingContacts ? (
-                <div className="flex items-center justify-center py-8">
-                  <Spinner />
-                </div>
-              ) : contacts.length === 0 ? (
-                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                  <UsersIcon className="mx-auto h-8 w-8 text-gray-400 mb-2" />
-                  <p>No contacts associated with this company</p>
-                </div>
-              ) : (
-                <div className="divide-y dark:divide-gray-700">
-                  {contacts.map((contact) => (
-                    <ContactRow key={contact.id} contact={contact} />
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Sidebar */}
-          <div className="space-y-6">
-            {/* Contact Info */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 p-6">
-              <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">Contact Information</h3>
-              <div className="space-y-1">
-                <DetailItem
-                  icon={GlobeAltIcon}
-                  label="Website"
-                  value={company.website?.replace(/^https?:\/\//, '')}
-                  link={company.website || undefined}
-                />
-                <DetailItem
-                  icon={EnvelopeIcon}
-                  label="Email"
-                  value={company.email}
-                  link={company.email ? `mailto:${company.email}` : undefined}
-                />
-                <DetailItem
-                  icon={PhoneIcon}
-                  label="Phone"
-                  value={company.phone}
-                  link={company.phone ? `tel:${company.phone}` : undefined}
-                />
-                {fullAddress && (
-                  <DetailItem icon={MapPinIcon} label="Address" value={fullAddress} />
-                )}
-              </div>
-            </div>
-
-            {/* Business Info */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 p-6">
-              <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">Business Details</h3>
-              <div className="space-y-3">
-                {company.annual_revenue && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-500 dark:text-gray-400">Annual Revenue</span>
-                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                      {formatCurrency(company.annual_revenue)}
-                    </span>
-                  </div>
-                )}
-                {company.employee_count && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-500 dark:text-gray-400">Employees</span>
-                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                      {company.employee_count.toLocaleString()}
-                    </span>
-                  </div>
-                )}
-                {company.company_size && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-500 dark:text-gray-400">Company Size</span>
-                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{company.company_size}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Account & Creative */}
-            {(company.link_creative_tier || company.sow_url || company.account_manager) && (
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 p-6">
-                <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">Account & Creative</h3>
-                <div className="space-y-1">
-                  <DetailItem
-                    icon={SparklesIcon}
-                    label="Link Creative Tier"
-                    value={company.link_creative_tier ? `Tier ${company.link_creative_tier}` : null}
-                  />
-                  <DetailItem
-                    icon={UserCircleIcon}
-                    label="Account Manager"
-                    value={company.account_manager}
-                  />
-                  <DetailItem
-                    icon={DocumentTextIcon}
-                    label="SOW"
-                    value={company.sow_url ? 'View SOW' : null}
-                    link={company.sow_url || undefined}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Social Links */}
-            {(company.linkedin_url || company.twitter_handle) && (
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 p-6">
-                <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">Social Links</h3>
-                <div className="space-y-2">
-                  {company.linkedin_url && (
-                    <a
-                      href={company.linkedin_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400"
-                    >
-                      <LinkIcon className="h-4 w-4" />
-                      LinkedIn
-                    </a>
-                  )}
-                  {company.twitter_handle && (
-                    <a
-                      href={`https://twitter.com/${company.twitter_handle.replace('@', '')}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400"
-                    >
-                      <LinkIcon className="h-4 w-4" />
-                      {company.twitter_handle}
-                    </a>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Tags */}
-            {company.tags && company.tags.length > 0 && (
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 p-6">
-                <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">Tags</h3>
-                <div className="flex flex-wrap gap-2">
-                  {company.tags.map((tag) => (
-                    <span
-                      key={tag.id}
-                      className="text-xs px-2.5 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
-                      style={
-                        tag.color ? { backgroundColor: `${tag.color}20`, color: tag.color } : undefined
-                      }
-                    >
-                      {tag.name}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Timestamps */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 p-6">
-              <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">Record Info</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-500 dark:text-gray-400">Created</span>
-                  <span className="text-gray-900 dark:text-gray-100">{formatDate(company.created_at, 'long')}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-500 dark:text-gray-400">Last Updated</span>
-                  <span className="text-gray-900 dark:text-gray-100">{formatDate(company.updated_at, 'long')}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+      {activeTab === 'overview' && companyId && (
+        <OverviewTab
+          company={company}
+          contacts={contacts}
+          isLoadingContacts={isLoadingContacts}
+          companyId={companyId}
+        />
       )}
 
-      {/* Opportunities Tab */}
       {activeTab === 'opportunities' && companyId && (
-        <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden border border-transparent dark:border-gray-700">
-          {companyOpportunities.length === 0 ? (
-            <div className="text-center py-12 px-4">
-              <p className="text-sm text-gray-500 dark:text-gray-400">No opportunities for this company.</p>
-              <Link
-                to={`/opportunities?company_id=${companyId}`}
-                className="mt-2 inline-block text-sm text-primary-600 hover:text-primary-900 dark:hover:text-primary-300"
-              >
-                View Opportunities
-              </Link>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                <thead className="bg-gray-50 dark:bg-gray-900">
-                  <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Name</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Stage</th>
-                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Amount</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                  {companyOpportunities.map((opp: Opportunity) => (
-                    <tr key={opp.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <Link to={`/opportunities/${opp.id}`} className="text-primary-600 hover:text-primary-900 dark:hover:text-primary-300">
-                          {opp.name}
-                        </Link>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                        {opp.pipeline_stage?.name ?? '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900 dark:text-gray-100" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                        {opp.amount ? formatCurrency(opp.amount) : '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                        {formatDate(opp.created_at)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        <OpportunitiesTab companyId={companyId} opportunities={companyOpportunities} />
       )}
 
-      {/* Contracts Tab */}
       {activeTab === 'contracts' && companyId && (
-        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
+        <Suspense fallback={<SuspenseFallback />}>
           <ContractsList entityType="company" entityId={companyId} />
         </Suspense>
       )}
 
-      {/* Quotes Tab */}
       {activeTab === 'quotes' && companyId && (
-        <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden border border-transparent dark:border-gray-700">
-          {companyQuotes.length === 0 ? (
-            <div className="text-center py-12 px-4">
-              <p className="text-sm text-gray-500 dark:text-gray-400">No quotes for this company.</p>
-              <Link
-                to={`/quotes?company_id=${companyId}`}
-                className="mt-2 inline-block text-sm text-primary-600 hover:text-primary-900 dark:hover:text-primary-300"
-              >
-                Create a Quote
-              </Link>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                <thead className="bg-gray-50 dark:bg-gray-900">
-                  <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Quote</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Total</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                  {companyQuotes.map((quote: Quote) => (
-                    <tr key={quote.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <Link to={`/quotes/${quote.id}`} className="text-primary-600 hover:text-primary-900 dark:hover:text-primary-300">
-                          {quote.title} ({quote.quote_number})
-                        </Link>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <StatusBadge status={quote.status as StatusType} size="sm" showDot={false} />
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900 dark:text-gray-100" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                        {formatCurrency(quote.total)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                        {formatDate(quote.created_at)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        <QuotesTab companyId={companyId} quotes={companyQuotes} />
       )}
 
-      {/* Proposals Tab */}
-      {activeTab === 'proposals' && companyId && (
-        <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden border border-transparent dark:border-gray-700">
-          {companyProposals.length === 0 ? (
-            <div className="text-center py-12 px-4">
-              <p className="text-sm text-gray-500 dark:text-gray-400">No proposals for this company.</p>
-              <Link
-                to="/proposals"
-                className="mt-2 inline-block text-sm text-primary-600 hover:text-primary-900 dark:hover:text-primary-300"
-              >
-                View Proposals
-              </Link>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                <thead className="bg-gray-50 dark:bg-gray-900">
-                  <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Proposal</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                  {companyProposals.map((proposal: Proposal) => (
-                    <tr key={proposal.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <Link to={`/proposals/${proposal.id}`} className="text-primary-600 hover:text-primary-900 dark:hover:text-primary-300">
-                          {proposal.title} ({proposal.proposal_number})
-                        </Link>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <StatusBadge status={proposal.status as StatusType} size="sm" showDot={false} />
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                        {formatDate(proposal.created_at)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+      {activeTab === 'proposals' && (
+        <ProposalsTab proposals={companyProposals} />
       )}
 
-      {activeTab === 'activities' && (
-        <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
-          <div className="px-4 py-5 sm:p-6">
-            {isLoadingActivities ? (
-              <div className="flex items-center justify-center py-4">
-                <Spinner />
-              </div>
-            ) : activities.length === 0 ? (
-              <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
-                No activities recorded yet.
-              </p>
-            ) : (
-              <ul className="space-y-4">
-                {activities.map((activity) => (
-                  <li
-                    key={activity.id}
-                    className="flex items-start space-x-3 pb-4 border-b border-gray-100 dark:border-gray-700 last:border-0"
-                  >
-                    <div className="flex-shrink-0">
-                      <div className="h-8 w-8 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
-                        <svg
-                          className="h-4 w-4 text-primary-600 dark:text-primary-400"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                          />
-                        </svg>
-                      </div>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-900 dark:text-gray-100">
-                        {activity.subject}
-                      </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        {formatDate(activity.created_at)}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
+      {activeTab === 'activities' && companyId && (
+        <ActivitiesTab entityType="company" entityId={companyId} />
       )}
 
-      {activeTab === 'notes' && companyId && (
-        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
-          <NotesList entityType="company" entityId={companyId} />
-        </Suspense>
-      )}
-
-      {activeTab === 'attachments' && companyId && (
-        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
-          <AttachmentList entityType="companies" entityId={companyId} />
-        </Suspense>
-      )}
-
-      {/* Meta/Social Tab */}
       {activeTab === 'meta' && companyId && (
-        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
+        <Suspense fallback={<SuspenseFallback />}>
           <MetaTab companyId={companyId} />
         </Suspense>
       )}
 
-      {/* Expenses Tab */}
       {activeTab === 'expenses' && companyId && (
-        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
+        <Suspense fallback={<SuspenseFallback />}>
           <ExpensesTab companyId={companyId} />
         </Suspense>
       )}
 
-      {/* History Tab */}
-      {activeTab === 'history' && companyId && (
-        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
-          <AuditTimeline entityType="companies" entityId={companyId} />
-        </Suspense>
-      )}
-
-      {/* Sharing Tab */}
-      {activeTab === 'sharing' && companyId && (
-        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
-          <SharePanel entityType="companies" entityId={companyId} />
-        </Suspense>
+      {companyId && (
+        <CommonTabContent
+          activeTab={activeTab}
+          entityType="companies"
+          entityId={companyId}
+          enabledTabs={['notes', 'attachments', 'history', 'sharing']}
+        />
       )}
 
       {/* Edit Form Modal */}
-      <Modal
-        isOpen={showEditForm}
-        onClose={() => setShowEditForm(false)}
-        title="Edit Company"
-        size="lg"
-      >
+      <Modal isOpen={showEditForm} onClose={() => setShowEditForm(false)} title="Edit Company" size="lg">
         <CompanyForm
           company={company}
           onSubmit={handleFormSubmit}
