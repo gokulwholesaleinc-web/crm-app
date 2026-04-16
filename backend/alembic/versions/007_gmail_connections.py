@@ -2,8 +2,8 @@
 
 Also merges the 004_lead_nullable_names and 004_user_approval branches so alembic has a single head going forward.
 
-Revision ID: 005_gmail_connections
-Revises: 004_lead_nullable_names, 004_user_approval
+Revision ID: 007_gmail_connections
+Revises: 006_prune_far_future
 Create Date: 2026-04-15
 """
 
@@ -11,8 +11,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "005_gmail_connections"
-down_revision = ("004_lead_nullable_names", "004_user_approval")
+revision = "007_gmail_connections"
+down_revision = "006_prune_far_future"
 branch_labels = None
 depends_on = None
 
