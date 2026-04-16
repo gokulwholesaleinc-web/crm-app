@@ -75,6 +75,7 @@ async def _background_tick():
     await _process_due_campaign_steps()
     await _deliver_scheduled_reports()
     await _sync_google_calendars()
+    await _sync_gmail_accounts()
 
 
 def start_scheduler():
@@ -96,3 +97,8 @@ def stop_scheduler():
     if scheduler.running:
         scheduler.shutdown(wait=False)
         logger.info("Background scheduler stopped")
+
+
+async def _sync_gmail_accounts():
+    from src.integrations.gmail.scheduler import _sync_gmail_accounts as _gmail_sync
+    await _gmail_sync()
