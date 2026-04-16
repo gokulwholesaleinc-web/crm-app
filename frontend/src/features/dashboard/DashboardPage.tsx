@@ -193,13 +193,12 @@ function DashboardPage() {
 
   const [dateRange, setDateRange] = useState<DateRange>({ dateFrom: null, dateTo: null });
 
-  // Use hooks for data fetching with date range
-  const { data: kpiCards, isLoading: isLoadingDashboard, error: dashboardError } = useKPIs(dateRange);
-  const { data: pipelineData } = usePipelineFunnelChart(dateRange);
-  const { data: leadsBySourceData } = useLeadsBySourceChart(dateRange);
-  const { data: timelineData } = useUserTimeline();
-  const { data: funnelData } = useSalesFunnel(dateRange);
-  const { data: salesKpis } = useSalesKpis(dateRange);
+  const { data: kpiCards, isLoading: isLoadingKpis, error: dashboardError } = useKPIs(dateRange);
+  const { data: pipelineData, isLoading: isLoadingPipeline } = usePipelineFunnelChart(dateRange);
+  const { data: leadsBySourceData, isLoading: isLoadingLeads } = useLeadsBySourceChart(dateRange);
+  const { data: timelineData, isLoading: isLoadingTimeline } = useUserTimeline();
+  const { data: funnelData, isLoading: isLoadingFunnel } = useSalesFunnel(dateRange);
+  const { data: salesKpis, isLoading: isLoadingSalesKpis } = useSalesKpis(dateRange);
 
   const error = dashboardError instanceof Error ? dashboardError.message : dashboardError ? String(dashboardError) : null;
 
@@ -243,7 +242,7 @@ function DashboardPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 gap-3 sm:gap-6 sm:grid-cols-2 lg:grid-cols-4 stagger-fade-in">
-        {isLoadingDashboard ? (
+        {isLoadingKpis ? (
           <>
             <SkeletonCard />
             <SkeletonCard />
