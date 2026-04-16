@@ -40,6 +40,13 @@ __all__ = [
     "normalize_header",
 ]
 
+# Legacy private-name aliases — tests/unit/test_import_export.py and
+# tests/unit/test_linkedin_campaigns.py still import these
+_map_columns = map_columns
+_normalize_header = normalize_header
+_split_full_name = split_full_name
+_find_name_column = find_name_column
+
 
 class CSVHandler:
     """Handles CSV import and export for CRM entities."""

@@ -37,6 +37,7 @@ COLUMN_ALIASES: Dict[str, str] = {
     "address": "address_line1",
     "address1": "address_line1",
     "street": "address_line1",
+    "location": "address_line1",
     "address2": "address_line2",
     "zip": "postal_code",
     "zipcode": "postal_code",
