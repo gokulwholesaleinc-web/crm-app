@@ -39,10 +39,6 @@ class GmailClient:
         if self._own_http:
             await self._http.aclose()
 
-    # ------------------------------------------------------------------
-    # Token management
-    # ------------------------------------------------------------------
-
     async def _refresh_if_needed(self) -> None:
         now = datetime.now(timezone.utc)
         expiry = self._conn.token_expiry
@@ -93,10 +89,6 @@ class GmailClient:
         resp.raise_for_status()
         return resp.json()
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
     async def send_message(self, raw: bytes, thread_id: Optional[str] = None) -> dict:
         """Base64url-encode raw RFC-822 bytes and POST to Gmail send endpoint."""
         encoded = base64.urlsafe_b64encode(raw).decode("ascii")
@@ -136,9 +128,6 @@ class GmailClient:
         return await self._get("users/me/profile")
 
 
-# ------------------------------------------------------------------
-# Parsing helpers
-# ------------------------------------------------------------------
 
 def _parse_message(data: dict) -> dict:
     payload = data.get("payload", {})

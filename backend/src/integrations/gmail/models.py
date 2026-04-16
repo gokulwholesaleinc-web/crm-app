@@ -1,15 +1,9 @@
-"""Gmail integration models.
-
-Patterned after src/integrations/google_calendar/models.py. Each user has at most one
-active GmailConnection; GmailSyncState tracks the last processed Gmail historyId so
-the 90s poller can diff forward via users.history.list.
-"""
+"""Gmail integration models."""
 
 from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import (
-    Boolean,
     DateTime,
     ForeignKey,
     Index,
@@ -74,11 +68,7 @@ class GmailConnection(Base):
 
 
 class GmailSyncState(Base):
-    """Cursor state for the Gmail history poller.
-
-    One row per user. last_history_id is the Gmail historyId we've already processed;
-    next poll passes it to users.history.list(startHistoryId=...).
-    """
+    """Per-user cursor for the Gmail history poller."""
 
     __tablename__ = "gmail_sync_state"
 

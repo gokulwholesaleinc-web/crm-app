@@ -1,4 +1,4 @@
-"""Gmail integration API routes — OAuth authorize/callback, status, disconnect."""
+"""Gmail integration routes."""
 
 import hmac as _hmac
 import secrets
@@ -38,7 +38,6 @@ async def gmail_authorize(
     response: Response,
     current_user: CurrentUser,
 ):
-    """Return the Google consent URL to start the Gmail incremental-consent flow."""
     client_id = settings.GOOGLE_CLIENT_ID
     if not client_id:
         raise HTTPException(
@@ -76,7 +75,6 @@ async def gmail_callback(
     db: DBSession,
     http_factory: GmailHttpFactory,
 ):
-    """Exchange Google code for Gmail tokens and upsert GmailConnection."""
     client_id = settings.GOOGLE_CLIENT_ID
     client_secret = settings.GOOGLE_CLIENT_SECRET
     if not client_id or not client_secret:
@@ -140,7 +138,6 @@ async def gmail_status(
     current_user: CurrentUser,
     db: DBSession,
 ):
-    """Return Gmail connection health for the current user."""
     service = GmailConnectionService(db)
     conn = await service.get_by_user(current_user.id)
     sync_state = await service.get_sync_state(current_user.id)
@@ -162,7 +159,6 @@ async def gmail_disconnect(
     db: DBSession,
     http_factory: GmailHttpFactory,
 ):
-    """Revoke Gmail tokens and mark the connection as disconnected."""
     service = GmailConnectionService(db, client_factory=http_factory)
     conn = await service.mark_revoked(current_user.id)
     if not conn:

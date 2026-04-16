@@ -21,12 +21,6 @@ logger = logging.getLogger(__name__)
 
 
 async def _try_gmail_send(email: EmailQueue, db: AsyncSession) -> bool:
-    """If the sending user has a Gmail connection, send via Gmail API.
-
-    Returns True if sent successfully, False if no connection or error (caller
-    should fall back to Resend). On success, populates email.message_id,
-    email.thread_id, and sets email.sent_via='gmail'.
-    """
     if not email.sent_by_id:
         return False
     from src.integrations.gmail.models import GmailConnection
@@ -73,7 +67,6 @@ async def _find_thread_context(
     entity_id: Optional[int],
     to_email: str,
 ) -> tuple[Optional[str], Optional[str]]:
-    """Look up the most recent EmailQueue row with the same entity+recipient to reuse threading."""
     if not entity_type or not entity_id:
         return None, None
     result = await db.execute(
@@ -97,7 +90,6 @@ async def _create_email_activity(
     db: AsyncSession,
     email: EmailQueue,
 ) -> None:
-    """Mirror every successful outbound send as an Activity(type=EMAIL)."""
     if not email.entity_type or not email.entity_id:
         return
     from src.activities.models import Activity, ActivityType

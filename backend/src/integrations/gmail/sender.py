@@ -1,4 +1,4 @@
-"""RFC 822 message builder for Gmail API sending."""
+"""Gmail send helpers."""
 
 from email.message import EmailMessage
 from email.utils import make_msgid

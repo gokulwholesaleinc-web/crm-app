@@ -1,4 +1,4 @@
-"""GmailConnectionService — CRUD on GmailConnection + GmailSyncState."""
+"""Gmail connection service."""
 
 from datetime import datetime, timezone
 from typing import Optional
