@@ -1,37 +1,45 @@
 import { useState, lazy, Suspense } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
-
-const NotesList = lazy(() => import('../../components/shared/NotesList'));
-const AttachmentList = lazy(() => import('../../components/shared/AttachmentList'));
-const AuditTimeline = lazy(() => import('../../components/shared/AuditTimeline'));
-
-const SharePanel = lazy(() => import('../../components/shared/SharePanel'));
-const ContractsList = lazy(() => import('../../components/shared/ContractsList'));
-const PaymentSummary = lazy(() => import('../../components/shared/PaymentSummary'));
-const DocumentsTab = lazy(() => import('../../components/shared/DocumentsTab'));
+import { TabBar, ActivitiesTab, CommonTabContent, SuspenseFallback } from '../../components/shared/DetailPageShell';
 import { EmailComposeModal, EmailThread } from '../../components/email';
-const SendInvoiceModal = lazy(() =>
-  import('../payments/components/SendInvoiceModal').then(m => ({ default: m.SendInvoiceModal }))
-);
-const OnboardingLinkGenerator = lazy(() =>
-  import('../payments/components/OnboardingLinkGenerator').then(m => ({ default: m.OnboardingLinkGenerator }))
-);
-import type { ThreadEmailItem } from '../../types/email';
 import { ContactForm, ContactFormData } from './components/ContactForm';
 import { NextBestActionCard } from '../../components/ai';
 import { useContact, useDeleteContact, useUpdateContact } from '../../hooks/useContacts';
 import { showSuccess, showError } from '../../utils/toast';
-import { useTimeline } from '../../hooks/useActivities';
 import { useQuotes } from '../../hooks/useQuotes';
 import { useProposals } from '../../hooks/useProposals';
 import { formatDate, formatPhoneNumber, formatCurrency } from '../../utils/formatters';
 import { StatusBadge } from '../../components/ui';
 import type { StatusType } from '../../components/ui/Badge';
 import type { ContactUpdate, Quote, Proposal } from '../../types';
-import clsx from 'clsx';
+import type { ThreadEmailItem } from '../../types/email';
+
+const ContractsList = lazy(() => import('../../components/shared/ContractsList'));
+const PaymentSummary = lazy(() => import('../../components/shared/PaymentSummary'));
+const DocumentsTab = lazy(() => import('../../components/shared/DocumentsTab'));
+const SendInvoiceModal = lazy(() =>
+  import('../payments/components/SendInvoiceModal').then(m => ({ default: m.SendInvoiceModal }))
+);
+const OnboardingLinkGenerator = lazy(() =>
+  import('../payments/components/OnboardingLinkGenerator').then(m => ({ default: m.OnboardingLinkGenerator }))
+);
 
 type TabType = 'details' | 'activities' | 'notes' | 'emails' | 'contracts' | 'quotes' | 'proposals' | 'documents' | 'attachments' | 'history' | 'sharing';
+
+const TABS: { id: TabType; name: string }[] = [
+  { id: 'details', name: 'Details' },
+  { id: 'activities', name: 'Activities' },
+  { id: 'notes', name: 'Notes' },
+  { id: 'emails', name: 'Emails' },
+  { id: 'contracts', name: 'Contracts' },
+  { id: 'quotes', name: 'Quotes' },
+  { id: 'proposals', name: 'Proposals' },
+  { id: 'documents', name: 'Documents' },
+  { id: 'attachments', name: 'Attachments' },
+  { id: 'history', name: 'History' },
+  { id: 'sharing', name: 'Sharing' },
+];
 
 function ContactDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -44,21 +52,10 @@ function ContactDetailPage() {
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [replyToEmail, setReplyToEmail] = useState<ThreadEmailItem | null>(null);
 
-  // Use hooks for data fetching
   const { data: contact, isLoading, error } = useContact(contactId);
   const deleteContactMutation = useDeleteContact();
   const updateContactMutation = useUpdateContact();
 
-  // Fetch timeline/activities for the contact - only fetch when on activities tab
-  const shouldFetchActivities = activeTab === 'activities' && !!contactId;
-  const { data: timelineData, isLoading: isLoadingActivities } = useTimeline(
-    shouldFetchActivities ? 'contact' : '',
-    shouldFetchActivities ? contactId! : 0
-  );
-
-  const activities = timelineData?.items || [];
-
-  // Fetch quotes/proposals for this contact - only when on those tabs
   const { data: quotesData } = useQuotes(
     activeTab === 'quotes' && contactId ? { contact_id: contactId } : undefined
   );
@@ -79,10 +76,7 @@ function ContactDetailPage() {
         job_title: data.jobTitle,
         company_id: data.company_id ?? undefined,
       };
-      await updateContactMutation.mutateAsync({
-        id: contactId,
-        data: updateData,
-      });
+      await updateContactMutation.mutateAsync({ id: contactId, data: updateData });
       setShowEditForm(false);
       showSuccess('Contact updated successfully');
     } catch {
@@ -104,7 +98,6 @@ function ContactDetailPage() {
 
   const handleDeleteConfirm = async () => {
     if (!contactId) return;
-
     try {
       await deleteContactMutation.mutateAsync(contactId);
       navigate('/contacts');
@@ -142,20 +135,6 @@ function ContactDetailPage() {
     );
   }
 
-  const tabs: { id: TabType; name: string }[] = [
-    { id: 'details', name: 'Details' },
-    { id: 'activities', name: 'Activities' },
-    { id: 'notes', name: 'Notes' },
-    { id: 'emails', name: 'Emails' },
-    { id: 'contracts', name: 'Contracts' },
-    { id: 'quotes', name: 'Quotes' },
-    { id: 'proposals', name: 'Proposals' },
-    { id: 'documents', name: 'Documents' },
-    { id: 'attachments', name: 'Attachments' },
-    { id: 'history', name: 'History' },
-    { id: 'sharing', name: 'Sharing' },
-  ];
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -166,18 +145,8 @@ function ContactDetailPage() {
             className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 flex-shrink-0"
             aria-label="Back to contacts"
           >
-            <svg
-              className="h-6 w-6"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M10 19l-7-7m0 0l7-7m-7 7h18"
-              />
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
           </Link>
           <div className="min-w-0">
@@ -201,25 +170,13 @@ function ContactDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-3 w-full sm:w-auto">
-          <Button
-            variant="primary"
-            onClick={() => setShowEmailCompose(true)}
-            className="flex-1 sm:flex-none"
-          >
+          <Button variant="primary" onClick={() => setShowEmailCompose(true)} className="flex-1 sm:flex-none">
             Send Email
           </Button>
-          <Button
-            variant="secondary"
-            onClick={() => setShowInvoiceModal(true)}
-            className="flex-1 sm:flex-none"
-          >
+          <Button variant="secondary" onClick={() => setShowInvoiceModal(true)} className="flex-1 sm:flex-none">
             Send Invoice
           </Button>
-          <Button
-            variant="secondary"
-            onClick={() => setShowEditForm(true)}
-            className="flex-1 sm:flex-none"
-          >
+          <Button variant="secondary" onClick={() => setShowEditForm(true)} className="flex-1 sm:flex-none">
             Edit
           </Button>
           <Button
@@ -237,202 +194,93 @@ function ContactDetailPage() {
       <NextBestActionCard entityType="contact" entityId={contact.id} />
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
-        <nav className="-mb-px flex space-x-4 sm:space-x-8 min-w-max px-1">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={clsx(
-                'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex-shrink-0',
-                activeTab === tab.id
-                  ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-              )}
-            >
-              {tab.name}
-            </button>
-          ))}
-        </nav>
-      </div>
+      <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
 
       {/* Tab Content */}
       {activeTab === 'details' && contactId && (
         <>
-        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="h-20 bg-gray-200 dark:bg-gray-700 rounded" /></div>}>
-          <PaymentSummary contactId={contactId} />
-        </Suspense>
-        <Suspense fallback={null}>
-          <OnboardingLinkGenerator contactId={contactId} contactEmail={contact.email ?? undefined} />
-        </Suspense>
-        <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
-          <div className="p-4 sm:p-6">
-            <dl className="grid grid-cols-1 gap-4 sm:gap-x-4 sm:gap-y-6 sm:grid-cols-2">
-              <div>
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Email</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
-                  <a
-                    href={`mailto:${contact.email}`}
-                    className="text-primary-600 hover:text-primary-500"
-                  >
-                    {contact.email}
-                  </a>
-                </dd>
-              </div>
-
-              <div>
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Phone</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
-                  {contact.phone ? (
-                    <a
-                      href={`tel:${contact.phone}`}
-                      className="text-primary-600 hover:text-primary-500"
-                    >
-                      {formatPhoneNumber(contact.phone)}
+          <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="h-20 bg-gray-200 dark:bg-gray-700 rounded" /></div>}>
+            <PaymentSummary contactId={contactId} />
+          </Suspense>
+          <Suspense fallback={null}>
+            <OnboardingLinkGenerator contactId={contactId} contactEmail={contact.email ?? undefined} />
+          </Suspense>
+          <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
+            <div className="p-4 sm:p-6">
+              <dl className="grid grid-cols-1 gap-4 sm:gap-x-4 sm:gap-y-6 sm:grid-cols-2">
+                <div>
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Email</dt>
+                  <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
+                    <a href={`mailto:${contact.email}`} className="text-primary-600 hover:text-primary-500">
+                      {contact.email}
                     </a>
-                  ) : (
-                    '-'
-                  )}
-                </dd>
-              </div>
-
-              <div>
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Company</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
-                  {contact.company ? (
-                    <Link
-                      to={`/companies/${contact.company.id}`}
-                      className="text-primary-600 hover:text-primary-500 focus-visible:underline focus-visible:outline-none"
-                    >
-                      {contact.company.name}
-                    </Link>
-                  ) : (
-                    '-'
-                  )}
-                </dd>
-              </div>
-
-              <div>
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Job Title</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
-                  {contact.job_title || '-'}
-                </dd>
-              </div>
-
-              <div>
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Sales Code</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
-                  {contact.sales_code || '-'}
-                </dd>
-              </div>
-
-              <div className="sm:col-span-2">
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Address</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
-                  {contact.address_line1 ? (
-                    <>
-                      {contact.address_line1}
-                      {contact.address_line2 && <><br />{contact.address_line2}</>}
-                      <br />
-                      {[contact.city, contact.state, contact.postal_code]
-                        .filter(Boolean)
-                        .join(', ')}
-                      {contact.country && (
-                        <>
-                          <br />
-                          {contact.country}
-                        </>
-                      )}
-                    </>
-                  ) : (
-                    '-'
-                  )}
-                </dd>
-              </div>
-
-              <div className="sm:col-span-2">
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Notes</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
-                  {contact.description || 'No notes'}
-                </dd>
-              </div>
-
-              <div>
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Created</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
-                  {formatDate(contact.created_at)}
-                </dd>
-              </div>
-
-              <div>
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                  Last Updated
-                </dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
-                  {formatDate(contact.updated_at)}
-                </dd>
-              </div>
-            </dl>
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Phone</dt>
+                  <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
+                    {contact.phone ? (
+                      <a href={`tel:${contact.phone}`} className="text-primary-600 hover:text-primary-500">
+                        {formatPhoneNumber(contact.phone)}
+                      </a>
+                    ) : '-'}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Company</dt>
+                  <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
+                    {contact.company ? (
+                      <Link
+                        to={`/companies/${contact.company.id}`}
+                        className="text-primary-600 hover:text-primary-500 focus-visible:underline focus-visible:outline-none"
+                      >
+                        {contact.company.name}
+                      </Link>
+                    ) : '-'}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Job Title</dt>
+                  <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">{contact.job_title || '-'}</dd>
+                </div>
+                <div>
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Sales Code</dt>
+                  <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">{contact.sales_code || '-'}</dd>
+                </div>
+                <div className="sm:col-span-2">
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Address</dt>
+                  <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
+                    {contact.address_line1 ? (
+                      <>
+                        {contact.address_line1}
+                        {contact.address_line2 && <><br />{contact.address_line2}</>}
+                        <br />
+                        {[contact.city, contact.state, contact.postal_code].filter(Boolean).join(', ')}
+                        {contact.country && <><br />{contact.country}</>}
+                      </>
+                    ) : '-'}
+                  </dd>
+                </div>
+                <div className="sm:col-span-2">
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Notes</dt>
+                  <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">{contact.description || 'No notes'}</dd>
+                </div>
+                <div>
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Created</dt>
+                  <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">{formatDate(contact.created_at)}</dd>
+                </div>
+                <div>
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Last Updated</dt>
+                  <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">{formatDate(contact.updated_at)}</dd>
+                </div>
+              </dl>
+            </div>
           </div>
-        </div>
         </>
       )}
 
-      {activeTab === 'activities' && (
-        <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
-          <div className="px-4 py-5 sm:p-6">
-            {isLoadingActivities ? (
-              <div className="flex items-center justify-center py-4">
-                <Spinner />
-              </div>
-            ) : activities.length === 0 ? (
-              <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
-                No activities recorded yet.
-              </p>
-            ) : (
-              <ul className="space-y-4">
-                {activities.map((activity) => (
-                  <li
-                    key={activity.id}
-                    className="flex items-start space-x-3 pb-4 border-b border-gray-100 dark:border-gray-700 last:border-0"
-                  >
-                    <div className="flex-shrink-0">
-                      <div className="h-8 w-8 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
-                        <svg
-                          className="h-4 w-4 text-primary-600 dark:text-primary-400"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                          />
-                        </svg>
-                      </div>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-900 dark:text-gray-100">
-                        {activity.subject}
-                      </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        {formatDate(activity.created_at)}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'notes' && contactId && (
-        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
-          <NotesList entityType="contact" entityId={contactId} />
-        </Suspense>
+      {activeTab === 'activities' && contactId && (
+        <ActivitiesTab entityType="contact" entityId={contactId} />
       )}
 
       {activeTab === 'emails' && contactId && (
@@ -440,40 +288,26 @@ function ContactDetailPage() {
           <div className="px-4 py-5 sm:p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Email Thread</h3>
-              <Button
-                variant="primary"
-                onClick={() => {
-                  setReplyToEmail(null);
-                  setShowEmailCompose(true);
-                }}
-              >
+              <Button variant="primary" onClick={() => { setReplyToEmail(null); setShowEmailCompose(true); }}>
                 Compose Email
               </Button>
             </div>
             <EmailThread
               entityType="contacts"
               entityId={contactId}
-              onReply={(email) => {
-                setReplyToEmail(email);
-                setShowEmailCompose(true);
-              }}
-              onCompose={() => {
-                setReplyToEmail(null);
-                setShowEmailCompose(true);
-              }}
+              onReply={(email) => { setReplyToEmail(email); setShowEmailCompose(true); }}
+              onCompose={() => { setReplyToEmail(null); setShowEmailCompose(true); }}
             />
           </div>
         </div>
       )}
 
-      {/* Contracts Tab */}
       {activeTab === 'contracts' && contactId && (
-        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
+        <Suspense fallback={<SuspenseFallback />}>
           <ContractsList entityType="contact" entityId={contactId} />
         </Suspense>
       )}
 
-      {/* Quotes Tab */}
       {activeTab === 'quotes' && contactId && (
         <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden border border-transparent dark:border-gray-700">
           {quotes.length === 0 ? (
@@ -523,7 +357,6 @@ function ContactDetailPage() {
         </div>
       )}
 
-      {/* Proposals Tab */}
       {activeTab === 'proposals' && contactId && (
         <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden border border-transparent dark:border-gray-700">
           {proposals.length === 0 ? (
@@ -569,41 +402,25 @@ function ContactDetailPage() {
         </div>
       )}
 
-      {/* Documents Tab */}
       {activeTab === 'documents' && contactId && (
-        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
+        <Suspense fallback={<SuspenseFallback />}>
           <DocumentsTab entityType="contacts" entityId={contactId} />
         </Suspense>
       )}
 
-      {/* Attachments Tab */}
-      {activeTab === 'attachments' && contactId && (
-        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
-          <AttachmentList entityType="contacts" entityId={contactId} />
-        </Suspense>
-      )}
-
-      {/* History Tab */}
-      {activeTab === 'history' && contactId && (
-        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
-          <AuditTimeline entityType="contacts" entityId={contactId} />
-        </Suspense>
-      )}
-
-      {/* Sharing Tab */}
-      {activeTab === 'sharing' && contactId && (
-        <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="space-y-3"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded" /><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6" /></div></div>}>
-          <SharePanel entityType="contacts" entityId={contactId} />
-        </Suspense>
+      {contactId && (
+        <CommonTabContent
+          activeTab={activeTab}
+          entityType="contacts"
+          entityId={contactId}
+          enabledTabs={['notes', 'attachments', 'history', 'sharing']}
+        />
       )}
 
       {/* Email Compose Modal */}
       <EmailComposeModal
         isOpen={showEmailCompose}
-        onClose={() => {
-          setShowEmailCompose(false);
-          setReplyToEmail(null);
-        }}
+        onClose={() => { setShowEmailCompose(false); setReplyToEmail(null); }}
         defaultTo={contact.email || ''}
         entityType="contacts"
         entityId={contactId}
@@ -611,12 +428,7 @@ function ContactDetailPage() {
       />
 
       {/* Edit Form Modal */}
-      <Modal
-        isOpen={showEditForm}
-        onClose={() => setShowEditForm(false)}
-        title="Edit Contact"
-        size="lg"
-      >
+      <Modal isOpen={showEditForm} onClose={() => setShowEditForm(false)} title="Edit Contact" size="lg">
         <ContactForm
           initialData={getInitialFormData()}
           onSubmit={handleEditSubmit}
