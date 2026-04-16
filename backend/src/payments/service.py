@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import logging
+import uuid
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, timezone
 from html import escape
@@ -786,11 +787,15 @@ body {{ font-family: Arial, Helvetica, sans-serif; margin: 40px; color: #111827;
         payment = result.scalar_one_or_none()
         if payment and payment.status != "succeeded":
             payment.status = "succeeded"
-            # Extract receipt URL from charges if available
+            charge = None
             charges = intent_obj.get("charges", {}).get("data", [])
             if charges:
-                payment.receipt_url = charges[0].get("receipt_url")
-                payment.payment_method = charges[0].get("payment_method_details", {}).get("type")
+                charge = charges[0]
+            elif isinstance(intent_obj.get("latest_charge"), dict):
+                charge = intent_obj["latest_charge"]
+            if charge:
+                payment.receipt_url = charge.get("receipt_url")
+                payment.payment_method = charge.get("payment_method_details", {}).get("type")
             await self.db.flush()
 
             # Send branded receipt email
@@ -1026,17 +1031,14 @@ body {{ font-family: Arial, Helvetica, sans-serif; margin: 40px; color: #111827;
             owner_id=owner_id,
             created_by_id=owner_id,
         )
-        self.db.add(renewal_payment)
         try:
-            await self.db.flush()
+            async with self.db.begin_nested():
+                self.db.add(renewal_payment)
+                await self.db.flush()
         except Exception as exc:
-            # Extremely tight race: another worker inserted the same
-            # invoice row between our SELECT and INSERT. Roll back via
-            # savepoint and fall through — the other worker handled it.
             logger.warning(
                 "invoice.paid renewal insert race for %s: %s", invoice_id, exc
             )
-            await self.db.rollback()
 
     async def _handle_invoice_payment_failed(self, invoice_obj: dict) -> None:
         """Handle invoice.payment_failed event -- marks payment as failed."""
@@ -1165,7 +1167,11 @@ body {{ font-family: Arial, Helvetica, sans-serif; margin: 40px; color: #111827;
                 invoice_params["payment_settings"] = {
                     "payment_method_types": payment_method_types,
                 }
-            invoice = stripe.Invoice.create(**invoice_params)
+            idem_key = f"inv_{customer_id}_{uuid.uuid4().hex[:12]}"
+            invoice = stripe.Invoice.create(
+                **invoice_params,
+                idempotency_key=idem_key,
+            )
 
             stripe.InvoiceItem.create(
                 customer=customer.stripe_customer_id,
@@ -1173,6 +1179,7 @@ body {{ font-family: Arial, Helvetica, sans-serif; margin: 40px; color: #111827;
                 currency=currency.lower(),
                 description=description,
                 invoice=invoice.id,
+                idempotency_key=f"{idem_key}_item",
             )
 
             invoice = stripe.Invoice.finalize_invoice(invoice.id)
@@ -1235,6 +1242,7 @@ body {{ font-family: Arial, Helvetica, sans-serif; margin: 40px; color: #111827;
             customer=customer.stripe_customer_id,
             success_url=success_url,
             cancel_url=cancel_url,
+            idempotency_key=f"setup_{customer.id}_{uuid.uuid4().hex[:12]}",
         )
 
         return {"url": session.url}
@@ -1381,7 +1389,7 @@ class SubscriptionService:
                     subscription.stripe_subscription_id,
                     cancel_at_period_end=True,
                 )
-            except (OSError, RuntimeError) as exc:
+            except Exception as exc:
                 logger.warning("Failed to cancel subscription on Stripe %s: %s", subscription.stripe_subscription_id, exc)
 
         subscription.status = "canceled"

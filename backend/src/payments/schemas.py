@@ -195,7 +195,7 @@ class SubscriptionResponse(BaseModel):
     id: int
     stripe_subscription_id: str
     customer_id: int
-    price_id: int
+    price_id: Optional[int] = None
     status: str
     current_period_start: Optional[datetime] = None
     current_period_end: Optional[datetime] = None

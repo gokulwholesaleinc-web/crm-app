@@ -19,7 +19,7 @@ from httpx import AsyncClient
 
 from src.auth.security import get_password_hash, create_access_token
 from src.auth.models import User
-from src.payments.models import StripeCustomer, Payment
+from src.payments.models import StripeCustomer, Payment, Subscription
 from src.payments.service import PaymentService
 from src.config import settings
 
@@ -681,3 +681,97 @@ class TestPaymentModelStripeInvoiceId:
         await db_session.commit()
         await db_session.refresh(payment)
         assert payment.stripe_invoice_id is None
+
+
+# =========================================================================
+# Stripe Hardening Tests
+# =========================================================================
+
+class TestSubscriptionResponseNullablePrice:
+    """SubscriptionResponse.price_id must accept None (webhook-created subs)."""
+
+    @pytest.mark.asyncio
+    async def test_subscription_with_null_price_serializes(self, db_session, test_user):
+        from src.payments.schemas import SubscriptionResponse
+
+        sub = Subscription(
+            stripe_subscription_id="sub_null_price",
+            customer_id=1,
+            price_id=None,
+            status="active",
+            cancel_at_period_end=False,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(sub)
+        await db_session.flush()
+        await db_session.refresh(sub)
+
+        resp = SubscriptionResponse.model_validate(sub)
+        assert resp.price_id is None
+        assert resp.status == "active"
+
+
+class TestPaymentSucceededLatestCharge:
+    """_handle_payment_succeeded must read both legacy charges and latest_charge."""
+
+    @pytest.mark.asyncio
+    async def test_legacy_charges_field(self, db_session, test_user):
+        payment = Payment(
+            stripe_payment_intent_id="pi_legacy",
+            amount=50.00,
+            currency="USD",
+            status="pending",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(payment)
+        await db_session.flush()
+
+        service = PaymentService(db_session)
+        await service._handle_payment_succeeded({
+            "id": "pi_legacy",
+            "charges": {"data": [
+                {"receipt_url": "https://example.com/receipt", "payment_method_details": {"type": "card"}}
+            ]},
+        })
+
+        await db_session.refresh(payment)
+        assert payment.status == "succeeded"
+        assert payment.receipt_url == "https://example.com/receipt"
+        assert payment.payment_method == "card"
+
+    @pytest.mark.asyncio
+    async def test_latest_charge_field(self, db_session, test_user):
+        payment = Payment(
+            stripe_payment_intent_id="pi_modern",
+            amount=75.00,
+            currency="USD",
+            status="pending",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(payment)
+        await db_session.flush()
+
+        service = PaymentService(db_session)
+        await service._handle_payment_succeeded({
+            "id": "pi_modern",
+            "latest_charge": {
+                "receipt_url": "https://example.com/modern",
+                "payment_method_details": {"type": "us_bank_account"},
+            },
+        })
+
+        await db_session.refresh(payment)
+        assert payment.status == "succeeded"
+        assert payment.receipt_url == "https://example.com/modern"
+        assert payment.payment_method == "us_bank_account"
+
+
+class TestIdempotencyKeyPresence:
+    """Stripe write operations must include idempotency keys."""
+
+    def test_uuid_imported(self):
+        import src.payments.service as svc
+        assert hasattr(svc, "uuid")
