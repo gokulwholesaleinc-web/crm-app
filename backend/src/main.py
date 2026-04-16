@@ -239,7 +239,7 @@ async def _run_production_migrations():
                         _secrets.token_urlsafe(32), row["id"],
                     )
             except Exception as exc:
-                logger.warning("Failed to backfill public_token on quotes/proposals: %s", exc)
+                logger.error("Failed to backfill public_token on quotes/proposals: %s", exc)
 
             # Create inbound_emails table if it doesn't exist
             try:
