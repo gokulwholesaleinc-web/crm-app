@@ -120,7 +120,7 @@ async def push_to_calendar(
         raise HTTPException(
             status_code=HTTPStatus.NOT_FOUND, detail="Activity not found"
         )
-    is_privileged = current_user.is_superuser or getattr(current_user, "role", "sales_rep") in ("admin", "manager")
+    is_privileged = current_user.is_superuser or current_user.role in ("admin", "manager")
     if not is_privileged:
         owns = (
             activity.owner_id == current_user.id
