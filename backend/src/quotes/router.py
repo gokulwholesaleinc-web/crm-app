@@ -324,6 +324,12 @@ async def update_quote(
     quote = await get_entity_or_404(service, quote_id, EntityNames.QUOTE)
     check_ownership(quote, current_user, EntityNames.QUOTE)
 
+    if quote.status == "accepted":
+        raise HTTPException(
+            status_code=HTTPStatus.CONFLICT,
+            detail="Accepted quotes cannot be modified",
+        )
+
     update_fields = list(quote_data.model_dump(exclude_unset=True).keys())
     old_data = snapshot_entity(quote, update_fields)
 
