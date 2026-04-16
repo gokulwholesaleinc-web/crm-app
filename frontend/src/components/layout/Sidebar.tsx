@@ -18,113 +18,31 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
-  HomeIcon,
-  UserGroupIcon,
-  BuildingOfficeIcon,
-  FunnelIcon,
-  DocumentTextIcon,
-  DocumentDuplicateIcon,
-  CreditCardIcon,
-  CalendarIcon,
-  CalendarDaysIcon,
-  MegaphoneIcon,
-  BoltIcon,
-  ArrowsRightLeftIcon,
-  ChartBarIcon,
-  SparklesIcon,
-  Cog6ToothIcon,
-  XMarkIcon,
-  QueueListIcon,
-  ViewColumnsIcon,
-  DocumentMagnifyingGlassIcon,
+  ArrowPathIcon,
+  CheckIcon,
   PencilSquareIcon,
   Bars2Icon,
-  CheckIcon,
-  ArrowPathIcon,
-  ShieldCheckIcon,
-  QuestionMarkCircleIcon,
-  UserPlusIcon,
 } from '@heroicons/react/24/outline';
 import { useTenant } from '../../providers/TenantProvider';
 import { useAuthStore } from '../../store/authStore';
+import {
+  DEFAULT_MAIN_NAVIGATION,
+  DEFAULT_SECONDARY_NAVIGATION,
+  STORAGE_KEY_MAIN,
+  STORAGE_KEY_SECONDARY,
+  ADMIN_ONLY_IDS,
+  readStoredOrder,
+  writeStoredOrder,
+  applyOrder,
+  type NavItem,
+} from './navigation.config';
 
-export interface NavItem {
-  id: string;
-  name: string;
-  href: string;
-  icon: React.ComponentType<{ className?: string }>;
-  badge?: string | number;
-}
+export type { NavItem };
+export { DEFAULT_MAIN_NAVIGATION, DEFAULT_SECONDARY_NAVIGATION };
 
-const DEFAULT_MAIN_NAVIGATION: NavItem[] = [
-  { id: 'dashboard', name: 'Dashboard', href: '/', icon: HomeIcon },
-  { id: 'contacts', name: 'Contacts', href: '/contacts', icon: UserGroupIcon },
-  { id: 'companies', name: 'Companies', href: '/companies', icon: BuildingOfficeIcon },
-  { id: 'leads', name: 'Leads', href: '/leads', icon: FunnelIcon },
-  { id: 'pipeline', name: 'Pipeline', href: '/pipeline', icon: ViewColumnsIcon },
-  { id: 'quotes', name: 'Quotes', href: '/quotes', icon: DocumentTextIcon },
-  { id: 'proposals', name: 'Proposals', href: '/proposals', icon: DocumentDuplicateIcon },
-  { id: 'payments', name: 'Payments', href: '/payments', icon: CreditCardIcon },
-  { id: 'activities', name: 'Activities', href: '/activities', icon: CalendarIcon },
-  { id: 'calendar', name: 'Calendar', href: '/calendar', icon: CalendarDaysIcon },
-  { id: 'campaigns', name: 'Campaigns', href: '/campaigns', icon: MegaphoneIcon },
-];
-
-const DEFAULT_SECONDARY_NAVIGATION: NavItem[] = [
-  { id: 'sequences', name: 'Sequences', href: '/sequences', icon: QueueListIcon },
-  { id: 'workflows', name: 'Workflows', href: '/workflows', icon: BoltIcon },
-  { id: 'duplicates', name: 'Duplicates', href: '/duplicates', icon: DocumentMagnifyingGlassIcon },
-  { id: 'import-export', name: 'Import/Export', href: '/import-export', icon: ArrowsRightLeftIcon },
-  { id: 'reports', name: 'Reports', href: '/reports', icon: ChartBarIcon },
-  { id: 'ai-assistant', name: 'AI Assistant', href: '/ai-assistant', icon: SparklesIcon },
-  { id: 'settings', name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
-  { id: 'help', name: 'Help', href: '/help', icon: QuestionMarkCircleIcon },
-  { id: 'admin', name: 'Admin', href: '/admin', icon: ShieldCheckIcon },
-  { id: 'approvals', name: 'User Approvals', href: '/admin/user-approvals', icon: UserPlusIcon },
-];
-
-const STORAGE_KEY_MAIN = 'crm-sidebar-order:v1';
-const STORAGE_KEY_SECONDARY = 'crm-sidebar-secondary-order:v1';
-
-function readStoredOrder(key: string): string[] | null {
-  try {
-    const stored = localStorage.getItem(key);
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed) && parsed.every((id: unknown) => typeof id === 'string')) {
-        return parsed;
-      }
-    }
-  } catch {
-    // localStorage unavailable or corrupted data
-  }
-  return null;
-}
-
-function writeStoredOrder(key: string, ids: string[]): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(ids));
-  } catch {
-    // localStorage unavailable or full
-  }
-}
-
-function applyOrder(items: NavItem[], storedIds: string[] | null): NavItem[] {
-  if (!storedIds) return items;
-  const itemMap = new Map(items.map(item => [item.id, item]));
-  const ordered: NavItem[] = [];
-  for (const id of storedIds) {
-    const item = itemMap.get(id);
-    if (item) {
-      ordered.push(item);
-      itemMap.delete(id);
-    }
-  }
-  for (const item of itemMap.values()) {
-    ordered.push(item);
-  }
-  return ordered;
-}
+// Re-export MobileSidebar so existing imports from Sidebar still work
+export { MobileSidebar } from './MobileSidebar';
+export type { MobileSidebarProps } from './MobileSidebar';
 
 function StaticNavItem({
   item,
@@ -285,7 +203,6 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
     applyOrder(DEFAULT_SECONDARY_NAVIGATION, readStoredOrder(STORAGE_KEY_SECONDARY))
   );
 
-  const ADMIN_ONLY_IDS = new Set(['admin', 'approvals']);
   const { user } = useAuthStore();
   const isAdminUser = user?.is_superuser || user?.role === 'admin';
   const filteredSecondaryNav = isAdminUser
@@ -524,195 +441,8 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
   );
 }
 
-// Shared navigation items for DRY principle - used by both Sidebar and MobileSidebar
 // eslint-disable-next-line react-refresh/only-export-components
 export const getNavigation = () => ({
   main: DEFAULT_MAIN_NAVIGATION,
   secondary: DEFAULT_SECONDARY_NAVIGATION,
 });
-
-// Mobile Sidebar Overlay with proper animations and touch support
-export interface MobileSidebarProps {
-  isOpen: boolean;
-  onClose: () => void;
-}
-
-export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
-  const location = useLocation();
-  const { tenant } = useTenant();
-  const [mobileLogoError, setMobileLogoError] = useState(false);
-  const { user: mobileUser } = useAuthStore();
-
-  useEffect(() => {
-    setMobileLogoError(false);
-  }, [tenant?.logo_url]);
-  const isMobileAdmin = mobileUser?.is_superuser || mobileUser?.role === 'admin';
-  const mobileSecondaryNav = isMobileAdmin
-    ? DEFAULT_SECONDARY_NAVIGATION
-    : DEFAULT_SECONDARY_NAVIGATION.filter(item => item.id !== 'admin' && item.id !== 'approvals');
-
-  // Close sidebar on route change
-  useEffect(() => {
-    if (isOpen) {
-      onClose();
-    }
-    // Only run when location changes, not when isOpen changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname]);
-
-  // Handle escape key press
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        onClose();
-      }
-    };
-
-    document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
-  }, [isOpen, onClose]);
-
-  // Prevent body scroll when mobile menu is open
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [isOpen]);
-
-  const isActive = (href: string) => {
-    if (href === '/') {
-      return location.pathname === '/';
-    }
-    return location.pathname.startsWith(href);
-  };
-
-  const renderMobileNavItem = (item: NavItem) => (
-    <NavLink
-      key={item.id}
-      to={item.href}
-      onClick={onClose}
-      className={clsx(
-        'group flex items-center px-3 py-3 rounded-lg transition-colors duration-200',
-        'touch-manipulation',
-        isActive(item.href)
-          ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400'
-          : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100 active:bg-gray-200 dark:active:bg-gray-600'
-      )}
-    >
-      <item.icon
-        className={clsx(
-          'flex-shrink-0 h-6 w-6 mr-3',
-          isActive(item.href)
-            ? 'text-primary-500 dark:text-primary-400'
-            : 'text-gray-400 dark:text-gray-500 group-hover:text-gray-500 dark:group-hover:text-gray-400'
-        )}
-        aria-hidden="true"
-      />
-      <span className="flex-1 text-base font-medium">{item.name}</span>
-      {item.badge != null && item.badge !== 0 && (
-        <span
-          className={clsx(
-            'ml-2 inline-flex items-center justify-center px-2.5 py-1 text-xs font-medium rounded-full',
-            isActive(item.href)
-              ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
-              : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
-          )}
-        >
-          {item.badge}
-        </span>
-      )}
-    </NavLink>
-  );
-
-  return (
-    <>
-      {/* Backdrop with fade animation */}
-      <div
-        className={clsx(
-          'fixed inset-0 z-40 bg-gray-600 transition-opacity duration-300 ease-in-out lg:hidden',
-          isOpen ? 'opacity-75' : 'opacity-0 pointer-events-none'
-        )}
-        onClick={onClose}
-        aria-hidden="true"
-      />
-
-      {/* Sidebar panel with slide animation */}
-      <div
-        className={clsx(
-          'fixed inset-y-0 left-0 z-50 flex flex-col w-72 max-w-[85vw] bg-white dark:bg-gray-800 shadow-xl',
-          'transform transition-transform duration-300 ease-in-out lg:hidden',
-          isOpen ? 'translate-x-0' : '-translate-x-full'
-        )}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Mobile navigation"
-      >
-        {/* Header with close button */}
-        <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200 dark:border-gray-700">
-          <div className="flex items-center min-w-0">
-            {tenant?.logo_url && !mobileLogoError ? (
-              <img
-                src={tenant.logo_url}
-                alt={tenant.company_name || 'Logo'}
-                width={32}
-                height={32}
-                className="h-8 w-8 rounded-lg object-contain flex-shrink-0"
-                onError={() => setMobileLogoError(true)}
-              />
-            ) : (
-              <div
-                className={clsx(
-                  'h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0',
-                  !tenant?.primary_color && 'bg-primary-500'
-                )}
-                style={tenant?.primary_color ? { backgroundColor: tenant.primary_color } : undefined}
-              >
-                <span className="text-white font-bold text-lg">
-                  {tenant?.company_name?.[0]?.toUpperCase() || 'C'}
-                </span>
-              </div>
-            )}
-            <span className="ml-2 text-xl font-bold text-gray-900 dark:text-gray-100 truncate">
-              {tenant?.company_name || 'CRM'}
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 -mr-2 rounded-lg text-gray-400 hover:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 dark:hover:text-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 touch-manipulation"
-            aria-label="Close sidebar"
-          >
-            <XMarkIcon className="h-6 w-6" aria-hidden="true" />
-          </button>
-        </div>
-
-        {/* Navigation */}
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto overscroll-contain" aria-label="Mobile navigation">
-          <div className="space-y-1">
-            {DEFAULT_MAIN_NAVIGATION.map(renderMobileNavItem)}
-          </div>
-
-          {/* Divider */}
-          <div className="my-4 border-t border-gray-200 dark:border-gray-700" />
-
-          {/* Secondary Navigation */}
-          <div className="space-y-1">
-            {mobileSecondaryNav.map(renderMobileNavItem)}
-          </div>
-        </nav>
-
-        {/* Footer */}
-        <div className="px-4 py-4 border-t border-gray-200 dark:border-gray-700 safe-area-inset-bottom">
-          <div className="text-xs text-gray-500 dark:text-gray-400">
-            <p>{tenant?.footer_text || 'CRM Application v1.0'}</p>
-          </div>
-        </div>
-      </div>
-    </>
-  );
-}
