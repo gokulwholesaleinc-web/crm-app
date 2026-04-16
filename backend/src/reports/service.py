@@ -3,6 +3,7 @@
 import csv
 import io
 from typing import List, Optional, Dict, Any, Type
+from fastapi import HTTPException
 from sqlalchemy import select, func, extract, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +17,7 @@ from src.payments.models import Payment
 from src.contracts.models import Contract
 from src.core.filtering import apply_filters_to_query
 from src.reports.schemas import ReportDataPoint, ReportResult, ReportDefinition
+from src.core.constants import HTTPStatus
 
 # Mapping from entity_type string to SQLAlchemy model
 ENTITY_MODEL_MAP: Dict[str, Type] = {
@@ -80,13 +82,26 @@ def _format_date_label(dt, date_group: str) -> str:
 class ReportExecutor:
     """Executes custom report definitions against the database."""
 
-    def __init__(self, db: AsyncSession, user_id: int = None):
+    def __init__(self, db: AsyncSession, user_id: int = None, is_admin: bool = False):
         self.db = db
         self.user_id = user_id
+        self.is_admin = is_admin
 
     def _apply_owner_filter(self, query, model):
-        """Apply owner_id filter if user_id is set and model has owner_id."""
-        if self.user_id and hasattr(model, "owner_id"):
+        """Apply owner_id filter if user_id is set and model has owner_id.
+
+        If the model lacks owner_id and the caller is not an admin, raises 403 —
+        without an ownership column there is no safe way to scope the results to
+        a single user, so the data would leak across tenants/reps.
+        """
+        if not hasattr(model, "owner_id"):
+            if not self.is_admin:
+                raise HTTPException(
+                    status_code=HTTPStatus.FORBIDDEN,
+                    detail="Reports on this entity require admin role",
+                )
+            return query
+        if self.user_id:
             query = query.where(model.owner_id == self.user_id)
         return query
 

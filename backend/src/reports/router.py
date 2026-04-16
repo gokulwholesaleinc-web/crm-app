@@ -3,8 +3,8 @@
 import json
 import logging
 import os
-from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Query
+from typing import Annotated, List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, or_
 from openai import AsyncOpenAI
@@ -13,6 +13,7 @@ import io
 from src.config import settings
 from src.core.router_utils import DBSession, CurrentUser
 from src.core.constants import HTTPStatus
+from src.core.data_scope import DataScope, get_data_scope
 from src.reports.models import SavedReport
 from src.reports.schemas import (
     ReportDefinition,
@@ -64,9 +65,10 @@ async def execute_report(
     definition: ReportDefinition,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Execute a report definition and return results (scoped to current user)."""
-    executor = ReportExecutor(db, user_id=current_user.id)
+    executor = ReportExecutor(db, user_id=current_user.id, is_admin=data_scope.can_see_all())
     try:
         return await executor.execute(definition)
     except ValueError as exc:
@@ -78,9 +80,10 @@ async def export_report_csv(
     definition: ReportDefinition,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Execute a report and return results as CSV download."""
-    executor = ReportExecutor(db, user_id=current_user.id)
+    executor = ReportExecutor(db, user_id=current_user.id, is_admin=data_scope.can_see_all())
     csv_content = await executor.export_csv(definition)
 
     return StreamingResponse(
@@ -103,6 +106,7 @@ async def ai_generate_report(
     request: AIReportGenerateRequest,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Use AI to parse a natural language prompt into a report definition, execute it, and return results."""
     api_key = settings.OPENAI_API_KEY or os.environ.get("OPENAI_API_KEY", "")
@@ -171,7 +175,7 @@ Default to bar chart if no chart preference is stated."""
         logger.error(f"AI report generation error: {exc}")
         raise HTTPException(status_code=400, detail=f"Failed to generate report: {str(exc)}")
 
-    executor = ReportExecutor(db, user_id=current_user.id)
+    executor = ReportExecutor(db, user_id=current_user.id, is_admin=data_scope.can_see_all())
     try:
         result = await executor.execute(definition)
     except ValueError as exc:
