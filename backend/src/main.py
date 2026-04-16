@@ -335,9 +335,11 @@ async def _init_database():
         from src.meta.models import CompanyMetaData
         from src.expenses.models import Expense
 
-        from src.database import Base
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+        skip_create_all = os.environ.get("SKIP_CREATE_ALL", "").lower() in ("true", "1")
+        if not skip_create_all:
+            from src.database import Base
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
 
         from src.database import async_session_maker
         from src.roles.service import RoleService

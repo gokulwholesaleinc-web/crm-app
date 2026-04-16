@@ -36,16 +36,18 @@ def get_redirect_uri() -> str:
     return f"{frontend_url}/settings/integrations/gmail/callback"
 
 
-def build_authorize_url(client_id: str, redirect_uri: str, state: str) -> str:
+def build_authorize_url(client_id: str, redirect_uri: str, state: str, login_hint: str = "") -> str:
     params = {
         "client_id": client_id,
         "redirect_uri": redirect_uri,
         "response_type": "code",
         "scope": GMAIL_SCOPES,
         "access_type": "offline",
-        "prompt": "consent",
+        "prompt": "consent select_account",
         "state": state,
     }
+    if login_hint:
+        params["login_hint"] = login_hint
     return f"{GOOGLE_AUTH_URL}?{urlencode(params)}"
 
 
@@ -60,7 +62,6 @@ def decode_id_token_email(id_token: str) -> Optional[str]:
         if len(parts) < 2:
             return None
         payload_b64 = parts[1]
-        # Pad to a multiple of 4
         payload_b64 += "=" * (-len(payload_b64) % 4)
         payload = json.loads(base64.urlsafe_b64decode(payload_b64))
         return payload.get("email")

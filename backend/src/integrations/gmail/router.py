@@ -51,6 +51,7 @@ async def gmail_authorize(
         client_id=client_id,
         redirect_uri=redirect_uri,
         state=state,
+        login_hint=current_user.email,
     )
 
     cross_site = not settings.DEBUG
