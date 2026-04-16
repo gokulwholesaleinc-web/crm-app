@@ -152,17 +152,18 @@ class TestGmailSync:
     @pytest.mark.asyncio
     async def test_first_sync_seeds_history_id(self, db_session, gmail_connection):
         transport = _gmail_transport(profile_history_id="5000")
-        gmail_connection._test_http = transport
-
         client_http = httpx.AsyncClient(transport=transport)
-        async with GmailClient(gmail_connection, db_session, http=client_http) as client:
-            profile = await client.get_profile()
 
         state = GmailSyncState(user_id=gmail_connection.user_id, failure_count=0)
         db_session.add(state)
         await db_session.flush()
 
-        await GmailSyncWorker.sync_account(gmail_connection, db_session)
+        import unittest.mock
+        orig_init = GmailClient.__init__
+        def patched_init(self, conn, db, http=None):
+            orig_init(self, conn, db, http=client_http)
+        with unittest.mock.patch.object(GmailClient, "__init__", patched_init):
+            await GmailSyncWorker.sync_account(gmail_connection, db_session)
         await db_session.commit()
 
         result = await db_session.execute(
