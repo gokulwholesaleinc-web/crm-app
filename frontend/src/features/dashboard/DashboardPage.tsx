@@ -18,7 +18,6 @@ import { listDashboardWidgets, createDashboardWidget } from '../../api/dashboard
 import { useAuthStore } from '../../store/authStore';
 import type { NumberCardData, ChartDataPoint } from '../../types';
 
-// Build a Map for O(1) lookups by card id
 function buildCardMap(cards: NumberCardData[]): Map<string, NumberCardData> {
   return new Map(cards.map(c => [c.id, c]));
 }
@@ -194,18 +193,16 @@ function DashboardPage() {
   const [dateRange, setDateRange] = useState<DateRange>({ dateFrom: null, dateTo: null });
 
   const { data: kpiCards, isLoading: isLoadingKpis, error: dashboardError } = useKPIs(dateRange);
-  const { data: pipelineData, isLoading: isLoadingPipeline } = usePipelineFunnelChart(dateRange);
-  const { data: leadsBySourceData, isLoading: isLoadingLeads } = useLeadsBySourceChart(dateRange);
-  const { data: timelineData, isLoading: isLoadingTimeline } = useUserTimeline();
-  const { data: funnelData, isLoading: isLoadingFunnel } = useSalesFunnel(dateRange);
-  const { data: salesKpis, isLoading: isLoadingSalesKpis } = useSalesKpis(dateRange);
+  const { data: pipelineData } = usePipelineFunnelChart(dateRange);
+  const { data: leadsBySourceData } = useLeadsBySourceChart(dateRange);
+  const { data: timelineData } = useUserTimeline();
+  const { data: funnelData } = useSalesFunnel(dateRange);
+  const { data: salesKpis } = useSalesKpis(dateRange);
 
   const error = dashboardError instanceof Error ? dashboardError.message : dashboardError ? String(dashboardError) : null;
 
-  // Extract number cards from dashboard response
   const numberCards = kpiCards ?? [];
   const cardMap = buildCardMap(numberCards);
-  // Map data to expected format using number cards
   const data = kpiCards ? {
     totalContacts: findCardValue(cardMap, 'total_contacts'),
     totalLeads: findCardValue(cardMap, 'total_leads'),

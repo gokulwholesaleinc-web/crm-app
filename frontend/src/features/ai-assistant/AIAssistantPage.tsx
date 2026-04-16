@@ -1,8 +1,4 @@
-/**
- * AI Assistant chat interface page
- */
-
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
 import {
   SparklesIcon,
@@ -71,11 +67,12 @@ function QuickAction({
   );
 }
 
+const AUTO_SCROLL_KEY = 'crm:ai-assistant:autoscroll:v1';
+
 export function AIAssistantPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<'chat' | 'recommendations' | 'summary' | 'memory'>('chat');
 
-  const AUTO_SCROLL_KEY = 'crm:ai-assistant:autoscroll:v1';
   const [autoScroll, setAutoScroll] = useState<boolean>(() => {
     try {
       const stored = localStorage.getItem(AUTO_SCROLL_KEY);
@@ -85,7 +82,7 @@ export function AIAssistantPage() {
     }
   });
 
-  const toggleAutoScroll = useCallback(() => {
+  function toggleAutoScroll() {
     setAutoScroll((prev) => {
       const next = !prev;
       try {
@@ -93,7 +90,7 @@ export function AIAssistantPage() {
       } catch {}
       return next;
     });
-  }, []);
+  }
 
   // Chat state
   const { messages, sendMessage, clearChat, confirmAction, isLoading: isChatLoading, pendingConfirmation, sessionId } = useChat();
@@ -108,7 +105,6 @@ export function AIAssistantPage() {
   const deleteLearningMutation = useDeleteAILearning();
   const { data: suggestionsData, isLoading: isLoadingSuggestions } = useSmartSuggestions();
 
-  // Scroll to bottom when new messages arrive (only when auto-scroll is on)
   useEffect(() => {
     if (autoScroll && messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
