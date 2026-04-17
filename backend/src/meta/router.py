@@ -85,7 +85,7 @@ async def handle_callback(
     try:
         credential = await service.exchange_code(data.code, redirect_uri, current_user.id)
     except Exception as exc:
-        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=f"Failed to connect: {str(exc)}")
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=f"Failed to connect: {str(exc)}") from exc
     return MetaCredentialResponse.model_validate(credential)
 
 
@@ -217,8 +217,8 @@ async def receive_webhook(
     import json
     try:
         body = json.loads(raw_body)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid JSON")
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Invalid JSON") from exc
 
     payload = MetaWebhookPayload(**body)
     if payload.object != "page":

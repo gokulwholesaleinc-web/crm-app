@@ -154,7 +154,7 @@ async def google_callback(
         raise HTTPException(
             status_code=HTTPStatus.BAD_REQUEST,
             detail=f"Google token exchange failed: {str(exc)}",
-        )
+        ) from exc
 
     access_token = token_data.get("access_token")
     if not access_token:
@@ -172,7 +172,7 @@ async def google_callback(
         raise HTTPException(
             status_code=HTTPStatus.BAD_REQUEST,
             detail=f"Failed to fetch Google profile: {str(exc)}",
-        )
+        ) from exc
 
     google_sub = profile.get("sub")
     email = profile.get("email")
@@ -196,11 +196,11 @@ async def google_callback(
             full_name=profile.get("name") or email.split("@")[0],
             avatar_url=profile.get("picture"),
         )
-    except RejectedAccessError:
+    except RejectedAccessError as exc:
         raise HTTPException(
             status_code=403,
             detail={"rejected": True, "detail": "Access denied. Contact an admin if this is a mistake."},
-        )
+        ) from exc
 
     if not user.is_approved:
         # Notify admins on first pending sign-in (no tenant yet means brand new)

@@ -220,7 +220,7 @@ async def create_checkout(
         raise HTTPException(
             status_code=HTTPStatus.BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
 
 
 @router.post("/create-payment-intent", response_model=CreatePaymentIntentResponse)
@@ -257,7 +257,7 @@ async def create_payment_intent(
         raise HTTPException(
             status_code=HTTPStatus.BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
 
 
 # Webhook Endpoint (no auth - uses Stripe signature verification)
@@ -278,7 +278,7 @@ async def stripe_webhook(request: Request, db: DBSession):
         raise HTTPException(
             status_code=HTTPStatus.BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
 
     if result.get("event_type") in (
         "checkout.session.completed",
@@ -385,7 +385,7 @@ async def create_onboarding_link(
         raise HTTPException(
             status_code=HTTPStatus.BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
 
 
 # Invoice Endpoints
@@ -423,7 +423,7 @@ async def create_and_send_invoice(
         raise HTTPException(
             status_code=HTTPStatus.BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
 
 
 # Product Endpoints
@@ -562,7 +562,7 @@ async def download_invoice(
         raise HTTPException(
             status_code=HTTPStatus.NOT_FOUND,
             detail=str(e),
-        )
+        ) from e
 
     return Response(
         content=pdf_bytes,
@@ -594,7 +594,7 @@ async def send_receipt(
         raise HTTPException(
             status_code=HTTPStatus.BAD_REQUEST,
             detail=f"Failed to send receipt: {str(e)}",
-        )
+        ) from e
 
     return {"message": "Receipt email sent", "payment_id": payment_id}
 

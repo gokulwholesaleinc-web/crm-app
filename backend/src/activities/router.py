@@ -142,8 +142,8 @@ async def list_activities(
     if filters:
         try:
             parsed_filters = _json.loads(filters)
-        except _json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail="Invalid JSON filter format")
+        except _json.JSONDecodeError as exc:
+            raise HTTPException(status_code=400, detail="Invalid JSON filter format") from exc
 
     effective_owner_id = owner_id if data_scope.can_see_all() else data_scope.owner_id
 

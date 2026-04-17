@@ -257,7 +257,7 @@ async def accept_quote_public(
             signer_user_agent=signer_user_agent,
         )
     except ValueError as e:
-        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e)) from e
 
     return _build_branded_response(await service.get_branding_for_quote(quote), quote)
 
@@ -285,7 +285,7 @@ async def reject_quote_public(
             quote, reason=reason, signer_ip=signer_ip, signer_user_agent=signer_user_agent,
         )
     except ValueError as e:
-        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e)) from e
 
     return _build_branded_response(await service.get_branding_for_quote(quote), quote)
 
@@ -372,7 +372,7 @@ async def send_quote(
     try:
         quote = await service.send_quote_email(quote_id, current_user.id, attach_pdf=attach_pdf)
     except ValueError as e:
-        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e)) from e
 
     await emit(QUOTE_SENT, {
         "entity_id": quote.id,
@@ -398,7 +398,7 @@ async def get_quote_pdf(
     try:
         pdf_bytes = await service.generate_quote_pdf(quote_id, current_user.id)
     except ValueError as e:
-        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e)) from e
 
     disposition = "attachment" if download else "inline"
     filename = f"quote-{quote.quote_number}.html"
@@ -422,7 +422,7 @@ async def accept_quote(
     try:
         quote = await service.mark_accepted(quote)
     except ValueError as e:
-        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e)) from e
 
     await emit(QUOTE_ACCEPTED, {
         "entity_id": quote.id,
@@ -447,7 +447,7 @@ async def reject_quote(
     try:
         quote = await service.mark_rejected(quote)
     except ValueError as e:
-        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e)) from e
     return QuoteResponse.model_validate(quote)
 
 
@@ -480,7 +480,7 @@ async def remove_line_item(
     try:
         await service.remove_line_item(quote, item_id)
     except ValueError as e:
-        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail=str(e)) from e
 
 
 @router.post("/{quote_id}/add-bundle/{bundle_id}", response_model=QuoteResponse)
@@ -497,5 +497,5 @@ async def add_bundle_to_quote(
     try:
         quote = await service.add_bundle_to_quote(quote, bundle_id)
     except ValueError as e:
-        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e)) from e
     return QuoteResponse.model_validate(quote)

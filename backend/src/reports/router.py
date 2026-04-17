@@ -73,9 +73,9 @@ async def execute_report(
     try:
         return await executor.execute(definition)
     except PermissionError as exc:
-        raise HTTPException(status_code=HTTPStatus.FORBIDDEN, detail=str(exc))
+        raise HTTPException(status_code=HTTPStatus.FORBIDDEN, detail=str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/export-csv")
@@ -90,7 +90,7 @@ async def export_report_csv(
     try:
         csv_content = await executor.export_csv(definition)
     except PermissionError as exc:
-        raise HTTPException(status_code=HTTPStatus.FORBIDDEN, detail=str(exc))
+        raise HTTPException(status_code=HTTPStatus.FORBIDDEN, detail=str(exc)) from exc
 
     return StreamingResponse(
         io.StringIO(csv_content),
@@ -175,11 +175,11 @@ Default to bar chart if no chart preference is stated."""
             filters=parsed.get("filters"),
             chart_type=parsed.get("chart_type", "bar"),
         )
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="AI returned invalid JSON. Please try rephrasing your request.")
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="AI returned invalid JSON. Please try rephrasing your request.") from exc
     except Exception as exc:
         logger.error(f"AI report generation error: {exc}")
-        raise HTTPException(status_code=400, detail=f"Failed to generate report: {str(exc)}")
+        raise HTTPException(status_code=400, detail=f"Failed to generate report: {str(exc)}") from exc
 
     # Gate on entity scope before executing — avoids unnecessary DB work for a guaranteed 403.
     entity_model = ENTITY_MODEL_MAP.get(definition.entity_type)
@@ -190,9 +190,9 @@ Default to bar chart if no chart preference is stated."""
     try:
         result = await executor.execute(definition)
     except PermissionError as exc:
-        raise HTTPException(status_code=HTTPStatus.FORBIDDEN, detail=str(exc))
+        raise HTTPException(status_code=HTTPStatus.FORBIDDEN, detail=str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return AIReportGenerateResponse(definition=definition, result=result)
 
