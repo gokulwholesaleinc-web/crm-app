@@ -43,7 +43,6 @@ class AssignmentService(BaseService[AssignmentRule]):
         return rules, total
 
     async def create_rule(self, data: AssignmentRuleCreate, user_id: int) -> AssignmentRule:
-        """Create a new assignment rule."""
         rule = AssignmentRule(**data.model_dump(), created_by_id=user_id)
         self.db.add(rule)
         await self.db.flush()
@@ -51,7 +50,6 @@ class AssignmentService(BaseService[AssignmentRule]):
         return rule
 
     async def update_rule(self, rule: AssignmentRule, data: AssignmentRuleUpdate) -> AssignmentRule:
-        """Update an assignment rule."""
         update_data = data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(rule, field, value)
@@ -60,7 +58,6 @@ class AssignmentService(BaseService[AssignmentRule]):
         return rule
 
     async def delete_rule(self, rule: AssignmentRule) -> None:
-        """Delete an assignment rule."""
         await self.db.delete(rule)
         await self.db.flush()
 

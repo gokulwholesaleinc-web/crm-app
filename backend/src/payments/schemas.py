@@ -7,9 +7,7 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
-# =============================================================================
 # Stripe Customer Schemas
-# =============================================================================
 
 class StripeCustomerCreate(BaseModel):
     contact_id: Optional[int] = None
@@ -44,9 +42,7 @@ class SyncCustomerRequest(BaseModel):
     company_id: Optional[int] = None
 
 
-# =============================================================================
 # Product Schemas
-# =============================================================================
 
 class ProductCreate(BaseModel):
     name: str
@@ -98,9 +94,7 @@ class ProductListResponse(BaseModel):
     pages: int
 
 
-# =============================================================================
 # Price Schemas
-# =============================================================================
 
 class PriceCreate(BaseModel):
     product_id: int
@@ -111,9 +105,7 @@ class PriceCreate(BaseModel):
     is_active: bool = True
 
 
-# =============================================================================
 # Payment Schemas
-# =============================================================================
 
 class PaymentBase(BaseModel):
     amount: Decimal
@@ -187,9 +179,7 @@ class PaymentListResponse(BaseModel):
     pages: int
 
 
-# =============================================================================
 # Subscription Schemas
-# =============================================================================
 
 class SubscriptionResponse(BaseModel):
     id: int
@@ -217,9 +207,7 @@ class SubscriptionListResponse(BaseModel):
     pages: int
 
 
-# =============================================================================
 # Checkout / PaymentIntent Schemas
-# =============================================================================
 
 def _validate_url(v: str) -> str:
     """Validate that a URL has a proper http/https scheme."""

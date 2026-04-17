@@ -270,7 +270,6 @@ class MetaService:
         return captures
 
     async def get_unprocessed_captures(self, page: int = 1, page_size: int = 50) -> List[MetaLeadCapture]:
-        """Get unprocessed lead captures."""
         offset = (page - 1) * page_size
         result = await self.db.execute(
             select(MetaLeadCapture)

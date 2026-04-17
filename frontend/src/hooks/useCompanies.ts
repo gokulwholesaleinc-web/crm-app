@@ -8,15 +8,11 @@ import { createEntityHooks, createQueryKeys, PaginatedResponse } from './useEnti
 import { companiesApi } from '../api/companies';
 import type { Company, CompanyCreate, CompanyUpdate, CompanyFilters } from '../types';
 
-// =============================================================================
 // Query Keys
-// =============================================================================
 
 export const companyKeys = createQueryKeys('companies');
 
-// =============================================================================
 // Entity CRUD Hooks using Factory Pattern
-// =============================================================================
 
 const companyEntityHooks = createEntityHooks<
   Company,
@@ -67,9 +63,7 @@ export function useDeleteCompany() {
   return companyEntityHooks.useDelete();
 }
 
-// =============================================================================
 // Additional Specialized Hooks
-// =============================================================================
 
 /**
  * Hook to search companies by name

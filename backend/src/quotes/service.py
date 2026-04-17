@@ -62,7 +62,6 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
         return f"{prefix}{seq:04d}"
 
     def _calculate_line_item_total(self, item: QuoteLineItem) -> float:
-        """Calculate total for a single line item."""
         return float(item.quantity * item.unit_price) - float(item.discount)
 
     def _recalculate_totals(self, quote: Quote) -> None:
@@ -190,7 +189,6 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
         return quote
 
     async def update(self, instance: Quote, data: QuoteUpdate, user_id: int) -> Quote:
-        """Update a quote."""
         quote = await super().update(instance, data, user_id)
 
         # Recalculate totals if relevant fields changed
@@ -201,7 +199,6 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
         return quote
 
     async def add_line_item(self, quote: Quote, data: QuoteLineItemCreate) -> QuoteLineItem:
-        """Add a line item to a quote."""
         item = QuoteLineItem(
             quote_id=quote.id,
             description=data.description,
@@ -223,7 +220,6 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
         return item
 
     async def remove_line_item(self, quote: Quote, item_id: int) -> None:
-        """Remove a line item from a quote."""
         result = await self.db.execute(
             select(QuoteLineItem).where(
                 QuoteLineItem.id == item_id,

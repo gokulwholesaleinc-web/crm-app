@@ -26,9 +26,7 @@ import type {
 
 const AI_BASE = '/api/ai';
 
-// =============================================================================
 // Chat
-// =============================================================================
 
 /**
  * Send a chat message to the AI assistant
@@ -38,9 +36,7 @@ export const chat = async (request: ChatRequest): Promise<ChatResponse> => {
   return response.data;
 };
 
-// =============================================================================
 // Insights
-// =============================================================================
 
 /**
  * Get AI-powered insights for a lead
@@ -64,9 +60,7 @@ export const getOpportunityInsights = async (
   return response.data;
 };
 
-// =============================================================================
 // Summary
-// =============================================================================
 
 /**
  * Get AI-generated daily summary
@@ -76,9 +70,7 @@ export const getDailySummary = async (): Promise<DailySummaryResponse> => {
   return response.data;
 };
 
-// =============================================================================
 // Recommendations
-// =============================================================================
 
 /**
  * Get prioritized action recommendations
@@ -103,9 +95,7 @@ export const getNextBestAction = async (
   return response.data;
 };
 
-// =============================================================================
 // Semantic Search
-// =============================================================================
 
 /**
  * Perform semantic search across CRM content
@@ -125,9 +115,7 @@ export const semanticSearch = async (
   return response.data;
 };
 
-// =============================================================================
 // Confirm Action
-// =============================================================================
 
 /**
  * Confirm and execute a high-risk AI action
@@ -142,9 +130,7 @@ export const confirmAction = async (
   return response.data;
 };
 
-// =============================================================================
 // Feedback
-// =============================================================================
 
 /**
  * Submit feedback on an AI response
@@ -159,9 +145,7 @@ export const submitFeedback = async (
   return response.data;
 };
 
-// =============================================================================
 // User Preferences
-// =============================================================================
 
 /**
  * Get user AI preferences
@@ -181,9 +165,7 @@ export const updatePreferences = async (
   return response.data;
 };
 
-// =============================================================================
 // Predictive AI
-// =============================================================================
 
 export interface WinProbabilityResponse {
   opportunity_id: number;
@@ -242,9 +224,7 @@ export const getActivitySummary = async (
   return response.data;
 };
 
-// =============================================================================
 // AI Learning
-// =============================================================================
 
 export const getLearnings = async (
   category?: string

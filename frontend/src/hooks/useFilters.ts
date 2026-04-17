@@ -9,9 +9,7 @@ import { filtersApi } from '../api/filters';
 import type { SavedFilterCreate, AggregateRequest } from '../api/filters';
 import { useAuthQuery } from './useAuthQuery';
 
-// =============================================================================
 // Query Keys
-// =============================================================================
 
 export const filterKeys = {
   all: ['filters'] as const,
@@ -19,9 +17,7 @@ export const filterKeys = {
   list: (entityType?: string) => ['filters', 'list', entityType] as const,
 };
 
-// =============================================================================
 // Query Hooks
-// =============================================================================
 
 export function useSavedFilters(entityType?: string) {
   return useAuthQuery({
@@ -30,9 +26,7 @@ export function useSavedFilters(entityType?: string) {
   });
 }
 
-// =============================================================================
 // Mutation Hooks
-// =============================================================================
 
 export function useCreateSavedFilter() {
   const queryClient = useQueryClient();

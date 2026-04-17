@@ -12,9 +12,7 @@ import type {
 } from '../api/reports';
 import { useAuthQuery } from './useAuthQuery';
 
-// =============================================================================
 // Query Keys
-// =============================================================================
 
 export const reportKeys = {
   all: ['reports'] as const,
@@ -26,9 +24,7 @@ export const reportKeys = {
   execution: (definition: ReportDefinition) => ['reports', 'execution', definition] as const,
 };
 
-// =============================================================================
 // Query Hooks
-// =============================================================================
 
 export function useReportTemplates() {
   return useAuthQuery({
@@ -53,9 +49,7 @@ export function useSavedReport(id: number | undefined) {
   });
 }
 
-// =============================================================================
 // Mutation Hooks
-// =============================================================================
 
 export function useExecuteReport() {
   return useMutation({

@@ -107,14 +107,12 @@ class LeadService(
 
     # Lead Source methods
     async def get_source_by_id(self, source_id: int) -> Optional[LeadSource]:
-        """Get lead source by ID."""
         result = await self.db.execute(
             select(LeadSource).where(LeadSource.id == source_id)
         )
         return result.scalar_one_or_none()
 
     async def get_all_sources(self, active_only: bool = True) -> List[LeadSource]:
-        """Get all lead sources."""
         query = select(LeadSource)
         if active_only:
             query = query.where(LeadSource.is_active == True)
@@ -123,7 +121,6 @@ class LeadService(
         return list(result.scalars().all())
 
     async def create_source(self, data: LeadSourceCreate) -> LeadSource:
-        """Create a new lead source."""
         source = LeadSource(**data.model_dump())
         self.db.add(source)
         await self.db.flush()

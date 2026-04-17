@@ -19,7 +19,6 @@ class NoteService:
         self.db = db
 
     async def get_by_id(self, note_id: int) -> Optional[Note]:
-        """Get a note by ID."""
         result = await self.db.execute(
             select(Note).where(Note.id == note_id)
         )
@@ -86,7 +85,6 @@ class NoteService:
         return notes, total
 
     async def create(self, data: NoteCreate, user_id: int) -> dict:
-        """Create a new note."""
         note = Note(
             content=data.content,
             entity_type=data.entity_type,
@@ -182,7 +180,6 @@ class NoteService:
                 )
 
     async def update(self, note: Note, data: NoteUpdate, user_id: int) -> dict:
-        """Update a note."""
         if data.content is not None:
             note.content = data.content
 
@@ -209,6 +206,5 @@ class NoteService:
         }
 
     async def delete(self, note: Note) -> None:
-        """Delete a note."""
         await self.db.delete(note)
         await self.db.flush()

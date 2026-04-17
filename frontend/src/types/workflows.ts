@@ -1,6 +1,4 @@
-// =============================================================================
 // Workflow Types
-// =============================================================================
 
 export interface WorkflowRule {
   id: number;
@@ -51,9 +49,7 @@ export interface WorkflowTestRequest {
   entity_id: number;
 }
 
-// =============================================================================
 // Sequence Types
-// =============================================================================
 
 export interface SequenceStep {
   step_number: number;
@@ -102,9 +98,7 @@ export interface ProcessDueResult {
   errors: number;
 }
 
-// =============================================================================
 // Webhook Types
-// =============================================================================
 
 export interface Webhook {
   id: number;

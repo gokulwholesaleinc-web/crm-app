@@ -1,6 +1,4 @@
-// =============================================================================
 // Import/Export Types
-// =============================================================================
 
 export interface DuplicateEntry {
   row: number;
@@ -56,9 +54,7 @@ export interface ImportPreview {
 
 export type ImportExportEntityType = 'contacts' | 'companies' | 'leads';
 
-// =============================================================================
 // Bulk Operation Types
-// =============================================================================
 
 export interface BulkUpdateRequest {
   entity_type: string;

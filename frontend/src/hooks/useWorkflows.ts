@@ -11,9 +11,7 @@ import type {
   WorkflowRuleUpdate,
 } from '../types';
 
-// =============================================================================
 // Query Keys
-// =============================================================================
 
 export const workflowKeys = {
   all: ['workflows'] as const,
@@ -26,9 +24,7 @@ export const workflowKeys = {
     ['workflows', 'executions', id, params] as const,
 };
 
-// =============================================================================
 // List & Detail Hooks
-// =============================================================================
 
 export function useWorkflows(params?: {
   page?: number;
@@ -61,9 +57,7 @@ export function useWorkflowExecutions(
   });
 }
 
-// =============================================================================
 // Mutation Hooks
-// =============================================================================
 
 export function useCreateWorkflow() {
   const queryClient = useQueryClient();

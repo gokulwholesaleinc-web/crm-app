@@ -358,9 +358,7 @@ async def get_conversion_rates_chart(
     return result
 
 
-# =========================================================================
 # Sales Pipeline KPIs
-# =========================================================================
 
 from pydantic import BaseModel
 from sqlalchemy import select, func, or_
@@ -475,9 +473,7 @@ async def get_sales_kpis(
     return result
 
 
-# =========================================================================
 # Multi-Currency endpoints
-# =========================================================================
 
 
 @router.get("/currencies")
@@ -545,9 +541,7 @@ async def get_converted_revenue(
     return revenue_result
 
 
-# =========================================================================
 # Unified Pipeline View
-# =========================================================================
 
 
 @router.get("/pipeline/unified")
@@ -653,9 +647,7 @@ async def get_unified_pipeline(
     }
 
 
-# =========================================================================
 # Report Widgets
-# =========================================================================
 
 import json
 from src.dashboard.models import DashboardReportWidget

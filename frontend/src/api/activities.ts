@@ -15,9 +15,7 @@ import type {
 
 const ACTIVITIES_BASE = '/api/activities';
 
-// =============================================================================
 // Activities CRUD
-// =============================================================================
 
 /**
  * List activities with pagination and filters
@@ -82,9 +80,7 @@ export const completeActivity = async (
   return response.data;
 };
 
-// =============================================================================
 // Tasks
-// =============================================================================
 
 /**
  * Get tasks assigned to or owned by current user
@@ -102,9 +98,7 @@ export const getMyTasks = async (
   return response.data;
 };
 
-// =============================================================================
 // Timeline
-// =============================================================================
 
 /**
  * Unified timeline event (activity + email + sequence events)
@@ -207,9 +201,7 @@ export const getOverdueActivities = async (limit = 20): Promise<TimelineResponse
   return response.data;
 };
 
-// =============================================================================
 // Calendar
-// =============================================================================
 
 export interface CalendarActivity {
   id: number;

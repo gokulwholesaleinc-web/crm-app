@@ -4,9 +4,7 @@
 
 import { apiClient } from './client';
 
-// =========================================================================
 // Google Calendar
-// =========================================================================
 
 export interface CalendarSyncStatus {
   connected: boolean;
@@ -51,9 +49,7 @@ export const pushToCalendar = async (activityId: number): Promise<{ google_event
   return response.data;
 };
 
-// =========================================================================
 // Gmail
-// =========================================================================
 
 export interface GmailStatus {
   connected: boolean;
@@ -86,9 +82,7 @@ export const syncGmail = async (): Promise<unknown> => {
   return response.data;
 };
 
-// =========================================================================
 // Meta (Facebook/Instagram)
-// =========================================================================
 
 export interface MetaConnectionStatus {
   connected: boolean;

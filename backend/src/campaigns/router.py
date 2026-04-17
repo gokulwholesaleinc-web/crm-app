@@ -55,9 +55,7 @@ def _can_manage_template(template, current_user) -> bool:
     return template.created_by_id == current_user.id
 
 
-# =========================================================================
 # Email Template endpoints (MUST be before /{campaign_id} routes)
-# =========================================================================
 
 @router.post("/templates", response_model=EmailTemplateResponse, status_code=HTTPStatus.CREATED)
 async def create_email_template(
@@ -138,9 +136,7 @@ async def delete_email_template(
     await service.delete_template(template)
 
 
-# =========================================================================
 # Create-from-import endpoint (before /{campaign_id} routes)
-# =========================================================================
 
 @router.post("/create-from-import", response_model=CampaignResponse, status_code=HTTPStatus.CREATED)
 async def create_campaign_from_import(
@@ -184,9 +180,7 @@ async def create_campaign_from_import(
     return CampaignResponse.model_validate(campaign)
 
 
-# =========================================================================
 # Campaign CRUD endpoints
-# =========================================================================
 
 @router.get("", response_model=CampaignListResponse)
 async def list_campaigns(
@@ -315,9 +309,7 @@ async def get_campaign_analytics(
     return await service.get_campaign_analytics(campaign_id)
 
 
-# =========================================================================
 # Campaign Members endpoints
-# =========================================================================
 
 @router.get("/{campaign_id}/members", response_model=List[CampaignMemberResponse])
 async def list_campaign_members(
@@ -409,9 +401,7 @@ async def remove_campaign_member(
     await member_service.remove_member(member)
 
 
-# =========================================================================
 # Email Campaign Step endpoints
-# =========================================================================
 
 @router.post("/{campaign_id}/steps", response_model=EmailCampaignStepResponse, status_code=HTTPStatus.CREATED)
 async def add_campaign_step(

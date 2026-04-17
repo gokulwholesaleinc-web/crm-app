@@ -33,7 +33,6 @@ class ChartDataGenerator:
         return filters
 
     async def get_pipeline_funnel(self) -> Dict[str, Any]:
-        """Get pipeline funnel data."""
         join_conditions = [Opportunity.pipeline_stage_id == PipelineStage.id]
         if self.user_id:
             join_conditions.append(Opportunity.owner_id == self.user_id)
@@ -81,7 +80,6 @@ class ChartDataGenerator:
         }
 
     async def get_leads_by_status(self) -> Dict[str, Any]:
-        """Get leads grouped by status."""
         filters = []
         if self.user_id:
             filters.append(Lead.owner_id == self.user_id)
@@ -119,7 +117,6 @@ class ChartDataGenerator:
         }
 
     async def get_leads_by_source(self) -> Dict[str, Any]:
-        """Get leads grouped by source."""
         from src.leads.models import LeadSource
 
         join_conditions = [Lead.source_id == LeadSource.id]
@@ -242,7 +239,6 @@ class ChartDataGenerator:
         }
 
     async def get_new_leads_trend(self, weeks: int = 8) -> Dict[str, Any]:
-        """Get weekly new leads trend."""
         start_date = datetime.now() - timedelta(weeks=weeks)
 
         filters = [Lead.created_at >= start_date]

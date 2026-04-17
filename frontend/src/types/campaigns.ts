@@ -122,9 +122,7 @@ export interface CampaignAnalytics {
   steps: StepAnalytics[];
 }
 
-// =============================================================================
 // LinkedIn Campaign / Volume Types
-// =============================================================================
 
 export interface VolumeStats {
   sent_today: number;
@@ -162,9 +160,7 @@ export interface CreateCampaignFromImportResponse extends Campaign {
   member_count: number;
 }
 
-// =============================================================================
 // Email Campaign Step Types
-// =============================================================================
 
 export interface EmailCampaignStep {
   id: number;

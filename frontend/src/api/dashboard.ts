@@ -12,9 +12,7 @@ import type {
 
 const DASHBOARD_BASE = '/api/dashboard';
 
-// =============================================================================
 // Dashboard
-// =============================================================================
 
 export interface DateRangeParams {
   dateFrom?: string | null;
@@ -48,9 +46,7 @@ export const getKpis = async (dateRange?: DateRangeParams): Promise<NumberCardDa
   return response.data;
 };
 
-// =============================================================================
 // Charts
-// =============================================================================
 
 /**
  * Get pipeline funnel chart data
@@ -139,9 +135,7 @@ export const getSalesFunnel = async (dateRange?: DateRangeParams): Promise<Sales
   return response.data;
 };
 
-// =============================================================================
 // Sales KPIs
-// =============================================================================
 
 export interface SalesKPIResponse {
   quotes_sent: number;
@@ -158,9 +152,7 @@ export const getSalesKpis = async (dateRange?: DateRangeParams): Promise<SalesKP
   return response.data;
 };
 
-// =============================================================================
 // Multi-Currency
-// =============================================================================
 
 export interface CurrencyInfo {
   code: string;
@@ -204,9 +196,7 @@ export const getConvertedRevenue = async (
   return response.data;
 };
 
-// =============================================================================
 // Report Widgets
-// =============================================================================
 
 export interface ReportWidget {
   id: number;

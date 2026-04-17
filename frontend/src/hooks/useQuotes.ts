@@ -16,15 +16,11 @@ import type {
   ProductBundleFilters,
 } from '../types';
 
-// =============================================================================
 // Query Keys
-// =============================================================================
 
 export const quoteKeys = createQueryKeys('quotes');
 
-// =============================================================================
 // Entity CRUD Hooks using Factory Pattern
-// =============================================================================
 
 const quoteEntityHooks = createEntityHooks<
   Quote,
@@ -72,9 +68,7 @@ export function useDeleteQuote() {
   return quoteEntityHooks.useDelete();
 }
 
-// =============================================================================
 // Status Action Hooks
-// =============================================================================
 
 /**
  * Hook to send a branded quote email
@@ -131,9 +125,7 @@ export function useRejectQuote() {
   });
 }
 
-// =============================================================================
 // Line Item Hooks
-// =============================================================================
 
 /**
  * Hook to add a line item to a quote
@@ -167,9 +159,7 @@ export function useRemoveLineItem() {
   });
 }
 
-// =============================================================================
 // Product Bundle Hooks
-// =============================================================================
 
 export const bundleKeys = createQueryKeys('bundles');
 

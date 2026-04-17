@@ -154,9 +154,7 @@ class ConversionResponse(BaseModel):
     message: str
 
 
-# =============================================================================
 # Lead Kanban / Pipeline schemas
-# =============================================================================
 
 class KanbanLead(BaseModel):
     id: int

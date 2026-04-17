@@ -23,9 +23,7 @@ import { useLeadKanban, useMoveLeadStage } from '../../../hooks/useLeads';
 import type { KanbanLead, KanbanLeadStage } from '../../../types';
 import { getScoreColor } from '../../../utils';
 
-// =============================================================================
 // Lead Card Component
-// =============================================================================
 
 interface LeadCardProps {
   lead: KanbanLead;
@@ -110,9 +108,7 @@ function LeadCard({ lead, onClick }: LeadCardProps) {
   );
 }
 
-// =============================================================================
 // Lead Column Component
-// =============================================================================
 
 interface LeadColumnProps {
   stage: KanbanLeadStage;
@@ -187,9 +183,7 @@ function LeadColumn({ stage, leads, onLeadClick }: LeadColumnProps) {
   );
 }
 
-// =============================================================================
 // Lead Kanban Board
-// =============================================================================
 
 interface LeadKanbanBoardProps {
   onLeadClick?: (lead: KanbanLead) => void;

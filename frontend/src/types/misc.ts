@@ -10,9 +10,7 @@ export * from './audit';
 export * from './contracts';
 export * from './import-export';
 
-// =============================================================================
 // Tag Types (used across multiple domains)
-// =============================================================================
 
 export interface Tag {
   id: number;
@@ -28,9 +26,7 @@ export interface TagCreate {
   entity_type: string;
 }
 
-// =============================================================================
 // Email Template Types
-// =============================================================================
 
 export interface EmailTemplate {
   id: number;
@@ -57,9 +53,7 @@ export interface EmailTemplateUpdate {
   category?: string | null;
 }
 
-// =============================================================================
 // Sales Funnel Types
-// =============================================================================
 
 export interface FunnelStage {
   stage: string;
@@ -79,9 +73,7 @@ export interface SalesFunnelResponse {
   avg_days_in_stage: Record<string, number | null>;
 }
 
-// =============================================================================
 // Pipeline (Multiple Pipelines) Types
-// =============================================================================
 
 export interface PipelineStageInPipeline {
   id: number;

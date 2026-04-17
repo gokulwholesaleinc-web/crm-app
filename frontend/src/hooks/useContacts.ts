@@ -8,15 +8,11 @@ import { createEntityHooks, createQueryKeys, PaginatedResponse } from './useEnti
 import { contactsApi } from '../api/contacts';
 import type { Contact, ContactCreate, ContactUpdate, ContactFilters } from '../types';
 
-// =============================================================================
 // Query Keys
-// =============================================================================
 
 export const contactKeys = createQueryKeys('contacts');
 
-// =============================================================================
 // Entity CRUD Hooks using Factory Pattern
-// =============================================================================
 
 const contactEntityHooks = createEntityHooks<
   Contact,
@@ -67,9 +63,7 @@ export function useDeleteContact() {
   return contactEntityHooks.useDelete();
 }
 
-// =============================================================================
 // Additional Specialized Hooks
-// =============================================================================
 
 /**
  * Hook to search contacts by name or email

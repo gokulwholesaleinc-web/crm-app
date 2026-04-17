@@ -18,9 +18,7 @@ import type {
   EmailCampaignStepUpdate,
 } from '../types';
 
-// =============================================================================
 // Query Keys
-// =============================================================================
 
 export const campaignKeys = {
   ...createQueryKeys('campaigns'),
@@ -30,9 +28,7 @@ export const campaignKeys = {
   analytics: (id: number) => ['campaigns', 'analytics', id] as const,
 };
 
-// =============================================================================
 // Entity CRUD Hooks using Factory Pattern
-// =============================================================================
 
 const campaignEntityHooks = createEntityHooks<
   Campaign,
@@ -90,9 +86,7 @@ export function useDeleteCampaign() {
   return campaignEntityHooks.useDelete();
 }
 
-// =============================================================================
 // Campaign Stats and Members Hooks
-// =============================================================================
 
 /**
  * Hook to fetch campaign email analytics
@@ -164,9 +158,7 @@ export function useRemoveCampaignMember() {
   });
 }
 
-// =============================================================================
 // Volume Stats & Email Settings Hooks
-// =============================================================================
 
 export function useVolumeStats() {
   return useQuery({
@@ -208,9 +200,7 @@ export function useCreateCampaignFromImport() {
   });
 }
 
-// =============================================================================
 // Campaign Steps Hooks
-// =============================================================================
 
 export function useCampaignSteps(id: number | undefined) {
   return useQuery({

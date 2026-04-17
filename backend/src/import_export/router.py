@@ -244,9 +244,7 @@ async def get_import_template(
     )
 
 
-# =========================================================================
 # Mapped Import (user-specified column mapping)
-# =========================================================================
 
 @router.post("/import/{entity_type}/mapped")
 async def import_with_mapping(
@@ -298,9 +296,7 @@ async def import_with_mapping(
     }
 
 
-# =========================================================================
 # Bulk Operations endpoints
-# =========================================================================
 
 @router.post("/bulk/update")
 async def bulk_update(

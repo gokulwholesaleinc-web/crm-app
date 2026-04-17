@@ -496,9 +496,7 @@ async def get_entity_insights(
     return EntityInsightsResponse(**result)
 
 
-# =========================================================================
 # Predictive AI endpoints
-# =========================================================================
 
 from src.opportunities.models import Opportunity
 from src.activities.models import Activity

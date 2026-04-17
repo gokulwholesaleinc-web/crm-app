@@ -14,28 +14,24 @@ class RoleService:
         self.db = db
 
     async def get_all_roles(self) -> list[Role]:
-        """Get all roles."""
         result = await self.db.execute(
             select(Role).order_by(Role.name)
         )
         return list(result.scalars().all())
 
     async def get_role_by_id(self, role_id: int) -> Optional[Role]:
-        """Get a role by ID."""
         result = await self.db.execute(
             select(Role).where(Role.id == role_id)
         )
         return result.scalar_one_or_none()
 
     async def get_role_by_name(self, name: str) -> Optional[Role]:
-        """Get a role by name."""
         result = await self.db.execute(
             select(Role).where(Role.name == name)
         )
         return result.scalar_one_or_none()
 
     async def create_role(self, data: RoleCreate) -> Role:
-        """Create a new role."""
         role = Role(
             name=data.name,
             description=data.description,
@@ -47,7 +43,6 @@ class RoleService:
         return role
 
     async def update_role(self, role: Role, data: RoleUpdate) -> Role:
-        """Update an existing role."""
         update_data = data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(role, field, value)
@@ -56,7 +51,6 @@ class RoleService:
         return role
 
     async def delete_role(self, role: Role) -> None:
-        """Delete a role."""
         await self.db.delete(role)
         await self.db.flush()
 
@@ -77,7 +71,6 @@ class RoleService:
         return user_role
 
     async def get_user_role(self, user_id: int) -> Optional[UserRole]:
-        """Get the role assigned to a user."""
         result = await self.db.execute(
             select(UserRole)
             .options(selectinload(UserRole.role))

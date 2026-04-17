@@ -75,7 +75,6 @@ class WebhookService(BaseService[Webhook]):
             raise
 
     async def create_webhook(self, data: WebhookCreate, user_id: int) -> Webhook:
-        """Create a new webhook."""
         self._validate_webhook_url(data.url)
         webhook = Webhook(**data.model_dump(), created_by_id=user_id)
         self.db.add(webhook)
@@ -101,7 +100,6 @@ class WebhookService(BaseService[Webhook]):
         return webhook
 
     async def delete_webhook(self, webhook: Webhook) -> None:
-        """Delete a webhook."""
         await self.db.delete(webhook)
         await self.db.flush()
 

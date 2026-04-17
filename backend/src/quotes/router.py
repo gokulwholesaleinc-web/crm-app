@@ -112,9 +112,7 @@ async def create_quote(
     return QuoteResponse.model_validate(quote)
 
 
-# =============================================================================
 # Bundle endpoints (BEFORE /{quote_id} to avoid path conflicts)
-# =============================================================================
 
 @router.get("/bundles", response_model=ProductBundleListResponse)
 async def list_bundles(
@@ -198,9 +196,7 @@ async def delete_bundle(
     await service.delete(bundle)
 
 
-# =============================================================================
 # Public quote endpoints (no auth, BEFORE /{quote_id} to avoid path conflicts)
-# =============================================================================
 
 # Public quote routes use an unguessable `token` (Quote.public_token),
 # NOT the sequential `quote_number`. The previous version keyed by
@@ -290,9 +286,7 @@ async def reject_quote_public(
     return _build_branded_response(await service.get_branding_for_quote(quote), quote)
 
 
-# =============================================================================
 # Quote detail endpoints
-# =============================================================================
 
 @router.get("/{quote_id}", response_model=QuoteResponse)
 async def get_quote(

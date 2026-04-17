@@ -177,7 +177,6 @@ class CampaignService(CRUDService[Campaign, CampaignCreate, CampaignUpdate]):
         )
 
     async def get_campaign_stats(self, campaign_id: int) -> Dict:
-        """Get campaign statistics."""
         # Count by status
         result = await self.db.execute(
             select(
@@ -315,7 +314,6 @@ class CampaignMemberService(BaseService[CampaignMember]):
         return members, total
 
     async def add_member(self, data: CampaignMemberCreate) -> CampaignMember:
-        """Add a member to a campaign."""
         member = CampaignMember(**data.model_dump())
         self.db.add(member)
         await self.db.flush()
@@ -371,7 +369,6 @@ class CampaignMemberService(BaseService[CampaignMember]):
         return member
 
     async def remove_member(self, member: CampaignMember) -> None:
-        """Remove a member from a campaign."""
         await self.db.delete(member)
         await self.db.flush()
 
@@ -406,7 +403,6 @@ class EmailTemplateService(BaseService[EmailTemplate]):
         return templates, total
 
     async def create_template(self, data: EmailTemplateCreate, user_id: int) -> EmailTemplate:
-        """Create a new email template."""
         template = EmailTemplate(**data.model_dump(), created_by_id=user_id)
         self.db.add(template)
         await self.db.flush()
@@ -414,7 +410,6 @@ class EmailTemplateService(BaseService[EmailTemplate]):
         return template
 
     async def update_template(self, template: EmailTemplate, data: EmailTemplateUpdate) -> EmailTemplate:
-        """Update an email template."""
         update_data = data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(template, field, value)
@@ -423,7 +418,6 @@ class EmailTemplateService(BaseService[EmailTemplate]):
         return template
 
     async def delete_template(self, template: EmailTemplate) -> None:
-        """Delete an email template."""
         await self.db.delete(template)
         await self.db.flush()
 
@@ -451,7 +445,6 @@ class EmailCampaignStepService(BaseService[EmailCampaignStep]):
         return step
 
     async def update_step(self, step: EmailCampaignStep, data: EmailCampaignStepUpdate) -> EmailCampaignStep:
-        """Update a campaign step."""
         update_data = data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(step, field, value)
@@ -460,6 +453,5 @@ class EmailCampaignStepService(BaseService[EmailCampaignStep]):
         return step
 
     async def delete_step(self, step: EmailCampaignStep) -> None:
-        """Delete a campaign step."""
         await self.db.delete(step)
         await self.db.flush()

@@ -231,7 +231,6 @@ class TaggableServiceMixin:
     entity_type: str
 
     async def get_tags(self, entity_id: int) -> List[Tag]:
-        """Get all tags for an entity."""
         result = await self.db.execute(
             select(Tag)
             .join(EntityTag)

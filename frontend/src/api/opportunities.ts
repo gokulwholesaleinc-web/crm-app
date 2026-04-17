@@ -21,9 +21,7 @@ import type {
 
 const OPPORTUNITIES_BASE = '/api/opportunities';
 
-// =============================================================================
 // Opportunities CRUD
-// =============================================================================
 
 /**
  * List opportunities with pagination and filters
@@ -78,9 +76,7 @@ export const deleteOpportunity = async (opportunityId: number): Promise<void> =>
   await apiClient.delete(`${OPPORTUNITIES_BASE}/${opportunityId}`);
 };
 
-// =============================================================================
 // Pipeline Stages
-// =============================================================================
 
 /**
  * List all pipeline stages
@@ -137,9 +133,7 @@ export const reorderStages = async (
   return response.data;
 };
 
-// =============================================================================
 // Kanban / Pipeline View
-// =============================================================================
 
 /**
  * Get Kanban board view of the pipeline
@@ -165,9 +159,7 @@ export const moveOpportunity = async (
   return response.data;
 };
 
-// =============================================================================
 // Forecasting
-// =============================================================================
 
 /**
  * Get revenue forecast
@@ -200,9 +192,7 @@ export const getPipelineSummary = async (
   return response.data;
 };
 
-// =============================================================================
 // Unified Pipeline
-// =============================================================================
 
 /**
  * Get unified pipeline view (leads + opportunities)

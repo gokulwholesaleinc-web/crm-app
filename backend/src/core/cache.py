@@ -236,7 +236,6 @@ def invalidate_cache(name: str) -> None:
 
 
 def invalidate_all_caches() -> None:
-    """Invalidate all caches."""
     with _cache_lock:
         for cache in _caches.values():
             cache.clear()
@@ -246,14 +245,12 @@ T = TypeVar("T")
 
 
 def cache_get(cache_name: str, key: str) -> Any | None:
-    """Get a value from cache."""
     cache = get_cache(cache_name)
     with _cache_lock:
         return cache.get(key)
 
 
 def cache_set(cache_name: str, key: str, value: Any) -> None:
-    """Set a value in cache."""
     cache = get_cache(cache_name)
     with _cache_lock:
         cache[key] = value
@@ -279,35 +276,28 @@ async def cached_fetch(
 
 # Convenience functions for invalidating specific caches
 def invalidate_tags_cache() -> None:
-    """Invalidate the tags cache."""
     invalidate_cache(CACHE_TAGS)
 
 
 def invalidate_lead_sources_cache() -> None:
-    """Invalidate the lead sources cache."""
     invalidate_cache(CACHE_LEAD_SOURCES)
 
 
 def invalidate_pipeline_stages_cache() -> None:
-    """Invalidate the pipeline stages cache."""
     invalidate_cache(CACHE_PIPELINE_STAGES)
 
 
 def invalidate_roles_cache() -> None:
-    """Invalidate the roles cache."""
     invalidate_cache(CACHE_ROLES)
 
 
 def invalidate_tenant_settings_cache() -> None:
-    """Invalidate the tenant settings cache."""
     invalidate_cache(CACHE_TENANT_SETTINGS)
 
 
 def invalidate_dashboard_cache() -> None:
-    """Invalidate the dashboard cache."""
     invalidate_cache(CACHE_DASHBOARD)
 
 
 def invalidate_admin_stats_cache() -> None:
-    """Invalidate the admin stats cache."""
     invalidate_cache(CACHE_ADMIN_STATS)

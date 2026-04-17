@@ -46,7 +46,6 @@ class TenantService:
         return result.scalar_one_or_none()
 
     async def get_all(self, active_only: bool = True) -> List[Tenant]:
-        """Get all tenants."""
         query = select(Tenant).options(selectinload(Tenant.settings))
         if active_only:
             query = query.where(Tenant.is_active == True)
@@ -79,7 +78,6 @@ class TenantService:
         return tenant
 
     async def update(self, tenant: Tenant, data: TenantUpdate) -> Tenant:
-        """Update a tenant."""
         update_data = data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(tenant, field, value)
@@ -88,7 +86,6 @@ class TenantService:
         return tenant
 
     async def delete(self, tenant: Tenant) -> None:
-        """Delete a tenant."""
         await self.db.delete(tenant)
         await self.db.flush()
 
@@ -98,7 +95,6 @@ class TenantSettingsService:
         self.db = db
 
     async def get_by_tenant_id(self, tenant_id: int) -> Optional[TenantSettings]:
-        """Get settings for a tenant."""
         result = await self.db.execute(
             select(TenantSettings).where(TenantSettings.tenant_id == tenant_id)
         )
@@ -123,21 +119,18 @@ class TenantUserService:
         self.db = db
 
     async def get_user_tenants(self, user_id: int) -> List[TenantUser]:
-        """Get all tenants a user belongs to."""
         result = await self.db.execute(
             select(TenantUser).where(TenantUser.user_id == user_id)
         )
         return list(result.scalars().all())
 
     async def get_tenant_users(self, tenant_id: int) -> List[TenantUser]:
-        """Get all users in a tenant."""
         result = await self.db.execute(
             select(TenantUser).where(TenantUser.tenant_id == tenant_id)
         )
         return list(result.scalars().all())
 
     async def add_user_to_tenant(self, data: TenantUserCreate) -> TenantUser:
-        """Add a user to a tenant."""
         tenant_user = TenantUser(**data.model_dump())
         self.db.add(tenant_user)
         await self.db.flush()
@@ -158,12 +151,10 @@ class TenantUserService:
         return tenant_user
 
     async def remove_user_from_tenant(self, tenant_user: TenantUser) -> None:
-        """Remove user from tenant."""
         await self.db.delete(tenant_user)
         await self.db.flush()
 
     async def get_primary_tenant(self, user_id: int) -> Optional[TenantUser]:
-        """Get user's primary tenant."""
         result = await self.db.execute(
             select(TenantUser)
             .where(TenantUser.user_id == user_id)
