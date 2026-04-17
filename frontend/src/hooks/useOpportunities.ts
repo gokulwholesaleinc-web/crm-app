@@ -238,23 +238,6 @@ export function usePipelineSummary(ownerId?: number) {
   });
 }
 
-// Unified Pipeline Hook
-
-export const unifiedPipelineKeys = {
-  all: ['unified-pipeline'] as const,
-  data: (ownerId?: number) => [...unifiedPipelineKeys.all, { ownerId }] as const,
-};
-
-/**
- * Hook to fetch unified pipeline view (lead + opportunity stages)
- */
-export function useUnifiedPipeline(ownerId?: number) {
-  return useQuery({
-    queryKey: unifiedPipelineKeys.data(ownerId),
-    queryFn: () => opportunitiesApi.getUnifiedPipeline(ownerId),
-  });
-}
-
 // Search Hook
 
 /**

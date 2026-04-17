@@ -112,9 +112,3 @@ export const useAuthStore = create<AuthState>()(
 // Register the axios client's token getter with zustand as the source of
 // truth. The axios interceptor reads through this getter on every request.
 registerAuthTokenGetter(() => useAuthStore.getState().token);
-
-// Selectors for common access patterns
-export const selectUser = (state: AuthState) => state.user;
-export const selectToken = (state: AuthState) => state.token;
-export const selectIsAuthenticated = (state: AuthState) => state.isAuthenticated;
-export const selectIsLoading = (state: AuthState) => state.isLoading;

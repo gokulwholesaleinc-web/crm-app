@@ -13,7 +13,6 @@ import type {
   CampaignFilters,
   AddMembersRequest,
   EmailSettingsUpdate,
-  CreateCampaignFromImportRequest,
   EmailCampaignStepCreate,
   EmailCampaignStepUpdate,
 } from '../types';
@@ -184,18 +183,6 @@ export function useUpdateEmailSettings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings', 'email'] });
       queryClient.invalidateQueries({ queryKey: ['email', 'volume-stats'] });
-    },
-  });
-}
-
-export function useCreateCampaignFromImport() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (data: CreateCampaignFromImportRequest) =>
-      campaignsApi.createFromImport(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: campaignKeys.lists() });
     },
   });
 }
