@@ -54,6 +54,19 @@ def _encode(event: dict) -> bytes:
     return json.dumps(event).encode()
 
 
+def _as_utc(dt):
+    """Normalize a datetime for comparison across backends.
+
+    SQLite (the test DB) drops tzinfo on `DateTime(timezone=True)` columns,
+    but Postgres preserves it in prod. Stamp UTC when it's missing so a
+    single expected value works in both.
+    """
+    if dt is None:
+        return None
+    from datetime import timezone as _tz
+    return dt.replace(tzinfo=_tz.utc) if dt.tzinfo is None else dt
+
+
 # ---------------------------------------------------------------------------
 # Target 7: _to_cents — ROUND_HALF_UP
 # ---------------------------------------------------------------------------
@@ -678,19 +691,19 @@ class TestHandleSubscriptionUpdated:
         db_session.add(sub)
         await db_session.commit()
 
-        new_start = int(datetime(2026, 2, 1, tzinfo=timezone.utc).timestamp())
-        new_end = int(datetime(2026, 3, 1, tzinfo=timezone.utc).timestamp())
+        new_start_dt = datetime(2026, 2, 1, tzinfo=timezone.utc)
+        new_end_dt = datetime(2026, 3, 1, tzinfo=timezone.utc)
         await payment_service._handle_subscription_updated({
             "id": "sub_update_04",
             "status": "active",
             "cancel_at_period_end": False,
-            "current_period_start": new_start,
-            "current_period_end": new_end,
+            "current_period_start": int(new_start_dt.timestamp()),
+            "current_period_end": int(new_end_dt.timestamp()),
         })
 
         await db_session.refresh(sub)
-        assert sub.current_period_start == datetime(2026, 2, 1, tzinfo=timezone.utc)
-        assert sub.current_period_end == datetime(2026, 3, 1, tzinfo=timezone.utc)
+        assert _as_utc(sub.current_period_start) == new_start_dt
+        assert _as_utc(sub.current_period_end) == new_end_dt
 
     @pytest.mark.asyncio
     async def test_period_preserved_when_event_omits_timestamps(
@@ -731,8 +744,8 @@ class TestHandleSubscriptionUpdated:
         })
 
         await db_session.refresh(sub)
-        assert sub.current_period_start == existing_start
-        assert sub.current_period_end == existing_end
+        assert _as_utc(sub.current_period_start) == existing_start
+        assert _as_utc(sub.current_period_end) == existing_end
 
     @pytest.mark.asyncio
     async def test_unknown_subscription_is_noop(
