@@ -30,7 +30,9 @@ export function EmailComposeModal({
   const [showCcBcc, setShowCcBcc] = useState(false);
   const sendEmailMutation = useSendEmail();
 
-  // Pre-fill for reply mode
+  // Pre-fill on mount and whenever the reply target changes.
+  // Intentionally excludes `defaultTo` from deps so a parent re-render with
+  // a new default recipient doesn't wipe in-progress edits mid-compose.
   useEffect(() => {
     if (replyTo) {
       setTo(replyTo.from_email || '');
@@ -50,7 +52,8 @@ export function EmailComposeModal({
       setBcc('');
       setShowCcBcc(false);
     }
-  }, [replyTo, defaultTo]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [replyTo]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

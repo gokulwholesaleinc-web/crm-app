@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { useState } from 'react';
 import { renderWithProviders, screen, waitFor, fireEvent } from '../../test-utils/renderWithProviders';
 import { EmailComposeModal } from './EmailComposeModal';
 import type { ThreadEmailItem } from '../../types/email';
@@ -144,5 +145,29 @@ describe('EmailComposeModal', () => {
 
     expect(screen.getByLabelText('CC')).toBeInTheDocument();
     expect(screen.getByLabelText('BCC')).toBeInTheDocument();
+  });
+
+  it('preserves in-progress edits when parent re-renders with a new defaultTo', () => {
+    function Harness() {
+      const [defaultTo, setDefaultTo] = useState('first@example.com');
+      return (
+        <>
+          <button type="button" onClick={() => setDefaultTo('second@example.com')}>
+            change-default
+          </button>
+          <EmailComposeModal {...BASE_PROPS} defaultTo={defaultTo} />
+        </>
+      );
+    }
+
+    renderWithProviders(<Harness />);
+
+    fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'Draft subject' } });
+    fireEvent.change(screen.getByLabelText('Body'), { target: { value: 'Draft body text' } });
+
+    fireEvent.click(screen.getByText('change-default'));
+
+    expect(screen.getByLabelText('Subject')).toHaveValue('Draft subject');
+    expect(screen.getByLabelText('Body')).toHaveValue('Draft body text');
   });
 });

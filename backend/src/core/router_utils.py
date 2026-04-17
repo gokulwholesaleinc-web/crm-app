@@ -54,7 +54,7 @@ def parse_comma_separated(value: str | None) -> list[str] | None:
     return [x.strip() for x in value.split(",") if x.strip()]
 
 
-def raise_not_found(entity_name: str, entity_id: int = None) -> None:
+def raise_not_found(entity_name: str, entity_id: int | None = None) -> None:
     """
     Raise an HTTPException with 404 status for entity not found.
 
@@ -93,7 +93,7 @@ def raise_bad_request(message: str) -> None:
 
 
 
-def raise_forbidden(message: str = None) -> None:
+def raise_forbidden(message: str | None = None) -> None:
     """
     Raise an HTTPException with 403 status for forbidden access.
 
@@ -109,7 +109,7 @@ def raise_forbidden(message: str = None) -> None:
     )
 
 
-def check_ownership(entity: Any, current_user: Any, entity_name: str = None) -> None:
+def check_ownership(entity: Any, current_user: Any, entity_name: str | None = None) -> None:
     """
     Check if the current user owns the entity (RBAC-aware).
 
