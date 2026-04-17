@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from fastapi import APIRouter, Depends
 
 from src.auth.models import User
+from src.core.http_errors import value_error_as_400
 from src.core.router_utils import DBSession, CurrentUser, raise_bad_request
 from src.core.permissions import require_manager_or_above
 from src.dedup.service import DedupService
@@ -67,7 +68,7 @@ async def merge_entities(
 
     service = DedupService(db)
 
-    try:
+    with value_error_as_400():
         if request.entity_type == "contacts":
             await service.merge_contacts(request.primary_id, request.secondary_id)
         elif request.entity_type == "companies":
@@ -76,8 +77,6 @@ async def merge_entities(
             await service.merge_leads(request.primary_id, request.secondary_id)
         else:
             raise_bad_request(f"Invalid entity_type: {request.entity_type}")
-    except ValueError as e:
-        raise_bad_request(str(e))
 
     return MergeResponse(
         success=True,

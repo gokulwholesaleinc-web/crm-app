@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, date
 from typing import Dict, Any, Optional
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
+from src.core.constants import SECONDS_PER_DAY
 from src.leads.models import Lead
 from src.opportunities.models import Opportunity, PipelineStage
 from src.activities.models import Activity
@@ -329,7 +330,8 @@ class ChartDataGenerator:
             select(
                 Lead.status,
                 func.avg(
-                    func.extract("epoch", Lead.updated_at - Lead.created_at) / 86400
+                    func.extract("epoch", Lead.updated_at - Lead.created_at)
+                    / SECONDS_PER_DAY
                 ).label("avg_days"),
             )
             .where(and_(*avg_filters))
