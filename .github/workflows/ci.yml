@@ -75,7 +75,6 @@ jobs:
 
   ruff-check:
     runs-on: ubuntu-latest
-    continue-on-error: true  # advisory until Phase 2 lands ruff auto-fixes
 
     steps:
       - uses: actions/checkout@v4
@@ -95,7 +94,6 @@ jobs:
 
   knip-check:
     runs-on: ubuntu-latest
-    continue-on-error: true  # advisory until Phase 1 removes dead code
 
     steps:
       - uses: actions/checkout@v4
