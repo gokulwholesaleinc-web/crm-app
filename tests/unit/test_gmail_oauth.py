@@ -161,6 +161,29 @@ class TestGmailAuthorize:
             settings.GOOGLE_CLIENT_ID = original
 
     @pytest.mark.asyncio
+    async def test_auth_url_omits_login_hint(self, client, test_user):
+        """Gmail authorize must NOT send login_hint so Google shows the account picker.
+
+        Regression guard: passing the CRM login email as login_hint caused Google to
+        silently bind to the Chrome default account, blocking users from linking a
+        different Gmail.
+        """
+        from src.config import settings
+        original = settings.GOOGLE_CLIENT_ID
+        settings.GOOGLE_CLIENT_ID = "test-client-id.apps.googleusercontent.com"
+        try:
+            resp = await client.get(
+                "/api/integrations/gmail/authorize",
+                headers=_auth_header(test_user),
+            )
+            assert resp.status_code == 200
+            auth_url = resp.json()["auth_url"]
+            params = parse_qs(urlparse(auth_url).query)
+            assert "login_hint" not in params
+        finally:
+            settings.GOOGLE_CLIENT_ID = original
+
+    @pytest.mark.asyncio
     async def test_requires_auth(self, client):
         """Unauthenticated request must be rejected."""
         resp = await client.get("/api/integrations/gmail/authorize")

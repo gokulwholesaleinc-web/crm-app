@@ -47,11 +47,12 @@ async def gmail_authorize(
 
     state = secrets.token_urlsafe(24)
     redirect_uri = gmail_oauth.get_redirect_uri()
+    # No login_hint: the Gmail account a user wants to connect is often
+    # different from their CRM login email. Let Google show the picker.
     auth_url = gmail_oauth.build_authorize_url(
         client_id=client_id,
         redirect_uri=redirect_uri,
         state=state,
-        login_hint=current_user.email,
     )
 
     cross_site = not settings.DEBUG
