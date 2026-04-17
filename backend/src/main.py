@@ -344,10 +344,18 @@ if FRONTEND_DIST.exists():
 
     _CACHEABLE_EXTENSIONS = {".js", ".css", ".svg", ".png", ".jpg", ".jpeg", ".gif", ".ico", ".woff", ".woff2", ".ttf", ".eot"}
 
+    # Always 404 unmatched /api/* regardless of method, so the SPA GET catchall
+    # below doesn't cause 405s on POST/PUT/DELETE/PATCH to removed endpoints.
+    @app.api_route(
+        "/api/{full_path:path}",
+        methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+    )
+    async def api_not_found(full_path: str):
+        return JSONResponse(status_code=404, content={"detail": "Not Found"})
+
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
         """Serve SPA for all non-API routes."""
-        # Never intercept API paths - let them 404 naturally
         if full_path.startswith("api/"):
             return JSONResponse(status_code=404, content={"detail": "Not Found"})
         file_path = FRONTEND_DIST / full_path
