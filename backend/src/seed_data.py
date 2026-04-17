@@ -5,8 +5,7 @@ needed here.  _today() and _dt() are called at module import time (list
 literals evaluated on load), so they live alongside the data they build.
 """
 
-from datetime import date, datetime, timedelta, timezone
-
+from datetime import UTC, date, datetime, timedelta
 
 # ---------------------------------------------------------------------------
 # Pipeline stages (shared)
@@ -312,7 +311,7 @@ OPPORTUNITIES_DATA = [
 
 def _dt(days_offset: int, hour: int = 10) -> datetime:
     """Helper to create a datetime relative to today."""
-    return datetime.now(timezone.utc).replace(hour=hour, minute=0, second=0, microsecond=0) + timedelta(days=days_offset)
+    return datetime.now(UTC).replace(hour=hour, minute=0, second=0, microsecond=0) + timedelta(days=days_offset)
 
 
 ACTIVITIES_DATA = [

@@ -1,15 +1,15 @@
 """Lead auto-assignment service layer."""
 
 import logging
-from typing import Optional, List, Tuple, Dict, Any
+from typing import Any
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 
 from src.assignment.models import AssignmentRule
 from src.assignment.schemas import AssignmentRuleCreate, AssignmentRuleUpdate
-from src.leads.models import Lead
 from src.core.base_service import BaseService
 from src.core.constants import DEFAULT_PAGE_SIZE
+from src.leads.models import Lead
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +23,8 @@ class AssignmentService(BaseService[AssignmentRule]):
         self,
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
-        is_active: Optional[bool] = None,
-    ) -> Tuple[List[AssignmentRule], int]:
+        is_active: bool | None = None,
+    ) -> tuple[list[AssignmentRule], int]:
         """Get paginated list of assignment rules."""
         query = select(AssignmentRule)
 
@@ -61,7 +61,7 @@ class AssignmentService(BaseService[AssignmentRule]):
         await self.db.delete(rule)
         await self.db.flush()
 
-    def _matches_filters(self, lead_data: Dict[str, Any], filters: Dict[str, Any]) -> bool:
+    def _matches_filters(self, lead_data: dict[str, Any], filters: dict[str, Any]) -> bool:
         """Check if a lead matches the rule's filters."""
         if not filters:
             return True
@@ -89,7 +89,7 @@ class AssignmentService(BaseService[AssignmentRule]):
 
         return True
 
-    async def _get_round_robin_user(self, rule: AssignmentRule) -> Optional[int]:
+    async def _get_round_robin_user(self, rule: AssignmentRule) -> int | None:
         """Get next user in round-robin rotation."""
         if not rule.user_ids:
             return None
@@ -99,7 +99,7 @@ class AssignmentService(BaseService[AssignmentRule]):
         await self.db.flush()
         return user_id
 
-    async def _get_load_balance_user(self, rule: AssignmentRule) -> Optional[int]:
+    async def _get_load_balance_user(self, rule: AssignmentRule) -> int | None:
         """Get user with fewest active leads."""
         if not rule.user_ids:
             return None
@@ -118,7 +118,7 @@ class AssignmentService(BaseService[AssignmentRule]):
         # Return user with fewest leads
         return min(user_lead_counts, key=user_lead_counts.get)
 
-    async def assign_lead(self, lead_data: Dict[str, Any]) -> Optional[int]:
+    async def assign_lead(self, lead_data: dict[str, Any]) -> int | None:
         """Find matching active assignment rule and return the assigned user_id.
 
         Returns None if no matching rule is found.
@@ -145,7 +145,7 @@ class AssignmentService(BaseService[AssignmentRule]):
 
         return None
 
-    async def get_assignment_stats(self, user_ids: List[int]) -> List[Dict[str, Any]]:
+    async def get_assignment_stats(self, user_ids: list[int]) -> list[dict[str, Any]]:
         """Get active lead counts for a list of users."""
         stats = []
         for user_id in user_ids:

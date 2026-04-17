@@ -6,8 +6,8 @@ Rates can be overridden via environment variables with the pattern:
   EXCHANGE_RATE_GBP=0.79
 """
 
+import contextlib
 import os
-from typing import Dict
 
 # Supported currencies with ISO 4217 codes
 SUPPORTED_CURRENCIES = {
@@ -35,7 +35,7 @@ SUPPORTED_CURRENCIES = {
 
 # Static exchange rates to USD (how many of the currency per 1 USD)
 # These are approximate rates and can be overridden via environment variables.
-_DEFAULT_RATES_TO_USD: Dict[str, float] = {
+_DEFAULT_RATES_TO_USD: dict[str, float] = {
     "USD": 1.0,
     "EUR": 0.92,
     "GBP": 0.79,
@@ -62,17 +62,15 @@ _DEFAULT_RATES_TO_USD: Dict[str, float] = {
 BASE_CURRENCY = os.environ.get("CRM_BASE_CURRENCY", "USD")
 
 
-def _load_exchange_rates() -> Dict[str, float]:
+def _load_exchange_rates() -> dict[str, float]:
     """Load exchange rates, allowing env variable overrides."""
     rates = dict(_DEFAULT_RATES_TO_USD)
     for code in SUPPORTED_CURRENCIES:
         env_key = f"EXCHANGE_RATE_{code}"
         env_val = os.environ.get(env_key)
         if env_val is not None:
-            try:
+            with contextlib.suppress(ValueError):
                 rates[code] = float(env_val)
-            except ValueError:
-                pass
     return rates
 
 

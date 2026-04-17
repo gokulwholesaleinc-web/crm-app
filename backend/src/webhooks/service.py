@@ -4,15 +4,15 @@ import hashlib
 import hmac
 import json
 import logging
-from typing import Optional, List, Tuple, Dict, Any
+from typing import Any
 
 import httpx
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 
-from src.webhooks.models import Webhook, WebhookDelivery
-from src.webhooks.schemas import WebhookCreate, WebhookUpdate
 from src.core.base_service import BaseService
 from src.core.constants import DEFAULT_PAGE_SIZE
+from src.webhooks.models import Webhook, WebhookDelivery
+from src.webhooks.schemas import WebhookCreate, WebhookUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +35,8 @@ class WebhookService(BaseService[Webhook]):
         self,
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
-        is_active: Optional[bool] = None,
-    ) -> Tuple[List[Webhook], int]:
+        is_active: bool | None = None,
+    ) -> tuple[list[Webhook], int]:
         """Get paginated list of webhooks."""
         query = select(Webhook)
 
@@ -108,7 +108,7 @@ class WebhookService(BaseService[Webhook]):
         webhook_id: int,
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
-    ) -> Tuple[List[WebhookDelivery], int]:
+    ) -> tuple[list[WebhookDelivery], int]:
         """Get delivery log for a webhook."""
         query = select(WebhookDelivery).where(WebhookDelivery.webhook_id == webhook_id)
 
@@ -127,7 +127,7 @@ class WebhookService(BaseService[Webhook]):
         self,
         webhook: Webhook,
         event_type: str,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
     ) -> WebhookDelivery:
         """Deliver a webhook: POST payload to webhook URL with signature header."""
         payload_bytes = json.dumps(payload, default=str).encode("utf-8")
@@ -164,7 +164,7 @@ class WebhookService(BaseService[Webhook]):
         await self.db.refresh(delivery)
         return delivery
 
-    async def get_active_webhooks_for_event(self, event_type: str) -> List[Webhook]:
+    async def get_active_webhooks_for_event(self, event_type: str) -> list[Webhook]:
         """Get all active webhooks that subscribe to a given event type."""
         result = await self.db.execute(
             select(Webhook).where(Webhook.is_active == True)

@@ -1,9 +1,10 @@
 """Workflow automation models."""
 
 from datetime import datetime
-from typing import Optional
-from sqlalchemy import String, Integer, ForeignKey, Text, Boolean, DateTime, func, JSON
+
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
+
 from src.database import Base
 
 
@@ -13,7 +14,7 @@ class WorkflowRule(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text)
+    description: Mapped[str | None] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     # Trigger configuration
@@ -21,12 +22,12 @@ class WorkflowRule(Base):
     trigger_event: Mapped[str] = mapped_column(String(50), nullable=False)  # created, updated, status_changed, score_changed
 
     # Conditions as JSON - e.g., {"field": "score", "operator": ">=", "value": 80}
-    conditions: Mapped[Optional[dict]] = mapped_column(JSON)
+    conditions: Mapped[dict | None] = mapped_column(JSON)
 
     # Actions as JSON list - e.g., [{"type": "assign_owner", "value": 1}]
-    actions: Mapped[Optional[list]] = mapped_column(JSON)
+    actions: Mapped[list | None] = mapped_column(JSON)
 
-    created_by_id: Mapped[Optional[int]] = mapped_column(
+    created_by_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
     )
@@ -60,7 +61,7 @@ class WorkflowExecution(Base):
     entity_id: Mapped[int] = mapped_column(Integer, nullable=False)
 
     status: Mapped[str] = mapped_column(String(20), nullable=False)  # success, failed, skipped
-    result: Mapped[Optional[dict]] = mapped_column(JSON)
+    result: Mapped[dict | None] = mapped_column(JSON)
 
     executed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

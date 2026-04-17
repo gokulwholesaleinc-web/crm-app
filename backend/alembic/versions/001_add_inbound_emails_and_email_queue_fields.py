@@ -4,8 +4,9 @@ Revision ID: 001_inbound_emails
 Revises: None
 Create Date: 2026-04-03
 """
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "001_inbound_emails"
 down_revision = None

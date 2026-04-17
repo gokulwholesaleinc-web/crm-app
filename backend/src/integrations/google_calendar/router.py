@@ -3,16 +3,17 @@
 import logging
 
 from fastapi import APIRouter, HTTPException
-from src.core.router_utils import DBSession, CurrentUser
+
 from src.core.constants import HTTPStatus
-from src.integrations.google_calendar.service import GoogleCalendarService
+from src.core.router_utils import CurrentUser, DBSession
 from src.integrations.google_calendar.schemas import (
-    GoogleCalendarConnect,
+    CalendarSyncStatus,
     GoogleCalendarCallback,
+    GoogleCalendarConnect,
     GoogleCalendarCredentialResponse,
     GoogleCalendarEventCreate,
-    CalendarSyncStatus,
 )
+from src.integrations.google_calendar.service import GoogleCalendarService
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +110,7 @@ async def push_to_calendar(
     into your own calendar.
     """
     from sqlalchemy import select
+
     from src.activities.models import Activity
     from src.core.router_utils import raise_forbidden
 
@@ -123,9 +125,7 @@ async def push_to_calendar(
     is_privileged = current_user.is_superuser or getattr(current_user, "role", None) in ("admin", "manager")
     if not is_privileged:
         owns = (
-            activity.owner_id == current_user.id
-            or activity.assigned_to_id == current_user.id
-            or activity.created_by_id == current_user.id
+            current_user.id in (activity.owner_id, activity.assigned_to_id, activity.created_by_id)
         )
         if not owns:
             raise_forbidden("You do not have permission to push this activity")

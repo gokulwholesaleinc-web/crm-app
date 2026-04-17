@@ -1,15 +1,17 @@
 """AI-powered insights and recommendations."""
 
-from typing import Dict, Any
 from datetime import datetime, timedelta
-from sqlalchemy import select, func
-from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Any
+
 from openai import AsyncOpenAI
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.activities.models import Activity
 from src.config import settings
-from src.core.constants import ErrorMessages, EntityNames
+from src.core.constants import EntityNames, ErrorMessages
 from src.leads.models import Lead
 from src.opportunities.models import Opportunity
-from src.activities.models import Activity
 
 
 class InsightsGenerator:
@@ -21,7 +23,7 @@ class InsightsGenerator:
         api_key = settings.OPENAI_API_KEY or os.environ.get("OPENAI_API_KEY", "")
         self.client = AsyncOpenAI(api_key=api_key) if api_key else None
 
-    async def get_lead_insights(self, lead_id: int) -> Dict[str, Any]:
+    async def get_lead_insights(self, lead_id: int) -> dict[str, Any]:
         """Get AI insights for a specific lead."""
         result = await self.db.execute(
             select(Lead).where(Lead.id == lead_id)
@@ -84,7 +86,7 @@ class InsightsGenerator:
                 "insights": f"Error generating insights: {str(e)}",
             }
 
-    async def get_opportunity_insights(self, opportunity_id: int) -> Dict[str, Any]:
+    async def get_opportunity_insights(self, opportunity_id: int) -> dict[str, Any]:
         """Get AI insights for a specific opportunity."""
         result = await self.db.execute(
             select(Opportunity)
@@ -136,10 +138,10 @@ class InsightsGenerator:
                 "insights": f"Error generating insights: {str(e)}",
             }
 
-    async def get_daily_summary(self, user_id: int) -> Dict[str, Any]:
+    async def get_daily_summary(self, user_id: int) -> dict[str, Any]:
         """Generate a daily summary for the user."""
         today = datetime.now().date()
-        yesterday = today - timedelta(days=1)
+        today - timedelta(days=1)
 
         # Get today's tasks
         tasks = await self.db.execute(

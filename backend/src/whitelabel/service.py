@@ -1,14 +1,15 @@
 """White-label/tenant service layer."""
 
-from typing import Optional, List
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+
 from src.whitelabel.models import Tenant, TenantSettings, TenantUser
 from src.whitelabel.schemas import (
     TenantCreate,
-    TenantUpdate,
     TenantSettingsUpdate,
+    TenantUpdate,
     TenantUserCreate,
     TenantUserUpdate,
 )
@@ -18,7 +19,7 @@ class TenantService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_by_id(self, tenant_id: int) -> Optional[Tenant]:
+    async def get_by_id(self, tenant_id: int) -> Tenant | None:
         """Get tenant by ID with settings."""
         result = await self.db.execute(
             select(Tenant)
@@ -27,7 +28,7 @@ class TenantService:
         )
         return result.scalar_one_or_none()
 
-    async def get_by_slug(self, slug: str) -> Optional[Tenant]:
+    async def get_by_slug(self, slug: str) -> Tenant | None:
         """Get tenant by slug with settings."""
         result = await self.db.execute(
             select(Tenant)
@@ -36,7 +37,7 @@ class TenantService:
         )
         return result.scalar_one_or_none()
 
-    async def get_by_domain(self, domain: str) -> Optional[Tenant]:
+    async def get_by_domain(self, domain: str) -> Tenant | None:
         """Get tenant by custom domain."""
         result = await self.db.execute(
             select(Tenant)
@@ -45,7 +46,7 @@ class TenantService:
         )
         return result.scalar_one_or_none()
 
-    async def get_all(self, active_only: bool = True) -> List[Tenant]:
+    async def get_all(self, active_only: bool = True) -> list[Tenant]:
         query = select(Tenant).options(selectinload(Tenant.settings))
         if active_only:
             query = query.where(Tenant.is_active == True)
@@ -94,7 +95,7 @@ class TenantSettingsService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_by_tenant_id(self, tenant_id: int) -> Optional[TenantSettings]:
+    async def get_by_tenant_id(self, tenant_id: int) -> TenantSettings | None:
         result = await self.db.execute(
             select(TenantSettings).where(TenantSettings.tenant_id == tenant_id)
         )
@@ -118,13 +119,13 @@ class TenantUserService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_user_tenants(self, user_id: int) -> List[TenantUser]:
+    async def get_user_tenants(self, user_id: int) -> list[TenantUser]:
         result = await self.db.execute(
             select(TenantUser).where(TenantUser.user_id == user_id)
         )
         return list(result.scalars().all())
 
-    async def get_tenant_users(self, tenant_id: int) -> List[TenantUser]:
+    async def get_tenant_users(self, tenant_id: int) -> list[TenantUser]:
         result = await self.db.execute(
             select(TenantUser).where(TenantUser.tenant_id == tenant_id)
         )
@@ -154,7 +155,7 @@ class TenantUserService:
         await self.db.delete(tenant_user)
         await self.db.flush()
 
-    async def get_primary_tenant(self, user_id: int) -> Optional[TenantUser]:
+    async def get_primary_tenant(self, user_id: int) -> TenantUser | None:
         result = await self.db.execute(
             select(TenantUser)
             .where(TenantUser.user_id == user_id)

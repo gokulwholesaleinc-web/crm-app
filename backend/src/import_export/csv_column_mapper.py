@@ -2,10 +2,9 @@
 
 import re
 from difflib import SequenceMatcher
-from typing import Dict, List, Set
 
 # Common aliases for CSV columns → internal field names
-COLUMN_ALIASES: Dict[str, str] = {
+COLUMN_ALIASES: dict[str, str] = {
     "firstname": "first_name",
     "first": "first_name",
     "fname": "first_name",
@@ -76,7 +75,7 @@ CONTACT_PERSON_HEADERS = {"pointofcontact", "poc", "contactperson", "primarycont
 FUZZY_MATCH_THRESHOLD = 0.75
 
 # Monday.com status label → CRM lead status mapping
-MONDAY_STATUS_MAP: Dict[str, str] = {
+MONDAY_STATUS_MAP: dict[str, str] = {
     "working on it": "contacted",
     "done": "converted",
     "stuck": "unqualified",
@@ -109,7 +108,7 @@ def detect_linkedin_format(headers: list) -> bool:
     return len(matched) >= 4 and has_unique
 
 
-def detect_monday_csv(csv_headers: List[str]) -> bool:
+def detect_monday_csv(csv_headers: list[str]) -> bool:
     """Return True if the CSV headers contain Monday.com-specific columns."""
     normalized = {normalize_header(h) for h in csv_headers}
     return len(normalized & _MONDAY_SIGNATURE_HEADERS) >= 2
@@ -170,10 +169,10 @@ def find_contact_person_column(csv_headers: list, column_mapping: dict) -> str |
     return None
 
 
-def map_columns(csv_headers: List[str], target_fields: List[str]) -> Dict[str, str]:
+def map_columns(csv_headers: list[str], target_fields: list[str]) -> dict[str, str]:
     """Map CSV headers to target field names using exact match, aliases, and fuzzy matching."""
-    mapping: Dict[str, str] = {}
-    matched_fields: Set[str] = set()
+    mapping: dict[str, str] = {}
+    matched_fields: set[str] = set()
     normalized_targets = {normalize_header(f): f for f in target_fields}
 
     for header in csv_headers:

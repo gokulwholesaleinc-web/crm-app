@@ -1,34 +1,34 @@
 """Pydantic schemas for contracts."""
 
 from datetime import date, datetime
-from typing import Optional, List
+
 from pydantic import BaseModel, ConfigDict
 
 
 class ContractCreate(BaseModel):
     title: str
-    contact_id: Optional[int] = None
-    company_id: Optional[int] = None
-    start_date: Optional[date] = None
-    end_date: Optional[date] = None
-    scope: Optional[str] = None
-    value: Optional[float] = None
+    contact_id: int | None = None
+    company_id: int | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+    scope: str | None = None
+    value: float | None = None
     currency: str = "USD"
     status: str = "draft"
-    owner_id: Optional[int] = None
+    owner_id: int | None = None
 
 
 class ContractUpdate(BaseModel):
-    title: Optional[str] = None
-    contact_id: Optional[int] = None
-    company_id: Optional[int] = None
-    start_date: Optional[date] = None
-    end_date: Optional[date] = None
-    scope: Optional[str] = None
-    value: Optional[float] = None
-    currency: Optional[str] = None
-    status: Optional[str] = None
-    owner_id: Optional[int] = None
+    title: str | None = None
+    contact_id: int | None = None
+    company_id: int | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+    scope: str | None = None
+    value: float | None = None
+    currency: str | None = None
+    status: str | None = None
+    owner_id: int | None = None
 
 
 class ContactBrief(BaseModel):
@@ -48,25 +48,25 @@ class CompanyBrief(BaseModel):
 class ContractResponse(BaseModel):
     id: int
     title: str
-    contact_id: Optional[int] = None
-    company_id: Optional[int] = None
-    start_date: Optional[date] = None
-    end_date: Optional[date] = None
-    scope: Optional[str] = None
-    value: Optional[float] = None
+    contact_id: int | None = None
+    company_id: int | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+    scope: str | None = None
+    value: float | None = None
     currency: str = "USD"
     status: str = "draft"
-    owner_id: Optional[int] = None
+    owner_id: int | None = None
     created_at: datetime
     updated_at: datetime
-    contact: Optional[ContactBrief] = None
-    company: Optional[CompanyBrief] = None
+    contact: ContactBrief | None = None
+    company: CompanyBrief | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class ContractListResponse(BaseModel):
-    items: List[ContractResponse]
+    items: list[ContractResponse]
     total: int
     page: int
     page_size: int

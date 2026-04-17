@@ -1,32 +1,39 @@
 """Activity API routes."""
 
-from typing import Annotated, Optional, List
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, Query, Request
-from src.core.constants import HTTPStatus, EntityNames, ENTITY_TYPE_ACTIVITIES
-from src.core.router_utils import (
-    DBSession,
-    CurrentUser,
-    parse_comma_separated,
-    get_entity_or_404,
-    calculate_pages,
-    check_ownership,
-)
-from src.core.data_scope import DataScope, get_data_scope, check_record_access_or_shared
+
 from src.activities.schemas import (
     ActivityCreate,
-    ActivityUpdate,
-    ActivityResponse,
     ActivityListResponse,
-    TimelineResponse,
+    ActivityResponse,
+    ActivityUpdate,
+    CompleteActivityRequest,
     TimelineItem,
+    TimelineResponse,
     UnifiedTimelineEvent,
     UnifiedTimelineResponse,
-    CompleteActivityRequest,
 )
 from src.activities.service import ActivityService
 from src.activities.timeline import ActivityTimeline
-from src.audit.utils import audit_entity_create, audit_entity_update, audit_entity_delete, snapshot_entity
-from src.events.service import emit, ACTIVITY_CREATED
+from src.audit.utils import (
+    audit_entity_create,
+    audit_entity_delete,
+    audit_entity_update,
+    snapshot_entity,
+)
+from src.core.constants import ENTITY_TYPE_ACTIVITIES, EntityNames, HTTPStatus
+from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
+from src.core.router_utils import (
+    CurrentUser,
+    DBSession,
+    calculate_pages,
+    check_ownership,
+    get_entity_or_404,
+    parse_comma_separated,
+)
+from src.events.service import ACTIVITY_CREATED, emit
 from src.notifications.service import notify_on_activity_due
 
 router = APIRouter(prefix="/api/activities", tags=["activities"])
@@ -38,13 +45,15 @@ async def get_calendar_activities(
     db: DBSession,
     start_date: str = Query(..., description="Start date (YYYY-MM-DD)"),
     end_date: str = Query(..., description="End date (YYYY-MM-DD)"),
-    activity_type: Optional[str] = None,
-    owner_id: Optional[int] = None,
+    activity_type: str | None = None,
+    owner_id: int | None = None,
 ):
     """Get activities grouped by date for calendar view."""
-    from datetime import date as date_type
-    from sqlalchemy import select, or_, and_, func as sa_func
     from collections import defaultdict
+    from datetime import date as date_type
+
+    from sqlalchemy import and_, or_, select
+    from sqlalchemy import func as sa_func
 
     start = date_type.fromisoformat(start_date)
     end = date_type.fromisoformat(end_date)
@@ -116,17 +125,18 @@ async def list_activities(
     data_scope: Annotated[DataScope, Depends(get_data_scope)],
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    entity_type: Optional[str] = None,
-    entity_id: Optional[int] = None,
-    activity_type: Optional[str] = None,
-    owner_id: Optional[int] = None,
-    assigned_to_id: Optional[int] = None,
-    is_completed: Optional[bool] = None,
-    priority: Optional[str] = None,
-    filters: Optional[str] = None,
+    entity_type: str | None = None,
+    entity_id: int | None = None,
+    activity_type: str | None = None,
+    owner_id: int | None = None,
+    assigned_to_id: int | None = None,
+    is_completed: bool | None = None,
+    priority: str | None = None,
+    filters: str | None = None,
 ):
     """List activities with pagination and filters."""
     import json as _json
+
     from fastapi import HTTPException
     parsed_filters = None
     if filters:
@@ -135,10 +145,7 @@ async def list_activities(
         except _json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="Invalid JSON filter format")
 
-    if data_scope.can_see_all():
-        effective_owner_id = owner_id
-    else:
-        effective_owner_id = data_scope.owner_id
+    effective_owner_id = owner_id if data_scope.can_see_all() else data_scope.owner_id
 
     service = ActivityService(db)
 
@@ -193,7 +200,7 @@ async def create_activity(
     return ActivityResponse.model_validate(activity)
 
 
-@router.get("/my-tasks", response_model=List[ActivityResponse])
+@router.get("/my-tasks", response_model=list[ActivityResponse])
 async def get_my_tasks(
     current_user: CurrentUser,
     db: DBSession,
@@ -218,7 +225,7 @@ async def get_entity_timeline(
     db: DBSession,
     data_scope: Annotated[DataScope, Depends(get_data_scope)],
     limit: int = Query(50, ge=1, le=100),
-    activity_types: Optional[str] = None,
+    activity_types: str | None = None,
 ):
     """Get activity timeline for an entity."""
     from src.core.entity_access import require_entity_access
@@ -241,7 +248,7 @@ async def get_user_timeline(
     db: DBSession,
     limit: int = Query(50, ge=1, le=100),
     include_assigned: bool = True,
-    activity_types: Optional[str] = None,
+    activity_types: str | None = None,
 ):
     """Get activity timeline for current user."""
     timeline = ActivityTimeline(db)

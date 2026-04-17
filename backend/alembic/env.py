@@ -1,40 +1,23 @@
 """Alembic environment configuration."""
 
 import asyncio
+import os
+import sys
 from logging.config import fileConfig
+
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
+
 from alembic import context
-import os
-import sys
 
 # Add the backend directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.config import settings
-from src.database import Base
 
 # Import all models to ensure they're registered
-from src.auth.models import User
-from src.core.models import Note, Tag, EntityTag
-from src.contacts.models import Contact
-from src.companies.models import Company
-from src.leads.models import Lead, LeadSource
-from src.opportunities.models import Opportunity, PipelineStage
-from src.activities.models import Activity
-from src.campaigns.models import Campaign, CampaignMember, EmailTemplate, EmailCampaignStep
-from src.dashboard.models import DashboardNumberCard, DashboardChart, DashboardReportWidget
-from src.ai.models import AIEmbedding, AIConversation
-from src.whitelabel.models import Tenant, TenantSettings, TenantUser
-from src.meta.models import CompanyMetaData, MetaCredential, MetaLeadCapture
-from src.integrations.google_calendar.models import GoogleCalendarCredential, CalendarSyncEvent
-from src.integrations.gmail.models import GmailConnection, GmailSyncState
-from src.email.models import EmailQueue, InboundEmail
-from src.reports.models import SavedReport
-from src.sequences.models import Sequence, SequenceEnrollment
-from src.notifications.models import Notification
-from src.webhooks.stripe_events import WebhookEvent
+from src.config import settings
+from src.database import Base
 
 # Alembic Config object
 config = context.config

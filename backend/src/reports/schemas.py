@@ -1,7 +1,8 @@
 """Pydantic schemas for custom reports."""
 
 from datetime import datetime
-from typing import Optional, Any, Dict, List
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -9,10 +10,10 @@ class ReportDefinition(BaseModel):
     """Definition for executing a report."""
     entity_type: str
     metric: str = "count"  # count, sum, avg, min, max
-    metric_field: Optional[str] = None
-    group_by: Optional[str] = None
-    date_group: Optional[str] = None  # day, week, month, quarter, year
-    filters: Optional[Dict[str, Any]] = None
+    metric_field: str | None = None
+    group_by: str | None = None
+    date_group: str | None = None  # day, week, month, quarter, year
+    filters: dict[str, Any] | None = None
     chart_type: str = "bar"
 
 
@@ -26,57 +27,57 @@ class ReportResult(BaseModel):
     """Result of executing a report."""
     entity_type: str
     metric: str
-    metric_field: Optional[str] = None
-    group_by: Optional[str] = None
+    metric_field: str | None = None
+    group_by: str | None = None
     chart_type: str
-    data: List[ReportDataPoint]
-    total: Optional[float] = None
+    data: list[ReportDataPoint]
+    total: float | None = None
 
 
 class SavedReportCreate(BaseModel):
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     entity_type: str
-    filters: Optional[Dict[str, Any]] = None
-    group_by: Optional[str] = None
-    date_group: Optional[str] = None
+    filters: dict[str, Any] | None = None
+    group_by: str | None = None
+    date_group: str | None = None
     metric: str = "count"
-    metric_field: Optional[str] = None
+    metric_field: str | None = None
     chart_type: str = "bar"
     is_public: bool = False
-    schedule: Optional[str] = None
-    recipients: Optional[List[str]] = None
+    schedule: str | None = None
+    recipients: list[str] | None = None
 
 
 class SavedReportUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    filters: Optional[Dict[str, Any]] = None
-    group_by: Optional[str] = None
-    date_group: Optional[str] = None
-    metric: Optional[str] = None
-    metric_field: Optional[str] = None
-    chart_type: Optional[str] = None
-    is_public: Optional[bool] = None
-    schedule: Optional[str] = None
-    recipients: Optional[List[str]] = None
+    name: str | None = None
+    description: str | None = None
+    filters: dict[str, Any] | None = None
+    group_by: str | None = None
+    date_group: str | None = None
+    metric: str | None = None
+    metric_field: str | None = None
+    chart_type: str | None = None
+    is_public: bool | None = None
+    schedule: str | None = None
+    recipients: list[str] | None = None
 
 
 class SavedReportResponse(BaseModel):
     id: int
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     entity_type: str
-    filters: Optional[Dict[str, Any]] = None
-    group_by: Optional[str] = None
-    date_group: Optional[str] = None
+    filters: dict[str, Any] | None = None
+    group_by: str | None = None
+    date_group: str | None = None
     metric: str
-    metric_field: Optional[str] = None
+    metric_field: str | None = None
     chart_type: str
     created_by_id: int
     is_public: bool
-    schedule: Optional[str] = None
-    recipients: Optional[List[str]] = None
+    schedule: str | None = None
+    recipients: list[str] | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -90,11 +91,11 @@ class ReportTemplate(BaseModel):
     description: str
     entity_type: str
     metric: str
-    metric_field: Optional[str] = None
-    group_by: Optional[str] = None
-    date_group: Optional[str] = None
+    metric_field: str | None = None
+    group_by: str | None = None
+    date_group: str | None = None
     chart_type: str
-    filters: Optional[Dict[str, Any]] = None
+    filters: dict[str, Any] | None = None
 
 
 class AIReportGenerateRequest(BaseModel):
@@ -110,5 +111,5 @@ class AIReportGenerateResponse(BaseModel):
 
 class ScheduleUpdateRequest(BaseModel):
     """Request to update schedule on a saved report."""
-    schedule: Optional[str] = None  # daily/weekly/monthly or null to clear
-    recipients: Optional[List[str]] = None
+    schedule: str | None = None  # daily/weekly/monthly or null to clear
+    recipients: list[str] | None = None

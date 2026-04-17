@@ -2,7 +2,6 @@
 
 from email.message import EmailMessage
 from email.utils import make_msgid
-from typing import Optional
 
 
 def build_rfc822(
@@ -12,8 +11,8 @@ def build_rfc822(
     body_text: str,
     from_email: str,
     from_name: str,
-    in_reply_to: Optional[str] = None,
-    references: Optional[str] = None,
+    in_reply_to: str | None = None,
+    references: str | None = None,
 ) -> bytes:
     """Build a multipart/alternative RFC 822 message ready for Gmail API.
 

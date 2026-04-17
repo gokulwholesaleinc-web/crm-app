@@ -1,16 +1,18 @@
 """Quote models for sales proposals and pricing."""
 
 from datetime import date, datetime
-from typing import Optional, List, TYPE_CHECKING
-from sqlalchemy import String, Integer, ForeignKey, Text, Numeric, Date, DateTime, JSON
+from typing import TYPE_CHECKING, Optional
+
+from sqlalchemy import JSON, Date, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from src.database import Base
+
 from src.core.mixins.auditable import AuditableMixin
+from src.database import Base
 
 if TYPE_CHECKING:
-    from src.opportunities.models import Opportunity
-    from src.contacts.models import Contact
     from src.companies.models import Company
+    from src.contacts.models import Contact
+    from src.opportunities.models import Opportunity
 
 
 class Quote(Base, AuditableMixin):
@@ -26,24 +28,24 @@ class Quote(Base, AuditableMixin):
     # Unguessable token used for the public /accept endpoint. Separate from
     # quote_number so the user-facing identifier can stay short and readable
     # while the public URL remains non-enumerable.
-    public_token: Mapped[Optional[str]] = mapped_column(
+    public_token: Mapped[str | None] = mapped_column(
         String(64), unique=True, index=True, nullable=True
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text)
+    description: Mapped[str | None] = mapped_column(Text)
 
     # Relationships to other entities
-    opportunity_id: Mapped[Optional[int]] = mapped_column(
+    opportunity_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("opportunities.id", ondelete="SET NULL"),
         index=True,
     )
-    contact_id: Mapped[Optional[int]] = mapped_column(
+    contact_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("contacts.id", ondelete="SET NULL"),
         index=True,
     )
-    company_id: Mapped[Optional[int]] = mapped_column(
+    company_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("companies.id", ondelete="SET NULL"),
         index=True,
@@ -56,16 +58,16 @@ class Quote(Base, AuditableMixin):
     payment_type: Mapped[str] = mapped_column(
         String(20), default="one_time", nullable=False
     )
-    recurring_interval: Mapped[Optional[str]] = mapped_column(
+    recurring_interval: Mapped[str | None] = mapped_column(
         String(20)
     )  # monthly, quarterly, yearly
 
     # Validity and currency
-    valid_until: Mapped[Optional[date]] = mapped_column(Date)
+    valid_until: Mapped[date | None] = mapped_column(Date)
     currency: Mapped[str] = mapped_column(String(3), default="USD")
 
     # Discount
-    discount_type: Mapped[Optional[str]] = mapped_column(String(20))  # percent or fixed
+    discount_type: Mapped[str | None] = mapped_column(String(20))  # percent or fixed
     discount_value: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
 
     # Financials (calculated from line items)
@@ -75,33 +77,33 @@ class Quote(Base, AuditableMixin):
     total: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
 
     # Terms
-    terms_and_conditions: Mapped[Optional[str]] = mapped_column(Text)
-    notes: Mapped[Optional[str]] = mapped_column(Text)
+    terms_and_conditions: Mapped[str | None] = mapped_column(Text)
+    notes: Mapped[str | None] = mapped_column(Text)
 
     # Owner
-    owner_id: Mapped[Optional[int]] = mapped_column(
+    owner_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
         index=True,
     )
 
     # Timestamps for status transitions
-    sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
-    accepted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
-    rejected_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # E-signature fields (captured when client accepts via public link)
-    signer_name: Mapped[Optional[str]] = mapped_column(String(255))
-    signer_email: Mapped[Optional[str]] = mapped_column(String(255))
-    signer_ip: Mapped[Optional[str]] = mapped_column(String(45))
-    signer_user_agent: Mapped[Optional[str]] = mapped_column(Text)
-    signed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
-    rejection_reason: Mapped[Optional[str]] = mapped_column(Text)
+    signer_name: Mapped[str | None] = mapped_column(String(255))
+    signer_email: Mapped[str | None] = mapped_column(String(255))
+    signer_ip: Mapped[str | None] = mapped_column(String(45))
+    signer_user_agent: Mapped[str | None] = mapped_column(Text)
+    signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    rejection_reason: Mapped[str | None] = mapped_column(Text)
     # Optional override for who may sign. NULL falls back to contact.email.
-    designated_signer_email: Mapped[Optional[str]] = mapped_column(String(255))
+    designated_signer_email: Mapped[str | None] = mapped_column(String(255))
 
     # ORM relationships
-    line_items: Mapped[List["QuoteLineItem"]] = relationship(
+    line_items: Mapped[list["QuoteLineItem"]] = relationship(
         "QuoteLineItem",
         back_populates="quote",
         cascade="all, delete-orphan",
@@ -150,10 +152,10 @@ class QuoteTemplate(Base, AuditableMixin):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text)
-    default_terms: Mapped[Optional[str]] = mapped_column(Text)
-    default_notes: Mapped[Optional[str]] = mapped_column(Text)
-    line_items_template: Mapped[Optional[dict]] = mapped_column(JSON)
+    description: Mapped[str | None] = mapped_column(Text)
+    default_terms: Mapped[str | None] = mapped_column(Text)
+    default_notes: Mapped[str | None] = mapped_column(Text)
+    line_items_template: Mapped[dict | None] = mapped_column(JSON)
 
 
 class ProductBundle(Base, AuditableMixin):
@@ -162,11 +164,11 @@ class ProductBundle(Base, AuditableMixin):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text)
+    description: Mapped[str | None] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
 
     # ORM relationships
-    items: Mapped[List["ProductBundleItem"]] = relationship(
+    items: Mapped[list["ProductBundleItem"]] = relationship(
         "ProductBundleItem",
         back_populates="bundle",
         cascade="all, delete-orphan",

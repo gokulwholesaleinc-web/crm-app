@@ -1,18 +1,18 @@
 """Sales sequence service layer."""
 
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Optional, List, Tuple, Dict, Any
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 
-from src.sequences.models import Sequence, SequenceEnrollment
-from src.sequences.schemas import SequenceCreate, SequenceUpdate
+from src.activities.models import Activity
+from src.contacts.models import Contact
 from src.core.base_service import BaseService
 from src.core.constants import DEFAULT_PAGE_SIZE
-from src.contacts.models import Contact
 from src.email.service import EmailService
-from src.activities.models import Activity
+from src.sequences.models import Sequence, SequenceEnrollment
+from src.sequences.schemas import SequenceCreate, SequenceUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +26,8 @@ class SequenceService(BaseService[Sequence]):
         self,
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
-        is_active: Optional[bool] = None,
-    ) -> Tuple[List[Sequence], int]:
+        is_active: bool | None = None,
+    ) -> tuple[list[Sequence], int]:
         """Get paginated list of sequences."""
         query = select(Sequence)
 
@@ -88,11 +88,11 @@ class SequenceService(BaseService[Sequence]):
 
         # Get sequence to determine first step timing
         seq = await self.get_by_id(sequence_id)
-        next_step_at = datetime.now(timezone.utc)
+        next_step_at = datetime.now(UTC)
         if seq and seq.steps:
             first_step = seq.steps[0]
             delay_days = first_step.get("delay_days", 0)
-            next_step_at = datetime.now(timezone.utc) + timedelta(days=delay_days)
+            next_step_at = datetime.now(UTC) + timedelta(days=delay_days)
 
         enrollment = SequenceEnrollment(
             sequence_id=sequence_id,
@@ -106,7 +106,7 @@ class SequenceService(BaseService[Sequence]):
         await self.db.refresh(enrollment)
         return enrollment
 
-    async def pause_enrollment(self, enrollment_id: int) -> Optional[SequenceEnrollment]:
+    async def pause_enrollment(self, enrollment_id: int) -> SequenceEnrollment | None:
         result = await self.db.execute(
             select(SequenceEnrollment).where(SequenceEnrollment.id == enrollment_id)
         )
@@ -118,7 +118,7 @@ class SequenceService(BaseService[Sequence]):
         await self.db.refresh(enrollment)
         return enrollment
 
-    async def resume_enrollment(self, enrollment_id: int) -> Optional[SequenceEnrollment]:
+    async def resume_enrollment(self, enrollment_id: int) -> SequenceEnrollment | None:
         result = await self.db.execute(
             select(SequenceEnrollment).where(SequenceEnrollment.id == enrollment_id)
         )
@@ -127,7 +127,7 @@ class SequenceService(BaseService[Sequence]):
             return enrollment
         enrollment.status = "active"
         # Reset next_step_at to now so the step can be processed
-        enrollment.next_step_at = datetime.now(timezone.utc)
+        enrollment.next_step_at = datetime.now(UTC)
         await self.db.flush()
         await self.db.refresh(enrollment)
         return enrollment
@@ -137,7 +137,7 @@ class SequenceService(BaseService[Sequence]):
         sequence_id: int,
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
-    ) -> Tuple[List[SequenceEnrollment], int]:
+    ) -> tuple[list[SequenceEnrollment], int]:
         """Get enrollments for a sequence."""
         query = select(SequenceEnrollment).where(
             SequenceEnrollment.sequence_id == sequence_id
@@ -156,13 +156,13 @@ class SequenceService(BaseService[Sequence]):
         enrollments = list(result.scalars().all())
         return enrollments, total
 
-    async def get_enrollment_by_id(self, enrollment_id: int) -> Optional[SequenceEnrollment]:
+    async def get_enrollment_by_id(self, enrollment_id: int) -> SequenceEnrollment | None:
         result = await self.db.execute(
             select(SequenceEnrollment).where(SequenceEnrollment.id == enrollment_id)
         )
         return result.scalar_one_or_none()
 
-    async def get_contact_enrollments(self, contact_id: int) -> List[SequenceEnrollment]:
+    async def get_contact_enrollments(self, contact_id: int) -> list[SequenceEnrollment]:
         result = await self.db.execute(
             select(SequenceEnrollment).where(
                 SequenceEnrollment.contact_id == contact_id
@@ -170,13 +170,13 @@ class SequenceService(BaseService[Sequence]):
         )
         return list(result.scalars().all())
 
-    async def process_due_steps(self) -> List[Dict[str, Any]]:
+    async def process_due_steps(self) -> list[dict[str, Any]]:
         """Process all enrollments with due steps.
 
         Finds enrollments where next_step_at <= now and status == active,
         executes the current step, and advances to the next.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         result = await self.db.execute(
             select(SequenceEnrollment).where(
                 SequenceEnrollment.status == "active",
@@ -204,18 +204,18 @@ class SequenceService(BaseService[Sequence]):
         await self.db.flush()
         return processed
 
-    async def _get_contact(self, contact_id: int) -> Optional[Contact]:
+    async def _get_contact(self, contact_id: int) -> Contact | None:
         result = await self.db.execute(
             select(Contact).where(Contact.id == contact_id)
         )
         return result.scalar_one_or_none()
 
-    async def _execute_step(self, enrollment: SequenceEnrollment) -> Dict[str, Any]:
+    async def _execute_step(self, enrollment: SequenceEnrollment) -> dict[str, Any]:
         """Execute the current step for an enrollment and advance."""
         seq = await self.get_by_id(enrollment.sequence_id)
         if not seq or not seq.steps:
             enrollment.status = "completed"
-            enrollment.completed_at = datetime.now(timezone.utc)
+            enrollment.completed_at = datetime.now(UTC)
             if seq:
                 await self._notify_sequence_completed(seq, enrollment)
             return {
@@ -229,7 +229,7 @@ class SequenceService(BaseService[Sequence]):
 
         if current_step_index >= len(steps):
             enrollment.status = "completed"
-            enrollment.completed_at = datetime.now(timezone.utc)
+            enrollment.completed_at = datetime.now(UTC)
             await self._notify_sequence_completed(seq, enrollment)
             return {
                 "enrollment_id": enrollment.id,
@@ -276,7 +276,7 @@ class SequenceService(BaseService[Sequence]):
                 description=f"Auto-created by sequence '{seq.name}' step {current_step_index}",
                 entity_type="contacts",
                 entity_id=enrollment.contact_id,
-                due_date=datetime.now(timezone.utc).date(),
+                due_date=datetime.now(UTC).date(),
                 is_completed=False,
                 priority="normal",
                 owner_id=seq.created_by_id,
@@ -296,13 +296,13 @@ class SequenceService(BaseService[Sequence]):
 
         if next_step_index >= len(steps):
             enrollment.status = "completed"
-            enrollment.completed_at = datetime.now(timezone.utc)
+            enrollment.completed_at = datetime.now(UTC)
             result["status"] = "completed"
             await self._notify_sequence_completed(seq, enrollment)
         else:
             next_step = steps[next_step_index]
             delay_days = next_step.get("delay_days", 0)
-            enrollment.next_step_at = datetime.now(timezone.utc) + timedelta(days=delay_days)
+            enrollment.next_step_at = datetime.now(UTC) + timedelta(days=delay_days)
 
         return result
 

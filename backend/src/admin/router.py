@@ -3,26 +3,13 @@
 All endpoints require admin-level access (is_superuser or role=admin).
 """
 
-from datetime import datetime, timedelta, timezone
-from typing import List
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 
-from src.core.constants import HTTPStatus
-from src.core.rate_limit import limiter
-from src.core.router_utils import DBSession, CurrentUser, raise_forbidden, raise_not_found
-from src.auth.dependencies import invalidate_user_cache
-from src.auth.models import User, RejectedAccessEmail
-from src.contacts.models import Contact
-from src.companies.models import Company
-from src.leads.models import Lead
-from src.opportunities.models import Opportunity, PipelineStage
-from src.quotes.models import Quote
-from src.proposals.models import Proposal
-from src.payments.models import Payment
-from src.audit.models import AuditLog
 from src.admin.schemas import (
+    ActivityFeedEntry,
     AdminUserResponse,
     AdminUserUpdate,
     ApproveUserRequest,
@@ -30,12 +17,24 @@ from src.admin.schemas import (
     LinkTenantRequest,
     LinkTenantResponse,
     PendingUserResponse,
-    RejectUserRequest,
     RejectedEmailResponse,
+    RejectUserRequest,
     SystemStats,
     TeamMemberOverview,
-    ActivityFeedEntry,
 )
+from src.audit.models import AuditLog
+from src.auth.dependencies import invalidate_user_cache
+from src.auth.models import RejectedAccessEmail, User
+from src.companies.models import Company
+from src.contacts.models import Contact
+from src.core.constants import HTTPStatus
+from src.core.rate_limit import limiter
+from src.core.router_utils import CurrentUser, DBSession, raise_forbidden, raise_not_found
+from src.leads.models import Lead
+from src.opportunities.models import Opportunity, PipelineStage
+from src.payments.models import Payment
+from src.proposals.models import Proposal
+from src.quotes.models import Quote
 from src.whitelabel.models import Tenant, TenantUser
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -53,7 +52,7 @@ def _require_admin(user: User) -> None:
 # ---------------------------------------------------------------------------
 # GET /api/admin/users
 # ---------------------------------------------------------------------------
-@router.get("/users", response_model=List[AdminUserResponse])
+@router.get("/users", response_model=list[AdminUserResponse])
 @limiter.limit("30/minute")
 async def list_admin_users(
     request: Request,
@@ -238,7 +237,7 @@ async def get_system_stats(
     """System-wide stats: totals and active users in last 7 days."""
     _require_admin(current_user)
 
-    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    seven_days_ago = datetime.now(UTC) - timedelta(days=7)
 
     total_users = (await db.execute(select(func.count(User.id)))).scalar() or 0
     total_contacts = (await db.execute(select(func.count(Contact.id)))).scalar() or 0
@@ -271,7 +270,7 @@ async def get_system_stats(
 # ---------------------------------------------------------------------------
 # GET /api/admin/team-overview
 # ---------------------------------------------------------------------------
-@router.get("/team-overview", response_model=List[TeamMemberOverview])
+@router.get("/team-overview", response_model=list[TeamMemberOverview])
 @limiter.limit("30/minute")
 async def get_team_overview(
     request: Request,
@@ -338,7 +337,7 @@ async def get_team_overview(
 # ---------------------------------------------------------------------------
 # GET /api/admin/activity-feed
 # ---------------------------------------------------------------------------
-@router.get("/activity-feed", response_model=List[ActivityFeedEntry])
+@router.get("/activity-feed", response_model=list[ActivityFeedEntry])
 @limiter.limit("30/minute")
 async def get_activity_feed(
     request: Request,
@@ -493,7 +492,7 @@ async def link_user_to_tenant(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/users/pending", response_model=List[PendingUserResponse])
+@router.get("/users/pending", response_model=list[PendingUserResponse])
 @limiter.limit("30/minute")
 async def list_pending_users(
     request: Request,
@@ -568,7 +567,7 @@ async def reject_user(
     return {"rejected_email_id": rejected.id}
 
 
-@router.get("/rejected-emails", response_model=List[RejectedEmailResponse])
+@router.get("/rejected-emails", response_model=list[RejectedEmailResponse])
 @limiter.limit("30/minute")
 async def list_rejected_emails(
     request: Request,

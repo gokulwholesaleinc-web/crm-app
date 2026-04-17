@@ -1,15 +1,17 @@
 """Opportunity/Deal model for sales pipeline."""
 
 from datetime import date
-from typing import Optional, TYPE_CHECKING
-from sqlalchemy import String, Integer, ForeignKey, Text, Float, Date, Boolean, Index
+from typing import TYPE_CHECKING, Optional
+
+from sqlalchemy import Boolean, Date, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from src.database import Base
+
 from src.core.mixins.auditable import AuditableMixin
+from src.database import Base
 
 if TYPE_CHECKING:
-    from src.contacts.models import Contact
     from src.companies.models import Company
+    from src.contacts.models import Contact
 
 
 class PipelineStage(Base):
@@ -18,7 +20,7 @@ class PipelineStage(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(String(255))
+    description: Mapped[str | None] = mapped_column(String(255))
     order: Mapped[int] = mapped_column(Integer, default=0)
     color: Mapped[str] = mapped_column(String(7), default="#6366f1")
     probability: Mapped[int] = mapped_column(Integer, default=0)  # 0-100%
@@ -36,7 +38,7 @@ class Opportunity(Base, AuditableMixin):
 
     # Basic info
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text)
+    description: Mapped[str | None] = mapped_column(Text)
 
     # Pipeline
     pipeline_stage_id: Mapped[int] = mapped_column(
@@ -47,41 +49,41 @@ class Opportunity(Base, AuditableMixin):
     )
 
     # Financials
-    amount: Mapped[Optional[float]] = mapped_column(Float)
+    amount: Mapped[float | None] = mapped_column(Float)
     currency: Mapped[str] = mapped_column(String(3), default="USD")
 
     # Probability override (if null, use stage probability)
-    probability: Mapped[Optional[int]] = mapped_column(Integer)
+    probability: Mapped[int | None] = mapped_column(Integer)
 
     # Dates
-    expected_close_date: Mapped[Optional[date]] = mapped_column(Date)
-    actual_close_date: Mapped[Optional[date]] = mapped_column(Date)
+    expected_close_date: Mapped[date | None] = mapped_column(Date)
+    actual_close_date: Mapped[date | None] = mapped_column(Date)
 
     # Relationships
-    contact_id: Mapped[Optional[int]] = mapped_column(
+    contact_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("contacts.id", ondelete="SET NULL"),
         index=True,
     )
-    company_id: Mapped[Optional[int]] = mapped_column(
+    company_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("companies.id", ondelete="SET NULL"),
         index=True,
     )
 
     # Source tracking
-    source: Mapped[Optional[str]] = mapped_column(String(255))  # Lead #, Referral, etc.
+    source: Mapped[str | None] = mapped_column(String(255))  # Lead #, Referral, etc.
 
     # Owner
-    owner_id: Mapped[Optional[int]] = mapped_column(
+    owner_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
         index=True,
     )
 
     # Loss reason (if lost)
-    loss_reason: Mapped[Optional[str]] = mapped_column(String(255))
-    loss_notes: Mapped[Optional[str]] = mapped_column(Text)
+    loss_reason: Mapped[str | None] = mapped_column(String(255))
+    loss_notes: Mapped[str | None] = mapped_column(Text)
 
     # Relationships
     pipeline_stage: Mapped["PipelineStage"] = relationship(
@@ -102,7 +104,7 @@ class Opportunity(Base, AuditableMixin):
     )
 
     @property
-    def weighted_amount(self) -> Optional[float]:
+    def weighted_amount(self) -> float | None:
         """Calculate weighted amount based on probability."""
         if not self.amount:
             return None

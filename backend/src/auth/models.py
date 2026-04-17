@@ -1,11 +1,12 @@
 """User model for authentication."""
 
 from datetime import datetime
-from typing import Optional
-from sqlalchemy import String, Boolean, DateTime, Integer, Text, ForeignKey, func
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from src.database import Base
+
 from src.core.mixins.auditable import TimestampMixin
+from src.database import Base
 
 
 class User(Base, TimestampMixin):
@@ -15,11 +16,11 @@ class User(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     # Nullable for OAuth-only accounts (Google sign-in).
-    hashed_password: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    hashed_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
 
     # OAuth identity (currently only Google; nullable for password-only users).
-    google_sub: Mapped[Optional[str]] = mapped_column(
+    google_sub: Mapped[str | None] = mapped_column(
         String(255), unique=True, nullable=True, index=True
     )
     # "password" or "google". Lets the UI show provenance and blocks password
@@ -41,12 +42,12 @@ class User(Base, TimestampMixin):
     role: Mapped[str] = mapped_column(String(50), default="sales_rep", server_default="sales_rep")
 
     # Profile
-    phone: Mapped[Optional[str]] = mapped_column(String(50))
-    avatar_url: Mapped[Optional[str]] = mapped_column(String(500))
-    job_title: Mapped[Optional[str]] = mapped_column(String(100))
+    phone: Mapped[str | None] = mapped_column(String(50))
+    avatar_url: Mapped[str | None] = mapped_column(String(500))
+    job_title: Mapped[str | None] = mapped_column(String(100))
 
     # Login tracking
-    last_login: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    last_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Relationships
     user_roles: Mapped[list] = relationship("UserRole", backref="user", lazy="select")
@@ -58,13 +59,13 @@ class RejectedAccessEmail(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
-    rejected_by_id: Mapped[Optional[int]] = mapped_column(
+    rejected_by_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     rejected_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

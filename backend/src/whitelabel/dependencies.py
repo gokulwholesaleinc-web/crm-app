@@ -6,15 +6,15 @@ database lookup using the request-scoped DB session so that tests
 (which override get_db) work correctly.
 """
 
-from typing import Optional
+
+from cachetools import TTLCache
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from cachetools import TTLCache
 
-from src.database import get_db
 from src.auth.dependencies import get_current_active_user
 from src.auth.models import User
+from src.database import get_db
 from src.whitelabel.models import Tenant, TenantUser
 from src.whitelabel.service import TenantService
 
@@ -25,7 +25,7 @@ _tenant_id_cache: TTLCache = TTLCache(maxsize=100, ttl=300)
 async def get_current_tenant(
     request: Request,
     db: AsyncSession = Depends(get_db),
-) -> Optional[Tenant]:
+) -> Tenant | None:
     """Resolve tenant from request.state hints (set by middleware).
 
     Resolution order:
@@ -52,7 +52,7 @@ async def get_current_tenant(
 
 
 async def require_tenant(
-    tenant: Optional[Tenant] = Depends(get_current_tenant),
+    tenant: Tenant | None = Depends(get_current_tenant),
 ) -> Tenant:
     """Require a valid tenant context, raise 400 if missing."""
     if tenant is None:

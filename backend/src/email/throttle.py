@@ -2,7 +2,8 @@
 
 import math
 from datetime import date
-from sqlalchemy import select, func
+
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.email.models import EmailQueue, EmailSettings

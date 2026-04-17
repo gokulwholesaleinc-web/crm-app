@@ -1,13 +1,12 @@
 """Gmail connection service."""
 
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.integrations.gmail.models import GmailConnection, GmailSyncState
 from src.integrations.gmail import oauth as gmail_oauth
+from src.integrations.gmail.models import GmailConnection, GmailSyncState
 
 
 class GmailConnectionService:
@@ -15,13 +14,13 @@ class GmailConnectionService:
         self.db = db
         self._client_factory = client_factory
 
-    async def get_by_user(self, user_id: int) -> Optional[GmailConnection]:
+    async def get_by_user(self, user_id: int) -> GmailConnection | None:
         result = await self.db.execute(
             select(GmailConnection).where(GmailConnection.user_id == user_id)
         )
         return result.scalar_one_or_none()
 
-    async def get_sync_state(self, user_id: int) -> Optional[GmailSyncState]:
+    async def get_sync_state(self, user_id: int) -> GmailSyncState | None:
         result = await self.db.execute(
             select(GmailSyncState).where(GmailSyncState.user_id == user_id)
         )
@@ -39,7 +38,7 @@ class GmailConnectionService:
 
         expiry = None
         if "expires_in" in token_response:
-            expiry = datetime.now(timezone.utc) + timedelta(seconds=token_response["expires_in"])
+            expiry = datetime.now(UTC) + timedelta(seconds=token_response["expires_in"])
 
         if existing:
             existing.email = email
@@ -49,7 +48,7 @@ class GmailConnectionService:
             existing.token_expiry = expiry
             existing.scopes = gmail_oauth.CANONICAL_SCOPES
             existing.revoked_at = None
-            existing.updated_at = datetime.now(timezone.utc)
+            existing.updated_at = datetime.now(UTC)
             await self.db.flush()
             conn = existing
         else:
@@ -95,12 +94,12 @@ class GmailConnectionService:
             profile = await client.get_profile()
 
         sync_state.last_history_id = str(profile["historyId"])
-        sync_state.last_synced_at = datetime.now(timezone.utc)
+        sync_state.last_synced_at = datetime.now(UTC)
         sync_state.failure_count = 0
         sync_state.last_error = None
         await self.db.flush()
 
-    async def mark_revoked(self, user_id: int) -> Optional[GmailConnection]:
+    async def mark_revoked(self, user_id: int) -> GmailConnection | None:
         conn = await self.get_by_user(user_id)
         if not conn:
             return None
@@ -108,9 +107,9 @@ class GmailConnectionService:
         token = conn.refresh_token or conn.access_token
         if token:
             await gmail_oauth.revoke_token(token, self._client_factory)
-        conn.revoked_at = datetime.now(timezone.utc)
+        conn.revoked_at = datetime.now(UTC)
         conn.access_token = ""
         conn.refresh_token = None
-        conn.updated_at = datetime.now(timezone.utc)
+        conn.updated_at = datetime.now(UTC)
         await self.db.flush()
         return conn

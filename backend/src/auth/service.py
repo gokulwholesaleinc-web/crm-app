@@ -1,11 +1,12 @@
 """Authentication service layer."""
 
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
+
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.auth.models import User, RejectedAccessEmail
+
+from src.auth.models import RejectedAccessEmail, User
 from src.auth.schemas import UserUpdate
 
 
@@ -19,15 +20,15 @@ class AuthService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_user_by_email(self, email: str) -> Optional[User]:
+    async def get_user_by_email(self, email: str) -> User | None:
         result = await self.db.execute(select(User).where(User.email == email))
         return result.scalar_one_or_none()
 
-    async def get_user_by_id(self, user_id: int) -> Optional[User]:
+    async def get_user_by_id(self, user_id: int) -> User | None:
         result = await self.db.execute(select(User).where(User.id == user_id))
         return result.scalar_one_or_none()
 
-    async def get_user_by_google_sub(self, google_sub: str) -> Optional[User]:
+    async def get_user_by_google_sub(self, google_sub: str) -> User | None:
         result = await self.db.execute(select(User).where(User.google_sub == google_sub))
         return result.scalar_one_or_none()
 
@@ -43,7 +44,7 @@ class AuthService:
         google_sub: str,
         email: str,
         full_name: str,
-        avatar_url: Optional[str] = None,
+        avatar_url: str | None = None,
     ) -> User:
         """Find or create a user from a verified Google profile.
 
@@ -63,7 +64,7 @@ class AuthService:
 
         existing = await self.get_user_by_google_sub(google_sub)
         if existing:
-            existing.last_login = datetime.now(timezone.utc)
+            existing.last_login = datetime.now(UTC)
             if avatar_url and not existing.avatar_url:
                 existing.avatar_url = avatar_url
             await self.db.flush()
@@ -84,7 +85,7 @@ class AuthService:
             google_sub=google_sub,
             auth_provider="google",
             avatar_url=avatar_url,
-            last_login=datetime.now(timezone.utc),
+            last_login=datetime.now(UTC),
             is_active=True,
             is_approved=False,
         )
@@ -116,11 +117,11 @@ class AuthService:
         user: User,
         *,
         google_sub: str,
-        avatar_url: Optional[str] = None,
+        avatar_url: str | None = None,
     ) -> User:
         """Attach a google_sub to an existing user row."""
         user.google_sub = google_sub
-        user.last_login = datetime.now(timezone.utc)
+        user.last_login = datetime.now(UTC)
         if not user.hashed_password:
             user.auth_provider = "google"
         if avatar_url and not user.avatar_url:

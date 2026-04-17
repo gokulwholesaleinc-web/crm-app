@@ -1,29 +1,28 @@
 """Pydantic schemas for proposals."""
 
 from datetime import date, datetime
-from typing import Optional, List
-from pydantic import BaseModel, ConfigDict
 
+from pydantic import BaseModel, ConfigDict
 
 # Proposal Schemas
 
 class ProposalBase(BaseModel):
     title: str
-    content: Optional[str] = None
-    opportunity_id: Optional[int] = None
-    contact_id: Optional[int] = None
-    company_id: Optional[int] = None
-    quote_id: Optional[int] = None
+    content: str | None = None
+    opportunity_id: int | None = None
+    contact_id: int | None = None
+    company_id: int | None = None
+    quote_id: int | None = None
     status: str = "draft"
-    cover_letter: Optional[str] = None
-    executive_summary: Optional[str] = None
-    scope_of_work: Optional[str] = None
-    pricing_section: Optional[str] = None
-    timeline: Optional[str] = None
-    terms: Optional[str] = None
-    valid_until: Optional[date] = None
-    designated_signer_email: Optional[str] = None
-    owner_id: Optional[int] = None
+    cover_letter: str | None = None
+    executive_summary: str | None = None
+    scope_of_work: str | None = None
+    pricing_section: str | None = None
+    timeline: str | None = None
+    terms: str | None = None
+    valid_until: date | None = None
+    designated_signer_email: str | None = None
+    owner_id: int | None = None
 
 
 class ProposalCreate(ProposalBase):
@@ -31,21 +30,21 @@ class ProposalCreate(ProposalBase):
 
 
 class ProposalUpdate(BaseModel):
-    title: Optional[str] = None
-    content: Optional[str] = None
-    opportunity_id: Optional[int] = None
-    contact_id: Optional[int] = None
-    company_id: Optional[int] = None
-    quote_id: Optional[int] = None
-    cover_letter: Optional[str] = None
-    executive_summary: Optional[str] = None
-    scope_of_work: Optional[str] = None
-    pricing_section: Optional[str] = None
-    timeline: Optional[str] = None
-    terms: Optional[str] = None
-    valid_until: Optional[date] = None
-    designated_signer_email: Optional[str] = None
-    owner_id: Optional[int] = None
+    title: str | None = None
+    content: str | None = None
+    opportunity_id: int | None = None
+    contact_id: int | None = None
+    company_id: int | None = None
+    quote_id: int | None = None
+    cover_letter: str | None = None
+    executive_summary: str | None = None
+    scope_of_work: str | None = None
+    pricing_section: str | None = None
+    timeline: str | None = None
+    terms: str | None = None
+    valid_until: date | None = None
+    designated_signer_email: str | None = None
+    owner_id: int | None = None
 
 
 class ProposalAcceptRequest(BaseModel):
@@ -55,18 +54,18 @@ class ProposalAcceptRequest(BaseModel):
 
 
 class ProposalRejectRequest(BaseModel):
-    reason: Optional[str] = None
+    reason: str | None = None
 
 
-from src.core.schemas import ContactBrief, CompanyBrief, OpportunityBrief, QuoteBrief  # noqa: E402
+from src.core.schemas import CompanyBrief, ContactBrief, OpportunityBrief, QuoteBrief  # noqa: E402
 
 
 class ProposalViewResponse(BaseModel):
     id: int
     proposal_id: int
     viewed_at: datetime
-    ip_address: Optional[str] = None
-    user_agent: Optional[str] = None
+    ip_address: str | None = None
+    user_agent: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -75,29 +74,29 @@ class ProposalResponse(ProposalBase):
     id: int
     proposal_number: str
     view_count: int
-    last_viewed_at: Optional[datetime] = None
-    sent_at: Optional[datetime] = None
-    viewed_at: Optional[datetime] = None
-    accepted_at: Optional[datetime] = None
-    rejected_at: Optional[datetime] = None
-    signer_name: Optional[str] = None
-    signer_email: Optional[str] = None
-    signer_ip: Optional[str] = None
-    signer_user_agent: Optional[str] = None
-    signed_at: Optional[datetime] = None
-    rejection_reason: Optional[str] = None
+    last_viewed_at: datetime | None = None
+    sent_at: datetime | None = None
+    viewed_at: datetime | None = None
+    accepted_at: datetime | None = None
+    rejected_at: datetime | None = None
+    signer_name: str | None = None
+    signer_email: str | None = None
+    signer_ip: str | None = None
+    signer_user_agent: str | None = None
+    signed_at: datetime | None = None
+    rejection_reason: str | None = None
     created_at: datetime
     updated_at: datetime
-    contact: Optional[ContactBrief] = None
-    company: Optional[CompanyBrief] = None
-    opportunity: Optional[OpportunityBrief] = None
-    quote: Optional[QuoteBrief] = None
+    contact: ContactBrief | None = None
+    company: CompanyBrief | None = None
+    opportunity: OpportunityBrief | None = None
+    quote: QuoteBrief | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class ProposalListResponse(BaseModel):
-    items: List[ProposalResponse]
+    items: list[ProposalResponse]
     total: int
     page: int
     page_size: int
@@ -106,30 +105,30 @@ class ProposalListResponse(BaseModel):
 
 class ProposalBranding(BaseModel):
     """Tenant branding data for public proposal view."""
-    company_name: Optional[str] = None
-    logo_url: Optional[str] = None
+    company_name: str | None = None
+    logo_url: str | None = None
     primary_color: str = "#6366f1"
     secondary_color: str = "#8b5cf6"
     accent_color: str = "#22c55e"
-    footer_text: Optional[str] = None
+    footer_text: str | None = None
 
 
 class ProposalPublicResponse(BaseModel):
     """Public view of a proposal (no auth required)."""
     proposal_number: str
     title: str
-    content: Optional[str] = None
-    cover_letter: Optional[str] = None
-    executive_summary: Optional[str] = None
-    scope_of_work: Optional[str] = None
-    pricing_section: Optional[str] = None
-    timeline: Optional[str] = None
-    terms: Optional[str] = None
-    valid_until: Optional[date] = None
+    content: str | None = None
+    cover_letter: str | None = None
+    executive_summary: str | None = None
+    scope_of_work: str | None = None
+    pricing_section: str | None = None
+    timeline: str | None = None
+    terms: str | None = None
+    valid_until: date | None = None
     status: str
-    company: Optional[CompanyBrief] = None
-    contact: Optional[ContactBrief] = None
-    branding: Optional[ProposalBranding] = None
+    company: CompanyBrief | None = None
+    contact: ContactBrief | None = None
+    branding: ProposalBranding | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -150,30 +149,30 @@ class AIGenerateRequest(BaseModel):
 class ProposalTemplateCreate(BaseModel):
     name: str
     body: str
-    description: Optional[str] = None
-    legal_terms: Optional[str] = None
-    category: Optional[str] = None
+    description: str | None = None
+    legal_terms: str | None = None
+    category: str | None = None
     is_default: bool = False
 
 
 class ProposalTemplateUpdate(BaseModel):
-    name: Optional[str] = None
-    body: Optional[str] = None
-    description: Optional[str] = None
-    legal_terms: Optional[str] = None
-    category: Optional[str] = None
-    is_default: Optional[bool] = None
+    name: str | None = None
+    body: str | None = None
+    description: str | None = None
+    legal_terms: str | None = None
+    category: str | None = None
+    is_default: bool | None = None
 
 
 class ProposalTemplateResponse(BaseModel):
     id: int
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     body: str
-    legal_terms: Optional[str] = None
-    category: Optional[str] = None
+    legal_terms: str | None = None
+    category: str | None = None
     is_default: bool
-    owner_id: Optional[int] = None
+    owner_id: int | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -183,5 +182,5 @@ class ProposalTemplateResponse(BaseModel):
 class CreateFromTemplateRequest(BaseModel):
     template_id: int
     contact_id: int
-    company_id: Optional[int] = None
-    custom_variables: Optional[dict] = None
+    company_id: int | None = None
+    custom_variables: dict | None = None

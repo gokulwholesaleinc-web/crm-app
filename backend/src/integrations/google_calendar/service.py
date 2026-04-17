@@ -7,18 +7,18 @@ Requires GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in env.
 """
 
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Optional, Dict, Any, List
+from datetime import UTC, datetime, timedelta
+from typing import Any
 from urllib.parse import urlencode
 
 import httpx
-from sqlalchemy import select, func, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.activities.models import Activity
 from src.config import settings
 from src.core.constants import ENTITY_TYPE_USERS
-from src.integrations.google_calendar.models import GoogleCalendarCredential, CalendarSyncEvent
-from src.activities.models import Activity
+from src.integrations.google_calendar.models import CalendarSyncEvent, GoogleCalendarCredential
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ class GoogleCalendarService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    def get_authorization_url(self, redirect_uri: str, state: Optional[str] = None, login_hint: Optional[str] = None) -> str:
+    def get_authorization_url(self, redirect_uri: str, state: str | None = None, login_hint: str | None = None) -> str:
         """Build the Google OAuth2 authorization URL."""
         params = {
             "client_id": getattr(settings, "GOOGLE_CLIENT_ID", ""),
@@ -94,11 +94,11 @@ class GoogleCalendarService:
         if "refresh_token" in token_data:
             credential.refresh_token = token_data["refresh_token"]
         if "expires_in" in token_data:
-            credential.token_expiry = datetime.now(timezone.utc) + timedelta(seconds=token_data["expires_in"])
+            credential.token_expiry = datetime.now(UTC) + timedelta(seconds=token_data["expires_in"])
         await self.db.flush()
         return credential
 
-    async def get_credential(self, user_id: int) -> Optional[GoogleCalendarCredential]:
+    async def get_credential(self, user_id: int) -> GoogleCalendarCredential | None:
         """Get the stored Google Calendar credential for a user."""
         result = await self.db.execute(
             select(GoogleCalendarCredential).where(
@@ -116,7 +116,7 @@ class GoogleCalendarService:
         await self.db.flush()
         return True
 
-    async def get_sync_status(self, user_id: int) -> Dict[str, Any]:
+    async def get_sync_status(self, user_id: int) -> dict[str, Any]:
         credential = await self.get_credential(user_id)
         count_result = await self.db.execute(
             select(func.count()).select_from(
@@ -134,7 +134,7 @@ class GoogleCalendarService:
 
     async def _get_valid_token(self, credential: GoogleCalendarCredential) -> str:
         """Get a valid access token, refreshing if expired."""
-        if credential.token_expiry and credential.token_expiry <= datetime.now(timezone.utc):
+        if credential.token_expiry and credential.token_expiry <= datetime.now(UTC):
             credential = await self.refresh_access_token(credential)
         return credential.access_token
 
@@ -142,7 +142,7 @@ class GoogleCalendarService:
         self,
         user_id: int,
         activity_id: int,
-    ) -> Optional[CalendarSyncEvent]:
+    ) -> CalendarSyncEvent | None:
         """Create a Google Calendar event from a CRM activity."""
         credential = await self.get_credential(user_id)
         if not credential or not credential.is_active:
@@ -178,7 +178,7 @@ class GoogleCalendarService:
         await self.db.flush()
         return sync_event
 
-    async def sync_from_google(self, user_id: int) -> List[Dict[str, Any]]:
+    async def sync_from_google(self, user_id: int) -> list[dict[str, Any]]:
         """Pull upcoming events from Google Calendar into CRM activities."""
         has_lock = False
         try:
@@ -202,18 +202,18 @@ class GoogleCalendarService:
                     {"ns": CALENDAR_SYNC_LOCK_NAMESPACE, "uid": user_id},
                 )
 
-    async def _sync_from_google_locked(self, user_id: int) -> List[Dict[str, Any]]:
+    async def _sync_from_google_locked(self, user_id: int) -> list[dict[str, Any]]:
         credential = await self.get_credential(user_id)
         if not credential or not credential.is_active:
             return []
 
         token = await self._get_valid_token(credential)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         time_min_iso = now.isoformat()
         time_max_iso = (now + timedelta(days=CALENDAR_SYNC_HORIZON_DAYS)).isoformat()
 
         created = []
-        page_token: Optional[str] = None
+        page_token: str | None = None
 
         async with httpx.AsyncClient() as client:
             while True:
@@ -269,7 +269,7 @@ class GoogleCalendarService:
                 if not page_token:
                     break
 
-        credential.last_synced_at = datetime.now(timezone.utc)
+        credential.last_synced_at = datetime.now(UTC)
         await self.db.commit()
         return created
 
@@ -278,7 +278,7 @@ class GoogleCalendarService:
         existing = await self.get_credential(user_id)
         expiry = None
         if "expires_in" in token_data:
-            expiry = datetime.now(timezone.utc) + timedelta(seconds=token_data["expires_in"])
+            expiry = datetime.now(UTC) + timedelta(seconds=token_data["expires_in"])
 
         if existing:
             existing.access_token = token_data["access_token"]
@@ -309,7 +309,7 @@ class GoogleCalendarService:
             event["start"] = {"date": str(activity.due_date)}
             event["end"] = {"date": str(activity.due_date)}
         else:
-            now = datetime.now(timezone.utc).isoformat()
+            now = datetime.now(UTC).isoformat()
             event["start"] = {"dateTime": now}
             event["end"] = {"dateTime": now}
         return event

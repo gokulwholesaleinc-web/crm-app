@@ -1,20 +1,20 @@
 """Comment service layer."""
 
 import re
-from typing import Optional, List, Tuple
-from sqlalchemy import select, func
+
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from src.comments.models import Comment
-from src.auth.models import User
-from src.core.constants import DEFAULT_PAGE_SIZE
 
+from src.auth.models import User
+from src.comments.models import Comment
+from src.core.constants import DEFAULT_PAGE_SIZE
 
 # Regex to extract @mentions from comment content
 MENTION_PATTERN = re.compile(r"@(\w+(?:\.\w+)*)")
 
 
-def parse_mentions(content: str) -> List[str]:
+def parse_mentions(content: str) -> list[str]:
     """Extract @mentioned usernames from comment content."""
     return MENTION_PATTERN.findall(content)
 
@@ -25,7 +25,7 @@ class CommentService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_by_id(self, comment_id: int) -> Optional[Comment]:
+    async def get_by_id(self, comment_id: int) -> Comment | None:
         result = await self.db.execute(
             select(Comment).where(Comment.id == comment_id)
         )
@@ -37,7 +37,7 @@ class CommentService:
         entity_id: int,
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
-    ) -> Tuple[List[dict], int]:
+    ) -> tuple[list[dict], int]:
         """Get paginated list of top-level comments with author info and replies."""
         base_filter = [
             Comment.entity_type == entity_type,
@@ -72,7 +72,7 @@ class CommentService:
 
         return items, total
 
-    async def _build_comment_dict(self, comment: Comment, author_name: Optional[str] = None) -> dict:
+    async def _build_comment_dict(self, comment: Comment, author_name: str | None = None) -> dict:
         """Build a comment response dict with nested replies."""
         mentions = parse_mentions(comment.content)
 
@@ -107,7 +107,7 @@ class CommentService:
         }
 
     async def create(self, content: str, entity_type: str, entity_id: int,
-                     user_id: int, parent_id: Optional[int] = None,
+                     user_id: int, parent_id: int | None = None,
                      is_internal: bool = False) -> dict:
         """Create a new comment."""
         comment = Comment(

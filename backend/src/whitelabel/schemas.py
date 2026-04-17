@@ -1,9 +1,8 @@
 """Pydantic schemas for white-label system."""
 
 from datetime import datetime
-from typing import Optional
-from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator
 
+from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator
 
 # Human-readable labels for the URL fields validated below. Keeps error
 # messages consistent across :class:`TenantSettingsBase` and
@@ -16,7 +15,7 @@ _URL_FIELD_LABELS = {
 }
 
 
-def _validate_url_field(v: Optional[str], info: ValidationInfo) -> Optional[str]:
+def _validate_url_field(v: str | None, info: ValidationInfo) -> str | None:
     """Validate a URL field: strip whitespace, enforce http(s) scheme, or allow None to clear.
 
     Case-insensitive scheme check blocks mixed-case bypasses like
@@ -32,19 +31,19 @@ def _validate_url_field(v: Optional[str], info: ValidationInfo) -> Optional[str]
 
 
 class TenantSettingsBase(BaseModel):
-    company_name: Optional[str] = None
-    logo_url: Optional[str] = None
-    favicon_url: Optional[str] = None
+    company_name: str | None = None
+    logo_url: str | None = None
+    favicon_url: str | None = None
     primary_color: str = "#6366f1"
     secondary_color: str = "#8b5cf6"
     accent_color: str = "#22c55e"
-    email_from_name: Optional[str] = None
-    email_from_address: Optional[str] = None
-    feature_flags: Optional[str] = None
-    custom_css: Optional[str] = None
-    footer_text: Optional[str] = None
-    privacy_policy_url: Optional[str] = None
-    terms_of_service_url: Optional[str] = None
+    email_from_name: str | None = None
+    email_from_address: str | None = None
+    feature_flags: str | None = None
+    custom_css: str | None = None
+    footer_text: str | None = None
+    privacy_policy_url: str | None = None
+    terms_of_service_url: str | None = None
     default_language: str = "en"
     default_timezone: str = "UTC"
     default_currency: str = "USD"
@@ -61,23 +60,23 @@ class TenantSettingsCreate(TenantSettingsBase):
 
 
 class TenantSettingsUpdate(BaseModel):
-    company_name: Optional[str] = None
-    logo_url: Optional[str] = None
-    favicon_url: Optional[str] = None
-    primary_color: Optional[str] = None
-    secondary_color: Optional[str] = None
-    accent_color: Optional[str] = None
-    email_from_name: Optional[str] = None
-    email_from_address: Optional[str] = None
-    feature_flags: Optional[str] = None
-    custom_css: Optional[str] = None
-    footer_text: Optional[str] = None
-    privacy_policy_url: Optional[str] = None
-    terms_of_service_url: Optional[str] = None
-    default_language: Optional[str] = None
-    default_timezone: Optional[str] = None
-    default_currency: Optional[str] = None
-    date_format: Optional[str] = None
+    company_name: str | None = None
+    logo_url: str | None = None
+    favicon_url: str | None = None
+    primary_color: str | None = None
+    secondary_color: str | None = None
+    accent_color: str | None = None
+    email_from_name: str | None = None
+    email_from_address: str | None = None
+    feature_flags: str | None = None
+    custom_css: str | None = None
+    footer_text: str | None = None
+    privacy_policy_url: str | None = None
+    terms_of_service_url: str | None = None
+    default_language: str | None = None
+    default_timezone: str | None = None
+    default_currency: str | None = None
+    date_format: str | None = None
 
     @field_validator(*_URL_FIELD_LABELS.keys(), mode='before')
     @classmethod
@@ -95,30 +94,30 @@ class TenantSettingsResponse(TenantSettingsBase):
 class TenantBase(BaseModel):
     name: str
     slug: str
-    domain: Optional[str] = None
+    domain: str | None = None
     plan: str = "starter"
     max_users: int = 5
-    max_contacts: Optional[int] = None
+    max_contacts: int | None = None
 
 
 class TenantCreate(TenantBase):
-    settings: Optional[TenantSettingsCreate] = None
+    settings: TenantSettingsCreate | None = None
 
 
 class TenantUpdate(BaseModel):
-    name: Optional[str] = None
-    domain: Optional[str] = None
-    is_active: Optional[bool] = None
-    plan: Optional[str] = None
-    max_users: Optional[int] = None
-    max_contacts: Optional[int] = None
+    name: str | None = None
+    domain: str | None = None
+    is_active: bool | None = None
+    plan: str | None = None
+    max_users: int | None = None
+    max_contacts: int | None = None
 
 
 class TenantResponse(TenantBase):
     id: int
     is_active: bool
     created_at: datetime
-    settings: Optional[TenantSettingsResponse] = None
+    settings: TenantSettingsResponse | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -135,8 +134,8 @@ class TenantUserCreate(TenantUserBase):
 
 
 class TenantUserUpdate(BaseModel):
-    role: Optional[str] = None
-    is_primary: Optional[bool] = None
+    role: str | None = None
+    is_primary: bool | None = None
 
 
 class TenantUserResponse(TenantUserBase):
@@ -149,15 +148,15 @@ class TenantUserResponse(TenantUserBase):
 class PublicTenantConfig(BaseModel):
     """Public configuration exposed to frontend."""
     tenant_slug: str
-    company_name: Optional[str]
-    logo_url: Optional[str]
-    favicon_url: Optional[str]
+    company_name: str | None
+    logo_url: str | None
+    favicon_url: str | None
     primary_color: str
     secondary_color: str
     accent_color: str
-    footer_text: Optional[str]
-    privacy_policy_url: Optional[str]
-    terms_of_service_url: Optional[str]
+    footer_text: str | None
+    privacy_policy_url: str | None
+    terms_of_service_url: str | None
     default_language: str
     date_format: str
-    custom_css: Optional[str]
+    custom_css: str | None

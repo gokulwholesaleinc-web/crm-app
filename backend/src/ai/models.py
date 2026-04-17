@@ -1,10 +1,11 @@
 """AI-related models for RAG and conversations."""
 
 from datetime import datetime
-from typing import Optional
-from sqlalchemy import String, Integer, Float, ForeignKey, Text, DateTime, Boolean, func, JSON
-from sqlalchemy.orm import Mapped, mapped_column
+
 from pgvector.sqlalchemy import Vector
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy.orm import Mapped, mapped_column
+
 from src.database import Base
 
 
@@ -58,7 +59,7 @@ class AIConversation(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
 
     # Context (optional - for tracking what data was referenced)
-    context_entities: Mapped[Optional[str]] = mapped_column(Text)  # JSON array of entity refs
+    context_entities: Mapped[str | None] = mapped_column(Text)  # JSON array of entity refs
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
@@ -67,7 +68,7 @@ class AIConversation(Base):
     )
 
     # Session tracking
-    session_id: Mapped[Optional[str]] = mapped_column(String(100), index=True)
+    session_id: Mapped[str | None] = mapped_column(String(100), index=True)
 
 
 class AIFeedback(Base):
@@ -82,14 +83,14 @@ class AIFeedback(Base):
         nullable=False,
     )
 
-    session_id: Mapped[Optional[str]] = mapped_column(String(100), index=True)
+    session_id: Mapped[str | None] = mapped_column(String(100), index=True)
     query: Mapped[str] = mapped_column(Text, nullable=False)
     response: Mapped[str] = mapped_column(Text, nullable=False)
-    retrieved_context_ids: Mapped[Optional[dict]] = mapped_column(JSON)
+    retrieved_context_ids: Mapped[dict | None] = mapped_column(JSON)
 
     # Feedback: positive, negative, correction
     feedback: Mapped[str] = mapped_column(String(20), nullable=False)
-    correction_text: Mapped[Optional[str]] = mapped_column(Text)
+    correction_text: Mapped[str | None] = mapped_column(Text)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -139,7 +140,7 @@ class AILearning(Base):
     value: Mapped[str] = mapped_column(Text, nullable=False)
     confidence: Mapped[float] = mapped_column(Float, default=1.0)
     times_reinforced: Mapped[int] = mapped_column(Integer, default=1)
-    last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -162,9 +163,9 @@ class AIInteractionLog(Base):
         nullable=False,
     )
     query: Mapped[str] = mapped_column(Text, nullable=False)
-    tool_calls: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
-    response_quality: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    correction_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    tool_calls: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    response_quality: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    correction_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -183,14 +184,14 @@ class AIActionLog(Base):
         nullable=False,
     )
 
-    session_id: Mapped[Optional[str]] = mapped_column(String(100), index=True)
+    session_id: Mapped[str | None] = mapped_column(String(100), index=True)
     function_name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    arguments: Mapped[Optional[dict]] = mapped_column(JSON)
-    result: Mapped[Optional[dict]] = mapped_column(JSON)
+    arguments: Mapped[dict | None] = mapped_column(JSON)
+    result: Mapped[dict | None] = mapped_column(JSON)
     risk_level: Mapped[str] = mapped_column(String(20), nullable=False)
     was_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
-    model_used: Mapped[Optional[str]] = mapped_column(String(50))
-    tokens_used: Mapped[Optional[int]] = mapped_column(Integer)
+    model_used: Mapped[str | None] = mapped_column(String(50))
+    tokens_used: Mapped[int | None] = mapped_column(Integer)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -211,11 +212,11 @@ class AIUserPreferences(Base):
         unique=True,
     )
 
-    preferred_communication_style: Mapped[Optional[str]] = mapped_column(
+    preferred_communication_style: Mapped[str | None] = mapped_column(
         String(50), default="professional"
     )
-    priority_entities: Mapped[Optional[dict]] = mapped_column(JSON)
-    custom_instructions: Mapped[Optional[str]] = mapped_column(Text)
+    priority_entities: Mapped[dict | None] = mapped_column(JSON)
+    custom_instructions: Mapped[str | None] = mapped_column(Text)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

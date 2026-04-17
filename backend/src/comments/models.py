@@ -1,10 +1,12 @@
 """Comment model for team collaboration."""
 
-from typing import Optional, List
-from sqlalchemy import String, Integer, ForeignKey, Text, Boolean, Index
+from typing import Optional
+
+from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from src.database import Base
+
 from src.core.mixins.auditable import TimestampMixin
+from src.database import Base
 
 
 class Comment(Base, TimestampMixin):
@@ -19,14 +21,14 @@ class Comment(Base, TimestampMixin):
     entity_id: Mapped[int] = mapped_column(Integer, nullable=False)
 
     # Author
-    user_id: Mapped[Optional[int]] = mapped_column(
+    user_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
 
     # Threading - parent_id for replies
-    parent_id: Mapped[Optional[int]] = mapped_column(
+    parent_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("comments.id", ondelete="CASCADE"),
         nullable=True,
@@ -36,7 +38,7 @@ class Comment(Base, TimestampMixin):
     is_internal: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Self-referential relationship for threading
-    replies: Mapped[List["Comment"]] = relationship(
+    replies: Mapped[list["Comment"]] = relationship(
         "Comment",
         back_populates="parent",
         lazy="selectin",

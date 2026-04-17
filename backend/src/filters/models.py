@@ -1,8 +1,10 @@
 """SavedFilter model for persisting reusable filter presets."""
 
 from datetime import datetime
-from sqlalchemy import String, Integer, ForeignKey, Text, Boolean, DateTime, func
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
+
 from src.database import Base
 
 

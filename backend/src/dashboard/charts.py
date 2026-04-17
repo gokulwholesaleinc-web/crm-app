@@ -1,13 +1,15 @@
 """Dashboard chart data generators."""
 
-from datetime import datetime, timedelta, date
-from typing import Dict, Any, Optional
-from sqlalchemy import select, func, and_
+from datetime import date, datetime, timedelta
+from typing import Any
+
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.activities.models import Activity
 from src.core.constants import SECONDS_PER_DAY
 from src.leads.models import Lead
 from src.opportunities.models import Opportunity, PipelineStage
-from src.activities.models import Activity
 
 
 class ChartDataGenerator:
@@ -16,9 +18,9 @@ class ChartDataGenerator:
     def __init__(
         self,
         db: AsyncSession,
-        user_id: Optional[int] = None,
-        date_from: Optional[date] = None,
-        date_to: Optional[date] = None,
+        user_id: int | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
     ):
         self.db = db
         self.user_id = user_id
@@ -33,7 +35,7 @@ class ChartDataGenerator:
             filters.append(date_column <= datetime.combine(self.date_to, datetime.max.time()))
         return filters
 
-    async def get_pipeline_funnel(self) -> Dict[str, Any]:
+    async def get_pipeline_funnel(self) -> dict[str, Any]:
         join_conditions = [Opportunity.pipeline_stage_id == PipelineStage.id]
         if self.user_id:
             join_conditions.append(Opportunity.owner_id == self.user_id)
@@ -80,7 +82,7 @@ class ChartDataGenerator:
             "data": data,
         }
 
-    async def get_leads_by_status(self) -> Dict[str, Any]:
+    async def get_leads_by_status(self) -> dict[str, Any]:
         filters = []
         if self.user_id:
             filters.append(Lead.owner_id == self.user_id)
@@ -117,7 +119,7 @@ class ChartDataGenerator:
             "data": data,
         }
 
-    async def get_leads_by_source(self) -> Dict[str, Any]:
+    async def get_leads_by_source(self) -> dict[str, Any]:
         from src.leads.models import LeadSource
 
         join_conditions = [Lead.source_id == LeadSource.id]
@@ -160,7 +162,7 @@ class ChartDataGenerator:
             "data": data,
         }
 
-    async def get_revenue_trend(self, months: int = 6) -> Dict[str, Any]:
+    async def get_revenue_trend(self, months: int = 6) -> dict[str, Any]:
         """Get monthly revenue trend (won opportunities)."""
         today = date.today()
         start_date = date(today.year, today.month, 1) - timedelta(days=30 * (months - 1))
@@ -199,7 +201,7 @@ class ChartDataGenerator:
             "data": data,
         }
 
-    async def get_activities_by_type(self, days: int = 30) -> Dict[str, Any]:
+    async def get_activities_by_type(self, days: int = 30) -> dict[str, Any]:
         """Get activities grouped by type for recent period."""
         start_date = datetime.now() - timedelta(days=days)
 
@@ -239,7 +241,7 @@ class ChartDataGenerator:
             "data": data,
         }
 
-    async def get_new_leads_trend(self, weeks: int = 8) -> Dict[str, Any]:
+    async def get_new_leads_trend(self, weeks: int = 8) -> dict[str, Any]:
         start_date = datetime.now() - timedelta(weeks=weeks)
 
         filters = [Lead.created_at >= start_date]
@@ -272,7 +274,7 @@ class ChartDataGenerator:
             "data": data,
         }
 
-    async def get_sales_funnel(self) -> Dict[str, Any]:
+    async def get_sales_funnel(self) -> dict[str, Any]:
         """Get sales funnel data: leads by status with conversion rates and avg time."""
         # Define funnel stages in order
         funnel_stages = ["new", "contacted", "qualified", "converted"]
@@ -347,7 +349,7 @@ class ChartDataGenerator:
             "avg_days_in_stage": avg_days,
         }
 
-    async def get_conversion_rates(self) -> Dict[str, Any]:
+    async def get_conversion_rates(self) -> dict[str, Any]:
         """Get conversion rates across different stages."""
         import asyncio
 

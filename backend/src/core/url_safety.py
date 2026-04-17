@@ -21,7 +21,7 @@ the resolved IP and pass it to the fetch layer — this module only answers
 import ipaddress
 import logging
 import socket
-from typing import Iterable, List, Optional
+from collections.abc import Iterable
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
@@ -51,7 +51,7 @@ def is_private_ip(ip_str: str) -> bool:
     )
 
 
-def _resolve_all_addresses(host: str) -> List[str]:
+def _resolve_all_addresses(host: str) -> list[str]:
     """Return every A/AAAA record for ``host``.
 
     ``getaddrinfo`` returns ``(family, type, proto, canonname, sockaddr)``
@@ -70,7 +70,7 @@ def validate_public_url(
     url: str,
     *,
     allowed_schemes: Iterable[str] = ("https",),
-    allowed_hostnames: Optional[Iterable[str]] = None,
+    allowed_hostnames: Iterable[str] | None = None,
 ) -> str:
     """Validate ``url`` as safe for server-side fetch.
 

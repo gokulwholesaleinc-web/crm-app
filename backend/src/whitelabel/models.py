@@ -1,10 +1,11 @@
 """White-label/multi-tenant models."""
 
-from typing import Optional
-from sqlalchemy import String, Integer, ForeignKey, Text, Boolean
+
+from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from src.database import Base
+
 from src.core.mixins.auditable import TimestampMixin
+from src.database import Base
 
 
 class Tenant(Base, TimestampMixin):
@@ -21,7 +22,7 @@ class Tenant(Base, TimestampMixin):
     # Identification
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
-    domain: Mapped[Optional[str]] = mapped_column(String(255), unique=True, index=True)
+    domain: Mapped[str | None] = mapped_column(String(255), unique=True, index=True)
 
     # Status
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -29,7 +30,7 @@ class Tenant(Base, TimestampMixin):
     # Subscription/Plan
     plan: Mapped[str] = mapped_column(String(50), default="starter")  # starter, professional, enterprise
     max_users: Mapped[int] = mapped_column(Integer, default=5)
-    max_contacts: Mapped[Optional[int]] = mapped_column(Integer)
+    max_contacts: Mapped[int | None] = mapped_column(Integer)
 
     # Relationships
     settings: Mapped["TenantSettings"] = relationship(
@@ -59,9 +60,9 @@ class TenantSettings(Base, TimestampMixin):
     )
 
     # Branding
-    company_name: Mapped[Optional[str]] = mapped_column(String(255))
-    logo_url: Mapped[Optional[str]] = mapped_column(String(500))
-    favicon_url: Mapped[Optional[str]] = mapped_column(String(500))
+    company_name: Mapped[str | None] = mapped_column(String(255))
+    logo_url: Mapped[str | None] = mapped_column(String(500))
+    favicon_url: Mapped[str | None] = mapped_column(String(500))
 
     # Theme colors
     primary_color: Mapped[str] = mapped_column(String(7), default="#6366f1")
@@ -69,19 +70,19 @@ class TenantSettings(Base, TimestampMixin):
     accent_color: Mapped[str] = mapped_column(String(7), default="#22c55e")
 
     # Email settings
-    email_from_name: Mapped[Optional[str]] = mapped_column(String(255))
-    email_from_address: Mapped[Optional[str]] = mapped_column(String(255))
+    email_from_name: Mapped[str | None] = mapped_column(String(255))
+    email_from_address: Mapped[str | None] = mapped_column(String(255))
 
     # Feature flags (JSON string)
-    feature_flags: Mapped[Optional[str]] = mapped_column(Text)  # {"ai_enabled": true, "campaigns": true}
+    feature_flags: Mapped[str | None] = mapped_column(Text)  # {"ai_enabled": true, "campaigns": true}
 
     # Custom CSS (for advanced customization)
-    custom_css: Mapped[Optional[str]] = mapped_column(Text)
+    custom_css: Mapped[str | None] = mapped_column(Text)
 
     # Footer/Legal
-    footer_text: Mapped[Optional[str]] = mapped_column(String(500))
-    privacy_policy_url: Mapped[Optional[str]] = mapped_column(String(500))
-    terms_of_service_url: Mapped[Optional[str]] = mapped_column(String(500))
+    footer_text: Mapped[str | None] = mapped_column(String(500))
+    privacy_policy_url: Mapped[str | None] = mapped_column(String(500))
+    terms_of_service_url: Mapped[str | None] = mapped_column(String(500))
 
     # Localization
     default_language: Mapped[str] = mapped_column(String(5), default="en")

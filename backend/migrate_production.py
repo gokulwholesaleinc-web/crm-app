@@ -6,9 +6,10 @@ Safe to run multiple times (idempotent).
 """
 
 import asyncio
-import asyncpg
 import os
-from typing import List, Tuple
+import sys
+
+import asyncpg
 
 # Admin emails from environment (comma-separated), default to admin@admin.com
 ADMIN_EMAILS = [
@@ -19,7 +20,7 @@ ADMIN_EMAILS = [
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 if not DATABASE_URL:
     print("❌ DATABASE_URL not set in environment")
-    exit(1)
+    sys.exit(1)
 
 # Convert from SQLAlchemy format to asyncpg format
 if DATABASE_URL.startswith("postgresql+asyncpg://"):

@@ -2,27 +2,27 @@
 
 import urllib.parse
 from datetime import datetime
-from typing import Literal, Optional, List
 from decimal import Decimal
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from typing import Literal
 
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # Stripe Customer Schemas
 
 class StripeCustomerCreate(BaseModel):
-    contact_id: Optional[int] = None
-    company_id: Optional[int] = None
-    email: Optional[str] = None
-    name: Optional[str] = None
+    contact_id: int | None = None
+    company_id: int | None = None
+    email: str | None = None
+    name: str | None = None
 
 
 class StripeCustomerResponse(BaseModel):
     id: int
-    contact_id: Optional[int] = None
-    company_id: Optional[int] = None
+    contact_id: int | None = None
+    company_id: int | None = None
     stripe_customer_id: str
-    email: Optional[str] = None
-    name: Optional[str] = None
+    email: str | None = None
+    name: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -30,7 +30,7 @@ class StripeCustomerResponse(BaseModel):
 
 
 class StripeCustomerListResponse(BaseModel):
-    items: List[StripeCustomerResponse]
+    items: list[StripeCustomerResponse]
     total: int
     page: int
     page_size: int
@@ -38,33 +38,33 @@ class StripeCustomerListResponse(BaseModel):
 
 
 class SyncCustomerRequest(BaseModel):
-    contact_id: Optional[int] = None
-    company_id: Optional[int] = None
+    contact_id: int | None = None
+    company_id: int | None = None
 
 
 # Product Schemas
 
 class ProductCreate(BaseModel):
     name: str
-    description: Optional[str] = None
-    stripe_product_id: Optional[str] = None
+    description: str | None = None
+    stripe_product_id: str | None = None
     is_active: bool = True
 
 
 class ProductUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    stripe_product_id: Optional[str] = None
-    is_active: Optional[bool] = None
+    name: str | None = None
+    description: str | None = None
+    stripe_product_id: str | None = None
+    is_active: bool | None = None
 
 
 class PriceResponse(BaseModel):
     id: int
     product_id: int
-    stripe_price_id: Optional[str] = None
+    stripe_price_id: str | None = None
     amount: Decimal
     currency: str
-    recurring_interval: Optional[str] = None
+    recurring_interval: str | None = None
     is_active: bool
     created_at: datetime
     updated_at: datetime
@@ -75,11 +75,11 @@ class PriceResponse(BaseModel):
 class ProductResponse(BaseModel):
     id: int
     name: str
-    description: Optional[str] = None
-    stripe_product_id: Optional[str] = None
+    description: str | None = None
+    stripe_product_id: str | None = None
     is_active: bool
-    owner_id: Optional[int] = None
-    prices: List[PriceResponse] = []
+    owner_id: int | None = None
+    prices: list[PriceResponse] = []
     created_at: datetime
     updated_at: datetime
 
@@ -87,7 +87,7 @@ class ProductResponse(BaseModel):
 
 
 class ProductListResponse(BaseModel):
-    items: List[ProductResponse]
+    items: list[ProductResponse]
     total: int
     page: int
     page_size: int
@@ -100,8 +100,8 @@ class PriceCreate(BaseModel):
     product_id: int
     amount: Decimal
     currency: str = "USD"
-    recurring_interval: Optional[str] = None
-    stripe_price_id: Optional[str] = None
+    recurring_interval: str | None = None
+    stripe_price_id: str | None = None
     is_active: bool = True
 
 
@@ -110,35 +110,35 @@ class PriceCreate(BaseModel):
 class PaymentBase(BaseModel):
     amount: Decimal
     currency: str = "USD"
-    customer_id: Optional[int] = None
-    opportunity_id: Optional[int] = None
-    quote_id: Optional[int] = None
+    customer_id: int | None = None
+    opportunity_id: int | None = None
+    quote_id: int | None = None
     status: str = "pending"
-    payment_method: Optional[str] = None
-    receipt_url: Optional[str] = None
-    owner_id: Optional[int] = None
+    payment_method: str | None = None
+    receipt_url: str | None = None
+    owner_id: int | None = None
 
 
 class PaymentCreate(PaymentBase):
-    stripe_payment_intent_id: Optional[str] = None
-    stripe_checkout_session_id: Optional[str] = None
-    stripe_invoice_id: Optional[str] = None
+    stripe_payment_intent_id: str | None = None
+    stripe_checkout_session_id: str | None = None
+    stripe_invoice_id: str | None = None
 
 
 class PaymentUpdate(BaseModel):
-    status: Optional[str] = None
-    payment_method: Optional[str] = None
-    receipt_url: Optional[str] = None
-    stripe_payment_intent_id: Optional[str] = None
-    stripe_checkout_session_id: Optional[str] = None
-    stripe_invoice_id: Optional[str] = None
+    status: str | None = None
+    payment_method: str | None = None
+    receipt_url: str | None = None
+    stripe_payment_intent_id: str | None = None
+    stripe_checkout_session_id: str | None = None
+    stripe_invoice_id: str | None = None
 
 
 class CustomerBrief(BaseModel):
     id: int
     stripe_customer_id: str
-    email: Optional[str] = None
-    name: Optional[str] = None
+    email: str | None = None
+    name: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -159,20 +159,20 @@ class QuoteBrief(BaseModel):
 
 class PaymentResponse(PaymentBase):
     id: int
-    stripe_payment_intent_id: Optional[str] = None
-    stripe_checkout_session_id: Optional[str] = None
-    stripe_invoice_id: Optional[str] = None
+    stripe_payment_intent_id: str | None = None
+    stripe_checkout_session_id: str | None = None
+    stripe_invoice_id: str | None = None
     created_at: datetime
     updated_at: datetime
-    customer: Optional[CustomerBrief] = None
-    opportunity: Optional[OpportunityBrief] = None
-    quote: Optional[QuoteBrief] = None
+    customer: CustomerBrief | None = None
+    opportunity: OpportunityBrief | None = None
+    quote: QuoteBrief | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class PaymentListResponse(BaseModel):
-    items: List[PaymentResponse]
+    items: list[PaymentResponse]
     total: int
     page: int
     page_size: int
@@ -185,22 +185,22 @@ class SubscriptionResponse(BaseModel):
     id: int
     stripe_subscription_id: str
     customer_id: int
-    price_id: Optional[int] = None
+    price_id: int | None = None
     status: str
-    current_period_start: Optional[datetime] = None
-    current_period_end: Optional[datetime] = None
+    current_period_start: datetime | None = None
+    current_period_end: datetime | None = None
     cancel_at_period_end: bool
-    owner_id: Optional[int] = None
+    owner_id: int | None = None
     created_at: datetime
     updated_at: datetime
-    customer: Optional[CustomerBrief] = None
-    price: Optional[PriceResponse] = None
+    customer: CustomerBrief | None = None
+    price: PriceResponse | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class SubscriptionListResponse(BaseModel):
-    items: List[SubscriptionResponse]
+    items: list[SubscriptionResponse]
     total: int
     page: int
     page_size: int
@@ -220,12 +220,12 @@ def _validate_url(v: str) -> str:
 
 
 class CreateCheckoutRequest(BaseModel):
-    quote_id: Optional[int] = None
-    amount: Optional[Decimal] = None
+    quote_id: int | None = None
+    amount: Decimal | None = None
     currency: str = "USD"
     success_url: str
     cancel_url: str
-    customer_id: Optional[int] = None
+    customer_id: int | None = None
 
     @field_validator("success_url", "cancel_url")
     @classmethod
@@ -241,9 +241,9 @@ class CreateCheckoutResponse(BaseModel):
 class CreatePaymentIntentRequest(BaseModel):
     amount: Decimal
     currency: str = "USD"
-    customer_id: Optional[int] = None
-    opportunity_id: Optional[int] = None
-    quote_id: Optional[int] = None
+    customer_id: int | None = None
+    opportunity_id: int | None = None
+    quote_id: int | None = None
 
 
 class CreatePaymentIntentResponse(BaseModel):
@@ -258,20 +258,20 @@ class CreateAndSendInvoiceRequest(BaseModel):
     currency: str = "USD"
     description: str = "Invoice"
     due_days: int = Field(default=30, ge=1, le=365)
-    quote_id: Optional[int] = None
-    payment_method_types: Optional[List[Literal["card", "us_bank_account"]]] = None
+    quote_id: int | None = None
+    payment_method_types: list[Literal["card", "us_bank_account"]] | None = None
 
 
 class CreateAndSendInvoiceResponse(BaseModel):
     invoice_id: str
     payment_id: int
     status: str
-    invoice_url: Optional[str] = None
+    invoice_url: str | None = None
 
 
 class CreateOnboardingLinkRequest(BaseModel):
-    contact_id: Optional[int] = None
-    company_id: Optional[int] = None
+    contact_id: int | None = None
+    company_id: int | None = None
     success_url: str
     cancel_url: str
 

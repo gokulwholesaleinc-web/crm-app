@@ -1,7 +1,7 @@
 """Pydantic schemas for attachments."""
 
 from datetime import datetime
-from typing import List
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -21,5 +21,5 @@ class AttachmentResponse(BaseModel):
 
 
 class AttachmentListResponse(BaseModel):
-    items: List[AttachmentResponse]
+    items: list[AttachmentResponse]
     total: int

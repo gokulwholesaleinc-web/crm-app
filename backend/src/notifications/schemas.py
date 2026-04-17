@@ -1,7 +1,7 @@
 """Notification response schemas."""
 
 from datetime import datetime
-from typing import Optional, List
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -14,15 +14,15 @@ class NotificationResponse(BaseModel):
     type: str
     title: str
     message: str
-    entity_type: Optional[str] = None
-    entity_id: Optional[int] = None
+    entity_type: str | None = None
+    entity_id: int | None = None
     is_read: bool
     created_at: datetime
 
 
 class NotificationListResponse(BaseModel):
     """Paginated list of notifications."""
-    items: List[NotificationResponse]
+    items: list[NotificationResponse]
     total: int
     page: int
     page_size: int

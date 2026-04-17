@@ -1,15 +1,17 @@
 """Authentication dependencies for FastAPI."""
 
 from typing import Annotated
+
 from cachetools import TTLCache
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import make_transient
-from src.database import get_db
+
 from src.auth.models import User
 from src.auth.security import decode_token
 from src.auth.service import AuthService
+from src.database import get_db
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/google/authorize")
 

@@ -1,8 +1,7 @@
 """Gmail history sync worker — polls Gmail API and writes EmailQueue / InboundEmail rows."""
 
 import logging
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,7 +25,7 @@ class GmailSyncWorker:
                 # First run: seed the cursor and return — no messages processed.
                 profile = await client.get_profile()
                 state.last_history_id = str(profile["historyId"])
-                state.last_synced_at = datetime.now(timezone.utc)
+                state.last_synced_at = datetime.now(UTC)
                 state.failure_count = 0
                 state.last_error = None
                 db.add(state)
@@ -55,7 +54,7 @@ class GmailSyncWorker:
                         )
 
             state.last_history_id = max_history_id
-            state.last_synced_at = datetime.now(timezone.utc)
+            state.last_synced_at = datetime.now(UTC)
             state.failure_count = 0
             state.last_error = None
             db.add(state)
@@ -142,9 +141,9 @@ async def _process_message(
         return
 
     from_addr = msg["from"]
-    received_at: Optional[datetime] = msg["date"]
+    received_at: datetime | None = msg["date"]
     if received_at is None:
-        received_at = datetime.now(timezone.utc)
+        received_at = datetime.now(UTC)
 
     if from_addr.lower() == connection.email.lower():
         await _store_sent(msg, connection, db)
@@ -162,12 +161,12 @@ async def _store_sent(
     from src.email.models import EmailQueue
 
     to_addr = msg["to"]
-    received_at: Optional[datetime] = msg["date"]
+    received_at: datetime | None = msg["date"]
     if received_at is None:
-        received_at = datetime.now(timezone.utc)
+        received_at = datetime.now(UTC)
 
-    entity_type: Optional[str] = None
-    entity_id: Optional[int] = None
+    entity_type: str | None = None
+    entity_id: int | None = None
     if to_addr:
         result = await db.execute(select(Contact).where(Contact.email == to_addr))
         contact = result.scalar_one_or_none()
@@ -205,8 +204,8 @@ async def _store_inbound(
 
     from_addr = msg["from"]
 
-    entity_type: Optional[str] = None
-    entity_id: Optional[int] = None
+    entity_type: str | None = None
+    entity_id: int | None = None
     result = await db.execute(select(Contact).where(Contact.email == from_addr))
     contact = result.scalar_one_or_none()
     if contact:

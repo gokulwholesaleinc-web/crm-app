@@ -1,31 +1,31 @@
 """Dashboard API routes."""
 
-from typing import List, Optional
 from typing import Annotated as _Annotated  # alias to avoid shadowing existing Annotated-free code
-from fastapi import APIRouter, Query
+
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
-from fastapi import Depends
-from src.core.router_utils import DBSession, CurrentUser, effective_owner_id
+
 from src.core.data_scope import DataScope, get_data_scope
-from src.dashboard.schemas import (
-    NumberCardData,
-    ChartData,
-    ChartDataPoint,
-    DashboardResponse,
-    SalesFunnelResponse,
-    FunnelStage,
-    FunnelConversion,
-)
-from src.dashboard.number_cards import NumberCardGenerator
-from src.dashboard.charts import ChartDataGenerator
+from src.core.router_utils import CurrentUser, DBSession, effective_owner_id
 from src.dashboard._utils import (
-    _DASHBOARD_CACHE_TTL,
-    _dashboard_cache,
+    _DASHBOARD_CACHE_TTL,  # noqa: F401 — re-exported for tests/conftest.py
+    _dashboard_cache,  # noqa: F401 — re-exported for tests/conftest.py
     _get_cached,
     _parse_date,
     _set_cached,
 )
+from src.dashboard.charts import ChartDataGenerator
 from src.dashboard.charts_router import charts_router
+from src.dashboard.number_cards import NumberCardGenerator
+from src.dashboard.schemas import (
+    ChartData,
+    ChartDataPoint,
+    DashboardResponse,
+    FunnelConversion,
+    FunnelStage,
+    NumberCardData,
+    SalesFunnelResponse,
+)
 from src.dashboard.widgets_router import widgets_router
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
@@ -42,8 +42,8 @@ async def get_dashboard(
     current_user: CurrentUser,
     db: DBSession,
     response: Response,
-    date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
-    date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    date_from: str | None = Query(None, description="Start date (YYYY-MM-DD)"),
+    date_to: str | None = Query(None, description="End date (YYYY-MM-DD)"),
 ):
     """Get full dashboard data including KPIs and charts."""
     parsed_from = _parse_date(date_from)
@@ -89,13 +89,13 @@ async def get_dashboard(
     return result
 
 
-@router.get("/kpis", response_model=List[NumberCardData])
+@router.get("/kpis", response_model=list[NumberCardData])
 async def get_kpis(
     current_user: CurrentUser,
     db: DBSession,
     response: Response,
-    date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
-    date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    date_from: str | None = Query(None, description="Start date (YYYY-MM-DD)"),
+    date_to: str | None = Query(None, description="End date (YYYY-MM-DD)"),
 ):
     """Get KPI number cards only."""
     parsed_from = _parse_date(date_from)
@@ -118,8 +118,8 @@ async def get_kpis(
 async def get_sales_funnel(
     current_user: CurrentUser,
     db: DBSession,
-    date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
-    date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    date_from: str | None = Query(None, description="Start date (YYYY-MM-DD)"),
+    date_to: str | None = Query(None, description="End date (YYYY-MM-DD)"),
 ):
     """Get sales funnel data with lead counts, conversion rates, and avg time in stage."""
     parsed_from = _parse_date(date_from)
@@ -143,17 +143,18 @@ async def get_sales_funnel(
 # Sales Pipeline KPIs
 
 from pydantic import BaseModel
-from sqlalchemy import select, func, or_
-from src.quotes.models import Quote
-from src.proposals.models import Proposal
-from src.payments.models import Payment
+from sqlalchemy import func, select
+
 from src.core.currencies import (
-    get_supported_currencies_list,
-    get_base_currency,
     convert_amount,
+    get_base_currency,
+    get_supported_currencies_list,
 )
-from src.opportunities.models import Opportunity, PipelineStage
 from src.leads.models import Lead
+from src.opportunities.models import Opportunity, PipelineStage
+from src.payments.models import Payment
+from src.proposals.models import Proposal
+from src.quotes.models import Quote
 
 
 class SalesKPIResponse(BaseModel):
@@ -169,8 +170,8 @@ async def get_sales_kpis(
     current_user: CurrentUser,
     db: DBSession,
     response: Response,
-    date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
-    date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    date_from: str | None = Query(None, description="Start date (YYYY-MM-DD)"),
+    date_to: str | None = Query(None, description="End date (YYYY-MM-DD)"),
 ):
     """Get sales pipeline KPIs: quotes sent, proposals sent, payments collected, conversion rate."""
     parsed_from = _parse_date(date_from)
@@ -331,7 +332,7 @@ async def get_unified_pipeline(
     current_user: CurrentUser,
     db: DBSession,
     data_scope: _Annotated[DataScope, Depends(get_data_scope)],
-    owner_id: Optional[int] = Query(None, description="Filter by owner ID"),
+    owner_id: int | None = Query(None, description="Filter by owner ID"),
 ):
     """Get unified pipeline view with both lead and opportunity stages.
 

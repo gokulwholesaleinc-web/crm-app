@@ -1,34 +1,35 @@
 """White-label/tenant API routes."""
 
-from typing import Annotated, List, Any
+from typing import Annotated, Any
+
 from fastapi import APIRouter, Depends
 from fastapi.responses import Response
+from sqlalchemy import select
+
+from src.auth.dependencies import get_current_superuser
 from src.core.constants import (
-    HTTPStatus,
-    EntityNames,
+    DEFAULT_ACCENT_COLOR,
+    DEFAULT_DATE_FORMAT,
+    DEFAULT_LANGUAGE,
     DEFAULT_PRIMARY_COLOR,
     DEFAULT_SECONDARY_COLOR,
-    DEFAULT_ACCENT_COLOR,
-    DEFAULT_LANGUAGE,
-    DEFAULT_DATE_FORMAT,
+    EntityNames,
+    HTTPStatus,
 )
-from src.core.router_utils import DBSession, CurrentUser, raise_not_found, raise_bad_request
-from src.auth.dependencies import get_current_superuser
-from src.whitelabel.models import Tenant
+from src.core.router_utils import CurrentUser, DBSession, raise_bad_request, raise_not_found
+from src.whitelabel.dependencies import require_tenant
+from src.whitelabel.models import Tenant, TenantUser
 from src.whitelabel.schemas import (
+    PublicTenantConfig,
     TenantCreate,
-    TenantUpdate,
     TenantResponse,
-    TenantSettingsUpdate,
     TenantSettingsResponse,
+    TenantSettingsUpdate,
+    TenantUpdate,
     TenantUserCreate,
     TenantUserResponse,
-    PublicTenantConfig,
 )
-from src.whitelabel.models import TenantUser
 from src.whitelabel.service import TenantService, TenantSettingsService, TenantUserService
-from src.whitelabel.dependencies import require_tenant
-from sqlalchemy import select
 
 router = APIRouter(prefix="/api/tenants", tags=["tenants"])
 
@@ -124,7 +125,7 @@ async def get_config_by_domain(
 
 
 # Admin endpoints (superuser only)
-@router.get("", response_model=List[TenantResponse])
+@router.get("", response_model=list[TenantResponse])
 async def list_tenants(
     current_user: SuperUser,
     db: DBSession,
@@ -251,7 +252,7 @@ async def update_tenant_settings(
 
 
 # Tenant Users endpoints
-@router.get("/{tenant_id}/users", response_model=List[TenantUserResponse])
+@router.get("/{tenant_id}/users", response_model=list[TenantUserResponse])
 async def list_tenant_users(
     tenant_id: int,
     current_user: CurrentUser,

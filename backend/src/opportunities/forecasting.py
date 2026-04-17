@@ -1,9 +1,11 @@
 """Revenue forecasting utilities."""
 
 from datetime import date, timedelta
-from typing import Dict, Any
-from sqlalchemy import select, and_
+from typing import Any
+
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.opportunities.models import Opportunity, PipelineStage
 
 
@@ -17,7 +19,7 @@ class RevenueForecast:
         self,
         months_ahead: int = 6,
         owner_id: int = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Generate revenue forecast for the specified period.
 
@@ -42,12 +44,10 @@ class RevenueForecast:
                     (today.month + i) % 12 + 1,
                     1
                 )
+            elif month_start.month == 12:
+                next_month = date(month_start.year + 1, 1, 1)
             else:
-                # Last month in forecast
-                if month_start.month == 12:
-                    next_month = date(month_start.year + 1, 1, 1)
-                else:
-                    next_month = date(month_start.year, month_start.month + 1, 1)
+                next_month = date(month_start.year, month_start.month + 1, 1)
 
             month_end = next_month - timedelta(days=1)
 
@@ -103,7 +103,7 @@ class RevenueForecast:
             "currency": "USD",  # Could be made configurable
         }
 
-    async def get_pipeline_summary(self, owner_id: int = None) -> Dict[str, Any]:
+    async def get_pipeline_summary(self, owner_id: int = None) -> dict[str, Any]:
         """Get summary of current pipeline value."""
         # Query all open opportunities
         query = (

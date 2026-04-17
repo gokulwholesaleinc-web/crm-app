@@ -12,16 +12,16 @@ deployments, use Redis or another distributed cache.
 """
 
 import asyncio
-import sys
-import time
 import fnmatch
 import functools
-from typing import Any, Callable, TypeVar
+import sys
+import threading
+import time
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 # Legacy imports kept for backward compatibility with existing code
 from cachetools import TTLCache as _CacheToolsTTL
-import threading
-
 
 # ---------------------------------------------------------------------------
 # TTLCache - Async-safe in-memory cache

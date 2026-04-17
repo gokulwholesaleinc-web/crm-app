@@ -1,9 +1,10 @@
 """Lead auto-assignment models."""
 
 from datetime import datetime
-from typing import Optional
-from sqlalchemy import String, Integer, ForeignKey, Boolean, DateTime, func, JSON
+
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
+
 from src.database import Base
 
 
@@ -21,14 +22,14 @@ class AssignmentRule(Base):
     user_ids: Mapped[list] = mapped_column(JSON, nullable=False)
 
     # Optional filters as JSON: {"source": "Website", "tags": [1, 2]}
-    filters: Mapped[Optional[dict]] = mapped_column(JSON)
+    filters: Mapped[dict | None] = mapped_column(JSON)
 
     # For round-robin: index of the last assigned user
     last_assigned_index: Mapped[int] = mapped_column(Integer, default=-1)
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    created_by_id: Mapped[Optional[int]] = mapped_column(
+    created_by_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
     )

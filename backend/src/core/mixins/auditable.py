@@ -1,8 +1,9 @@
 """Auditable mixin for tracking creation and modification metadata."""
 
 from datetime import datetime
-from sqlalchemy import DateTime, Integer, ForeignKey, func
-from sqlalchemy.orm import declared_attr, Mapped, mapped_column
+
+from sqlalchemy import DateTime, ForeignKey, Integer, func
+from sqlalchemy.orm import Mapped, declared_attr, mapped_column
 
 
 class TimestampMixin:

@@ -3,19 +3,18 @@
 import os
 import uuid
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 from fastapi import UploadFile
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.attachments.models import Attachment
 from src.attachments.object_storage import (
-    is_object_storage_available,
-    upload_file_bytes,
-    get_download_url,
     delete_object,
     generate_object_key,
+    get_download_url,
+    is_object_storage_available,
+    upload_file_bytes,
 )
 
 MAX_UPLOAD_SIZE = int(os.getenv("MAX_UPLOAD_SIZE", str(10 * 1024 * 1024)))
@@ -47,7 +46,7 @@ class AttachmentService:
         entity_type: str,
         entity_id: int,
         user_id: int,
-        category: Optional[str] = None,
+        category: str | None = None,
     ) -> Attachment:
         ext = _get_extension(file.filename or "")
         if ext not in ALLOWED_EXTENSIONS:
@@ -97,8 +96,8 @@ class AttachmentService:
         self,
         entity_type: str,
         entity_id: int,
-        category: Optional[str] = None,
-    ) -> Tuple[List[Attachment], int]:
+        category: str | None = None,
+    ) -> tuple[list[Attachment], int]:
         query = (
             select(Attachment)
             .where(Attachment.entity_type == entity_type)
@@ -123,7 +122,7 @@ class AttachmentService:
 
         return items, total
 
-    async def get_attachment(self, attachment_id: int) -> Optional[Attachment]:
+    async def get_attachment(self, attachment_id: int) -> Attachment | None:
         result = await self.db.execute(
             select(Attachment).where(Attachment.id == attachment_id)
         )
@@ -141,12 +140,12 @@ class AttachmentService:
         await self.db.delete(attachment)
         await self.db.flush()
 
-    def get_file_path(self, attachment: Attachment) -> Optional[Path]:
+    def get_file_path(self, attachment: Attachment) -> Path | None:
         if attachment.file_path.startswith("obj://"):
             return None
         return UPLOAD_DIR / attachment.file_path
 
-    async def get_download_url(self, attachment: Attachment) -> Optional[str]:
+    async def get_download_url(self, attachment: Attachment) -> str | None:
         if attachment.file_path.startswith("obj://"):
             object_key = attachment.file_path[6:]
             return await get_download_url(object_key)

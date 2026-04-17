@@ -1,6 +1,7 @@
 """Settings API routes - provides /api/settings/* namespace."""
 
 from typing import Annotated, Any
+
 from fastapi import APIRouter, Depends
 
 from src.auth.dependencies import get_current_superuser

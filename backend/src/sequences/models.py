@@ -1,9 +1,10 @@
 """Sales sequence models."""
 
 from datetime import datetime
-from typing import Optional
-from sqlalchemy import String, Integer, ForeignKey, Text, Boolean, DateTime, func, JSON
+
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
+
 from src.database import Base
 
 
@@ -13,14 +14,14 @@ class Sequence(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text)
+    description: Mapped[str | None] = mapped_column(Text)
 
     # Steps as JSON list: [{step_number, type: email|task|wait, delay_days, template_id, task_description}]
     steps: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    created_by_id: Mapped[Optional[int]] = mapped_column(
+    created_by_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
     )
@@ -69,5 +70,5 @@ class SequenceEnrollment(Base):
         nullable=False,
     )
 
-    next_step_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
-    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    next_step_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

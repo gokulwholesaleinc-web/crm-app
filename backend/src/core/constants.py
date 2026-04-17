@@ -2,7 +2,6 @@
 
 from fastapi import status
 
-
 # Default settings
 DEFAULT_CURRENCY = "USD"
 DEFAULT_PAGE_SIZE = 20

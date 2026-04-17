@@ -1,5 +1,18 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
-  "entry": ["src/main.tsx"],
-  "project": ["src/**/*.{ts,tsx}"]
+  "entry": [
+    "src/main.tsx",
+    "src/test-setup.ts",
+    "src/**/*.test.{ts,tsx}"
+  ],
+  "project": ["src/**/*.{ts,tsx}"],
+  "ignoreExportsUsedInFile": true,
+  "ignoreDependencies": ["@vitest/coverage-v8"],
+  "rules": {
+    "exports": "off",
+    "types": "off",
+    "duplicates": "off",
+    "nsExports": "off",
+    "nsTypes": "off"
+  }
 }

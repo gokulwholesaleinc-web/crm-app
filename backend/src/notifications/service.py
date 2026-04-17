@@ -1,14 +1,13 @@
 """Notification service layer."""
 
 import logging
-from typing import Optional, List, Tuple
 
-from sqlalchemy import select, func, update, delete
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.models import User
-from src.notifications.models import Notification
 from src.core.constants import DEFAULT_PAGE_SIZE
+from src.notifications.models import Notification
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +24,8 @@ class NotificationService:
         type: str,
         title: str,
         message: str,
-        entity_type: Optional[str] = None,
-        entity_id: Optional[int] = None,
+        entity_type: str | None = None,
+        entity_id: int | None = None,
     ) -> Notification:
         """Create a new notification."""
         notif = Notification(
@@ -42,7 +41,7 @@ class NotificationService:
         await self.db.refresh(notif)
         return notif
 
-    async def get_by_id(self, notification_id: int) -> Optional[Notification]:
+    async def get_by_id(self, notification_id: int) -> Notification | None:
         result = await self.db.execute(
             select(Notification).where(Notification.id == notification_id)
         )
@@ -54,7 +53,7 @@ class NotificationService:
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
         unread_only: bool = False,
-    ) -> Tuple[List[Notification], int]:
+    ) -> tuple[list[Notification], int]:
         """Get paginated notifications for a user."""
         filters = [Notification.user_id == user_id]
         if unread_only:
@@ -80,7 +79,7 @@ class NotificationService:
 
         return items, total
 
-    async def mark_read(self, notification_id: int, user_id: int) -> Optional[Notification]:
+    async def mark_read(self, notification_id: int, user_id: int) -> Notification | None:
         """Mark a notification as read."""
         notif = await self.get_by_id(notification_id)
         if not notif or notif.user_id != user_id:

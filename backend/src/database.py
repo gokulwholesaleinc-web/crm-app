@@ -3,9 +3,10 @@ import os
 import ssl as ssl_module
 
 import sqlalchemy.exc
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy import MetaData
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import DeclarativeBase
+
 from src.config import settings
 
 logger = logging.getLogger(__name__)
@@ -35,9 +36,7 @@ def _is_local_db(url: str) -> bool:
     for host in _LOCAL_HOSTS:
         if host in url:
             return True
-    if _pghost and not any(c == '.' for c in _pghost):
-        return True
-    return False
+    return bool(_pghost and not any(c == "." for c in _pghost))
 
 _is_local = _is_local_db(_db_url)
 _is_sqlite = _db_url.startswith("sqlite")

@@ -1,7 +1,9 @@
 """Core schemas used across the CRM application."""
 
-from typing import Generic, TypeVar, List, Optional
+from typing import Generic, TypeVar
+
 from pydantic import BaseModel, Field
+
 from src.core.constants import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 
 T = TypeVar("T")
@@ -11,7 +13,7 @@ class TagBrief(BaseModel):
     """Brief tag representation for responses."""
     id: int
     name: str
-    color: Optional[str] = None
+    color: str | None = None
 
     class Config:
         from_attributes = True
@@ -57,7 +59,7 @@ class QuoteBrief(BaseModel):
 
 class PaginatedResponse(BaseModel, Generic[T]):
     """Generic paginated response schema."""
-    items: List[T]
+    items: list[T]
     total: int
     page: int
     page_size: int
@@ -66,7 +68,7 @@ class PaginatedResponse(BaseModel, Generic[T]):
     @classmethod
     def create(
         cls,
-        items: List[T],
+        items: list[T],
         total: int,
         page: int,
         page_size: int,
@@ -103,7 +105,7 @@ class ErrorResponse(BaseModel):
     """Generic error response."""
     success: bool = False
     error: str
-    detail: Optional[str] = None
+    detail: str | None = None
 
 
 class DeleteResponse(BaseModel):

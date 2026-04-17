@@ -4,19 +4,20 @@ import logging
 import os
 import re
 import secrets
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from html import escape
-from typing import Optional, List, Tuple
-from sqlalchemy import select, func, or_
+
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
-from src.proposals.models import Proposal, ProposalTemplate, ProposalView
-from src.proposals.schemas import ProposalCreate, ProposalUpdate
+
 from src.core.base_service import CRUDService, StatusTransitionMixin
 from src.core.constants import DEFAULT_PAGE_SIZE
 from src.core.filtering import build_token_search
 from src.core.url_safety import UnsafeUrlError, validate_public_url
 from src.email.branded_templates import TenantBrandingHelper, render_proposal_email
 from src.email.service import EmailService
+from src.proposals.models import Proposal, ProposalTemplate, ProposalView
+from src.proposals.schemas import ProposalCreate, ProposalUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,7 @@ def _designated_email_for(proposal: Proposal) -> str:
     return ""
 
 
-def _proposal_logo_allowed_hosts() -> Optional[List[str]]:
+def _proposal_logo_allowed_hosts() -> list[str] | None:
     """Return the optional allowlist of hostnames permitted for logo fetches.
 
     Read from ``PROPOSAL_LOGO_ALLOWED_HOSTS`` (comma-separated). When unset,
@@ -90,7 +91,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
 
     async def _generate_proposal_number(self) -> str:
         """Generate auto-incrementing proposal number: PR-{year}-{seq}."""
-        year = datetime.now(timezone.utc).year
+        year = datetime.now(UTC).year
         prefix = f"PR-{year}-"
 
         result = await self.db.execute(
@@ -106,14 +107,14 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         self,
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
-        search: Optional[str] = None,
-        status: Optional[str] = None,
-        contact_id: Optional[int] = None,
-        company_id: Optional[int] = None,
-        opportunity_id: Optional[int] = None,
-        owner_id: Optional[int] = None,
-        shared_entity_ids: Optional[List[int]] = None,
-    ) -> Tuple[List[Proposal], int]:
+        search: str | None = None,
+        status: str | None = None,
+        contact_id: int | None = None,
+        company_id: int | None = None,
+        opportunity_id: int | None = None,
+        owner_id: int | None = None,
+        shared_entity_ids: list[int] | None = None,
+    ) -> tuple[list[Proposal], int]:
         """Get paginated list of proposals with filters."""
         query = (
             select(Proposal)
@@ -183,8 +184,8 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         proposal: Proposal,
         signer_name: str,
         signer_email: str,
-        signer_ip: Optional[str] = None,
-        signer_user_agent: Optional[str] = None,
+        signer_ip: str | None = None,
+        signer_user_agent: str | None = None,
     ) -> Proposal:
         """Accept a proposal via the public link with e-signature data.
 
@@ -206,7 +207,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         if not given_email or given_email != expected_email:
             raise ValueError("Signer email does not match the proposal recipient")
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         proposal.status = "accepted"
         proposal.accepted_at = now
         proposal.signer_name = signer_name
@@ -221,15 +222,15 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
     async def reject_proposal_public(
         self,
         proposal: Proposal,
-        reason: Optional[str] = None,
-        signer_ip: Optional[str] = None,
-        signer_user_agent: Optional[str] = None,
+        reason: str | None = None,
+        signer_ip: str | None = None,
+        signer_user_agent: str | None = None,
     ) -> Proposal:
         """Reject a proposal via the public link."""
         if proposal.status not in ("sent", "viewed"):
             raise ValueError(f"Cannot reject proposal in '{proposal.status}' status")
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         proposal.status = "rejected"
         proposal.rejected_at = now
         proposal.rejection_reason = reason
@@ -240,7 +241,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         return proposal
 
     async def record_view(
-        self, proposal_id: int, ip_address: Optional[str] = None, user_agent: Optional[str] = None
+        self, proposal_id: int, ip_address: str | None = None, user_agent: str | None = None
     ) -> Proposal:
         """Record a view on a proposal and increment view_count."""
         proposal = await self.get_by_id(proposal_id)
@@ -254,7 +255,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         )
         self.db.add(view)
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         proposal.view_count = (proposal.view_count or 0) + 1
         proposal.last_viewed_at = now
 
@@ -267,7 +268,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         await self.db.refresh(proposal)
         return proposal
 
-    async def get_public_proposal(self, token: str) -> Optional[Proposal]:
+    async def get_public_proposal(self, token: str) -> Proposal | None:
         """Get a proposal by its unguessable public token.
 
         Token-based lookup replaces the old sequential proposal_number
@@ -339,7 +340,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         # Mark proposal as sent
         if proposal.status == "draft":
             proposal.status = "sent"
-            proposal.sent_at = datetime.now(timezone.utc)
+            proposal.sent_at = datetime.now(UTC)
             await self.db.flush()
             await self.db.refresh(proposal)
 
@@ -488,8 +489,8 @@ class ProposalTemplateService(CRUDService[ProposalTemplate, None, None]):
 
     async def get_list(
         self,
-        category: Optional[str] = None,
-    ) -> List[ProposalTemplate]:
+        category: str | None = None,
+    ) -> list[ProposalTemplate]:
         """Get all templates, optionally filtered by category."""
         query = select(ProposalTemplate)
         if category:

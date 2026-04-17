@@ -1,8 +1,10 @@
 """Audit log service for recording and retrieving entity changes."""
 
-from typing import Optional, List, Tuple, Any
-from sqlalchemy import select, func
+from typing import Any
+
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.audit.models import AuditLog
 from src.auth.models import User
 from src.core.constants import DEFAULT_PAGE_SIZE
@@ -18,10 +20,10 @@ class AuditService:
         self,
         entity_type: str,
         entity_id: int,
-        user_id: Optional[int],
+        user_id: int | None,
         action: str,
-        changes: Optional[List[dict]] = None,
-        ip_address: Optional[str] = None,
+        changes: list[dict] | None = None,
+        ip_address: str | None = None,
     ) -> AuditLog:
         """Record an audit log entry."""
         entry = AuditLog(
@@ -43,7 +45,7 @@ class AuditService:
         entity_id: int,
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
-    ) -> Tuple[List[dict], int]:
+    ) -> tuple[list[dict], int]:
         """Get paginated audit history for a specific entity."""
         base_filter = [
             AuditLog.entity_type == entity_type,
@@ -86,7 +88,7 @@ class AuditService:
         return items, total
 
 
-def detect_changes(old_data: dict, new_data: dict) -> List[dict]:
+def detect_changes(old_data: dict, new_data: dict) -> list[dict]:
     """Compare old and new data dicts and return list of changed fields.
 
     Args:
@@ -124,4 +126,4 @@ def _serialize(value: Any) -> Any:
         return None
     if hasattr(value, "isoformat"):
         return value.isoformat()
-    return str(value) if not isinstance(value, (str, int, float, bool)) else value
+    return str(value) if not isinstance(value, str | int | float | bool) else value

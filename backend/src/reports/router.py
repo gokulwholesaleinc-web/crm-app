@@ -1,32 +1,33 @@
 """Custom Reports API routes."""
 
+import io
 import json
 import logging
 import os
-from typing import Annotated, List, Optional
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select, or_
 from openai import AsyncOpenAI
-import io
+from sqlalchemy import or_, select
 
 from src.config import settings
-from src.core.router_utils import DBSession, CurrentUser
 from src.core.constants import HTTPStatus
 from src.core.data_scope import DataScope, get_data_scope
+from src.core.router_utils import CurrentUser, DBSession
 from src.reports.models import SavedReport
 from src.reports.schemas import (
+    AIReportGenerateRequest,
+    AIReportGenerateResponse,
     ReportDefinition,
     ReportResult,
     ReportTemplate,
     SavedReportCreate,
-    SavedReportUpdate,
     SavedReportResponse,
-    AIReportGenerateRequest,
-    AIReportGenerateResponse,
+    SavedReportUpdate,
     ScheduleUpdateRequest,
 )
-from src.reports.service import ReportExecutor, REPORT_TEMPLATES, ENTITY_MODEL_MAP, NUMERIC_FIELDS
+from src.reports.service import ENTITY_MODEL_MAP, NUMERIC_FIELDS, REPORT_TEMPLATES, ReportExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +99,7 @@ async def export_report_csv(
     )
 
 
-@router.get("/templates", response_model=List[ReportTemplate])
+@router.get("/templates", response_model=list[ReportTemplate])
 async def list_report_templates(
     current_user: CurrentUser,
 ):
@@ -197,11 +198,11 @@ Default to bar chart if no chart preference is stated."""
 
 
 # Saved report CRUD
-@router.get("", response_model=List[SavedReportResponse])
+@router.get("", response_model=list[SavedReportResponse])
 async def list_saved_reports(
     current_user: CurrentUser,
     db: DBSession,
-    entity_type: Optional[str] = None,
+    entity_type: str | None = None,
 ):
     """List saved reports (own + public)."""
     query = select(SavedReport).where(

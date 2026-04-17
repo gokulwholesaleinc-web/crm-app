@@ -6,7 +6,7 @@ Injectable HttpClientFactory keeps Google HTTP calls out of tests.
 import base64
 import json
 import os
-from typing import Callable, Optional
+from collections.abc import Callable
 from urllib.parse import urlencode
 
 import httpx
@@ -51,7 +51,7 @@ def build_authorize_url(client_id: str, redirect_uri: str, state: str, login_hin
     return f"{GOOGLE_AUTH_URL}?{urlencode(params)}"
 
 
-def decode_id_token_email(id_token: str) -> Optional[str]:
+def decode_id_token_email(id_token: str) -> str | None:
     """Extract email from JWT id_token without signature verification.
 
     Signature verification is Google's job — we've already exchanged a code

@@ -1,7 +1,6 @@
 """Conversation memory management for the AI assistant."""
 
 import logging
-from typing import Dict, List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,15 +18,15 @@ class AIConversationManager:
         self.db = db
         self.client = openai_client
 
-    async def get_user_preferences(self, user_id: int) -> Optional[AIUserPreferences]:
+    async def get_user_preferences(self, user_id: int) -> AIUserPreferences | None:
         result = await self.db.execute(
             select(AIUserPreferences).where(AIUserPreferences.user_id == user_id)
         )
         return result.scalar_one_or_none()
 
     async def get_conversation_history(
-        self, user_id: int, session_id: Optional[str] = None
-    ) -> List[Dict[str, str]]:
+        self, user_id: int, session_id: str | None = None
+    ) -> list[dict[str, str]]:
         if not session_id:
             return []
 
@@ -62,7 +61,7 @@ class AIConversationManager:
         history.extend({"role": m.role, "content": m.content} for m in recent)
         return history
 
-    async def summarize_messages(self, messages: List[AIConversation]) -> Optional[str]:
+    async def summarize_messages(self, messages: list[AIConversation]) -> str | None:
         if not self.client or not messages:
             return None
 
@@ -86,7 +85,7 @@ class AIConversationManager:
             return None
 
     async def save_conversation(
-        self, user_id: int, session_id: Optional[str], role: str, content: str
+        self, user_id: int, session_id: str | None, role: str, content: str
     ) -> None:
         msg = AIConversation(
             user_id=user_id,

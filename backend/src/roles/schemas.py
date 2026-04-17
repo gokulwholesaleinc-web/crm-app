@@ -1,14 +1,14 @@
 """Pydantic schemas for RBAC."""
 
 from datetime import datetime
-from typing import Optional
+
 from pydantic import BaseModel, ConfigDict
 
 
 class RoleBase(BaseModel):
     name: str
-    description: Optional[str] = None
-    permissions: Optional[dict] = None
+    description: str | None = None
+    permissions: dict | None = None
 
 
 class RoleCreate(RoleBase):
@@ -16,9 +16,9 @@ class RoleCreate(RoleBase):
 
 
 class RoleUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    permissions: Optional[dict] = None
+    name: str | None = None
+    description: str | None = None
+    permissions: dict | None = None
 
 
 class RoleResponse(RoleBase):

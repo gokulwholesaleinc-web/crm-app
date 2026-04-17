@@ -2,16 +2,17 @@
 
 import logging
 import re
-from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional
-from sqlalchemy import select, update, or_, func
+from datetime import UTC, datetime
+from typing import Any
+
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.contacts.models import Contact
-from src.companies.models import Company
-from src.leads.models import Lead
 from src.activities.models import Activity
-from src.core.models import Note, EntityTag
+from src.companies.models import Company
+from src.contacts.models import Contact
+from src.core.models import EntityTag, Note
+from src.leads.models import Lead
 
 logger = logging.getLogger(__name__)
 
@@ -54,12 +55,12 @@ class DedupService:
 
     async def find_duplicate_contacts(
         self,
-        email: Optional[str] = None,
-        phone: Optional[str] = None,
-        first_name: Optional[str] = None,
-        last_name: Optional[str] = None,
-        exclude_id: Optional[int] = None,
-    ) -> List[Contact]:
+        email: str | None = None,
+        phone: str | None = None,
+        first_name: str | None = None,
+        last_name: str | None = None,
+        exclude_id: int | None = None,
+    ) -> list[Contact]:
         """Find potential duplicate contacts by email, phone, or name."""
         conditions = []
 
@@ -108,9 +109,9 @@ class DedupService:
 
     async def find_duplicate_companies(
         self,
-        name: Optional[str] = None,
-        exclude_id: Optional[int] = None,
-    ) -> List[Company]:
+        name: str | None = None,
+        exclude_id: int | None = None,
+    ) -> list[Company]:
         """Find potential duplicate companies by normalized name."""
         if not name:
             return []
@@ -131,10 +132,10 @@ class DedupService:
 
     async def find_duplicate_leads(
         self,
-        email: Optional[str] = None,
-        phone: Optional[str] = None,
-        exclude_id: Optional[int] = None,
-    ) -> List[Lead]:
+        email: str | None = None,
+        phone: str | None = None,
+        exclude_id: int | None = None,
+    ) -> list[Lead]:
         """Find potential duplicate leads by exact email or phone match."""
         conditions = []
 
@@ -169,8 +170,8 @@ class DedupService:
     async def check_duplicates(
         self,
         entity_type: str,
-        data: Dict[str, Any],
-    ) -> List[Dict[str, Any]]:
+        data: dict[str, Any],
+    ) -> list[dict[str, Any]]:
         """Check for duplicates before creation. Returns list of potential matches."""
         duplicates = []
 
@@ -220,7 +221,7 @@ class DedupService:
 
         return duplicates
 
-    def _contact_match_reason(self, contact: Contact, data: Dict[str, Any]) -> str:
+    def _contact_match_reason(self, contact: Contact, data: dict[str, Any]) -> str:
         reasons = []
         if data.get("email") and contact.email and contact.email.lower() == data["email"].lower():
             reasons.append("Email match")
@@ -234,7 +235,7 @@ class DedupService:
             reasons.append("Name match")
         return ", ".join(reasons) if reasons else "Potential match"
 
-    def _lead_match_reason(self, lead: Lead, data: Dict[str, Any]) -> str:
+    def _lead_match_reason(self, lead: Lead, data: dict[str, Any]) -> str:
         reasons = []
         if data.get("email") and lead.email and lead.email.lower() == data["email"].lower():
             reasons.append("Email match")
@@ -246,7 +247,7 @@ class DedupService:
         self,
         primary_id: int,
         secondary_id: int,
-        user_id: Optional[int] = None,
+        user_id: int | None = None,
     ) -> Contact:
         """Merge ``secondary`` contact into ``primary``.
 
@@ -290,7 +291,7 @@ class DedupService:
         self,
         primary_id: int,
         secondary_id: int,
-        user_id: Optional[int] = None,
+        user_id: int | None = None,
     ) -> Company:
         """Merge ``secondary`` company into ``primary``.
 
@@ -322,7 +323,7 @@ class DedupService:
         self,
         primary_id: int,
         secondary_id: int,
-        user_id: Optional[int] = None,
+        user_id: int | None = None,
     ) -> Lead:
         """Merge ``secondary`` lead into ``primary``.
 
@@ -374,7 +375,7 @@ class DedupService:
     def _soft_delete_merged(self, contact: Contact, primary_id: int) -> None:
         """Mark a merged-away contact as soft-deleted and free its email slot."""
         contact.status = "merged"
-        contact.deleted_at = datetime.now(timezone.utc)
+        contact.deleted_at = datetime.now(UTC)
         contact.merged_into_id = primary_id
         if contact.email and not contact.email.startswith(("archived-", "merged-")):
             prefix = f"merged-{contact.id}-"
@@ -391,11 +392,11 @@ class DedupService:
         break the merge, so this list must be kept in sync with the
         ``contacts.id`` FK set across the codebase.
         """
-        from src.quotes.models import Quote
-        from src.proposals.models import Proposal
-        from src.opportunities.models import Opportunity
         from src.contracts.models import Contract
+        from src.opportunities.models import Opportunity
         from src.payments.models import StripeCustomer
+        from src.proposals.models import Proposal
+        from src.quotes.models import Quote
         from src.sequences.models import SequenceEnrollment
 
         tables_with_contact_fk = [
@@ -422,10 +423,10 @@ class DedupService:
 
     async def _transfer_company_fks(self, from_id: int, to_id: int) -> None:
         """Repoint every direct FK column that references ``companies.id``."""
-        from src.quotes.models import Quote
-        from src.proposals.models import Proposal
-        from src.opportunities.models import Opportunity
         from src.contracts.models import Contract
+        from src.opportunities.models import Opportunity
+        from src.proposals.models import Proposal
+        from src.quotes.models import Quote
 
         # Contacts: move them to the surviving company instead of deleting.
         await self.db.execute(
@@ -449,7 +450,7 @@ class DedupService:
         entity_type: str,
         primary_id: int,
         secondary_id: int,
-        user_id: Optional[int],
+        user_id: int | None,
     ) -> None:
         """Write an audit log entry describing the merge.
 
@@ -495,9 +496,9 @@ class DedupService:
         tag_id)`` pair on the primary are deleted instead of transferred
         to avoid unique-constraint violations.
         """
-        from src.email.models import EmailQueue, InboundEmail
         from src.attachments.models import Attachment
         from src.comments.models import Comment
+        from src.email.models import EmailQueue, InboundEmail
         from src.notifications.models import Notification
 
         polymorphic_models = (

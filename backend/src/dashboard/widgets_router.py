@@ -1,25 +1,26 @@
 """Dashboard widgets sub-router."""
 
 import json
-from typing import List
+
 from fastapi import APIRouter, HTTPException
-from sqlalchemy import select, or_
-from src.core.router_utils import DBSession, CurrentUser
+from sqlalchemy import or_, select
+
+from src.core.constants import HTTPStatus
+from src.core.router_utils import CurrentUser, DBSession
+from src.dashboard.models import DashboardReportWidget
 from src.dashboard.schemas import (
     ReportWidgetCreate,
-    ReportWidgetUpdate,
     ReportWidgetResponse,
+    ReportWidgetUpdate,
 )
-from src.dashboard.models import DashboardReportWidget
 from src.reports.models import SavedReport
-from src.reports.service import ReportExecutor
 from src.reports.schemas import ReportDefinition
-from src.core.constants import HTTPStatus
+from src.reports.service import ReportExecutor
 
 widgets_router = APIRouter(tags=["dashboard"])
 
 
-@widgets_router.get("", response_model=List[ReportWidgetResponse])
+@widgets_router.get("", response_model=list[ReportWidgetResponse])
 async def list_report_widgets(
     current_user: CurrentUser,
     db: DBSession,

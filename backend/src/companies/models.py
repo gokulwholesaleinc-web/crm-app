@@ -1,10 +1,12 @@
 """Company model for CRM accounts."""
 
-from typing import Optional, List, TYPE_CHECKING
-from sqlalchemy import String, Integer, ForeignKey, Text, BigInteger, Index, UniqueConstraint
+from typing import TYPE_CHECKING
+
+from sqlalchemy import BigInteger, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from src.database import Base
+
 from src.core.mixins.auditable import AuditableMixin
+from src.database import Base
 
 if TYPE_CHECKING:
     from src.contacts.models import Contact
@@ -18,41 +20,41 @@ class Company(Base, AuditableMixin):
 
     # Basic info
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    website: Mapped[Optional[str]] = mapped_column(String(500))
-    industry: Mapped[Optional[str]] = mapped_column(String(100), index=True)
-    company_size: Mapped[Optional[str]] = mapped_column(String(50))  # 1-10, 11-50, etc.
+    website: Mapped[str | None] = mapped_column(String(500))
+    industry: Mapped[str | None] = mapped_column(String(100), index=True)
+    company_size: Mapped[str | None] = mapped_column(String(50))  # 1-10, 11-50, etc.
 
     # Contact info
-    phone: Mapped[Optional[str]] = mapped_column(String(50))
-    email: Mapped[Optional[str]] = mapped_column(String(255))
+    phone: Mapped[str | None] = mapped_column(String(50))
+    email: Mapped[str | None] = mapped_column(String(255))
 
     # Address
-    address_line1: Mapped[Optional[str]] = mapped_column(String(255))
-    address_line2: Mapped[Optional[str]] = mapped_column(String(255))
-    city: Mapped[Optional[str]] = mapped_column(String(100))
-    state: Mapped[Optional[str]] = mapped_column(String(100))
-    postal_code: Mapped[Optional[str]] = mapped_column(String(20))
-    country: Mapped[Optional[str]] = mapped_column(String(100))
+    address_line1: Mapped[str | None] = mapped_column(String(255))
+    address_line2: Mapped[str | None] = mapped_column(String(255))
+    city: Mapped[str | None] = mapped_column(String(100))
+    state: Mapped[str | None] = mapped_column(String(100))
+    postal_code: Mapped[str | None] = mapped_column(String(20))
+    country: Mapped[str | None] = mapped_column(String(100))
 
     # Business info
-    annual_revenue: Mapped[Optional[int]] = mapped_column(BigInteger)
-    employee_count: Mapped[Optional[int]] = mapped_column(Integer)
+    annual_revenue: Mapped[int | None] = mapped_column(BigInteger)
+    employee_count: Mapped[int | None] = mapped_column(Integer)
 
     # Social
-    linkedin_url: Mapped[Optional[str]] = mapped_column(String(500))
-    twitter_handle: Mapped[Optional[str]] = mapped_column(String(100))
+    linkedin_url: Mapped[str | None] = mapped_column(String(500))
+    twitter_handle: Mapped[str | None] = mapped_column(String(100))
 
     # Additional
-    description: Mapped[Optional[str]] = mapped_column(Text)
-    logo_url: Mapped[Optional[str]] = mapped_column(String(500))
+    description: Mapped[str | None] = mapped_column(Text)
+    logo_url: Mapped[str | None] = mapped_column(String(500))
 
     # Segment
-    segment: Mapped[Optional[str]] = mapped_column(String(100), index=True, nullable=True)
+    segment: Mapped[str | None] = mapped_column(String(100), index=True, nullable=True)
 
     # Custom / transferable fields
-    link_creative_tier: Mapped[Optional[str]] = mapped_column(String(10))
-    sow_url: Mapped[Optional[str]] = mapped_column(String(500))
-    account_manager: Mapped[Optional[str]] = mapped_column(String(255))
+    link_creative_tier: Mapped[str | None] = mapped_column(String(10))
+    sow_url: Mapped[str | None] = mapped_column(String(500))
+    account_manager: Mapped[str | None] = mapped_column(String(255))
 
     # Status
     status: Mapped[str] = mapped_column(String(20), default="prospect", index=True)  # prospect, customer, churned, merged
@@ -60,21 +62,21 @@ class Company(Base, AuditableMixin):
     # Forwarding pointer set by the dedup merge flow. When two companies are
     # merged the secondary is soft-deleted (status="merged") and this column
     # points at the surviving primary so lookups can follow the redirect.
-    merged_into_id: Mapped[Optional[int]] = mapped_column(
+    merged_into_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("companies.id", ondelete="SET NULL"),
         nullable=True,
     )
 
     # Owner
-    owner_id: Mapped[Optional[int]] = mapped_column(
+    owner_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
         index=True,
     )
 
     # Relationships
-    contacts: Mapped[List["Contact"]] = relationship(
+    contacts: Mapped[list["Contact"]] = relationship(
         "Contact",
         back_populates="company",
         lazy="dynamic",

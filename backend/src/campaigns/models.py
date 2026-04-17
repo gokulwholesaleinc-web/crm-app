@@ -1,11 +1,23 @@
 """Campaign models for marketing campaigns."""
 
 from datetime import date, datetime
-from typing import Optional
-from sqlalchemy import String, Integer, ForeignKey, Text, Date, Float, Index, DateTime, func, Boolean
+
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from src.database import Base
+
 from src.core.mixins.auditable import AuditableMixin
+from src.database import Base
 
 
 class Campaign(Base, AuditableMixin):
@@ -16,39 +28,39 @@ class Campaign(Base, AuditableMixin):
 
     # Basic info
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text)
+    description: Mapped[str | None] = mapped_column(Text)
     campaign_type: Mapped[str] = mapped_column(String(50), nullable=False)  # email, event, webinar, ads, etc.
 
     # Status
     status: Mapped[str] = mapped_column(String(20), default="planned")  # planned, active, paused, completed
 
     # Dates
-    start_date: Mapped[Optional[date]] = mapped_column(Date)
-    end_date: Mapped[Optional[date]] = mapped_column(Date)
+    start_date: Mapped[date | None] = mapped_column(Date)
+    end_date: Mapped[date | None] = mapped_column(Date)
 
     # Budget
-    budget_amount: Mapped[Optional[float]] = mapped_column(Float)
-    actual_cost: Mapped[Optional[float]] = mapped_column(Float)
+    budget_amount: Mapped[float | None] = mapped_column(Float)
+    actual_cost: Mapped[float | None] = mapped_column(Float)
     budget_currency: Mapped[str] = mapped_column(String(3), default="USD")
 
     # Targets
-    target_audience: Mapped[Optional[str]] = mapped_column(Text)
-    expected_revenue: Mapped[Optional[float]] = mapped_column(Float)
-    expected_response: Mapped[Optional[int]] = mapped_column(Integer)  # Expected number of responses
+    target_audience: Mapped[str | None] = mapped_column(Text)
+    expected_revenue: Mapped[float | None] = mapped_column(Float)
+    expected_response: Mapped[int | None] = mapped_column(Integer)  # Expected number of responses
 
     # Results
-    actual_revenue: Mapped[Optional[float]] = mapped_column(Float)
+    actual_revenue: Mapped[float | None] = mapped_column(Float)
     num_sent: Mapped[int] = mapped_column(Integer, default=0)
     num_responses: Mapped[int] = mapped_column(Integer, default=0)
     num_converted: Mapped[int] = mapped_column(Integer, default=0)
 
     # Multi-step execution tracking
     current_step: Mapped[int] = mapped_column(Integer, default=0)
-    next_step_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_step_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_executing: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Owner
-    owner_id: Mapped[Optional[int]] = mapped_column(
+    owner_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
         index=True,
@@ -62,21 +74,21 @@ class Campaign(Base, AuditableMixin):
     )
 
     @property
-    def response_rate(self) -> Optional[float]:
+    def response_rate(self) -> float | None:
         """Calculate response rate percentage."""
         if self.num_sent and self.num_sent > 0:
             return (self.num_responses / self.num_sent) * 100
         return None
 
     @property
-    def conversion_rate(self) -> Optional[float]:
+    def conversion_rate(self) -> float | None:
         """Calculate conversion rate percentage."""
         if self.num_responses and self.num_responses > 0:
             return (self.num_converted / self.num_responses) * 100
         return None
 
     @property
-    def roi(self) -> Optional[float]:
+    def roi(self) -> float | None:
         """Calculate ROI percentage."""
         if self.actual_cost and self.actual_cost > 0 and self.actual_revenue:
             return ((self.actual_revenue - self.actual_cost) / self.actual_cost) * 100
@@ -103,12 +115,12 @@ class CampaignMember(Base):
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending, sent, responded, converted
 
     # Tracking
-    sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    responded_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    converted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    converted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Response details
-    response_notes: Mapped[Optional[str]] = mapped_column(Text)
+    response_notes: Mapped[str | None] = mapped_column(Text)
 
     # Relationships
     campaign: Mapped["Campaign"] = relationship("Campaign", back_populates="members")
@@ -127,9 +139,9 @@ class EmailTemplate(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     subject_template: Mapped[str] = mapped_column(String(500), nullable=False)
     body_template: Mapped[str] = mapped_column(Text, nullable=False)
-    category: Mapped[Optional[str]] = mapped_column(String(100))
+    category: Mapped[str | None] = mapped_column(String(100))
 
-    created_by_id: Mapped[Optional[int]] = mapped_column(
+    created_by_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
     )

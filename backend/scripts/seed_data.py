@@ -12,7 +12,8 @@ Or from Docker:
 
 import asyncio
 import random
-from datetime import datetime, timedelta
+from datetime import timedelta
+
 from faker import Faker
 from passlib.context import CryptContext
 
@@ -31,18 +32,19 @@ async def seed_database():
     import sys
     sys.path.insert(0, '/app')
 
-    from sqlalchemy import select, text
-    from src.database import async_session_maker, engine, Base
+    from sqlalchemy import select
+
+    from src.activities.models import Activity
 
     # Import all models
     from src.auth.models import User
-    from src.contacts.models import Contact
+    from src.campaigns.models import Campaign, CampaignMember
     from src.companies.models import Company
+    from src.contacts.models import Contact
+    from src.core.models import Note, Tag
+    from src.database import async_session_maker
     from src.leads.models import Lead, LeadSource
     from src.opportunities.models import Opportunity, PipelineStage
-    from src.activities.models import Activity
-    from src.campaigns.models import Campaign, CampaignMember
-    from src.core.models import Tag, Note
 
     print("Starting database seeding...")
 
@@ -66,7 +68,7 @@ async def seed_database():
         tag_names = ["VIP", "Hot Lead", "Enterprise", "SMB", "Partner", "Referral", "New", "Follow-up"]
         tag_colors = ["#EF4444", "#F59E0B", "#10B981", "#3B82F6", "#8B5CF6", "#EC4899", "#6366F1", "#14B8A6"]
         tags = []
-        for name, color in zip(tag_names, tag_colors):
+        for name, color in zip(tag_names, tag_colors, strict=False):
             tag = Tag(name=name, color=color)
             session.add(tag)
             tags.append(tag)
@@ -107,7 +109,7 @@ async def seed_database():
 
             # Create additional sales team members
             job_titles = ["Sales Representative", "Account Executive", "Business Development", "Sales Director", "Account Manager"]
-            for i in range(4):
+            for _i in range(4):
                 user = User(
                     email=fake.unique.email(),
                     hashed_password=get_password_hash(fake.password()),
@@ -437,7 +439,7 @@ async def seed_database():
         print("\n" + "=" * 50)
         print("Database seeding complete!")
         print("=" * 50)
-        print(f"\nSummary:")
+        print("\nSummary:")
         print(f"  - Users: {len(users)}")
         print(f"  - Tags: {len(tags)}")
         print(f"  - Lead Sources: {len(lead_sources)}")
@@ -449,9 +451,9 @@ async def seed_database():
         print(f"  - Activities: {len(activities)}")
         print(f"  - Campaigns: {len(campaigns)}")
         print(f"  - Notes: {note_count}")
-        print(f"\nLogin credentials:")
-        print(f"  1. Email: demo@demo.com     |  Password: demo123  (Admin)")
-        print(f"  2. Email: test@test.com     |  Password: test1    (User)")
+        print("\nLogin credentials:")
+        print("  1. Email: demo@demo.com     |  Password: demo123  (Admin)")
+        print("  2. Email: test@test.com     |  Password: test1    (User)")
 
 
 if __name__ == "__main__":

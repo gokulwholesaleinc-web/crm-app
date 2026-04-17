@@ -1,14 +1,15 @@
 """Webhook API routes."""
 
-from typing import Optional, List
+
 from fastapi import APIRouter, HTTPException, Query
+
 from src.core.constants import HTTPStatus
-from src.core.router_utils import DBSession, CurrentUser, raise_not_found
+from src.core.router_utils import CurrentUser, DBSession, raise_not_found
 from src.webhooks.schemas import (
     WebhookCreate,
-    WebhookUpdate,
-    WebhookResponse,
     WebhookDeliveryResponse,
+    WebhookResponse,
+    WebhookUpdate,
 )
 from src.webhooks.service import WebhookService
 
@@ -30,13 +31,13 @@ async def create_webhook(
     return WebhookResponse.model_validate(webhook)
 
 
-@router.get("", response_model=List[WebhookResponse])
+@router.get("", response_model=list[WebhookResponse])
 async def list_webhooks(
     current_user: CurrentUser,
     db: DBSession,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    is_active: Optional[bool] = None,
+    is_active: bool | None = None,
 ):
     """List webhooks."""
     service = WebhookService(db)
@@ -93,7 +94,7 @@ async def delete_webhook(
     await service.delete_webhook(webhook)
 
 
-@router.get("/{webhook_id}/deliveries", response_model=List[WebhookDeliveryResponse])
+@router.get("/{webhook_id}/deliveries", response_model=list[WebhookDeliveryResponse])
 async def get_deliveries(
     webhook_id: int,
     current_user: CurrentUser,

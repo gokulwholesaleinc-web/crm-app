@@ -1,7 +1,8 @@
 """Utility functions for integrating audit logging with entity operations."""
 
-from typing import Optional
+
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.audit.service import AuditService, detect_changes
 
 
@@ -9,8 +10,8 @@ async def audit_entity_create(
     db: AsyncSession,
     entity_type: str,
     entity_id: int,
-    user_id: Optional[int],
-    ip_address: Optional[str] = None,
+    user_id: int | None,
+    ip_address: str | None = None,
 ) -> None:
     """Log an entity creation."""
     service = AuditService(db)
@@ -27,10 +28,10 @@ async def audit_entity_update(
     db: AsyncSession,
     entity_type: str,
     entity_id: int,
-    user_id: Optional[int],
+    user_id: int | None,
     old_data: dict,
     new_data: dict,
-    ip_address: Optional[str] = None,
+    ip_address: str | None = None,
 ) -> None:
     """Log an entity update with field-level change tracking."""
     changes = detect_changes(old_data, new_data)
@@ -52,8 +53,8 @@ async def audit_entity_delete(
     db: AsyncSession,
     entity_type: str,
     entity_id: int,
-    user_id: Optional[int],
-    ip_address: Optional[str] = None,
+    user_id: int | None,
+    ip_address: str | None = None,
 ) -> None:
     """Log an entity deletion."""
     service = AuditService(db)

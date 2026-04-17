@@ -7,8 +7,7 @@ due based on last_sent_at, executes the report, and emails the CSV to recipients
 import html
 import json
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,7 +35,7 @@ class ReportDeliveryService:
         """Find and deliver all reports that are due for scheduled delivery."""
         from src.email.service import EmailService
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         result = await self.db.execute(
             select(SavedReport).where(
                 SavedReport.schedule.isnot(None),
@@ -92,7 +91,7 @@ class ReportDeliveryService:
 
         return now >= report.last_sent_at + interval
 
-    def _parse_recipients(self, recipients_json: Optional[str]) -> list:
+    def _parse_recipients(self, recipients_json: str | None) -> list:
         """Parse recipients JSON string into a list of email addresses."""
         if not recipients_json:
             return []
@@ -121,7 +120,7 @@ class ReportDeliveryService:
         executor = ReportExecutor(self.db, user_id=report.created_by_id)
         return await executor.export_csv(definition)
 
-    def _build_report_email(self, name: str, description: Optional[str], csv_content: str) -> str:
+    def _build_report_email(self, name: str, description: str | None, csv_content: str) -> str:
         """Build HTML email body with report data as an inline table.
 
         Every value that originates from report data or user-supplied fields
@@ -161,7 +160,7 @@ class ReportDeliveryService:
         <div style="font-family:sans-serif;max-width:800px;margin:0 auto;">
             <h2 style="color:#1a1a1a;">{safe_name}</h2>
             {desc_html}
-            <p style="color:#888;font-size:13px;">Generated on {datetime.now(timezone.utc).strftime('%B %d, %Y at %H:%M UTC')}</p>
+            <p style="color:#888;font-size:13px;">Generated on {datetime.now(UTC).strftime('%B %d, %Y at %H:%M UTC')}</p>
             {table_html}
             {truncated}
         </div>

@@ -3,22 +3,23 @@
 import hashlib
 import hmac
 from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 from sqlalchemy import select
 
 from src.companies.models import Company
-from src.core.data_scope import DataScope, get_data_scope, check_record_access_or_shared
-from src.core.router_utils import DBSession, CurrentUser
-from src.core.constants import HTTPStatus, ENTITY_TYPE_COMPANIES
+from src.core.constants import ENTITY_TYPE_COMPANIES, HTTPStatus
+from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
+from src.core.router_utils import CurrentUser, DBSession
 from src.meta.schemas import (
-    MetaSyncRequest,
     CompanyMetaDataResponse,
-    MetaConnectRequest,
     MetaCallbackRequest,
-    MetaCredentialResponse,
     MetaConnectionStatus,
+    MetaConnectRequest,
+    MetaCredentialResponse,
     MetaLeadCaptureResponse,
+    MetaSyncRequest,
     MetaWebhookPayload,
 )
 from src.meta.service import MetaService

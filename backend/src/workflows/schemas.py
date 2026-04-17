@@ -1,40 +1,41 @@
 """Pydantic schemas for workflows."""
 
 from datetime import datetime
-from typing import Optional, List, Any, Dict
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict
 
 
 class WorkflowRuleCreate(BaseModel):
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     is_active: bool = True
     trigger_entity: str
     trigger_event: str
-    conditions: Optional[Dict[str, Any]] = None
-    actions: Optional[List[Dict[str, Any]]] = None
+    conditions: dict[str, Any] | None = None
+    actions: list[dict[str, Any]] | None = None
 
 
 class WorkflowRuleUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    is_active: Optional[bool] = None
-    trigger_entity: Optional[str] = None
-    trigger_event: Optional[str] = None
-    conditions: Optional[Dict[str, Any]] = None
-    actions: Optional[List[Dict[str, Any]]] = None
+    name: str | None = None
+    description: str | None = None
+    is_active: bool | None = None
+    trigger_entity: str | None = None
+    trigger_event: str | None = None
+    conditions: dict[str, Any] | None = None
+    actions: list[dict[str, Any]] | None = None
 
 
 class WorkflowRuleResponse(BaseModel):
     id: int
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     is_active: bool
     trigger_entity: str
     trigger_event: str
-    conditions: Optional[Dict[str, Any]] = None
-    actions: Optional[List[Dict[str, Any]]] = None
-    created_by_id: Optional[int] = None
+    conditions: dict[str, Any] | None = None
+    actions: list[dict[str, Any]] | None = None
+    created_by_id: int | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -47,7 +48,7 @@ class WorkflowExecutionResponse(BaseModel):
     entity_type: str
     entity_id: int
     status: str
-    result: Optional[Dict[str, Any]] = None
+    result: dict[str, Any] | None = None
     executed_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

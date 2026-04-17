@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Dict, Optional
+from typing import Any
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,7 +24,7 @@ class CRMQueryTools:
         self,
         search_term: str = None,
         company: str = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         query = select(Contact).limit(10)
 
         if search_term:
@@ -54,7 +54,7 @@ class CRMQueryTools:
         search_term: str = None,
         status: str = None,
         min_score: int = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         query = select(Lead).limit(10)
 
         if search_term:
@@ -85,7 +85,7 @@ class CRMQueryTools:
             ],
         }
 
-    async def get_pipeline_summary(self) -> Dict[str, Any]:
+    async def get_pipeline_summary(self) -> dict[str, Any]:
         result = await self.db.execute(
             select(
                 PipelineStage.name,
@@ -118,7 +118,7 @@ class CRMQueryTools:
             "by_stage": stages,
         }
 
-    async def get_upcoming_tasks(self, user_id: int, days: int = 7) -> Dict[str, Any]:
+    async def get_upcoming_tasks(self, user_id: int, days: int = 7) -> dict[str, Any]:
         future = datetime.now() + timedelta(days=days)
 
         result = await self.db.execute(
@@ -156,7 +156,7 @@ class CRMQueryTools:
         entity_type: str = None,
         entity_id: int = None,
         limit: int = 10,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         query = select(Activity).order_by(Activity.created_at.desc()).limit(limit)
 
         if entity_type and entity_id:
@@ -181,7 +181,7 @@ class CRMQueryTools:
             ],
         }
 
-    async def get_kpis(self) -> Dict[str, Any]:
+    async def get_kpis(self) -> dict[str, Any]:
         contacts = await self.db.execute(select(func.count(Contact.id)))
         contacts_count = contacts.scalar() or 0
 
@@ -205,7 +205,7 @@ class CRMQueryTools:
             "pipeline_value": pipeline_value,
         }
 
-    async def search_quotes(self, args: Dict[str, Any]) -> Dict[str, Any]:
+    async def search_quotes(self, args: dict[str, Any]) -> dict[str, Any]:
         from src.quotes.models import Quote
 
         query = select(Quote).order_by(Quote.created_at.desc()).limit(args.get("limit", 10))
@@ -236,7 +236,7 @@ class CRMQueryTools:
             ],
         }
 
-    async def get_quote_details(self, args: Dict[str, Any]) -> Dict[str, Any]:
+    async def get_quote_details(self, args: dict[str, Any]) -> dict[str, Any]:
         from src.quotes.models import Quote
 
         result = await self.db.execute(
@@ -267,7 +267,7 @@ class CRMQueryTools:
             ],
         }
 
-    async def search_proposals(self, args: Dict[str, Any]) -> Dict[str, Any]:
+    async def search_proposals(self, args: dict[str, Any]) -> dict[str, Any]:
         from src.proposals.models import Proposal
 
         query = select(Proposal).order_by(Proposal.created_at.desc()).limit(args.get("limit", 10))
@@ -296,7 +296,7 @@ class CRMQueryTools:
             ],
         }
 
-    async def get_payment_summary(self) -> Dict[str, Any]:
+    async def get_payment_summary(self) -> dict[str, Any]:
         from src.payments.models import Payment
 
         result = await self.db.execute(
@@ -325,7 +325,7 @@ class CRMQueryTools:
             "by_status": by_status,
         }
 
-    async def list_recent_payments(self, args: Dict[str, Any]) -> Dict[str, Any]:
+    async def list_recent_payments(self, args: dict[str, Any]) -> dict[str, Any]:
         from src.payments.models import Payment
 
         query = select(Payment).order_by(Payment.created_at.desc()).limit(args.get("limit", 10))
@@ -350,7 +350,7 @@ class CRMQueryTools:
             ],
         }
 
-    async def get_campaign_stats(self, args: Dict[str, Any]) -> Dict[str, Any]:
+    async def get_campaign_stats(self, args: dict[str, Any]) -> dict[str, Any]:
         from src.campaigns.models import Campaign
 
         if args.get("campaign_id"):
@@ -385,7 +385,7 @@ class CRMQueryTools:
 
         return {"total_campaigns": total, "by_status": by_status}
 
-    async def get_deal_coaching(self, args: Dict[str, Any]) -> Dict[str, Any]:
+    async def get_deal_coaching(self, args: dict[str, Any]) -> dict[str, Any]:
         from datetime import date
 
         result = await self.db.execute(

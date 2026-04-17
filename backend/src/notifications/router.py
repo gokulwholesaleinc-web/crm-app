@@ -1,11 +1,12 @@
 """Notification API routes."""
 
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, HTTPException, Query
+
 from src.core.constants import HTTPStatus
-from src.core.router_utils import DBSession, CurrentUser, calculate_pages
+from src.core.router_utils import CurrentUser, DBSession, calculate_pages
 from src.notifications.schemas import (
-    NotificationResponse,
     NotificationListResponse,
+    NotificationResponse,
     UnreadCountResponse,
 )
 from src.notifications.service import NotificationService

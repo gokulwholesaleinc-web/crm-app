@@ -1,16 +1,16 @@
 """AI-powered proposal generation using OpenAI GPT-4."""
 
 import logging
-from typing import Optional
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.config import settings
-from src.proposals.models import Proposal
-from src.proposals.service import ProposalService
-from src.proposals.schemas import ProposalCreate
 from src.opportunities.models import Opportunity
+from src.proposals.models import Proposal
+from src.proposals.schemas import ProposalCreate
+from src.proposals.service import ProposalService
 from src.quotes.models import Quote
 
 logger = logging.getLogger(__name__)
@@ -115,7 +115,7 @@ async def _generate_with_openai(
     deal_name: str,
     deal_description: str,
     pricing_context: str,
-    quote_id: Optional[int],
+    quote_id: int | None,
     user_id: int,
 ) -> Proposal:
     """Generate proposal sections using OpenAI GPT-4."""
@@ -197,7 +197,7 @@ async def _create_placeholder_proposal(
     deal_name: str,
     deal_description: str,
     pricing_context: str,
-    quote_id: Optional[int],
+    quote_id: int | None,
     user_id: int,
 ) -> Proposal:
     """Create a proposal with placeholder content when OpenAI is unavailable."""

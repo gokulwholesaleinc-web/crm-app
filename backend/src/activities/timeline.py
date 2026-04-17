@@ -1,9 +1,11 @@
 """Activity timeline utilities."""
 
 from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional
-from sqlalchemy import select, or_, and_
+from typing import Any
+
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.activities.models import Activity
 
 
@@ -18,8 +20,8 @@ class ActivityTimeline:
         entity_type: str,
         entity_id: int,
         limit: int = 50,
-        activity_types: Optional[List[str]] = None,
-    ) -> List[Dict[str, Any]]:
+        activity_types: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Get activity timeline for a specific entity.
 
@@ -46,8 +48,8 @@ class ActivityTimeline:
         user_id: int,
         limit: int = 50,
         include_assigned: bool = True,
-        activity_types: Optional[List[str]] = None,
-    ) -> List[Dict[str, Any]]:
+        activity_types: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Get activity timeline for a user (owned or assigned activities).
         """
@@ -72,7 +74,7 @@ class ActivityTimeline:
         user_id: int,
         days_ahead: int = 7,
         limit: int = 20,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Get upcoming scheduled activities for a user.
         """
@@ -91,12 +93,12 @@ class ActivityTimeline:
             .where(
                 or_(
                     and_(
-                        Activity.scheduled_at != None,
+                        Activity.scheduled_at is not None,
                         Activity.scheduled_at >= now,
                         Activity.scheduled_at <= future,
                     ),
                     and_(
-                        Activity.due_date != None,
+                        Activity.due_date is not None,
                         Activity.due_date >= now.date(),
                         Activity.due_date <= future.date(),
                     ),
@@ -115,7 +117,7 @@ class ActivityTimeline:
         self,
         user_id: int,
         limit: int = 20,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Get overdue tasks for a user.
         """
@@ -145,12 +147,12 @@ class ActivityTimeline:
         entity_type: str,
         entity_id: int,
         limit: int = 50,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get a unified timeline combining activities, emails, and sequence events for an entity.
 
         Returns all event types sorted by timestamp (most recent first).
         """
-        events: List[Dict[str, Any]] = []
+        events: list[dict[str, Any]] = []
 
         # 1. Activities
         activity_result = await self.db.execute(
@@ -204,7 +206,7 @@ class ActivityTimeline:
 
         # 3. Sequence enrollments for contacts
         if entity_type in ("contacts", "contact"):
-            from src.sequences.models import SequenceEnrollment, Sequence
+            from src.sequences.models import Sequence, SequenceEnrollment
             enrollment_result = await self.db.execute(
                 select(SequenceEnrollment, Sequence.name)
                 .join(Sequence, SequenceEnrollment.sequence_id == Sequence.id)
@@ -232,7 +234,7 @@ class ActivityTimeline:
         events.sort(key=lambda x: x["timestamp"], reverse=True)
         return events[:limit]
 
-    def _format_activity(self, activity: Activity) -> Dict[str, Any]:
+    def _format_activity(self, activity: Activity) -> dict[str, Any]:
         """Format activity for timeline display."""
         return {
             "id": activity.id,

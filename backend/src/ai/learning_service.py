@@ -1,13 +1,15 @@
 """AI Learning Service for building user-specific context over time."""
 
-from datetime import datetime, timedelta, timezone
-from typing import Dict, Any, List, Optional
-from sqlalchemy import select, func
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.ai.models import AILearning, AIInteractionLog
+
+from src.activities.models import Activity
+from src.ai.models import AIInteractionLog, AILearning
 from src.contacts.models import Contact
 from src.opportunities.models import Opportunity, PipelineStage
-from src.activities.models import Activity
 
 
 class AILearningService:
@@ -41,7 +43,7 @@ class AILearningService:
             existing.value = value
             existing.times_reinforced += 1
             existing.confidence = min(1.0, existing.confidence + 0.1)
-            existing.last_used_at = datetime.now(timezone.utc)
+            existing.last_used_at = datetime.now(UTC)
             await self.db.flush()
             await self.db.refresh(existing)
             return existing
@@ -53,7 +55,7 @@ class AILearningService:
             value=value,
             confidence=1.0,
             times_reinforced=1,
-            last_used_at=datetime.now(timezone.utc),
+            last_used_at=datetime.now(UTC),
         )
         self.db.add(learning)
         await self.db.flush()
@@ -63,9 +65,9 @@ class AILearningService:
     async def get_learnings(
         self,
         user_id: int,
-        category: Optional[str] = None,
+        category: str | None = None,
         min_confidence: float = 0.3,
-    ) -> List[AILearning]:
+    ) -> list[AILearning]:
         """Get all learnings for a user, optionally filtered by category."""
         query = (
             select(AILearning)
@@ -97,7 +99,7 @@ class AILearningService:
         await self.db.flush()
         return True
 
-    async def reinforce_learning(self, learning_id: int) -> Optional[AILearning]:
+    async def reinforce_learning(self, learning_id: int) -> AILearning | None:
         """Increase confidence when a learning is confirmed again."""
         result = await self.db.execute(
             select(AILearning).where(AILearning.id == learning_id)
@@ -108,7 +110,7 @@ class AILearningService:
 
         learning.times_reinforced += 1
         learning.confidence = min(1.0, learning.confidence + 0.1)
-        learning.last_used_at = datetime.now(timezone.utc)
+        learning.last_used_at = datetime.now(UTC)
         await self.db.flush()
         await self.db.refresh(learning)
         return learning
@@ -168,7 +170,7 @@ class AILearningService:
         self,
         user_id: int,
         query: str,
-        tool_calls: Optional[List[Dict[str, Any]]] = None,
+        tool_calls: list[dict[str, Any]] | None = None,
     ) -> AIInteractionLog:
         """Log an interaction for pattern analysis."""
         log = AIInteractionLog(
@@ -187,8 +189,8 @@ class AILearningService:
         query: str,
         response: str,
         feedback_type: str,
-        correction: Optional[str] = None,
-    ) -> Optional[AILearning]:
+        correction: str | None = None,
+    ) -> AILearning | None:
         """Extract and store learnings from user feedback."""
         if feedback_type == "correction" and correction:
             return await self.learn_preference(
@@ -199,9 +201,9 @@ class AILearningService:
             )
         return None
 
-    async def get_frequently_accessed_entities(self, user_id: int) -> Dict[str, List[str]]:
+    async def get_frequently_accessed_entities(self, user_id: int) -> dict[str, list[str]]:
         """Return user's most accessed entities from interaction logs."""
-        cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+        cutoff = datetime.now(UTC) - timedelta(days=30)
 
         result = await self.db.execute(
             select(AIInteractionLog)
@@ -216,7 +218,7 @@ class AILearningService:
         logs = result.scalars().all()
 
         # Count entity mentions from tool calls
-        entity_counts: Dict[str, Dict[str, int]] = {}
+        entity_counts: dict[str, dict[str, int]] = {}
         for log in logs:
             if not log.tool_calls:
                 continue
@@ -238,7 +240,7 @@ class AILearningService:
 
     async def decay_old_learnings(self, days_threshold: int = 60) -> int:
         """Reduce confidence of old, unused learnings. Returns count of decayed items."""
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days_threshold)
+        cutoff = datetime.now(UTC) - timedelta(days=days_threshold)
 
         result = await self.db.execute(
             select(AILearning).where(
@@ -262,7 +264,7 @@ class AILearningService:
     # Smart suggestions
     # =========================================================================
 
-    async def generate_smart_suggestions(self, user_id: int) -> List[Dict[str, Any]]:
+    async def generate_smart_suggestions(self, user_id: int) -> list[dict[str, Any]]:
         """Generate personalized suggestions based on user data and patterns."""
         suggestions = []
 
@@ -281,10 +283,10 @@ class AILearningService:
         return suggestions[:10]
 
     async def _suggest_stale_followups(
-        self, user_id: int, suggestions: List[Dict[str, Any]]
+        self, user_id: int, suggestions: list[dict[str, Any]]
     ) -> None:
         """Suggest follow-ups for stale contacts."""
-        cutoff = datetime.now(timezone.utc) - timedelta(days=5)
+        cutoff = datetime.now(UTC) - timedelta(days=5)
 
         # Find contacts with opportunities but no recent activity
         result = await self.db.execute(
@@ -323,12 +325,12 @@ class AILearningService:
                 })
 
     async def _suggest_expiring_quotes(
-        self, user_id: int, suggestions: List[Dict[str, Any]]
+        self, user_id: int, suggestions: list[dict[str, Any]]
     ) -> None:
         """Suggest action on quotes expiring soon."""
         from src.quotes.models import Quote
 
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now(UTC).date()
         week_out = today + timedelta(days=7)
 
         result = await self.db.execute(
@@ -349,14 +351,14 @@ class AILearningService:
                 "type": "expiring_quote",
                 "priority": "high",
                 "title": f"Quote '{quote.title}' expires in {days_left} days",
-                "description": f"Send a reminder or follow up before it expires.",
+                "description": "Send a reminder or follow up before it expires.",
                 "action": "send_reminder",
                 "entity_type": "quotes",
                 "entity_id": quote.id,
             })
 
     async def _suggest_pipeline_actions(
-        self, user_id: int, suggestions: List[Dict[str, Any]]
+        self, user_id: int, suggestions: list[dict[str, Any]]
     ) -> None:
         """Suggest actions based on pipeline health."""
         result = await self.db.execute(
@@ -389,10 +391,10 @@ class AILearningService:
                 })
 
     async def _suggest_overdue_activities(
-        self, user_id: int, suggestions: List[Dict[str, Any]]
+        self, user_id: int, suggestions: list[dict[str, Any]]
     ) -> None:
         """Suggest completing overdue activities."""
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now(UTC).date()
 
         result = await self.db.execute(
             select(func.count(Activity.id))
@@ -421,7 +423,7 @@ class AILearningService:
 
     async def get_entity_insights(
         self, entity_type: str, entity_id: int, user_id: int
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get AI-powered insights for a specific entity."""
         insights = {
             "entity_type": entity_type,
@@ -441,7 +443,7 @@ class AILearningService:
         activity_count = activity_result.scalar() or 0
 
         # Recent activity
-        cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+        cutoff = datetime.now(UTC) - timedelta(days=7)
         recent_result = await self.db.execute(
             select(func.count(Activity.id))
             .where(

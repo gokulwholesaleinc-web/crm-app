@@ -29,9 +29,9 @@ independent branches; this file is the later of the two and takes the
 merge-point slot.
 """
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision = "003_contact_soft_delete"
 down_revision = "003_audit_s2"

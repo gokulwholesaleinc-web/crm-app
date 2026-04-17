@@ -1,60 +1,61 @@
 """Pydantic schemas for contacts."""
 
 from datetime import datetime
-from typing import Optional, List
-from pydantic import BaseModel, EmailStr, ConfigDict
+
+from pydantic import BaseModel, ConfigDict, EmailStr
+
 from src.core.schemas import TagBrief
 
 
 class ContactBase(BaseModel):
     first_name: str
     last_name: str
-    email: Optional[EmailStr] = None
-    phone: Optional[str] = None
-    mobile: Optional[str] = None
-    job_title: Optional[str] = None
-    department: Optional[str] = None
-    company_id: Optional[int] = None
-    address_line1: Optional[str] = None
-    address_line2: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
-    postal_code: Optional[str] = None
-    country: Optional[str] = None
-    linkedin_url: Optional[str] = None
-    twitter_handle: Optional[str] = None
-    description: Optional[str] = None
+    email: EmailStr | None = None
+    phone: str | None = None
+    mobile: str | None = None
+    job_title: str | None = None
+    department: str | None = None
+    company_id: int | None = None
+    address_line1: str | None = None
+    address_line2: str | None = None
+    city: str | None = None
+    state: str | None = None
+    postal_code: str | None = None
+    country: str | None = None
+    linkedin_url: str | None = None
+    twitter_handle: str | None = None
+    description: str | None = None
     status: str = "active"
-    owner_id: Optional[int] = None
-    sales_code: Optional[str] = None
+    owner_id: int | None = None
+    sales_code: str | None = None
 
 
 class ContactCreate(ContactBase):
-    tag_ids: Optional[List[int]] = None
+    tag_ids: list[int] | None = None
 
 
 class ContactUpdate(BaseModel):
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    email: Optional[EmailStr] = None
-    phone: Optional[str] = None
-    mobile: Optional[str] = None
-    job_title: Optional[str] = None
-    department: Optional[str] = None
-    company_id: Optional[int] = None
-    address_line1: Optional[str] = None
-    address_line2: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
-    postal_code: Optional[str] = None
-    country: Optional[str] = None
-    linkedin_url: Optional[str] = None
-    twitter_handle: Optional[str] = None
-    description: Optional[str] = None
-    status: Optional[str] = None
-    owner_id: Optional[int] = None
-    sales_code: Optional[str] = None
-    tag_ids: Optional[List[int]] = None
+    first_name: str | None = None
+    last_name: str | None = None
+    email: EmailStr | None = None
+    phone: str | None = None
+    mobile: str | None = None
+    job_title: str | None = None
+    department: str | None = None
+    company_id: int | None = None
+    address_line1: str | None = None
+    address_line2: str | None = None
+    city: str | None = None
+    state: str | None = None
+    postal_code: str | None = None
+    country: str | None = None
+    linkedin_url: str | None = None
+    twitter_handle: str | None = None
+    description: str | None = None
+    status: str | None = None
+    owner_id: int | None = None
+    sales_code: str | None = None
+    tag_ids: list[int] | None = None
 
 
 class CompanyBrief(BaseModel):
@@ -67,17 +68,17 @@ class CompanyBrief(BaseModel):
 class ContactResponse(ContactBase):
     id: int
     full_name: str
-    avatar_url: Optional[str] = None
+    avatar_url: str | None = None
     created_at: datetime
     updated_at: datetime
-    company: Optional[CompanyBrief] = None
-    tags: List[TagBrief] = []
+    company: CompanyBrief | None = None
+    tags: list[TagBrief] = []
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class ContactListResponse(BaseModel):
-    items: List[ContactResponse]
+    items: list[ContactResponse]
     total: int
     page: int
     page_size: int

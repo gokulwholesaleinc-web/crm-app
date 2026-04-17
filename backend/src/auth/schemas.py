@@ -1,15 +1,15 @@
 """Pydantic schemas for authentication."""
 
 from datetime import datetime
-from typing import Optional
-from pydantic import BaseModel, EmailStr, ConfigDict
+
+from pydantic import BaseModel, ConfigDict, EmailStr
 
 
 class UserBase(BaseModel):
     email: EmailStr
     full_name: str
-    phone: Optional[str] = None
-    job_title: Optional[str] = None
+    phone: str | None = None
+    job_title: str | None = None
 
 
 class UserCreate(UserBase):
@@ -17,20 +17,20 @@ class UserCreate(UserBase):
 
 
 class UserUpdate(BaseModel):
-    full_name: Optional[str] = None
-    phone: Optional[str] = None
-    job_title: Optional[str] = None
-    avatar_url: Optional[str] = None
+    full_name: str | None = None
+    phone: str | None = None
+    job_title: str | None = None
+    avatar_url: str | None = None
 
 
 class UserResponse(UserBase):
     id: int
     is_active: bool
     is_superuser: bool
-    avatar_url: Optional[str] = None
+    avatar_url: str | None = None
     role: str = "sales_rep"
     created_at: datetime
-    last_login: Optional[datetime] = None
+    last_login: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -39,23 +39,23 @@ class TenantInfo(BaseModel):
     """Tenant information included in login response."""
     tenant_id: int
     tenant_slug: str
-    company_name: Optional[str] = None
+    company_name: str | None = None
     role: str
     is_primary: bool = False
-    primary_color: Optional[str] = None
-    secondary_color: Optional[str] = None
-    accent_color: Optional[str] = None
-    logo_url: Optional[str] = None
+    primary_color: str | None = None
+    secondary_color: str | None = None
+    accent_color: str | None = None
+    logo_url: str | None = None
 
 
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
-    tenants: Optional[list] = None
+    tenants: list | None = None
 
 
 class TokenData(BaseModel):
-    user_id: Optional[int] = None
+    user_id: int | None = None
 
 
 class LoginRequest(BaseModel):
@@ -76,4 +76,4 @@ class GoogleAuthorizeResponse(BaseModel):
 class GoogleCallbackRequest(BaseModel):
     code: str
     redirect_uri: str
-    state: Optional[str] = None
+    state: str | None = None

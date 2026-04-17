@@ -1,13 +1,13 @@
 """Knowledge base ingestion service for document upload and chunking."""
 
-import io
 import csv
-from typing import List, Optional
+import io
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.ai.models import AIKnowledgeDocument
-from src.ai.embeddings import EmbeddingService
 
+from src.ai.embeddings import EmbeddingService
+from src.ai.models import AIKnowledgeDocument
 
 # Approximate tokens per character (conservative estimate)
 CHARS_PER_TOKEN = 4
@@ -17,7 +17,7 @@ CHUNK_SIZE_CHARS = CHUNK_SIZE_TOKENS * CHARS_PER_TOKEN
 CHUNK_OVERLAP_CHARS = CHUNK_OVERLAP_TOKENS * CHARS_PER_TOKEN
 
 
-def chunk_text(text: str, chunk_size: int = CHUNK_SIZE_CHARS, overlap: int = CHUNK_OVERLAP_CHARS) -> List[str]:
+def chunk_text(text: str, chunk_size: int = CHUNK_SIZE_CHARS, overlap: int = CHUNK_OVERLAP_CHARS) -> list[str]:
     """Split text into overlapping chunks."""
     if not text or not text.strip():
         return []
@@ -128,7 +128,7 @@ class KnowledgeBaseService:
         await self.db.flush()
         return doc
 
-    async def list_documents(self, user_id: int) -> List[AIKnowledgeDocument]:
+    async def list_documents(self, user_id: int) -> list[AIKnowledgeDocument]:
         """List all knowledge base documents for a user."""
         result = await self.db.execute(
             select(AIKnowledgeDocument)
@@ -137,7 +137,7 @@ class KnowledgeBaseService:
         )
         return list(result.scalars().all())
 
-    async def delete_document(self, doc_id: int, user_id: int) -> Optional[AIKnowledgeDocument]:
+    async def delete_document(self, doc_id: int, user_id: int) -> AIKnowledgeDocument | None:
         """Delete a knowledge base document and its embeddings."""
         result = await self.db.execute(
             select(AIKnowledgeDocument).where(

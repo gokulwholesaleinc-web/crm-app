@@ -19,11 +19,12 @@ Supports AND/OR filter groups:
 }
 """
 
-from typing import Any, Dict, Optional, Type
-from sqlalchemy import and_, or_, String, cast
+from typing import Any
+
+from sqlalchemy import String, and_, cast, or_
 
 
-def apply_filter_condition(model: Type, field_name: str, op: str, value: Any):
+def apply_filter_condition(model: type, field_name: str, op: str, value: Any):
     """Build a single SQLAlchemy filter condition."""
     column = getattr(model, field_name, None)
     if column is None:
@@ -54,9 +55,9 @@ def apply_filter_condition(model: Type, field_name: str, op: str, value: Any):
             value = [value]
         return ~column.in_(value)
     elif op == "is_empty":
-        return or_(column == None, column == "")
+        return or_(column is None, column == "")
     elif op == "is_not_empty":
-        return and_(column != None, column != "")
+        return and_(column is not None, column != "")
     elif op == "between":
         if isinstance(value, list) and len(value) == 2:
             return and_(column >= value[0], column <= value[1])
@@ -65,7 +66,7 @@ def apply_filter_condition(model: Type, field_name: str, op: str, value: Any):
         raise ValueError(f"Unknown operator: {op}")
 
 
-def parse_filter_group(model: Type, filter_def: Dict[str, Any]):
+def parse_filter_group(model: type, filter_def: dict[str, Any]):
     """Parse a filter group (AND/OR) recursively into SQLAlchemy conditions.
 
     Args:
@@ -102,7 +103,7 @@ def parse_filter_group(model: Type, filter_def: Dict[str, Any]):
     return and_(*parsed)
 
 
-def apply_filters_to_query(query, model: Type, filters: Optional[Dict[str, Any]]):
+def apply_filters_to_query(query, model: type, filters: dict[str, Any] | None):
     """Apply a filter definition to an existing SQLAlchemy query.
 
     Args:

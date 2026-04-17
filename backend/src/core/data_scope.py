@@ -6,20 +6,21 @@ a user can access based on their role:
 - sales_rep/viewer: see only own records + shared records
 """
 
-import time
 import logging
-from typing import Annotated, Any, Optional, List
+import time
 from dataclasses import dataclass, field
-from fastapi import Depends
+from typing import Annotated, Any
+
 import sqlalchemy.exc
+from fastapi import Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
-from src.database import get_db
 from src.auth.dependencies import get_current_active_user
 from src.auth.models import User
+from src.database import get_db
 from src.roles.models import RoleName
 
 # Cache data scope per user to avoid repeated role + shared entity queries
@@ -42,7 +43,7 @@ class DataScope:
     """
     user_id: int
     role_name: str
-    owner_id: Optional[int] = None
+    owner_id: int | None = None
     is_scoped: bool = True
     shared_entity_ids: dict = field(default_factory=dict)
 
@@ -50,13 +51,13 @@ class DataScope:
         """Whether this user can see all records regardless of owner."""
         return not self.is_scoped
 
-    def get_accessible_owner_ids(self) -> Optional[List[int]]:
+    def get_accessible_owner_ids(self) -> list[int] | None:
         """Get list of owner_ids this user can access, or None if all."""
         if not self.is_scoped:
             return None
         return [self.user_id]
 
-    def get_shared_ids(self, entity_type: str) -> List[int]:
+    def get_shared_ids(self, entity_type: str) -> list[int]:
         """Get entity IDs shared with this user for a given entity type."""
         return self.shared_entity_ids.get(entity_type, [])
 
@@ -151,7 +152,7 @@ def check_record_access_or_shared(
     entity,
     current_user: User,
     role_name: str,
-    shared_entity_ids: List[int] = None,
+    shared_entity_ids: list[int] = None,
     entity_type: str = None,
 ) -> None:
     """Check if a user can access a record, considering sharing.
@@ -174,6 +175,7 @@ def check_record_access_or_shared(
         entity_type: The entity type for shared lookup.
     """
     from fastapi import HTTPException
+
     from src.core.constants import HTTPStatus
 
     # Admin/manager can access all

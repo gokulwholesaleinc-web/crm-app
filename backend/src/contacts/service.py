@@ -1,15 +1,16 @@
 """Contact service layer."""
 
-from datetime import datetime, timezone
-from typing import Optional, List, Tuple, Any, Dict
+from datetime import UTC, datetime
+from typing import Any
+
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
+
 from src.contacts.models import Contact
-from src.core.filtering import apply_filters_to_query, build_token_search
 from src.contacts.schemas import ContactCreate, ContactUpdate
 from src.core.base_service import CRUDService, TaggableServiceMixin
-from src.core.constants import ENTITY_TYPE_CONTACTS, DEFAULT_PAGE_SIZE
-
+from src.core.constants import DEFAULT_PAGE_SIZE, ENTITY_TYPE_CONTACTS
+from src.core.filtering import apply_filters_to_query, build_token_search
 
 
 class ContactService(
@@ -29,14 +30,14 @@ class ContactService(
         self,
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
-        search: Optional[str] = None,
-        company_id: Optional[int] = None,
-        status: Optional[str] = None,
-        owner_id: Optional[int] = None,
-        tag_ids: Optional[List[int]] = None,
-        filters: Optional[Dict[str, Any]] = None,
-        shared_entity_ids: Optional[List[int]] = None,
-    ) -> Tuple[List[Contact], int]:
+        search: str | None = None,
+        company_id: int | None = None,
+        status: str | None = None,
+        owner_id: int | None = None,
+        tag_ids: list[int] | None = None,
+        filters: dict[str, Any] | None = None,
+        shared_entity_ids: list[int] | None = None,
+    ) -> tuple[list[Contact], int]:
         """Get paginated list of contacts with filters.
 
         Soft-deleted contacts (``deleted_at IS NOT NULL``) are hidden unless
@@ -84,7 +85,7 @@ class ContactService(
         workflow, support lookups) by stripping the prefix.
         """
         if contact.deleted_at is None:
-            contact.deleted_at = datetime.now(timezone.utc)
+            contact.deleted_at = datetime.now(UTC)
             contact.status = "archived"
             if contact.email and not contact.email.startswith("archived-"):
                 prefix = f"archived-{contact.id}-"

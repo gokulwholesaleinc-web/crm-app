@@ -5,8 +5,8 @@ Requires META_APP_ID and META_APP_SECRET for OAuth. Falls back to META_ACCESS_TO
 """
 
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Optional, List, Dict, Any
+from datetime import UTC, datetime, timedelta
+from typing import Any
 from urllib.parse import urlencode
 
 import httpx
@@ -34,7 +34,7 @@ class MetaService:
     # OAuth2 Flow
     # =========================================================================
 
-    def get_authorization_url(self, redirect_uri: str, state: Optional[str] = None) -> str:
+    def get_authorization_url(self, redirect_uri: str, state: str | None = None) -> str:
         """Build the Meta OAuth2 authorization URL."""
         params = {
             "client_id": settings.META_APP_ID,
@@ -69,7 +69,7 @@ class MetaService:
             ll_response.raise_for_status()
             ll_data = ll_response.json()
 
-        expiry = datetime.now(timezone.utc) + timedelta(seconds=ll_data.get("expires_in", 5184000))
+        expiry = datetime.now(UTC) + timedelta(seconds=ll_data.get("expires_in", 5184000))
 
         # Upsert credential
         existing = await self.get_credential(user_id)
@@ -91,7 +91,7 @@ class MetaService:
         await self.db.flush()
         return credential
 
-    async def get_credential(self, user_id: int) -> Optional[MetaCredential]:
+    async def get_credential(self, user_id: int) -> MetaCredential | None:
         """Get stored Meta credential for a user."""
         result = await self.db.execute(
             select(MetaCredential).where(MetaCredential.user_id == user_id)
@@ -107,7 +107,7 @@ class MetaService:
         await self.db.flush()
         return True
 
-    async def get_connection_status(self, user_id: int) -> Dict[str, Any]:
+    async def get_connection_status(self, user_id: int) -> dict[str, Any]:
         """Get Meta connection status including linked pages."""
         credential = await self.get_credential(user_id)
         if not credential or not credential.is_active:
@@ -130,7 +130,7 @@ class MetaService:
     # Facebook Page Sync
     # =========================================================================
 
-    async def get_by_company(self, company_id: int) -> Optional[CompanyMetaData]:
+    async def get_by_company(self, company_id: int) -> CompanyMetaData | None:
         """Get Meta data for a company."""
         result = await self.db.execute(
             select(CompanyMetaData).where(CompanyMetaData.company_id == company_id)
@@ -159,7 +159,7 @@ class MetaService:
             existing.about = page_data.get("about", existing.about)
             existing.website = page_data.get("website", existing.website)
             existing.raw_json = page_data or existing.raw_json
-            existing.last_synced_at = datetime.now(timezone.utc)
+            existing.last_synced_at = datetime.now(UTC)
             await self.db.flush()
             await self.db.refresh(existing)
             return existing
@@ -174,7 +174,7 @@ class MetaService:
                 about=page_data.get("about"),
                 website=page_data.get("website"),
                 raw_json=page_data or None,
-                last_synced_at=datetime.now(timezone.utc),
+                last_synced_at=datetime.now(UTC),
             )
             self.db.add(meta)
             await self.db.flush()
@@ -185,7 +185,7 @@ class MetaService:
     # Instagram Sync
     # =========================================================================
 
-    async def sync_instagram(self, company_id: int, page_id: str, access_token: str) -> Optional[CompanyMetaData]:
+    async def sync_instagram(self, company_id: int, page_id: str, access_token: str) -> CompanyMetaData | None:
         """Sync Instagram business account data linked to a Facebook page."""
         try:
             ig_data = await self._fetch_instagram_data(page_id, access_token)
@@ -204,7 +204,7 @@ class MetaService:
         existing.instagram_username = ig_data.get("username")
         existing.instagram_followers = ig_data.get("followers_count")
         existing.instagram_media_count = ig_data.get("media_count")
-        existing.last_synced_at = datetime.now(timezone.utc)
+        existing.last_synced_at = datetime.now(UTC)
         await self.db.flush()
         await self.db.refresh(existing)
         return existing
@@ -213,7 +213,7 @@ class MetaService:
     # Lead Capture (Webhooks)
     # =========================================================================
 
-    async def process_lead_webhook(self, payload: Dict[str, Any]) -> List[MetaLeadCapture]:
+    async def process_lead_webhook(self, payload: dict[str, Any]) -> list[MetaLeadCapture]:
         """Process incoming Meta Lead Ads webhook payload.
 
         Creates MetaLeadCapture records for each lead and optionally
@@ -269,7 +269,7 @@ class MetaService:
         await self.db.flush()
         return captures
 
-    async def get_unprocessed_captures(self, page: int = 1, page_size: int = 50) -> List[MetaLeadCapture]:
+    async def get_unprocessed_captures(self, page: int = 1, page_size: int = 50) -> list[MetaLeadCapture]:
         offset = (page - 1) * page_size
         result = await self.db.execute(
             select(MetaLeadCapture)
@@ -284,7 +284,7 @@ class MetaService:
     # CSV Export
     # =========================================================================
 
-    async def export_csv(self, company_id: int) -> Optional[str]:
+    async def export_csv(self, company_id: int) -> str | None:
         """Export Meta data as CSV string."""
         meta = await self.get_by_company(company_id)
         if not meta:
@@ -323,7 +323,7 @@ class MetaService:
             response.raise_for_status()
             return response.json()
 
-    async def _fetch_instagram_data(self, page_id: str, access_token: str) -> Optional[dict]:
+    async def _fetch_instagram_data(self, page_id: str, access_token: str) -> dict | None:
         """Fetch Instagram business account linked to a Facebook page."""
         url = f"{GRAPH_API_BASE}/{page_id}"
         params = {
@@ -336,7 +336,7 @@ class MetaService:
             data = response.json()
             return data.get("instagram_business_account")
 
-    async def _fetch_user_pages(self, access_token: str) -> List[Dict[str, Any]]:
+    async def _fetch_user_pages(self, access_token: str) -> list[dict[str, Any]]:
         """Fetch Facebook pages the user manages."""
         url = f"{GRAPH_API_BASE}/me/accounts"
         params = {"fields": "id,name,category,fan_count", "access_token": access_token}
@@ -354,7 +354,7 @@ class MetaService:
             response.raise_for_status()
             return response.json()
 
-    async def _create_lead_from_capture(self, capture: MetaLeadCapture) -> Optional[int]:
+    async def _create_lead_from_capture(self, capture: MetaLeadCapture) -> int | None:
         """Convert a MetaLeadCapture into a CRM Lead."""
         from src.leads.models import Lead
 

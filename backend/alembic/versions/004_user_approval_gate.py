@@ -9,9 +9,9 @@ Revises: 003_audit_s2
 Create Date: 2026-04-15
 """
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision = "004_user_approval"
 down_revision = "003_audit_s2"

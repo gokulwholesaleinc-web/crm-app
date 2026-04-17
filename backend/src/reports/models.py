@@ -1,9 +1,10 @@
 """SavedReport model for persisting custom report definitions."""
 
 from datetime import datetime
-from typing import Optional
-from sqlalchemy import String, Integer, ForeignKey, Text, Boolean, DateTime, func
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
+
 from src.database import Base
 
 
@@ -13,13 +14,13 @@ class SavedReport(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text)
+    description: Mapped[str | None] = mapped_column(Text)
     entity_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
-    filters: Mapped[Optional[str]] = mapped_column(Text)  # JSON filter definition
-    group_by: Mapped[Optional[str]] = mapped_column(String(100))
-    date_group: Mapped[Optional[str]] = mapped_column(String(20))  # day, week, month, quarter, year
+    filters: Mapped[str | None] = mapped_column(Text)  # JSON filter definition
+    group_by: Mapped[str | None] = mapped_column(String(100))
+    date_group: Mapped[str | None] = mapped_column(String(20))  # day, week, month, quarter, year
     metric: Mapped[str] = mapped_column(String(20), default="count")  # count, sum, avg, min, max
-    metric_field: Mapped[Optional[str]] = mapped_column(String(100))  # field to apply metric on
+    metric_field: Mapped[str | None] = mapped_column(String(100))  # field to apply metric on
     chart_type: Mapped[str] = mapped_column(String(20), default="bar")  # bar, line, pie, table, funnel
     created_by_id: Mapped[int] = mapped_column(
         Integer,
@@ -28,9 +29,9 @@ class SavedReport(Base):
         index=True,
     )
     is_public: Mapped[bool] = mapped_column(Boolean, default=False)
-    schedule: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # daily/weekly/monthly
-    recipients: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON array of email addresses
-    last_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    schedule: Mapped[str | None] = mapped_column(String(20), nullable=True)  # daily/weekly/monthly
+    recipients: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of email addresses
+    last_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

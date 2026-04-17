@@ -1,10 +1,12 @@
 """Embedding hooks for entity CRUD operations."""
 
 import logging
-from typing import Optional, Any
+from typing import Any
+
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.config import settings
+
 from src.ai.embeddings import EmbeddingService
+from src.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +16,7 @@ def _safe_str(value: Any) -> str:
     return str(value) if value is not None else ""
 
 
-def build_contact_embedding_content(contact: Any, company_name: Optional[str] = None) -> str:
+def build_contact_embedding_content(contact: Any, company_name: str | None = None) -> str:
     """Build embedding content for a contact.
 
     Format: {first_name} {last_name} - {job_title} at {company_name}. {description}

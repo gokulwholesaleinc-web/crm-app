@@ -1,23 +1,24 @@
 """Campaign service layer."""
 
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Optional, List, Tuple, Dict
-from sqlalchemy import select, func, and_
-from src.campaigns.models import Campaign, CampaignMember, EmailTemplate, EmailCampaignStep
+from datetime import UTC, datetime, timedelta
+
+from sqlalchemy import and_, func, select
+
+from src.campaigns.models import Campaign, CampaignMember, EmailCampaignStep, EmailTemplate
 from src.campaigns.schemas import (
+    CampaignAnalytics,
     CampaignCreate,
-    CampaignUpdate,
     CampaignMemberCreate,
     CampaignMemberUpdate,
-    EmailTemplateCreate,
-    EmailTemplateUpdate,
+    CampaignUpdate,
     EmailCampaignStepCreate,
     EmailCampaignStepUpdate,
+    EmailTemplateCreate,
+    EmailTemplateUpdate,
     StepAnalytics,
-    CampaignAnalytics,
 )
-from src.core.base_service import CRUDService, BaseService
+from src.core.base_service import BaseService, CRUDService
 from src.core.constants import DEFAULT_PAGE_SIZE
 from src.core.filtering import build_token_search
 
@@ -36,11 +37,11 @@ class CampaignService(CRUDService[Campaign, CampaignCreate, CampaignUpdate]):
         self,
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
-        search: Optional[str] = None,
-        campaign_type: Optional[str] = None,
-        status: Optional[str] = None,
-        owner_id: Optional[int] = None,
-    ) -> Tuple[List[Campaign], int]:
+        search: str | None = None,
+        campaign_type: str | None = None,
+        status: str | None = None,
+        owner_id: int | None = None,
+    ) -> tuple[list[Campaign], int]:
         """Get paginated list of campaigns with filters."""
         query = select(Campaign)
 
@@ -70,13 +71,13 @@ class CampaignService(CRUDService[Campaign, CampaignCreate, CampaignUpdate]):
 
         return campaigns, total
 
-    async def process_due_campaign_steps(self) -> List[Dict]:
+    async def process_due_campaign_steps(self) -> list[dict]:
         """Process campaigns that have a due next step.
 
         Finds campaigns where is_executing=True and next_step_at <= now,
         sends emails for the current step, then advances or completes.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         result = await self.db.execute(
             select(Campaign).where(
                 and_(
@@ -104,7 +105,7 @@ class CampaignService(CRUDService[Campaign, CampaignCreate, CampaignUpdate]):
         """Mark campaign members as 'sent' for emails that were actually queued."""
         from src.email.service import EmailService
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         email_addresses = {e.to_email for e in sent_emails}
         email_service = EmailService(self.db)
         members_result = await self.db.execute(
@@ -124,9 +125,9 @@ class CampaignService(CRUDService[Campaign, CampaignCreate, CampaignUpdate]):
             campaign.next_step_at = None
         else:
             next_step = steps[campaign.current_step]
-            campaign.next_step_at = datetime.now(timezone.utc) + timedelta(days=next_step.delay_days)
+            campaign.next_step_at = datetime.now(UTC) + timedelta(days=next_step.delay_days)
 
-    async def _execute_campaign_step(self, campaign: Campaign) -> Dict:
+    async def _execute_campaign_step(self, campaign: Campaign) -> dict:
         """Execute the current step for a campaign and schedule the next one."""
         from src.email.service import EmailService
 
@@ -176,7 +177,7 @@ class CampaignService(CRUDService[Campaign, CampaignCreate, CampaignUpdate]):
             notification_type="campaign_completed",
         )
 
-    async def get_campaign_stats(self, campaign_id: int) -> Dict:
+    async def get_campaign_stats(self, campaign_id: int) -> dict:
         # Count by status
         result = await self.db.execute(
             select(
@@ -215,6 +216,7 @@ class CampaignService(CRUDService[Campaign, CampaignCreate, CampaignUpdate]):
     async def get_campaign_analytics(self, campaign_id: int) -> CampaignAnalytics:
         """Get email analytics for a campaign, grouped by step."""
         from sqlalchemy import case
+
         from src.email.models import EmailQueue
 
         # Get campaign steps with template names
@@ -291,10 +293,10 @@ class CampaignMemberService(BaseService[CampaignMember]):
     async def get_campaign_members(
         self,
         campaign_id: int,
-        status: Optional[str] = None,
+        status: str | None = None,
         page: int = 1,
         page_size: int = 50,
-    ) -> Tuple[List[CampaignMember], int]:
+    ) -> tuple[list[CampaignMember], int]:
         """Get members of a campaign."""
         query = select(CampaignMember).where(CampaignMember.campaign_id == campaign_id)
 
@@ -324,7 +326,7 @@ class CampaignMemberService(BaseService[CampaignMember]):
         self,
         campaign_id: int,
         member_type: str,
-        member_ids: List[int],
+        member_ids: list[int],
     ) -> int:
         """Add multiple members to a campaign."""
         if not member_ids:
@@ -382,8 +384,8 @@ class EmailTemplateService(BaseService[EmailTemplate]):
         self,
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
-        category: Optional[str] = None,
-    ) -> Tuple[List[EmailTemplate], int]:
+        category: str | None = None,
+    ) -> tuple[list[EmailTemplate], int]:
         """Get paginated list of email templates."""
         query = select(EmailTemplate)
 
@@ -427,7 +429,7 @@ class EmailCampaignStepService(BaseService[EmailCampaignStep]):
 
     model = EmailCampaignStep
 
-    async def get_steps(self, campaign_id: int) -> List[EmailCampaignStep]:
+    async def get_steps(self, campaign_id: int) -> list[EmailCampaignStep]:
         """Get all steps for a campaign, ordered by step_order."""
         result = await self.db.execute(
             select(EmailCampaignStep)

@@ -1,61 +1,68 @@
 """Opportunity API routes."""
 
 import logging
-from typing import Annotated, Optional, List
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 from sqlalchemy import select
-from src.core.constants import HTTPStatus, EntityNames, ENTITY_TYPE_OPPORTUNITIES
-from src.core.router_utils import (
-    DBSession,
-    CurrentUser,
-    parse_tag_ids,
-    parse_json_filters,
-    effective_owner_id,
-    get_entity_or_404,
-    calculate_pages,
-    check_ownership,
-    build_response_with_tags,
-    build_list_responses_with_tags,
+
+from src.ai.embedding_hooks import (
+    build_opportunity_embedding_content,
+    delete_entity_embedding,
+    store_entity_embedding,
 )
-from src.core.data_scope import DataScope, get_data_scope, check_record_access_or_shared
+from src.audit.utils import (
+    audit_entity_create,
+    audit_entity_delete,
+    audit_entity_update,
+    snapshot_entity,
+)
 from src.core.cache import (
-    cached_fetch,
     CACHE_PIPELINE_STAGES,
+    cached_fetch,
     invalidate_pipeline_stages_cache,
 )
+from src.core.constants import ENTITY_TYPE_OPPORTUNITIES, EntityNames, HTTPStatus
+from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
+from src.core.router_utils import (
+    CurrentUser,
+    DBSession,
+    build_list_responses_with_tags,
+    build_response_with_tags,
+    calculate_pages,
+    check_ownership,
+    effective_owner_id,
+    get_entity_or_404,
+    parse_json_filters,
+    parse_tag_ids,
+)
+from src.events.service import (
+    OPPORTUNITY_CREATED,
+    OPPORTUNITY_STAGE_CHANGED,
+    OPPORTUNITY_UPDATED,
+    emit,
+)
+from src.notifications.service import notify_on_assignment, notify_on_stage_change
+from src.opportunities.forecasting import RevenueForecast
+from src.opportunities.models import Opportunity, PipelineStage
+from src.opportunities.pipeline import PipelineManager
 from src.opportunities.schemas import (
-    OpportunityCreate,
-    OpportunityUpdate,
-    OpportunityResponse,
-    OpportunityListResponse,
-    PipelineStageCreate,
-    PipelineStageUpdate,
-    PipelineStageResponse,
+    ForecastResponse,
     KanbanResponse,
     KanbanStage,
     MoveOpportunityRequest,
-    ForecastResponse,
+    OpportunityCreate,
+    OpportunityListResponse,
+    OpportunityResponse,
+    OpportunityUpdate,
+    PipelineStageCreate,
+    PipelineStageResponse,
+    PipelineStageUpdate,
     PipelineSummaryResponse,
     TagBrief,
 )
-from src.opportunities.models import Opportunity, PipelineStage
 from src.opportunities.service import OpportunityService, PipelineStageService
-from src.opportunities.pipeline import PipelineManager
-from src.opportunities.forecasting import RevenueForecast
-from src.ai.embedding_hooks import (
-    store_entity_embedding,
-    delete_entity_embedding,
-    build_opportunity_embedding_content,
-)
-from src.audit.utils import audit_entity_create, audit_entity_update, audit_entity_delete, snapshot_entity
-from src.events.service import (
-    emit,
-    OPPORTUNITY_CREATED,
-    OPPORTUNITY_UPDATED,
-    OPPORTUNITY_STAGE_CHANGED,
-)
-from src.notifications.service import notify_on_assignment, notify_on_stage_change
 
 logger = logging.getLogger(__name__)
 
@@ -69,13 +76,13 @@ async def _build_opportunity_response(
 
 
 # Pipeline Stages endpoints
-@router.get("/stages", response_model=List[PipelineStageResponse])
+@router.get("/stages", response_model=list[PipelineStageResponse])
 async def list_stages(
     current_user: CurrentUser,
     db: DBSession,
     response: Response,
     active_only: bool = True,
-    pipeline_type: Optional[str] = None,
+    pipeline_type: str | None = None,
 ):
     """List all pipeline stages (cached for 5 minutes)."""
     service = PipelineStageService(db)
@@ -150,9 +157,9 @@ async def delete_stage(
     invalidate_pipeline_stages_cache()
 
 
-@router.post("/stages/reorder", response_model=List[PipelineStageResponse])
+@router.post("/stages/reorder", response_model=list[PipelineStageResponse])
 async def reorder_stages(
-    stage_orders: List[dict],  # [{id: int, order: int}, ...]
+    stage_orders: list[dict],  # [{id: int, order: int}, ...]
     current_user: CurrentUser,
     db: DBSession,
 ):
@@ -170,7 +177,7 @@ async def get_kanban_view(
     current_user: CurrentUser,
     db: DBSession,
     data_scope: Annotated[DataScope, Depends(get_data_scope)],
-    owner_id: Optional[int] = None,
+    owner_id: int | None = None,
 ):
     """Get Kanban board view of pipeline.
 
@@ -219,7 +226,7 @@ async def get_forecast(
     db: DBSession,
     data_scope: Annotated[DataScope, Depends(get_data_scope)],
     months_ahead: int = Query(6, ge=1, le=12),
-    owner_id: Optional[int] = None,
+    owner_id: int | None = None,
 ):
     """Get revenue forecast. Sales reps cannot spoof owner_id."""
     resolved_owner_id = effective_owner_id(data_scope, owner_id)
@@ -238,7 +245,7 @@ async def get_pipeline_summary(
     current_user: CurrentUser,
     db: DBSession,
     data_scope: Annotated[DataScope, Depends(get_data_scope)],
-    owner_id: Optional[int] = None,
+    owner_id: int | None = None,
 ):
     """Get pipeline summary. Sales reps cannot spoof owner_id."""
     resolved_owner_id = effective_owner_id(data_scope, owner_id)
@@ -257,13 +264,13 @@ async def list_opportunities(
     data_scope: Annotated[DataScope, Depends(get_data_scope)],
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    search: Optional[str] = None,
-    pipeline_stage_id: Optional[int] = None,
-    contact_id: Optional[int] = None,
-    company_id: Optional[int] = None,
-    owner_id: Optional[int] = None,
-    tag_ids: Optional[str] = None,
-    filters: Optional[str] = None,
+    search: str | None = None,
+    pipeline_stage_id: int | None = None,
+    contact_id: int | None = None,
+    company_id: int | None = None,
+    owner_id: int | None = None,
+    tag_ids: str | None = None,
+    filters: str | None = None,
 ):
     """List opportunities with pagination and filters."""
     service = OpportunityService(db)

@@ -8,14 +8,16 @@ Existing opportunities and leads are re-mapped to the closest new stage.
 Usage: docker compose exec backend python scripts/migrate_pipeline_stages.py
 """
 
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import asyncio
-from sqlalchemy import text
-from src.database import engine
 
+from sqlalchemy import text
+
+from src.database import engine
 
 NEW_STAGES = [
     {"name": "Discovery",    "order": 1, "color": "#06b6d4", "probability": 10, "is_won": False, "is_lost": False},

@@ -1,7 +1,9 @@
 """Background task scheduler using APScheduler."""
 
 import logging
-from typing import Callable, Any
+from collections.abc import Callable
+from typing import Any
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
@@ -49,6 +51,7 @@ async def _deliver_scheduled_reports():
 
 async def _sync_google_calendars():
     from sqlalchemy import select
+
     from src.integrations.google_calendar.models import GoogleCalendarCredential
     from src.integrations.google_calendar.service import GoogleCalendarService
 

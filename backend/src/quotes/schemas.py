@@ -1,9 +1,8 @@
 """Pydantic schemas for quotes."""
 
 from datetime import date, datetime
-from typing import Optional, List
-from pydantic import BaseModel, ConfigDict, model_validator
 
+from pydantic import BaseModel, ConfigDict, model_validator
 
 # Line Item Schemas
 
@@ -32,22 +31,22 @@ class QuoteLineItemResponse(BaseModel):
 
 class QuoteBase(BaseModel):
     title: str
-    description: Optional[str] = None
-    opportunity_id: Optional[int] = None
-    contact_id: Optional[int] = None
-    company_id: Optional[int] = None
+    description: str | None = None
+    opportunity_id: int | None = None
+    contact_id: int | None = None
+    company_id: int | None = None
     status: str = "draft"
-    valid_until: Optional[date] = None
+    valid_until: date | None = None
     currency: str = "USD"
-    discount_type: Optional[str] = None
+    discount_type: str | None = None
     discount_value: float = 0
     tax_rate: float = 0
-    terms_and_conditions: Optional[str] = None
-    notes: Optional[str] = None
-    owner_id: Optional[int] = None
+    terms_and_conditions: str | None = None
+    notes: str | None = None
+    owner_id: int | None = None
     payment_type: str = "one_time"
-    recurring_interval: Optional[str] = None
-    designated_signer_email: Optional[str] = None
+    recurring_interval: str | None = None
+    designated_signer_email: str | None = None
 
     @model_validator(mode="after")
     def validate_recurring_interval(self):
@@ -59,29 +58,29 @@ class QuoteBase(BaseModel):
 
 
 class QuoteCreate(QuoteBase):
-    line_items: Optional[List[QuoteLineItemCreate]] = None
+    line_items: list[QuoteLineItemCreate] | None = None
 
 
 class QuoteUpdate(BaseModel):
-    title: Optional[str] = None
-    description: Optional[str] = None
-    opportunity_id: Optional[int] = None
-    contact_id: Optional[int] = None
-    company_id: Optional[int] = None
-    valid_until: Optional[date] = None
-    currency: Optional[str] = None
-    discount_type: Optional[str] = None
-    discount_value: Optional[float] = None
-    tax_rate: Optional[float] = None
-    terms_and_conditions: Optional[str] = None
-    notes: Optional[str] = None
-    owner_id: Optional[int] = None
-    payment_type: Optional[str] = None
-    recurring_interval: Optional[str] = None
-    designated_signer_email: Optional[str] = None
+    title: str | None = None
+    description: str | None = None
+    opportunity_id: int | None = None
+    contact_id: int | None = None
+    company_id: int | None = None
+    valid_until: date | None = None
+    currency: str | None = None
+    discount_type: str | None = None
+    discount_value: float | None = None
+    tax_rate: float | None = None
+    terms_and_conditions: str | None = None
+    notes: str | None = None
+    owner_id: int | None = None
+    payment_type: str | None = None
+    recurring_interval: str | None = None
+    designated_signer_email: str | None = None
 
 
-from src.core.schemas import ContactBrief, CompanyBrief, OpportunityBrief  # noqa: E402
+from src.core.schemas import CompanyBrief, ContactBrief, OpportunityBrief  # noqa: E402
 
 
 class QuoteResponse(QuoteBase):
@@ -90,27 +89,27 @@ class QuoteResponse(QuoteBase):
     subtotal: float
     tax_amount: float
     total: float
-    sent_at: Optional[datetime] = None
-    accepted_at: Optional[datetime] = None
-    rejected_at: Optional[datetime] = None
-    signer_name: Optional[str] = None
-    signer_email: Optional[str] = None
-    signer_ip: Optional[str] = None
-    signer_user_agent: Optional[str] = None
-    signed_at: Optional[datetime] = None
-    rejection_reason: Optional[str] = None
+    sent_at: datetime | None = None
+    accepted_at: datetime | None = None
+    rejected_at: datetime | None = None
+    signer_name: str | None = None
+    signer_email: str | None = None
+    signer_ip: str | None = None
+    signer_user_agent: str | None = None
+    signed_at: datetime | None = None
+    rejection_reason: str | None = None
     created_at: datetime
     updated_at: datetime
-    line_items: List[QuoteLineItemResponse] = []
-    contact: Optional[ContactBrief] = None
-    company: Optional[CompanyBrief] = None
-    opportunity: Optional[OpportunityBrief] = None
+    line_items: list[QuoteLineItemResponse] = []
+    contact: ContactBrief | None = None
+    company: CompanyBrief | None = None
+    opportunity: OpportunityBrief | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class QuoteListResponse(BaseModel):
-    items: List[QuoteResponse]
+    items: list[QuoteResponse]
     total: int
     page: int
     page_size: int
@@ -121,12 +120,12 @@ class QuoteListResponse(BaseModel):
 
 class QuoteBranding(BaseModel):
     """Tenant branding data for public quote view."""
-    company_name: Optional[str] = None
-    logo_url: Optional[str] = None
+    company_name: str | None = None
+    logo_url: str | None = None
     primary_color: str = "#6366f1"
     secondary_color: str = "#8b5cf6"
     accent_color: str = "#22c55e"
-    footer_text: Optional[str] = None
+    footer_text: str | None = None
 
 
 class QuotePublicLineItem(BaseModel):
@@ -144,22 +143,22 @@ class QuotePublicResponse(BaseModel):
     """Public view of a quote (no auth required)."""
     quote_number: str
     title: str
-    description: Optional[str] = None
+    description: str | None = None
     status: str
     currency: str = "USD"
-    valid_until: Optional[date] = None
+    valid_until: date | None = None
     subtotal: float = 0
     tax_amount: float = 0
     total: float = 0
-    discount_type: Optional[str] = None
+    discount_type: str | None = None
     discount_value: float = 0
-    terms_and_conditions: Optional[str] = None
+    terms_and_conditions: str | None = None
     payment_type: str = "one_time"
-    recurring_interval: Optional[str] = None
-    line_items: List[QuotePublicLineItem] = []
-    contact: Optional[ContactBrief] = None
-    company: Optional[CompanyBrief] = None
-    branding: Optional[QuoteBranding] = None
+    recurring_interval: str | None = None
+    line_items: list[QuotePublicLineItem] = []
+    contact: ContactBrief | None = None
+    company: CompanyBrief | None = None
+    branding: QuoteBranding | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -172,26 +171,26 @@ class QuoteAcceptRequest(BaseModel):
 
 class QuoteRejectRequest(BaseModel):
     """Request body for rejecting a quote via public link."""
-    reason: Optional[str] = None
+    reason: str | None = None
 
 
 # Template Schemas
 
 class QuoteTemplateCreate(BaseModel):
     name: str
-    description: Optional[str] = None
-    default_terms: Optional[str] = None
-    default_notes: Optional[str] = None
-    line_items_template: Optional[dict] = None
+    description: str | None = None
+    default_terms: str | None = None
+    default_notes: str | None = None
+    line_items_template: dict | None = None
 
 
 class QuoteTemplateResponse(BaseModel):
     id: int
     name: str
-    description: Optional[str] = None
-    default_terms: Optional[str] = None
-    default_notes: Optional[str] = None
-    line_items_template: Optional[dict] = None
+    description: str | None = None
+    default_terms: str | None = None
+    default_notes: str | None = None
+    line_items_template: dict | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -220,24 +219,24 @@ class ProductBundleItemResponse(BaseModel):
 
 class ProductBundleCreate(BaseModel):
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     is_active: bool = True
-    items: Optional[List[ProductBundleItemCreate]] = None
+    items: list[ProductBundleItemCreate] | None = None
 
 
 class ProductBundleUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    is_active: Optional[bool] = None
-    items: Optional[List[ProductBundleItemCreate]] = None
+    name: str | None = None
+    description: str | None = None
+    is_active: bool | None = None
+    items: list[ProductBundleItemCreate] | None = None
 
 
 class ProductBundleResponse(BaseModel):
     id: int
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     is_active: bool
-    items: List[ProductBundleItemResponse] = []
+    items: list[ProductBundleItemResponse] = []
     created_at: datetime
     updated_at: datetime
 
@@ -245,7 +244,7 @@ class ProductBundleResponse(BaseModel):
 
 
 class ProductBundleListResponse(BaseModel):
-    items: List[ProductBundleResponse]
+    items: list[ProductBundleResponse]
     total: int
     page: int
     page_size: int

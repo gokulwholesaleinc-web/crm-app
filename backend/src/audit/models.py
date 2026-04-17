@@ -1,9 +1,10 @@
 """Audit log model for tracking entity changes."""
 
 from datetime import datetime
-from typing import Optional
-from sqlalchemy import String, Integer, ForeignKey, DateTime, func, Index, JSON
+
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
+
 from src.database import Base
 
 
@@ -14,14 +15,14 @@ class AuditLog(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     entity_type: Mapped[str] = mapped_column(String(50), nullable=False)
     entity_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    user_id: Mapped[Optional[int]] = mapped_column(
+    user_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
     action: Mapped[str] = mapped_column(String(20), nullable=False)  # create, update, delete
-    changes: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # [{field, old_value, new_value}]
-    ip_address: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
+    changes: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # [{field, old_value, new_value}]
+    ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
     timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

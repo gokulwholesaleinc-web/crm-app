@@ -5,7 +5,8 @@ that trigger all registered handlers.
 """
 
 import logging
-from typing import Callable, Dict, List, Any
+from collections.abc import Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ PROPOSAL_ACCEPTED = "proposal.accepted"
 PAYMENT_RECEIVED = "payment.received"
 
 # Registry: event_type -> list of async handler functions
-_handlers: Dict[str, List[Callable]] = {}
+_handlers: dict[str, list[Callable]] = {}
 
 
 def on(event_type: str, handler: Callable) -> None:
@@ -45,7 +46,7 @@ def off(event_type: str, handler: Callable) -> None:
         _handlers[event_type] = [h for h in _handlers[event_type] if h is not handler]
 
 
-async def emit(event_type: str, payload: Dict[str, Any]) -> None:
+async def emit(event_type: str, payload: dict[str, Any]) -> None:
     """Emit an event, calling all registered handlers.
 
     Handlers are called with (event_type, payload).
@@ -64,6 +65,6 @@ def clear_handlers() -> None:
     _handlers.clear()
 
 
-def get_handlers(event_type: str) -> List[Callable]:
+def get_handlers(event_type: str) -> list[Callable]:
     """Get handlers registered for an event type."""
     return _handlers.get(event_type, [])

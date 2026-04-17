@@ -17,7 +17,6 @@ Create Date: 2026-04-15
 
 from alembic import op
 
-
 revision = "006_prune_far_future"
 down_revision = "005_signer_audit"
 branch_labels = None

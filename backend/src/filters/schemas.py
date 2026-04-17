@@ -1,30 +1,31 @@
 """Pydantic schemas for saved filters."""
 
 from datetime import datetime
-from typing import Optional, Any, Dict
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict
 
 
 class SavedFilterCreate(BaseModel):
     name: str
     entity_type: str
-    filters: Dict[str, Any]
+    filters: dict[str, Any]
     is_default: bool = False
     is_public: bool = False
 
 
 class SavedFilterUpdate(BaseModel):
-    name: Optional[str] = None
-    filters: Optional[Dict[str, Any]] = None
-    is_default: Optional[bool] = None
-    is_public: Optional[bool] = None
+    name: str | None = None
+    filters: dict[str, Any] | None = None
+    is_default: bool | None = None
+    is_public: bool | None = None
 
 
 class SavedFilterResponse(BaseModel):
     id: int
     name: str
     entity_type: str
-    filters: Dict[str, Any]
+    filters: dict[str, Any]
     user_id: int
     is_default: bool
     is_public: bool
@@ -36,11 +37,11 @@ class SavedFilterResponse(BaseModel):
 
 class AggregateRequest(BaseModel):
     entity_type: str
-    filters: Dict[str, Any]
+    filters: dict[str, Any]
     metrics: list[str]
 
 
 class AggregateResponse(BaseModel):
     count: int
-    metrics: Dict[str, Any]
-    sample_entities: list[Dict[str, Any]]
+    metrics: dict[str, Any]
+    sample_entities: list[dict[str, Any]]
