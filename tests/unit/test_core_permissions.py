@@ -157,10 +157,10 @@ class TestRequireManagerOrAbove:
 class TestCheckRecordAccess:
     """Tests for check_record_access (synchronous)."""
 
-    def _user(self, user_id: int) -> User:
-        u = User.__new__(User)
-        u.id = user_id
-        return u
+    def _user(self, user_id: int):
+        # check_record_access only reads .id; avoid SA model instantiation
+        # (User.__new__ bypasses _sa_instance_state and User() has required fields).
+        return SimpleNamespace(id=user_id)
 
     def test_admin_can_access_any_record(self):
         """Admin role never raises, regardless of owner_id."""
