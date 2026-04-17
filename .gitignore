@@ -57,3 +57,6 @@ Thumbs.db
 *.key
 credentials.json
 .wrangler/
+
+# User uploads (dev-local files; not source-controlled)
+backend/uploads/
