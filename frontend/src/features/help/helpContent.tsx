@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- file intentionally colocates small helper components (Step/Bullet/Tip) with the SECTIONS data structure. */
 import { Badge } from '../../components/ui/Badge';
 import {
   HomeIcon,

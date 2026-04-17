@@ -87,7 +87,9 @@ export function AIAssistantPage() {
       const next = !prev;
       try {
         localStorage.setItem(AUTO_SCROLL_KEY, String(next));
-      } catch {}
+      } catch {
+        // localStorage unavailable (private mode / quota); preference is in-memory only
+      }
       return next;
     });
   }
