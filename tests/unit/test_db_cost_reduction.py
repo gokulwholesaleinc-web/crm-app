@@ -154,28 +154,37 @@ class TestDashboardCacheTTL:
 
 
 class TestSchedulerConsolidation:
-    """start_scheduler should register a single consolidated tick so Neon's
-    compute only wakes once per interval."""
+    """start_scheduler registers the 90-minute consolidated tick plus a
+    separate faster Gmail sync job (replies need to land in minutes, not
+    90 minutes). Everything else stays consolidated so Neon compute wakes
+    once per interval."""
 
-    def test_scheduler_uses_single_consolidated_tick(self):
-        """Only one job ('background_tick') is registered, every 90 minutes."""
-        from src.core.scheduler import scheduler, start_scheduler, stop_scheduler
+    def test_scheduler_registers_consolidated_tick_and_gmail_sync(self):
+        from src.core.scheduler import (
+            GMAIL_SYNC_INTERVAL_SECONDS,
+            scheduler,
+            start_scheduler,
+            stop_scheduler,
+        )
 
         was_running = scheduler.running
         if not was_running:
             start_scheduler()
         try:
-            jobs = scheduler.get_jobs()
-            assert len(jobs) == 1, (
-                f"expected 1 consolidated job, got {len(jobs)}: "
-                f"{[j.id for j in jobs]}"
+            job_ids = {j.id for j in scheduler.get_jobs()}
+            assert job_ids == {"background_tick", "gmail_sync"}, (
+                f"unexpected scheduler jobs: {job_ids}"
             )
 
             tick = scheduler.get_job("background_tick")
-            assert tick is not None, "background_tick job not registered"
             assert tick.trigger.interval.total_seconds() == 90 * 60
             assert tick.coalesce is True
             assert tick.max_instances == 1
+
+            gmail = scheduler.get_job("gmail_sync")
+            assert gmail.trigger.interval.total_seconds() == GMAIL_SYNC_INTERVAL_SECONDS
+            assert gmail.coalesce is True
+            assert gmail.max_instances == 1
         finally:
             if not was_running:
                 stop_scheduler()
