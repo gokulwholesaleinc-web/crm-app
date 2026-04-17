@@ -186,6 +186,7 @@ class TestSharedEntities:
             entity_type="contacts",
             entity_id=77,
             shared_with_user_id=_sales_rep_user.id,
+            shared_by_user_id=_sales_rep_user.id,
         )
         db_session.add(share)
         await db_session.commit()
