@@ -66,10 +66,25 @@ async def _find_thread_context(
     entity_id: int | None,
     to_email: str,
 ) -> tuple[str | None, str | None]:
+    """Return (gmail thread_id, rfc-822 message_id) of the most recent message
+    on this contact's thread — inbound OR outbound. Passing thread_id to
+    Gmail's send makes the reply land inside the original Gmail thread;
+    passing message_id as In-Reply-To/References makes non-Gmail clients
+    thread correctly.
+
+    Previously we only looked at EmailQueue, so replying to a first-touch
+    inbound email (no prior outbound) would create a fresh thread instead
+    of threading into the inbound.
+    """
     if not entity_type or not entity_id:
         return None, None
-    result = await db.execute(
-        select(EmailQueue.thread_id, EmailQueue.message_id)
+
+    outbound = await db.execute(
+        select(
+            EmailQueue.thread_id,
+            EmailQueue.message_id,
+            EmailQueue.created_at.label("ts"),
+        )
         .where(
             EmailQueue.entity_type == entity_type,
             EmailQueue.entity_id == entity_id,
@@ -79,10 +94,30 @@ async def _find_thread_context(
         .order_by(EmailQueue.created_at.desc())
         .limit(1)
     )
-    row = result.first()
-    if row:
-        return row.thread_id, row.message_id
-    return None, None
+    out_row = outbound.first()
+
+    inbound = await db.execute(
+        select(
+            InboundEmail.thread_id,
+            InboundEmail.message_id,
+            InboundEmail.received_at.label("ts"),
+        )
+        .where(
+            InboundEmail.entity_type == entity_type,
+            InboundEmail.entity_id == entity_id,
+            InboundEmail.from_email == to_email,
+            InboundEmail.thread_id.isnot(None),
+        )
+        .order_by(InboundEmail.received_at.desc())
+        .limit(1)
+    )
+    in_row = inbound.first()
+
+    candidates = [r for r in (out_row, in_row) if r is not None]
+    if not candidates:
+        return None, None
+    newest = max(candidates, key=lambda r: r.ts)
+    return newest.thread_id, newest.message_id
 
 
 async def _create_email_activity(
