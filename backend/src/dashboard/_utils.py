@@ -2,10 +2,10 @@
 
 import time
 from datetime import date
-from typing import Any, Optional
+from typing import Any
 
 
-def _parse_date(date_str: Optional[str]) -> Optional[date]:
+def _parse_date(date_str: str | None) -> date | None:
     """Parse a YYYY-MM-DD string to a date object."""
     if not date_str:
         return None

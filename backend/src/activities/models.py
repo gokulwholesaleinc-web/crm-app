@@ -1,12 +1,13 @@
 """Activity model for unified activity tracking."""
 
-from datetime import datetime, date
-from typing import Optional
-from sqlalchemy import String, Integer, ForeignKey, Text, DateTime, Date, Boolean, Index
-from sqlalchemy.orm import Mapped, mapped_column
-from src.database import Base
-from src.core.mixins.auditable import AuditableMixin
 import enum
+from datetime import date, datetime
+
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column
+
+from src.core.mixins.auditable import AuditableMixin
+from src.database import Base
 
 
 class ActivityType(str, enum.Enum):
@@ -33,44 +34,44 @@ class Activity(Base, AuditableMixin):
 
     # Content
     subject: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text)
+    description: Mapped[str | None] = mapped_column(Text)
 
     # Dynamic link to any entity (polymorphic)
     entity_type: Mapped[str] = mapped_column(String(50), nullable=False)  # contacts, leads, opportunities, companies
     entity_id: Mapped[int] = mapped_column(Integer, nullable=False)
 
     # Scheduling
-    scheduled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
-    due_date: Mapped[Optional[date]] = mapped_column(Date)
-    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    due_date: Mapped[date | None] = mapped_column(Date)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Status
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False)
     priority: Mapped[str] = mapped_column(String(20), default="normal")  # low, normal, high, urgent
 
     # Call-specific fields
-    call_duration_minutes: Mapped[Optional[int]] = mapped_column(Integer)
-    call_outcome: Mapped[Optional[str]] = mapped_column(String(50))  # connected, voicemail, no_answer, busy
+    call_duration_minutes: Mapped[int | None] = mapped_column(Integer)
+    call_outcome: Mapped[str | None] = mapped_column(String(50))  # connected, voicemail, no_answer, busy
 
     # Email-specific fields
-    email_to: Mapped[Optional[str]] = mapped_column(String(500))
-    email_cc: Mapped[Optional[str]] = mapped_column(String(500))
-    email_opened: Mapped[Optional[bool]] = mapped_column(Boolean)
+    email_to: Mapped[str | None] = mapped_column(String(500))
+    email_cc: Mapped[str | None] = mapped_column(String(500))
+    email_opened: Mapped[bool | None] = mapped_column(Boolean)
 
     # Meeting-specific fields
-    meeting_location: Mapped[Optional[str]] = mapped_column(String(255))
-    meeting_attendees: Mapped[Optional[str]] = mapped_column(Text)  # JSON array of attendee info
+    meeting_location: Mapped[str | None] = mapped_column(String(255))
+    meeting_attendees: Mapped[str | None] = mapped_column(Text)  # JSON array of attendee info
 
     # Task-specific fields
-    task_reminder_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    task_reminder_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Owner/assignee
-    owner_id: Mapped[Optional[int]] = mapped_column(
+    owner_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
         index=True,
     )
-    assigned_to_id: Mapped[Optional[int]] = mapped_column(
+    assigned_to_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
         index=True,

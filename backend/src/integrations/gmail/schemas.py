@@ -1,7 +1,6 @@
 """Gmail integration schemas."""
 
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
 
@@ -13,7 +12,7 @@ class GmailConnectionResponse(BaseModel):
     email: str
     scopes: list[str]
     is_active: bool
-    last_synced_at: Optional[datetime] = None
+    last_synced_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -28,13 +27,13 @@ class GmailCallbackRequest(BaseModel):
 
 
 class GmailSendRequest(BaseModel):
-    sent_via: Optional[str] = None
+    sent_via: str | None = None
 
 
 class GmailStatusResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     connected: bool
-    email: Optional[str] = None
-    last_synced_at: Optional[datetime] = None
-    last_error: Optional[str] = None
+    email: str | None = None
+    last_synced_at: datetime | None = None
+    last_error: str | None = None

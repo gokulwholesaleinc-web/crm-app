@@ -6,7 +6,6 @@ tenant's brand.
 """
 
 from html import escape
-from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,14 +13,13 @@ from sqlalchemy.orm import selectinload
 
 from src.whitelabel.models import Tenant, TenantSettings, TenantUser
 
-
 # Schemes allowed in outbound email links. ``html.escape`` does not block
 # ``javascript:``/``data:`` URLs inside ``href``/``src`` attributes, so every
 # externally-sourced URL that lands in an email must also pass this filter.
 _SAFE_URL_SCHEMES = ("https://", "http://", "mailto:")
 
 
-def _safe_url(url: Optional[str]) -> str:
+def _safe_url(url: str | None) -> str:
     """Return ``url`` if it uses an allowlisted scheme, else an empty string.
 
     Defensive second layer: values in :class:`TenantSettings` should already
@@ -120,8 +118,8 @@ def _base_email_html(
     branding: dict,
     headline: str,
     body_html: str,
-    cta_text: Optional[str] = None,
-    cta_url: Optional[str] = None,
+    cta_text: str | None = None,
+    cta_url: str | None = None,
 ) -> str:
     """Render content into a branded, responsive HTML email wrapper.
 
@@ -255,8 +253,8 @@ def render_branded_email(
     subject: str,
     headline: str,
     body_html: str,
-    cta_text: Optional[str] = None,
-    cta_url: Optional[str] = None,
+    cta_text: str | None = None,
+    cta_url: str | None = None,
 ) -> str:
     """Render any content into the branded email wrapper."""
     return _base_email_html(

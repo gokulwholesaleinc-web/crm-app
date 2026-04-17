@@ -1,11 +1,13 @@
 """Workflow automation service layer."""
 
-from typing import Optional, List, Tuple, Dict, Any
-from sqlalchemy import select, func
-from src.workflows.models import WorkflowRule, WorkflowExecution
-from src.workflows.schemas import WorkflowRuleCreate, WorkflowRuleUpdate
+from typing import Any
+
+from sqlalchemy import func, select
+
 from src.core.base_service import BaseService
 from src.core.constants import DEFAULT_PAGE_SIZE
+from src.workflows.models import WorkflowExecution, WorkflowRule
+from src.workflows.schemas import WorkflowRuleCreate, WorkflowRuleUpdate
 
 # Supported operators for condition evaluation
 OPERATORS = {
@@ -29,9 +31,9 @@ class WorkflowService(BaseService[WorkflowRule]):
         self,
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
-        is_active: Optional[bool] = None,
-        trigger_entity: Optional[str] = None,
-    ) -> Tuple[List[WorkflowRule], int]:
+        is_active: bool | None = None,
+        trigger_entity: str | None = None,
+    ) -> tuple[list[WorkflowRule], int]:
         """Get paginated list of workflow rules."""
         query = select(WorkflowRule)
 
@@ -77,7 +79,7 @@ class WorkflowService(BaseService[WorkflowRule]):
         rule_id: int,
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
-    ) -> Tuple[List[WorkflowExecution], int]:
+    ) -> tuple[list[WorkflowExecution], int]:
         """Get execution history for a rule."""
         query = select(WorkflowExecution).where(WorkflowExecution.rule_id == rule_id)
 
@@ -93,7 +95,7 @@ class WorkflowService(BaseService[WorkflowRule]):
 
         return executions, total
 
-    def _check_condition(self, entity_data: Dict[str, Any], condition: Dict[str, Any]) -> bool:
+    def _check_condition(self, entity_data: dict[str, Any], condition: dict[str, Any]) -> bool:
         """Check if a single condition matches the entity data."""
         field = condition.get("field")
         operator = condition.get("operator", "==")
@@ -118,10 +120,10 @@ class WorkflowService(BaseService[WorkflowRule]):
         self,
         entity_type: str,
         event: str,
-        entity_data: Dict[str, Any],
+        entity_data: dict[str, Any],
         entity_id: int,
         dry_run: bool = False,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Evaluate all active rules against an entity event.
 

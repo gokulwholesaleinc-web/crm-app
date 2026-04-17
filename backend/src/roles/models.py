@@ -1,11 +1,12 @@
 """Role and permission models for RBAC."""
 
 import enum
-from typing import Optional
-from sqlalchemy import String, Integer, ForeignKey, JSON, UniqueConstraint
+
+from sqlalchemy import JSON, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from src.database import Base
+
 from src.core.mixins.auditable import TimestampMixin
+from src.database import Base
 
 
 class RoleName(str, enum.Enum):
@@ -78,8 +79,8 @@ class Role(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(50), unique=True, nullable=False, index=True)
-    description: Mapped[Optional[str]] = mapped_column(String(255))
-    permissions: Mapped[Optional[dict]] = mapped_column(JSON, default=dict)
+    description: Mapped[str | None] = mapped_column(String(255))
+    permissions: Mapped[dict | None] = mapped_column(JSON, default=dict)
 
     # Relationships
     users: Mapped[list["UserRole"]] = relationship("UserRole", back_populates="role")

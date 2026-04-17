@@ -1,18 +1,20 @@
 """Comment API routes."""
 
 from typing import Annotated
-from fastapi import APIRouter, Depends, Query, HTTPException
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from src.comments.schemas import (
+    CommentCreate,
+    CommentListResponse,
+    CommentResponse,
+    CommentUpdate,
+)
+from src.comments.service import CommentService
 from src.core.constants import HTTPStatus
 from src.core.data_scope import DataScope, get_data_scope
 from src.core.entity_access import require_entity_access
-from src.core.router_utils import DBSession, CurrentUser, calculate_pages
-from src.comments.schemas import (
-    CommentCreate,
-    CommentUpdate,
-    CommentResponse,
-    CommentListResponse,
-)
-from src.comments.service import CommentService
+from src.core.router_utils import CurrentUser, DBSession, calculate_pages
 
 router = APIRouter(prefix="/api/comments", tags=["comments"])
 
@@ -104,6 +106,7 @@ async def get_comment(
     # Get author name
     if comment.user_id:
         from sqlalchemy import select
+
         from src.auth.models import User
         user_result = await db.execute(
             select(User.full_name).where(User.id == comment.user_id)

@@ -1,15 +1,15 @@
 """Write/action CRM tools for the AI assistant."""
 
 import logging
-from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict
+from datetime import UTC, date, datetime, timedelta
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.activities.models import Activity
 from src.activities.schemas import ActivityCreate
 from src.activities.service import ActivityService
+from src.ai.learning_service import AILearningService
 from src.contacts.models import Contact
 from src.leads.schemas import LeadCreate, LeadUpdate
 from src.leads.service import LeadService
@@ -18,7 +18,6 @@ from src.notes.service import NoteService
 from src.opportunities.models import Opportunity, PipelineStage
 from src.opportunities.schemas import OpportunityUpdate
 from src.opportunities.service import OpportunityService
-from src.ai.learning_service import AILearningService
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +26,7 @@ class CRMActionTools:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def create_lead(self, args: Dict[str, Any], user_id: int) -> Dict[str, Any]:
+    async def create_lead(self, args: dict[str, Any], user_id: int) -> dict[str, Any]:
         service = LeadService(self.db)
         lead_data = LeadCreate(
             first_name=args["first_name"],
@@ -47,7 +46,7 @@ class CRMActionTools:
             "message": f"Lead '{lead.full_name}' created successfully.",
         }
 
-    async def update_lead_status(self, args: Dict[str, Any], user_id: int) -> Dict[str, Any]:
+    async def update_lead_status(self, args: dict[str, Any], user_id: int) -> dict[str, Any]:
         service = LeadService(self.db)
         lead = await service.get_by_id(args["lead_id"])
         if not lead:
@@ -68,7 +67,7 @@ class CRMActionTools:
             "message": f"Lead '{lead.full_name}' status changed from '{old_status}' to '{lead.status}'.",
         }
 
-    async def create_activity(self, args: Dict[str, Any], user_id: int) -> Dict[str, Any]:
+    async def create_activity(self, args: dict[str, Any], user_id: int) -> dict[str, Any]:
         service = ActivityService(self.db)
 
         due = None
@@ -97,7 +96,7 @@ class CRMActionTools:
             "message": f"Activity '{activity.subject}' created successfully.",
         }
 
-    async def update_opportunity_stage(self, args: Dict[str, Any], user_id: int) -> Dict[str, Any]:
+    async def update_opportunity_stage(self, args: dict[str, Any], user_id: int) -> dict[str, Any]:
         service = OpportunityService(self.db)
         opportunity = await service.get_by_id(args["opportunity_id"])
         if not opportunity:
@@ -129,7 +128,7 @@ class CRMActionTools:
             "message": f"Opportunity '{opportunity.name}' moved from '{old_stage_name}' to '{stage.name}'.",
         }
 
-    async def add_note(self, args: Dict[str, Any], user_id: int) -> Dict[str, Any]:
+    async def add_note(self, args: dict[str, Any], user_id: int) -> dict[str, Any]:
         service = NoteService(self.db)
         note_data = NoteCreate(
             entity_type=args["entity_type"],
@@ -145,7 +144,7 @@ class CRMActionTools:
             "message": f"Note added to {args['entity_type']} #{args['entity_id']}.",
         }
 
-    async def remember_preference(self, args: Dict[str, Any], user_id: int) -> Dict[str, Any]:
+    async def remember_preference(self, args: dict[str, Any], user_id: int) -> dict[str, Any]:
         learning_service = AILearningService(self.db)
         learning = await learning_service.learn_preference(
             user_id=user_id,
@@ -159,10 +158,11 @@ class CRMActionTools:
             "learning_id": learning.id,
         }
 
-    async def create_and_send_quote(self, args: Dict[str, Any], user_id: int) -> Dict[str, Any]:
-        from src.quotes.service import QuoteService
-        from src.quotes.schemas import QuoteCreate, QuoteLineItemCreate
+    async def create_and_send_quote(self, args: dict[str, Any], user_id: int) -> dict[str, Any]:
         import os
+
+        from src.quotes.schemas import QuoteCreate, QuoteLineItemCreate
+        from src.quotes.service import QuoteService
 
         valid_days = args.get("valid_days", 30)
         valid_until = (date.today() + timedelta(days=valid_days))
@@ -209,7 +209,7 @@ class CRMActionTools:
 
         return result
 
-    async def _send_quote_email(self, quote, user_id: int) -> Dict[str, Any]:
+    async def _send_quote_email(self, quote, user_id: int) -> dict[str, Any]:
         import os
 
         if not quote.contact_id:
@@ -261,14 +261,15 @@ class CRMActionTools:
 
         if quote.status == "draft":
             quote.status = "sent"
-            quote.sent_at = datetime.now(timezone.utc)
+            quote.sent_at = datetime.now(UTC)
             await self.db.flush()
 
         return {"success": True}
 
-    async def resend_quote(self, args: Dict[str, Any], user_id: int) -> Dict[str, Any]:
-        from src.quotes.models import Quote
+    async def resend_quote(self, args: dict[str, Any], user_id: int) -> dict[str, Any]:
         from sqlalchemy.orm import selectinload
+
+        from src.quotes.models import Quote
 
         result = await self.db.execute(
             select(Quote)
@@ -284,9 +285,9 @@ class CRMActionTools:
             return {"success": True, "message": f"Quote '{quote.quote_number}' resent successfully."}
         return {"success": False, "error": send_result.get("error", "Failed to send email.")}
 
-    async def create_and_send_proposal(self, args: Dict[str, Any], user_id: int) -> Dict[str, Any]:
-        from src.proposals.service import ProposalService
+    async def create_and_send_proposal(self, args: dict[str, Any], user_id: int) -> dict[str, Any]:
         from src.proposals.schemas import ProposalCreate
+        from src.proposals.service import ProposalService
 
         opp_result = await self.db.execute(
             select(Opportunity).where(Opportunity.id == args["opportunity_id"])
@@ -324,7 +325,7 @@ class CRMActionTools:
 
         return result
 
-    async def _send_proposal_email(self, proposal, opportunity, user_id: int) -> Dict[str, Any]:
+    async def _send_proposal_email(self, proposal, opportunity, user_id: int) -> dict[str, Any]:
         if not opportunity.contact_id:
             return {"success": False, "error": "No contact on opportunity."}
 
@@ -359,7 +360,7 @@ class CRMActionTools:
         )
         return {"success": True}
 
-    async def resend_proposal(self, args: Dict[str, Any], user_id: int) -> Dict[str, Any]:
+    async def resend_proposal(self, args: dict[str, Any], user_id: int) -> dict[str, Any]:
         from src.proposals.models import Proposal
 
         result = await self.db.execute(
@@ -384,7 +385,7 @@ class CRMActionTools:
             return {"success": True, "message": f"Proposal '{proposal.proposal_number}' resent successfully."}
         return {"success": False, "error": send_result.get("error", "Failed to send email.")}
 
-    async def create_payment_link(self, args: Dict[str, Any], user_id: int) -> Dict[str, Any]:
+    async def create_payment_link(self, args: dict[str, Any], user_id: int) -> dict[str, Any]:
         from src.payments.service import PaymentService
 
         amount = args["amount"]
@@ -458,7 +459,7 @@ class CRMActionTools:
 
         return result
 
-    async def send_invoice(self, args: Dict[str, Any], user_id: int) -> Dict[str, Any]:
+    async def send_invoice(self, args: dict[str, Any], user_id: int) -> dict[str, Any]:
         from src.payments.models import Payment
 
         result = await self.db.execute(
@@ -524,7 +525,7 @@ class CRMActionTools:
             "message": f"Invoice sent to {email_addr} for payment #{payment.id}.",
         }
 
-    async def send_email_to_contact(self, args: Dict[str, Any], user_id: int) -> Dict[str, Any]:
+    async def send_email_to_contact(self, args: dict[str, Any], user_id: int) -> dict[str, Any]:
         contact_result = await self.db.execute(
             select(Contact).where(Contact.id == args["contact_id"])
         )
@@ -567,7 +568,7 @@ class CRMActionTools:
             "message": f"Email sent to {contact.full_name} ({contact.email}).",
         }
 
-    async def schedule_follow_up_sequence(self, args: Dict[str, Any], user_id: int) -> Dict[str, Any]:
+    async def schedule_follow_up_sequence(self, args: dict[str, Any], user_id: int) -> dict[str, Any]:
         entity_type = args["entity_type"]
         entity_id = args["entity_id"]
         steps = args.get("steps", [])
@@ -606,7 +607,7 @@ class CRMActionTools:
             "message": f"Scheduled {len(created_activities)} follow-up activities.",
         }
 
-    async def send_campaign_to_segment(self, args: Dict[str, Any], user_id: int) -> Dict[str, Any]:
+    async def send_campaign_to_segment(self, args: dict[str, Any], user_id: int) -> dict[str, Any]:
         from src.campaigns.models import Campaign
 
         campaign_result = await self.db.execute(

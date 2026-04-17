@@ -1,39 +1,42 @@
 """Payment API routes."""
 
 import logging
-from typing import Annotated, Optional
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
-from src.core.constants import HTTPStatus, EntityNames, ENTITY_TYPE_PAYMENTS
+
+from src.core.constants import ENTITY_TYPE_PAYMENTS, EntityNames, HTTPStatus
+from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
 from src.core.router_utils import (
-    DBSession,
     CurrentUser,
-    get_entity_or_404,
+    DBSession,
     calculate_pages,
     check_ownership,
+    get_entity_or_404,
     raise_forbidden,
 )
-from src.core.data_scope import DataScope, get_data_scope, check_record_access_or_shared
+from src.events.service import PAYMENT_RECEIVED, emit
 from src.payments.models import StripeCustomer
 from src.payments.schemas import (
-    PaymentResponse,
-    PaymentListResponse,
-    ProductCreate,
-    ProductResponse,
-    ProductListResponse,
-    StripeCustomerResponse,
-    StripeCustomerListResponse,
-    SyncCustomerRequest,
-    SubscriptionResponse,
-    SubscriptionListResponse,
-    CreateCheckoutRequest,
-    CreateCheckoutResponse,
-    CreatePaymentIntentRequest,
-    CreatePaymentIntentResponse,
     CreateAndSendInvoiceRequest,
     CreateAndSendInvoiceResponse,
+    CreateCheckoutRequest,
+    CreateCheckoutResponse,
     CreateOnboardingLinkRequest,
     CreateOnboardingLinkResponse,
+    CreatePaymentIntentRequest,
+    CreatePaymentIntentResponse,
+    PaymentListResponse,
+    PaymentResponse,
+    ProductCreate,
+    ProductListResponse,
+    ProductResponse,
+    StripeCustomerListResponse,
+    StripeCustomerResponse,
+    SubscriptionListResponse,
+    SubscriptionResponse,
+    SyncCustomerRequest,
 )
 from src.payments.service import (
     PaymentService,
@@ -41,7 +44,6 @@ from src.payments.service import (
     StripeCustomerService,
     SubscriptionService,
 )
-from src.events.service import emit, PAYMENT_RECEIVED
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +57,7 @@ def _is_privileged(current_user) -> bool:
     return getattr(current_user, "role", "sales_rep") in ("admin", "manager")
 
 
-async def _verify_contact_access(db, contact_id: Optional[int], current_user) -> None:
+async def _verify_contact_access(db, contact_id: int | None, current_user) -> None:
     """Raise 403 if the caller cannot access the referenced contact."""
     if contact_id is None or _is_privileged(current_user):
         return
@@ -68,7 +70,7 @@ async def _verify_contact_access(db, contact_id: Optional[int], current_user) ->
         raise_forbidden("You do not have permission to reference this contact")
 
 
-async def _verify_company_access(db, company_id: Optional[int], current_user) -> None:
+async def _verify_company_access(db, company_id: int | None, current_user) -> None:
     """Raise 403 if the caller cannot access the referenced company."""
     if company_id is None or _is_privileged(current_user):
         return
@@ -81,7 +83,7 @@ async def _verify_company_access(db, company_id: Optional[int], current_user) ->
         raise_forbidden("You do not have permission to reference this company")
 
 
-async def _verify_quote_access(db, quote_id: Optional[int], current_user) -> None:
+async def _verify_quote_access(db, quote_id: int | None, current_user) -> None:
     """Raise 403 if the caller cannot access the referenced quote."""
     if quote_id is None or _is_privileged(current_user):
         return
@@ -94,7 +96,7 @@ async def _verify_quote_access(db, quote_id: Optional[int], current_user) -> Non
         raise_forbidden("You do not have permission to reference this quote")
 
 
-async def _verify_opportunity_access(db, opportunity_id: Optional[int], current_user) -> None:
+async def _verify_opportunity_access(db, opportunity_id: int | None, current_user) -> None:
     """Raise 403 if the caller cannot access the referenced opportunity."""
     if opportunity_id is None or _is_privileged(current_user):
         return
@@ -140,10 +142,10 @@ async def list_payments(
     data_scope: Annotated[DataScope, Depends(get_data_scope)],
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    status: Optional[str] = None,
-    customer_id: Optional[int] = None,
-    owner_id: Optional[int] = None,
-    search: Optional[str] = None,
+    status: str | None = None,
+    customer_id: int | None = None,
+    owner_id: int | None = None,
+    search: str | None = None,
 ):
     """List payments with pagination and filters."""
     if data_scope.can_see_all():
@@ -435,7 +437,7 @@ async def list_products(
     db: DBSession,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    is_active: Optional[bool] = None,
+    is_active: bool | None = None,
 ):
     """List products."""
     service = ProductService(db)
@@ -475,8 +477,8 @@ async def list_subscriptions(
     data_scope: Annotated[DataScope, Depends(get_data_scope)],
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    status: Optional[str] = None,
-    customer_id: Optional[int] = None,
+    status: str | None = None,
+    customer_id: int | None = None,
 ):
     """List subscriptions."""
     effective_owner_id = None

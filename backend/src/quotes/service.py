@@ -2,21 +2,25 @@
 
 import os
 import secrets
-from datetime import datetime, timezone
-from typing import Optional, List, Tuple
-from sqlalchemy import select, func, or_
+from datetime import UTC, datetime
+
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
-from src.quotes.models import Quote, QuoteLineItem, ProductBundle, ProductBundleItem
-from src.quotes.schemas import (
-    QuoteCreate, QuoteUpdate, QuoteLineItemCreate,
-    ProductBundleCreate, ProductBundleUpdate,
-)
-from src.core.base_service import CRUDService, StatusTransitionMixin, BaseService
+
+from src.core.base_service import BaseService, CRUDService, StatusTransitionMixin
 from src.core.constants import DEFAULT_PAGE_SIZE
 from src.core.filtering import build_token_search
 from src.email.branded_templates import TenantBrandingHelper, render_quote_email
 from src.email.pdf_service import BrandedPDFGenerator
 from src.email.service import EmailService
+from src.quotes.models import ProductBundle, ProductBundleItem, Quote, QuoteLineItem
+from src.quotes.schemas import (
+    ProductBundleCreate,
+    ProductBundleUpdate,
+    QuoteCreate,
+    QuoteLineItemCreate,
+    QuoteUpdate,
+)
 
 
 def _designated_email_for(quote: Quote) -> str:
@@ -49,7 +53,7 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
 
     async def _generate_quote_number(self) -> str:
         """Generate auto-incrementing quote number: QT-{year}-{seq}."""
-        year = datetime.now(timezone.utc).year
+        year = datetime.now(UTC).year
         prefix = f"QT-{year}-"
 
         result = await self.db.execute(
@@ -89,14 +93,14 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
         self,
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
-        search: Optional[str] = None,
-        status: Optional[str] = None,
-        contact_id: Optional[int] = None,
-        company_id: Optional[int] = None,
-        opportunity_id: Optional[int] = None,
-        owner_id: Optional[int] = None,
-        shared_entity_ids: Optional[List[int]] = None,
-    ) -> Tuple[List[Quote], int]:
+        search: str | None = None,
+        status: str | None = None,
+        contact_id: int | None = None,
+        company_id: int | None = None,
+        opportunity_id: int | None = None,
+        owner_id: int | None = None,
+        shared_entity_ids: list[int] | None = None,
+    ) -> tuple[list[Quote], int]:
         """Get paginated list of quotes with filters."""
         query = (
             select(Quote)
@@ -296,7 +300,7 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
             )
 
         quote.status = "sent"
-        quote.sent_at = datetime.now(timezone.utc)
+        quote.sent_at = datetime.now(UTC)
         await self.db.flush()
         await self.db.refresh(quote)
 
@@ -343,7 +347,7 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
         generator = BrandedPDFGenerator()
         return generator.generate_quote_pdf(quote_data, branding)
 
-    async def get_public_quote(self, token: str) -> Optional[Quote]:
+    async def get_public_quote(self, token: str) -> Quote | None:
         """Get a quote by its unguessable public token.
 
         Looks up rows with `public_token == token` (no longer
@@ -383,8 +387,8 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
         quote: Quote,
         signer_name: str,
         signer_email: str,
-        signer_ip: Optional[str] = None,
-        signer_user_agent: Optional[str] = None,
+        signer_ip: str | None = None,
+        signer_user_agent: str | None = None,
     ) -> Quote:
         """Accept a quote via the public link with e-signature data.
 
@@ -406,7 +410,7 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
         if not given_email or given_email != expected_email:
             raise ValueError("Signer email does not match the quote recipient")
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         quote.status = "accepted"
         quote.accepted_at = now
         quote.signer_name = signer_name
@@ -421,15 +425,15 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
     async def reject_quote_public(
         self,
         quote: Quote,
-        reason: Optional[str] = None,
-        signer_ip: Optional[str] = None,
-        signer_user_agent: Optional[str] = None,
+        reason: str | None = None,
+        signer_ip: str | None = None,
+        signer_user_agent: str | None = None,
     ) -> Quote:
         """Reject a quote via the public link."""
         if quote.status not in ("sent", "viewed"):
             raise ValueError(f"Cannot reject quote in '{quote.status}' status")
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         quote.status = "rejected"
         quote.rejected_at = now
         quote.rejection_reason = reason
@@ -487,9 +491,9 @@ class ProductBundleService(BaseService[ProductBundle]):
         self,
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
-        search: Optional[str] = None,
-        is_active: Optional[bool] = None,
-    ) -> Tuple[List[ProductBundle], int]:
+        search: str | None = None,
+        is_active: bool | None = None,
+    ) -> tuple[list[ProductBundle], int]:
         """Get paginated list of bundles."""
         query = select(ProductBundle).options(selectinload(ProductBundle.items))
 

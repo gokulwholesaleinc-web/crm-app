@@ -1,24 +1,30 @@
 """Contract API routes."""
 
 import logging
-from typing import Optional
+
 from fastapi import APIRouter, Query, Request
-from src.core.constants import HTTPStatus
-from src.core.router_utils import (
-    DBSession,
-    CurrentUser,
-    get_entity_or_404,
-    calculate_pages,
-    check_ownership,
+
+from src.audit.utils import (
+    audit_entity_create,
+    audit_entity_delete,
+    audit_entity_update,
+    snapshot_entity,
 )
 from src.contracts.schemas import (
     ContractCreate,
-    ContractUpdate,
-    ContractResponse,
     ContractListResponse,
+    ContractResponse,
+    ContractUpdate,
 )
 from src.contracts.service import ContractService
-from src.audit.utils import audit_entity_create, audit_entity_update, audit_entity_delete, snapshot_entity
+from src.core.constants import HTTPStatus
+from src.core.router_utils import (
+    CurrentUser,
+    DBSession,
+    calculate_pages,
+    check_ownership,
+    get_entity_or_404,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,10 +39,10 @@ async def list_contracts(
     db: DBSession,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    contact_id: Optional[int] = None,
-    company_id: Optional[int] = None,
-    status: Optional[str] = None,
-    owner_id: Optional[int] = None,
+    contact_id: int | None = None,
+    company_id: int | None = None,
+    status: str | None = None,
+    owner_id: int | None = None,
 ):
     """List contracts with pagination and filters."""
     service = ContractService(db)

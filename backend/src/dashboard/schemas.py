@@ -1,7 +1,8 @@
 """Pydantic schemas for dashboard."""
 
 from datetime import datetime
-from typing import Optional, List, Any, Dict
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -9,37 +10,37 @@ class NumberCardData(BaseModel):
     id: str
     label: str
     value: Any  # Can be int, float
-    format: Optional[str] = None  # currency, percentage, number
-    icon: Optional[str] = None
+    format: str | None = None  # currency, percentage, number
+    icon: str | None = None
     color: str = "#6366f1"
-    change: Optional[float] = None  # Percentage change
+    change: float | None = None  # Percentage change
 
 
 class ChartDataPoint(BaseModel):
     label: str
     value: Any
-    color: Optional[str] = None
+    color: str | None = None
 
 
 class ChartData(BaseModel):
     type: str  # bar, line, pie, funnel, area
     title: str
-    data: List[ChartDataPoint]
+    data: list[ChartDataPoint]
 
 
 class DashboardResponse(BaseModel):
-    number_cards: List[NumberCardData]
-    charts: List[ChartData]
+    number_cards: list[NumberCardData]
+    charts: list[ChartData]
 
 
 class NumberCardConfig(BaseModel):
     id: int
     name: str
     label: str
-    description: Optional[str] = None
+    description: str | None = None
     config: str  # JSON string
     color: str = "#6366f1"
-    icon: Optional[str] = None
+    icon: str | None = None
     is_active: bool = True
     order: int = 0
     show_percentage_change: bool = False
@@ -51,7 +52,7 @@ class ChartConfig(BaseModel):
     id: int
     name: str
     label: str
-    description: Optional[str] = None
+    description: str | None = None
     chart_type: str
     config: str  # JSON string
     is_active: bool = True
@@ -65,7 +66,7 @@ class ChartConfig(BaseModel):
 class FunnelStage(BaseModel):
     stage: str
     count: int
-    color: Optional[str] = None
+    color: str | None = None
 
 
 class FunnelConversion(BaseModel):
@@ -75,9 +76,9 @@ class FunnelConversion(BaseModel):
 
 
 class SalesFunnelResponse(BaseModel):
-    stages: List[FunnelStage]
-    conversions: List[FunnelConversion]
-    avg_days_in_stage: Dict[str, Optional[float]]
+    stages: list[FunnelStage]
+    conversions: list[FunnelConversion]
+    avg_days_in_stage: dict[str, float | None]
 
 
 # Report Widget schemas
@@ -88,9 +89,9 @@ class ReportWidgetCreate(BaseModel):
 
 
 class ReportWidgetUpdate(BaseModel):
-    position: Optional[int] = None
-    width: Optional[str] = None
-    is_visible: Optional[bool] = None
+    position: int | None = None
+    width: str | None = None
+    is_visible: bool | None = None
 
 
 class ReportWidgetResponse(BaseModel):

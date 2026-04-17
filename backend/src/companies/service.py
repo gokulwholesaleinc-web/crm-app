@@ -1,13 +1,15 @@
 """Company service layer."""
 
-from typing import Optional, List, Tuple, Any, Dict
-from sqlalchemy import select, func
+from typing import Any
+
+from sqlalchemy import func, select
+
 from src.companies.models import Company
-from src.core.filtering import apply_filters_to_query, build_token_search
 from src.companies.schemas import CompanyCreate, CompanyUpdate
 from src.contacts.models import Contact
 from src.core.base_service import CRUDService, TaggableServiceMixin
-from src.core.constants import ENTITY_TYPE_COMPANIES, DEFAULT_PAGE_SIZE
+from src.core.constants import DEFAULT_PAGE_SIZE, ENTITY_TYPE_COMPANIES
+from src.core.filtering import apply_filters_to_query, build_token_search
 
 
 class CompanyService(
@@ -23,14 +25,14 @@ class CompanyService(
         self,
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
-        search: Optional[str] = None,
-        status: Optional[str] = None,
-        industry: Optional[str] = None,
-        owner_id: Optional[int] = None,
-        tag_ids: Optional[List[int]] = None,
-        filters: Optional[Dict[str, Any]] = None,
-        shared_entity_ids: Optional[List[int]] = None,
-    ) -> Tuple[List[Company], int]:
+        search: str | None = None,
+        status: str | None = None,
+        industry: str | None = None,
+        owner_id: int | None = None,
+        tag_ids: list[int] | None = None,
+        filters: dict[str, Any] | None = None,
+        shared_entity_ids: list[int] | None = None,
+    ) -> tuple[list[Company], int]:
         """Get paginated list of companies with filters.
 
         Soft-deleted companies (``status="merged"``, written by
@@ -72,7 +74,7 @@ class CompanyService(
         )
         return result.scalar() or 0
 
-    async def get_contact_counts_batch(self, company_ids: List[int]) -> Dict[int, int]:
+    async def get_contact_counts_batch(self, company_ids: list[int]) -> dict[int, int]:
         """Get contact counts for multiple companies in a single query."""
         if not company_ids:
             return {}

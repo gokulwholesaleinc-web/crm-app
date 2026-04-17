@@ -1,7 +1,8 @@
 """Pydantic schemas for sales sequences."""
 
 from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -9,31 +10,31 @@ class SequenceStepSchema(BaseModel):
     step_number: int
     type: str  # email, task, wait
     delay_days: int = 0
-    template_id: Optional[int] = None
-    task_description: Optional[str] = None
+    template_id: int | None = None
+    task_description: str | None = None
 
 
 class SequenceCreate(BaseModel):
     name: str
-    description: Optional[str] = None
-    steps: List[SequenceStepSchema] = []
+    description: str | None = None
+    steps: list[SequenceStepSchema] = []
     is_active: bool = True
 
 
 class SequenceUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    steps: Optional[List[SequenceStepSchema]] = None
-    is_active: Optional[bool] = None
+    name: str | None = None
+    description: str | None = None
+    steps: list[SequenceStepSchema] | None = None
+    is_active: bool | None = None
 
 
 class SequenceResponse(BaseModel):
     id: int
     name: str
-    description: Optional[str] = None
-    steps: List[Dict[str, Any]] = []
+    description: str | None = None
+    steps: list[dict[str, Any]] = []
     is_active: bool
-    created_by_id: Optional[int] = None
+    created_by_id: int | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -51,12 +52,12 @@ class SequenceEnrollmentResponse(BaseModel):
     current_step: int
     status: str
     started_at: datetime
-    next_step_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
+    next_step_at: datetime | None = None
+    completed_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class ProcessDueResult(BaseModel):
     processed: int
-    details: List[Dict[str, Any]] = []
+    details: list[dict[str, Any]] = []

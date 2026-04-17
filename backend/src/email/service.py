@@ -4,18 +4,17 @@ import asyncio
 import html
 import logging
 import re
-from datetime import datetime, timedelta, timezone
-from typing import Optional, List, Tuple, Dict
+from datetime import UTC, datetime, timedelta
 
 import resend
-from sqlalchemy import select, func, and_, union_all, literal
+from sqlalchemy import and_, func, literal, select, union_all
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
-from src.email.models import EmailQueue, InboundEmail
-from src.email.branded_templates import TenantBrandingHelper, render_branded_email
 from src.core.constants import DEFAULT_PAGE_SIZE
+from src.email.branded_templates import TenantBrandingHelper, render_branded_email
+from src.email.models import EmailQueue, InboundEmail
 
 logger = logging.getLogger(__name__)
 
@@ -63,10 +62,10 @@ async def _try_gmail_send(email: EmailQueue, db: AsyncSession) -> bool:
 
 async def _find_thread_context(
     db: AsyncSession,
-    entity_type: Optional[str],
-    entity_id: Optional[int],
+    entity_type: str | None,
+    entity_id: int | None,
     to_email: str,
-) -> tuple[Optional[str], Optional[str]]:
+) -> tuple[str | None, str | None]:
     if not entity_type or not entity_id:
         return None, None
     result = await db.execute(
@@ -102,7 +101,7 @@ async def _create_email_activity(
         email_cc=email.cc,
         owner_id=email.sent_by_id,
         is_completed=True,
-        completed_at=datetime.now(timezone.utc),
+        completed_at=datetime.now(UTC),
     )
     db.add(activity)
     await db.flush()
@@ -114,9 +113,9 @@ def send_email(
     to_email: str,
     subject: str,
     body: str,
-    from_email: Optional[str] = None,
-    cc: Optional[str] = None,
-    bcc: Optional[str] = None,
+    from_email: str | None = None,
+    cc: str | None = None,
+    bcc: str | None = None,
 ) -> None:
     """Send an email via Resend. Raises on failure."""
     resend.api_key = settings.RESEND_API_KEY
@@ -134,7 +133,7 @@ def send_email(
 
 
 def render_template(
-    template: str, variables: Dict[str, str], is_html: bool = True
+    template: str, variables: dict[str, str], is_html: bool = True
 ) -> str:
     """Render a template by replacing {{var}} placeholders with substituted values.
 
@@ -161,7 +160,7 @@ class EmailService:
         self.db = db
 
     @staticmethod
-    def _validate_from_email(from_email: Optional[str]) -> Optional[str]:
+    def _validate_from_email(from_email: str | None) -> str | None:
         """Validate from_email against the configured EMAIL_FROM domain.
 
         Returns the from_email if valid, or None to fall back to default.
@@ -183,14 +182,14 @@ class EmailService:
         to_email: str,
         subject: str,
         body: str,
-        sent_by_id: Optional[int] = None,
-        entity_type: Optional[str] = None,
-        entity_id: Optional[int] = None,
-        template_id: Optional[int] = None,
-        campaign_id: Optional[int] = None,
-        from_email: Optional[str] = None,
-        cc: Optional[str] = None,
-        bcc: Optional[str] = None,
+        sent_by_id: int | None = None,
+        entity_type: str | None = None,
+        entity_id: int | None = None,
+        template_id: int | None = None,
+        campaign_id: int | None = None,
+        from_email: str | None = None,
+        cc: str | None = None,
+        bcc: str | None = None,
     ) -> EmailQueue:
         """Create an email queue entry and attempt to send."""
         from_email = self._validate_from_email(from_email)
@@ -216,7 +215,7 @@ class EmailService:
         throttle = EmailThrottleService(self.db)
         if not await throttle.can_send():
             email.status = "throttled"
-            tomorrow_9am = (datetime.now(timezone.utc) + timedelta(days=1)).replace(
+            tomorrow_9am = (datetime.now(UTC) + timedelta(days=1)).replace(
                 hour=9, minute=0, second=0, microsecond=0
             )
             email.next_retry_at = tomorrow_9am
@@ -244,7 +243,7 @@ class EmailService:
                 email.sent_via = "resend"
 
             email.status = "sent"
-            email.sent_at = datetime.now(timezone.utc)
+            email.sent_at = datetime.now(UTC)
             await _create_email_activity(self.db, email)
         except Exception as exc:
             email.error = str(exc)[:500]
@@ -255,10 +254,10 @@ class EmailService:
             else:
                 email.status = "retry"
                 backoff_minutes = 2 ** email.retry_count
-                email.next_retry_at = datetime.now(timezone.utc) + timedelta(minutes=backoff_minutes)
+                email.next_retry_at = datetime.now(UTC) + timedelta(minutes=backoff_minutes)
         await self.db.flush()
 
-    async def get_by_id(self, email_id: int) -> Optional[EmailQueue]:
+    async def get_by_id(self, email_id: int) -> EmailQueue | None:
         result = await self.db.execute(
             select(EmailQueue).where(EmailQueue.id == email_id)
         )
@@ -268,11 +267,11 @@ class EmailService:
         self,
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
-        entity_type: Optional[str] = None,
-        entity_id: Optional[int] = None,
-        status: Optional[str] = None,
-        sent_by_id: Optional[int] = None,
-    ) -> Tuple[List[EmailQueue], int]:
+        entity_type: str | None = None,
+        entity_id: int | None = None,
+        status: str | None = None,
+        sent_by_id: int | None = None,
+    ) -> tuple[list[EmailQueue], int]:
         """Get paginated list of emails with optional filters."""
         filters = []
         if entity_type:
@@ -301,28 +300,28 @@ class EmailService:
 
     async def _record_tracking_event(
         self, email_id: int, count_attr: str, timestamp_attr: str,
-    ) -> Optional[EmailQueue]:
+    ) -> EmailQueue | None:
         """Increment a tracking counter and set the first-occurrence timestamp."""
         email = await self.get_by_id(email_id)
         if not email:
             return None
         setattr(email, count_attr, getattr(email, count_attr) + 1)
         if not getattr(email, timestamp_attr):
-            setattr(email, timestamp_attr, datetime.now(timezone.utc))
+            setattr(email, timestamp_attr, datetime.now(UTC))
         await self.db.flush()
         return email
 
-    async def record_open(self, email_id: int) -> Optional[EmailQueue]:
+    async def record_open(self, email_id: int) -> EmailQueue | None:
         """Record an email open event."""
         return await self._record_tracking_event(email_id, "open_count", "opened_at")
 
-    async def record_click(self, email_id: int) -> Optional[EmailQueue]:
+    async def record_click(self, email_id: int) -> EmailQueue | None:
         """Record an email click event."""
         return await self._record_tracking_event(email_id, "click_count", "clicked_at")
 
     async def process_retries(self) -> int:
         """Retry emails that are due for retry. Returns the count of retried emails."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         result = await self.db.execute(
             select(EmailQueue).where(
                 and_(
@@ -340,12 +339,12 @@ class EmailService:
         self,
         to_email: str,
         template_id: int,
-        variables: Optional[Dict[str, str]] = None,
-        sent_by_id: Optional[int] = None,
-        entity_type: Optional[str] = None,
-        entity_id: Optional[int] = None,
+        variables: dict[str, str] | None = None,
+        sent_by_id: int | None = None,
+        entity_type: str | None = None,
+        entity_id: int | None = None,
         use_branded_wrapper: bool = False,
-        branding: Optional[dict] = None,
+        branding: dict | None = None,
     ) -> EmailQueue:
         """Send an email using a template.
 
@@ -386,9 +385,9 @@ class EmailService:
         self,
         campaign_id: int,
         template_id: int,
-        variables: Optional[Dict[str, str]] = None,
-        sent_by_id: Optional[int] = None,
-    ) -> List[EmailQueue]:
+        variables: dict[str, str] | None = None,
+        sent_by_id: int | None = None,
+    ) -> list[EmailQueue]:
         """Send branded emails to all members of a campaign.
 
         Wraps each email in the tenant's branded template with an
@@ -446,7 +445,7 @@ class EmailService:
 
         return sent_emails
 
-    async def get_member_email(self, member) -> Optional[str]:
+    async def get_member_email(self, member) -> str | None:
         """Get the email address for a campaign member."""
         if member.member_type in ("contact", "contacts"):
             from src.contacts.models import Contact
@@ -469,10 +468,10 @@ class EmailService:
         headline: str,
         body_html: str,
         sent_by_id: int,
-        cta_text: Optional[str] = None,
-        cta_url: Optional[str] = None,
-        entity_type: Optional[str] = None,
-        entity_id: Optional[int] = None,
+        cta_text: str | None = None,
+        cta_url: str | None = None,
+        entity_type: str | None = None,
+        entity_id: int | None = None,
     ) -> EmailQueue:
         """Send an email wrapped in the tenant-branded template.
 
@@ -510,13 +509,13 @@ class EmailService:
         to_email: str,
         subject: str,
         received_at: datetime,
-        cc: Optional[str] = None,
-        bcc: Optional[str] = None,
-        body_text: Optional[str] = None,
-        body_html: Optional[str] = None,
-        message_id: Optional[str] = None,
-        in_reply_to: Optional[str] = None,
-        attachments: Optional[list] = None,
+        cc: str | None = None,
+        bcc: str | None = None,
+        body_text: str | None = None,
+        body_html: str | None = None,
+        message_id: str | None = None,
+        in_reply_to: str | None = None,
+        attachments: list | None = None,
     ) -> InboundEmail:
         """Store an inbound email and auto-match to a contact."""
         from src.contacts.models import Contact
@@ -582,7 +581,7 @@ class EmailService:
         entity_id: int,
         page: int = 1,
         page_size: int = 50,
-    ) -> Tuple[List[Dict], int]:
+    ) -> tuple[list[dict], int]:
         """Get unified email thread (inbound + outbound) for an entity.
 
         Uses SQL UNION ALL with ORDER BY + LIMIT/OFFSET at the database level.

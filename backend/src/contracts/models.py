@@ -1,15 +1,17 @@
 """Contract model for tracking contracts associated with contacts and companies."""
 
 from datetime import date as date_type
-from typing import Optional, TYPE_CHECKING
-from sqlalchemy import String, Integer, Float, Text, Date, ForeignKey
+from typing import TYPE_CHECKING, Optional
+
+from sqlalchemy import Date, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from src.database import Base
+
 from src.core.mixins.auditable import AuditableMixin
+from src.database import Base
 
 if TYPE_CHECKING:
-    from src.contacts.models import Contact
     from src.companies.models import Company
+    from src.contacts.models import Contact
 
 
 class Contract(Base, AuditableMixin):
@@ -20,33 +22,33 @@ class Contract(Base, AuditableMixin):
 
     # Basic info
     title: Mapped[str] = mapped_column(String(255), nullable=False)
-    scope: Mapped[Optional[str]] = mapped_column(Text)
+    scope: Mapped[str | None] = mapped_column(Text)
 
     # Financials
-    value: Mapped[Optional[float]] = mapped_column(Float)
+    value: Mapped[float | None] = mapped_column(Float)
     currency: Mapped[str] = mapped_column(String(3), default="USD")
 
     # Dates
-    start_date: Mapped[Optional[date_type]] = mapped_column(Date)
-    end_date: Mapped[Optional[date_type]] = mapped_column(Date)
+    start_date: Mapped[date_type | None] = mapped_column(Date)
+    end_date: Mapped[date_type | None] = mapped_column(Date)
 
     # Status: draft, active, expired, terminated
     status: Mapped[str] = mapped_column(String(20), default="draft", index=True)
 
     # Relationships
-    contact_id: Mapped[Optional[int]] = mapped_column(
+    contact_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("contacts.id", ondelete="SET NULL"),
         index=True,
     )
-    company_id: Mapped[Optional[int]] = mapped_column(
+    company_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("companies.id", ondelete="SET NULL"),
         index=True,
     )
 
     # Owner
-    owner_id: Mapped[Optional[int]] = mapped_column(
+    owner_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
         index=True,

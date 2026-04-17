@@ -1,81 +1,82 @@
 """Pydantic schemas for companies."""
 
 from datetime import datetime
-from typing import Optional, List
-from pydantic import BaseModel, EmailStr, ConfigDict
+
+from pydantic import BaseModel, ConfigDict, EmailStr
+
 from src.core.schemas import TagBrief
 
 
 class CompanyBase(BaseModel):
     name: str
-    website: Optional[str] = None
-    industry: Optional[str] = None
-    company_size: Optional[str] = None
-    phone: Optional[str] = None
-    email: Optional[EmailStr] = None
-    address_line1: Optional[str] = None
-    address_line2: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
-    postal_code: Optional[str] = None
-    country: Optional[str] = None
-    annual_revenue: Optional[int] = None
-    employee_count: Optional[int] = None
-    linkedin_url: Optional[str] = None
-    twitter_handle: Optional[str] = None
-    description: Optional[str] = None
-    link_creative_tier: Optional[str] = None
-    sow_url: Optional[str] = None
-    account_manager: Optional[str] = None
+    website: str | None = None
+    industry: str | None = None
+    company_size: str | None = None
+    phone: str | None = None
+    email: EmailStr | None = None
+    address_line1: str | None = None
+    address_line2: str | None = None
+    city: str | None = None
+    state: str | None = None
+    postal_code: str | None = None
+    country: str | None = None
+    annual_revenue: int | None = None
+    employee_count: int | None = None
+    linkedin_url: str | None = None
+    twitter_handle: str | None = None
+    description: str | None = None
+    link_creative_tier: str | None = None
+    sow_url: str | None = None
+    account_manager: str | None = None
     status: str = "prospect"
-    segment: Optional[str] = None
-    owner_id: Optional[int] = None
+    segment: str | None = None
+    owner_id: int | None = None
 
 
 class CompanyCreate(CompanyBase):
-    tag_ids: Optional[List[int]] = None
+    tag_ids: list[int] | None = None
 
 
 class CompanyUpdate(BaseModel):
-    name: Optional[str] = None
-    website: Optional[str] = None
-    industry: Optional[str] = None
-    company_size: Optional[str] = None
-    phone: Optional[str] = None
-    email: Optional[EmailStr] = None
-    address_line1: Optional[str] = None
-    address_line2: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
-    postal_code: Optional[str] = None
-    country: Optional[str] = None
-    annual_revenue: Optional[int] = None
-    employee_count: Optional[int] = None
-    linkedin_url: Optional[str] = None
-    twitter_handle: Optional[str] = None
-    description: Optional[str] = None
-    link_creative_tier: Optional[str] = None
-    sow_url: Optional[str] = None
-    account_manager: Optional[str] = None
-    status: Optional[str] = None
-    segment: Optional[str] = None
-    owner_id: Optional[int] = None
-    tag_ids: Optional[List[int]] = None
+    name: str | None = None
+    website: str | None = None
+    industry: str | None = None
+    company_size: str | None = None
+    phone: str | None = None
+    email: EmailStr | None = None
+    address_line1: str | None = None
+    address_line2: str | None = None
+    city: str | None = None
+    state: str | None = None
+    postal_code: str | None = None
+    country: str | None = None
+    annual_revenue: int | None = None
+    employee_count: int | None = None
+    linkedin_url: str | None = None
+    twitter_handle: str | None = None
+    description: str | None = None
+    link_creative_tier: str | None = None
+    sow_url: str | None = None
+    account_manager: str | None = None
+    status: str | None = None
+    segment: str | None = None
+    owner_id: int | None = None
+    tag_ids: list[int] | None = None
 
 
 class CompanyResponse(CompanyBase):
     id: int
-    logo_url: Optional[str] = None
+    logo_url: str | None = None
     created_at: datetime
     updated_at: datetime
-    tags: List[TagBrief] = []
+    tags: list[TagBrief] = []
     contact_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class CompanyListResponse(BaseModel):
-    items: List[CompanyResponse]
+    items: list[CompanyResponse]
     total: int
     page: int
     page_size: int

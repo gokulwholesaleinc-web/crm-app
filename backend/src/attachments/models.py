@@ -1,9 +1,10 @@
 """Attachment model for file uploads linked to CRM entities."""
 
 from datetime import datetime
-from typing import Optional
-from sqlalchemy import String, Integer, ForeignKey, BigInteger, DateTime, Index, func
+
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
+
 from src.database import Base
 
 
@@ -21,14 +22,14 @@ class Attachment(Base):
     mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
 
     # Category for document organization
-    category: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    category: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     # Polymorphic link to any entity
     entity_type: Mapped[str] = mapped_column(String(50), nullable=False)
     entity_id: Mapped[int] = mapped_column(Integer, nullable=False)
 
     # Author tracking
-    uploaded_by: Mapped[Optional[int]] = mapped_column(
+    uploaded_by: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,

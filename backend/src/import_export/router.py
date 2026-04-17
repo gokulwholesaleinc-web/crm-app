@@ -1,16 +1,18 @@
 """Import/Export API routes."""
 
-from typing import Annotated, List, Dict, Any, Optional
-from pydantic import BaseModel
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from fastapi.responses import StreamingResponse
 import io
 import json
+from typing import Annotated, Any
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+
 from src.core.constants import HTTPStatus
-from src.core.router_utils import DBSession, CurrentUser, raise_bad_request
 from src.core.data_scope import DataScope, get_data_scope
-from src.import_export.csv_handler import CSVHandler
+from src.core.router_utils import CurrentUser, DBSession, raise_bad_request
 from src.import_export.bulk_operations import BulkOperationsHandler
+from src.import_export.csv_handler import CSVHandler
 
 MAX_CSV_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
@@ -33,19 +35,19 @@ router = APIRouter(prefix="/api/import-export", tags=["import-export"])
 # Bulk operation schemas
 class BulkUpdateRequest(BaseModel):
     entity_type: str
-    entity_ids: List[int]
-    updates: Dict[str, Any]
+    entity_ids: list[int]
+    updates: dict[str, Any]
 
 
 class BulkAssignRequest(BaseModel):
     entity_type: str
-    entity_ids: List[int]
+    entity_ids: list[int]
     owner_id: int
 
 
 class BulkDeleteRequest(BaseModel):
     entity_type: str
-    entity_ids: List[int]
+    entity_ids: list[int]
 
 
 # Export endpoints
@@ -138,7 +140,7 @@ async def import_companies(
     db: DBSession,
     file: UploadFile = File(...),
     skip_errors: bool = True,
-    contact_decisions: Optional[str] = Form(None),
+    contact_decisions: str | None = Form(None),
 ):
     """Import companies from CSV file with optional contact linking.
 

@@ -2,21 +2,22 @@
 
 import hmac as _hmac
 import secrets
+from datetime import UTC
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
 from src.config import settings
 from src.core.constants import HTTPStatus
-from src.core.router_utils import DBSession, CurrentUser
+from src.core.router_utils import CurrentUser, DBSession
 from src.integrations.gmail import oauth as gmail_oauth
-from src.integrations.gmail.service import GmailConnectionService
 from src.integrations.gmail.schemas import (
     GmailAuthorizeResponse,
     GmailCallbackRequest,
     GmailConnectionResponse,
     GmailStatusResponse,
 )
+from src.integrations.gmail.service import GmailConnectionService
 
 router = APIRouter(prefix="/api/integrations/gmail", tags=["gmail"])
 
@@ -183,7 +184,8 @@ async def gmail_sync(
     reply to land. Guarded by a short cooldown so button-mashing can't
     race the 120s background tick or burn Gmail API quota.
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
+
     from src.integrations.gmail.sync import GmailSyncWorker
 
     service = GmailConnectionService(db)
@@ -196,7 +198,7 @@ async def gmail_sync(
 
     sync_state = await service.get_sync_state(current_user.id)
     if sync_state and sync_state.last_synced_at:
-        elapsed = (datetime.now(timezone.utc) - sync_state.last_synced_at).total_seconds()
+        elapsed = (datetime.now(UTC) - sync_state.last_synced_at).total_seconds()
         if elapsed < GMAIL_MANUAL_SYNC_COOLDOWN_SECONDS:
             raise HTTPException(
                 status_code=HTTPStatus.TOO_MANY_REQUESTS,

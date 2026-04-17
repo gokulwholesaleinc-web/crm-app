@@ -12,9 +12,9 @@ Create Date: 2026-04-08
 
 import secrets
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision = "003_audit_s2"
 down_revision = "002_google_oauth"

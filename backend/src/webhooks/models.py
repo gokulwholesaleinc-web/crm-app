@@ -1,9 +1,10 @@
 """Webhook models for external integrations."""
 
 from datetime import datetime
-from typing import Optional
-from sqlalchemy import String, Integer, ForeignKey, Text, Boolean, DateTime, func, JSON
+
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
+
 from src.database import Base
 
 
@@ -15,10 +16,10 @@ class Webhook(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     url: Mapped[str] = mapped_column(String(2000), nullable=False)
     events: Mapped[list] = mapped_column(JSON, nullable=False)  # List of event type strings
-    secret: Mapped[Optional[str]] = mapped_column(String(255))
+    secret: Mapped[str | None] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    created_by_id: Mapped[Optional[int]] = mapped_column(
+    created_by_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
     )
@@ -50,10 +51,10 @@ class WebhookDelivery(Base):
     )
 
     event_type: Mapped[str] = mapped_column(String(100), nullable=False)
-    payload: Mapped[Optional[dict]] = mapped_column(JSON)
+    payload: Mapped[dict | None] = mapped_column(JSON)
     status: Mapped[str] = mapped_column(String(20), nullable=False)  # success, failed
-    response_code: Mapped[Optional[int]] = mapped_column(Integer)
-    error: Mapped[Optional[str]] = mapped_column(Text)
+    response_code: Mapped[int | None] = mapped_column(Integer)
+    error: Mapped[str | None] = mapped_column(Text)
 
     attempted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

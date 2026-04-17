@@ -1,9 +1,10 @@
 """Notification model for in-app notifications."""
 
 from datetime import datetime
-from typing import Optional
-from sqlalchemy import String, Integer, ForeignKey, Text, DateTime, Boolean, func, Index
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
+
 from src.database import Base
 
 
@@ -24,8 +25,8 @@ class Notification(Base):
     message: Mapped[str] = mapped_column(Text, nullable=False)
 
     # Entity link (polymorphic)
-    entity_type: Mapped[Optional[str]] = mapped_column(String(50))
-    entity_id: Mapped[Optional[int]] = mapped_column(Integer)
+    entity_type: Mapped[str | None] = mapped_column(String(50))
+    entity_id: Mapped[int | None] = mapped_column(Integer)
 
     # State
     is_read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

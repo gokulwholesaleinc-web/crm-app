@@ -2,19 +2,19 @@
 
 import logging
 import uuid
-from typing import Dict, Any, List, Optional
+from typing import Any
 
 from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.config import settings
-from src.ai.conversation_manager import AIConversationManager
-from src.ai.tool_executor import AIToolExecutor, _log_ai_action, _summarize_result
-from src.ai.query_tools import CRMQueryTools
+from src.ai.action_safety import classify_action
 from src.ai.action_tools import CRMActionTools
 from src.ai.analytics_tools import CRMAnalyticsTools
-from src.ai.action_safety import classify_action, ActionRisk
+from src.ai.conversation_manager import AIConversationManager
 from src.ai.learning_service import AILearningService
+from src.ai.query_tools import CRMQueryTools
+from src.ai.tool_executor import AIToolExecutor, _log_ai_action, _summarize_result
+from src.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -315,8 +315,8 @@ class QueryProcessor:
         return " ".join(parts)
 
     async def process_query(
-        self, query: str, user_id: int, session_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+        self, query: str, user_id: int, session_id: str | None = None
+    ) -> dict[str, Any]:
         if not self.client:
             return {
                 "response": "AI assistant is not configured. Please set OPENAI_API_KEY.",
@@ -353,8 +353,8 @@ class QueryProcessor:
         user_id: int,
         session_id: str,
         function_name: str,
-        arguments: Dict[str, Any],
-        result: Dict[str, Any],
+        arguments: dict[str, Any],
+        result: dict[str, Any],
         risk_level: str,
         was_confirmed: bool,
         model_used: str = "gpt-4",
@@ -376,10 +376,10 @@ class QueryProcessor:
     async def execute_confirmed_action(
         self,
         function_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         user_id: int,
         session_id: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         data = await self._execute_function(function_name, arguments, user_id)
 
         risk = classify_action(function_name)
@@ -425,9 +425,9 @@ class QueryProcessor:
     async def _execute_function(
         self,
         func_name: str,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         user_id: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         q = self._query_tools
         a = self._action_tools
         an = self._analytics_tools

@@ -1,14 +1,16 @@
 """Dashboard number cards data generators."""
 
-from datetime import datetime, timedelta, date
-from typing import Dict, Any, List, Optional
-from sqlalchemy import select, func, and_
+from datetime import date, datetime, timedelta
+from typing import Any
+
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.contacts.models import Contact
+
+from src.activities.models import Activity
 from src.companies.models import Company
+from src.contacts.models import Contact
 from src.leads.models import Lead
 from src.opportunities.models import Opportunity, PipelineStage
-from src.activities.models import Activity
 
 
 class NumberCardGenerator:
@@ -17,16 +19,16 @@ class NumberCardGenerator:
     def __init__(
         self,
         db: AsyncSession,
-        user_id: Optional[int] = None,
-        date_from: Optional[date] = None,
-        date_to: Optional[date] = None,
+        user_id: int | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
     ):
         self.db = db
         self.user_id = user_id
         self.date_from = date_from
         self.date_to = date_to
 
-    async def get_all_kpis(self, user_id: Optional[int] = None) -> List[Dict[str, Any]]:
+    async def get_all_kpis(self, user_id: int | None = None) -> list[dict[str, Any]]:
         """Get all KPI data for number cards.
 
         Caching is handled one layer up in src.dashboard.router._dashboard_cache
@@ -58,7 +60,7 @@ class NumberCardGenerator:
             filters.append(date_column <= datetime.combine(self.date_to, datetime.max.time()))
         return filters
 
-    async def get_total_contacts(self) -> Dict[str, Any]:
+    async def get_total_contacts(self) -> dict[str, Any]:
         """Get total active contacts count."""
         filters = [Contact.status == "active"]
         if self.user_id:
@@ -92,7 +94,7 @@ class NumberCardGenerator:
             "change": change,
         }
 
-    async def get_total_leads(self) -> Dict[str, Any]:
+    async def get_total_leads(self) -> dict[str, Any]:
         """Get total leads count (all statuses)."""
         filters = []
         if self.user_id:
@@ -126,7 +128,7 @@ class NumberCardGenerator:
             "change": change,
         }
 
-    async def get_open_opportunities(self) -> Dict[str, Any]:
+    async def get_open_opportunities(self) -> dict[str, Any]:
         filters = [
             PipelineStage.is_won == False,
             PipelineStage.is_lost == False,
@@ -167,7 +169,7 @@ class NumberCardGenerator:
             "change": change,
         }
 
-    async def get_total_revenue(self) -> Dict[str, Any]:
+    async def get_total_revenue(self) -> dict[str, Any]:
         """Get total revenue from won opportunities."""
         filters = [PipelineStage.is_won == True]
         if self.user_id:
@@ -206,7 +208,7 @@ class NumberCardGenerator:
             "change": change,
         }
 
-    def _calculate_change(self, current: float, previous: float) -> Optional[float]:
+    def _calculate_change(self, current: float, previous: float) -> float | None:
         """Calculate percentage change between current and previous values."""
         if previous > 0:
             return round(((current - previous) / previous) * 100, 1)
@@ -214,7 +216,7 @@ class NumberCardGenerator:
             return 100.0  # New items from zero baseline
         return None
 
-    async def get_total_companies(self) -> Dict[str, Any]:
+    async def get_total_companies(self) -> dict[str, Any]:
         filters = []
         if self.user_id:
             filters.append(Company.owner_id == self.user_id)
@@ -233,7 +235,7 @@ class NumberCardGenerator:
             "color": "#8b5cf6",
         }
 
-    async def get_open_leads(self) -> Dict[str, Any]:
+    async def get_open_leads(self) -> dict[str, Any]:
         """Get count of open leads (not in won/lost pipeline stages, or status-based fallback)."""
         from sqlalchemy import or_
 
@@ -271,7 +273,7 @@ class NumberCardGenerator:
             "color": "#22c55e",
         }
 
-    async def get_pipeline_value(self) -> Dict[str, Any]:
+    async def get_pipeline_value(self) -> dict[str, Any]:
         """Get total value of open opportunities."""
         filters = [
             PipelineStage.is_won == False,
@@ -296,7 +298,7 @@ class NumberCardGenerator:
             "color": "#f59e0b",
         }
 
-    async def get_won_this_month(self) -> Dict[str, Any]:
+    async def get_won_this_month(self) -> dict[str, Any]:
         """Get value of opportunities won this month."""
         today = date.today()
         month_start = date(today.year, today.month, 1)
@@ -324,7 +326,7 @@ class NumberCardGenerator:
             "color": "#22c55e",
         }
 
-    async def get_tasks_due_today(self, user_id: Optional[int] = None) -> Dict[str, Any]:
+    async def get_tasks_due_today(self, user_id: int | None = None) -> dict[str, Any]:
         today = date.today()
 
         filters = [
@@ -355,7 +357,7 @@ class NumberCardGenerator:
             "color": "#ef4444" if count > 0 else "#22c55e",
         }
 
-    async def get_new_leads_this_week(self) -> Dict[str, Any]:
+    async def get_new_leads_this_week(self) -> dict[str, Any]:
         """Get count of new leads created this week."""
         today = date.today()
         week_start = today - timedelta(days=today.weekday())
@@ -394,7 +396,7 @@ class NumberCardGenerator:
             "change": change,
         }
 
-    async def get_conversion_rate(self) -> Dict[str, Any]:
+    async def get_conversion_rate(self) -> dict[str, Any]:
         """Get overall lead to opportunity conversion rate."""
         # Total leads (excluding very recent ones)
         total_filters = [Lead.created_at < datetime.now() - timedelta(days=7)]

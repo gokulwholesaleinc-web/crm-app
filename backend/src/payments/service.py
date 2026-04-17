@@ -1,24 +1,20 @@
 """Payment service layer."""
 
-import hashlib
-import hmac
-import json
 import logging
 import uuid
-from decimal import Decimal, ROUND_HALF_UP
-from datetime import datetime, timezone
+from decimal import ROUND_HALF_UP, Decimal
 from html import escape
-from typing import Optional, List, Tuple, Union
 
-from sqlalchemy import select, func, or_, String
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import String, func, or_, select
 from sqlalchemy.orm import selectinload
 
+from src.config import settings
+from src.core.base_service import CRUDService
+from src.core.constants import DEFAULT_PAGE_SIZE
 from src.payments.models import (
-    StripeCustomer,
-    Product,
-    Price,
     Payment,
+    Product,
+    StripeCustomer,
     Subscription,
 )
 from src.payments.schemas import (
@@ -26,19 +22,13 @@ from src.payments.schemas import (
     PaymentUpdate,
     ProductCreate,
     ProductUpdate,
-    PriceCreate,
-    StripeCustomerCreate,
 )
-from src.webhooks.stripe_events import WebhookEvent
 from src.payments.webhook_processor import WebhookProcessor
-from src.core.base_service import CRUDService
-from src.core.constants import DEFAULT_PAGE_SIZE
-from src.config import settings
 
 
 # Common: rounding money to integer cents. Stripe expects amounts as ints.
 # Use banker's-rounding-free half-up so $19.995 → 2000¢, not 1999¢.
-def _to_cents(amount: Union[float, int, Decimal, str]) -> int:
+def _to_cents(amount: float | int | Decimal | str) -> int:
     """Convert a user-facing money amount to integer cents.
 
     Uses Decimal + ROUND_HALF_UP so values like 19.995 round to 2000
@@ -87,12 +77,12 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         self,
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
-        status: Optional[str] = None,
-        customer_id: Optional[int] = None,
-        owner_id: Optional[int] = None,
-        shared_entity_ids: Optional[List[int]] = None,
-        search: Optional[str] = None,
-    ) -> Tuple[List[Payment], int]:
+        status: str | None = None,
+        customer_id: int | None = None,
+        owner_id: int | None = None,
+        shared_entity_ids: list[int] | None = None,
+        search: str | None = None,
+    ) -> tuple[list[Payment], int]:
         """Get paginated list of payments with filters."""
         query = (
             select(Payment)
@@ -159,8 +149,8 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         success_url: str,
         cancel_url: str,
         user_id: int,
-        customer_id: Optional[int] = None,
-        quote_id: Optional[int] = None,
+        customer_id: int | None = None,
+        quote_id: int | None = None,
     ) -> dict:
         """Create a Stripe Checkout Session.
 
@@ -270,9 +260,9 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         amount: float,
         currency: str,
         user_id: int,
-        customer_id: Optional[int] = None,
-        opportunity_id: Optional[int] = None,
-        quote_id: Optional[int] = None,
+        customer_id: int | None = None,
+        opportunity_id: int | None = None,
+        quote_id: int | None = None,
     ) -> dict:
         """Create a Stripe PaymentIntent.
 
@@ -326,10 +316,10 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
 
     async def sync_customer(
         self,
-        contact_id: Optional[int] = None,
-        company_id: Optional[int] = None,
-        email: Optional[str] = None,
-        name: Optional[str] = None,
+        contact_id: int | None = None,
+        company_id: int | None = None,
+        email: str | None = None,
+        name: str | None = None,
     ) -> StripeCustomer:
         """Sync a CRM contact/company to a Stripe customer.
 
@@ -619,13 +609,13 @@ body {{ font-family: Arial, Helvetica, sans-serif; margin: 40px; color: #111827;
         processor = WebhookProcessor(self.db)
         return await processor._handle_payment_succeeded(intent_obj)
 
-    async def _find_payment(self, lookup_field, obj: dict, obj_key: str = "id") -> Optional[Payment]:
+    async def _find_payment(self, lookup_field, obj: dict, obj_key: str = "id") -> Payment | None:
         """Look up a Payment by a Stripe ID field. Delegates to WebhookProcessor."""
         processor = WebhookProcessor(self.db)
         return await processor._find_payment(lookup_field, obj, obj_key=obj_key)
 
     async def _set_payment_status(
-        self, payment: Optional[Payment], new_status: str,
+        self, payment: Payment | None, new_status: str,
         guard_statuses: tuple = ("succeeded", "refunded"),
     ) -> None:
         """Set payment status. Delegates to WebhookProcessor."""
@@ -708,8 +698,8 @@ body {{ font-family: Arial, Helvetica, sans-serif; margin: 40px; color: #111827;
         user_id: int,
         currency: str = "USD",
         due_days: int = 30,
-        quote_id: Optional[int] = None,
-        payment_method_types: Optional[List[str]] = None,
+        quote_id: int | None = None,
+        payment_method_types: list[str] | None = None,
     ) -> dict:
         """Create a Stripe Invoice, finalize it, and send it.
 
@@ -792,8 +782,8 @@ body {{ font-family: Arial, Helvetica, sans-serif; margin: 40px; color: #111827;
         self,
         success_url: str,
         cancel_url: str,
-        contact_id: Optional[int] = None,
-        company_id: Optional[int] = None,
+        contact_id: int | None = None,
+        company_id: int | None = None,
     ) -> dict:
         """Create a Stripe customer portal / onboarding link.
 
@@ -837,9 +827,9 @@ class ProductService(CRUDService[Product, ProductCreate, ProductUpdate]):
         self,
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
-        is_active: Optional[bool] = None,
-        owner_id: Optional[int] = None,
-    ) -> Tuple[List[Product], int]:
+        is_active: bool | None = None,
+        owner_id: int | None = None,
+    ) -> tuple[list[Product], int]:
         """Get paginated list of products."""
         query = select(Product).options(selectinload(Product.prices))
 
@@ -868,7 +858,7 @@ class StripeCustomerService:
     def __init__(self, db):
         self.db = db
 
-    async def get_by_id(self, id: int) -> Optional[StripeCustomer]:
+    async def get_by_id(self, id: int) -> StripeCustomer | None:
         result = await self.db.execute(
             select(StripeCustomer).where(StripeCustomer.id == id)
         )
@@ -878,7 +868,7 @@ class StripeCustomerService:
         self,
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
-    ) -> Tuple[List[StripeCustomer], int]:
+    ) -> tuple[list[StripeCustomer], int]:
         """Get paginated list of Stripe customers."""
         query = select(StripeCustomer)
 
@@ -903,7 +893,7 @@ class SubscriptionService:
     def __init__(self, db):
         self.db = db
 
-    async def get_by_id(self, id: int) -> Optional[Subscription]:
+    async def get_by_id(self, id: int) -> Subscription | None:
         result = await self.db.execute(
             select(Subscription)
             .options(
@@ -918,10 +908,10 @@ class SubscriptionService:
         self,
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
-        status: Optional[str] = None,
-        customer_id: Optional[int] = None,
-        owner_id: Optional[int] = None,
-    ) -> Tuple[List[Subscription], int]:
+        status: str | None = None,
+        customer_id: int | None = None,
+        owner_id: int | None = None,
+    ) -> tuple[list[Subscription], int]:
         """Get paginated list of subscriptions."""
         query = select(Subscription).options(
             selectinload(Subscription.customer),

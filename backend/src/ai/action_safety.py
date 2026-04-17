@@ -1,7 +1,6 @@
 """Action safety classification for AI command execution."""
 
 from enum import Enum
-from typing import Dict, Optional
 
 
 class ActionRisk(Enum):
@@ -11,7 +10,7 @@ class ActionRisk(Enum):
     DESTRUCTIVE = "destructive"
 
 
-ACTION_CLASSIFICATION: Dict[str, ActionRisk] = {
+ACTION_CLASSIFICATION: dict[str, ActionRisk] = {
     # Read operations
     "search_contacts": ActionRisk.READ,
     "search_leads": ActionRisk.READ,
@@ -56,7 +55,7 @@ ACTION_CLASSIFICATION: Dict[str, ActionRisk] = {
 
 
 # Human-readable descriptions for confirmation prompts
-ACTION_DESCRIPTIONS: Dict[str, str] = {
+ACTION_DESCRIPTIONS: dict[str, str] = {
     "update_lead_status": "Change the status of lead #{lead_id} to '{new_status}'",
     "update_opportunity_stage": "Move opportunity #{opportunity_id} to a new pipeline stage",
     "create_and_send_quote": "Create a quote titled '{title}' for contact #{contact_id} and send it",
@@ -82,7 +81,7 @@ def requires_confirmation(function_name: str) -> bool:
     return risk in (ActionRisk.WRITE_HIGH, ActionRisk.DESTRUCTIVE)
 
 
-def get_confirmation_description(function_name: str, args: dict) -> Optional[str]:
+def get_confirmation_description(function_name: str, args: dict) -> str | None:
     """Get a human-readable description of a high-risk action for confirmation."""
     template = ACTION_DESCRIPTIONS.get(function_name)
     if template:

@@ -1,8 +1,9 @@
 """Expense model for company expenses."""
-from datetime import datetime, date
-from typing import Optional
-from sqlalchemy import String, Integer, ForeignKey, DateTime, Date, Numeric, Text, func
+from datetime import date, datetime
+
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
+
 from src.database import Base
 
 
@@ -16,14 +17,14 @@ class Expense(Base):
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="USD")
     description: Mapped[str] = mapped_column(Text, nullable=False)
     expense_date: Mapped[date] = mapped_column(Date, nullable=False)
-    category: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    receipt_attachment_id: Mapped[Optional[int]] = mapped_column(
+    category: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    receipt_attachment_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("attachments.id", ondelete="SET NULL"), nullable=True
     )
-    payment_id: Mapped[Optional[int]] = mapped_column(
+    payment_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("payments.id", ondelete="SET NULL"), nullable=True
     )
-    created_by_id: Mapped[Optional[int]] = mapped_column(
+    created_by_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

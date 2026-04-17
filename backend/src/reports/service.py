@@ -2,23 +2,23 @@
 
 import csv
 import io
-from typing import List, Optional, Dict, Type
-from sqlalchemy import select, func
+
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.leads.models import Lead
-from src.contacts.models import Contact
-from src.opportunities.models import Opportunity, PipelineStage
 from src.activities.models import Activity
 from src.campaigns.models import Campaign
 from src.companies.models import Company
-from src.payments.models import Payment
+from src.contacts.models import Contact
 from src.contracts.models import Contract
 from src.core.filtering import apply_filters_to_query
-from src.reports.schemas import ReportDataPoint, ReportResult, ReportDefinition
+from src.leads.models import Lead
+from src.opportunities.models import Opportunity, PipelineStage
+from src.payments.models import Payment
+from src.reports.schemas import ReportDataPoint, ReportDefinition, ReportResult
 
 # Mapping from entity_type string to SQLAlchemy model
-ENTITY_MODEL_MAP: Dict[str, Type] = {
+ENTITY_MODEL_MAP: dict[str, type] = {
     "leads": Lead,
     "contacts": Contact,
     "opportunities": Opportunity,
@@ -30,7 +30,7 @@ ENTITY_MODEL_MAP: Dict[str, Type] = {
 }
 
 # Numeric fields per entity type (for sum/avg/min/max metrics)
-NUMERIC_FIELDS: Dict[str, List[str]] = {
+NUMERIC_FIELDS: dict[str, list[str]] = {
     "leads": ["score", "budget_amount"],
     "contacts": [],
     "opportunities": ["amount", "probability"],
@@ -173,7 +173,7 @@ class ReportExecutor:
             total=round(total, 2),
         )
 
-    def _get_metric_expression(self, model, metric: str, metric_field: Optional[str]):
+    def _get_metric_expression(self, model, metric: str, metric_field: str | None):
         """Build the SQLAlchemy aggregate expression."""
         if metric == "count":
             return func.count(model.id)

@@ -1,10 +1,11 @@
 """Core models used across the CRM application."""
 
-from typing import Optional
-from sqlalchemy import String, Text, Integer, ForeignKey, Index, UniqueConstraint
+
+from sqlalchemy import ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from src.database import Base
+
 from src.core.mixins.auditable import TimestampMixin
+from src.database import Base
 
 
 class Note(Base, TimestampMixin):
@@ -23,7 +24,7 @@ class Note(Base, TimestampMixin):
     entity_id: Mapped[int] = mapped_column(Integer, nullable=False)
 
     # Author tracking
-    created_by_id: Mapped[Optional[int]] = mapped_column(
+    created_by_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
@@ -41,8 +42,8 @@ class Tag(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
-    color: Mapped[Optional[str]] = mapped_column(String(7), default="#6366f1")  # Hex color
-    description: Mapped[Optional[str]] = mapped_column(String(255))
+    color: Mapped[str | None] = mapped_column(String(7), default="#6366f1")  # Hex color
+    description: Mapped[str | None] = mapped_column(String(255))
 
 
 class EntityTag(Base):

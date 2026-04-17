@@ -1,7 +1,7 @@
 """Lead scoring algorithm."""
 
 import json
-from typing import Dict, Tuple
+
 from src.leads.models import Lead
 
 
@@ -42,7 +42,7 @@ class LeadScorer:
         "Partner",
     ]
 
-    def calculate_score(self, lead: Lead, source_name: str = None) -> Tuple[int, Dict]:
+    def calculate_score(self, lead: Lead, source_name: str = None) -> tuple[int, dict]:
         """
         Calculate lead score and return score with breakdown.
 
@@ -151,7 +151,7 @@ class LeadScorer:
         return 5
 
 
-def calculate_lead_score(lead: Lead, source_name: str = None) -> Tuple[int, str]:
+def calculate_lead_score(lead: Lead, source_name: str = None) -> tuple[int, str]:
     """
     Convenience function to calculate lead score.
 

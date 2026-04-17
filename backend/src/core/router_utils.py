@@ -1,12 +1,13 @@
 """Common router utilities and helpers for DRY code."""
 
 import json as _json
-from typing import Annotated, Optional, List, TypeVar, Any
+from typing import Annotated, Any, TypeVar
+
 from fastapi import Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.database import get_db
-from src.core.constants import HTTPStatus, ErrorMessages
 
+from src.core.constants import ErrorMessages, HTTPStatus
+from src.database import get_db
 
 # Type aliases for common dependency patterns
 DBSession = Annotated[AsyncSession, Depends(get_db)]
@@ -23,7 +24,7 @@ CurrentUser = Annotated[Any, Depends(get_current_active_user)]
 T = TypeVar("T")
 
 
-def parse_tag_ids(tag_ids: Optional[str]) -> Optional[List[int]]:
+def parse_tag_ids(tag_ids: str | None) -> list[int] | None:
     """
     Parse a comma-separated string of tag IDs into a list of integers.
 
@@ -38,7 +39,7 @@ def parse_tag_ids(tag_ids: Optional[str]) -> Optional[List[int]]:
     return [int(x.strip()) for x in tag_ids.split(",") if x.strip()]
 
 
-def parse_comma_separated(value: Optional[str]) -> Optional[List[str]]:
+def parse_comma_separated(value: str | None) -> list[str] | None:
     """
     Parse a comma-separated string into a list of strings.
 
@@ -166,7 +167,7 @@ def calculate_pages(total: int, page_size: int) -> int:
     return (total + page_size - 1) // page_size
 
 
-def parse_json_filters(filters: Optional[str]) -> Optional[dict]:
+def parse_json_filters(filters: str | None) -> dict | None:
     """Parse a JSON filter string, raising 400 on invalid JSON."""
     if not filters:
         return None
@@ -176,7 +177,7 @@ def parse_json_filters(filters: Optional[str]) -> Optional[dict]:
         raise HTTPException(status_code=400, detail="Invalid JSON filter format")
 
 
-def effective_owner_id(data_scope, requested_owner_id: Optional[int] = None) -> Optional[int]:
+def effective_owner_id(data_scope, requested_owner_id: int | None = None) -> int | None:
     """Return the effective owner_id based on data scope permissions."""
     if data_scope.can_see_all():
         return requested_owner_id
@@ -191,7 +192,7 @@ async def build_response_with_tags(service, entity, response_model, tag_brief_mo
     return response_model(**response_dict)
 
 
-def build_list_responses_with_tags(items, tags_map, response_model, tag_brief_model) -> List:
+def build_list_responses_with_tags(items, tags_map, response_model, tag_brief_model) -> list:
     """Build a list of entity responses with pre-loaded tags map."""
     responses = []
     for item in items:

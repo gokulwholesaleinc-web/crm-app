@@ -1,88 +1,88 @@
 """Pydantic schemas for activities."""
 
-from datetime import datetime, date
-from typing import Optional, List
+from datetime import date, datetime
+
 from pydantic import BaseModel, ConfigDict
 
 
 class ActivityBase(BaseModel):
     activity_type: str
     subject: str
-    description: Optional[str] = None
+    description: str | None = None
     entity_type: str
     entity_id: int
-    scheduled_at: Optional[datetime] = None
-    due_date: Optional[date] = None
+    scheduled_at: datetime | None = None
+    due_date: date | None = None
     priority: str = "normal"
-    owner_id: Optional[int] = None
-    assigned_to_id: Optional[int] = None
+    owner_id: int | None = None
+    assigned_to_id: int | None = None
 
 
 class ActivityCreate(ActivityBase):
-    entity_type: Optional[str] = None
-    entity_id: Optional[int] = None
+    entity_type: str | None = None
+    entity_id: int | None = None
 
     # Call-specific
-    call_duration_minutes: Optional[int] = None
-    call_outcome: Optional[str] = None
+    call_duration_minutes: int | None = None
+    call_outcome: str | None = None
     # Email-specific
-    email_to: Optional[str] = None
-    email_cc: Optional[str] = None
+    email_to: str | None = None
+    email_cc: str | None = None
     # Meeting-specific
-    meeting_location: Optional[str] = None
-    meeting_attendees: Optional[str] = None
+    meeting_location: str | None = None
+    meeting_attendees: str | None = None
     # Task-specific
-    task_reminder_at: Optional[datetime] = None
+    task_reminder_at: datetime | None = None
 
 
 class ActivityUpdate(BaseModel):
-    subject: Optional[str] = None
-    description: Optional[str] = None
-    scheduled_at: Optional[datetime] = None
-    due_date: Optional[date] = None
-    priority: Optional[str] = None
-    is_completed: Optional[bool] = None
-    completed_at: Optional[datetime] = None
-    owner_id: Optional[int] = None
-    assigned_to_id: Optional[int] = None
+    subject: str | None = None
+    description: str | None = None
+    scheduled_at: datetime | None = None
+    due_date: date | None = None
+    priority: str | None = None
+    is_completed: bool | None = None
+    completed_at: datetime | None = None
+    owner_id: int | None = None
+    assigned_to_id: int | None = None
     # Call-specific
-    call_duration_minutes: Optional[int] = None
-    call_outcome: Optional[str] = None
+    call_duration_minutes: int | None = None
+    call_outcome: str | None = None
     # Email-specific
-    email_to: Optional[str] = None
-    email_cc: Optional[str] = None
-    email_opened: Optional[bool] = None
+    email_to: str | None = None
+    email_cc: str | None = None
+    email_opened: bool | None = None
     # Meeting-specific
-    meeting_location: Optional[str] = None
-    meeting_attendees: Optional[str] = None
+    meeting_location: str | None = None
+    meeting_attendees: str | None = None
     # Task-specific
-    task_reminder_at: Optional[datetime] = None
+    task_reminder_at: datetime | None = None
 
 
 class ActivityResponse(ActivityBase):
     id: int
     is_completed: bool
-    completed_at: Optional[datetime] = None
+    completed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
     # Call-specific
-    call_duration_minutes: Optional[int] = None
-    call_outcome: Optional[str] = None
+    call_duration_minutes: int | None = None
+    call_outcome: str | None = None
     # Email-specific
-    email_to: Optional[str] = None
-    email_cc: Optional[str] = None
-    email_opened: Optional[bool] = None
+    email_to: str | None = None
+    email_cc: str | None = None
+    email_opened: bool | None = None
     # Meeting-specific
-    meeting_location: Optional[str] = None
-    meeting_attendees: Optional[str] = None
+    meeting_location: str | None = None
+    meeting_attendees: str | None = None
     # Task-specific
-    task_reminder_at: Optional[datetime] = None
+    task_reminder_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class ActivityListResponse(BaseModel):
-    items: List[ActivityResponse]
+    items: list[ActivityResponse]
     total: int
     page: int
     page_size: int
@@ -93,24 +93,24 @@ class TimelineItem(BaseModel):
     id: int
     activity_type: str
     subject: str
-    description: Optional[str]
+    description: str | None
     entity_type: str
     entity_id: int
-    scheduled_at: Optional[str]
-    due_date: Optional[str]
-    completed_at: Optional[str]
+    scheduled_at: str | None
+    due_date: str | None
+    completed_at: str | None
     is_completed: bool
     priority: str
     created_at: str
-    owner_id: Optional[int]
-    assigned_to_id: Optional[int]
-    call_duration_minutes: Optional[int]
-    call_outcome: Optional[str]
-    meeting_location: Optional[str]
+    owner_id: int | None
+    assigned_to_id: int | None
+    call_duration_minutes: int | None
+    call_outcome: str | None
+    meeting_location: str | None
 
 
 class TimelineResponse(BaseModel):
-    items: List[TimelineItem]
+    items: list[TimelineItem]
 
 
 class UnifiedTimelineEvent(BaseModel):
@@ -118,16 +118,16 @@ class UnifiedTimelineEvent(BaseModel):
     id: int
     event_type: str  # activity, email_sent, email_opened, email_clicked, sequence_step
     subject: str
-    description: Optional[str] = None
-    entity_type: Optional[str] = None
-    entity_id: Optional[int] = None
+    description: str | None = None
+    entity_type: str | None = None
+    entity_id: int | None = None
     timestamp: str
-    metadata: Optional[dict] = None
+    metadata: dict | None = None
 
 
 class UnifiedTimelineResponse(BaseModel):
-    items: List[UnifiedTimelineEvent]
+    items: list[UnifiedTimelineEvent]
 
 
 class CompleteActivityRequest(BaseModel):
-    notes: Optional[str] = None
+    notes: str | None = None

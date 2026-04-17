@@ -4,26 +4,26 @@ import csv
 import io
 from datetime import datetime
 from difflib import SequenceMatcher
-from typing import Any, Dict, List, Set, Type
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.companies.models import Company
 from src.contacts.models import Contact
-from src.leads.models import Lead
 from src.import_export.csv_column_mapper import (
-    map_columns,
-    find_name_column,
-    find_location_column,
-    find_contact_person_column,
+    apply_monday_status,
     detect_linkedin_format,
     detect_monday_csv,
-    apply_monday_status,
+    find_contact_person_column,
+    find_location_column,
+    find_name_column,
+    map_columns,
+    normalize_header,
     split_full_name,
     split_location,
-    normalize_header,
 )
+from src.leads.models import Lead
 
 # Re-export module-level helpers so callers that imported them from here still work
 __all__ = [
@@ -79,10 +79,10 @@ class CSVHandler:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    def _get_fields(self, entity_type: str) -> List[str]:
+    def _get_fields(self, entity_type: str) -> list[str]:
         return {"contacts": self.CONTACT_FIELDS, "companies": self.COMPANY_FIELDS, "leads": self.LEAD_FIELDS}[entity_type]
 
-    def _get_model(self, entity_type: str) -> Type:
+    def _get_model(self, entity_type: str) -> type:
         return {"contacts": Contact, "companies": Company, "leads": Lead}[entity_type]
 
     # ------------------------------------------------------------------
@@ -114,7 +114,7 @@ class CSVHandler:
     # Import
     # ------------------------------------------------------------------
 
-    async def import_contacts(self, csv_content: str, user_id: int, skip_errors: bool = True) -> Dict[str, Any]:
+    async def import_contacts(self, csv_content: str, user_id: int, skip_errors: bool = True) -> dict[str, Any]:
         return await self._import_entities(csv_content, Contact, self.CONTACT_FIELDS, user_id, skip_errors)
 
     async def import_companies(
@@ -122,8 +122,8 @@ class CSVHandler:
         csv_content: str,
         user_id: int,
         skip_errors: bool = True,
-        contact_decisions: List[Dict[str, Any]] | None = None,
-    ) -> Dict[str, Any]:
+        contact_decisions: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         """Import companies with optional auto-creation of linked contacts."""
         reader = csv.DictReader(io.StringIO(csv_content))
         csv_headers = reader.fieldnames or []
@@ -133,15 +133,15 @@ class CSVHandler:
         location_col = find_location_column(csv_headers, column_mapping, self.COMPANY_FIELDS)
         contact_person_col = find_contact_person_column(csv_headers, column_mapping)
 
-        decision_map: Dict[str, Dict[str, Any]] = {}
+        decision_map: dict[str, dict[str, Any]] = {}
         if contact_decisions:
             for d in contact_decisions:
                 decision_map[d["csv_name"].strip().lower()] = d
 
         existing_emails = await self._get_existing_emails(Company)
         existing_names = await self._get_existing_names(Company)
-        seen_emails: Set[str] = set()
-        seen_names: Set[str] = set()
+        seen_emails: set[str] = set()
+        seen_names: set[str] = set()
 
         imported = 0
         contacts_created = 0
@@ -258,7 +258,7 @@ class CSVHandler:
             "duplicates": duplicates,
         }
 
-    async def import_leads(self, csv_content: str, user_id: int, skip_errors: bool = True) -> Dict[str, Any]:
+    async def import_leads(self, csv_content: str, user_id: int, skip_errors: bool = True) -> dict[str, Any]:
         return await self._import_entities(csv_content, Lead, self.LEAD_FIELDS, user_id, skip_errors)
 
     # ------------------------------------------------------------------
@@ -269,10 +269,10 @@ class CSVHandler:
         self,
         entity_type: str,
         csv_content: str,
-        column_mapping: Dict[str, str],
+        column_mapping: dict[str, str],
         user_id: int,
         skip_errors: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Import entities using user-specified column mapping."""
         entity_class = self._get_model(entity_type)
         fields = self._get_fields(entity_type)
@@ -285,7 +285,7 @@ class CSVHandler:
 
         return await self._import_entities(csv_content, entity_class, fields, user_id, skip_errors, active_mapping)
 
-    async def preview_csv(self, entity_type: str, csv_content: str) -> Dict[str, Any]:
+    async def preview_csv(self, entity_type: str, csv_content: str) -> dict[str, Any]:
         """Preview a CSV: show column mapping, first rows, and validation warnings."""
         fields = self._get_fields(entity_type)
         reader = csv.DictReader(io.StringIO(csv_content))
@@ -315,8 +315,8 @@ class CSVHandler:
 
         preview_rows = []
         warnings = []
-        emails_seen: Set[str] = set()
-        contact_matches: List[Dict[str, Any]] = []
+        emails_seen: set[str] = set()
+        contact_matches: list[dict[str, Any]] = []
 
         for i, row in enumerate(all_rows_raw):
             mapped_row = {}
@@ -405,7 +405,7 @@ class CSVHandler:
             return "'" + value
         return value
 
-    def _to_csv(self, entities: List[Any], fields: List[str]) -> str:
+    def _to_csv(self, entities: list[Any], fields: list[str]) -> str:
         output = io.StringIO()
         writer = csv.DictWriter(output, fieldnames=fields)
         writer.writeheader()
@@ -423,7 +423,7 @@ class CSVHandler:
             writer.writerow(row)
         return output.getvalue()
 
-    async def _get_existing_names(self, entity_class: Type) -> Set[str]:
+    async def _get_existing_names(self, entity_class: type) -> set[str]:
         if not hasattr(entity_class, "name"):
             return set()
         result = await self.db.execute(
@@ -431,7 +431,7 @@ class CSVHandler:
         )
         return {row[0] for row in result.all()}
 
-    async def _get_existing_emails(self, entity_class: Type) -> Set[str]:
+    async def _get_existing_emails(self, entity_class: type) -> set[str]:
         if not hasattr(entity_class, "email"):
             return set()
         result = await self.db.execute(
@@ -452,12 +452,12 @@ class CSVHandler:
     async def _import_entities(
         self,
         csv_content: str,
-        entity_class: Type,
-        fields: List[str],
+        entity_class: type,
+        fields: list[str],
         user_id: int,
         skip_errors: bool = True,
-        column_mapping: Dict[str, str] | None = None,
-    ) -> Dict[str, Any]:
+        column_mapping: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         reader = csv.DictReader(io.StringIO(csv_content))
         csv_headers = reader.fieldnames or []
 
@@ -469,7 +469,7 @@ class CSVHandler:
         is_linkedin = detect_linkedin_format(csv_headers)
 
         existing_emails = await self._get_existing_emails(entity_class)
-        seen_emails: Set[str] = set()
+        seen_emails: set[str] = set()
 
         imported = 0
         errors = []

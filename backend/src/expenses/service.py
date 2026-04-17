@@ -1,9 +1,10 @@
 """Expense service layer."""
-from typing import Optional, List, Tuple
-from sqlalchemy import select, func
+
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.expenses.models import Expense
+
 from src.core.constants import DEFAULT_PAGE_SIZE
+from src.expenses.models import Expense
 
 
 class ExpenseService:
@@ -12,7 +13,7 @@ class ExpenseService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_by_id(self, expense_id: int) -> Optional[Expense]:
+    async def get_by_id(self, expense_id: int) -> Expense | None:
         result = await self.db.execute(
             select(Expense).where(Expense.id == expense_id)
         )
@@ -23,8 +24,8 @@ class ExpenseService:
         company_id: int,
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
-        category: Optional[str] = None,
-    ) -> Tuple[List[Expense], int]:
+        category: str | None = None,
+    ) -> tuple[list[Expense], int]:
         query = select(Expense).where(Expense.company_id == company_id)
         if category:
             query = query.where(Expense.category == category)

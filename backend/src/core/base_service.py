@@ -1,14 +1,16 @@
 """Base service classes for DRY service layer implementation."""
 
-from datetime import datetime, timezone
-from typing import TypeVar, Generic, Optional, List, Tuple, Type, Any, Dict
 from collections import defaultdict
-from sqlalchemy import select, func, or_
+from datetime import UTC, datetime
+from typing import Any, Generic, TypeVar
+
+from pydantic import BaseModel
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute
-from pydantic import BaseModel
-from src.core.models import Tag, EntityTag
+
 from src.core.constants import DEFAULT_PAGE_SIZE
+from src.core.models import EntityTag, Tag
 
 ModelType = TypeVar("ModelType")
 CreateSchemaType = TypeVar("CreateSchemaType", bound=BaseModel)
@@ -26,7 +28,7 @@ class BaseService(Generic[ModelType]):
     - apply_owner_filter: Filter by owner_id with shared entity support
     """
 
-    model: Type[ModelType]
+    model: type[ModelType]
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -35,11 +37,11 @@ class BaseService(Generic[ModelType]):
         """Get base query with optional eager loading. Override in subclasses."""
         return select(self.model)
 
-    def _get_eager_load_options(self) -> List[Any]:
+    def _get_eager_load_options(self) -> list[Any]:
         """Return list of selectinload options. Override in subclasses."""
         return []
 
-    async def get_by_id(self, id: int) -> Optional[ModelType]:
+    async def get_by_id(self, id: int) -> ModelType | None:
         """Get a record by ID with optional eager loading."""
         query = select(self.model).where(self.model.id == id)
 
@@ -55,7 +57,7 @@ class BaseService(Generic[ModelType]):
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
         order_by=None,
-    ) -> Tuple[List[ModelType], int]:
+    ) -> tuple[list[ModelType], int]:
         """Execute a query with count and pagination. Returns (items, total)."""
         count_query = select(func.count()).select_from(query.subquery())
         total_result = await self.db.execute(count_query)
@@ -73,7 +75,7 @@ class BaseService(Generic[ModelType]):
         items = list(result.scalars().all())
         return items, total
 
-    def apply_owner_filter(self, query, owner_id: Optional[int], shared_entity_ids: Optional[List[int]] = None):
+    def apply_owner_filter(self, query, owner_id: int | None, shared_entity_ids: list[int] | None = None):
         """Filter by owner_id, including shared entities if present."""
         if not owner_id:
             return query
@@ -85,9 +87,9 @@ class BaseService(Generic[ModelType]):
         self,
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
-        order_by: Optional[InstrumentedAttribute] = None,
+        order_by: InstrumentedAttribute | None = None,
         order_desc: bool = True,
-    ) -> Tuple[List[ModelType], int]:
+    ) -> tuple[list[ModelType], int]:
         """
         Get paginated list of records.
 
@@ -196,7 +198,7 @@ class StatusTransitionMixin:
         if instance.status not in valid_from:
             raise ValueError(f"Cannot transition from '{instance.status}' to '{target_status}'")
         instance.status = target_status
-        setattr(instance, timestamp_attr, datetime.now(timezone.utc))
+        setattr(instance, timestamp_attr, datetime.now(UTC))
         await self.db.flush()
         await self.db.refresh(instance)
         return instance
@@ -230,7 +232,7 @@ class TaggableServiceMixin:
     db: AsyncSession
     entity_type: str
 
-    async def get_tags(self, entity_id: int) -> List[Tag]:
+    async def get_tags(self, entity_id: int) -> list[Tag]:
         result = await self.db.execute(
             select(Tag)
             .join(EntityTag)
@@ -239,7 +241,7 @@ class TaggableServiceMixin:
         )
         return list(result.scalars().all())
 
-    async def get_tags_for_entities(self, entity_ids: List[int]) -> Dict[int, List[Tag]]:
+    async def get_tags_for_entities(self, entity_ids: list[int]) -> dict[int, list[Tag]]:
         """
         Get tags for multiple entities in a single query.
 
@@ -264,14 +266,14 @@ class TaggableServiceMixin:
         )
 
         # Group tags by entity_id
-        tags_by_entity: Dict[int, List[Tag]] = defaultdict(list)
+        tags_by_entity: dict[int, list[Tag]] = defaultdict(list)
         for tag, entity_id in result.all():
             tags_by_entity[entity_id].append(tag)
 
         # Ensure all requested entity_ids have an entry (even if empty)
         return {entity_id: tags_by_entity.get(entity_id, []) for entity_id in entity_ids}
 
-    async def update_tags(self, entity_id: int, tag_ids: List[int]) -> None:
+    async def update_tags(self, entity_id: int, tag_ids: list[int]) -> None:
         """
         Replace all tags for an entity.
 
@@ -296,7 +298,7 @@ class TaggableServiceMixin:
 
         await self.db.flush()
 
-    async def add_tags(self, entity_id: int, tag_ids: List[int]) -> None:
+    async def add_tags(self, entity_id: int, tag_ids: list[int]) -> None:
         """Add tags to an entity (without removing existing tags)."""
         # Get existing tag IDs
         result = await self.db.execute(
@@ -318,7 +320,7 @@ class TaggableServiceMixin:
 
         await self.db.flush()
 
-    async def remove_tags(self, entity_id: int, tag_ids: List[int]) -> None:
+    async def remove_tags(self, entity_id: int, tag_ids: list[int]) -> None:
         """Remove specific tags from an entity."""
         await self.db.execute(
             EntityTag.__table__.delete().where(
@@ -339,7 +341,7 @@ class TaggableServiceMixin:
         )
         await self.db.flush()
 
-    async def _filter_by_tags(self, query, tag_ids: List[int]):
+    async def _filter_by_tags(self, query, tag_ids: list[int]):
         """
         Apply tag filter to a query.
 

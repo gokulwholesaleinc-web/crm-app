@@ -1,26 +1,26 @@
 """Duplicate detection and merge API routes."""
 
-from typing import Annotated, Dict, Any, List
-from pydantic import BaseModel
+from typing import Annotated, Any
+
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 
 from src.auth.models import User
 from src.core.http_errors import value_error_as_400
-from src.core.router_utils import DBSession, CurrentUser, raise_bad_request
 from src.core.permissions import require_manager_or_above
+from src.core.router_utils import CurrentUser, DBSession, raise_bad_request
 from src.dedup.service import DedupService
-
 
 router = APIRouter(prefix="/api/dedup", tags=["dedup"])
 
 
 class DedupCheckRequest(BaseModel):
     entity_type: str
-    data: Dict[str, Any]
+    data: dict[str, Any]
 
 
 class DedupCheckResponse(BaseModel):
-    duplicates: List[Dict[str, Any]]
+    duplicates: list[dict[str, Any]]
     has_duplicates: bool
 
 

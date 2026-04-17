@@ -2,8 +2,7 @@
 
 import base64
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,7 +24,7 @@ class GmailClient:
         self,
         connection: GmailConnection,
         db: AsyncSession,
-        http: Optional[httpx.AsyncClient] = None,
+        http: httpx.AsyncClient | None = None,
     ):
         self._conn = connection
         self._db = db
@@ -40,10 +39,10 @@ class GmailClient:
             await self._http.aclose()
 
     async def _refresh_if_needed(self) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         expiry = self._conn.token_expiry
         if expiry is not None and expiry.tzinfo is None:
-            expiry = expiry.replace(tzinfo=timezone.utc)
+            expiry = expiry.replace(tzinfo=UTC)
         if expiry is not None and expiry > now:
             return
         if not self._conn.refresh_token:
@@ -89,7 +88,7 @@ class GmailClient:
         resp.raise_for_status()
         return resp.json()
 
-    async def send_message(self, raw: bytes, thread_id: Optional[str] = None) -> dict:
+    async def send_message(self, raw: bytes, thread_id: str | None = None) -> dict:
         """Base64url-encode raw RFC-822 bytes and POST to Gmail send endpoint."""
         encoded = base64.urlsafe_b64encode(raw).decode("ascii")
         body: dict = {"raw": encoded}
@@ -100,7 +99,7 @@ class GmailClient:
     async def list_history_since(self, start_history_id: str) -> list[dict]:
         """Paginate history records starting from start_history_id."""
         records: list[dict] = []
-        page_token: Optional[str] = None
+        page_token: str | None = None
 
         while True:
             params: dict = {
@@ -157,7 +156,7 @@ def _parse_message(data: dict) -> dict:
     }
 
 
-def _extract_body(payload: dict) -> tuple[Optional[str], Optional[str]]:
+def _extract_body(payload: dict) -> tuple[str | None, str | None]:
     """Walk MIME parts and extract text/plain and text/html bodies."""
     mime = payload.get("mimeType", "")
 
@@ -166,8 +165,8 @@ def _extract_body(payload: dict) -> tuple[Optional[str], Optional[str]]:
     if mime == "text/html":
         return None, _decode_body(payload)
 
-    plain: Optional[str] = None
-    html_body: Optional[str] = None
+    plain: str | None = None
+    html_body: str | None = None
     for part in payload.get("parts", []):
         p, h = _extract_body(part)
         if p and plain is None:
@@ -178,7 +177,7 @@ def _extract_body(payload: dict) -> tuple[Optional[str], Optional[str]]:
     return plain, html_body
 
 
-def _decode_body(part: dict) -> Optional[str]:
+def _decode_body(part: dict) -> str | None:
     raw = part.get("body", {}).get("data", "")
     if not raw:
         return None
@@ -188,7 +187,7 @@ def _decode_body(part: dict) -> Optional[str]:
         return None
 
 
-def _parse_date(date_str: str) -> Optional[datetime]:
+def _parse_date(date_str: str) -> datetime | None:
     if not date_str:
         return None
     from email.utils import parsedate_to_datetime

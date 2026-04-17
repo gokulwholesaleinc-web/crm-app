@@ -9,9 +9,8 @@ import hashlib
 import hmac
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,19 +18,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.payments.models import (
     Payment,
     Price,
-    Subscription,
     StripeCustomer,
+    Subscription,
 )
 from src.webhooks.stripe_events import WebhookEvent
 
 logger = logging.getLogger(__name__)
 
 
-def _ts_to_dt(ts) -> Optional[datetime]:
+def _ts_to_dt(ts) -> datetime | None:
     """Convert a Stripe unix timestamp to a tz-aware UTC datetime."""
     if ts is None:
         return None
-    return datetime.fromtimestamp(int(ts), tz=timezone.utc)
+    return datetime.fromtimestamp(int(ts), tz=UTC)
 
 
 class WebhookProcessor:
@@ -195,7 +194,7 @@ class WebhookProcessor:
                 payload_ts = int(timestamp)
             except ValueError:
                 return False
-            now_ts = int(datetime.now(timezone.utc).timestamp())
+            now_ts = int(datetime.now(UTC).timestamp())
             if abs(now_ts - payload_ts) > tolerance:
                 return False
 
@@ -214,7 +213,7 @@ class WebhookProcessor:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    async def _find_payment(self, lookup_field, obj: dict, obj_key: str = "id") -> Optional[Payment]:
+    async def _find_payment(self, lookup_field, obj: dict, obj_key: str = "id") -> Payment | None:
         """Look up a Payment by a Stripe ID field. Returns None if not found."""
         value = obj.get(obj_key)
         if not value:
@@ -225,7 +224,7 @@ class WebhookProcessor:
         return result.scalar_one_or_none()
 
     async def _set_payment_status(
-        self, payment: Optional[Payment], new_status: str,
+        self, payment: Payment | None, new_status: str,
         guard_statuses: tuple = ("succeeded", "refunded"),
     ) -> None:
         """Set payment status if payment exists and current status is not in guard_statuses."""

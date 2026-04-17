@@ -2,31 +2,30 @@
 
 import base64
 import logging
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, Query, HTTPException, Request
-from fastapi.responses import Response, RedirectResponse
+from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import RedirectResponse, Response
+from svix.webhooks import Webhook, WebhookVerificationError
 
-from src.core.constants import HTTPStatus, EntityNames
+from src.core.constants import EntityNames, HTTPStatus
 from src.core.router_utils import (
-    DBSession,
     CurrentUser,
+    DBSession,
     calculate_pages,
-    get_entity_or_404,
     check_ownership,
+    get_entity_or_404,
 )
 from src.email.schemas import (
+    EmailListResponse,
+    EmailQueueResponse,
+    SendCampaignEmailRequest,
     SendEmailRequest,
     SendTemplateEmailRequest,
-    SendCampaignEmailRequest,
-    EmailQueueResponse,
-    EmailListResponse,
     ThreadEmailItem,
     ThreadResponse,
 )
 from src.email.service import EmailService
-from svix.webhooks import Webhook, WebhookVerificationError
 from src.email.throttle import EmailThrottleService
 
 logger = logging.getLogger(__name__)
@@ -171,11 +170,11 @@ async def inbound_webhook(request: Request, db: DBSession):
 
     service = EmailService(db)
     inbound = await service.store_inbound_email(
-        resend_email_id=email_id or f"webhook-{datetime.now(timezone.utc).timestamp()}",
+        resend_email_id=email_id or f"webhook-{datetime.now(UTC).timestamp()}",
         from_email=from_email,
         to_email=to_email,
         subject=data.get("subject", "(no subject)"),
-        received_at=datetime.now(timezone.utc),
+        received_at=datetime.now(UTC),
         cc=cc,
         body_text=body_text,
         body_html=body_html,
@@ -229,9 +228,9 @@ async def list_emails(
     db: DBSession,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    entity_type: Optional[str] = None,
-    entity_id: Optional[int] = None,
-    status: Optional[str] = None,
+    entity_type: str | None = None,
+    entity_id: int | None = None,
+    status: str | None = None,
 ):
     """List sent emails with optional filters."""
     service = EmailService(db)

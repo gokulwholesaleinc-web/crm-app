@@ -1,20 +1,20 @@
 """Pydantic schemas for Google Calendar integration."""
 
 from datetime import datetime
-from typing import Optional
+
 from pydantic import BaseModel, ConfigDict
 
 
 class GoogleCalendarConnect(BaseModel):
     """Request to initiate OAuth2 flow."""
-    redirect_uri: Optional[str] = None
+    redirect_uri: str | None = None
 
 
 class GoogleCalendarCallback(BaseModel):
     """OAuth2 callback data."""
     code: str
-    state: Optional[str] = None
-    redirect_uri: Optional[str] = None
+    state: str | None = None
+    redirect_uri: str | None = None
 
 
 class GoogleCalendarCredentialResponse(BaseModel):
@@ -23,7 +23,7 @@ class GoogleCalendarCredentialResponse(BaseModel):
     user_id: int
     calendar_id: str
     is_active: bool
-    last_synced_at: Optional[datetime] = None
+    last_synced_at: datetime | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -37,6 +37,6 @@ class GoogleCalendarEventCreate(BaseModel):
 class CalendarSyncStatus(BaseModel):
     """Status of calendar sync for a user."""
     connected: bool
-    calendar_id: Optional[str] = None
-    last_synced_at: Optional[datetime] = None
+    calendar_id: str | None = None
+    last_synced_at: datetime | None = None
     synced_events_count: int = 0

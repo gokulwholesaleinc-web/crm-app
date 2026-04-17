@@ -1,14 +1,15 @@
 """Pydantic schemas for opportunities."""
 
 from datetime import date, datetime
-from typing import Optional, List, Dict
+
 from pydantic import BaseModel, ConfigDict
+
 from src.core.schemas import TagBrief
 
 
 class PipelineStageBase(BaseModel):
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     order: int = 0
     color: str = "#6366f1"
     probability: int = 0
@@ -23,15 +24,15 @@ class PipelineStageCreate(PipelineStageBase):
 
 
 class PipelineStageUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    order: Optional[int] = None
-    color: Optional[str] = None
-    probability: Optional[int] = None
-    is_won: Optional[bool] = None
-    is_lost: Optional[bool] = None
-    is_active: Optional[bool] = None
-    pipeline_type: Optional[str] = None
+    name: str | None = None
+    description: str | None = None
+    order: int | None = None
+    color: str | None = None
+    probability: int | None = None
+    is_won: bool | None = None
+    is_lost: bool | None = None
+    is_active: bool | None = None
+    pipeline_type: str | None = None
 
 
 class PipelineStageResponse(PipelineStageBase):
@@ -42,38 +43,38 @@ class PipelineStageResponse(PipelineStageBase):
 
 class OpportunityBase(BaseModel):
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     pipeline_stage_id: int
-    amount: Optional[float] = None
+    amount: float | None = None
     currency: str = "USD"
-    probability: Optional[int] = None
-    expected_close_date: Optional[date] = None
-    contact_id: Optional[int] = None
-    company_id: Optional[int] = None
-    source: Optional[str] = None
-    owner_id: Optional[int] = None
+    probability: int | None = None
+    expected_close_date: date | None = None
+    contact_id: int | None = None
+    company_id: int | None = None
+    source: str | None = None
+    owner_id: int | None = None
 
 
 class OpportunityCreate(OpportunityBase):
-    tag_ids: Optional[List[int]] = None
+    tag_ids: list[int] | None = None
 
 
 class OpportunityUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    pipeline_stage_id: Optional[int] = None
-    amount: Optional[float] = None
-    currency: Optional[str] = None
-    probability: Optional[int] = None
-    expected_close_date: Optional[date] = None
-    actual_close_date: Optional[date] = None
-    contact_id: Optional[int] = None
-    company_id: Optional[int] = None
-    source: Optional[str] = None
-    owner_id: Optional[int] = None
-    loss_reason: Optional[str] = None
-    loss_notes: Optional[str] = None
-    tag_ids: Optional[List[int]] = None
+    name: str | None = None
+    description: str | None = None
+    pipeline_stage_id: int | None = None
+    amount: float | None = None
+    currency: str | None = None
+    probability: int | None = None
+    expected_close_date: date | None = None
+    actual_close_date: date | None = None
+    contact_id: int | None = None
+    company_id: int | None = None
+    source: str | None = None
+    owner_id: int | None = None
+    loss_reason: str | None = None
+    loss_notes: str | None = None
+    tag_ids: list[int] | None = None
 
 
 class ContactBrief(BaseModel):
@@ -92,22 +93,22 @@ class CompanyBrief(BaseModel):
 
 class OpportunityResponse(OpportunityBase):
     id: int
-    actual_close_date: Optional[date] = None
-    loss_reason: Optional[str] = None
-    loss_notes: Optional[str] = None
-    weighted_amount: Optional[float] = None
+    actual_close_date: date | None = None
+    loss_reason: str | None = None
+    loss_notes: str | None = None
+    weighted_amount: float | None = None
     created_at: datetime
     updated_at: datetime
     pipeline_stage: PipelineStageResponse
-    contact: Optional[ContactBrief] = None
-    company: Optional[CompanyBrief] = None
-    tags: List[TagBrief] = []
+    contact: ContactBrief | None = None
+    company: CompanyBrief | None = None
+    tags: list[TagBrief] = []
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class OpportunityListResponse(BaseModel):
-    items: List[OpportunityResponse]
+    items: list[OpportunityResponse]
     total: int
     page: int
     page_size: int
@@ -118,13 +119,13 @@ class OpportunityListResponse(BaseModel):
 class KanbanOpportunity(BaseModel):
     id: int
     name: str
-    amount: Optional[float]
+    amount: float | None
     currency: str
-    weighted_amount: Optional[float]
-    expected_close_date: Optional[str]
-    contact_name: Optional[str]
-    company_name: Optional[str]
-    owner_id: Optional[int]
+    weighted_amount: float | None
+    expected_close_date: str | None
+    contact_name: str | None
+    company_name: str | None
+    owner_id: int | None
 
 
 class KanbanStage(BaseModel):
@@ -134,14 +135,14 @@ class KanbanStage(BaseModel):
     probability: int
     is_won: bool
     is_lost: bool
-    opportunities: List[KanbanOpportunity]
+    opportunities: list[KanbanOpportunity]
     total_amount: float
     total_weighted: float
     count: int
 
 
 class KanbanResponse(BaseModel):
-    stages: List[KanbanStage]
+    stages: list[KanbanStage]
 
 
 class MoveOpportunityRequest(BaseModel):
@@ -165,7 +166,7 @@ class ForecastTotals(BaseModel):
 
 
 class ForecastResponse(BaseModel):
-    periods: List[ForecastPeriod]
+    periods: list[ForecastPeriod]
     totals: ForecastTotals
     currency: str
 
@@ -181,4 +182,4 @@ class PipelineSummaryResponse(BaseModel):
     total_value: float
     weighted_value: float
     currency: str
-    by_stage: Dict[str, PipelineSummaryStage]
+    by_stage: dict[str, PipelineSummaryStage]

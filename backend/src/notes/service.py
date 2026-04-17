@@ -1,14 +1,15 @@
 """Note service layer."""
 
 import html
-from typing import Optional, List, Tuple
-from sqlalchemy import select, func
+
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.core.models import Note
+
 from src.auth.models import User
 from src.comments.service import parse_mentions
-from src.notes.schemas import NoteCreate, NoteUpdate
 from src.core.constants import DEFAULT_PAGE_SIZE
+from src.core.models import Note
+from src.notes.schemas import NoteCreate, NoteUpdate
 from src.whitelabel.models import TenantUser
 
 
@@ -18,7 +19,7 @@ class NoteService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_by_id(self, note_id: int) -> Optional[Note]:
+    async def get_by_id(self, note_id: int) -> Note | None:
         result = await self.db.execute(
             select(Note).where(Note.id == note_id)
         )
@@ -28,10 +29,10 @@ class NoteService:
         self,
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
-        entity_type: Optional[str] = None,
-        entity_id: Optional[int] = None,
-        created_by_id: Optional[int] = None,
-    ) -> Tuple[List[dict], int]:
+        entity_type: str | None = None,
+        entity_id: int | None = None,
+        created_by_id: int | None = None,
+    ) -> tuple[list[dict], int]:
         """Get paginated list of notes with author info."""
         query = (
             select(Note, User.full_name.label("author_name"))
@@ -119,8 +120,8 @@ class NoteService:
 
     async def _process_mentions(self, note: Note, author_id: int) -> None:
         """Parse @mentions from note content and create notifications + emails."""
-        from src.notifications.service import NotificationService
         from src.email.service import EmailService
+        from src.notifications.service import NotificationService
 
         usernames = parse_mentions(note.content)
         if not usernames:

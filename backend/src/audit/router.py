@@ -1,16 +1,17 @@
 """Audit log API routes."""
 
 from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 
+from src.audit.models import AuditLog
+from src.audit.schemas import AuditLogListResponse, AuditLogResponse
+from src.audit.service import AuditService
 from src.core.constants import HTTPStatus
 from src.core.data_scope import DataScope, get_data_scope
 from src.core.entity_access import _resolve_entity, require_entity_access
-from src.core.router_utils import DBSession, CurrentUser, calculate_pages
-from src.audit.models import AuditLog
-from src.audit.schemas import AuditLogResponse, AuditLogListResponse
-from src.audit.service import AuditService
+from src.core.router_utils import CurrentUser, DBSession, calculate_pages
 
 router = APIRouter(prefix="/api/audit", tags=["audit"])
 

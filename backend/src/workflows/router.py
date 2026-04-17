@@ -1,15 +1,17 @@
 """Workflow automation API routes."""
 
-from typing import Annotated, Any, Optional, List
+from typing import Annotated, Any
+
 from fastapi import APIRouter, Depends, Query
+
 from src.core.constants import HTTPStatus
 from src.core.permissions import require_manager_or_above
-from src.core.router_utils import DBSession, CurrentUser, raise_not_found
+from src.core.router_utils import CurrentUser, DBSession, raise_not_found
 from src.workflows.schemas import (
-    WorkflowRuleCreate,
-    WorkflowRuleUpdate,
-    WorkflowRuleResponse,
     WorkflowExecutionResponse,
+    WorkflowRuleCreate,
+    WorkflowRuleResponse,
+    WorkflowRuleUpdate,
     WorkflowTestRequest,
 )
 from src.workflows.service import WorkflowService
@@ -31,14 +33,14 @@ async def create_workflow_rule(
     return WorkflowRuleResponse.model_validate(rule)
 
 
-@router.get("", response_model=List[WorkflowRuleResponse])
+@router.get("", response_model=list[WorkflowRuleResponse])
 async def list_workflow_rules(
     current_user: CurrentUser,
     db: DBSession,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    is_active: Optional[bool] = None,
-    trigger_entity: Optional[str] = None,
+    is_active: bool | None = None,
+    trigger_entity: str | None = None,
 ):
     """List workflow rules."""
     service = WorkflowService(db)
@@ -95,7 +97,7 @@ async def delete_workflow_rule(
     await service.delete_rule(rule)
 
 
-@router.get("/{rule_id}/executions", response_model=List[WorkflowExecutionResponse])
+@router.get("/{rule_id}/executions", response_model=list[WorkflowExecutionResponse])
 async def get_workflow_executions(
     rule_id: int,
     current_user: CurrentUser,
@@ -141,7 +143,7 @@ async def test_workflow_rule(
     return {"rule_id": rule_id, "dry_run": True, "results": results}
 
 
-async def _get_entity_data(db, entity_type: str, entity_id: int) -> Optional[dict]:
+async def _get_entity_data(db, entity_type: str, entity_id: int) -> dict | None:
     """Fetch entity data for workflow evaluation."""
     from sqlalchemy import select
 

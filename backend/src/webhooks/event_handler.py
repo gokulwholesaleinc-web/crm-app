@@ -1,14 +1,14 @@
 """Webhook event handler - delivers webhooks when CRM events occur."""
 
 import logging
-from typing import Dict, Any
+from typing import Any
 
 from src.webhooks.service import WebhookService
 
 logger = logging.getLogger(__name__)
 
 
-async def webhook_event_handler(event_type: str, payload: Dict[str, Any]) -> None:
+async def webhook_event_handler(event_type: str, payload: dict[str, Any]) -> None:
     """Handle CRM events by delivering to subscribed webhooks.
 
     Imports async_session_maker lazily so test fixtures that swap the

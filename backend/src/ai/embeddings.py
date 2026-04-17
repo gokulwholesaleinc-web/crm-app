@@ -1,12 +1,14 @@
 """Embedding service for RAG with pgvector."""
 
 import logging
-from typing import List, Optional, Dict, Any
+from typing import Any
+
+from openai import AsyncOpenAI
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
-from openai import AsyncOpenAI
-from src.config import settings
+
 from src.ai.models import AIEmbedding
+from src.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +23,7 @@ class EmbeddingService:
         self.client = AsyncOpenAI(api_key=api_key) if api_key else None
         self.model = "text-embedding-3-small"
 
-    async def create_embedding(self, text: str) -> Optional[List[float]]:
+    async def create_embedding(self, text: str) -> list[float] | None:
         """Create an embedding for the given text."""
         if not self.client:
             return None
@@ -42,7 +44,7 @@ class EmbeddingService:
         entity_id: int,
         content: str,
         content_type: str = "description",
-    ) -> Optional[AIEmbedding]:
+    ) -> AIEmbedding | None:
         """Create and store an embedding for entity content."""
         embedding_vector = await self.create_embedding(content)
         if not embedding_vector:
@@ -81,10 +83,10 @@ class EmbeddingService:
     async def search_similar(
         self,
         query: str,
-        entity_types: Optional[List[str]] = None,
+        entity_types: list[str] | None = None,
         limit: int = 5,
         threshold: float = 0.7,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Search for similar content using cosine similarity.
 
@@ -138,7 +140,7 @@ class EmbeddingService:
         self,
         entity_type: str,
         entity_id: int,
-        content_type: Optional[str] = None,
+        content_type: str | None = None,
     ) -> None:
         """Delete embeddings for an entity."""
         query = select(AIEmbedding).where(

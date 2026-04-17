@@ -1,14 +1,16 @@
 """Lead service layer."""
 
-from typing import Optional, List, Tuple, Any, Dict
+from typing import Any
+
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
-from src.leads.models import Lead, LeadSource
-from src.core.filtering import apply_filters_to_query, build_token_search
-from src.leads.schemas import LeadCreate, LeadUpdate, LeadSourceCreate
-from src.leads.scoring import calculate_lead_score
+
 from src.core.base_service import CRUDService, TaggableServiceMixin
-from src.core.constants import ENTITY_TYPE_LEADS, DEFAULT_PAGE_SIZE
+from src.core.constants import DEFAULT_PAGE_SIZE, ENTITY_TYPE_LEADS
+from src.core.filtering import apply_filters_to_query, build_token_search
+from src.leads.models import Lead, LeadSource
+from src.leads.schemas import LeadCreate, LeadSourceCreate, LeadUpdate
+from src.leads.scoring import calculate_lead_score
 
 
 class LeadService(
@@ -28,15 +30,15 @@ class LeadService(
         self,
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
-        search: Optional[str] = None,
-        status: Optional[str] = None,
-        source_id: Optional[int] = None,
-        owner_id: Optional[int] = None,
-        min_score: Optional[int] = None,
-        tag_ids: Optional[List[int]] = None,
-        filters: Optional[Dict[str, Any]] = None,
-        shared_entity_ids: Optional[List[int]] = None,
-    ) -> Tuple[List[Lead], int]:
+        search: str | None = None,
+        status: str | None = None,
+        source_id: int | None = None,
+        owner_id: int | None = None,
+        min_score: int | None = None,
+        tag_ids: list[int] | None = None,
+        filters: dict[str, Any] | None = None,
+        shared_entity_ids: list[int] | None = None,
+    ) -> tuple[list[Lead], int]:
         """Get paginated list of leads with filters."""
         query = select(Lead).options(selectinload(Lead.source))
 
@@ -106,13 +108,13 @@ class LeadService(
 
 
     # Lead Source methods
-    async def get_source_by_id(self, source_id: int) -> Optional[LeadSource]:
+    async def get_source_by_id(self, source_id: int) -> LeadSource | None:
         result = await self.db.execute(
             select(LeadSource).where(LeadSource.id == source_id)
         )
         return result.scalar_one_or_none()
 
-    async def get_all_sources(self, active_only: bool = True) -> List[LeadSource]:
+    async def get_all_sources(self, active_only: bool = True) -> list[LeadSource]:
         query = select(LeadSource)
         if active_only:
             query = query.where(LeadSource.is_active == True)

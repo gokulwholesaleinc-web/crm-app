@@ -3,9 +3,10 @@ import os
 import ssl as ssl_module
 
 import sqlalchemy.exc
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy import MetaData
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import DeclarativeBase
+
 from src.config import settings
 
 logger = logging.getLogger(__name__)

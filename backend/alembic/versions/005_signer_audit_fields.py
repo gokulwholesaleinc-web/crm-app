@@ -17,9 +17,9 @@ Revises: 004_lead_nullable_names, 004_user_approval
 Create Date: 2026-04-15
 """
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision = "005_signer_audit"
 down_revision = ("004_lead_nullable_names", "004_user_approval")

@@ -1,37 +1,44 @@
 """Quote API routes."""
 
 import logging
-from typing import Annotated, Optional
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
-from src.core.constants import HTTPStatus, EntityNames, ENTITY_TYPE_QUOTES
+
+from src.audit.utils import (
+    audit_entity_create,
+    audit_entity_delete,
+    audit_entity_update,
+    snapshot_entity,
+)
+from src.core.constants import ENTITY_TYPE_QUOTES, EntityNames, HTTPStatus
+from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
 from src.core.router_utils import (
-    DBSession,
     CurrentUser,
-    get_entity_or_404,
+    DBSession,
     calculate_pages,
     check_ownership,
+    get_entity_or_404,
 )
-from src.core.data_scope import DataScope, get_data_scope, check_record_access_or_shared
+from src.events.service import QUOTE_ACCEPTED, QUOTE_SENT, emit
 from src.quotes.schemas import (
+    ProductBundleCreate,
+    ProductBundleListResponse,
+    ProductBundleResponse,
+    ProductBundleUpdate,
+    QuoteAcceptRequest,
+    QuoteBranding,
     QuoteCreate,
-    QuoteUpdate,
-    QuoteResponse,
-    QuoteListResponse,
     QuoteLineItemCreate,
     QuoteLineItemResponse,
-    QuoteBranding,
+    QuoteListResponse,
     QuotePublicResponse,
-    QuoteAcceptRequest,
     QuoteRejectRequest,
-    ProductBundleCreate,
-    ProductBundleUpdate,
-    ProductBundleResponse,
-    ProductBundleListResponse,
+    QuoteResponse,
+    QuoteUpdate,
 )
-from src.quotes.service import QuoteService, ProductBundleService
-from src.audit.utils import audit_entity_create, audit_entity_update, audit_entity_delete, snapshot_entity
-from src.events.service import emit, QUOTE_SENT, QUOTE_ACCEPTED
+from src.quotes.service import ProductBundleService, QuoteService
 
 logger = logging.getLogger(__name__)
 
@@ -59,12 +66,12 @@ async def list_quotes(
     data_scope: Annotated[DataScope, Depends(get_data_scope)],
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    search: Optional[str] = None,
-    status: Optional[str] = None,
-    contact_id: Optional[int] = None,
-    company_id: Optional[int] = None,
-    opportunity_id: Optional[int] = None,
-    owner_id: Optional[int] = None,
+    search: str | None = None,
+    status: str | None = None,
+    contact_id: int | None = None,
+    company_id: int | None = None,
+    opportunity_id: int | None = None,
+    owner_id: int | None = None,
 ):
     """List quotes with pagination and filters."""
     if data_scope.can_see_all():
@@ -120,8 +127,8 @@ async def list_bundles(
     db: DBSession,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    search: Optional[str] = None,
-    is_active: Optional[bool] = None,
+    search: str | None = None,
+    is_active: bool | None = None,
 ):
     """List product bundles."""
     service = ProductBundleService(db)
@@ -263,7 +270,7 @@ async def reject_quote_public(
     token: str,
     request: Request,
     db: DBSession,
-    reject_data: Optional[QuoteRejectRequest] = None,
+    reject_data: QuoteRejectRequest | None = None,
 ):
     """Reject a quote via public link (no auth required)."""
     import hmac as _hmac

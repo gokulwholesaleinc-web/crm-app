@@ -1,10 +1,11 @@
 """Dashboard configuration models - ERPNext pattern."""
 
-from typing import Optional
-from sqlalchemy import String, Integer, Text, Boolean, ForeignKey
+
+from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
-from src.database import Base
+
 from src.core.mixins.auditable import TimestampMixin
+from src.database import Base
 
 
 class DashboardNumberCard(Base, TimestampMixin):
@@ -20,7 +21,7 @@ class DashboardNumberCard(Base, TimestampMixin):
     # Display
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     label: Mapped[str] = mapped_column(String(100), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(String(255))
+    description: Mapped[str | None] = mapped_column(String(255))
 
     # Configuration (JSON string)
     # Example: {"model": "opportunities", "aggregate": "sum", "field": "amount", "filters": {"status": "open"}}
@@ -28,7 +29,7 @@ class DashboardNumberCard(Base, TimestampMixin):
 
     # Styling
     color: Mapped[str] = mapped_column(String(7), default="#6366f1")
-    icon: Mapped[Optional[str]] = mapped_column(String(50))
+    icon: Mapped[str | None] = mapped_column(String(50))
 
     # Display settings
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -49,7 +50,7 @@ class DashboardChart(Base, TimestampMixin):
     # Display
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     label: Mapped[str] = mapped_column(String(100), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(String(255))
+    description: Mapped[str | None] = mapped_column(String(255))
 
     # Chart type
     chart_type: Mapped[str] = mapped_column(String(20), nullable=False)  # bar, line, pie, funnel, area

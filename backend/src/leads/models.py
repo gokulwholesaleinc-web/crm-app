@@ -1,11 +1,13 @@
 """Lead model for CRM lead management."""
 
-from typing import Optional
-from sqlalchemy import String, Integer, ForeignKey, Text, Float, Index
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-from src.database import Base
-from src.core.mixins.auditable import AuditableMixin
 import enum
+from typing import Optional
+
+from sqlalchemy import Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from src.core.mixins.auditable import AuditableMixin
+from src.database import Base
 
 
 class LeadStatus(str, enum.Enum):
@@ -23,7 +25,7 @@ class LeadSource(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(String(255))
+    description: Mapped[str | None] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(default=True)
 
 
@@ -34,29 +36,29 @@ class Lead(Base, AuditableMixin):
     id: Mapped[int] = mapped_column(primary_key=True)
 
     # Basic info
-    first_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    last_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    email: Mapped[Optional[str]] = mapped_column(String(255), index=True)
-    phone: Mapped[Optional[str]] = mapped_column(String(50))
-    mobile: Mapped[Optional[str]] = mapped_column(String(50))
+    first_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    last_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(255), index=True)
+    phone: Mapped[str | None] = mapped_column(String(50))
+    mobile: Mapped[str | None] = mapped_column(String(50))
 
     # Professional info
-    job_title: Mapped[Optional[str]] = mapped_column(String(100))
-    company_name: Mapped[Optional[str]] = mapped_column(String(255))
-    website: Mapped[Optional[str]] = mapped_column(String(500))
-    industry: Mapped[Optional[str]] = mapped_column(String(100))
+    job_title: Mapped[str | None] = mapped_column(String(100))
+    company_name: Mapped[str | None] = mapped_column(String(255))
+    website: Mapped[str | None] = mapped_column(String(500))
+    industry: Mapped[str | None] = mapped_column(String(100))
 
     # Source tracking
-    source_id: Mapped[Optional[int]] = mapped_column(
+    source_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("lead_sources.id", ondelete="SET NULL"),
         index=True,
     )
-    source_details: Mapped[Optional[str]] = mapped_column(String(500))
+    source_details: Mapped[str | None] = mapped_column(String(500))
 
     # Lead scoring
     score: Mapped[int] = mapped_column(Integer, default=0)
-    score_factors: Mapped[Optional[str]] = mapped_column(Text)  # JSON string of scoring factors
+    score_factors: Mapped[str | None] = mapped_column(Text)  # JSON string of scoring factors
 
     # Status
     status: Mapped[str] = mapped_column(
@@ -66,23 +68,23 @@ class Lead(Base, AuditableMixin):
     )
 
     # Address
-    address_line1: Mapped[Optional[str]] = mapped_column(String(255))
-    address_line2: Mapped[Optional[str]] = mapped_column(String(255))
-    city: Mapped[Optional[str]] = mapped_column(String(100))
-    state: Mapped[Optional[str]] = mapped_column(String(100))
-    postal_code: Mapped[Optional[str]] = mapped_column(String(20))
-    country: Mapped[Optional[str]] = mapped_column(String(100))
+    address_line1: Mapped[str | None] = mapped_column(String(255))
+    address_line2: Mapped[str | None] = mapped_column(String(255))
+    city: Mapped[str | None] = mapped_column(String(100))
+    state: Mapped[str | None] = mapped_column(String(100))
+    postal_code: Mapped[str | None] = mapped_column(String(20))
+    country: Mapped[str | None] = mapped_column(String(100))
 
     # Additional info
-    description: Mapped[Optional[str]] = mapped_column(Text)
-    requirements: Mapped[Optional[str]] = mapped_column(Text)
+    description: Mapped[str | None] = mapped_column(Text)
+    requirements: Mapped[str | None] = mapped_column(Text)
 
     # Budget and timeline
-    budget_amount: Mapped[Optional[float]] = mapped_column(Float)
+    budget_amount: Mapped[float | None] = mapped_column(Float)
     budget_currency: Mapped[str] = mapped_column(String(3), default="USD")
 
     # Pipeline stage (for kanban board)
-    pipeline_stage_id: Mapped[Optional[int]] = mapped_column(
+    pipeline_stage_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("pipeline_stages.id", ondelete="SET NULL"),
         nullable=True,
@@ -90,27 +92,27 @@ class Lead(Base, AuditableMixin):
     )
 
     # Owner
-    owner_id: Mapped[Optional[int]] = mapped_column(
+    owner_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
         index=True,
     )
 
     # Sales code
-    sales_code: Mapped[Optional[str]] = mapped_column(String(100), index=True, nullable=True)
+    sales_code: Mapped[str | None] = mapped_column(String(100), index=True, nullable=True)
 
     # Conversion tracking (ERPNext pattern)
-    converted_contact_id: Mapped[Optional[int]] = mapped_column(
+    converted_contact_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("contacts.id", ondelete="SET NULL"),
     )
-    converted_opportunity_id: Mapped[Optional[int]] = mapped_column(
+    converted_opportunity_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("opportunities.id", ondelete="SET NULL"),
     )
 
     # Dedup merge forwarding pointer — see Contact.merged_into_id.
-    merged_into_id: Mapped[Optional[int]] = mapped_column(
+    merged_into_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("leads.id", ondelete="SET NULL"),
         nullable=True,

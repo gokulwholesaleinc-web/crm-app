@@ -5,7 +5,7 @@ SQLAlchemy/FastAPI concerns so the auth service can call them directly and
 tests can inject a custom httpx transport without mocks.
 """
 
-from typing import Callable, Optional
+from typing import Callable
 from urllib.parse import urlencode
 
 import httpx
@@ -31,7 +31,7 @@ def default_client_factory() -> httpx.AsyncClient:
 def build_authorize_url(
     client_id: str,
     redirect_uri: str,
-    state: Optional[str] = None,
+    state: str | None = None,
 ) -> str:
     """Build the Google consent URL for sign-in.
 

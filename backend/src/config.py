@@ -1,6 +1,5 @@
-import logging
-from typing import List
 import json
+import logging
 import os
 
 from pydantic_settings import BaseSettings
@@ -41,7 +40,7 @@ class Settings(BaseSettings):
     SEED_ON_STARTUP: bool = False
 
     @property
-    def cors_origins(self) -> List[str]:
+    def cors_origins(self) -> list[str]:
         origins = json.loads(self.BACKEND_CORS_ORIGINS)
         if "*" in origins:
             return ["*"]

@@ -1,11 +1,11 @@
 """Role service layer for RBAC operations."""
 
-from typing import Optional
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.roles.models import Role, UserRole, RoleName, DEFAULT_PERMISSIONS
+from src.roles.models import DEFAULT_PERMISSIONS, Role, RoleName, UserRole
 from src.roles.schemas import RoleCreate, RoleUpdate
 
 
@@ -19,13 +19,13 @@ class RoleService:
         )
         return list(result.scalars().all())
 
-    async def get_role_by_id(self, role_id: int) -> Optional[Role]:
+    async def get_role_by_id(self, role_id: int) -> Role | None:
         result = await self.db.execute(
             select(Role).where(Role.id == role_id)
         )
         return result.scalar_one_or_none()
 
-    async def get_role_by_name(self, name: str) -> Optional[Role]:
+    async def get_role_by_name(self, name: str) -> Role | None:
         result = await self.db.execute(
             select(Role).where(Role.name == name)
         )
@@ -70,7 +70,7 @@ class RoleService:
         await self.db.refresh(user_role)
         return user_role
 
-    async def get_user_role(self, user_id: int) -> Optional[UserRole]:
+    async def get_user_role(self, user_id: int) -> UserRole | None:
         result = await self.db.execute(
             select(UserRole)
             .options(selectinload(UserRole.role))

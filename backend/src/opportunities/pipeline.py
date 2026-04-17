@@ -1,10 +1,12 @@
 """Pipeline management utilities."""
 
-from typing import List, Dict, Any
+from typing import Any
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from src.core.constants import ErrorMessages, EntityNames
+
+from src.core.constants import EntityNames, ErrorMessages
 from src.opportunities.models import Opportunity, PipelineStage
 
 
@@ -14,7 +16,7 @@ class PipelineManager:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_kanban_data(self, owner_id: int = None) -> List[Dict[str, Any]]:
+    async def get_kanban_data(self, owner_id: int = None) -> list[dict[str, Any]]:
         """
         Get pipeline data formatted for Kanban board.
 
@@ -47,7 +49,7 @@ class PipelineManager:
             opp_query = opp_query.where(Opportunity.owner_id == owner_id)
 
         opp_result = await self.db.execute(opp_query)
-        opps_by_stage: Dict[int, List[Opportunity]] = {stage.id: [] for stage in stages}
+        opps_by_stage: dict[int, list[Opportunity]] = {stage.id: [] for stage in stages}
         for opp in opp_result.scalars().all():
             opps_by_stage[opp.pipeline_stage_id].append(opp)
 

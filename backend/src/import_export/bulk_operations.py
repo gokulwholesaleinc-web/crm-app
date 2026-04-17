@@ -1,15 +1,16 @@
 """Bulk operations for mass updates and assignments."""
 
-from datetime import datetime, timezone
-from typing import List, Dict, Any
-from sqlalchemy import select, update, delete, func
-from sqlalchemy.ext.asyncio import AsyncSession
-from src.leads.models import Lead
-from src.contacts.models import Contact
-from src.companies.models import Company
-from src.opportunities.models import Opportunity
-from src.activities.models import Activity
+from datetime import UTC, datetime
+from typing import Any
 
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.activities.models import Activity
+from src.companies.models import Company
+from src.contacts.models import Contact
+from src.leads.models import Lead
+from src.opportunities.models import Opportunity
 
 # Map entity type strings to model classes
 ENTITY_MODELS = {
@@ -39,9 +40,9 @@ class BulkOperationsHandler:
     async def bulk_update(
         self,
         entity_type: str,
-        entity_ids: List[int],
-        updates: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        entity_ids: list[int],
+        updates: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Mass update entities of a given type.
 
@@ -78,9 +79,9 @@ class BulkOperationsHandler:
     async def bulk_assign(
         self,
         entity_type: str,
-        entity_ids: List[int],
+        entity_ids: list[int],
         owner_id: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Mass assign owner to entities."""
         model = ENTITY_MODELS.get(entity_type)
         if not model:
@@ -110,8 +111,8 @@ class BulkOperationsHandler:
     async def bulk_delete(
         self,
         entity_type: str,
-        entity_ids: List[int],
-    ) -> Dict[str, Any]:
+        entity_ids: list[int],
+    ) -> dict[str, Any]:
         """Mass delete entities of a given type.
 
         For ``contacts`` this is routed through the soft-delete path
@@ -154,7 +155,7 @@ class BulkOperationsHandler:
                     .where(Contact.id.in_(existing_ids))
                     .where(Contact.deleted_at.is_(None))
                 )
-                now = datetime.now(timezone.utc)
+                now = datetime.now(UTC)
                 for contact in contacts_result.scalars().all():
                     contact.deleted_at = now
                     contact.status = "archived"

@@ -1,13 +1,15 @@
 """AI-powered recommendations for CRM actions."""
 
-from typing import Dict, Any, List
 from datetime import datetime, timedelta
-from sqlalchemy import select, func, or_
+from typing import Any
+
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.core.constants import ErrorMessages, EntityNames
+
+from src.activities.models import Activity
+from src.core.constants import EntityNames, ErrorMessages
 from src.leads.models import Lead
 from src.opportunities.models import Opportunity, PipelineStage
-from src.activities.models import Activity
 
 
 class RecommendationEngine:
@@ -16,7 +18,7 @@ class RecommendationEngine:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_recommendations(self, user_id: int) -> List[Dict[str, Any]]:
+    async def get_recommendations(self, user_id: int) -> list[dict[str, Any]]:
         """Get prioritized recommendations for the user."""
         recommendations = []
         recommendations.extend(await self._check_overdue_tasks(user_id))
@@ -30,7 +32,7 @@ class RecommendationEngine:
 
         return recommendations[:10]  # Return top 10
 
-    async def _check_overdue_tasks(self, user_id: int) -> List[Dict[str, Any]]:
+    async def _check_overdue_tasks(self, user_id: int) -> list[dict[str, Any]]:
         today = datetime.now().date()
 
         result = await self.db.execute(
@@ -65,7 +67,7 @@ class RecommendationEngine:
 
         return recommendations
 
-    async def _check_stale_leads(self, user_id: int) -> List[Dict[str, Any]]:
+    async def _check_stale_leads(self, user_id: int) -> list[dict[str, Any]]:
         """Check for leads with no recent activity."""
         cutoff = datetime.now() - timedelta(days=14)
 
@@ -95,7 +97,7 @@ class RecommendationEngine:
 
         return recommendations
 
-    async def _check_at_risk_deals(self, user_id: int) -> List[Dict[str, Any]]:
+    async def _check_at_risk_deals(self, user_id: int) -> list[dict[str, Any]]:
         """Check for deals that might be at risk."""
         today = datetime.now().date()
 
@@ -128,7 +130,7 @@ class RecommendationEngine:
 
         return recommendations
 
-    async def _check_hot_leads_no_activity(self, user_id: int) -> List[Dict[str, Any]]:
+    async def _check_hot_leads_no_activity(self, user_id: int) -> list[dict[str, Any]]:
         """Check for high-scoring leads without recent follow-up."""
         cutoff = datetime.now() - timedelta(days=7)
 
@@ -176,7 +178,7 @@ class RecommendationEngine:
         self,
         entity_type: str,
         entity_id: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get the recommended next action for an entity."""
         if entity_type == "leads":
             return await self._get_lead_next_action(entity_id)
@@ -187,7 +189,7 @@ class RecommendationEngine:
         else:
             return {"action": "Review and update", "reason": "Keep records current"}
 
-    async def _get_lead_next_action(self, lead_id: int) -> Dict[str, Any]:
+    async def _get_lead_next_action(self, lead_id: int) -> dict[str, Any]:
         result = await self.db.execute(
             select(Lead).where(Lead.id == lead_id)
         )
@@ -237,7 +239,7 @@ class RecommendationEngine:
                 "reason": "Determine appropriate next steps",
             }
 
-    async def _get_opportunity_next_action(self, opp_id: int) -> Dict[str, Any]:
+    async def _get_opportunity_next_action(self, opp_id: int) -> dict[str, Any]:
         result = await self.db.execute(
             select(Opportunity).where(Opportunity.id == opp_id)
         )
@@ -273,7 +275,7 @@ class RecommendationEngine:
                 "reason": "High probability - push for signature",
             }
 
-    async def _get_contact_next_action(self, contact_id: int) -> Dict[str, Any]:
+    async def _get_contact_next_action(self, contact_id: int) -> dict[str, Any]:
         # Check for recent activity
         cutoff = datetime.now() - timedelta(days=30)
 

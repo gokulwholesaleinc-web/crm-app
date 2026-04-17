@@ -1,20 +1,20 @@
 """Role management API routes (admin-only)."""
 
-from typing import List
+
 from fastapi import APIRouter, HTTPException
 
+from src.core.cache import CACHE_ROLES, cached_fetch, invalidate_roles_cache
 from src.core.constants import HTTPStatus
-from src.core.router_utils import DBSession, CurrentUser, raise_not_found, raise_forbidden
+from src.core.router_utils import CurrentUser, DBSession, raise_forbidden, raise_not_found
 from src.roles.models import RoleName
 from src.roles.schemas import (
     RoleCreate,
-    RoleUpdate,
     RoleResponse,
+    RoleUpdate,
     UserRoleAssign,
     UserRoleResponse,
 )
 from src.roles.service import RoleService
-from src.core.cache import cached_fetch, CACHE_ROLES, invalidate_roles_cache
 
 router = APIRouter(prefix="/api/roles", tags=["roles"])
 
@@ -27,7 +27,7 @@ async def _require_admin(current_user, db: DBSession):
         raise_forbidden("Only admins can manage roles")
 
 
-@router.get("", response_model=List[RoleResponse])
+@router.get("", response_model=list[RoleResponse])
 async def list_roles(
     current_user: CurrentUser,
     db: DBSession,

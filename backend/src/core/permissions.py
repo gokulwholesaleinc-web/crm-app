@@ -1,15 +1,16 @@
 """Permission dependencies for role-based access control."""
 
 from typing import Annotated
+
 from fastapi import Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database import get_db
 from src.auth.dependencies import get_current_active_user
 from src.auth.models import User
 from src.core.constants import HTTPStatus
-from src.roles.service import RoleService
+from src.database import get_db
 from src.roles.models import RoleName
+from src.roles.service import RoleService
 
 
 class PermissionChecker:

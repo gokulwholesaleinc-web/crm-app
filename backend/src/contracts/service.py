@@ -1,12 +1,12 @@
 """Contract service layer."""
 
-from typing import Optional, List, Tuple
-from sqlalchemy import select, func
+
+from sqlalchemy import func, select
+
 from src.contracts.models import Contract
 from src.contracts.schemas import ContractCreate, ContractUpdate
 from src.core.base_service import CRUDService
 from src.core.constants import DEFAULT_PAGE_SIZE
-
 
 ENTITY_TYPE_CONTRACTS = "contracts"
 
@@ -23,11 +23,11 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
         self,
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
-        contact_id: Optional[int] = None,
-        company_id: Optional[int] = None,
-        status: Optional[str] = None,
-        owner_id: Optional[int] = None,
-    ) -> Tuple[List[Contract], int]:
+        contact_id: int | None = None,
+        company_id: int | None = None,
+        status: str | None = None,
+        owner_id: int | None = None,
+    ) -> tuple[list[Contract], int]:
         """Get paginated list of contracts with filters."""
         query = select(Contract)
 

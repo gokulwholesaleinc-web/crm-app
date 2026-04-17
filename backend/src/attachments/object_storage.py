@@ -3,9 +3,9 @@
 Uses S3-compatible API via boto3 to interact with Cloudflare R2 buckets.
 """
 
+import logging
 import os
 import uuid
-import logging
 
 import boto3
 from botocore.config import Config as BotoConfig

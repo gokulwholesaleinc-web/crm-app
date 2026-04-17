@@ -1,7 +1,7 @@
 """Notification event handler - creates in-app notifications when CRM events fire."""
 
 import logging
-from typing import Dict, Any
+from typing import Any
 
 import src.database as _db
 from src.notifications.models import Notification
@@ -10,7 +10,7 @@ from src.opportunities.models import PipelineStage
 logger = logging.getLogger(__name__)
 
 
-async def notification_event_handler(event_type: str, payload: Dict[str, Any]) -> None:
+async def notification_event_handler(event_type: str, payload: dict[str, Any]) -> None:
     """Handle CRM events by creating in-app notifications.
 
     Registered with the event emitter for LEAD_CREATED, CONTACT_CREATED,
@@ -27,7 +27,7 @@ async def notification_event_handler(event_type: str, payload: Dict[str, Any]) -
             await session.rollback()
 
 
-async def _build_notification(session, event_type: str, payload: Dict[str, Any]):
+async def _build_notification(session, event_type: str, payload: dict[str, Any]):
     """Build a Notification from the event payload, or return None if not applicable."""
     user_id = payload.get("user_id")
     entity_id = payload.get("entity_id")

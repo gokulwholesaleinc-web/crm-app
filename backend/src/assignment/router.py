@@ -1,17 +1,19 @@
 """Assignment rule API routes."""
 
-from typing import Annotated, Any, Optional, List
+from typing import Annotated, Any
+
 from fastapi import APIRouter, Depends, Query
-from src.core.constants import HTTPStatus
-from src.core.permissions import require_manager_or_above
-from src.core.router_utils import DBSession, CurrentUser, raise_not_found
+
 from src.assignment.schemas import (
     AssignmentRuleCreate,
-    AssignmentRuleUpdate,
     AssignmentRuleResponse,
+    AssignmentRuleUpdate,
     AssignmentStatsResponse,
 )
 from src.assignment.service import AssignmentService
+from src.core.constants import HTTPStatus
+from src.core.permissions import require_manager_or_above
+from src.core.router_utils import CurrentUser, DBSession, raise_not_found
 
 router = APIRouter(prefix="/api/assignment-rules", tags=["assignment"])
 
@@ -32,13 +34,13 @@ async def create_rule(
     return AssignmentRuleResponse.model_validate(rule)
 
 
-@router.get("", response_model=List[AssignmentRuleResponse])
+@router.get("", response_model=list[AssignmentRuleResponse])
 async def list_rules(
     current_user: CurrentUser,
     db: DBSession,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    is_active: Optional[bool] = None,
+    is_active: bool | None = None,
 ):
     """List assignment rules."""
     service = AssignmentService(db)
@@ -90,7 +92,7 @@ async def delete_rule(
     await service.delete_rule(rule)
 
 
-@router.get("/{rule_id}/stats", response_model=List[AssignmentStatsResponse])
+@router.get("/{rule_id}/stats", response_model=list[AssignmentStatsResponse])
 async def get_stats(
     rule_id: int,
     current_user: CurrentUser,

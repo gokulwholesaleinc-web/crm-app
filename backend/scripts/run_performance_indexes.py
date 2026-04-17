@@ -3,14 +3,16 @@
 Usage: docker compose exec backend python scripts/run_performance_indexes.py
 """
 
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import asyncio
-from sqlalchemy import text
-from src.database import engine
 
+from sqlalchemy import text
+
+from src.database import engine
 
 INDEXES = [
     # created_at indexes for ORDER BY on list endpoints

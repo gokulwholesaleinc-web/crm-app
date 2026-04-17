@@ -1,7 +1,8 @@
 """Pydantic schemas for AI module."""
 
 from datetime import datetime
-from typing import Optional, List, Any, Dict
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -12,27 +13,27 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str
-    session_id: Optional[str] = None
+    session_id: str | None = None
 
 
 class ChatResponse(BaseModel):
     response: str
-    data: Optional[Dict[str, Any]] = None
-    function_called: Optional[str] = None
-    session_id: Optional[str] = None
+    data: dict[str, Any] | None = None
+    function_called: str | None = None
+    session_id: str | None = None
     confirmation_required: bool = False
-    pending_action: Optional[Dict[str, Any]] = None
-    actions_taken: List[Dict[str, Any]] = []
+    pending_action: dict[str, Any] | None = None
+    actions_taken: list[dict[str, Any]] = []
 
 
 class InsightResponse(BaseModel):
-    lead_data: Optional[Dict[str, Any]] = None
-    opportunity_data: Optional[Dict[str, Any]] = None
+    lead_data: dict[str, Any] | None = None
+    opportunity_data: dict[str, Any] | None = None
     insights: str
 
 
 class DailySummaryResponse(BaseModel):
-    data: Dict[str, Any]
+    data: dict[str, Any]
     summary: str
 
 
@@ -42,20 +43,20 @@ class Recommendation(BaseModel):
     title: str
     description: str
     action: str
-    entity_type: Optional[str] = None
-    entity_id: Optional[int] = None
-    activity_id: Optional[int] = None
-    amount: Optional[float] = None
-    score: Optional[int] = None
+    entity_type: str | None = None
+    entity_id: int | None = None
+    activity_id: int | None = None
+    amount: float | None = None
+    score: int | None = None
 
 
 class RecommendationsResponse(BaseModel):
-    recommendations: List[Recommendation]
+    recommendations: list[Recommendation]
 
 
 class NextBestAction(BaseModel):
     action: str
-    activity_type: Optional[str] = None
+    activity_type: str | None = None
     reason: str
 
 
@@ -68,17 +69,17 @@ class SimilarContentResult(BaseModel):
 
 
 class SearchResponse(BaseModel):
-    results: List[SimilarContentResult]
+    results: list[SimilarContentResult]
 
 
 # Feedback schemas
 class FeedbackRequest(BaseModel):
-    session_id: Optional[str] = None
+    session_id: str | None = None
     query: str
     response: str
-    retrieved_context_ids: Optional[List[int]] = None
+    retrieved_context_ids: list[int] | None = None
     feedback: str  # positive, negative, correction
-    correction_text: Optional[str] = None
+    correction_text: str | None = None
 
 
 class FeedbackResponse(BaseModel):
@@ -106,22 +107,22 @@ class KnowledgeDocumentResponse(BaseModel):
 
 
 class KnowledgeDocumentListResponse(BaseModel):
-    documents: List[KnowledgeDocumentResponse]
+    documents: list[KnowledgeDocumentResponse]
 
 
 # User preferences schemas
 class UserPreferencesRequest(BaseModel):
-    preferred_communication_style: Optional[str] = None
-    priority_entities: Optional[Dict[str, Any]] = None
-    custom_instructions: Optional[str] = None
+    preferred_communication_style: str | None = None
+    priority_entities: dict[str, Any] | None = None
+    custom_instructions: str | None = None
 
 
 class UserPreferencesResponse(BaseModel):
     id: int
     user_id: int
-    preferred_communication_style: Optional[str] = None
-    priority_entities: Optional[Dict[str, Any]] = None
-    custom_instructions: Optional[str] = None
+    preferred_communication_style: str | None = None
+    priority_entities: dict[str, Any] | None = None
+    custom_instructions: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -130,23 +131,23 @@ class UserPreferencesResponse(BaseModel):
 class ConfirmActionRequest(BaseModel):
     session_id: str
     function_name: str
-    arguments: Dict[str, Any]
+    arguments: dict[str, Any]
     confirmed: bool = True
 
 
 class ConfirmActionResponse(BaseModel):
     response: str
-    data: Optional[Dict[str, Any]] = None
-    function_called: Optional[str] = None
-    actions_taken: List[Dict[str, Any]] = []
+    data: dict[str, Any] | None = None
+    function_called: str | None = None
+    actions_taken: list[dict[str, Any]] = []
 
 
 class AIActionLogResponse(BaseModel):
     id: int
     user_id: int
-    session_id: Optional[str] = None
+    session_id: str | None = None
     function_name: str
-    arguments: Optional[Dict[str, Any]] = None
+    arguments: dict[str, Any] | None = None
     risk_level: str
     was_confirmed: bool
     created_at: datetime
@@ -163,14 +164,14 @@ class AILearningResponse(BaseModel):
     value: str
     confidence: float
     times_reinforced: int
-    last_used_at: Optional[datetime] = None
+    last_used_at: datetime | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class AILearningListResponse(BaseModel):
-    learnings: List[AILearningResponse]
+    learnings: list[AILearningResponse]
 
 
 class TeachAIRequest(BaseModel):
@@ -185,16 +186,16 @@ class SmartSuggestion(BaseModel):
     title: str
     description: str
     action: str
-    entity_type: Optional[str] = None
-    entity_id: Optional[int] = None
+    entity_type: str | None = None
+    entity_id: int | None = None
 
 
 class SmartSuggestionsResponse(BaseModel):
-    suggestions: List[SmartSuggestion]
+    suggestions: list[SmartSuggestion]
 
 
 class EntityInsightsResponse(BaseModel):
     entity_type: str
     entity_id: int
-    insights: List[Dict[str, Any]]
-    suggestions: List[str]
+    insights: list[dict[str, Any]]
+    suggestions: list[str]

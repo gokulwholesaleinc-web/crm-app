@@ -1,7 +1,8 @@
 """Admin dashboard Pydantic schemas."""
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
+
 from pydantic import BaseModel, EmailStr
 
 from src.roles.models import RoleName
@@ -15,8 +16,8 @@ class AdminUserResponse(BaseModel):
     role: str
     is_active: bool
     is_superuser: bool
-    last_login: Optional[datetime] = None
-    created_at: Optional[datetime] = None
+    last_login: datetime | None = None
+    created_at: datetime | None = None
     lead_count: int = 0
     contact_count: int = 0
     opportunity_count: int = 0
@@ -26,10 +27,10 @@ class AdminUserResponse(BaseModel):
 
 class AdminUserUpdate(BaseModel):
     """Fields an admin can update on a user."""
-    role: Optional[str] = None
-    is_active: Optional[bool] = None
-    email: Optional[EmailStr] = None
-    full_name: Optional[str] = None
+    role: str | None = None
+    is_active: bool | None = None
+    email: EmailStr | None = None
+    full_name: str | None = None
 
 
 class AssignRoleRequest(BaseModel):
@@ -83,10 +84,10 @@ class ActivityFeedEntry(BaseModel):
     entity_type: str
     entity_id: int
     action: str
-    user_id: Optional[int] = None
-    user_name: Optional[str] = None
+    user_id: int | None = None
+    user_name: str | None = None
     timestamp: datetime
-    changes: Optional[Any] = None
+    changes: Any | None = None
 
     model_config = {"from_attributes": True}
 
@@ -101,8 +102,8 @@ class PendingUserResponse(BaseModel):
     id: int
     email: str
     full_name: str
-    avatar_url: Optional[str] = None
-    created_at: Optional[datetime] = None
+    avatar_url: str | None = None
+    created_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
@@ -112,16 +113,16 @@ class ApproveUserRequest(BaseModel):
 
 
 class RejectUserRequest(BaseModel):
-    reason: Optional[str] = None
+    reason: str | None = None
 
 
 class RejectedEmailResponse(BaseModel):
     id: int
     email: str
-    rejected_by_id: Optional[int] = None
-    rejected_by_email: Optional[str] = None
+    rejected_by_id: int | None = None
+    rejected_by_email: str | None = None
     rejected_at: datetime
-    reason: Optional[str] = None
+    reason: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

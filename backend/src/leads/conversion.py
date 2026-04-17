@@ -7,11 +7,12 @@ Conversion flows:
 3. Lead → Contact + Opportunity (both at once)
 """
 
-from typing import Optional, Tuple
+
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.leads.models import Lead, LeadStatus
-from src.contacts.models import Contact
+
 from src.companies.models import Company
+from src.contacts.models import Contact
+from src.leads.models import Lead, LeadStatus
 
 
 class LeadConverter:
@@ -24,9 +25,9 @@ class LeadConverter:
         self,
         lead: Lead,
         user_id: int,
-        company_id: Optional[int] = None,
+        company_id: int | None = None,
         create_company: bool = False,
-    ) -> Tuple[Contact, Optional[Company]]:
+    ) -> tuple[Contact, Company | None]:
         """
         Convert a lead to a contact.
 
@@ -94,8 +95,8 @@ class LeadConverter:
         lead: Lead,
         user_id: int,
         pipeline_stage_id: int,
-        contact_id: Optional[int] = None,
-        company_id: Optional[int] = None,
+        contact_id: int | None = None,
+        company_id: int | None = None,
     ):
         """
         Convert a lead to an opportunity.

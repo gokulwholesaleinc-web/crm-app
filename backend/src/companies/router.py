@@ -1,37 +1,44 @@
 """Company API routes."""
 
 import logging
-from typing import Annotated, Optional
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
-from src.contacts.models import Contact
-from src.core.constants import HTTPStatus, EntityNames, ENTITY_TYPE_COMPANIES
-from src.core.router_utils import (
-    DBSession,
-    CurrentUser,
-    parse_tag_ids,
-    parse_json_filters,
-    effective_owner_id,
-    get_entity_or_404,
-    calculate_pages,
-    check_ownership,
+
+from src.ai.embedding_hooks import (
+    build_company_embedding_content,
+    delete_entity_embedding,
+    store_entity_embedding,
 )
-from src.core.data_scope import DataScope, get_data_scope, check_record_access_or_shared
+from src.audit.utils import (
+    audit_entity_create,
+    audit_entity_delete,
+    audit_entity_update,
+    snapshot_entity,
+)
 from src.companies.schemas import (
     CompanyCreate,
-    CompanyUpdate,
-    CompanyResponse,
     CompanyListResponse,
+    CompanyResponse,
+    CompanyUpdate,
     TagBrief,
 )
 from src.companies.service import CompanyService
-from src.ai.embedding_hooks import (
-    store_entity_embedding,
-    delete_entity_embedding,
-    build_company_embedding_content,
+from src.contacts.models import Contact
+from src.core.constants import ENTITY_TYPE_COMPANIES, EntityNames, HTTPStatus
+from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
+from src.core.router_utils import (
+    CurrentUser,
+    DBSession,
+    calculate_pages,
+    check_ownership,
+    effective_owner_id,
+    get_entity_or_404,
+    parse_json_filters,
+    parse_tag_ids,
 )
-from src.audit.utils import audit_entity_create, audit_entity_update, audit_entity_delete, snapshot_entity
-from src.events.service import emit, COMPANY_CREATED, COMPANY_UPDATED
+from src.events.service import COMPANY_CREATED, COMPANY_UPDATED, emit
 
 logger = logging.getLogger(__name__)
 
@@ -57,12 +64,12 @@ async def list_companies(
     data_scope: Annotated[DataScope, Depends(get_data_scope)],
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    search: Optional[str] = None,
-    status: Optional[str] = None,
-    industry: Optional[str] = None,
-    owner_id: Optional[int] = None,
-    tag_ids: Optional[str] = None,
-    filters: Optional[str] = None,
+    search: str | None = None,
+    status: str | None = None,
+    industry: str | None = None,
+    owner_id: int | None = None,
+    tag_ids: str | None = None,
+    filters: str | None = None,
 ):
     """List companies with pagination and filters."""
     service = CompanyService(db)

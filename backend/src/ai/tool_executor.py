@@ -2,20 +2,25 @@
 
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.ai.action_safety import ActionRisk, classify_action, get_confirmation_description, requires_confirmation
-from src.ai.models import AIActionLog
+from src.ai.action_safety import (
+    ActionRisk,
+    classify_action,
+    get_confirmation_description,
+    requires_confirmation,
+)
 from src.ai.learning_service import AILearningService
+from src.ai.models import AIActionLog
 
 logger = logging.getLogger(__name__)
 
 MAX_AGENT_ITERATIONS = 10
 
 
-def _summarize_result(data: Dict[str, Any]) -> str:
+def _summarize_result(data: dict[str, Any]) -> str:
     if "error" in data:
         return f"Error: {data['error']}"
     if "message" in data:
@@ -32,8 +37,8 @@ async def _log_ai_action(
     user_id: int,
     session_id: str,
     function_name: str,
-    arguments: Dict[str, Any],
-    result: Dict[str, Any],
+    arguments: dict[str, Any],
+    result: dict[str, Any],
     risk_level: str,
     was_confirmed: bool,
     model_used: str = "gpt-4",
@@ -60,7 +65,7 @@ async def _log_ai_action(
 
 
 class AIToolExecutor:
-    def __init__(self, db: AsyncSession, openai_client, tools: List[Dict], system_prompt: str):
+    def __init__(self, db: AsyncSession, openai_client, tools: list[dict], system_prompt: str):
         self.db = db
         self.client = openai_client
         self.tools = tools
@@ -71,10 +76,10 @@ class AIToolExecutor:
         query: str,
         user_id: int,
         session_id: str,
-        history: List[Dict],
+        history: list[dict],
         execute_fn,
         save_conversation_fn,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         learning_service = AILearningService(self.db)
 
         await save_conversation_fn(user_id, session_id, "user", query)
@@ -203,8 +208,8 @@ class AIToolExecutor:
         user_id: int,
         session_id: str,
         function_name: str,
-        arguments: Dict[str, Any],
-        result: Dict[str, Any],
+        arguments: dict[str, Any],
+        result: dict[str, Any],
         risk_level: str,
         was_confirmed: bool,
         model_used: str = "gpt-4",

@@ -1,62 +1,69 @@
 """Lead API routes."""
 
 import logging
-from typing import Annotated, Optional, List
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 from sqlalchemy import select
-from src.auth.models import User
-from src.core.constants import HTTPStatus, EntityNames, ErrorMessages, ENTITY_TYPE_LEADS
-from src.core.permissions import require_permission
-from src.core.router_utils import (
-    DBSession,
-    CurrentUser,
-    parse_tag_ids,
-    parse_json_filters,
-    effective_owner_id,
-    get_entity_or_404,
-    calculate_pages,
-    raise_bad_request,
-    check_ownership,
-    build_response_with_tags,
-    build_list_responses_with_tags,
+
+from src.ai.embedding_hooks import (
+    build_lead_embedding_content,
+    delete_entity_embedding,
+    store_entity_embedding,
 )
-from src.core.data_scope import DataScope, get_data_scope, check_record_access_or_shared
+from src.audit.utils import (
+    audit_entity_create,
+    audit_entity_delete,
+    audit_entity_update,
+    snapshot_entity,
+)
+from src.auth.models import User
 from src.core.cache import (
-    cached_fetch,
     CACHE_LEAD_SOURCES,
+    cached_fetch,
     invalidate_lead_sources_cache,
 )
+from src.core.constants import ENTITY_TYPE_LEADS, EntityNames, ErrorMessages, HTTPStatus
+from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
+from src.core.permissions import require_permission
+from src.core.router_utils import (
+    CurrentUser,
+    DBSession,
+    build_list_responses_with_tags,
+    build_response_with_tags,
+    calculate_pages,
+    check_ownership,
+    effective_owner_id,
+    get_entity_or_404,
+    parse_json_filters,
+    parse_tag_ids,
+    raise_bad_request,
+)
+from src.events.service import LEAD_CREATED, LEAD_UPDATED, emit
+from src.leads.conversion import LeadConverter
+from src.leads.models import Lead
 from src.leads.schemas import (
-    LeadCreate,
-    LeadUpdate,
-    LeadResponse,
-    LeadListResponse,
-    LeadSourceCreate,
-    LeadSourceResponse,
-    LeadConvertToContactRequest,
-    LeadConvertToOpportunityRequest,
-    LeadFullConversionRequest,
     ConversionResponse,
     KanbanLead,
     KanbanLeadStage,
+    LeadConvertToContactRequest,
+    LeadConvertToOpportunityRequest,
+    LeadCreate,
+    LeadFullConversionRequest,
     LeadKanbanResponse,
+    LeadListResponse,
+    LeadResponse,
+    LeadSourceCreate,
+    LeadSourceResponse,
+    LeadUpdate,
     MoveLeadRequest,
     SendCampaignRequest,
     TagBrief,
 )
 from src.leads.service import LeadService
-from src.leads.conversion import LeadConverter
-from src.leads.models import Lead
-from src.opportunities.models import PipelineStage
-from src.ai.embedding_hooks import (
-    store_entity_embedding,
-    delete_entity_embedding,
-    build_lead_embedding_content,
-)
-from src.audit.utils import audit_entity_create, audit_entity_update, audit_entity_delete, snapshot_entity
-from src.events.service import emit, LEAD_CREATED, LEAD_UPDATED
 from src.notifications.service import notify_on_assignment
+from src.opportunities.models import PipelineStage
 
 logger = logging.getLogger(__name__)
 
@@ -74,13 +81,13 @@ async def list_leads(
     data_scope: Annotated[DataScope, Depends(get_data_scope)],
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    search: Optional[str] = None,
-    status: Optional[str] = None,
-    source_id: Optional[int] = None,
-    owner_id: Optional[int] = None,
-    min_score: Optional[int] = None,
-    tag_ids: Optional[str] = None,
-    filters: Optional[str] = None,
+    search: str | None = None,
+    status: str | None = None,
+    source_id: int | None = None,
+    owner_id: int | None = None,
+    min_score: int | None = None,
+    tag_ids: str | None = None,
+    filters: str | None = None,
 ):
     """List leads with pagination and filters.
 
@@ -173,7 +180,7 @@ async def get_lead_kanban(
     current_user: CurrentUser,
     db: DBSession,
     data_scope: Annotated[DataScope, Depends(get_data_scope)],
-    owner_id: Optional[int] = None,
+    owner_id: int | None = None,
 ):
     """Get Kanban board view of lead pipeline.
 
@@ -588,7 +595,7 @@ async def full_conversion(
 
 
 # Lead Sources endpoints
-@router.get("/sources/", response_model=List[LeadSourceResponse])
+@router.get("/sources/", response_model=list[LeadSourceResponse])
 async def list_sources(
     current_user: CurrentUser,
     db: DBSession,

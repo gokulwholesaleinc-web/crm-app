@@ -1,21 +1,23 @@
 """Note API routes."""
 
-from typing import Annotated, Optional
-from fastapi import APIRouter, Depends, Query, HTTPException
-from src.core.constants import HTTPStatus, EntityNames
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from src.core.constants import EntityNames, HTTPStatus
 from src.core.data_scope import DataScope, get_data_scope
 from src.core.entity_access import require_entity_access
 from src.core.router_utils import (
-    DBSession,
     CurrentUser,
-    get_entity_or_404,
+    DBSession,
     calculate_pages,
+    get_entity_or_404,
 )
 from src.notes.schemas import (
     NoteCreate,
-    NoteUpdate,
-    NoteResponse,
     NoteListResponse,
+    NoteResponse,
+    NoteUpdate,
 )
 from src.notes.service import NoteService
 
@@ -28,8 +30,8 @@ async def list_notes(
     db: DBSession,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    entity_type: Optional[str] = None,
-    entity_id: Optional[int] = None,
+    entity_type: str | None = None,
+    entity_id: int | None = None,
 ):
     """List notes with pagination and filters (scoped to current user)."""
     service = NoteService(db)

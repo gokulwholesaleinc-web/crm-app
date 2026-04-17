@@ -1,18 +1,20 @@
 """Sales sequence API routes."""
 
-from typing import Annotated, Optional, List
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, Query
+
 from src.auth.models import User
 from src.core.constants import HTTPStatus
-from src.core.router_utils import DBSession, CurrentUser, raise_not_found, raise_bad_request
 from src.core.permissions import require_manager_or_above
+from src.core.router_utils import CurrentUser, DBSession, raise_bad_request, raise_not_found
 from src.sequences.schemas import (
-    SequenceCreate,
-    SequenceUpdate,
-    SequenceResponse,
     EnrollContactRequest,
-    SequenceEnrollmentResponse,
     ProcessDueResult,
+    SequenceCreate,
+    SequenceEnrollmentResponse,
+    SequenceResponse,
+    SequenceUpdate,
 )
 from src.sequences.service import SequenceService
 
@@ -31,13 +33,13 @@ async def create_sequence(
     return SequenceResponse.model_validate(seq)
 
 
-@router.get("", response_model=List[SequenceResponse])
+@router.get("", response_model=list[SequenceResponse])
 async def list_sequences(
     current_user: CurrentUser,
     db: DBSession,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    is_active: Optional[bool] = None,
+    is_active: bool | None = None,
 ):
     """List sequences."""
     service = SequenceService(db)
@@ -107,7 +109,7 @@ async def enroll_contact(
     return SequenceEnrollmentResponse.model_validate(enrollment)
 
 
-@router.get("/{sequence_id}/enrollments", response_model=List[SequenceEnrollmentResponse])
+@router.get("/{sequence_id}/enrollments", response_model=list[SequenceEnrollmentResponse])
 async def get_enrollments(
     sequence_id: int,
     current_user: CurrentUser,
@@ -169,7 +171,7 @@ async def process_due_steps(
     return ProcessDueResult(processed=len(results), details=results)
 
 
-@router.get("/contacts/{contact_id}/enrollments", response_model=List[SequenceEnrollmentResponse])
+@router.get("/contacts/{contact_id}/enrollments", response_model=list[SequenceEnrollmentResponse])
 async def get_contact_enrollments(
     contact_id: int,
     current_user: CurrentUser,

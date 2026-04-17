@@ -1,14 +1,14 @@
 """Sharing endpoints for record collaboration between users."""
 
-from typing import List
-from pydantic import BaseModel
+
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import select
 
 from src.core.constants import HTTPStatus
-from src.core.router_utils import DBSession, CurrentUser
-from src.core.models import EntityShare
 from src.core.data_scope import invalidate_scope_cache
+from src.core.models import EntityShare
+from src.core.router_utils import CurrentUser, DBSession
 
 router = APIRouter(prefix="/api/sharing", tags=["sharing"])
 
@@ -32,7 +32,7 @@ class ShareResponse(BaseModel):
 
 
 class ShareListResponse(BaseModel):
-    items: List[ShareResponse]
+    items: list[ShareResponse]
 
 
 @router.post("", response_model=ShareResponse, status_code=HTTPStatus.CREATED)

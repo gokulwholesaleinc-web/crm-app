@@ -1,15 +1,17 @@
 """Payment models for Stripe payment infrastructure."""
 
 from datetime import datetime
-from typing import Optional, TYPE_CHECKING
-from sqlalchemy import String, Integer, ForeignKey, Numeric, DateTime, Boolean
+from typing import TYPE_CHECKING, Optional
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from src.database import Base
+
 from src.core.mixins.auditable import AuditableMixin, TimestampMixin
+from src.database import Base
 
 if TYPE_CHECKING:
-    from src.contacts.models import Contact
     from src.companies.models import Company
+    from src.contacts.models import Contact
     from src.opportunities.models import Opportunity
     from src.quotes.models import Quote
 
@@ -21,13 +23,13 @@ class StripeCustomer(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(primary_key=True)
 
     # Link to CRM entities (one or both can be set)
-    contact_id: Mapped[Optional[int]] = mapped_column(
+    contact_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("contacts.id", ondelete="SET NULL"),
         index=True,
         nullable=True,
     )
-    company_id: Mapped[Optional[int]] = mapped_column(
+    company_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("companies.id", ondelete="SET NULL"),
         index=True,
@@ -38,8 +40,8 @@ class StripeCustomer(Base, TimestampMixin):
     stripe_customer_id: Mapped[str] = mapped_column(
         String(255), unique=True, index=True, nullable=False
     )
-    email: Mapped[Optional[str]] = mapped_column(String(255))
-    name: Mapped[Optional[str]] = mapped_column(String(255))
+    email: Mapped[str | None] = mapped_column(String(255))
+    name: Mapped[str | None] = mapped_column(String(255))
 
     # ORM relationships
     contact: Mapped[Optional["Contact"]] = relationship("Contact", lazy="joined")
@@ -52,14 +54,14 @@ class Product(Base, AuditableMixin):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(String(1000))
-    stripe_product_id: Mapped[Optional[str]] = mapped_column(
+    description: Mapped[str | None] = mapped_column(String(1000))
+    stripe_product_id: Mapped[str | None] = mapped_column(
         String(255), unique=True, index=True
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     # Owner
-    owner_id: Mapped[Optional[int]] = mapped_column(
+    owner_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
         index=True,
@@ -85,12 +87,12 @@ class Price(Base, TimestampMixin):
         nullable=False,
         index=True,
     )
-    stripe_price_id: Mapped[Optional[str]] = mapped_column(
+    stripe_price_id: Mapped[str | None] = mapped_column(
         String(255), unique=True, index=True
     )
     amount: Mapped[float] = mapped_column(Numeric(precision=12, scale=2), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), default="USD")
-    recurring_interval: Mapped[Optional[str]] = mapped_column(String(20))  # "month" or "year"
+    recurring_interval: Mapped[str | None] = mapped_column(String(20))  # "month" or "year"
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     # ORM relationships
@@ -104,28 +106,28 @@ class Payment(Base, AuditableMixin):
     id: Mapped[int] = mapped_column(primary_key=True)
 
     # Stripe identifiers
-    stripe_payment_intent_id: Mapped[Optional[str]] = mapped_column(
+    stripe_payment_intent_id: Mapped[str | None] = mapped_column(
         String(255), unique=True, index=True
     )
-    stripe_checkout_session_id: Mapped[Optional[str]] = mapped_column(
+    stripe_checkout_session_id: Mapped[str | None] = mapped_column(
         String(255), index=True
     )
-    stripe_invoice_id: Mapped[Optional[str]] = mapped_column(
+    stripe_invoice_id: Mapped[str | None] = mapped_column(
         String(255), unique=True, index=True, nullable=True
     )
 
     # Relations
-    customer_id: Mapped[Optional[int]] = mapped_column(
+    customer_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("stripe_customers.id", ondelete="SET NULL"),
         index=True,
     )
-    opportunity_id: Mapped[Optional[int]] = mapped_column(
+    opportunity_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("opportunities.id", ondelete="SET NULL"),
         index=True,
     )
-    quote_id: Mapped[Optional[int]] = mapped_column(
+    quote_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("quotes.id", ondelete="SET NULL"),
         index=True,
@@ -137,11 +139,11 @@ class Payment(Base, AuditableMixin):
     status: Mapped[str] = mapped_column(
         String(20), default="pending", nullable=False
     )  # pending, sent, succeeded, failed, refunded
-    payment_method: Mapped[Optional[str]] = mapped_column(String(50))
-    receipt_url: Mapped[Optional[str]] = mapped_column(String(500))
+    payment_method: Mapped[str | None] = mapped_column(String(50))
+    receipt_url: Mapped[str | None] = mapped_column(String(500))
 
     # Owner
-    owner_id: Mapped[Optional[int]] = mapped_column(
+    owner_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
         index=True,
@@ -179,7 +181,7 @@ class Subscription(Base, AuditableMixin):
     )
     # Nullable: subscriptions created via Stripe Checkout / webhook flow
     # don't necessarily map to a local Price row at creation time.
-    price_id: Mapped[Optional[int]] = mapped_column(
+    price_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("prices.id", ondelete="CASCADE"),
         nullable=True,
@@ -190,16 +192,16 @@ class Subscription(Base, AuditableMixin):
     status: Mapped[str] = mapped_column(
         String(20), default="active", nullable=False
     )  # active, past_due, canceled, trialing
-    current_period_start: Mapped[Optional[datetime]] = mapped_column(
+    current_period_start: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
     )
-    current_period_end: Mapped[Optional[datetime]] = mapped_column(
+    current_period_end: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
     )
     cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Owner
-    owner_id: Mapped[Optional[int]] = mapped_column(
+    owner_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
         index=True,

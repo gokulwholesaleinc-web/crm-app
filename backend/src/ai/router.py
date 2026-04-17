@@ -1,43 +1,44 @@
 """AI Assistant API routes."""
 
-from typing import Optional
-from fastapi import APIRouter, Query, UploadFile, File, HTTPException
-from sqlalchemy import select, func
-from src.core.constants import HTTPStatus
-from src.core.router_utils import DBSession, CurrentUser, raise_not_found, raise_bad_request
+
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from sqlalchemy import func, select
+
+from src.ai.embeddings import EmbeddingService
+from src.ai.insights import InsightsGenerator
+from src.ai.knowledge_base import KnowledgeBaseService
+from src.ai.learning_service import AILearningService
+from src.ai.models import AIFeedback, AIUserPreferences
+from src.ai.query_processor import QueryProcessor
+from src.ai.recommendations import RecommendationEngine
 from src.ai.schemas import (
+    AILearningListResponse,
+    AILearningResponse,
     ChatRequest,
     ChatResponse,
-    InsightResponse,
+    ConfirmActionRequest,
+    ConfirmActionResponse,
     DailySummaryResponse,
-    RecommendationsResponse,
-    Recommendation,
-    NextBestAction,
-    SearchResponse,
-    SimilarContentResult,
+    EntityInsightsResponse,
     FeedbackRequest,
     FeedbackResponse,
     FeedbackStatsResponse,
-    KnowledgeDocumentResponse,
+    InsightResponse,
     KnowledgeDocumentListResponse,
-    UserPreferencesRequest,
-    UserPreferencesResponse,
-    ConfirmActionRequest,
-    ConfirmActionResponse,
-    AILearningResponse,
-    AILearningListResponse,
-    TeachAIRequest,
+    KnowledgeDocumentResponse,
+    NextBestAction,
+    Recommendation,
+    RecommendationsResponse,
+    SearchResponse,
+    SimilarContentResult,
     SmartSuggestion,
     SmartSuggestionsResponse,
-    EntityInsightsResponse,
+    TeachAIRequest,
+    UserPreferencesRequest,
+    UserPreferencesResponse,
 )
-from src.ai.models import AIFeedback, AIUserPreferences
-from src.ai.learning_service import AILearningService
-from src.ai.query_processor import QueryProcessor
-from src.ai.insights import InsightsGenerator
-from src.ai.recommendations import RecommendationEngine
-from src.ai.embeddings import EmbeddingService
-from src.ai.knowledge_base import KnowledgeBaseService
+from src.core.constants import HTTPStatus
+from src.core.router_utils import CurrentUser, DBSession, raise_bad_request, raise_not_found
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
@@ -194,7 +195,7 @@ async def semantic_search(
     query: str,
     current_user: CurrentUser,
     db: DBSession,
-    entity_types: Optional[str] = None,
+    entity_types: str | None = None,
     limit: int = Query(5, ge=1, le=20),
 ):
     """Perform semantic search across CRM content."""
@@ -430,7 +431,7 @@ async def update_preferences(
 async def get_learnings(
     current_user: CurrentUser,
     db: DBSession,
-    category: Optional[str] = None,
+    category: str | None = None,
 ):
     """Get all AI learnings for the current user."""
     service = AILearningService(db)
@@ -498,8 +499,10 @@ async def get_entity_insights(
 
 # Predictive AI endpoints
 
-from src.opportunities.models import Opportunity
+from datetime import UTC
+
 from src.activities.models import Activity
+from src.opportunities.models import Opportunity
 
 
 @router.get("/predict/opportunity/{opportunity_id}")
@@ -613,10 +616,10 @@ async def get_activity_summary(
     days: int = Query(30, ge=1, le=365),
 ):
     """Get activity summary for an entity over a time period."""
-    from datetime import datetime, timedelta, timezone
     from collections import Counter
+    from datetime import datetime, timedelta
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    cutoff = datetime.now(UTC) - timedelta(days=days)
 
     # Fetch activities for the entity within the time period
     result = await db.execute(

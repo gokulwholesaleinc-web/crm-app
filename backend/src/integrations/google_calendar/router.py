@@ -3,16 +3,17 @@
 import logging
 
 from fastapi import APIRouter, HTTPException
-from src.core.router_utils import DBSession, CurrentUser
+
 from src.core.constants import HTTPStatus
-from src.integrations.google_calendar.service import GoogleCalendarService
+from src.core.router_utils import CurrentUser, DBSession
 from src.integrations.google_calendar.schemas import (
-    GoogleCalendarConnect,
+    CalendarSyncStatus,
     GoogleCalendarCallback,
+    GoogleCalendarConnect,
     GoogleCalendarCredentialResponse,
     GoogleCalendarEventCreate,
-    CalendarSyncStatus,
 )
+from src.integrations.google_calendar.service import GoogleCalendarService
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +110,7 @@ async def push_to_calendar(
     into your own calendar.
     """
     from sqlalchemy import select
+
     from src.activities.models import Activity
     from src.core.router_utils import raise_forbidden
 

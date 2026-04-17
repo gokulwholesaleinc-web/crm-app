@@ -1,21 +1,22 @@
 """Saved filters CRUD API routes."""
 
 import json
-from typing import Annotated, List, Optional, Any, Dict
-from fastapi import APIRouter, Depends
-from sqlalchemy import select, func, or_
+from typing import Annotated, Any
 
-from src.core.router_utils import DBSession, CurrentUser
+from fastapi import APIRouter, Depends
+from sqlalchemy import func, or_, select
+
 from src.core.constants import HTTPStatus
 from src.core.data_scope import DataScope, get_data_scope
 from src.core.filtering import apply_filters_to_query
+from src.core.router_utils import CurrentUser, DBSession
 from src.filters.models import SavedFilter
 from src.filters.schemas import (
-    SavedFilterCreate,
-    SavedFilterUpdate,
-    SavedFilterResponse,
     AggregateRequest,
     AggregateResponse,
+    SavedFilterCreate,
+    SavedFilterResponse,
+    SavedFilterUpdate,
 )
 
 router = APIRouter(prefix="/api/filters", tags=["filters"])
@@ -27,11 +28,11 @@ ENTITY_MODEL_MAP = {}
 def _get_entity_model(entity_type: str):
     """Lazily load and cache entity models to avoid circular imports."""
     if not ENTITY_MODEL_MAP:
-        from src.contacts.models import Contact
+        from src.activities.models import Activity
         from src.companies.models import Company
+        from src.contacts.models import Contact
         from src.leads.models import Lead
         from src.opportunities.models import Opportunity
-        from src.activities.models import Activity
 
         ENTITY_MODEL_MAP.update({
             "contacts": Contact,
@@ -62,11 +63,11 @@ def _filter_to_response(f: SavedFilter) -> SavedFilterResponse:
     )
 
 
-@router.get("", response_model=List[SavedFilterResponse])
+@router.get("", response_model=list[SavedFilterResponse])
 async def list_saved_filters(
     current_user: CurrentUser,
     db: DBSession,
-    entity_type: Optional[str] = None,
+    entity_type: str | None = None,
 ):
     """List saved filters for the current user and public filters."""
     query = select(SavedFilter).where(
@@ -149,7 +150,7 @@ async def aggregate_filters(
     count = count_result.scalar() or 0
 
     # Compute metrics
-    metrics: Dict[str, Any] = {}
+    metrics: dict[str, Any] = {}
     for metric in data.metrics:
         if metric == "count":
             metrics["count"] = count
@@ -180,7 +181,7 @@ async def aggregate_filters(
 
     sample_dicts = []
     for entity in sample_entities:
-        entity_dict: Dict[str, Any] = {"id": entity.id}
+        entity_dict: dict[str, Any] = {"id": entity.id}
         # Add common display fields
         if hasattr(entity, "first_name"):
             entity_dict["first_name"] = entity.first_name

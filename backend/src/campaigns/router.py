@@ -1,42 +1,44 @@
 """Campaign API routes."""
 
-from typing import Annotated, Optional, List
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, Query
-from src.core.constants import HTTPStatus, EntityNames
-from src.core.router_utils import (
-    DBSession,
-    CurrentUser,
-    get_entity_or_404,
-    calculate_pages,
-    raise_not_found,
-    raise_forbidden,
-    check_ownership,
-    effective_owner_id,
-)
-from src.core.data_scope import DataScope, get_data_scope
+
 from src.campaigns.schemas import (
+    AddMembersRequest,
+    CampaignAnalytics,
     CampaignCreate,
-    CampaignUpdate,
-    CampaignResponse,
     CampaignListResponse,
     CampaignMemberResponse,
     CampaignMemberUpdate,
-    AddMembersRequest,
-    CreateFromImportRequest,
+    CampaignResponse,
     CampaignStats,
-    CampaignAnalytics,
-    EmailTemplateCreate,
-    EmailTemplateUpdate,
-    EmailTemplateResponse,
+    CampaignUpdate,
+    CreateFromImportRequest,
     EmailCampaignStepCreate,
-    EmailCampaignStepUpdate,
     EmailCampaignStepResponse,
+    EmailCampaignStepUpdate,
+    EmailTemplateCreate,
+    EmailTemplateResponse,
+    EmailTemplateUpdate,
 )
 from src.campaigns.service import (
-    CampaignService,
     CampaignMemberService,
-    EmailTemplateService,
+    CampaignService,
     EmailCampaignStepService,
+    EmailTemplateService,
+)
+from src.core.constants import EntityNames, HTTPStatus
+from src.core.data_scope import DataScope, get_data_scope
+from src.core.router_utils import (
+    CurrentUser,
+    DBSession,
+    calculate_pages,
+    check_ownership,
+    effective_owner_id,
+    get_entity_or_404,
+    raise_forbidden,
+    raise_not_found,
 )
 
 router = APIRouter(prefix="/api/campaigns", tags=["campaigns"])
@@ -69,14 +71,14 @@ async def create_email_template(
     return EmailTemplateResponse.model_validate(template)
 
 
-@router.get("/templates", response_model=List[EmailTemplateResponse])
+@router.get("/templates", response_model=list[EmailTemplateResponse])
 async def list_email_templates(
     current_user: CurrentUser,
     db: DBSession,
     data_scope: Annotated[DataScope, Depends(get_data_scope)],
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    category: Optional[str] = None,
+    category: str | None = None,
 ):
     """List email templates — scoped to caller unless admin/manager."""
     service = EmailTemplateService(db)
@@ -189,10 +191,10 @@ async def list_campaigns(
     data_scope: Annotated[DataScope, Depends(get_data_scope)],
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    search: Optional[str] = None,
-    campaign_type: Optional[str] = None,
-    status: Optional[str] = None,
-    owner_id: Optional[int] = None,
+    search: str | None = None,
+    campaign_type: str | None = None,
+    status: str | None = None,
+    owner_id: int | None = None,
 ):
     """List campaigns with pagination and filters.
 
@@ -311,12 +313,12 @@ async def get_campaign_analytics(
 
 # Campaign Members endpoints
 
-@router.get("/{campaign_id}/members", response_model=List[CampaignMemberResponse])
+@router.get("/{campaign_id}/members", response_model=list[CampaignMemberResponse])
 async def list_campaign_members(
     campaign_id: int,
     current_user: CurrentUser,
     db: DBSession,
-    status: Optional[str] = None,
+    status: str | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
 ):
@@ -420,7 +422,7 @@ async def add_campaign_step(
     return EmailCampaignStepResponse.model_validate(step)
 
 
-@router.get("/{campaign_id}/steps", response_model=List[EmailCampaignStepResponse])
+@router.get("/{campaign_id}/steps", response_model=list[EmailCampaignStepResponse])
 async def get_campaign_steps(
     campaign_id: int,
     current_user: CurrentUser,

@@ -6,9 +6,9 @@ Safe to run multiple times (idempotent).
 """
 
 import asyncio
-import asyncpg
 import os
-from typing import List, Tuple
+
+import asyncpg
 
 # Admin emails from environment (comma-separated), default to admin@admin.com
 ADMIN_EMAILS = [

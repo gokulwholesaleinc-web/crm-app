@@ -1,13 +1,15 @@
 """Activity service layer."""
 
-from datetime import datetime, timezone
-from typing import Optional, List, Tuple, Any, Dict
-from sqlalchemy import select, func, or_
+from datetime import UTC, datetime
+from typing import Any
+
+from sqlalchemy import func, or_, select
+
 from src.activities.models import Activity, ActivityType
-from src.core.filtering import apply_filters_to_query
 from src.activities.schemas import ActivityCreate, ActivityUpdate
 from src.core.base_service import CRUDService
 from src.core.constants import DEFAULT_PAGE_SIZE
+from src.core.filtering import apply_filters_to_query
 
 
 class ActivityService(CRUDService[Activity, ActivityCreate, ActivityUpdate]):
@@ -22,16 +24,16 @@ class ActivityService(CRUDService[Activity, ActivityCreate, ActivityUpdate]):
         self,
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
-        entity_type: Optional[str] = None,
-        entity_id: Optional[int] = None,
-        activity_type: Optional[str] = None,
-        owner_id: Optional[int] = None,
-        assigned_to_id: Optional[int] = None,
-        is_completed: Optional[bool] = None,
-        priority: Optional[str] = None,
-        filters: Optional[Dict[str, Any]] = None,
-        shared_entity_ids: Optional[List[int]] = None,
-    ) -> Tuple[List[Activity], int]:
+        entity_type: str | None = None,
+        entity_id: int | None = None,
+        activity_type: str | None = None,
+        owner_id: int | None = None,
+        assigned_to_id: int | None = None,
+        is_completed: bool | None = None,
+        priority: str | None = None,
+        filters: dict[str, Any] | None = None,
+        shared_entity_ids: list[int] | None = None,
+    ) -> tuple[list[Activity], int]:
         """Get paginated list of activities with filters."""
         query = select(Activity)
 
@@ -92,10 +94,10 @@ class ActivityService(CRUDService[Activity, ActivityCreate, ActivityUpdate]):
     async def update(self, activity: Activity, data: ActivityUpdate, user_id: int) -> Activity:
         return await super().update(activity, data, user_id)
 
-    async def complete(self, activity: Activity, user_id: int, notes: Optional[str] = None) -> Activity:
+    async def complete(self, activity: Activity, user_id: int, notes: str | None = None) -> Activity:
         """Mark an activity as completed."""
         activity.is_completed = True
-        activity.completed_at = datetime.now(timezone.utc)
+        activity.completed_at = datetime.now(UTC)
         if notes:
             if activity.description:
                 activity.description += f"\n\n---\nCompletion notes: {notes}"
@@ -111,7 +113,7 @@ class ActivityService(CRUDService[Activity, ActivityCreate, ActivityUpdate]):
         entity_type: str,
         entity_id: int,
         limit: int = 50,
-    ) -> List[Activity]:
+    ) -> list[Activity]:
         """Get all activities for a specific entity."""
         result = await self.db.execute(
             select(Activity)
@@ -127,7 +129,7 @@ class ActivityService(CRUDService[Activity, ActivityCreate, ActivityUpdate]):
         user_id: int,
         include_completed: bool = False,
         limit: int = 50,
-    ) -> List[Activity]:
+    ) -> list[Activity]:
         """Get tasks assigned to or owned by user."""
         query = (
             select(Activity)

@@ -6,14 +6,16 @@ to the correct stage based on their status field.
 Usage: docker compose exec backend python scripts/fix_pipeline_stages.py
 """
 
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import asyncio
-from sqlalchemy import text
-from src.database import engine
 
+from sqlalchemy import text
+
+from src.database import engine
 
 LEAD_STAGES = [
     {"name": "Discovery",    "order": 1, "color": "#06b6d4", "probability": 10, "is_won": False, "is_lost": False},

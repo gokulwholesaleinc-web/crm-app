@@ -9,16 +9,15 @@ from datetime import timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.activities.models import Activity
 from src.auth.models import User
 from src.auth.security import get_password_hash
+from src.campaigns.models import Campaign
 from src.companies.models import Company
 from src.contacts.models import Contact
+from src.core.models import EntityTag, Note, Tag
 from src.leads.models import Lead, LeadSource
 from src.opportunities.models import Opportunity, PipelineStage
-from src.activities.models import Activity
-from src.campaigns.models import Campaign
-from src.core.models import Note, Tag, EntityTag
-from src.whitelabel.models import Tenant, TenantSettings, TenantUser
 from src.seed_data import (
     ACTIVITIES_DATA,
     CAMPAIGNS_DATA,
@@ -34,6 +33,7 @@ from src.seed_data import (
     TAGS_DATA,
     _today,
 )
+from src.whitelabel.models import Tenant, TenantSettings, TenantUser
 
 
 async def seed_database(session: AsyncSession) -> None:

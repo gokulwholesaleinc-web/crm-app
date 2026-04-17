@@ -2,7 +2,7 @@
 
 import logging
 from datetime import date, datetime, timedelta
-from typing import Any, Dict
+from typing import Any
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +17,7 @@ class CRMAnalyticsTools:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def generate_pipeline_report(self, args: Dict[str, Any]) -> Dict[str, Any]:
+    async def generate_pipeline_report(self, args: dict[str, Any]) -> dict[str, Any]:
         date_from = None
         date_to = None
 
@@ -83,7 +83,7 @@ class CRMAnalyticsTools:
             "by_stage": stages,
         }
 
-    async def generate_activity_report(self, args: Dict[str, Any], user_id: int) -> Dict[str, Any]:
+    async def generate_activity_report(self, args: dict[str, Any], user_id: int) -> dict[str, Any]:
         report_user_id = args.get("user_id", user_id)
         date_from = None
         date_to = None
@@ -135,7 +135,7 @@ class CRMAnalyticsTools:
             "by_type": by_type,
         }
 
-    async def analyze_pipeline(self, args: Dict[str, Any]) -> Dict[str, Any]:
+    async def analyze_pipeline(self, args: dict[str, Any]) -> dict[str, Any]:
         days = args.get("days", 30)
         now = datetime.now()
         period_start = now - timedelta(days=days)
@@ -278,7 +278,7 @@ class CRMAnalyticsTools:
             "recommendations": recommendations,
         }
 
-    async def suggest_improvements(self, args: Dict[str, Any]) -> Dict[str, Any]:
+    async def suggest_improvements(self, args: dict[str, Any]) -> dict[str, Any]:
         opportunity_id = args.get("opportunity_id")
 
         if opportunity_id:
@@ -386,7 +386,7 @@ class CRMAnalyticsTools:
             "improvement_suggestions": suggestions,
         }
 
-    async def get_stale_deals(self, args: Dict[str, Any]) -> Dict[str, Any]:
+    async def get_stale_deals(self, args: dict[str, Any]) -> dict[str, Any]:
         days_idle = args.get("days_idle", 7)
         cutoff = datetime.now() - timedelta(days=days_idle)
 
@@ -441,7 +441,7 @@ class CRMAnalyticsTools:
             "deals": deals,
         }
 
-    async def get_follow_up_priorities(self, user_id: int) -> Dict[str, Any]:
+    async def get_follow_up_priorities(self, user_id: int) -> dict[str, Any]:
         priorities = []
 
         result = await self.db.execute(

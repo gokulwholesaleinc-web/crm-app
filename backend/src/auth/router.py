@@ -2,28 +2,29 @@
 
 import hmac as _hmac
 import secrets
-from typing import Annotated, List
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import select
-from src.config import settings
-from src.core.constants import HTTPStatus
-from src.core.router_utils import DBSession, CurrentUser
+
+from src.auth import google_oauth
 from src.auth.schemas import (
-    UserUpdate,
-    UserResponse,
-    Token,
-    TenantInfo,
     GoogleAuthorizeRequest,
     GoogleAuthorizeResponse,
     GoogleCallbackRequest,
+    TenantInfo,
+    Token,
+    UserResponse,
+    UserUpdate,
 )
-from src.auth.service import AuthService, RejectedAccessError
 from src.auth.security import create_access_token
-from src.auth import google_oauth
-from src.whitelabel.models import TenantUser, Tenant, TenantSettings
-from src.notifications.service import notify_admins_of_pending_user
-
+from src.auth.service import AuthService, RejectedAccessError
+from src.config import settings
+from src.core.constants import HTTPStatus
 from src.core.rate_limit import limiter
+from src.core.router_utils import CurrentUser, DBSession
+from src.notifications.service import notify_admins_of_pending_user
+from src.whitelabel.models import Tenant, TenantSettings, TenantUser
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -258,7 +259,7 @@ async def get_me(
     return current_user
 
 
-@router.get("/me/tenants", response_model=List[TenantInfo])
+@router.get("/me/tenants", response_model=list[TenantInfo])
 async def get_my_tenants(
     current_user: CurrentUser,
     db: DBSession,
@@ -280,7 +281,7 @@ async def update_me(
     return updated_user
 
 
-@router.get("/users", response_model=List[UserResponse])
+@router.get("/users", response_model=list[UserResponse])
 async def list_users(
     current_user: CurrentUser,
     db: DBSession,

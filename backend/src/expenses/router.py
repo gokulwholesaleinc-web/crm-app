@@ -4,22 +4,26 @@ All endpoints require that the caller can access the parent Company (owner
 or admin/manager). Expense rows don't have their own `owner_id` column, so
 access is derived from `Company.owner_id` via the linked `company_id`.
 """
-from typing import Annotated, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import select
 
 from src.companies.models import Company
 from src.core.constants import HTTPStatus
 from src.core.data_scope import DataScope, get_data_scope
 from src.core.router_utils import (
-    DBSession,
     CurrentUser,
+    DBSession,
     calculate_pages,
     raise_forbidden,
 )
 from src.expenses.schemas import (
-    ExpenseCreate, ExpenseUpdate, ExpenseResponse,
-    ExpenseListResponse, ExpenseTotalsResponse,
+    ExpenseCreate,
+    ExpenseListResponse,
+    ExpenseResponse,
+    ExpenseTotalsResponse,
+    ExpenseUpdate,
 )
 from src.expenses.service import ExpenseService
 
@@ -77,7 +81,7 @@ async def list_expenses(
     company_id: int = Query(...),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    category: Optional[str] = None,
+    category: str | None = None,
 ):
     """List expenses for a company."""
     await _require_company_access(db, company_id, data_scope)

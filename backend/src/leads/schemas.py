@@ -1,14 +1,15 @@
 """Pydantic schemas for leads."""
 
 from datetime import datetime
-from typing import Optional, List
-from pydantic import BaseModel, EmailStr, ConfigDict, model_validator
+
+from pydantic import BaseModel, ConfigDict, EmailStr, model_validator
+
 from src.core.schemas import TagBrief
 
 
 class LeadSourceBase(BaseModel):
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     is_active: bool = True
 
 
@@ -23,35 +24,35 @@ class LeadSourceResponse(LeadSourceBase):
 
 
 class LeadBase(BaseModel):
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    email: Optional[EmailStr] = None
-    phone: Optional[str] = None
-    mobile: Optional[str] = None
-    job_title: Optional[str] = None
-    company_name: Optional[str] = None
-    website: Optional[str] = None
-    industry: Optional[str] = None
-    source_id: Optional[int] = None
-    source_details: Optional[str] = None
-    address_line1: Optional[str] = None
-    address_line2: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
-    postal_code: Optional[str] = None
-    country: Optional[str] = None
-    description: Optional[str] = None
-    requirements: Optional[str] = None
-    budget_amount: Optional[float] = None
+    first_name: str | None = None
+    last_name: str | None = None
+    email: EmailStr | None = None
+    phone: str | None = None
+    mobile: str | None = None
+    job_title: str | None = None
+    company_name: str | None = None
+    website: str | None = None
+    industry: str | None = None
+    source_id: int | None = None
+    source_details: str | None = None
+    address_line1: str | None = None
+    address_line2: str | None = None
+    city: str | None = None
+    state: str | None = None
+    postal_code: str | None = None
+    country: str | None = None
+    description: str | None = None
+    requirements: str | None = None
+    budget_amount: float | None = None
     budget_currency: str = "USD"
-    owner_id: Optional[int] = None
-    sales_code: Optional[str] = None
+    owner_id: int | None = None
+    sales_code: str | None = None
 
 
 class LeadCreate(LeadBase):
     status: str = "new"
-    pipeline_stage_id: Optional[int] = None
-    tag_ids: Optional[List[int]] = None
+    pipeline_stage_id: int | None = None
+    tag_ids: list[int] | None = None
 
     @model_validator(mode="after")
     def require_name_or_company(self) -> "LeadCreate":
@@ -63,32 +64,32 @@ class LeadCreate(LeadBase):
 
 
 class LeadUpdate(BaseModel):
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    email: Optional[EmailStr] = None
-    phone: Optional[str] = None
-    mobile: Optional[str] = None
-    job_title: Optional[str] = None
-    company_name: Optional[str] = None
-    website: Optional[str] = None
-    industry: Optional[str] = None
-    source_id: Optional[int] = None
-    source_details: Optional[str] = None
-    status: Optional[str] = None
-    pipeline_stage_id: Optional[int] = None
-    address_line1: Optional[str] = None
-    address_line2: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
-    postal_code: Optional[str] = None
-    country: Optional[str] = None
-    description: Optional[str] = None
-    requirements: Optional[str] = None
-    budget_amount: Optional[float] = None
-    budget_currency: Optional[str] = None
-    owner_id: Optional[int] = None
-    sales_code: Optional[str] = None
-    tag_ids: Optional[List[int]] = None
+    first_name: str | None = None
+    last_name: str | None = None
+    email: EmailStr | None = None
+    phone: str | None = None
+    mobile: str | None = None
+    job_title: str | None = None
+    company_name: str | None = None
+    website: str | None = None
+    industry: str | None = None
+    source_id: int | None = None
+    source_details: str | None = None
+    status: str | None = None
+    pipeline_stage_id: int | None = None
+    address_line1: str | None = None
+    address_line2: str | None = None
+    city: str | None = None
+    state: str | None = None
+    postal_code: str | None = None
+    country: str | None = None
+    description: str | None = None
+    requirements: str | None = None
+    budget_amount: float | None = None
+    budget_currency: str | None = None
+    owner_id: int | None = None
+    sales_code: str | None = None
+    tag_ids: list[int] | None = None
 
 
 class PipelineStageRef(BaseModel):
@@ -108,21 +109,21 @@ class LeadResponse(LeadBase):
     full_name: str
     status: str
     score: int
-    score_factors: Optional[str] = None
-    pipeline_stage_id: Optional[int] = None
-    pipeline_stage: Optional[PipelineStageRef] = None
+    score_factors: str | None = None
+    pipeline_stage_id: int | None = None
+    pipeline_stage: PipelineStageRef | None = None
     created_at: datetime
     updated_at: datetime
-    source: Optional[LeadSourceResponse] = None
-    tags: List[TagBrief] = []
-    converted_contact_id: Optional[int] = None
-    converted_opportunity_id: Optional[int] = None
+    source: LeadSourceResponse | None = None
+    tags: list[TagBrief] = []
+    converted_contact_id: int | None = None
+    converted_opportunity_id: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class LeadListResponse(BaseModel):
-    items: List[LeadResponse]
+    items: list[LeadResponse]
     total: int
     page: int
     page_size: int
@@ -131,14 +132,14 @@ class LeadListResponse(BaseModel):
 
 # Conversion schemas
 class LeadConvertToContactRequest(BaseModel):
-    company_id: Optional[int] = None
+    company_id: int | None = None
     create_company: bool = False
 
 
 class LeadConvertToOpportunityRequest(BaseModel):
     pipeline_stage_id: int
-    contact_id: Optional[int] = None
-    company_id: Optional[int] = None
+    contact_id: int | None = None
+    company_id: int | None = None
 
 
 class LeadFullConversionRequest(BaseModel):
@@ -148,9 +149,9 @@ class LeadFullConversionRequest(BaseModel):
 
 class ConversionResponse(BaseModel):
     lead_id: int
-    contact_id: Optional[int] = None
-    company_id: Optional[int] = None
-    opportunity_id: Optional[int] = None
+    contact_id: int | None = None
+    company_id: int | None = None
+    opportunity_id: int | None = None
     message: str
 
 
@@ -158,13 +159,13 @@ class ConversionResponse(BaseModel):
 
 class KanbanLead(BaseModel):
     id: int
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
+    first_name: str | None = None
+    last_name: str | None = None
     full_name: str
-    email: Optional[str] = None
-    company_name: Optional[str] = None
+    email: str | None = None
+    company_name: str | None = None
     score: int
-    owner_id: Optional[int] = None
+    owner_id: int | None = None
 
 
 class KanbanLeadStage(BaseModel):
@@ -174,13 +175,13 @@ class KanbanLeadStage(BaseModel):
     probability: int
     is_won: bool
     is_lost: bool
-    leads: List[KanbanLead]
+    leads: list[KanbanLead]
     count: int
 
 
 class LeadKanbanResponse(BaseModel):
-    stages: List[KanbanLeadStage]
-    message: Optional[str] = None
+    stages: list[KanbanLeadStage]
+    message: str | None = None
 
 
 class MoveLeadRequest(BaseModel):
@@ -188,6 +189,6 @@ class MoveLeadRequest(BaseModel):
 
 
 class SendCampaignRequest(BaseModel):
-    lead_ids: List[int]
+    lead_ids: list[int]
     subject: str
     body_template: str  # Supports {{first_name}} placeholder

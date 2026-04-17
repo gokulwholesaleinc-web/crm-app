@@ -1,38 +1,45 @@
 """Proposal API routes."""
 
 import logging
-from typing import Annotated, Optional
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
-from src.core.constants import HTTPStatus, EntityNames, ENTITY_TYPE_PROPOSALS
+
+from src.audit.utils import (
+    audit_entity_create,
+    audit_entity_delete,
+    audit_entity_update,
+    snapshot_entity,
+)
+from src.core.constants import ENTITY_TYPE_PROPOSALS, EntityNames, HTTPStatus
+from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
 from src.core.http_errors import value_error_as_400
 from src.core.router_utils import (
-    DBSession,
     CurrentUser,
-    get_entity_or_404,
+    DBSession,
     calculate_pages,
     check_ownership,
+    get_entity_or_404,
 )
-from src.core.data_scope import DataScope, get_data_scope, check_record_access_or_shared
+from src.events.service import PROPOSAL_ACCEPTED, PROPOSAL_SENT, emit
 from src.proposals.schemas import (
+    AIGenerateRequest,
+    CreateFromTemplateRequest,
+    ProposalAcceptRequest,
+    ProposalBranding,
     ProposalCreate,
-    ProposalUpdate,
-    ProposalResponse,
     ProposalListResponse,
     ProposalPublicResponse,
-    ProposalBranding,
-    ProposalSendRequest,
-    ProposalAcceptRequest,
     ProposalRejectRequest,
+    ProposalResponse,
+    ProposalSendRequest,
     ProposalTemplateCreate,
-    ProposalTemplateUpdate,
     ProposalTemplateResponse,
-    CreateFromTemplateRequest,
-    AIGenerateRequest,
+    ProposalTemplateUpdate,
+    ProposalUpdate,
 )
 from src.proposals.service import ProposalService, ProposalTemplateService
-from src.audit.utils import audit_entity_create, audit_entity_update, audit_entity_delete, snapshot_entity
-from src.events.service import emit, PROPOSAL_SENT, PROPOSAL_ACCEPTED
 
 logger = logging.getLogger(__name__)
 
@@ -46,12 +53,12 @@ async def list_proposals(
     data_scope: Annotated[DataScope, Depends(get_data_scope)],
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    search: Optional[str] = None,
-    status: Optional[str] = None,
-    contact_id: Optional[int] = None,
-    company_id: Optional[int] = None,
-    opportunity_id: Optional[int] = None,
-    owner_id: Optional[int] = None,
+    search: str | None = None,
+    status: str | None = None,
+    contact_id: int | None = None,
+    company_id: int | None = None,
+    opportunity_id: int | None = None,
+    owner_id: int | None = None,
 ):
     """List proposals with pagination and filters."""
     if data_scope.can_see_all():
@@ -103,7 +110,7 @@ async def create_proposal(
 async def list_templates(
     current_user: CurrentUser,
     db: DBSession,
-    category: Optional[str] = None,
+    category: str | None = None,
 ):
     """List all proposal templates, optionally filtered by category."""
     service = ProposalTemplateService(db)
@@ -203,8 +210,9 @@ async def create_proposal_from_template(
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Template not found")
 
     # Fetch contact
-    from src.contacts.models import Contact
     from sqlalchemy import select
+
+    from src.contacts.models import Contact
     contact_result = await db.execute(
         select(Contact).where(Contact.id == request_data.contact_id)
     )
@@ -373,7 +381,7 @@ async def reject_proposal_public(
     token: str,
     request: Request,
     db: DBSession,
-    reject_data: Optional[ProposalRejectRequest] = None,
+    reject_data: ProposalRejectRequest | None = None,
 ):
     """Reject a proposal via public link (no auth required)."""
     import hmac as _hmac
@@ -472,7 +480,7 @@ async def send_proposal(
     proposal_id: int,
     current_user: CurrentUser,
     db: DBSession,
-    send_request: Optional[ProposalSendRequest] = None,
+    send_request: ProposalSendRequest | None = None,
 ):
     """Send a branded proposal email and mark as sent."""
     service = ProposalService(db)

@@ -1,18 +1,20 @@
 """Opportunity service layer."""
 
-from typing import Optional, List, Tuple, Any, Dict
+from typing import Any
+
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
-from src.opportunities.models import Opportunity, PipelineStage
+
+from src.core.base_service import BaseService, CRUDService, TaggableServiceMixin
+from src.core.constants import DEFAULT_PAGE_SIZE, ENTITY_TYPE_OPPORTUNITIES
 from src.core.filtering import apply_filters_to_query, build_token_search
+from src.opportunities.models import Opportunity, PipelineStage
 from src.opportunities.schemas import (
     OpportunityCreate,
     OpportunityUpdate,
     PipelineStageCreate,
     PipelineStageUpdate,
 )
-from src.core.base_service import CRUDService, BaseService, TaggableServiceMixin
-from src.core.constants import ENTITY_TYPE_OPPORTUNITIES, DEFAULT_PAGE_SIZE
 
 
 class OpportunityService(
@@ -36,15 +38,15 @@ class OpportunityService(
         self,
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
-        search: Optional[str] = None,
-        pipeline_stage_id: Optional[int] = None,
-        contact_id: Optional[int] = None,
-        company_id: Optional[int] = None,
-        owner_id: Optional[int] = None,
-        tag_ids: Optional[List[int]] = None,
-        filters: Optional[Dict[str, Any]] = None,
-        shared_entity_ids: Optional[List[int]] = None,
-    ) -> Tuple[List[Opportunity], int]:
+        search: str | None = None,
+        pipeline_stage_id: int | None = None,
+        contact_id: int | None = None,
+        company_id: int | None = None,
+        owner_id: int | None = None,
+        tag_ids: list[int] | None = None,
+        filters: dict[str, Any] | None = None,
+        shared_entity_ids: list[int] | None = None,
+    ) -> tuple[list[Opportunity], int]:
         """Get paginated list of opportunities with filters."""
         query = (
             select(Opportunity)
@@ -86,7 +88,7 @@ class PipelineStageService(BaseService[PipelineStage]):
 
     model = PipelineStage
 
-    async def get_all(self, active_only: bool = True, pipeline_type: str | None = None) -> List[PipelineStage]:
+    async def get_all(self, active_only: bool = True, pipeline_type: str | None = None) -> list[PipelineStage]:
         """Get all pipeline stages ordered by order field, optionally filtered by pipeline_type."""
         query = select(PipelineStage)
         if pipeline_type is not None:
@@ -119,7 +121,7 @@ class PipelineStageService(BaseService[PipelineStage]):
         await self.db.delete(stage)
         await self.db.flush()
 
-    async def reorder(self, stage_orders: List[dict]) -> List[PipelineStage]:
+    async def reorder(self, stage_orders: list[dict]) -> list[PipelineStage]:
         """Reorder pipeline stages. stage_orders: [{id: int, order: int}, ...]"""
         for item in stage_orders:
             result = await self.db.execute(

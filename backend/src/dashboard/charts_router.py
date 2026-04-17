@@ -1,12 +1,13 @@
 """Dashboard charts sub-router."""
 
-from typing import Optional
+
 from fastapi import APIRouter, Query
 from fastapi.responses import Response
-from src.core.router_utils import DBSession, CurrentUser
-from src.dashboard.schemas import ChartData, ChartDataPoint
+
+from src.core.router_utils import CurrentUser, DBSession
+from src.dashboard._utils import _get_cached, _parse_date, _set_cached
 from src.dashboard.charts import ChartDataGenerator
-from src.dashboard._utils import _parse_date, _get_cached, _set_cached
+from src.dashboard.schemas import ChartData, ChartDataPoint
 
 charts_router = APIRouter(tags=["dashboard"])
 
@@ -16,8 +17,8 @@ async def get_pipeline_funnel_chart(
     current_user: CurrentUser,
     db: DBSession,
     response: Response,
-    date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
-    date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    date_from: str | None = Query(None, description="Start date (YYYY-MM-DD)"),
+    date_to: str | None = Query(None, description="End date (YYYY-MM-DD)"),
 ):
     """Get pipeline funnel chart data."""
     parsed_from = _parse_date(date_from)
@@ -45,8 +46,8 @@ async def get_leads_by_status_chart(
     current_user: CurrentUser,
     db: DBSession,
     response: Response,
-    date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
-    date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    date_from: str | None = Query(None, description="Start date (YYYY-MM-DD)"),
+    date_to: str | None = Query(None, description="End date (YYYY-MM-DD)"),
 ):
     """Get leads by status chart data."""
     parsed_from = _parse_date(date_from)
@@ -74,8 +75,8 @@ async def get_leads_by_source_chart(
     current_user: CurrentUser,
     db: DBSession,
     response: Response,
-    date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
-    date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    date_from: str | None = Query(None, description="Start date (YYYY-MM-DD)"),
+    date_to: str | None = Query(None, description="End date (YYYY-MM-DD)"),
 ):
     """Get leads by source chart data."""
     parsed_from = _parse_date(date_from)
@@ -104,8 +105,8 @@ async def get_revenue_trend_chart(
     db: DBSession,
     response: Response,
     months: int = 6,
-    date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
-    date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    date_from: str | None = Query(None, description="Start date (YYYY-MM-DD)"),
+    date_to: str | None = Query(None, description="End date (YYYY-MM-DD)"),
 ):
     """Get monthly revenue trend chart data."""
     parsed_from = _parse_date(date_from)
@@ -134,8 +135,8 @@ async def get_activities_chart(
     db: DBSession,
     response: Response,
     days: int = 30,
-    date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
-    date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    date_from: str | None = Query(None, description="Start date (YYYY-MM-DD)"),
+    date_to: str | None = Query(None, description="End date (YYYY-MM-DD)"),
 ):
     """Get activities by type chart data."""
     parsed_from = _parse_date(date_from)
@@ -164,8 +165,8 @@ async def get_new_leads_trend_chart(
     db: DBSession,
     response: Response,
     weeks: int = 8,
-    date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
-    date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    date_from: str | None = Query(None, description="Start date (YYYY-MM-DD)"),
+    date_to: str | None = Query(None, description="End date (YYYY-MM-DD)"),
 ):
     """Get new leads trend chart data."""
     parsed_from = _parse_date(date_from)
@@ -192,8 +193,8 @@ async def get_new_leads_trend_chart(
 async def get_conversion_rates_chart(
     current_user: CurrentUser,
     db: DBSession,
-    date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
-    date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    date_from: str | None = Query(None, description="Start date (YYYY-MM-DD)"),
+    date_to: str | None = Query(None, description="End date (YYYY-MM-DD)"),
 ):
     """Get conversion rates chart data."""
     parsed_from = _parse_date(date_from)

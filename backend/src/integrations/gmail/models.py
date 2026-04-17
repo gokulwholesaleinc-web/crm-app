@@ -1,7 +1,6 @@
 """Gmail integration models."""
 
 from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import (
     DateTime,
@@ -31,16 +30,16 @@ class GmailConnection(Base):
     )
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     access_token: Mapped[str] = mapped_column(Text, nullable=False)
-    refresh_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    token_expiry: Mapped[Optional[datetime]] = mapped_column(
+    refresh_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    token_expiry: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     scopes: Mapped[str] = mapped_column(Text, nullable=False)
-    history_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    watch_expires_at: Mapped[Optional[datetime]] = mapped_column(
+    history_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    watch_expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    revoked_at: Mapped[Optional[datetime]] = mapped_column(
+    revoked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
@@ -79,11 +78,11 @@ class GmailSyncState(Base):
         nullable=False,
         unique=True,
     )
-    last_history_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    last_synced_at: Mapped[Optional[datetime]] = mapped_column(
+    last_history_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     failure_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

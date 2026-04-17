@@ -1,24 +1,25 @@
 """Pydantic schemas for campaigns."""
 
 from datetime import date, datetime
-from typing import Literal, Optional, List
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict
 
 
 class CampaignBase(BaseModel):
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     campaign_type: str
     status: str = "planned"
-    start_date: Optional[date] = None
-    end_date: Optional[date] = None
-    budget_amount: Optional[float] = None
-    actual_cost: Optional[float] = None
+    start_date: date | None = None
+    end_date: date | None = None
+    budget_amount: float | None = None
+    actual_cost: float | None = None
     budget_currency: str = "USD"
-    target_audience: Optional[str] = None
-    expected_revenue: Optional[float] = None
-    expected_response: Optional[int] = None
-    owner_id: Optional[int] = None
+    target_audience: str | None = None
+    expected_revenue: float | None = None
+    expected_response: int | None = None
+    owner_id: int | None = None
 
 
 class CampaignCreate(CampaignBase):
@@ -26,37 +27,37 @@ class CampaignCreate(CampaignBase):
 
 
 class CampaignUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    campaign_type: Optional[str] = None
-    status: Optional[str] = None
-    start_date: Optional[date] = None
-    end_date: Optional[date] = None
-    budget_amount: Optional[float] = None
-    actual_cost: Optional[float] = None
-    budget_currency: Optional[str] = None
-    target_audience: Optional[str] = None
-    expected_revenue: Optional[float] = None
-    expected_response: Optional[int] = None
-    actual_revenue: Optional[float] = None
-    num_sent: Optional[int] = None
-    num_responses: Optional[int] = None
-    num_converted: Optional[int] = None
-    owner_id: Optional[int] = None
+    name: str | None = None
+    description: str | None = None
+    campaign_type: str | None = None
+    status: str | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+    budget_amount: float | None = None
+    actual_cost: float | None = None
+    budget_currency: str | None = None
+    target_audience: str | None = None
+    expected_revenue: float | None = None
+    expected_response: int | None = None
+    actual_revenue: float | None = None
+    num_sent: int | None = None
+    num_responses: int | None = None
+    num_converted: int | None = None
+    owner_id: int | None = None
 
 
 class CampaignResponse(CampaignBase):
     id: int
-    actual_revenue: Optional[float] = None
+    actual_revenue: float | None = None
     num_sent: int
     num_responses: int
     num_converted: int
     current_step: int = 0
-    next_step_at: Optional[datetime] = None
+    next_step_at: datetime | None = None
     is_executing: bool = False
-    response_rate: Optional[float] = None
-    conversion_rate: Optional[float] = None
-    roi: Optional[float] = None
+    response_rate: float | None = None
+    conversion_rate: float | None = None
+    roi: float | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -64,7 +65,7 @@ class CampaignResponse(CampaignBase):
 
 
 class CampaignListResponse(BaseModel):
-    items: List[CampaignResponse]
+    items: list[CampaignResponse]
     total: int
     page: int
     page_size: int
@@ -84,34 +85,34 @@ class CampaignMemberCreate(CampaignMemberBase):
 
 
 class CampaignMemberUpdate(BaseModel):
-    status: Optional[str] = None
-    sent_at: Optional[datetime] = None
-    responded_at: Optional[datetime] = None
-    converted_at: Optional[datetime] = None
-    response_notes: Optional[str] = None
+    status: str | None = None
+    sent_at: datetime | None = None
+    responded_at: datetime | None = None
+    converted_at: datetime | None = None
+    response_notes: str | None = None
 
 
 class CampaignMemberResponse(CampaignMemberBase):
     id: int
-    sent_at: Optional[datetime] = None
-    responded_at: Optional[datetime] = None
-    converted_at: Optional[datetime] = None
-    response_notes: Optional[str] = None
+    sent_at: datetime | None = None
+    responded_at: datetime | None = None
+    converted_at: datetime | None = None
+    response_notes: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class AddMembersRequest(BaseModel):
     member_type: str
-    member_ids: List[int]
+    member_ids: list[int]
 
 
 class CreateFromImportRequest(BaseModel):
     name: str
-    member_ids: List[int]
+    member_ids: list[int]
     member_type: Literal["contacts", "leads"] = "contacts"
-    template_id: Optional[int] = None
-    schedule_start: Optional[datetime] = None
+    template_id: int | None = None
+    schedule_start: datetime | None = None
     delay_days: int = 1
 
 
@@ -121,8 +122,8 @@ class CampaignStats(BaseModel):
     sent: int
     responded: int
     converted: int
-    response_rate: Optional[float]
-    conversion_rate: Optional[float]
+    response_rate: float | None
+    conversion_rate: float | None
 
 
 # Campaign Analytics schemas
@@ -145,7 +146,7 @@ class CampaignAnalytics(BaseModel):
     total_failed: int
     open_rate: float
     click_rate: float
-    steps: List[StepAnalytics]
+    steps: list[StepAnalytics]
 
 
 # Email Template schemas
@@ -153,14 +154,14 @@ class EmailTemplateCreate(BaseModel):
     name: str
     subject_template: str
     body_template: str
-    category: Optional[str] = None
+    category: str | None = None
 
 
 class EmailTemplateUpdate(BaseModel):
-    name: Optional[str] = None
-    subject_template: Optional[str] = None
-    body_template: Optional[str] = None
-    category: Optional[str] = None
+    name: str | None = None
+    subject_template: str | None = None
+    body_template: str | None = None
+    category: str | None = None
 
 
 class EmailTemplateResponse(BaseModel):
@@ -168,8 +169,8 @@ class EmailTemplateResponse(BaseModel):
     name: str
     subject_template: str
     body_template: str
-    category: Optional[str] = None
-    created_by_id: Optional[int] = None
+    category: str | None = None
+    created_by_id: int | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -184,9 +185,9 @@ class EmailCampaignStepCreate(BaseModel):
 
 
 class EmailCampaignStepUpdate(BaseModel):
-    template_id: Optional[int] = None
-    delay_days: Optional[int] = None
-    step_order: Optional[int] = None
+    template_id: int | None = None
+    delay_days: int | None = None
+    step_order: int | None = None
 
 
 class EmailCampaignStepResponse(BaseModel):

@@ -12,7 +12,6 @@ Create Date: 2026-04-10
 
 from alembic import op
 
-
 revision = "004_lead_nullable_names"
 down_revision = "003_contact_soft_delete"
 branch_labels = None
