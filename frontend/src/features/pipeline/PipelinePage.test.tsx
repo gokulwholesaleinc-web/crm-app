@@ -90,15 +90,15 @@ function renderPage() {
 beforeEach(() => {
   vi.clearAllMocks();
 
-  vi.mocked(useLeadKanban).mockReturnValue({ data: { stages: [] }, isLoading: false, error: null } as ReturnType<typeof useLeadKanban>);
-  vi.mocked(useMoveLeadStage).mockReturnValue({ mutate: mockMoveLeadMutate } as ReturnType<typeof useMoveLeadStage>);
-  vi.mocked(useOpportunities).mockReturnValue({ data: { items: [] }, isLoading: false } as ReturnType<typeof useOpportunities>);
-  vi.mocked(useKanban).mockReturnValue({ data: { stages: [] }, isLoading: false, error: null } as ReturnType<typeof useKanban>);
-  vi.mocked(useMoveOpportunity).mockReturnValue({ mutate: mockMoveOppMutate } as ReturnType<typeof useMoveOpportunity>);
-  vi.mocked(useCreateOpportunity).mockReturnValue({ mutateAsync: vi.fn(), isPending: false } as ReturnType<typeof useCreateOpportunity>);
-  vi.mocked(useUpdateOpportunity).mockReturnValue({ mutateAsync: vi.fn(), isPending: false } as ReturnType<typeof useUpdateOpportunity>);
-  vi.mocked(useContacts).mockReturnValue({ data: { items: [] } } as ReturnType<typeof useContacts>);
-  vi.mocked(useCompanies).mockReturnValue({ data: { items: [] } } as ReturnType<typeof useCompanies>);
+  vi.mocked(useLeadKanban).mockReturnValue({ data: { stages: [] }, isLoading: false, error: null } as unknown as ReturnType<typeof useLeadKanban>);
+  vi.mocked(useMoveLeadStage).mockReturnValue({ mutate: mockMoveLeadMutate } as unknown as ReturnType<typeof useMoveLeadStage>);
+  vi.mocked(useOpportunities).mockReturnValue({ data: { items: [] }, isLoading: false } as unknown as ReturnType<typeof useOpportunities>);
+  vi.mocked(useKanban).mockReturnValue({ data: { stages: [] }, isLoading: false, error: null } as unknown as ReturnType<typeof useKanban>);
+  vi.mocked(useMoveOpportunity).mockReturnValue({ mutate: mockMoveOppMutate } as unknown as ReturnType<typeof useMoveOpportunity>);
+  vi.mocked(useCreateOpportunity).mockReturnValue({ mutateAsync: vi.fn(), isPending: false } as unknown as ReturnType<typeof useCreateOpportunity>);
+  vi.mocked(useUpdateOpportunity).mockReturnValue({ mutateAsync: vi.fn(), isPending: false } as unknown as ReturnType<typeof useUpdateOpportunity>);
+  vi.mocked(useContacts).mockReturnValue({ data: { items: [] } } as unknown as ReturnType<typeof useContacts>);
+  vi.mocked(useCompanies).mockReturnValue({ data: { items: [] } } as unknown as ReturnType<typeof useCompanies>);
 
   // matchMedia not available in jsdom — default to kanban view
   Object.defineProperty(window, 'matchMedia', {
