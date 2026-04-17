@@ -1,0 +1,15 @@
+{
+  "include": ["src"],
+  "exclude": ["**/__pycache__", "**/node_modules", "**/.venv"],
+  "pythonVersion": "3.11",
+  "pythonPlatform": "All",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": "warning",
+  "reportMissingTypeStubs": "none",
+  "reportUnusedExpression": "none",
+  "reportGeneralTypeIssues": "warning",
+  "reportOptionalMemberAccess": "warning",
+  "reportArgumentType": "warning",
+  "reportReturnType": "warning",
+  "useLibraryCodeForTypes": true
+}
