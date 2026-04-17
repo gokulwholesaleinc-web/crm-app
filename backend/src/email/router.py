@@ -81,7 +81,7 @@ async def send_template_email(
         raise HTTPException(
             status_code=HTTPStatus.NOT_FOUND,
             detail=str(exc),
-        )
+        ) from exc
     return email
 
 
@@ -110,7 +110,7 @@ async def send_campaign_email(
         raise HTTPException(
             status_code=HTTPStatus.NOT_FOUND,
             detail=str(exc),
-        )
+        ) from exc
     return {"sent": len(emails), "items": [EmailQueueResponse.model_validate(e) for e in emails]}
 
 
@@ -138,7 +138,7 @@ async def inbound_webhook(request: Request, db: DBSession):
         })
     except WebhookVerificationError as e:
         logger.warning("Webhook signature verification failed: %s", e)
-        raise HTTPException(status_code=400, detail="Invalid webhook signature")
+        raise HTTPException(status_code=400, detail="Invalid webhook signature") from e
 
     payload = await request.json()
     event_type = payload.get("type", "")

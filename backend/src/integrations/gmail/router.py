@@ -108,7 +108,7 @@ async def gmail_callback(
         raise HTTPException(
             status_code=HTTPStatus.BAD_REQUEST,
             detail=f"Gmail token exchange failed: {str(exc)}",
-        )
+        ) from exc
 
     id_token = token_data.get("id_token", "")
     gmail_email = gmail_oauth.decode_id_token_email(id_token) if id_token else None

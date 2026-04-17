@@ -213,7 +213,7 @@ async def move_opportunity(
         raise HTTPException(
             status_code=HTTPStatus.NOT_FOUND,
             detail=str(e),
-        )
+        ) from e
 
     opp_service = OpportunityService(db)
     return await _build_opportunity_response(opp_service, opportunity)

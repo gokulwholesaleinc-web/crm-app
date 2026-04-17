@@ -39,8 +39,8 @@ async def get_current_user(
 
     try:
         user_id = int(user_id_str)
-    except (ValueError, TypeError):
-        raise credentials_exception
+    except (ValueError, TypeError) as exc:
+        raise credentials_exception from exc
 
     cached = _user_cache.get(user_id)
     if cached is not None:

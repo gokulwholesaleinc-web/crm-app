@@ -66,7 +66,7 @@ async def handle_callback(
     try:
         credential = await service.exchange_code(data.code, redirect_uri, current_user.id)
     except Exception as exc:
-        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=f"Failed to connect: {str(exc)}")
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=f"Failed to connect: {str(exc)}") from exc
     return GoogleCalendarCredentialResponse.model_validate(credential)
 
 
@@ -93,7 +93,7 @@ async def sync_calendar(
         created = await service.sync_from_google(current_user.id)
     except Exception as exc:
         logger.exception("Calendar sync failed for user_id=%s", current_user.id)
-        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=f"Sync failed: {str(exc)}")
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=f"Sync failed: {str(exc)}") from exc
     return {"synced": len(created), "events": created}
 
 
@@ -134,7 +134,7 @@ async def push_to_calendar(
     try:
         sync_event = await service.create_calendar_event(current_user.id, data.activity_id)
     except Exception as exc:
-        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=f"Push failed: {str(exc)}")
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=f"Push failed: {str(exc)}") from exc
     if not sync_event:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail="Calendar not connected or activity not found")
     return {"google_event_id": sync_event.google_event_id, "activity_id": sync_event.activity_id}

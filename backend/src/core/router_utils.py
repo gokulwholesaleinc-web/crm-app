@@ -173,8 +173,8 @@ def parse_json_filters(filters: str | None) -> dict | None:
         return None
     try:
         return _json.loads(filters)
-    except _json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid JSON filter format")
+    except _json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Invalid JSON filter format") from exc
 
 
 def effective_owner_id(data_scope, requested_owner_id: int | None = None) -> int | None:
