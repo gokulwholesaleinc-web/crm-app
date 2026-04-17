@@ -62,5 +62,3 @@ export function PrivateRoute({ children }: PrivateRouteProps) {
     </Layout>
   );
 }
-
-export default PrivateRoute;
