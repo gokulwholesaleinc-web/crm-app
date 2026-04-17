@@ -21,7 +21,7 @@ the resolved IP and pass it to the fetch layer — this module only answers
 import ipaddress
 import logging
 import socket
-from typing import Iterable
+from collections.abc import Iterable
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)

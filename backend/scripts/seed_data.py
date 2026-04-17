@@ -109,7 +109,7 @@ async def seed_database():
 
             # Create additional sales team members
             job_titles = ["Sales Representative", "Account Executive", "Business Development", "Sales Director", "Account Manager"]
-            for i in range(4):
+            for _i in range(4):
                 user = User(
                     email=fake.unique.email(),
                     hashed_password=get_password_hash(fake.password()),

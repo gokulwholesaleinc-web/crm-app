@@ -277,7 +277,7 @@ class CSVHandler:
         entity_class = self._get_model(entity_type)
         fields = self._get_fields(entity_type)
 
-        for csv_col, target_field in column_mapping.items():
+        for _csv_col, target_field in column_mapping.items():
             if target_field not in fields and target_field not in ("skip", ""):
                 raise ValueError(f"Invalid target field '{target_field}' for {entity_type}")
 

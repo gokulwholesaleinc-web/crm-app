@@ -36,9 +36,7 @@ def _is_local_db(url: str) -> bool:
     for host in _LOCAL_HOSTS:
         if host in url:
             return True
-    if _pghost and not any(c == '.' for c in _pghost):
-        return True
-    return False
+    return bool(_pghost and not any(c == "." for c in _pghost))
 
 _is_local = _is_local_db(_db_url)
 _is_sqlite = _db_url.startswith("sqlite")

@@ -110,7 +110,7 @@ class WorkflowService(BaseService[WorkflowRule]):
 
         try:
             # Convert types for comparison
-            if isinstance(expected, (int, float)) and isinstance(actual, str):
+            if isinstance(expected, int | float) and isinstance(actual, str):
                 actual = type(expected)(actual)
             return OPERATORS[operator](actual, expected)
         except (ValueError, TypeError):

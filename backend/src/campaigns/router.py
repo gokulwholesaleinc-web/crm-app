@@ -162,7 +162,7 @@ async def create_campaign_from_import(
     campaign = await service.create(campaign_data, current_user.id)
 
     member_service = CampaignMemberService(db)
-    added = await member_service.add_members_bulk(
+    await member_service.add_members_bulk(
         campaign_id=campaign.id,
         member_type=request.member_type,
         member_ids=request.member_ids,

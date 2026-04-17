@@ -5,7 +5,7 @@ SQLAlchemy/FastAPI concerns so the auth service can call them directly and
 tests can inject a custom httpx transport without mocks.
 """
 
-from typing import Callable
+from collections.abc import Callable
 from urllib.parse import urlencode
 
 import httpx

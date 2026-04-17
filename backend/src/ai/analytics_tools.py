@@ -1,5 +1,6 @@
 """CRM analytics tools: pipeline reports, forecasts, and pipeline intelligence."""
 
+import contextlib
 import logging
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -22,15 +23,11 @@ class CRMAnalyticsTools:
         date_to = None
 
         if args.get("date_from"):
-            try:
+            with contextlib.suppress(ValueError):
                 date_from = date.fromisoformat(args["date_from"])
-            except ValueError:
-                pass
         if args.get("date_to"):
-            try:
+            with contextlib.suppress(ValueError):
                 date_to = date.fromisoformat(args["date_to"])
-            except ValueError:
-                pass
 
         query = (
             select(
@@ -89,15 +86,11 @@ class CRMAnalyticsTools:
         date_to = None
 
         if args.get("date_from"):
-            try:
+            with contextlib.suppress(ValueError):
                 date_from = date.fromisoformat(args["date_from"])
-            except ValueError:
-                pass
         if args.get("date_to"):
-            try:
+            with contextlib.suppress(ValueError):
                 date_to = date.fromisoformat(args["date_to"])
-            except ValueError:
-                pass
 
         query = select(Activity).where(
             or_(

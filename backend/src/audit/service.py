@@ -126,4 +126,4 @@ def _serialize(value: Any) -> Any:
         return None
     if hasattr(value, "isoformat"):
         return value.isoformat()
-    return str(value) if not isinstance(value, (str, int, float, bool)) else value
+    return str(value) if not isinstance(value, str | int | float | bool) else value

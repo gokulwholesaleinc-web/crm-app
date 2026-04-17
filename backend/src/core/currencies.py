@@ -6,6 +6,7 @@ Rates can be overridden via environment variables with the pattern:
   EXCHANGE_RATE_GBP=0.79
 """
 
+import contextlib
 import os
 
 # Supported currencies with ISO 4217 codes
@@ -68,10 +69,8 @@ def _load_exchange_rates() -> dict[str, float]:
         env_key = f"EXCHANGE_RATE_{code}"
         env_val = os.environ.get(env_key)
         if env_val is not None:
-            try:
+            with contextlib.suppress(ValueError):
                 rates[code] = float(env_val)
-            except ValueError:
-                pass
     return rates
 
 

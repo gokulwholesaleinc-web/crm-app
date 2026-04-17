@@ -145,10 +145,7 @@ async def list_activities(
         except _json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="Invalid JSON filter format")
 
-    if data_scope.can_see_all():
-        effective_owner_id = owner_id
-    else:
-        effective_owner_id = data_scope.owner_id
+    effective_owner_id = owner_id if data_scope.can_see_all() else data_scope.owner_id
 
     service = ActivityService(db)
 

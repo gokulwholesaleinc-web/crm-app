@@ -141,7 +141,7 @@ class InsightsGenerator:
     async def get_daily_summary(self, user_id: int) -> dict[str, Any]:
         """Generate a daily summary for the user."""
         today = datetime.now().date()
-        yesterday = today - timedelta(days=1)
+        today - timedelta(days=1)
 
         # Get today's tasks
         tasks = await self.db.execute(

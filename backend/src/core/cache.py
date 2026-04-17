@@ -17,7 +17,8 @@ import functools
 import sys
 import threading
 import time
-from typing import Any, Callable, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 # Legacy imports kept for backward compatibility with existing code
 from cachetools import TTLCache as _CacheToolsTTL

@@ -61,10 +61,7 @@ async def list_proposals(
     owner_id: int | None = None,
 ):
     """List proposals with pagination and filters."""
-    if data_scope.can_see_all():
-        effective_owner_id = owner_id
-    else:
-        effective_owner_id = data_scope.owner_id
+    effective_owner_id = owner_id if data_scope.can_see_all() else data_scope.owner_id
 
     service = ProposalService(db)
 

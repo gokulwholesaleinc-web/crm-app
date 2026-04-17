@@ -125,9 +125,7 @@ async def push_to_calendar(
     is_privileged = current_user.is_superuser or getattr(current_user, "role", None) in ("admin", "manager")
     if not is_privileged:
         owns = (
-            activity.owner_id == current_user.id
-            or activity.assigned_to_id == current_user.id
-            or activity.created_by_id == current_user.id
+            current_user.id in (activity.owner_id, activity.assigned_to_id, activity.created_by_id)
         )
         if not owns:
             raise_forbidden("You do not have permission to push this activity")

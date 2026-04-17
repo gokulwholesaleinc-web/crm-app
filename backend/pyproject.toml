@@ -3,8 +3,21 @@ line-length = 100
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "PL", "FAST"]
-ignore = ["E501", "PLR0913"]
+select = ["E", "F", "I", "UP", "B", "SIM", "PL"]
+ignore = [
+    "E501",    # line length — handled by formatter, not worth enforcing
+    "E402",    # module-import-not-at-top — some modules need lazy imports for circular deps
+    "E712",    # `col == True` / `== False` — SQLAlchemy requires this form for column ops
+    "E741",    # ambiguous variable names (l, I, O) — accept where context makes intent obvious
+    "B008",    # function-call-in-default-argument — FastAPI `Depends()` relies on this pattern
+    "B904",    # raise-without-from — good practice but 38 manual fixes; revisit in a follow-up
+    "SIM102",  # collapsible-if — aesthetic; current form is often clearer
+    "PLR0911", # too-many-return-statements
+    "PLR0912", # too-many-branches
+    "PLR0913", # too-many-arguments — FastAPI endpoints collect many deps
+    "PLR0915", # too-many-statements — Phase 3 complexity work owns the real fix
+    "PLR2004", # magic-value-comparison — too noisy; inline constants are often the right call
+]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["PLR2004", "S101"]

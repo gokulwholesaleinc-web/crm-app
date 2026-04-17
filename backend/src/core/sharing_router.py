@@ -123,10 +123,7 @@ async def revoke_share(
     # Only the sharer, the shared user, or admin/manager can revoke
     user_role = getattr(current_user, 'role', 'sales_rep')
     if (
-        not current_user.is_superuser
-        and user_role not in ('admin', 'manager')
-        and share.shared_by_user_id != current_user.id
-        and share.shared_with_user_id != current_user.id
+        not current_user.is_superuser and user_role not in ("admin", "manager") and current_user.id not in (share.shared_by_user_id, share.shared_with_user_id)
     ):
         raise HTTPException(
             status_code=HTTPStatus.FORBIDDEN,
