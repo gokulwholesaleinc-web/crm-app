@@ -190,4 +190,3 @@ export const proposalsApi = {
   downloadPDF: downloadProposalPDF,
 };
 
-export default proposalsApi;

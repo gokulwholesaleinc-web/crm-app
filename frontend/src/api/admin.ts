@@ -132,4 +132,3 @@ export const adminApi = {
   unblockRejectedEmail,
 };
 
-export default adminApi;

@@ -70,4 +70,3 @@ export const commentsApi = {
   delete: deleteComment,
 };
 
-export default commentsApi;

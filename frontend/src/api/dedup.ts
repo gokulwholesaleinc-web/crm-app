@@ -55,4 +55,3 @@ export const dedupApi = {
   merge: mergeEntities,
 };
 
-export default dedupApi;

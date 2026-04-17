@@ -134,7 +134,6 @@ export const quotesApi = {
   downloadPDF: downloadQuotePDF,
 };
 
-export default quotesApi;
 
 // Product Bundle API
 

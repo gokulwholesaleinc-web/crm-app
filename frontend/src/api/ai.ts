@@ -294,4 +294,3 @@ export const aiApi = {
   getEntityInsights,
 };
 
-export default aiApi;

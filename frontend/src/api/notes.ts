@@ -95,4 +95,3 @@ export const notesApi = {
   getEntityNotes,
 };
 
-export default notesApi;

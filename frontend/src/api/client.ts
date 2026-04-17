@@ -100,4 +100,3 @@ export const getToken = (): string | null => {
 
 export const apiClient = createApiClient();
 
-export default apiClient;

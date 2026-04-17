@@ -59,4 +59,3 @@ export const assignmentApi = {
   getStats: getAssignmentStats,
 };
 
-export default assignmentApi;

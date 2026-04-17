@@ -27,4 +27,3 @@ export const auditApi = {
   getEntityAuditLog,
 };
 
-export default auditApi;

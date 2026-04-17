@@ -69,4 +69,3 @@ export const contactsApi = {
   delete: deleteContact,
 };
 
-export default contactsApi;

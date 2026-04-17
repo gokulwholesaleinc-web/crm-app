@@ -77,4 +77,3 @@ export const authApi = {
   googleCallback,
 };
 
-export default authApi;

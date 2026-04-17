@@ -71,4 +71,3 @@ export const workflowsApi = {
   test: testWorkflowRule,
 };
 
-export default workflowsApi;

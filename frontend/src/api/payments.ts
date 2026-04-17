@@ -140,4 +140,3 @@ export const paymentsApi = {
   createOnboardingLink,
 };
 
-export default paymentsApi;

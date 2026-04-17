@@ -267,4 +267,3 @@ export const activitiesApi = {
   getCalendarActivities,
 };
 
-export default activitiesApi;
