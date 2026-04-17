@@ -194,13 +194,13 @@ export function ActivityForm({
         ...typeSpecificFields,
       } as ActivityUpdate);
     } else {
-      const createData: Record<string, unknown> = {
+      const createData: Partial<ActivityCreate> = {
         ...baseData,
         ...typeSpecificFields,
       };
       if (entityType) createData.entity_type = entityType;
       if (entityId) createData.entity_id = entityId;
-      await onSubmit(createData as unknown as ActivityCreate);
+      await onSubmit(createData as ActivityCreate);
     }
   };
 
