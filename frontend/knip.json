@@ -7,6 +7,7 @@
   ],
   "project": ["src/**/*.{ts,tsx}"],
   "ignoreExportsUsedInFile": true,
+  "ignoreDependencies": ["@vitest/coverage-v8"],
   "rules": {
     "exports": "off",
     "types": "off",
