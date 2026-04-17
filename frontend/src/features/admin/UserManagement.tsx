@@ -39,7 +39,7 @@ export default function UserManagement() {
   const { data: users, isLoading } = useAdminUsers();
   const currentUser = useAuthStore((s) => s.user);
   const updateUser = useUpdateAdminUser();
-  const [sortColumn, setSortColumn] = useState<string>('full_name');
+  const [sortColumn, setSortColumn] = useState<keyof AdminUser>('full_name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [filter, setFilter] = useState('');
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
@@ -102,7 +102,7 @@ export default function UserManagement() {
     setSortDirection((prev) =>
       sortColumn === column && prev === 'asc' ? 'desc' : 'asc'
     );
-    setSortColumn(column);
+    setSortColumn(column as keyof AdminUser);
   }, [sortColumn]);
 
   const handleRoleChange = useCallback(
@@ -151,8 +151,8 @@ export default function UserManagement() {
       );
     })
     .toSorted((a, b) => {
-      const aVal = String((a as unknown as Record<string, unknown>)[sortColumn] ?? '');
-      const bVal = String((b as unknown as Record<string, unknown>)[sortColumn] ?? '');
+      const aVal = String(a[sortColumn] ?? '');
+      const bVal = String(b[sortColumn] ?? '');
       const cmp = aVal.localeCompare(bVal);
       return sortDirection === 'asc' ? cmp : -cmp;
     });
