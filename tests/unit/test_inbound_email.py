@@ -372,6 +372,55 @@ class TestEmailThread:
         assert data["items"] == []
 
     @pytest.mark.asyncio
+    async def test_thread_includes_thread_id(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_contact: Contact,
+    ):
+        """Thread response must expose thread_id on both inbound and outbound rows.
+
+        The EmailThread UI groups bubbles by this field; if it's missing,
+        every message renders as a standalone thread.
+        """
+        outbound = EmailQueue(
+            to_email=test_contact.email,
+            subject="Initial",
+            body="<p>Hi</p>",
+            status="sent",
+            entity_type="contacts",
+            entity_id=test_contact.id,
+            sent_by_id=test_user.id,
+            thread_id="gmail-thread-42",
+        )
+        db_session.add(outbound)
+        inbound = InboundEmail(
+            resend_email_id="gmail:reply-1",
+            from_email=test_contact.email,
+            to_email="crm@example.com",
+            subject="Re: Initial",
+            body_text="Thanks",
+            entity_type="contacts",
+            entity_id=test_contact.id,
+            received_at=datetime.now(timezone.utc),
+            thread_id="gmail-thread-42",
+        )
+        db_session.add(inbound)
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/email/thread",
+            headers=auth_headers,
+            params={"entity_type": "contacts", "entity_id": test_contact.id},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        thread_ids = {item.get("thread_id") for item in data["items"]}
+        assert thread_ids == {"gmail-thread-42"}
+
+    @pytest.mark.asyncio
     async def test_thread_requires_auth(
         self,
         client: AsyncClient,

@@ -129,6 +129,7 @@ class ThreadEmailItem(BaseModel):
     status: Optional[str] = None  # outbound only
     open_count: Optional[int] = None  # outbound only
     attachments: Optional[Any] = None  # inbound only
+    thread_id: Optional[str] = None
 
 
 class ThreadResponse(BaseModel):
