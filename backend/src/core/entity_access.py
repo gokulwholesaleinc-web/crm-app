@@ -14,6 +14,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.constants import HTTPStatus
 from src.core.data_scope import DataScope, check_record_access_or_shared
 
+# Canonical singular → plural map. Must match the entity_type keys used by
+# EntityShare rows and DataScope.shared_entity_ids (see core/constants.py
+# ENTITY_TYPE_COMPANIES="companies", etc). A naive `normalized + "s"`
+# produces "companys"/"opportunitys"/"activitys", which silently drops
+# shared access for those entity types.
+_ENTITY_PLURALS = {
+    "contact": "contacts",
+    "company": "companies",
+    "lead": "leads",
+    "opportunity": "opportunities",
+    "quote": "quotes",
+    "proposal": "proposals",
+    "contract": "contracts",
+    "payment": "payments",
+    "activity": "activities",
+    "expense": "expenses",
+}
+
 
 async def _resolve_entity(db: AsyncSession, entity_type: str, entity_id: int):
     """Return (entity, entity_type_alias) or (None, entity_type_alias).
@@ -22,6 +40,7 @@ async def _resolve_entity(db: AsyncSession, entity_type: str, entity_id: int):
     pass either "contact" or "contacts".
     """
     normalized = entity_type.lower().rstrip("s")
+    plural = _ENTITY_PLURALS.get(normalized, normalized)
 
     # Lazy imports to avoid circular dependencies.
     if normalized == "contact":
@@ -57,18 +76,18 @@ async def _resolve_entity(db: AsyncSession, entity_type: str, entity_id: int):
         result = await db.execute(select(Expense).where(Expense.id == entity_id))
         expense = result.scalar_one_or_none()
         if expense is None:
-            return None, normalized
+            return None, plural
         from src.companies.models import Company
         company_result = await db.execute(
             select(Company).where(Company.id == expense.company_id)
         )
-        return company_result.scalar_one_or_none(), normalized
+        return company_result.scalar_one_or_none(), plural
     else:
         # Unknown entity type — reject rather than silently allowing.
-        return None, normalized
+        return None, plural
 
     result = await db.execute(select(model).where(model.id == entity_id))
-    return result.scalar_one_or_none(), normalized + "s"
+    return result.scalar_one_or_none(), plural
 
 
 async def require_entity_access(

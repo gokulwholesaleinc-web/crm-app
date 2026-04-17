@@ -1,6 +1,6 @@
 """Unit tests for core/entity_access.py — _resolve_entity and require_entity_access."""
 
-from datetime import date, datetime, timezone
+from datetime import date
 
 import pytest
 from fastapi import HTTPException
@@ -90,12 +90,12 @@ class TestResolveEntity:
         entity, plural = await _resolve_entity(db_session, "company", company.id)
         assert entity is not None
         assert entity.id == company.id
-        assert plural == "companys"
+        assert plural == "companies"
 
     async def test_expense_returns_parent_company(
         self, db_session: AsyncSession, test_user, test_company
     ):
-        """Expense branch returns the parent Company, plural is 'expense' (no trailing s added)."""
+        """Expense branch returns the parent Company; plural is canonical 'expenses'."""
         from src.expenses.models import Expense
 
         expense = Expense(
@@ -113,13 +113,40 @@ class TestResolveEntity:
         entity, plural = await _resolve_entity(db_session, "expense", expense.id)
         assert entity is not None
         assert entity.id == test_company.id
-        assert plural == "expense"
+        assert plural == "expenses"
 
     async def test_expense_missing_returns_none(self, db_session: AsyncSession):
-        """Non-existent expense id returns (None, 'expense')."""
+        """Non-existent expense id returns (None, 'expenses')."""
         entity, plural = await _resolve_entity(db_session, "expense", 99999)
         assert entity is None
-        assert plural == "expense"
+        assert plural == "expenses"
+
+    @pytest.mark.parametrize(
+        "singular, expected_plural",
+        [
+            ("contact", "contacts"),
+            ("company", "companies"),
+            ("lead", "leads"),
+            ("opportunity", "opportunities"),
+            ("quote", "quotes"),
+            ("proposal", "proposals"),
+            ("contract", "contracts"),
+            ("payment", "payments"),
+            ("activity", "activities"),
+            ("expense", "expenses"),
+        ],
+    )
+    async def test_plural_matches_entity_share_convention(
+        self, db_session: AsyncSession, singular: str, expected_plural: str
+    ):
+        """Plural output must match the canonical keys used by EntityShare/DataScope.
+
+        A naive `normalized + 's'` produces 'companys'/'opportunitys'/'activitys'
+        which do NOT match ENTITY_TYPE_COMPANIES='companies' etc., silently
+        dropping shared access for those entity types.
+        """
+        _, plural = await _resolve_entity(db_session, singular, 99999)
+        assert plural == expected_plural
 
 
 # ---------------------------------------------------------------------------
