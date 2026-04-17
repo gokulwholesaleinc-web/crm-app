@@ -3,7 +3,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { emailApi, SendEmailPayload, SendTemplateEmailPayload, SendCampaignEmailPayload } from '../api/email';
+import { emailApi, SendEmailPayload, SendTemplateEmailPayload } from '../api/email';
 
 export const emailKeys = {
   all: ['emails'] as const,
@@ -61,15 +61,5 @@ export function useEmailThread(entityType: string, entityId: number, page = 1, p
     queryKey: emailKeys.thread(entityType, entityId, page),
     queryFn: () => emailApi.thread({ entity_type: entityType, entity_id: entityId, page, page_size: pageSize }),
     enabled: !!entityType && !!entityId,
-  });
-}
-
-export function useSendCampaignEmail() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (data: SendCampaignEmailPayload) => emailApi.sendCampaign(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: emailKeys.all });
-    },
   });
 }

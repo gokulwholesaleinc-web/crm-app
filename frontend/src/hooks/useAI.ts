@@ -5,7 +5,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useCallback } from 'react';
 import { aiApi } from '../api/ai';
-import type { ChatMessage, ChatRequest, FeedbackRequest, ConfirmActionRequest, ChatResponse, AIUserPreferencesUpdate, TeachAIRequest } from '../types';
+import type { ChatMessage, ChatRequest, FeedbackRequest, ConfirmActionRequest, ChatResponse, AIUserPreferencesUpdate } from '../types';
 
 // Query keys
 export const aiKeys = {
@@ -16,13 +16,9 @@ export const aiKeys = {
   opportunityInsights: (id: number) => [...aiKeys.all, 'insights', 'opportunity', id] as const,
   nextAction: (entityType: string, entityId: number) =>
     [...aiKeys.all, 'next-action', entityType, entityId] as const,
-  search: (query: string, entityTypes?: string) =>
-    [...aiKeys.all, 'search', query, entityTypes] as const,
   preferences: () => [...aiKeys.all, 'preferences'] as const,
   learnings: (category?: string) => [...aiKeys.all, 'learnings', category] as const,
   smartSuggestions: () => [...aiKeys.all, 'smart-suggestions'] as const,
-  entityInsights: (entityType: string, entityId: number) =>
-    [...aiKeys.all, 'entity-insights', entityType, entityId] as const,
 };
 
 /**
@@ -80,18 +76,6 @@ export function useNextBestAction(entityType: string, entityId: number) {
     queryFn: () => aiApi.getNextBestAction(entityType, entityId),
     enabled: !!entityType && !!entityId,
     staleTime: 5 * 60 * 1000, // 5 minutes
-  });
-}
-
-/**
- * Hook for semantic search
- */
-export function useSemanticSearch(query: string, entityTypes?: string, limit = 5) {
-  return useQuery({
-    queryKey: aiKeys.search(query, entityTypes),
-    queryFn: () => aiApi.semanticSearch(query, entityTypes, limit),
-    enabled: query.length >= 3,
-    staleTime: 60 * 1000, // 1 minute
   });
 }
 
@@ -255,21 +239,6 @@ export function useRefreshAIData() {
 }
 
 /**
- * Convenience hook combining insights for easy use
- */
-export function useInsights(entityType: 'lead' | 'opportunity', entityId: number | undefined) {
-  const leadInsights = useLeadInsights(entityType === 'lead' ? entityId : undefined);
-  const opportunityInsights = useOpportunityInsights(
-    entityType === 'opportunity' ? entityId : undefined
-  );
-
-  if (entityType === 'lead') {
-    return leadInsights;
-  }
-  return opportunityInsights;
-}
-
-/**
  * Hook to fetch AI user preferences
  */
 export function useAIPreferences() {
@@ -320,20 +289,6 @@ export function useDeleteAILearning() {
 }
 
 /**
- * Hook to teach the AI something new
- */
-export function useTeachAI() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (data: TeachAIRequest) => aiApi.teachAI(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: aiKeys.learnings() });
-    },
-  });
-}
-
-/**
  * Hook to get smart suggestions
  */
 export function useSmartSuggestions() {
@@ -344,14 +299,3 @@ export function useSmartSuggestions() {
   });
 }
 
-/**
- * Hook to get entity insights
- */
-export function useEntityInsights(entityType: string, entityId: number) {
-  return useQuery({
-    queryKey: aiKeys.entityInsights(entityType, entityId),
-    queryFn: () => aiApi.getEntityInsights(entityType, entityId),
-    enabled: !!entityType && !!entityId,
-    staleTime: 5 * 60 * 1000,
-  });
-}

@@ -157,13 +157,3 @@ export const useUIStore = create<UIState>()(
     }
   )
 );
-
-// Selectors
-export const selectSidebarOpen = (state: UIState) => state.sidebarOpen;
-export const selectSidebarCollapsed = (state: UIState) => state.sidebarCollapsed;
-export const selectTheme = (state: UIState) => state.theme;
-export const selectModal = (modalId: string) => (state: UIState) =>
-  state.modals[modalId] || { isOpen: false, type: null };
-export const selectToasts = (state: UIState) => state.toasts;
-export const selectGlobalLoading = (state: UIState) => state.globalLoading;
-export const selectCommandPaletteOpen = (state: UIState) => state.commandPaletteOpen;
