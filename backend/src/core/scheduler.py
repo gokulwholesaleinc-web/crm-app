@@ -22,8 +22,9 @@ async def _run_scheduled_job(job_name: str, service_factory: Callable, method: s
             if result:
                 logger.info("[%s] Processed %s item(s)", job_name, result if isinstance(result, int) else len(result))
             return result
-    except Exception as e:
-        logger.error("[%s] Error: %s", job_name, e)
+    except Exception:
+        # Scheduled jobs must never crash the scheduler; log traceback.
+        logger.exception("[%s] Error", job_name)
 
 
 async def _process_due_sequence_steps():
@@ -63,8 +64,10 @@ async def _sync_google_calendars():
                 await session.commit()
                 if synced:
                     logger.info("[google_calendar_sync] user_id=%s synced %s event(s)", credential.user_id, len(synced))
-        except Exception as e:
-            logger.error("[google_calendar_sync] user_id=%s error: %s", credential.user_id, e)
+        except Exception:
+            # Isolate per-user failures so one revoked token doesn't abort
+            # the whole tick; keep full traceback in logs.
+            logger.exception("[google_calendar_sync] user_id=%s error", credential.user_id)
 
 
 async def _background_tick():

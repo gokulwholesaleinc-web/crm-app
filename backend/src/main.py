@@ -99,8 +99,10 @@ async def _init_database():
                     await seed_database(session)
             except ImportError:
                 pass
-    except Exception as e:
-        print(f"Database initialization error: {e}")
+    except Exception:
+        # Fire-and-forget task from lifespan; swallowing so HTTP serving
+        # continues, but log the full traceback so the failure is visible.
+        logger.exception("Database initialization failed; startup continues")
 
 
 @asynccontextmanager

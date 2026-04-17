@@ -58,7 +58,7 @@ async def _run_production_migrations():
             ]:
                 try:
                     await conn.execute(idx_sql)
-                except Exception as exc:
+                except asyncpg.PostgresError as exc:
                     logger.warning("Migration DDL skipped: %s", exc)
 
             column_migrations = [
@@ -129,7 +129,7 @@ async def _run_production_migrations():
             for sql in column_migrations:
                 try:
                     await conn.execute(sql)
-                except Exception as exc:
+                except asyncpg.PostgresError as exc:
                     logger.warning("Column migration skipped: %s", exc)
 
             # User approval gate: rejected emails block list
@@ -147,7 +147,7 @@ async def _run_production_migrations():
                 await conn.execute(
                     "CREATE UNIQUE INDEX IF NOT EXISTS ix_rejected_access_emails_email ON rejected_access_emails(email)"
                 )
-            except Exception as exc:
+            except asyncpg.PostgresError as exc:
                 logger.warning("Failed to create rejected_access_emails table: %s", exc)
 
             # Audit Session 2: Stripe webhook idempotency log
@@ -163,7 +163,7 @@ async def _run_production_migrations():
                 await conn.execute(
                     "CREATE UNIQUE INDEX IF NOT EXISTS ix_webhook_events_event_id ON webhook_events(event_id)"
                 )
-            except Exception as exc:
+            except asyncpg.PostgresError as exc:
                 logger.warning("Failed to create webhook_events table: %s", exc)
 
             # Audit Session 2: backfill public_token on any pre-existing quote
@@ -187,8 +187,10 @@ async def _run_production_migrations():
                         "UPDATE proposals SET public_token = $1 WHERE id = $2",
                         _secrets.token_urlsafe(32), row["id"],
                     )
-            except Exception as exc:
-                logger.error("Failed to backfill public_token on quotes/proposals: %s", exc)
+            except Exception:
+                # Broad catch: backfill walks rows and can hit data-shape
+                # surprises; log the full traceback so we can diagnose.
+                logger.exception("Failed to backfill public_token on quotes/proposals")
 
             # Create inbound_emails table if it doesn't exist
             try:
@@ -214,7 +216,7 @@ async def _run_production_migrations():
                 """)
                 await conn.execute("CREATE INDEX IF NOT EXISTS ix_inbound_emails_entity ON inbound_emails(entity_type, entity_id)")
                 await conn.execute("CREATE INDEX IF NOT EXISTS ix_inbound_emails_from ON inbound_emails(from_email)")
-            except Exception as exc:
+            except asyncpg.PostgresError as exc:
                 logger.warning("Failed to create inbound_emails table: %s", exc)
 
             # Create email_settings table if it doesn't exist
@@ -230,7 +232,7 @@ async def _run_production_migrations():
                         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                     )
                 """)
-            except Exception as exc:
+            except asyncpg.PostgresError as exc:
                 logger.warning("Failed to create email_settings table: %s", exc)
 
             try:
@@ -239,11 +241,14 @@ async def _run_production_migrations():
                     WHERE LOWER(name) IN ('new', 'contacted', 'qualified', 'nurturing', 'unqualified', 'converted')
                     AND pipeline_type != 'lead'
                 """)
-            except Exception as exc:
+            except asyncpg.PostgresError as exc:
                 logger.warning("Failed to update pipeline_stages pipeline_type: %s", exc)
 
             print("Production migrations completed successfully")
         finally:
             await conn.close()
-    except Exception as e:
-        print(f"Production migration error (non-fatal): {e}")
+    except Exception:
+        # Broad catch: outermost wrapper; connection + any unexpected
+        # failure. Non-fatal because app can serve cached/existing schema;
+        # log the traceback so we can still see what broke.
+        logger.exception("Production migration error (non-fatal)")
