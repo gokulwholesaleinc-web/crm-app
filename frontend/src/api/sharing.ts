@@ -51,4 +51,3 @@ export const sharingApi = {
   revoke: revokeShare,
 };
 
-export default sharingApi;

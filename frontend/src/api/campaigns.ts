@@ -305,4 +305,3 @@ export const campaignsApi = {
   updateEmailSettings,
 };
 
-export default campaignsApi;

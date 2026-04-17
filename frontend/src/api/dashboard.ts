@@ -291,4 +291,3 @@ export const dashboardApi = {
   getDashboardWidgetData,
 };
 
-export default dashboardApi;

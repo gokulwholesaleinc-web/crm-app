@@ -106,4 +106,3 @@ export const sequencesApi = {
   getContactEnrollments,
 };
 
-export default sequencesApi;

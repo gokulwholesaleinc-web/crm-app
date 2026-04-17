@@ -206,4 +206,3 @@ export const leadsApi = {
   sendCampaign,
 };
 
-export default leadsApi;

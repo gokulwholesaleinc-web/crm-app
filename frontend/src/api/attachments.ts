@@ -73,4 +73,3 @@ export const attachmentsApi = {
   getDownloadUrl,
 };
 
-export default attachmentsApi;

@@ -228,4 +228,3 @@ export const opportunitiesApi = {
   getUnifiedPipeline,
 };
 
-export default opportunitiesApi;

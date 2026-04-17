@@ -74,4 +74,3 @@ export const contractsApi = {
   delete: deleteContract,
 };
 
-export default contractsApi;

@@ -237,4 +237,3 @@ export const importExportApi = {
   importWithMapping,
 };
 
-export default importExportApi;

@@ -80,4 +80,3 @@ export const rolesApi = {
   getMyPermissions,
 };
 
-export default rolesApi;

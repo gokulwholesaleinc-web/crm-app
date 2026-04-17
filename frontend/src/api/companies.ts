@@ -69,4 +69,3 @@ export const companiesApi = {
   delete: deleteCompany,
 };
 
-export default companiesApi;

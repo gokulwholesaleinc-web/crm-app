@@ -65,4 +65,3 @@ export const webhooksApi = {
   test: testWebhook,
 };
 
-export default webhooksApi;
