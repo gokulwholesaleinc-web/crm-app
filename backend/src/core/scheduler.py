@@ -73,16 +73,23 @@ async def _sync_google_calendars():
 async def _background_tick():
     # Single periodic wakeup runs all five handlers sequentially so Neon's
     # compute only has to come out of autosuspend once per interval.
+    # Gmail sync runs on its own faster cadence — see start_scheduler.
     await _process_email_retries()
     await _process_due_sequence_steps()
     await _process_due_campaign_steps()
     await _deliver_scheduled_reports()
     await _sync_google_calendars()
-    await _sync_gmail_accounts()
+
+
+# Gmail sync needs near-real-time cadence so replies show up in the CRM
+# within a couple of minutes, not 90 minutes. history.list is cheap
+# (empty response when nothing new), so polling often doesn't wake Neon
+# unless there are actual messages to process.
+GMAIL_SYNC_INTERVAL_SECONDS = 120
 
 
 def start_scheduler():
-    """Register the consolidated background tick and start the scheduler."""
+    """Register background jobs and start the scheduler."""
     scheduler.add_job(
         _background_tick,
         trigger=IntervalTrigger(minutes=90),
@@ -91,8 +98,19 @@ def start_scheduler():
         coalesce=True,
         max_instances=1,
     )
+    scheduler.add_job(
+        _sync_gmail_accounts,
+        trigger=IntervalTrigger(seconds=GMAIL_SYNC_INTERVAL_SECONDS),
+        id="gmail_sync",
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+    )
     scheduler.start()
-    logger.info("Background scheduler started (consolidated tick every 90m)")
+    logger.info(
+        "Background scheduler started (tick every 90m, gmail sync every %ss)",
+        GMAIL_SYNC_INTERVAL_SECONDS,
+    )
 
 
 def stop_scheduler():

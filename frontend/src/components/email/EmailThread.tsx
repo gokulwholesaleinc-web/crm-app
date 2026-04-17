@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import DOMPurify from 'dompurify';
 import { Spinner, Badge, Button } from '../ui';
 import { useEmailThread } from '../../hooks/useEmail';
@@ -24,6 +24,65 @@ function formatTimestamp(dateString: string): string {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(new Date(dateString));
+}
+
+interface EmailGroup {
+  key: string;
+  threadId: string | null;
+  subject: string;
+  participants: string[];
+  latestTimestamp: string;
+  messages: ThreadEmailItem[];
+}
+
+// Group emails by Gmail's thread_id. Messages without one fall into singleton
+// groups so legacy Resend rows still render (they just lack threading).
+function groupByThread(items: ThreadEmailItem[]): EmailGroup[] {
+  const map = new Map<string, EmailGroup>();
+
+  for (const email of items) {
+    const key = email.thread_id
+      ? `thread:${email.thread_id}`
+      : `single:${email.direction}:${email.id}`;
+    let group = map.get(key);
+    if (!group) {
+      group = {
+        key,
+        threadId: email.thread_id,
+        subject: email.subject,
+        participants: [],
+        latestTimestamp: email.timestamp,
+        messages: [],
+      };
+      map.set(key, group);
+    }
+    group.messages.push(email);
+
+    const participant =
+      email.direction === 'outbound' ? email.to_email : email.from_email || 'Unknown';
+    if (participant && !group.participants.includes(participant)) {
+      group.participants.push(participant);
+    }
+
+    if (new Date(email.timestamp) > new Date(group.latestTimestamp)) {
+      group.latestTimestamp = email.timestamp;
+    }
+  }
+
+  const groups = Array.from(map.values());
+  for (const g of groups) {
+    g.messages.sort(
+      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+    );
+    // Use the earliest message's subject so a "Re: Re: X" reply doesn't
+    // overwrite the canonical thread topic in the header.
+    g.subject = g.messages[0]?.subject || g.subject;
+  }
+  groups.sort(
+    (a, b) =>
+      new Date(b.latestTimestamp).getTime() - new Date(a.latestTimestamp).getTime(),
+  );
+  return groups;
 }
 
 function EmailBubble({
@@ -53,11 +112,11 @@ function EmailBubble({
         {/* Header: from/to + status */}
         <div className="flex items-start justify-between gap-2 mb-1">
           <div className="min-w-0 flex-1">
-            <p className={`text-xs truncate ${isOutbound ? 'text-primary-100' : 'text-gray-500 dark:text-gray-400'}`}>
+            <p className={`text-xs truncate ${isOutbound ? 'text-white/90' : 'text-gray-500 dark:text-gray-400'}`}>
               {isOutbound ? `To: ${email.to_email}` : `From: ${email.from_email || 'Unknown'}`}
             </p>
             {email.cc && (
-              <p className={`text-xs truncate ${isOutbound ? 'text-primary-200' : 'text-gray-400 dark:text-gray-500'}`}>
+              <p className={`text-xs truncate ${isOutbound ? 'text-white/80' : 'text-gray-400 dark:text-gray-500'}`}>
                 CC: {email.cc}
               </p>
             )}
@@ -73,7 +132,7 @@ function EmailBubble({
         </p>
 
         {/* Timestamp + metrics */}
-        <div className={`flex items-center gap-3 mt-1 text-xs ${isOutbound ? 'text-primary-200' : 'text-gray-400 dark:text-gray-500'}`}>
+        <div className={`flex items-center gap-3 mt-1 text-xs ${isOutbound ? 'text-white/80' : 'text-gray-500 dark:text-gray-400'}`}>
           <span>{formatTimestamp(email.timestamp)}</span>
           {isOutbound && email.open_count != null && email.open_count > 0 && (
             <span>Opened {email.open_count}x</span>
@@ -86,7 +145,7 @@ function EmailBubble({
           onClick={() => setExpanded((prev) => !prev)}
           className={`mt-2 text-xs font-medium focus-visible:outline-none focus-visible:underline ${
             isOutbound
-              ? 'text-primary-200 hover:text-white'
+              ? 'text-white/90 hover:text-white'
               : 'text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300'
           }`}
           aria-label={expanded ? 'Collapse email body' : 'Expand email body'}
@@ -99,7 +158,7 @@ function EmailBubble({
           <div
             className={`mt-2 text-sm whitespace-pre-wrap break-words border-t pt-2 ${
               isOutbound
-                ? 'border-primary-500 text-primary-50'
+                ? 'border-white/20 text-white'
                 : 'border-gray-200 dark:border-gray-600 text-gray-800 dark:text-gray-200'
             }`}
           >
@@ -134,6 +193,80 @@ function EmailBubble({
   );
 }
 
+function ThreadCard({
+  group,
+  defaultExpanded,
+  onReply,
+}: {
+  group: EmailGroup;
+  defaultExpanded: boolean;
+  onReply?: (email: ThreadEmailItem) => void;
+}) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const isMultiMessage = group.messages.length > 1;
+  const displayedParticipants = group.participants.slice(0, 2).join(', ');
+  const extraParticipants =
+    group.participants.length > 2 ? `, +${group.participants.length - 2}` : '';
+
+  const headerId = `thread-${group.key}`;
+  const panelId = `panel-${group.key}`;
+
+  return (
+    <section
+      className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden"
+      aria-labelledby={headerId}
+    >
+      <button
+        type="button"
+        id={headerId}
+        onClick={() => setExpanded((p) => !p)}
+        className="w-full px-3 sm:px-4 py-2 sm:py-3 flex items-center justify-between gap-3 text-left bg-gray-50 dark:bg-gray-800/60 hover:bg-gray-100 dark:hover:bg-gray-700/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+        aria-expanded={expanded}
+        aria-controls={panelId}
+      >
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 mb-0.5">
+            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
+              {group.subject || '(No subject)'}
+            </p>
+            {isMultiMessage && (
+              <Badge variant="gray" size="sm">
+                {group.messages.length} messages
+              </Badge>
+            )}
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+            {displayedParticipants}
+            {extraParticipants} · {formatTimestamp(group.latestTimestamp)}
+          </p>
+        </div>
+        <svg
+          className={`h-4 w-4 shrink-0 text-gray-400 transition-transform ${
+            expanded ? 'rotate-180' : ''
+          }`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          aria-hidden="true"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {expanded && (
+        <div id={panelId} className="px-3 sm:px-4 py-3 space-y-3">
+          {group.messages.map((email) => (
+            <EmailBubble
+              key={`${email.direction}-${email.id}`}
+              email={email}
+              onReply={onReply}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function EmailThread({ entityType, entityId, onReply, onCompose }: EmailThreadProps) {
   const [page, setPage] = useState(1);
   const [accumulated, setAccumulated] = useState<ThreadEmailItem[]>([]);
@@ -151,6 +284,8 @@ export function EmailThread({ entityType, entityId, onReply, onCompose }: EmailT
     }
     prevPageRef.current = page;
   }, [data, page]);
+
+  const groups = useMemo(() => groupByThread(accumulated), [accumulated]);
 
   const loadOlder = useCallback(() => {
     setPage((p) => p + 1);
@@ -203,11 +338,12 @@ export function EmailThread({ entityType, entityId, onReply, onCompose }: EmailT
         </div>
       )}
 
-      {/* Email bubbles */}
-      {accumulated.map((email) => (
-        <EmailBubble
-          key={`${email.direction}-${email.id}`}
-          email={email}
+      {/* Thread cards (grouped by Gmail thread_id) */}
+      {groups.map((group, index) => (
+        <ThreadCard
+          key={group.key}
+          group={group}
+          defaultExpanded={index === 0}
           onReply={onReply}
         />
       ))}

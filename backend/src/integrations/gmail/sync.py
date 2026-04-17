@@ -224,6 +224,7 @@ async def _store_inbound(
         body_html=msg["body_html"],
         message_id=msg["message_id"],
         in_reply_to=msg.get("in_reply_to") or None,
+        thread_id=msg.get("thread_id") or None,
         received_at=received_at,
         entity_type=entity_type,
         entity_id=entity_id,

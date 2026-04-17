@@ -115,6 +115,7 @@ class InboundEmail(Base):
     # Threading
     message_id: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     in_reply_to: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    thread_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     # Attachments metadata
     attachments: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
@@ -132,4 +133,5 @@ class InboundEmail(Base):
     __table_args__ = (
         Index("ix_inbound_emails_entity", "entity_type", "entity_id"),
         Index("ix_inbound_emails_from", "from_email"),
+        Index("ix_inbound_emails_thread_id", "thread_id"),
     )

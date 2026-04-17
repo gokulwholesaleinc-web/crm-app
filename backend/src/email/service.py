@@ -601,6 +601,7 @@ class EmailService:
                 EmailQueue.status.label("status"),
                 EmailQueue.open_count.label("open_count"),
                 literal(None).label("attachments"),
+                EmailQueue.thread_id.label("thread_id"),
             )
             .where(
                 EmailQueue.entity_type == entity_type,
@@ -622,6 +623,7 @@ class EmailService:
                 literal(None).label("status"),
                 literal(None).label("open_count"),
                 literal(None).label("attachments"),
+                InboundEmail.thread_id.label("thread_id"),
             )
             .where(
                 InboundEmail.entity_type == entity_type,

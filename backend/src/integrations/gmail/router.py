@@ -120,6 +120,19 @@ async def gmail_callback(
         token_response=token_data,
         email=gmail_email,
     )
+    # Seed the history cursor so the first background sync actually pulls
+    # any reply that arrives in the seconds after connect instead of just
+    # learning the starting historyId and returning empty.
+    try:
+        await service.seed_sync_cursor(conn)
+    except Exception as exc:
+        # Don't fail the connect flow if Gmail rejects the profile call —
+        # the first scheduler tick will seed the cursor via the old path.
+        import logging
+        logging.getLogger(__name__).warning(
+            "Failed to seed Gmail sync cursor for user_id=%s: %s",
+            current_user.id, exc,
+        )
     await db.commit()
     await db.refresh(conn)
 
@@ -153,6 +166,45 @@ async def gmail_status(
         last_synced_at=sync_state.last_synced_at if sync_state else None,
         last_error=sync_state.last_error if sync_state else None,
     )
+
+
+GMAIL_MANUAL_SYNC_COOLDOWN_SECONDS = 15
+
+
+@router.post("/sync")
+async def gmail_sync(
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Run Gmail sync for the current user immediately.
+
+    Backs the "Sync" button on Settings → Integrations → Gmail so users
+    don't have to wait for the background scheduler when they expect a
+    reply to land. Guarded by a short cooldown so button-mashing can't
+    race the 120s background tick or burn Gmail API quota.
+    """
+    from datetime import datetime, timezone
+    from src.integrations.gmail.sync import GmailSyncWorker
+
+    service = GmailConnectionService(db)
+    conn = await service.get_by_user(current_user.id)
+    if not conn or conn.revoked_at is not None:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail="No active Gmail connection",
+        )
+
+    sync_state = await service.get_sync_state(current_user.id)
+    if sync_state and sync_state.last_synced_at:
+        elapsed = (datetime.now(timezone.utc) - sync_state.last_synced_at).total_seconds()
+        if elapsed < GMAIL_MANUAL_SYNC_COOLDOWN_SECONDS:
+            raise HTTPException(
+                status_code=HTTPStatus.TOO_MANY_REQUESTS,
+                detail="Gmail sync just ran; wait a few seconds and try again.",
+            )
+
+    await GmailSyncWorker.sync_account(conn, db)
+    return {"synced": True}
 
 
 @router.post("/disconnect")
