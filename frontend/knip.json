@@ -3,7 +3,8 @@
   "entry": [
     "src/main.tsx",
     "src/test-setup.ts",
-    "src/**/*.test.{ts,tsx}"
+    "src/**/*.test.{ts,tsx}",
+    "src/test-utils/**"
   ],
   "project": ["src/**/*.{ts,tsx}"],
   "ignoreExportsUsedInFile": true,
