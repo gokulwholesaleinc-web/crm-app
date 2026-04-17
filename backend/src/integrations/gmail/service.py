@@ -73,6 +73,33 @@ class GmailConnectionService:
 
         return conn
 
+    async def seed_sync_cursor(self, connection: GmailConnection) -> None:
+        """Seed last_history_id with the account's current historyId.
+
+        Called right after a successful connect so the first background sync
+        pulls every message that arrives *after* the connect moment. Without
+        this seed, the first sync tick would just learn the cursor and return
+        empty — dropping any reply that lands in the gap.
+
+        Update-only: upsert_from_token_exchange guarantees the sync_state row
+        exists before we're called, which keeps us off the check-then-insert
+        race with the scheduler's own create path.
+        """
+        from src.integrations.gmail.client import GmailClient
+
+        sync_state = await self.get_sync_state(connection.user_id)
+        if sync_state is None:
+            return
+
+        async with GmailClient(connection, self.db) as client:
+            profile = await client.get_profile()
+
+        sync_state.last_history_id = str(profile["historyId"])
+        sync_state.last_synced_at = datetime.now(timezone.utc)
+        sync_state.failure_count = 0
+        sync_state.last_error = None
+        await self.db.flush()
+
     async def mark_revoked(self, user_id: int) -> Optional[GmailConnection]:
         conn = await self.get_by_user(user_id)
         if not conn:

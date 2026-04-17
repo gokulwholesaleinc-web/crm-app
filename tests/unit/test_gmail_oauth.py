@@ -464,3 +464,93 @@ class TestGmailDisconnect:
             _clear_gmail_http_factory_override()
             settings.GOOGLE_CLIENT_ID = ""
             settings.GOOGLE_CLIENT_SECRET = ""
+
+
+# =============================================================================
+# /sync (manual-trigger)
+# =============================================================================
+
+
+class TestGmailSyncEndpoint:
+    @pytest.mark.asyncio
+    async def test_sync_returns_404_when_not_connected(self, client, test_user):
+        """POST /sync on a user with no Gmail connection returns 404."""
+        resp = await client.post(
+            "/api/integrations/gmail/sync", headers=_auth_header(test_user)
+        )
+        assert resp.status_code == 404
+        assert "no active gmail connection" in resp.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_sync_returns_429_within_cooldown(
+        self, client, db_session, test_user
+    ):
+        """POST /sync is rate-limited when last_synced_at is within the cooldown.
+
+        Protects Gmail API quota and prevents a user from racing the scheduler
+        by spamming the button.
+        """
+        from datetime import datetime, timezone
+
+        conn = GmailConnection(
+            user_id=test_user.id,
+            email="user@gmail.com",
+            access_token="ya29.test",
+            refresh_token="1//test",
+            token_expiry=datetime(2099, 1, 1, tzinfo=timezone.utc),
+            scopes="openid email profile gmail.send gmail.readonly",
+        )
+        db_session.add(conn)
+        state = GmailSyncState(
+            user_id=test_user.id,
+            last_history_id="100",
+            last_synced_at=datetime.now(timezone.utc),
+            failure_count=0,
+        )
+        db_session.add(state)
+        await db_session.commit()
+
+        resp = await client.post(
+            "/api/integrations/gmail/sync", headers=_auth_header(test_user)
+        )
+        assert resp.status_code == 429
+        assert "wait" in resp.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_sync_returns_404_after_disconnect(
+        self, client, db_session, test_user
+    ):
+        """POST /sync after disconnect (revoked_at set) returns 404."""
+        from src.config import settings
+        settings.DEBUG = True
+        settings.GOOGLE_CLIENT_ID = "test-client-id.apps.googleusercontent.com"
+        settings.GOOGLE_CLIENT_SECRET = "test-secret"
+
+        factory = _make_gmail_stub_factory(
+            token_response={
+                "access_token": "ya29.tok",
+                "refresh_token": "1//ref",
+                "expires_in": 3600,
+                "id_token": _make_id_token("d@gmail.com"),
+            }
+        )
+        _override_gmail_http_factory(factory)
+        try:
+            state = await _prime_gmail_state(client, _auth_header(test_user))
+            await client.post(
+                "/api/integrations/gmail/callback",
+                json={"code": "c", "state": state},
+                headers=_auth_header(test_user),
+            )
+            await client.post(
+                "/api/integrations/gmail/disconnect", headers=_auth_header(test_user)
+            )
+
+            resp = await client.post(
+                "/api/integrations/gmail/sync", headers=_auth_header(test_user)
+            )
+            assert resp.status_code == 404
+        finally:
+            _clear_gmail_http_factory_override()
+            settings.GOOGLE_CLIENT_ID = ""
+            settings.GOOGLE_CLIENT_SECRET = ""

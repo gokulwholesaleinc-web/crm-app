@@ -216,6 +216,11 @@ async def _run_production_migrations():
                 """)
                 await conn.execute("CREATE INDEX IF NOT EXISTS ix_inbound_emails_entity ON inbound_emails(entity_type, entity_id)")
                 await conn.execute("CREATE INDEX IF NOT EXISTS ix_inbound_emails_from ON inbound_emails(from_email)")
+                # thread_id is used by EmailThread UI to group replies with the
+                # outbound message they belong to; Gmail's threadId is stable
+                # across the full RFC-822 thread.
+                await conn.execute("ALTER TABLE inbound_emails ADD COLUMN IF NOT EXISTS thread_id VARCHAR(255)")
+                await conn.execute("CREATE INDEX IF NOT EXISTS ix_inbound_emails_thread_id ON inbound_emails(thread_id)")
             except asyncpg.PostgresError as exc:
                 logger.warning("Failed to create inbound_emails table: %s", exc)
 

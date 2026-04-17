@@ -332,6 +332,64 @@ class TestGmailSync:
         assert rows[0].entity_id == contact.id
 
 
+class TestSeedSyncCursor:
+    """Tests for GmailConnectionService.seed_sync_cursor."""
+
+    @pytest.mark.asyncio
+    async def test_noop_when_sync_state_missing(self, db_session, gmail_connection):
+        """seed_sync_cursor returns quietly when no sync_state row exists.
+
+        Guards against racing the scheduler's own create path: seed is
+        update-only, and upsert_from_token_exchange owns the create.
+        """
+        result = await db_session.execute(
+            select(GmailSyncState).where(GmailSyncState.user_id == gmail_connection.user_id)
+        )
+        existing = result.scalar_one_or_none()
+        if existing is not None:
+            await db_session.delete(existing)
+            await db_session.flush()
+
+        service = GmailConnectionService(db_session)
+        await service.seed_sync_cursor(gmail_connection)
+
+        result = await db_session.execute(
+            select(GmailSyncState).where(GmailSyncState.user_id == gmail_connection.user_id)
+        )
+        assert result.scalar_one_or_none() is None
+
+    @pytest.mark.asyncio
+    async def test_updates_existing_sync_state(self, db_session, gmail_connection):
+        """seed_sync_cursor writes historyId + timestamp into an existing row."""
+        state = GmailSyncState(
+            user_id=gmail_connection.user_id,
+            last_history_id=None,
+            failure_count=3,
+            last_error="previous failure",
+        )
+        db_session.add(state)
+        await db_session.flush()
+
+        transport = _gmail_transport(profile_history_id="9999")
+        stub_http = httpx.AsyncClient(transport=transport)
+
+        import unittest.mock
+        orig_init = GmailClient.__init__
+
+        def patched_init(self, conn, db, http=None):
+            orig_init(self, conn, db, http=stub_http)
+
+        with unittest.mock.patch.object(GmailClient, "__init__", patched_init):
+            service = GmailConnectionService(db_session)
+            await service.seed_sync_cursor(gmail_connection)
+
+        await db_session.refresh(state)
+        assert state.last_history_id == "9999"
+        assert state.last_synced_at is not None
+        assert state.failure_count == 0
+        assert state.last_error is None
+
+
 class TestGmailSendRouting:
     @pytest.mark.asyncio
     async def test_queue_email_creates_activity_on_send(self, db_session, test_user, contact):

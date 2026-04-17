@@ -15,6 +15,7 @@ export interface ThreadEmailItem {
   status: string | null;
   open_count: number | null;
   attachments: unknown | null;
+  thread_id: string | null;
 }
 
 export interface ThreadResponse {
