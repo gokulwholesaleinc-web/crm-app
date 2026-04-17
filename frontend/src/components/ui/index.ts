@@ -19,8 +19,8 @@ export { ConfirmDialog } from './ConfirmDialog';
 export type { ConfirmDialogProps } from './ConfirmDialog';
 
 // Table
-export { Table, Pagination } from './Table';
-export type { TableProps, PaginationProps, Column, SortDirection } from './Table';
+export { Table } from './Table';
+export type { TableProps, Column, SortDirection } from './Table';
 
 // Badge
 export { Badge, StatusBadge } from './Badge';

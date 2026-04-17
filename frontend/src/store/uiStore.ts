@@ -5,15 +5,15 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
-export type Theme = 'light' | 'dark' | 'system';
+type Theme = 'light' | 'dark' | 'system';
 
-export interface ModalState {
+interface ModalState {
   isOpen: boolean;
   type: string | null;
   data?: Record<string, unknown>;
 }
 
-export interface ToastMessage {
+interface ToastMessage {
   id: string;
   type: 'success' | 'error' | 'warning' | 'info';
   title: string;
