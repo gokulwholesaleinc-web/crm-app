@@ -649,6 +649,92 @@ class TestHandleSubscriptionUpdated:
         assert sub.status == "active"
 
     @pytest.mark.asyncio
+    async def test_period_refresh_on_renewal(
+        self,
+        db_session: AsyncSession,
+        payment_service: PaymentService,
+        test_user: User,
+    ):
+        """Renewal events advance current_period_start/end; we must apply them."""
+        from datetime import datetime, timezone
+
+        customer = StripeCustomer(
+            stripe_customer_id="cus_subupdate_04",
+            email="subupdate4@example.com",
+            name="Sub Renewal Customer",
+        )
+        db_session.add(customer)
+        await db_session.flush()
+
+        sub = Subscription(
+            stripe_subscription_id="sub_update_04",
+            customer_id=customer.id,
+            status="active",
+            current_period_start=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            current_period_end=datetime(2026, 2, 1, tzinfo=timezone.utc),
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(sub)
+        await db_session.commit()
+
+        new_start = int(datetime(2026, 2, 1, tzinfo=timezone.utc).timestamp())
+        new_end = int(datetime(2026, 3, 1, tzinfo=timezone.utc).timestamp())
+        await payment_service._handle_subscription_updated({
+            "id": "sub_update_04",
+            "status": "active",
+            "cancel_at_period_end": False,
+            "current_period_start": new_start,
+            "current_period_end": new_end,
+        })
+
+        await db_session.refresh(sub)
+        assert sub.current_period_start == datetime(2026, 2, 1, tzinfo=timezone.utc)
+        assert sub.current_period_end == datetime(2026, 3, 1, tzinfo=timezone.utc)
+
+    @pytest.mark.asyncio
+    async def test_period_preserved_when_event_omits_timestamps(
+        self,
+        db_session: AsyncSession,
+        payment_service: PaymentService,
+        test_user: User,
+    ):
+        """Events without period fields (e.g. pause) must not null existing values."""
+        from datetime import datetime, timezone
+
+        customer = StripeCustomer(
+            stripe_customer_id="cus_subupdate_05",
+            email="subupdate5@example.com",
+            name="Sub Preserve Customer",
+        )
+        db_session.add(customer)
+        await db_session.flush()
+
+        existing_start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        existing_end = datetime(2026, 2, 1, tzinfo=timezone.utc)
+        sub = Subscription(
+            stripe_subscription_id="sub_update_05",
+            customer_id=customer.id,
+            status="active",
+            current_period_start=existing_start,
+            current_period_end=existing_end,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(sub)
+        await db_session.commit()
+
+        await payment_service._handle_subscription_updated({
+            "id": "sub_update_05",
+            "status": "paused",
+            "cancel_at_period_end": False,
+        })
+
+        await db_session.refresh(sub)
+        assert sub.current_period_start == existing_start
+        assert sub.current_period_end == existing_end
+
+    @pytest.mark.asyncio
     async def test_unknown_subscription_is_noop(
         self,
         db_session: AsyncSession,

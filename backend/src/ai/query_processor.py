@@ -393,6 +393,24 @@ class QueryProcessor:
             was_confirmed=True,
         )
 
+        # Mirror AIToolExecutor.run: the auto-execute path logs every
+        # tool invocation to AILearningService so patterns and frequent
+        # entities surface in user_context. Confirmed high-risk actions
+        # were previously absent from that corpus, skewing learning
+        # toward reads/low-risk writes.
+        result_summary = _summarize_result(data)
+        tool_log = [{
+            "function": function_name,
+            "arguments": arguments,
+            "result_summary": result_summary,
+        }]
+        learning_service = AILearningService(self.db)
+        await learning_service.log_interaction(
+            user_id=user_id,
+            query=f"[confirmed action] {function_name}",
+            tool_calls=tool_log,
+        )
+
         return {
             "response": f"Action '{function_name}' completed successfully.",
             "data": data,
@@ -400,7 +418,7 @@ class QueryProcessor:
             "actions_taken": [{
                 "function": function_name,
                 "arguments": arguments,
-                "result_summary": _summarize_result(data),
+                "result_summary": result_summary,
             }],
         }
 
