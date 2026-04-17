@@ -18,7 +18,13 @@ from src.dashboard.schemas import (
 )
 from src.dashboard.number_cards import NumberCardGenerator
 from src.dashboard.charts import ChartDataGenerator
-from src.dashboard._utils import _parse_date, _get_cached, _set_cached
+from src.dashboard._utils import (
+    _DASHBOARD_CACHE_TTL,
+    _dashboard_cache,
+    _get_cached,
+    _parse_date,
+    _set_cached,
+)
 from src.dashboard.charts_router import charts_router
 from src.dashboard.widgets_router import widgets_router
 
