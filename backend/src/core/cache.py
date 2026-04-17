@@ -14,6 +14,7 @@ deployments, use Redis or another distributed cache.
 import asyncio
 import fnmatch
 import functools
+import inspect
 import sys
 import threading
 import time
@@ -136,15 +137,15 @@ def cached(key_template: str, ttl: int = 300):
             ...
     """
     def decorator(func):
+        sig = inspect.signature(func)
+        param_names = list(sig.parameters.keys())
+
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
             # Build cache key from template and kwargs/args
             try:
                 # Try to format key from kwargs first, then positional args
                 all_params = {}
-                import inspect
-                sig = inspect.signature(func)
-                param_names = list(sig.parameters.keys())
                 for i, arg in enumerate(args):
                     if i < len(param_names):
                         all_params[param_names[i]] = arg
