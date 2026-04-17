@@ -402,6 +402,34 @@ class TestAuditLogging:
         assert log.was_confirmed is True
         assert log.risk_level == "write_high"
 
+    @pytest.mark.asyncio
+    async def test_confirmed_action_recorded_in_learning_log(
+        self, db_session: AsyncSession, test_user: User, test_lead: Lead
+    ):
+        """Confirmed actions must reach AIInteractionLog so the learning corpus
+        sees them (prior bug: only auto-executed tools were logged)."""
+        from src.ai.models import AIInteractionLog
+
+        processor = QueryProcessor(db_session)
+        await processor.execute_confirmed_action(
+            function_name="update_lead_status",
+            arguments={"lead_id": test_lead.id, "new_status": "qualified"},
+            user_id=test_user.id,
+            session_id="confirm-learning-session",
+        )
+
+        result = await db_session.execute(
+            select(AIInteractionLog).where(AIInteractionLog.user_id == test_user.id)
+        )
+        logs = result.scalars().all()
+        assert any(
+            log.query == "[confirmed action] update_lead_status"
+            and log.tool_calls
+            and log.tool_calls[0]["function"] == "update_lead_status"
+            and log.tool_calls[0]["arguments"]["lead_id"] == test_lead.id
+            for log in logs
+        ), "expected a matching AIInteractionLog entry for the confirmed action"
+
 
 class TestConfirmationFlow:
     """Tests for the action confirmation flow via API endpoints."""

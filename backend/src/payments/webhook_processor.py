@@ -27,6 +27,13 @@ from src.webhooks.stripe_events import WebhookEvent
 logger = logging.getLogger(__name__)
 
 
+def _ts_to_dt(ts) -> Optional[datetime]:
+    """Convert a Stripe unix timestamp to a tz-aware UTC datetime."""
+    if ts is None:
+        return None
+    return datetime.fromtimestamp(int(ts), tz=timezone.utc)
+
+
 class WebhookProcessor:
     """Handles Stripe webhook signature verification and event dispatching.
 
@@ -376,11 +383,6 @@ class WebhookProcessor:
                 if local_price is not None:
                     local_price_id = local_price.id
 
-        def _ts_to_dt(ts):
-            if ts is None:
-                return None
-            return datetime.fromtimestamp(int(ts), tz=timezone.utc)
-
         subscription = Subscription(
             stripe_subscription_id=sub_id,
             customer_id=customer_row.id,
@@ -410,6 +412,16 @@ class WebhookProcessor:
             subscription.cancel_at_period_end = sub_obj.get(
                 "cancel_at_period_end", subscription.cancel_at_period_end
             )
+            # Stripe renewals fire subscription.updated with advanced period
+            # timestamps; keep them in sync so UI "Next billing date" stays
+            # correct. Fall back to the existing value if the event omits
+            # the field.
+            new_start = _ts_to_dt(sub_obj.get("current_period_start"))
+            if new_start is not None:
+                subscription.current_period_start = new_start
+            new_end = _ts_to_dt(sub_obj.get("current_period_end"))
+            if new_end is not None:
+                subscription.current_period_end = new_end
             await self.db.flush()
 
     async def _handle_subscription_deleted(self, sub_obj: dict) -> None:
