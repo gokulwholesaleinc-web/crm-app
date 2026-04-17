@@ -1,11 +1,9 @@
 """Dashboard API routes."""
 
-import time
-from datetime import date
-from typing import Any, List, Optional
-from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import Response
+from typing import List, Optional
 from typing import Annotated as _Annotated  # alias to avoid shadowing existing Annotated-free code
+from fastapi import APIRouter, Query
+from fastapi.responses import Response
 from fastapi import Depends
 from src.core.router_utils import DBSession, CurrentUser, effective_owner_id
 from src.core.data_scope import DataScope, get_data_scope
@@ -17,39 +15,20 @@ from src.dashboard.schemas import (
     SalesFunnelResponse,
     FunnelStage,
     FunnelConversion,
-    ReportWidgetCreate,
-    ReportWidgetUpdate,
-    ReportWidgetResponse,
 )
 from src.dashboard.number_cards import NumberCardGenerator
 from src.dashboard.charts import ChartDataGenerator
-
-
-def _parse_date(date_str: Optional[str]) -> Optional[date]:
-    """Parse a YYYY-MM-DD string to a date object."""
-    if not date_str:
-        return None
-    return date.fromisoformat(date_str)
+from src.dashboard._utils import _parse_date, _get_cached, _set_cached
+from src.dashboard.charts_router import charts_router
+from src.dashboard.widgets_router import widgets_router
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
-# Result-level cache for expensive dashboard queries (keyed by user_id).
-# TTL is deliberately modest — dashboards are read-heavy and the data-scope /
-# sharing layer does not currently invalidate this cache when role or share
-# grants change, so stale data is bounded by the TTL below.
-_dashboard_cache: dict[str, tuple[float, Any]] = {}
-_DASHBOARD_CACHE_TTL = 180  # 3 minutes — long enough to let Neon auto-suspend
-
-
-def _get_cached(key: str) -> Any | None:
-    cached = _dashboard_cache.get(key)
-    if cached and (time.monotonic() - cached[0]) < _DASHBOARD_CACHE_TTL:
-        return cached[1]
-    return None
-
-
-def _set_cached(key: str, value: Any) -> None:
-    _dashboard_cache[key] = (time.monotonic(), value)
+# Mount sub-routers.
+# charts_router handles all /api/dashboard/charts/* endpoints.
+# widgets_router handles all /api/dashboard/widgets and /api/dashboard/widgets/* endpoints.
+router.include_router(charts_router, prefix="/charts")
+router.include_router(widgets_router, prefix="/widgets")
 
 
 @router.get("", response_model=DashboardResponse)
@@ -129,183 +108,6 @@ async def get_kpis(
     return result
 
 
-@router.get("/charts/pipeline-funnel", response_model=ChartData)
-async def get_pipeline_funnel_chart(
-    current_user: CurrentUser,
-    db: DBSession,
-    response: Response,
-    date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
-    date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
-):
-    """Get pipeline funnel chart data."""
-    parsed_from = _parse_date(date_from)
-    parsed_to = _parse_date(date_to)
-    cache_key = f"pipeline-funnel:{current_user.id}:{date_from}:{date_to}"
-    cached = _get_cached(cache_key)
-    if cached is not None:
-        response.headers["Cache-Control"] = "private, max-age=60"
-        return cached
-
-    generator = ChartDataGenerator(db, user_id=current_user.id, date_from=parsed_from, date_to=parsed_to)
-    data = await generator.get_pipeline_funnel()
-    result = ChartData(
-        type=data["type"],
-        title=data["title"],
-        data=[ChartDataPoint(**d) for d in data["data"]],
-    )
-    _set_cached(cache_key, result)
-    response.headers["Cache-Control"] = "private, max-age=60"
-    return result
-
-
-@router.get("/charts/leads-by-status", response_model=ChartData)
-async def get_leads_by_status_chart(
-    current_user: CurrentUser,
-    db: DBSession,
-    response: Response,
-    date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
-    date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
-):
-    """Get leads by status chart data."""
-    parsed_from = _parse_date(date_from)
-    parsed_to = _parse_date(date_to)
-    cache_key = f"leads-by-status:{current_user.id}:{date_from}:{date_to}"
-    cached = _get_cached(cache_key)
-    if cached is not None:
-        response.headers["Cache-Control"] = "private, max-age=60"
-        return cached
-
-    generator = ChartDataGenerator(db, user_id=current_user.id, date_from=parsed_from, date_to=parsed_to)
-    data = await generator.get_leads_by_status()
-    result = ChartData(
-        type=data["type"],
-        title=data["title"],
-        data=[ChartDataPoint(**d) for d in data["data"]],
-    )
-    _set_cached(cache_key, result)
-    response.headers["Cache-Control"] = "private, max-age=60"
-    return result
-
-
-@router.get("/charts/leads-by-source", response_model=ChartData)
-async def get_leads_by_source_chart(
-    current_user: CurrentUser,
-    db: DBSession,
-    response: Response,
-    date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
-    date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
-):
-    """Get leads by source chart data."""
-    parsed_from = _parse_date(date_from)
-    parsed_to = _parse_date(date_to)
-    cache_key = f"leads-by-source:{current_user.id}:{date_from}:{date_to}"
-    cached = _get_cached(cache_key)
-    if cached is not None:
-        response.headers["Cache-Control"] = "private, max-age=60"
-        return cached
-
-    generator = ChartDataGenerator(db, user_id=current_user.id, date_from=parsed_from, date_to=parsed_to)
-    data = await generator.get_leads_by_source()
-    result = ChartData(
-        type=data["type"],
-        title=data["title"],
-        data=[ChartDataPoint(**d) for d in data["data"]],
-    )
-    _set_cached(cache_key, result)
-    response.headers["Cache-Control"] = "private, max-age=60"
-    return result
-
-
-@router.get("/charts/revenue-trend", response_model=ChartData)
-async def get_revenue_trend_chart(
-    current_user: CurrentUser,
-    db: DBSession,
-    response: Response,
-    months: int = 6,
-    date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
-    date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
-):
-    """Get monthly revenue trend chart data."""
-    parsed_from = _parse_date(date_from)
-    parsed_to = _parse_date(date_to)
-    cache_key = f"revenue-trend:{current_user.id}:{months}:{date_from}:{date_to}"
-    cached = _get_cached(cache_key)
-    if cached is not None:
-        response.headers["Cache-Control"] = "private, max-age=60"
-        return cached
-
-    generator = ChartDataGenerator(db, user_id=current_user.id, date_from=parsed_from, date_to=parsed_to)
-    data = await generator.get_revenue_trend(months=months)
-    result = ChartData(
-        type=data["type"],
-        title=data["title"],
-        data=[ChartDataPoint(**d) for d in data["data"]],
-    )
-    _set_cached(cache_key, result)
-    response.headers["Cache-Control"] = "private, max-age=60"
-    return result
-
-
-@router.get("/charts/activities", response_model=ChartData)
-async def get_activities_chart(
-    current_user: CurrentUser,
-    db: DBSession,
-    response: Response,
-    days: int = 30,
-    date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
-    date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
-):
-    """Get activities by type chart data."""
-    parsed_from = _parse_date(date_from)
-    parsed_to = _parse_date(date_to)
-    cache_key = f"activities:{current_user.id}:{days}:{date_from}:{date_to}"
-    cached = _get_cached(cache_key)
-    if cached is not None:
-        response.headers["Cache-Control"] = "private, max-age=60"
-        return cached
-
-    generator = ChartDataGenerator(db, user_id=current_user.id, date_from=parsed_from, date_to=parsed_to)
-    data = await generator.get_activities_by_type(days=days)
-    result = ChartData(
-        type=data["type"],
-        title=data["title"],
-        data=[ChartDataPoint(**d) for d in data["data"]],
-    )
-    _set_cached(cache_key, result)
-    response.headers["Cache-Control"] = "private, max-age=60"
-    return result
-
-
-@router.get("/charts/new-leads-trend", response_model=ChartData)
-async def get_new_leads_trend_chart(
-    current_user: CurrentUser,
-    db: DBSession,
-    response: Response,
-    weeks: int = 8,
-    date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
-    date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
-):
-    """Get new leads trend chart data."""
-    parsed_from = _parse_date(date_from)
-    parsed_to = _parse_date(date_to)
-    cache_key = f"new-leads-trend:{current_user.id}:{weeks}:{date_from}:{date_to}"
-    cached = _get_cached(cache_key)
-    if cached is not None:
-        response.headers["Cache-Control"] = "private, max-age=60"
-        return cached
-
-    generator = ChartDataGenerator(db, user_id=current_user.id, date_from=parsed_from, date_to=parsed_to)
-    data = await generator.get_new_leads_trend(weeks=weeks)
-    result = ChartData(
-        type=data["type"],
-        title=data["title"],
-        data=[ChartDataPoint(**d) for d in data["data"]],
-    )
-    _set_cached(cache_key, result)
-    response.headers["Cache-Control"] = "private, max-age=60"
-    return result
-
-
 @router.get("/funnel", response_model=SalesFunnelResponse)
 async def get_sales_funnel(
     current_user: CurrentUser,
@@ -327,32 +129,6 @@ async def get_sales_funnel(
         stages=[FunnelStage(**s) for s in data["stages"]],
         conversions=[FunnelConversion(**c) for c in data["conversions"]],
         avg_days_in_stage=data["avg_days_in_stage"],
-    )
-    _set_cached(cache_key, result)
-    return result
-
-
-@router.get("/charts/conversion-rates", response_model=ChartData)
-async def get_conversion_rates_chart(
-    current_user: CurrentUser,
-    db: DBSession,
-    date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
-    date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
-):
-    """Get conversion rates chart data."""
-    parsed_from = _parse_date(date_from)
-    parsed_to = _parse_date(date_to)
-    cache_key = f"conversion-rates:{current_user.id}:{date_from}:{date_to}"
-    cached = _get_cached(cache_key)
-    if cached is not None:
-        return cached
-
-    generator = ChartDataGenerator(db, user_id=current_user.id, date_from=parsed_from, date_to=parsed_to)
-    data = await generator.get_conversion_rates()
-    result = ChartData(
-        type=data["type"],
-        title=data["title"],
-        data=[ChartDataPoint(**d) for d in data["data"]],
     )
     _set_cached(cache_key, result)
     return result
@@ -644,197 +420,4 @@ async def get_unified_pipeline(
     return {
         "lead_stages": lead_stages_data,
         "opportunity_stages": opp_stages_data,
-    }
-
-
-# Report Widgets
-
-import json
-from src.dashboard.models import DashboardReportWidget
-from src.reports.models import SavedReport
-from src.reports.service import ReportExecutor
-from src.reports.schemas import ReportDefinition
-from src.core.constants import HTTPStatus
-
-
-@router.get("/widgets", response_model=List[ReportWidgetResponse])
-async def list_report_widgets(
-    current_user: CurrentUser,
-    db: DBSession,
-):
-    """List the current user's dashboard report widgets."""
-    result = await db.execute(
-        select(DashboardReportWidget, SavedReport)
-        .join(SavedReport, DashboardReportWidget.report_id == SavedReport.id)
-        .where(DashboardReportWidget.user_id == current_user.id)
-        .order_by(DashboardReportWidget.position)
-    )
-    rows = result.all()
-    return [
-        ReportWidgetResponse(
-            id=widget.id,
-            user_id=widget.user_id,
-            report_id=widget.report_id,
-            report_name=report.name,
-            report_chart_type=report.chart_type,
-            position=widget.position,
-            width=widget.width,
-            is_visible=widget.is_visible,
-            created_at=widget.created_at,
-        )
-        for widget, report in rows
-    ]
-
-
-@router.post("/widgets", response_model=ReportWidgetResponse, status_code=HTTPStatus.CREATED)
-async def create_report_widget(
-    data: ReportWidgetCreate,
-    current_user: CurrentUser,
-    db: DBSession,
-):
-    """Pin a saved report to the dashboard as a widget."""
-    # Verify report exists and user has access
-    report_result = await db.execute(
-        select(SavedReport).where(
-            SavedReport.id == data.report_id,
-            or_(
-                SavedReport.created_by_id == current_user.id,
-                SavedReport.is_public == True,
-            ),
-        )
-    )
-    report = report_result.scalar_one_or_none()
-    if not report:
-        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Report not found")
-
-    widget = DashboardReportWidget(
-        user_id=current_user.id,
-        report_id=data.report_id,
-        position=data.position,
-        width=data.width,
-    )
-    db.add(widget)
-    await db.flush()
-    await db.refresh(widget)
-
-    return ReportWidgetResponse(
-        id=widget.id,
-        user_id=widget.user_id,
-        report_id=widget.report_id,
-        report_name=report.name,
-        report_chart_type=report.chart_type,
-        position=widget.position,
-        width=widget.width,
-        is_visible=widget.is_visible,
-        created_at=widget.created_at,
-    )
-
-
-@router.patch("/widgets/{widget_id}", response_model=ReportWidgetResponse)
-async def update_report_widget(
-    widget_id: int,
-    data: ReportWidgetUpdate,
-    current_user: CurrentUser,
-    db: DBSession,
-):
-    """Update a dashboard report widget's position, width, or visibility."""
-    result = await db.execute(
-        select(DashboardReportWidget).where(
-            DashboardReportWidget.id == widget_id,
-            DashboardReportWidget.user_id == current_user.id,
-        )
-    )
-    widget = result.scalar_one_or_none()
-    if not widget:
-        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Widget not found")
-
-    if data.position is not None:
-        widget.position = data.position
-    if data.width is not None:
-        widget.width = data.width
-    if data.is_visible is not None:
-        widget.is_visible = data.is_visible
-
-    await db.flush()
-    await db.refresh(widget)
-
-    # Fetch report for response
-    report_result = await db.execute(
-        select(SavedReport).where(SavedReport.id == widget.report_id)
-    )
-    report = report_result.scalar_one()
-
-    return ReportWidgetResponse(
-        id=widget.id,
-        user_id=widget.user_id,
-        report_id=widget.report_id,
-        report_name=report.name,
-        report_chart_type=report.chart_type,
-        position=widget.position,
-        width=widget.width,
-        is_visible=widget.is_visible,
-        created_at=widget.created_at,
-    )
-
-
-@router.delete("/widgets/{widget_id}", status_code=HTTPStatus.NO_CONTENT)
-async def delete_report_widget(
-    widget_id: int,
-    current_user: CurrentUser,
-    db: DBSession,
-):
-    """Remove a report widget from the dashboard."""
-    result = await db.execute(
-        select(DashboardReportWidget).where(
-            DashboardReportWidget.id == widget_id,
-            DashboardReportWidget.user_id == current_user.id,
-        )
-    )
-    widget = result.scalar_one_or_none()
-    if not widget:
-        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Widget not found")
-
-    await db.delete(widget)
-    await db.flush()
-
-
-@router.get("/widgets/{widget_id}/data")
-async def get_report_widget_data(
-    widget_id: int,
-    current_user: CurrentUser,
-    db: DBSession,
-):
-    """Execute the widget's underlying report and return chart data."""
-    result = await db.execute(
-        select(DashboardReportWidget, SavedReport)
-        .join(SavedReport, DashboardReportWidget.report_id == SavedReport.id)
-        .where(
-            DashboardReportWidget.id == widget_id,
-            DashboardReportWidget.user_id == current_user.id,
-        )
-    )
-    row = result.one_or_none()
-    if not row:
-        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Widget not found")
-
-    widget, report = row
-
-    definition = ReportDefinition(
-        entity_type=report.entity_type,
-        metric=report.metric,
-        metric_field=report.metric_field,
-        group_by=report.group_by,
-        date_group=report.date_group,
-        filters=json.loads(report.filters) if report.filters else None,
-        chart_type=report.chart_type,
-    )
-
-    executor = ReportExecutor(db, user_id=current_user.id)
-    report_result = await executor.execute(definition)
-
-    return {
-        "widget_id": widget.id,
-        "report_name": report.name,
-        "chart_type": report.chart_type,
-        "result": report_result,
     }
