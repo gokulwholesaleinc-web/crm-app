@@ -8,6 +8,11 @@ DEFAULT_CURRENCY = "USD"
 DEFAULT_PAGE_SIZE = 20
 MAX_PAGE_SIZE = 100
 
+# Time (seconds)
+SECONDS_PER_DAY = 86_400
+# 1 year; HTTP Cache-Control idiom for immutable hashed assets.
+CACHE_IMMUTABLE_ASSETS_MAX_AGE_SECONDS = 31_536_000
+
 # Default UI colors (used in whitelabel/theming)
 DEFAULT_PRIMARY_COLOR = "#6366f1"
 DEFAULT_SECONDARY_COLOR = "#8b5cf6"

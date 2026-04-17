@@ -5,6 +5,7 @@ from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 from src.core.constants import HTTPStatus, EntityNames, ENTITY_TYPE_PROPOSALS
+from src.core.http_errors import value_error_as_400
 from src.core.router_utils import (
     DBSession,
     CurrentUser,
@@ -278,11 +279,9 @@ async def generate_proposal(
     """Generate a proposal using AI based on an opportunity."""
     from src.proposals.ai_generator import generate_proposal as ai_generate
 
-    try:
+    with value_error_as_400():
         proposal = await ai_generate(db, request_data.opportunity_id, current_user.id)
-        return ProposalResponse.model_validate(proposal)
-    except ValueError as e:
-        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
+    return ProposalResponse.model_validate(proposal)
 
 
 @router.get("/public/{token}", response_model=ProposalPublicResponse)
@@ -347,7 +346,7 @@ async def accept_proposal_public(
 
     signer_ip = request.client.host if request.client else None
     signer_user_agent = request.headers.get("user-agent")
-    try:
+    with value_error_as_400():
         proposal = await service.accept_proposal_public(
             proposal,
             signer_name=accept_data.signer_name,
@@ -355,8 +354,6 @@ async def accept_proposal_public(
             signer_ip=signer_ip,
             signer_user_agent=signer_user_agent,
         )
-    except ValueError as e:
-        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
 
     branding_data = await service.get_branding_for_proposal(proposal)
     response = ProposalPublicResponse.model_validate(proposal)
@@ -389,15 +386,13 @@ async def reject_proposal_public(
     signer_ip = request.client.host if request.client else None
     signer_user_agent = request.headers.get("user-agent")
     reason = reject_data.reason if reject_data else None
-    try:
+    with value_error_as_400():
         proposal = await service.reject_proposal_public(
             proposal,
             reason=reason,
             signer_ip=signer_ip,
             signer_user_agent=signer_user_agent,
         )
-    except ValueError as e:
-        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
 
     branding_data = await service.get_branding_for_proposal(proposal)
     response = ProposalPublicResponse.model_validate(proposal)
@@ -483,11 +478,9 @@ async def send_proposal(
     service = ProposalService(db)
     proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
     check_ownership(proposal, current_user, EntityNames.PROPOSAL)
-    try:
-        attach_pdf = send_request.attach_pdf if send_request else False
+    attach_pdf = send_request.attach_pdf if send_request else False
+    with value_error_as_400():
         await service.send_proposal_email(proposal_id, current_user.id, attach_pdf)
-    except ValueError as e:
-        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
     # Refresh to return updated state
     proposal = await service.get_by_id(proposal_id)
 
@@ -511,10 +504,8 @@ async def get_proposal_pdf(
     service = ProposalService(db)
     proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
     check_ownership(proposal, current_user, EntityNames.PROPOSAL)
-    try:
+    with value_error_as_400():
         pdf_bytes = await service.generate_proposal_pdf(proposal_id, current_user.id)
-    except ValueError as e:
-        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
     filename = f"proposal-{proposal.proposal_number}.pdf"
     return Response(
         content=pdf_bytes,
@@ -533,10 +524,8 @@ async def accept_proposal(
     service = ProposalService(db)
     proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
     check_ownership(proposal, current_user, EntityNames.PROPOSAL)
-    try:
+    with value_error_as_400():
         proposal = await service.mark_accepted(proposal)
-    except ValueError as e:
-        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
 
     await emit(PROPOSAL_ACCEPTED, {
         "entity_id": proposal.id,
@@ -558,8 +547,6 @@ async def reject_proposal(
     service = ProposalService(db)
     proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
     check_ownership(proposal, current_user, EntityNames.PROPOSAL)
-    try:
+    with value_error_as_400():
         proposal = await service.mark_rejected(proposal)
-    except ValueError as e:
-        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
     return ProposalResponse.model_validate(proposal)

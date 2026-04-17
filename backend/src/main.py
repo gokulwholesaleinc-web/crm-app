@@ -30,6 +30,7 @@ from src.companies.router import router as companies_router
 from src.config import settings
 from src.contacts.router import router as contacts_router
 from src.contracts.router import router as contracts_router
+from src.core.constants import CACHE_IMMUTABLE_ASSETS_MAX_AGE_SECONDS
 from src.core.migrations import _run_production_migrations
 from src.core.permissions import require_manager_or_above
 from src.core.rate_limit import limiter
@@ -353,7 +354,9 @@ if FRONTEND_DIST.exists():
         if file_path.exists() and file_path.is_file():
             response = FileResponse(file_path)
             if file_path.suffix in _CACHEABLE_EXTENSIONS:
-                response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+                response.headers["Cache-Control"] = (
+                    f"public, max-age={CACHE_IMMUTABLE_ASSETS_MAX_AGE_SECONDS}, immutable"
+                )
             else:
                 response.headers["Cache-Control"] = "no-cache, must-revalidate"
             return response
