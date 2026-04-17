@@ -83,5 +83,3 @@ export function DuplicateWarningModal({
     </Modal>
   );
 }
-
-export default DuplicateWarningModal;
