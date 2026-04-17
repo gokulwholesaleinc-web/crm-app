@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
 from src.ai.conversation_manager import AIConversationManager
-from src.ai.tool_executor import AIToolExecutor, _summarize_result
+from src.ai.tool_executor import AIToolExecutor, _log_ai_action, _summarize_result
 from src.ai.query_tools import CRMQueryTools
 from src.ai.action_tools import CRMActionTools
 from src.ai.analytics_tools import CRMAnalyticsTools
@@ -360,26 +360,18 @@ class QueryProcessor:
         model_used: str = "gpt-4",
         tokens_used: int = None,
     ) -> None:
-        import json
-        from src.ai.models import AIActionLog
-        result_to_store = result
-        result_str = json.dumps(result)
-        if len(result_str) > 5000:
-            result_to_store = {"truncated": True, "summary": _summarize_result(result)}
-
-        log_entry = AIActionLog(
+        await _log_ai_action(
+            self.db,
             user_id=user_id,
             session_id=session_id,
             function_name=function_name,
             arguments=arguments,
-            result=result_to_store,
+            result=result,
             risk_level=risk_level,
             was_confirmed=was_confirmed,
             model_used=model_used,
             tokens_used=tokens_used,
         )
-        self.db.add(log_entry)
-        await self.db.flush()
 
     async def execute_confirmed_action(
         self,

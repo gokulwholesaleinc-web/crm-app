@@ -27,6 +27,38 @@ def _summarize_result(data: Dict[str, Any]) -> str:
     return "Completed"
 
 
+async def _log_ai_action(
+    db: AsyncSession,
+    user_id: int,
+    session_id: str,
+    function_name: str,
+    arguments: Dict[str, Any],
+    result: Dict[str, Any],
+    risk_level: str,
+    was_confirmed: bool,
+    model_used: str = "gpt-4",
+    tokens_used: int = None,
+) -> None:
+    result_to_store = result
+    result_str = json.dumps(result)
+    if len(result_str) > 5000:
+        result_to_store = {"truncated": True, "summary": _summarize_result(result)}
+
+    log_entry = AIActionLog(
+        user_id=user_id,
+        session_id=session_id,
+        function_name=function_name,
+        arguments=arguments,
+        result=result_to_store,
+        risk_level=risk_level,
+        was_confirmed=was_confirmed,
+        model_used=model_used,
+        tokens_used=tokens_used,
+    )
+    db.add(log_entry)
+    await db.flush()
+
+
 class AIToolExecutor:
     def __init__(self, db: AsyncSession, openai_client, tools: List[Dict], system_prompt: str):
         self.db = db
@@ -178,21 +210,15 @@ class AIToolExecutor:
         model_used: str = "gpt-4",
         tokens_used: int = None,
     ) -> None:
-        result_to_store = result
-        result_str = json.dumps(result)
-        if len(result_str) > 5000:
-            result_to_store = {"truncated": True, "summary": _summarize_result(result)}
-
-        log_entry = AIActionLog(
+        await _log_ai_action(
+            self.db,
             user_id=user_id,
             session_id=session_id,
             function_name=function_name,
             arguments=arguments,
-            result=result_to_store,
+            result=result,
             risk_level=risk_level,
             was_confirmed=was_confirmed,
             model_used=model_used,
             tokens_used=tokens_used,
         )
-        self.db.add(log_entry)
-        await self.db.flush()

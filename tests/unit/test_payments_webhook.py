@@ -140,7 +140,14 @@ def payment_service(db_session: AsyncSession) -> PaymentService:
 
 @pytest.fixture
 def patched_settings():
-    """Patch settings so process_webhook uses the hand-rolled fallback path."""
+    """Patch settings so process_webhook uses the hand-rolled fallback path.
+
+    Patch targets are `src.payments.service.*` (not `webhook_processor.*`)
+    because webhook_processor.process_webhook reads these via a deferred
+    `import src.payments.service as _svc_mod`. If that import is ever
+    changed to `from src.payments.service import _get_stripe`, this patch
+    silently stops working — update both sides together.
+    """
     with patch("src.payments.service._get_stripe", return_value=None):
         with patch("src.payments.service.settings") as mock_settings:
             mock_settings.STRIPE_WEBHOOK_SECRET = WEBHOOK_SECRET

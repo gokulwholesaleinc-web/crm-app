@@ -57,6 +57,9 @@ class WebhookProcessor:
         Raises ValueError on invalid signature, stale timestamp, or
         missing config.
         """
+        # Deferred module import (not `from ... import`) so tests can patch
+        # `src.payments.service.settings` and `_get_stripe` and have the
+        # patches take effect here via Python's sys.modules cache.
         import src.payments.service as _svc_mod
         _settings = _svc_mod.settings
         webhook_secret = getattr(_settings, "STRIPE_WEBHOOK_SECRET", "")
