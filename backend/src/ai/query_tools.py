@@ -89,7 +89,7 @@ class CRMQueryTools:
         result = await self.db.execute(
             select(
                 PipelineStage.name,
-                func.count(Opportunity.id).label("count"),
+                func.count(Opportunity.id).label("n"),
                 func.sum(Opportunity.amount).label("total"),
             )
             .outerjoin(Opportunity)
@@ -106,11 +106,11 @@ class CRMQueryTools:
             amount = float(row.total or 0)
             stages.append({
                 "stage": row.name,
-                "deals": row.count or 0,
+                "deals": row.n or 0,
                 "value": amount,
             })
             total_value += amount
-            total_deals += row.count or 0
+            total_deals += row.n or 0
 
         return {
             "total_deals": total_deals,
@@ -302,7 +302,7 @@ class CRMQueryTools:
         result = await self.db.execute(
             select(
                 Payment.status,
-                func.count(Payment.id).label("count"),
+                func.count(Payment.id).label("n"),
                 func.sum(Payment.amount).label("total"),
             ).group_by(Payment.status)
         )
@@ -313,11 +313,11 @@ class CRMQueryTools:
         for row in result.all():
             amount = float(row.total or 0)
             by_status[row.status] = {
-                "count": row.count or 0,
+                "count": row.n or 0,
                 "total": amount,
             }
             grand_total += amount
-            total_count += row.count or 0
+            total_count += row.n or 0
 
         return {
             "total_payments": total_count,
@@ -373,15 +373,15 @@ class CRMQueryTools:
         result = await self.db.execute(
             select(
                 Campaign.status,
-                func.count(Campaign.id).label("count"),
+                func.count(Campaign.id).label("n"),
             ).group_by(Campaign.status)
         )
 
         by_status = {}
         total = 0
         for row in result.all():
-            by_status[row.status] = row.count or 0
-            total += row.count or 0
+            by_status[row.status] = row.n or 0
+            total += row.n or 0
 
         return {"total_campaigns": total, "by_status": by_status}
 

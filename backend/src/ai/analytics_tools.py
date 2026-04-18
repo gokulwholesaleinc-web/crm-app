@@ -33,7 +33,7 @@ class CRMAnalyticsTools:
             select(
                 PipelineStage.name,
                 PipelineStage.probability,
-                func.count(Opportunity.id).label("count"),
+                func.count(Opportunity.id).label("n"),
                 func.sum(Opportunity.amount).label("total"),
                 func.avg(Opportunity.amount).label("avg_amount"),
             )
@@ -60,7 +60,7 @@ class CRMAnalyticsTools:
             weighted = amount * (row.probability / 100)
             stages.append({
                 "stage": row.name,
-                "deals": row.count or 0,
+                "deals": row.n or 0,
                 "total_value": amount,
                 "avg_deal_size": round(avg, 2),
                 "probability": row.probability,
@@ -68,7 +68,7 @@ class CRMAnalyticsTools:
             })
             total_value += amount
             total_weighted += weighted
-            total_deals += row.count or 0
+            total_deals += row.n or 0
 
         return {
             "report_type": "pipeline",
@@ -140,7 +140,7 @@ class CRMAnalyticsTools:
                 PipelineStage.probability,
                 PipelineStage.is_won,
                 PipelineStage.is_lost,
-                func.count(Opportunity.id).label("count"),
+                func.count(Opportunity.id).label("n"),
                 func.sum(Opportunity.amount).label("total"),
                 func.avg(Opportunity.amount).label("avg_amount"),
             )
@@ -162,7 +162,7 @@ class CRMAnalyticsTools:
             amount = float(row.total or 0)
             avg = float(row.avg_amount or 0)
             w_value = amount * (row.probability / 100)
-            count = row.count or 0
+            count = row.n or 0
 
             stages.append({
                 "stage": row.name,
@@ -219,7 +219,7 @@ class CRMAnalyticsTools:
 
         prev_result = await self.db.execute(
             select(
-                func.count(Opportunity.id).label("count"),
+                func.count(Opportunity.id).label("n"),
                 func.sum(Opportunity.amount).label("total"),
             )
             .join(PipelineStage)

@@ -52,7 +52,7 @@ class ChartDataGenerator:
                 PipelineStage.name,
                 PipelineStage.color,
                 PipelineStage.order,
-                func.count(Opportunity.id).label("count"),
+                func.count(Opportunity.id).label("n"),
                 func.sum(Opportunity.amount).label("total_amount"),
             )
             .outerjoin(
@@ -72,7 +72,7 @@ class ChartDataGenerator:
         for row in result.all():
             data.append({
                 "label": row.name,
-                "value": row.count or 0,
+                "value": row.n or 0,
                 "color": row.color,
             })
 
@@ -89,7 +89,7 @@ class ChartDataGenerator:
         self._apply_date_filter(filters, Lead.created_at)
         query = select(
             Lead.status,
-            func.count(Lead.id).label("count"),
+            func.count(Lead.id).label("n"),
         )
         if filters:
             query = query.where(and_(*filters))
@@ -109,7 +109,7 @@ class ChartDataGenerator:
         for row in result.all():
             data.append({
                 "label": row.status.capitalize(),
-                "value": row.count,
+                "value": row.n,
                 "color": colors.get(row.status, "#6b7280"),
             })
 
@@ -136,7 +136,7 @@ class ChartDataGenerator:
         query = (
             select(
                 LeadSource.name,
-                func.count(Lead.id).label("count"),
+                func.count(Lead.id).label("n"),
             )
             .outerjoin(
                 Lead,
@@ -150,10 +150,10 @@ class ChartDataGenerator:
 
         data = []
         for row in result.all():
-            if row.count > 0:
+            if row.n > 0:
                 data.append({
                     "label": row.name,
-                    "value": row.count,
+                    "value": row.n,
                 })
 
         return {
@@ -213,7 +213,7 @@ class ChartDataGenerator:
         result = await self.db.execute(
             select(
                 Activity.activity_type,
-                func.count(Activity.id).label("count"),
+                func.count(Activity.id).label("n"),
             )
             .where(and_(*filters))
             .group_by(Activity.activity_type)
@@ -231,7 +231,7 @@ class ChartDataGenerator:
         for row in result.all():
             data.append({
                 "label": row.activity_type.capitalize(),
-                "value": row.count,
+                "value": row.n,
                 "color": colors.get(row.activity_type, "#6b7280"),
             })
 
@@ -253,7 +253,7 @@ class ChartDataGenerator:
         result = await self.db.execute(
             select(
                 week_col,
-                func.count(Lead.id).label("count"),
+                func.count(Lead.id).label("n"),
             )
             .where(and_(*filters))
             .group_by(week_col)
@@ -265,7 +265,7 @@ class ChartDataGenerator:
             if row.week:
                 data.append({
                     "label": f"Week of {row.week.strftime('%b %d')}",
-                    "value": row.count,
+                    "value": row.n,
                 })
 
         return {
@@ -294,12 +294,12 @@ class ChartDataGenerator:
         result = await self.db.execute(
             select(
                 Lead.status,
-                func.count(Lead.id).label("count"),
+                func.count(Lead.id).label("n"),
             )
             .where(and_(*filters))
             .group_by(Lead.status)
         )
-        status_counts = {row.status: row.count for row in result.all()}
+        status_counts = {row.status: row.n for row in result.all()}
 
         stages = []
         for stage in funnel_stages:
