@@ -182,12 +182,12 @@ class CampaignService(CRUDService[Campaign, CampaignCreate, CampaignUpdate]):
         result = await self.db.execute(
             select(
                 CampaignMember.status,
-                func.count(CampaignMember.id).label("count")
+                func.count(CampaignMember.id).label("n")
             )
             .where(CampaignMember.campaign_id == campaign_id)
             .group_by(CampaignMember.status)
         )
-        status_counts = {row.status: row.count for row in result.all()}
+        status_counts = {row.status: row.n for row in result.all()}
 
         total = sum(status_counts.values())
         pending = status_counts.get("pending", 0)

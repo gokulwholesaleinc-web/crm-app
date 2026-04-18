@@ -74,12 +74,12 @@ class ExpenseService:
         result = await self.db.execute(
             select(
                 func.coalesce(func.sum(Expense.amount), 0).label("total"),
-                func.count(Expense.id).label("count"),
+                func.count(Expense.id).label("n"),
             ).where(Expense.company_id == company_id)
         )
         row = result.one()
         total_amount = float(row.total)
-        count = row.count
+        count = row.n
 
         # Category breakdown
         cat_result = await self.db.execute(
