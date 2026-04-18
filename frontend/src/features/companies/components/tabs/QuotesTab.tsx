@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom';
 import { formatCurrency, formatDate } from '../../../../utils/formatters';
 import { StatusBadge } from '../../../../components/ui/Badge';
-import type { StatusType } from '../../../../components/ui/Badge';
 import type { Quote } from '../../../../types';
 
 interface QuotesTabProps {
@@ -42,7 +41,7 @@ export function QuotesTab({ companyId, quotes }: QuotesTabProps) {
                     </Link>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <StatusBadge status={quote.status as StatusType} size="sm" showDot={false} />
+                    <StatusBadge status={quote.status} size="sm" showDot={false} />
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900 dark:text-gray-100" style={{ fontVariantNumeric: 'tabular-nums' }}>
                     {formatCurrency(quote.total)}

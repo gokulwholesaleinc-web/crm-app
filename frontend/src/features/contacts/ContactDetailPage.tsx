@@ -11,7 +11,6 @@ import { useQuotes } from '../../hooks/useQuotes';
 import { useProposals } from '../../hooks/useProposals';
 import { formatDate, formatPhoneNumber, formatCurrency } from '../../utils/formatters';
 import { StatusBadge } from '../../components/ui';
-import type { StatusType } from '../../components/ui/Badge';
 import type { ContactUpdate, Quote, Proposal } from '../../types';
 import type { ThreadEmailItem } from '../../types/email';
 
@@ -340,7 +339,7 @@ function ContactDetailPage() {
                         </Link>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <StatusBadge status={quote.status as StatusType} size="sm" showDot={false} />
+                        <StatusBadge status={quote.status} size="sm" showDot={false} />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900 dark:text-gray-100" style={{ fontVariantNumeric: 'tabular-nums' }}>
                         {formatCurrency(quote.total)}
@@ -388,7 +387,7 @@ function ContactDetailPage() {
                         </Link>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <StatusBadge status={proposal.status as StatusType} size="sm" showDot={false} />
+                        <StatusBadge status={proposal.status} size="sm" showDot={false} />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {formatDate(proposal.created_at)}

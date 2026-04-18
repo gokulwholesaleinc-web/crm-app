@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { PlusIcon, CubeIcon } from '@heroicons/react/24/outline';
 import { Button, Modal, ConfirmDialog, StatusBadge, PaginationBar } from '../../components/ui';
-import type { StatusType } from '../../components/ui/Badge';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { QuoteForm } from './QuoteForm';
 import { BundleManager } from './BundleManager';
@@ -232,7 +231,7 @@ function QuotesPage() {
                       </Link>
                       <p className="text-xs text-gray-500 dark:text-gray-400">{quote.quote_number}</p>
                     </div>
-                    <StatusBadge status={quote.status as StatusType} size="sm" showDot={false} className="flex-shrink-0" />
+                    <StatusBadge status={quote.status} size="sm" showDot={false} className="flex-shrink-0" />
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="font-medium text-gray-900 dark:text-gray-100" style={{ fontVariantNumeric: 'tabular-nums' }}>
@@ -311,7 +310,7 @@ function QuotesPage() {
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <StatusBadge status={quote.status as StatusType} size="sm" showDot={false} />
+                        <StatusBadge status={quote.status} size="sm" showDot={false} />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900 dark:text-gray-100" style={{ fontVariantNumeric: 'tabular-nums' }}>
                         {formatCurrency(quote.total, quote.currency)}

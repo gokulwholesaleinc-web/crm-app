@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeftIcon, DocumentArrowDownIcon, EnvelopeIcon } from '@heroicons/react/24/outline';
 import { StatusBadge } from '../../components/ui';
-import type { StatusType } from '../../components/ui/Badge';
 import { usePayment } from '../../hooks/usePayments';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
@@ -77,7 +76,7 @@ function PaymentDetailPage() {
               <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">
                 Payment #{payment.id}
               </h1>
-              <StatusBadge status={payment.status as StatusType} size="sm" showDot={false} />
+              <StatusBadge status={payment.status} size="sm" showDot={false} />
             </div>
             {payment.stripe_payment_intent_id && (
               <p className="text-sm text-gray-500 dark:text-gray-400">{payment.stripe_payment_intent_id}</p>

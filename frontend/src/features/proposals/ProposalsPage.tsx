@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { PlusIcon, SparklesIcon, DocumentDuplicateIcon } from '@heroicons/react/24/outline';
 import { Button, Modal, ConfirmDialog, StatusBadge, PaginationBar } from '../../components/ui';
-import type { StatusType } from '../../components/ui/Badge';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { ProposalForm } from './ProposalForm';
 import { AIProposalGenerator } from './AIProposalGenerator';
@@ -282,7 +281,7 @@ function ProposalsPage() {
                       </p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">{proposal.proposal_number}</p>
                     </Link>
-                    <StatusBadge status={proposal.status as StatusType} size="sm" showDot={false} className="flex-shrink-0" />
+                    <StatusBadge status={proposal.status} size="sm" showDot={false} className="flex-shrink-0" />
                   </div>
                   <div className="mt-2 space-y-1 text-sm text-gray-500 dark:text-gray-400">
                     <p className="truncate">
@@ -356,7 +355,7 @@ function ProposalsPage() {
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <StatusBadge status={proposal.status as StatusType} size="sm" showDot={false} />
+                        <StatusBadge status={proposal.status} size="sm" showDot={false} />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500 dark:text-gray-400" style={{ fontVariantNumeric: 'tabular-nums' }}>
                         {proposal.view_count}
