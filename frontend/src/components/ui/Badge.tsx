@@ -101,7 +101,16 @@ export type StatusType =
   | 'expired'
   | 'succeeded'
   | 'failed'
-  | 'refunded';
+  | 'refunded'
+  // Stripe subscription statuses
+  | 'active'
+  | 'canceled'
+  | 'incomplete'
+  | 'incomplete_expired'
+  | 'past_due'
+  | 'paused'
+  | 'trialing'
+  | 'unpaid';
 
 const statusConfig: Record<StatusType, { variant: BadgeVariant; label: string }> = {
   new: { variant: 'blue', label: 'New' },
@@ -126,10 +135,20 @@ const statusConfig: Record<StatusType, { variant: BadgeVariant; label: string }>
   succeeded: { variant: 'green', label: 'Succeeded' },
   failed: { variant: 'red', label: 'Failed' },
   refunded: { variant: 'purple', label: 'Refunded' },
+  active: { variant: 'green', label: 'Active' },
+  canceled: { variant: 'gray', label: 'Canceled' },
+  incomplete: { variant: 'yellow', label: 'Incomplete' },
+  incomplete_expired: { variant: 'gray', label: 'Incomplete (expired)' },
+  past_due: { variant: 'red', label: 'Past due' },
+  paused: { variant: 'gray', label: 'Paused' },
+  trialing: { variant: 'blue', label: 'Trialing' },
+  unpaid: { variant: 'red', label: 'Unpaid' },
 };
 
 export interface StatusBadgeProps {
-  status: StatusType;
+  // Accepts any string so upstream components don't need `as StatusType` casts.
+  // Unknown or missing statuses fall back to a gray badge showing the raw value.
+  status: StatusType | string | null | undefined;
   size?: BadgeSize;
   showDot?: boolean;
   className?: string;
@@ -141,7 +160,10 @@ export function StatusBadge({
   showDot = true,
   className,
 }: StatusBadgeProps) {
-  const config = statusConfig[status];
+  const config = statusConfig[status as StatusType] ?? {
+    variant: 'gray' as const,
+    label: status ?? 'Unknown',
+  };
 
   return (
     <Badge

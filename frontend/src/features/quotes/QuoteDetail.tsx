@@ -12,7 +12,6 @@ import {
   ArrowDownTrayIcon,
 } from '@heroicons/react/24/outline';
 import { Button, Modal, ConfirmDialog, StatusBadge } from '../../components/ui';
-import type { StatusType } from '../../components/ui/Badge';
 import {
   useQuote,
   useUpdateQuote,
@@ -224,7 +223,7 @@ function QuoteDetailPage() {
               <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">
                 {quote.title}
               </h1>
-              <StatusBadge status={quote.status as StatusType} size="sm" showDot={false} />
+              <StatusBadge status={quote.status} size="sm" showDot={false} />
             </div>
             <p className="text-sm text-gray-500 dark:text-gray-400">{quote.quote_number}</p>
           </div>

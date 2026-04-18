@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom';
 import { formatDate } from '../../../../utils/formatters';
 import { StatusBadge } from '../../../../components/ui/Badge';
-import type { StatusType } from '../../../../components/ui/Badge';
 import type { Proposal } from '../../../../types';
 
 interface ProposalsTabProps {
@@ -40,7 +39,7 @@ export function ProposalsTab({ proposals }: ProposalsTabProps) {
                     </Link>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <StatusBadge status={proposal.status as StatusType} size="sm" showDot={false} />
+                    <StatusBadge status={proposal.status} size="sm" showDot={false} />
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                     {formatDate(proposal.created_at)}

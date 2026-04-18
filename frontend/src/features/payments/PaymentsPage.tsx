@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { StatusBadge, Button, PaginationBar } from '../../components/ui';
-import type { StatusType } from '../../components/ui/Badge';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { usePayments, useSubscriptions, useCancelSubscription } from '../../hooks/usePayments';
 import { SendInvoiceModal } from './components/SendInvoiceModal';
@@ -204,7 +203,7 @@ function PaymentsPage() {
                           {payment.customer?.name ?? payment.customer?.email ?? 'No customer'}
                         </p>
                       </Link>
-                      <StatusBadge status={payment.status as StatusType} size="sm" showDot={false} className="flex-shrink-0" />
+                      <StatusBadge status={payment.status} size="sm" showDot={false} className="flex-shrink-0" />
                     </div>
                     <div className="mt-2 flex items-center justify-between text-sm">
                       <span className="font-medium text-gray-900 dark:text-gray-100" style={{ fontVariantNumeric: 'tabular-nums' }}>
@@ -261,7 +260,7 @@ function PaymentsPage() {
                           {payment.customer?.name ?? payment.customer?.email ?? '-'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <StatusBadge status={payment.status as StatusType} size="sm" showDot={false} />
+                          <StatusBadge status={payment.status} size="sm" showDot={false} />
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900 dark:text-gray-100" style={{ fontVariantNumeric: 'tabular-nums' }}>
                           {formatCurrency(payment.amount, payment.currency)}
@@ -341,7 +340,7 @@ function PaymentsPage() {
                           {sub.stripe_subscription_id}
                         </p>
                       </div>
-                      <StatusBadge status={sub.status as StatusType} size="sm" showDot={false} className="flex-shrink-0" />
+                      <StatusBadge status={sub.status} size="sm" showDot={false} className="flex-shrink-0" />
                     </div>
                     <div className="mt-2 flex items-center justify-between text-sm">
                       <span className="text-gray-500 dark:text-gray-400">
@@ -394,7 +393,7 @@ function PaymentsPage() {
                           {sub.customer?.name ?? sub.customer?.email ?? `#${sub.id}`}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <StatusBadge status={sub.status as StatusType} size="sm" showDot={false} />
+                          <StatusBadge status={sub.status} size="sm" showDot={false} />
                           {sub.cancel_at_period_end && (
                             <span className="ml-2 text-xs text-orange-600 dark:text-orange-400">
                               Canceling

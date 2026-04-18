@@ -10,7 +10,6 @@ import {
   ClipboardDocumentIcon,
 } from '@heroicons/react/24/outline';
 import { Button, Modal, ConfirmDialog, StatusBadge } from '../../components/ui';
-import type { StatusType } from '../../components/ui/Badge';
 import {
   useProposal,
   useUpdateProposal,
@@ -171,7 +170,7 @@ function ProposalDetailPage() {
               <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">
                 {proposal.title}
               </h1>
-              <StatusBadge status={proposal.status as StatusType} size="sm" showDot={false} />
+              <StatusBadge status={proposal.status} size="sm" showDot={false} />
             </div>
             <p className="text-sm text-gray-500 dark:text-gray-400">{proposal.proposal_number}</p>
           </div>
