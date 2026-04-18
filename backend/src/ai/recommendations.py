@@ -53,6 +53,8 @@ class RecommendationEngine:
         recommendations = []
 
         for task in overdue_tasks:
+            if task.due_date is None:
+                continue
             days_overdue = (today - task.due_date).days
             recommendations.append({
                 "type": "overdue_task",
@@ -116,6 +118,8 @@ class RecommendationEngine:
         recommendations = []
 
         for opp in at_risk:
+            if opp.expected_close_date is None:
+                continue
             days_past = (today - opp.expected_close_date).days
             recommendations.append({
                 "type": "at_risk_deal",
