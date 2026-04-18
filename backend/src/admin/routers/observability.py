@@ -90,12 +90,12 @@ async def get_team_overview(
     lead_counts = dict(
         (await db.execute(
             select(Lead.owner_id, func.count(Lead.id)).group_by(Lead.owner_id)
-        )).all()
+        )).tuples().all()
     )
     opp_counts = dict(
         (await db.execute(
             select(Opportunity.owner_id, func.count(Opportunity.id)).group_by(Opportunity.owner_id)
-        )).all()
+        )).tuples().all()
     )
 
     # Pipeline value per user (open deals only)
@@ -108,7 +108,7 @@ async def get_team_overview(
         .where(PipelineStage.is_won == False, PipelineStage.is_lost == False)
         .group_by(Opportunity.owner_id)
     )
-    pipeline_values = dict(pipeline_result.all())
+    pipeline_values = dict(pipeline_result.tuples().all())
 
     # Won deals per user
     won_result = await db.execute(
@@ -120,7 +120,7 @@ async def get_team_overview(
         .where(PipelineStage.is_won == True)
         .group_by(Opportunity.owner_id)
     )
-    won_counts = dict(won_result.all())
+    won_counts = dict(won_result.tuples().all())
 
     overview = []
     for u in users:
@@ -166,7 +166,7 @@ async def get_activity_feed(
         users_result = await db.execute(
             select(User.id, User.full_name).where(User.id.in_(user_ids))
         )
-        user_names = dict(users_result.all())
+        user_names = dict(users_result.tuples().all())
 
     entries = []
     for log in logs:
