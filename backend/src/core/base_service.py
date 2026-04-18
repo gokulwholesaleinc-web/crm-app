@@ -2,9 +2,10 @@
 
 from collections import defaultdict
 from datetime import UTC, datetime
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, Protocol, TypeVar
 
 from pydantic import BaseModel
+from sqlalchemy import delete as sa_delete
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute
@@ -12,7 +13,12 @@ from sqlalchemy.orm import InstrumentedAttribute
 from src.core.constants import DEFAULT_PAGE_SIZE
 from src.core.models import EntityTag, Tag
 
-ModelType = TypeVar("ModelType")
+
+class _Entity(Protocol):
+    id: Any
+
+
+ModelType = TypeVar("ModelType", bound=_Entity)
 CreateSchemaType = TypeVar("CreateSchemaType", bound=BaseModel)
 UpdateSchemaType = TypeVar("UpdateSchemaType", bound=BaseModel)
 
@@ -65,8 +71,10 @@ class BaseService(Generic[ModelType]):
 
         if order_by is not None:
             query = query.order_by(order_by)
-        elif hasattr(self.model, 'created_at'):
-            query = query.order_by(self.model.created_at.desc())
+        else:
+            created_at = getattr(self.model, 'created_at', None)
+            if created_at is not None:
+                query = query.order_by(created_at.desc())
 
         offset = (page - 1) * page_size
         query = query.offset(offset).limit(page_size)
@@ -76,12 +84,17 @@ class BaseService(Generic[ModelType]):
         return items, total
 
     def apply_owner_filter(self, query, owner_id: int | None, shared_entity_ids: list[int] | None = None):
-        """Filter by owner_id, including shared entities if present."""
+        """Filter by owner_id, including shared entities if present.
+
+        Only callable on services whose model has owner_id — not enforced at type level
+        because not every BaseService subclass owns an owner_id column.
+        """
         if not owner_id:
             return query
+        model_owner_id: Any = self.model.owner_id  # type: ignore[attr-defined]
         if shared_entity_ids:
-            return query.where(or_(self.model.owner_id == owner_id, self.model.id.in_(shared_entity_ids)))
-        return query.where(self.model.owner_id == owner_id)
+            return query.where(or_(model_owner_id == owner_id, self.model.id.in_(shared_entity_ids)))
+        return query.where(model_owner_id == owner_id)
 
     async def get_multi(
         self,
@@ -138,8 +151,10 @@ class CRUDService(BaseService[ModelType], Generic[ModelType, CreateSchemaType, U
         await self.db.flush()
         await self.db.refresh(instance)
 
-        if hasattr(data, 'tag_ids') and data.tag_ids and hasattr(self, 'update_tags'):
-            await self.update_tags(instance.id, data.tag_ids)
+        tag_ids = getattr(data, 'tag_ids', None)
+        update_tags = getattr(self, 'update_tags', None)
+        if tag_ids and update_tags:
+            await update_tags(instance.id, tag_ids)
             await self.db.refresh(instance)
 
         return instance
@@ -157,21 +172,24 @@ class CRUDService(BaseService[ModelType], Generic[ModelType, CreateSchemaType, U
             setattr(instance, field, value)
 
         if hasattr(instance, 'updated_by_id'):
-            instance.updated_by_id = user_id
+            instance.updated_by_id = user_id  # type: ignore[attr-defined]
 
         await self.db.flush()
         await self.db.refresh(instance)
 
-        if hasattr(data, 'tag_ids') and data.tag_ids is not None and hasattr(self, 'update_tags'):
-            await self.update_tags(instance.id, data.tag_ids)
+        tag_ids = getattr(data, 'tag_ids', None)
+        update_tags = getattr(self, 'update_tags', None)
+        if tag_ids is not None and update_tags:
+            await update_tags(instance.id, tag_ids)
             await self.db.refresh(instance)
 
         return instance
 
     async def delete(self, instance: ModelType) -> None:
         """Delete a record, clearing tags if TaggableServiceMixin is present."""
-        if hasattr(self, 'clear_tags'):
-            await self.clear_tags(instance.id)
+        clear_tags = getattr(self, 'clear_tags', None)
+        if clear_tags:
+            await clear_tags(instance.id)
         await self.db.delete(instance)
         await self.db.flush()
 
@@ -231,6 +249,7 @@ class TaggableServiceMixin:
 
     db: AsyncSession
     entity_type: str
+    model: type[Any]
 
     async def get_tags(self, entity_id: int) -> list[Tag]:
         result = await self.db.execute(
@@ -281,7 +300,7 @@ class TaggableServiceMixin:
         """
         # Remove existing tags
         await self.db.execute(
-            EntityTag.__table__.delete().where(
+            sa_delete(EntityTag).where(
                 EntityTag.entity_type == self.entity_type,
                 EntityTag.entity_id == entity_id,
             )
@@ -323,7 +342,7 @@ class TaggableServiceMixin:
     async def remove_tags(self, entity_id: int, tag_ids: list[int]) -> None:
         """Remove specific tags from an entity."""
         await self.db.execute(
-            EntityTag.__table__.delete().where(
+            sa_delete(EntityTag).where(
                 EntityTag.entity_type == self.entity_type,
                 EntityTag.entity_id == entity_id,
                 EntityTag.tag_id.in_(tag_ids),
@@ -334,7 +353,7 @@ class TaggableServiceMixin:
     async def clear_tags(self, entity_id: int) -> None:
         """Remove all tags from an entity."""
         await self.db.execute(
-            EntityTag.__table__.delete().where(
+            sa_delete(EntityTag).where(
                 EntityTag.entity_type == self.entity_type,
                 EntityTag.entity_id == entity_id,
             )
