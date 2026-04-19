@@ -299,9 +299,9 @@ class GoogleCalendarService:
         await self.db.flush()
         return credential
 
-    def _activity_to_event(self, activity: Activity) -> dict:
+    def _activity_to_event(self, activity: Activity) -> dict[str, Any]:
         """Convert a CRM activity to a Google Calendar event payload."""
-        event = {
+        event: dict[str, Any] = {
             "summary": activity.subject or "CRM Activity",
             "description": activity.description or "",
         }
