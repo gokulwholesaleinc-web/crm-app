@@ -19,6 +19,12 @@ const STATUS_BADGE: Record<string, { variant: BadgeVariant; label: string }> = {
   received: { variant: 'blue', label: 'Received' },
 };
 
+const REPLY_ARROW_ICON = (
+  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+  </svg>
+);
+
 function formatTimestamp(dateString: string): string {
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: 'medium',
@@ -182,9 +188,7 @@ function EmailBubble({
             className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 focus-visible:outline-none focus-visible:underline"
             aria-label={`Reply to email from ${email.from_email || 'sender'}`}
           >
-            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-            </svg>
+            {REPLY_ARROW_ICON}
             Reply
           </button>
         )}
@@ -211,15 +215,9 @@ function ThreadCard({
   const headerId = `thread-${group.key}`;
   const panelId = `panel-${group.key}`;
 
-  // Reply to the newest message so outbound-only threads stay repliable.
-  // Backend _find_thread_context resolves the Gmail threadId by entity, so
-  // direction of the picked message doesn't affect threading correctness.
-  const latestMessage = group.messages[group.messages.length - 1];
-
-  const handleReplyClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (onReply && latestMessage) onReply(latestMessage);
-  };
+  // Reply targets the newest message so outbound-only threads stay repliable.
+  // Messages are sorted ascending by timestamp above, so the last entry is newest.
+  const latestMessage = group.messages.at(-1);
 
   return (
     <section
@@ -266,13 +264,14 @@ function ThreadCard({
         {onReply && latestMessage && (
           <button
             type="button"
-            onClick={handleReplyClick}
+            onClick={(e) => {
+              e.stopPropagation();
+              onReply(latestMessage);
+            }}
             className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 shrink-0"
             aria-label={`Reply to thread: ${group.subject || '(No subject)'}`}
           >
-            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-            </svg>
+            {REPLY_ARROW_ICON}
             Reply
           </button>
         )}
