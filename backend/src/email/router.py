@@ -154,7 +154,7 @@ async def inbound_webhook(request: Request, db: DBSession):
     body_text = data.get("text")
     if email_id and not body_html and app_settings.RESEND_API_KEY:
         try:
-            import resend
+            import resend  # pyright: ignore[reportMissingImports]
             resend.api_key = app_settings.RESEND_API_KEY
             full_email = resend.Emails.get(email_id)
             body_html = getattr(full_email, "html", None) or body_html
