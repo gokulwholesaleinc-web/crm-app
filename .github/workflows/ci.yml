@@ -160,10 +160,12 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: backend/requirements-dev.txt
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
 
-      - name: Install dev dependencies
-        run: pip install -r backend/requirements-dev.txt
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
 
-      - name: Run pyright (advisory)
-        run: cd backend && pyright src || true
+      - name: Run pyright
+        run: cd backend && pyright src

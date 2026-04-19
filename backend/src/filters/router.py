@@ -25,7 +25,7 @@ router = APIRouter(prefix="/api/filters", tags=["filters"])
 ENTITY_MODEL_MAP = {}
 
 
-def _get_entity_model(entity_type: str):
+def _get_entity_model(entity_type: str) -> Any:
     """Lazily load and cache entity models to avoid circular imports."""
     if not ENTITY_MODEL_MAP:
         from src.activities.models import Activity

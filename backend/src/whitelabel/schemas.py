@@ -25,7 +25,8 @@ def _validate_url_field(v: str | None, info: ValidationInfo) -> str | None:
     if not stripped:
         return None
     if not stripped.lower().startswith(('http://', 'https://')):
-        label = _URL_FIELD_LABELS.get(info.field_name, info.field_name)
+        field_name = info.field_name or ''
+        label = _URL_FIELD_LABELS.get(field_name, field_name)
         raise ValueError(f'{label} must start with http:// or https://')
     return stripped
 

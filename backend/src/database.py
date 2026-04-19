@@ -1,9 +1,10 @@
 import logging
 import os
 import ssl as ssl_module
+from collections.abc import AsyncGenerator
 
 import sqlalchemy.exc
-from sqlalchemy import MetaData
+from sqlalchemy import MetaData, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -77,7 +78,7 @@ async_session_maker = async_sessionmaker(
 )
 
 
-async def get_db() -> AsyncSession:
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """Dependency for getting async database session."""
     async with async_session_maker() as session:
         try:
@@ -94,5 +95,5 @@ async def get_db() -> AsyncSession:
 async def init_db():
     """Initialize database tables."""
     async with engine.begin() as conn:
-        await conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.create_all)

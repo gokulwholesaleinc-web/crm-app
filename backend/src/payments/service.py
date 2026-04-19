@@ -623,20 +623,23 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
                 **invoice_params,
                 idempotency_key=idem_key,
             )
+            if not invoice.id:
+                raise ValueError("Stripe returned an invoice without an id")
+            invoice_id: str = invoice.id
 
             stripe.InvoiceItem.create(
                 customer=customer.stripe_customer_id,
                 amount=amount_cents,
                 currency=currency.lower(),
                 description=description,
-                invoice=invoice.id,
+                invoice=invoice_id,
                 idempotency_key=f"{idem_key}_item",
             )
 
-            invoice = stripe.Invoice.finalize_invoice(invoice.id)
-            invoice = stripe.Invoice.send_invoice(invoice.id)
+            invoice = stripe.Invoice.finalize_invoice(invoice_id)
+            invoice = stripe.Invoice.send_invoice(invoice_id)
         except Exception as exc:
-            if invoice and hasattr(invoice, "id"):
+            if invoice and invoice.id:
                 try:
                     stripe.Invoice.void_invoice(invoice.id)
                 except Exception:
