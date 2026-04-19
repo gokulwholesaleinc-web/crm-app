@@ -80,7 +80,7 @@ def _format_date_label(dt, date_group: str) -> str:
 class ReportExecutor:
     """Executes custom report definitions against the database."""
 
-    def __init__(self, db: AsyncSession, user_id: int = None, is_admin: bool = False):
+    def __init__(self, db: AsyncSession, user_id: int | None = None, is_admin: bool = False):
         self.db = db
         self.user_id = user_id
         self.is_admin = is_admin

@@ -18,7 +18,7 @@ class RevenueForecast:
     async def get_forecast(
         self,
         months_ahead: int = 6,
-        owner_id: int = None,
+        owner_id: int | None = None,
     ) -> dict[str, Any]:
         """
         Generate revenue forecast for the specified period.
@@ -103,7 +103,7 @@ class RevenueForecast:
             "currency": "USD",  # Could be made configurable
         }
 
-    async def get_pipeline_summary(self, owner_id: int = None) -> dict[str, Any]:
+    async def get_pipeline_summary(self, owner_id: int | None = None) -> dict[str, Any]:
         """Get summary of current pipeline value."""
         # Query all open opportunities
         query = (

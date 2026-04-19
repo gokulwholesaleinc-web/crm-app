@@ -22,8 +22,8 @@ class CRMQueryTools:
 
     async def search_contacts(
         self,
-        search_term: str = None,
-        company: str = None,
+        search_term: str | None = None,
+        company: str | None = None,
     ) -> dict[str, Any]:
         query = select(Contact).limit(10)
 
@@ -51,9 +51,9 @@ class CRMQueryTools:
 
     async def search_leads(
         self,
-        search_term: str = None,
-        status: str = None,
-        min_score: int = None,
+        search_term: str | None = None,
+        status: str | None = None,
+        min_score: int | None = None,
     ) -> dict[str, Any]:
         query = select(Lead).limit(10)
 
@@ -153,8 +153,8 @@ class CRMQueryTools:
 
     async def get_recent_activities(
         self,
-        entity_type: str = None,
-        entity_id: int = None,
+        entity_type: str | None = None,
+        entity_id: int | None = None,
         limit: int = 10,
     ) -> dict[str, Any]:
         query = select(Activity).order_by(Activity.created_at.desc()).limit(limit)

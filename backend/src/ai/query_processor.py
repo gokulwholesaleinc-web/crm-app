@@ -358,7 +358,7 @@ class QueryProcessor:
         risk_level: str,
         was_confirmed: bool,
         model_used: str = "gpt-4",
-        tokens_used: int = None,
+        tokens_used: int | None = None,
     ) -> None:
         await _log_ai_action(
             self.db,
