@@ -130,7 +130,7 @@ async def get_team_overview(
             role=u.role or "sales_rep",
             lead_count=lead_counts.get(u.id, 0),
             opportunity_count=opp_counts.get(u.id, 0),
-            total_pipeline_value=float(pipeline_values.get(u.id, 0)),
+            total_pipeline_value=float(pipeline_values.get(u.id) or 0),
             won_deals=won_counts.get(u.id, 0),
         ))
     return overview
