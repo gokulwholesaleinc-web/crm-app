@@ -11,8 +11,8 @@ inside _background_tick in core/scheduler.py.
 
 import logging
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.interval import IntervalTrigger
+from apscheduler.schedulers.asyncio import AsyncIOScheduler  # pyright: ignore[reportMissingImports]
+from apscheduler.triggers.interval import IntervalTrigger  # pyright: ignore[reportMissingImports]
 
 logger = logging.getLogger(__name__)
 

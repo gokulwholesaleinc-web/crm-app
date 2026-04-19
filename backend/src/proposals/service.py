@@ -69,7 +69,7 @@ def _safe_pdf_url_fetcher(url: str):
     except UnsafeUrlError as exc:
         logger.warning("Rejected unsafe PDF resource URL: %s", exc)
         raise
-    from weasyprint import default_url_fetcher
+    from weasyprint import default_url_fetcher  # pyright: ignore[reportMissingImports]
     return default_url_fetcher(url)
 
 
@@ -444,7 +444,7 @@ body {{ font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 0; color:
         # font, CSS) so a tenant cannot point the renderer at internal IPs
         # or ``file://`` paths.
         try:
-            import weasyprint
+            import weasyprint  # pyright: ignore[reportMissingImports]
             pdf_bytes = weasyprint.HTML(
                 string=html,
                 url_fetcher=_safe_pdf_url_fetcher,

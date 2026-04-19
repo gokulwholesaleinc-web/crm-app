@@ -50,7 +50,7 @@ def _get_stripe():
     if not stripe_key:
         return None
     try:
-        import stripe
+        import stripe  # pyright: ignore[reportMissingImports]
         stripe.api_key = stripe_key
         return stripe
     except ImportError:

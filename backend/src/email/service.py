@@ -6,7 +6,7 @@ import logging
 import re
 from datetime import UTC, datetime, timedelta
 
-import resend
+import resend  # pyright: ignore[reportMissingImports]
 from sqlalchemy import and_, func, literal, select, union_all
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession

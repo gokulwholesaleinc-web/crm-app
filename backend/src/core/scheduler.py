@@ -4,8 +4,8 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.interval import IntervalTrigger
+from apscheduler.schedulers.asyncio import AsyncIOScheduler  # pyright: ignore[reportMissingImports]
+from apscheduler.triggers.interval import IntervalTrigger  # pyright: ignore[reportMissingImports]
 
 import src.database as db_module
 
