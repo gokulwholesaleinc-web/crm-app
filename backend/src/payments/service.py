@@ -2,6 +2,7 @@
 
 import logging
 import uuid
+from collections.abc import Sequence
 from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import String, func, or_, select
@@ -143,7 +144,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
 
     async def create_checkout_session(
         self,
-        amount: float,
+        amount: float | Decimal,
         currency: str,
         success_url: str,
         cancel_url: str,
@@ -256,7 +257,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
 
     async def create_payment_intent(
         self,
-        amount: float,
+        amount: float | Decimal,
         currency: str,
         user_id: int,
         customer_id: int | None = None,
@@ -579,13 +580,13 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
     async def create_and_send_invoice(
         self,
         customer_id: int,
-        amount: float,
+        amount: float | Decimal,
         description: str,
         user_id: int,
         currency: str = "USD",
         due_days: int = 30,
         quote_id: int | None = None,
-        payment_method_types: list[str] | None = None,
+        payment_method_types: Sequence[str] | None = None,
     ) -> dict:
         """Create a Stripe Invoice, finalize it, and send it.
 
