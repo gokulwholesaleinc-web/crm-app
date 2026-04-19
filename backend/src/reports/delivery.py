@@ -82,6 +82,8 @@ class ReportDeliveryService:
 
     def _is_due(self, report: SavedReport, now: datetime) -> bool:
         """Check if a scheduled report is due for delivery."""
+        if not report.schedule:
+            return False
         interval = SCHEDULE_INTERVALS.get(report.schedule)
         if not interval:
             return False
