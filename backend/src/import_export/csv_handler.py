@@ -2,6 +2,7 @@
 
 import csv
 import io
+from collections.abc import Sequence
 from datetime import datetime
 from difflib import SequenceMatcher
 from typing import Any
@@ -405,7 +406,7 @@ class CSVHandler:
             return "'" + value
         return value
 
-    def _to_csv(self, entities: list[Any], fields: list[str]) -> str:
+    def _to_csv(self, entities: Sequence[Any], fields: list[str]) -> str:
         output = io.StringIO()
         writer = csv.DictWriter(output, fieldnames=fields)
         writer.writeheader()
