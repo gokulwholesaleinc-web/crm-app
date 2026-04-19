@@ -2,6 +2,7 @@
 
 import csv
 import io
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -222,7 +223,7 @@ class ReportExecutor:
 
 
 # Pre-built report templates
-REPORT_TEMPLATES = [
+REPORT_TEMPLATES: list[dict[str, Any]] = [
     {
         "id": "pipeline_by_stage",
         "name": "Sales Pipeline by Stage",

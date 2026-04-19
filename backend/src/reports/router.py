@@ -164,6 +164,8 @@ Default to bar chart if no chart preference is stated."""
         )
 
         content = response.choices[0].message.content
+        if not content:
+            raise HTTPException(status_code=502, detail="AI returned an empty response. Please try again.")
         parsed = json.loads(content)
 
         definition = ReportDefinition(
