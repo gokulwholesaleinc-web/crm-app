@@ -486,8 +486,7 @@ async def send_proposal(
     attach_pdf = send_request.attach_pdf if send_request else False
     with value_error_as_400():
         await service.send_proposal_email(proposal_id, current_user.id, attach_pdf)
-    # Refresh to return updated state
-    proposal = await service.get_by_id(proposal_id)
+    proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
 
     await emit(PROPOSAL_SENT, {
         "entity_id": proposal.id,
