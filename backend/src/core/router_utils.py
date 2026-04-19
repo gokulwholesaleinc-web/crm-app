@@ -1,7 +1,7 @@
 """Common router utilities and helpers for DRY code."""
 
 import json as _json
-from typing import Annotated, Any, TypeVar
+from typing import Annotated, Any, NoReturn, TypeVar
 
 from fastapi import Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -54,7 +54,7 @@ def parse_comma_separated(value: str | None) -> list[str] | None:
     return [x.strip() for x in value.split(",") if x.strip()]
 
 
-def raise_not_found(entity_name: str, entity_id: int | None = None) -> None:
+def raise_not_found(entity_name: str, entity_id: int | None = None) -> NoReturn:
     """
     Raise an HTTPException with 404 status for entity not found.
 
@@ -76,7 +76,7 @@ def raise_not_found(entity_name: str, entity_id: int | None = None) -> None:
     )
 
 
-def raise_bad_request(message: str) -> None:
+def raise_bad_request(message: str) -> NoReturn:
     """
     Raise an HTTPException with 400 status for bad request.
 
@@ -93,7 +93,7 @@ def raise_bad_request(message: str) -> None:
 
 
 
-def raise_forbidden(message: str | None = None) -> None:
+def raise_forbidden(message: str | None = None) -> NoReturn:
     """
     Raise an HTTPException with 403 status for forbidden access.
 
