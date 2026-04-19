@@ -310,6 +310,8 @@ class SequenceService(BaseService[Sequence]):
         self, seq: Sequence, enrollment: SequenceEnrollment
     ) -> None:
         """Send a completion notification to the sequence creator."""
+        if seq.created_by_id is None:
+            return
         from src.notifications.event_handler import create_completion_notification
 
         await create_completion_notification(

@@ -166,6 +166,8 @@ class CampaignService(CRUDService[Campaign, CampaignCreate, CampaignUpdate]):
 
     async def _notify_campaign_completed(self, campaign: Campaign) -> None:
         """Send a completion notification to the campaign owner."""
+        if campaign.owner_id is None:
+            return
         from src.notifications.event_handler import create_completion_notification
 
         await create_completion_notification(
