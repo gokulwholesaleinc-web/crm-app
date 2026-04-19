@@ -10,7 +10,7 @@ from html import escape
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
 
-from src.core.base_service import CRUDService, StatusTransitionMixin
+from src.core.base_service import BaseService, CRUDService, StatusTransitionMixin
 from src.core.constants import DEFAULT_PAGE_SIZE
 from src.core.filtering import build_token_search
 from src.core.url_safety import UnsafeUrlError, validate_public_url
@@ -480,12 +480,10 @@ body {{ font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 0; color:
         return _TEMPLATE_VAR_PATTERN.sub(_replacer, template_content)
 
 
-class ProposalTemplateService(CRUDService[ProposalTemplate, None, None]):
-    """Service for ProposalTemplate CRUD operations."""
+class ProposalTemplateService(BaseService[ProposalTemplate]):
+    """Service for ProposalTemplate read operations. Create/update live in the router."""
 
     model = ProposalTemplate
-    create_exclude_fields = set()
-    update_exclude_fields = set()
 
     async def get_list(
         self,

@@ -343,8 +343,7 @@ class CRMQueryTools:
                     "id": p.id,
                     "amount": float(p.amount) if p.amount else 0,
                     "status": p.status,
-                    "payment_date": p.payment_date.isoformat() if p.payment_date else None,
-                    "created_at": p.created_at.isoformat() if p.created_at else None,
+                    "payment_date": p.created_at.isoformat() if p.created_at else None,
                 }
                 for p in payments
             ],

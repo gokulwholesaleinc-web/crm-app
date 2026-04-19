@@ -69,4 +69,4 @@ class Settings(BaseSettings):
         extra = "ignore"
 
 
-settings = Settings()
+settings = Settings()  # type: ignore[call-arg]  # SECRET_KEY sourced from env; startup fails if unset
