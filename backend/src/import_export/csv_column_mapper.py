@@ -1,6 +1,7 @@
 """CSV column mapping utilities: aliases, normalization, fuzzy matching, and format detection."""
 
 import re
+from collections.abc import Sequence
 from difflib import SequenceMatcher
 
 # Common aliases for CSV columns → internal field names
@@ -100,7 +101,7 @@ def normalize_header(header: str) -> str:
     return re.sub(r"[^a-z0-9]", "", header.lower().strip())
 
 
-def detect_linkedin_format(headers: list) -> bool:
+def detect_linkedin_format(headers: Sequence[str]) -> bool:
     """Return True if the CSV headers match LinkedIn Sales Navigator export format."""
     normalized = {normalize_header(h) for h in headers}
     matched = normalized & _LINKEDIN_SIGNATURE_HEADERS
@@ -108,7 +109,7 @@ def detect_linkedin_format(headers: list) -> bool:
     return len(matched) >= 4 and has_unique
 
 
-def detect_monday_csv(csv_headers: list[str]) -> bool:
+def detect_monday_csv(csv_headers: Sequence[str]) -> bool:
     """Return True if the CSV headers contain Monday.com-specific columns."""
     normalized = {normalize_header(h) for h in csv_headers}
     return len(normalized & _MONDAY_SIGNATURE_HEADERS) >= 2
@@ -135,7 +136,7 @@ def split_location(location: str) -> tuple:
     return (parts[0], "") if parts else ("", "")
 
 
-def find_name_column(csv_headers: list, column_mapping: dict, target_fields: list):
+def find_name_column(csv_headers: Sequence[str], column_mapping: dict, target_fields: list):
     """Find a full-name CSV column that should be split into first_name + last_name."""
     if "first_name" not in target_fields or "last_name" not in target_fields:
         return None
@@ -148,7 +149,7 @@ def find_name_column(csv_headers: list, column_mapping: dict, target_fields: lis
     return None
 
 
-def find_location_column(csv_headers: list, column_mapping: dict, target_fields: list):
+def find_location_column(csv_headers: Sequence[str], column_mapping: dict, target_fields: list):
     """Find a combined location CSV column that should be split into city + state."""
     if "city" not in target_fields or "state" not in target_fields:
         return None
@@ -161,7 +162,7 @@ def find_location_column(csv_headers: list, column_mapping: dict, target_fields:
     return None
 
 
-def find_contact_person_column(csv_headers: list, column_mapping: dict) -> str | None:
+def find_contact_person_column(csv_headers: Sequence[str], column_mapping: dict) -> str | None:
     """Find a contact person CSV column for company imports."""
     for header in csv_headers:
         if normalize_header(header) in CONTACT_PERSON_HEADERS and header not in column_mapping:
@@ -169,7 +170,7 @@ def find_contact_person_column(csv_headers: list, column_mapping: dict) -> str |
     return None
 
 
-def map_columns(csv_headers: list[str], target_fields: list[str]) -> dict[str, str]:
+def map_columns(csv_headers: Sequence[str], target_fields: list[str]) -> dict[str, str]:
     """Map CSV headers to target field names using exact match, aliases, and fuzzy matching."""
     mapping: dict[str, str] = {}
     matched_fields: set[str] = set()
