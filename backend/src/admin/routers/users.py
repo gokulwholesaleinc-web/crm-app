@@ -48,17 +48,17 @@ async def list_admin_users(
     lead_counts = dict(
         (await db.execute(
             select(Lead.owner_id, func.count(Lead.id)).group_by(Lead.owner_id)
-        )).all()
+        )).tuples().all()
     )
     contact_counts = dict(
         (await db.execute(
             select(Contact.owner_id, func.count(Contact.id)).group_by(Contact.owner_id)
-        )).all()
+        )).tuples().all()
     )
     opp_counts = dict(
         (await db.execute(
             select(Opportunity.owner_id, func.count(Opportunity.id)).group_by(Opportunity.owner_id)
-        )).all()
+        )).tuples().all()
     )
 
     result = []
