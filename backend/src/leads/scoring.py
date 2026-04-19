@@ -42,7 +42,7 @@ class LeadScorer:
         "Partner",
     ]
 
-    def calculate_score(self, lead: Lead, source_name: str = None) -> tuple[int, dict]:
+    def calculate_score(self, lead: Lead, source_name: str | None = None) -> tuple[int, dict]:
         """
         Calculate lead score and return score with breakdown.
 
@@ -133,7 +133,7 @@ class LeadScorer:
         # Partial match
         return 5
 
-    def _score_source(self, source_name: str = None) -> int:
+    def _score_source(self, source_name: str | None = None) -> int:
         """Score based on lead source quality."""
         if not source_name:
             return 0
@@ -151,7 +151,7 @@ class LeadScorer:
         return 5
 
 
-def calculate_lead_score(lead: Lead, source_name: str = None) -> tuple[int, str]:
+def calculate_lead_score(lead: Lead, source_name: str | None = None) -> tuple[int, str]:
     """
     Convenience function to calculate lead score.
 
