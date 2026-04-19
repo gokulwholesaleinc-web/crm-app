@@ -45,7 +45,7 @@ class WebhookService(BaseService[Webhook]):
 
         count_query = select(func.count()).select_from(query.subquery())
         total_result = await self.db.execute(count_query)
-        total = total_result.scalar()
+        total = total_result.scalar() or 0
 
         offset = (page - 1) * page_size
         query = query.offset(offset).limit(page_size).order_by(Webhook.created_at.desc())
@@ -114,7 +114,7 @@ class WebhookService(BaseService[Webhook]):
 
         count_query = select(func.count()).select_from(query.subquery())
         total_result = await self.db.execute(count_query)
-        total = total_result.scalar()
+        total = total_result.scalar() or 0
 
         offset = (page - 1) * page_size
         query = query.offset(offset).limit(page_size).order_by(WebhookDelivery.attempted_at.desc())
