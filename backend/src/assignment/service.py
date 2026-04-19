@@ -116,7 +116,7 @@ class AssignmentService(BaseService[AssignmentRule]):
             user_lead_counts[user_id] = result.scalar() or 0
 
         # Return user with fewest leads
-        return min(user_lead_counts, key=user_lead_counts.get)
+        return min(user_lead_counts, key=lambda u: user_lead_counts[u])
 
     async def assign_lead(self, lead_data: dict[str, Any]) -> int | None:
         """Find matching active assignment rule and return the assigned user_id.

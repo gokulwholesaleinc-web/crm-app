@@ -165,5 +165,5 @@ jobs:
       - name: Install dev dependencies
         run: pip install -r backend/requirements-dev.txt
 
-      - name: Run pyright (advisory)
-        run: cd backend && pyright src || true
+      - name: Run pyright
+        run: cd backend && pyright src
