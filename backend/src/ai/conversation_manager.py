@@ -1,6 +1,7 @@
 """Conversation memory management for the AI assistant."""
 
 import logging
+from collections.abc import Sequence
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -61,7 +62,7 @@ class AIConversationManager:
         history.extend({"role": m.role, "content": m.content} for m in recent)
         return history
 
-    async def summarize_messages(self, messages: list[AIConversation]) -> str | None:
+    async def summarize_messages(self, messages: Sequence[AIConversation]) -> str | None:
         if not self.client or not messages:
             return None
 
