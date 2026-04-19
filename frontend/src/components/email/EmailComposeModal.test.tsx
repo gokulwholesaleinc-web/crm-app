@@ -72,6 +72,19 @@ describe('EmailComposeModal', () => {
     expect(screen.getByLabelText('Subject')).toHaveValue('Re: Hello World');
   });
 
+  it('outbound replyTo pre-fills To with the original recipient (to_email), not from_email', () => {
+    const outboundReply: ThreadEmailItem = {
+      ...REPLY_TO,
+      direction: 'outbound',
+      from_email: 'me@example.com',
+      to_email: 'recipient@example.com',
+    };
+    renderWithProviders(<EmailComposeModal {...BASE_PROPS} replyTo={outboundReply} />);
+
+    expect(screen.getByLabelText('To')).toHaveValue('recipient@example.com');
+    expect(screen.getByLabelText('Subject')).toHaveValue('Re: Hello World');
+  });
+
   it('submitting with valid fields calls mutateAsync with correct payload and closes on success', async () => {
     mutateAsync.mockResolvedValueOnce({});
     const onClose = vi.fn();

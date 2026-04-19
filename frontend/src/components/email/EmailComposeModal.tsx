@@ -35,7 +35,13 @@ export function EmailComposeModal({
   // a new default recipient doesn't wipe in-progress edits mid-compose.
   useEffect(() => {
     if (replyTo) {
-      setTo(replyTo.from_email || '');
+      // For outbound replyTo, from_email is the CRM user's own address —
+      // continuing the thread means sending back to the original recipient.
+      const replyRecipient =
+        replyTo.direction === 'outbound'
+          ? replyTo.to_email
+          : replyTo.from_email || '';
+      setTo(replyRecipient);
       setSubject(
         replyTo.subject.startsWith('Re: ')
           ? replyTo.subject
