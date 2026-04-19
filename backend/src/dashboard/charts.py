@@ -3,7 +3,7 @@
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import ColumnElement, and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.activities.models import Activity
@@ -286,7 +286,7 @@ class ChartDataGenerator:
         }
 
         # Get counts per status
-        filters = [Lead.status.in_(funnel_stages)]
+        filters: list[ColumnElement[bool]] = [Lead.status.in_(funnel_stages)]
         if self.user_id:
             filters.append(Lead.owner_id == self.user_id)
         self._apply_date_filter(filters, Lead.created_at)
@@ -324,7 +324,7 @@ class ChartDataGenerator:
             })
 
         # Average days in each stage (approximate via created_at to updated_at)
-        avg_filters = [Lead.status.in_(funnel_stages)]
+        avg_filters: list[ColumnElement[bool]] = [Lead.status.in_(funnel_stages)]
         if self.user_id:
             avg_filters.append(Lead.owner_id == self.user_id)
         self._apply_date_filter(avg_filters, Lead.created_at)
