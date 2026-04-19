@@ -93,12 +93,12 @@ class ActivityTimeline:
             .where(
                 or_(
                     and_(
-                        Activity.scheduled_at is not None,
+                        Activity.scheduled_at.is_not(None),
                         Activity.scheduled_at >= now,
                         Activity.scheduled_at <= future,
                     ),
                     and_(
-                        Activity.due_date is not None,
+                        Activity.due_date.is_not(None),
                         Activity.due_date >= now.date(),
                         Activity.due_date <= future.date(),
                     ),
