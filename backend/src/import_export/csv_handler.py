@@ -89,21 +89,21 @@ class CSVHandler:
     # Export
     # ------------------------------------------------------------------
 
-    async def export_contacts(self, user_id: int = None) -> str:
+    async def export_contacts(self, user_id: int | None = None) -> str:
         query = select(Contact)
         if user_id:
             query = query.where(Contact.owner_id == user_id)
         result = await self.db.execute(query)
         return self._to_csv(result.scalars().all(), self.CONTACT_FIELDS)
 
-    async def export_companies(self, user_id: int = None) -> str:
+    async def export_companies(self, user_id: int | None = None) -> str:
         query = select(Company)
         if user_id:
             query = query.where(Company.owner_id == user_id)
         result = await self.db.execute(query)
         return self._to_csv(result.scalars().all(), self.COMPANY_FIELDS)
 
-    async def export_leads(self, user_id: int = None) -> str:
+    async def export_leads(self, user_id: int | None = None) -> str:
         query = select(Lead)
         if user_id:
             query = query.where(Lead.owner_id == user_id)

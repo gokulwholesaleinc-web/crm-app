@@ -42,7 +42,7 @@ async def _log_ai_action(
     risk_level: str,
     was_confirmed: bool,
     model_used: str = "gpt-4",
-    tokens_used: int = None,
+    tokens_used: int | None = None,
 ) -> None:
     result_to_store = result
     result_str = json.dumps(result)
@@ -213,7 +213,7 @@ class AIToolExecutor:
         risk_level: str,
         was_confirmed: bool,
         model_used: str = "gpt-4",
-        tokens_used: int = None,
+        tokens_used: int | None = None,
     ) -> None:
         await _log_ai_action(
             self.db,

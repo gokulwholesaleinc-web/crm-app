@@ -62,7 +62,7 @@ class DataScope:
         return self.shared_entity_ids.get(entity_type, [])
 
 
-def invalidate_scope_cache(user_id: int = None) -> None:
+def invalidate_scope_cache(user_id: int | None = None) -> None:
     """Invalidate the scope cache for a specific user or all users.
 
     Call this when sharing permissions change (create, revoke, update)
@@ -153,7 +153,7 @@ def check_record_access_or_shared(
     current_user: User,
     role_name: str,
     shared_entity_ids: list[int] = None,
-    entity_type: str = None,
+    entity_type: str | None = None,
 ) -> None:
     """Check if a user can access a record, considering sharing.
 

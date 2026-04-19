@@ -16,7 +16,7 @@ class PipelineManager:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_kanban_data(self, owner_id: int = None) -> list[dict[str, Any]]:
+    async def get_kanban_data(self, owner_id: int | None = None) -> list[dict[str, Any]]:
         """
         Get pipeline data formatted for Kanban board.
 
