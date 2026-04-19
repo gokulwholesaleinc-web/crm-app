@@ -55,9 +55,9 @@ def apply_filter_condition(model: type, field_name: str, op: str, value: Any):
             value = [value]
         return ~column.in_(value)
     elif op == "is_empty":
-        return or_(column is None, column == "")
+        return or_(column.is_(None), column == "")
     elif op == "is_not_empty":
-        return and_(column is not None, column != "")
+        return and_(column.is_not(None), column != "")
     elif op == "between":
         if isinstance(value, list) and len(value) == 2:
             return and_(column >= value[0], column <= value[1])
