@@ -19,7 +19,7 @@ MAX_CSV_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 async def _read_csv_upload(file: UploadFile) -> str:
     """Validate and read a CSV upload file, returning the decoded content string."""
-    if not file.filename.endswith(".csv"):
+    if not file.filename or not file.filename.endswith(".csv"):
         raise_bad_request("File must be a CSV")
 
     content = await file.read()

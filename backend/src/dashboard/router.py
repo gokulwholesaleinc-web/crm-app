@@ -300,7 +300,7 @@ async def get_converted_revenue(
     won_deal_count = 0
 
     for opp in opportunities:
-        converted = convert_amount(opp.amount, opp.currency or "USD", target_currency)
+        converted = convert_amount(opp.amount or 0.0, opp.currency or "USD", target_currency)
         stage = opp.pipeline_stage
 
         if stage.is_won:

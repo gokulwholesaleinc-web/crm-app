@@ -297,7 +297,7 @@ async def _seed_contacts(session: AsyncSession, demo_user: User, companies: list
 # Leads
 # ---------------------------------------------------------------------------
 
-async def _seed_leads(session: AsyncSession, demo_user: User, lead_sources: list[LeadSource], lead_stages: list[PipelineStage] = None) -> list[Lead]:
+async def _seed_leads(session: AsyncSession, demo_user: User, lead_sources: list[LeadSource], lead_stages: list[PipelineStage] | None = None) -> list[Lead]:
     source_map = {s.name: s.id for s in lead_sources}
 
     # Build status-to-stage mapping for lead pipeline stages

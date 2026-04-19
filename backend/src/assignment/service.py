@@ -61,7 +61,7 @@ class AssignmentService(BaseService[AssignmentRule]):
         await self.db.delete(rule)
         await self.db.flush()
 
-    def _matches_filters(self, lead_data: dict[str, Any], filters: dict[str, Any]) -> bool:
+    def _matches_filters(self, lead_data: dict[str, Any], filters: dict[str, Any] | None) -> bool:
         """Check if a lead matches the rule's filters."""
         if not filters:
             return True
