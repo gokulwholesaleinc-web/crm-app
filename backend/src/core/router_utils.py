@@ -137,7 +137,7 @@ def check_ownership(entity: Any, current_user: Any, entity_name: str | None = No
         raise_forbidden(message)
 
 
-async def get_entity_or_404(
+async def get_entity_or_404(  # pyright: ignore[reportInvalidTypeVarUse]
     service: Any,
     entity_id: int,
     entity_name: str,

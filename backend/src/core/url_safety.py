@@ -63,7 +63,7 @@ def _resolve_all_addresses(host: str) -> list[str]:
         infos = socket.getaddrinfo(host, None)
     except socket.gaierror:
         return []
-    return list({info[4][0] for info in infos})
+    return list({str(info[4][0]) for info in infos})
 
 
 def validate_public_url(

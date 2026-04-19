@@ -152,7 +152,7 @@ def check_record_access_or_shared(
     entity,
     current_user: User,
     role_name: str,
-    shared_entity_ids: list[int] = None,
+    shared_entity_ids: list[int] | None = None,
     entity_type: str | None = None,
 ) -> None:
     """Check if a user can access a record, considering sharing.
