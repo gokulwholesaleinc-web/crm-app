@@ -19,6 +19,12 @@ const STATUS_BADGE: Record<string, { variant: BadgeVariant; label: string }> = {
   received: { variant: 'blue', label: 'Received' },
 };
 
+const REPLY_ARROW_ICON = (
+  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+  </svg>
+);
+
 function formatTimestamp(dateString: string): string {
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: 'medium',
@@ -182,9 +188,7 @@ function EmailBubble({
             className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 focus-visible:outline-none focus-visible:underline"
             aria-label={`Reply to email from ${email.from_email || 'sender'}`}
           >
-            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-            </svg>
+            {REPLY_ARROW_ICON}
             Reply
           </button>
         )}
@@ -211,47 +215,67 @@ function ThreadCard({
   const headerId = `thread-${group.key}`;
   const panelId = `panel-${group.key}`;
 
+  // Reply targets the newest message so outbound-only threads stay repliable.
+  // Messages are sorted ascending by timestamp above, so the last entry is newest.
+  const latestMessage = group.messages.at(-1);
+
   return (
     <section
       className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden"
       aria-labelledby={headerId}
     >
-      <button
-        type="button"
-        id={headerId}
-        onClick={() => setExpanded((p) => !p)}
-        className="w-full px-3 sm:px-4 py-2 sm:py-3 flex items-center justify-between gap-3 text-left bg-gray-50 dark:bg-gray-800/60 hover:bg-gray-100 dark:hover:bg-gray-700/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-        aria-expanded={expanded}
-        aria-controls={panelId}
-      >
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 mb-0.5">
-            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
-              {group.subject || '(No subject)'}
-            </p>
-            {isMultiMessage && (
-              <Badge variant="gray" size="sm">
-                {group.messages.length} messages
-              </Badge>
-            )}
-          </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-            {displayedParticipants}
-            {extraParticipants} · {formatTimestamp(group.latestTimestamp)}
-          </p>
-        </div>
-        <svg
-          className={`h-4 w-4 shrink-0 text-gray-400 transition-transform ${
-            expanded ? 'rotate-180' : ''
-          }`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          aria-hidden="true"
+      <div className="w-full px-3 sm:px-4 py-2 sm:py-3 flex items-center gap-3 bg-gray-50 dark:bg-gray-800/60">
+        <button
+          type="button"
+          id={headerId}
+          onClick={() => setExpanded((p) => !p)}
+          className="flex items-center justify-between gap-3 text-left flex-1 min-w-0 hover:bg-gray-100 dark:hover:bg-gray-700/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded-md -mx-1 px-1 py-1"
+          aria-expanded={expanded}
+          aria-controls={panelId}
         >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 mb-0.5">
+              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
+                {group.subject || '(No subject)'}
+              </p>
+              {isMultiMessage && (
+                <Badge variant="gray" size="sm">
+                  {group.messages.length} messages
+                </Badge>
+              )}
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+              {displayedParticipants}
+              {extraParticipants} · {formatTimestamp(group.latestTimestamp)}
+            </p>
+          </div>
+          <svg
+            className={`h-4 w-4 shrink-0 text-gray-400 transition-transform ${
+              expanded ? 'rotate-180' : ''
+            }`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            aria-hidden="true"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        {onReply && latestMessage && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onReply(latestMessage);
+            }}
+            className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 shrink-0"
+            aria-label={`Reply to thread: ${group.subject || '(No subject)'}`}
+          >
+            {REPLY_ARROW_ICON}
+            Reply
+          </button>
+        )}
+      </div>
       {expanded && (
         <div id={panelId} className="px-3 sm:px-4 py-3 space-y-3">
           {group.messages.map((email) => (
