@@ -151,6 +151,53 @@ async def _process_message(
         await _store_inbound(msg, connection, db, received_at)
 
 
+async def _resolve_entity_from_thread(
+    thread_id: str | None,
+    connection: GmailConnection,
+    db: AsyncSession,
+) -> tuple[str | None, int | None]:
+    # Replies sent/received from outside CRM (Gmail web, phone) keep the same
+    # Gmail threadId but may use addresses that don't match any contact, so
+    # direct email-match misses them. Fall back to any prior row on the thread,
+    # scoped to this connection's user so thread_id collisions across tenants
+    # can't attach an email to someone else's contact.
+    from src.email.models import EmailQueue, InboundEmail
+
+    if not thread_id:
+        return None, None
+
+    eq = await db.execute(
+        select(EmailQueue.entity_type, EmailQueue.entity_id)
+        .where(
+            EmailQueue.thread_id == thread_id,
+            EmailQueue.sent_by_id == connection.user_id,
+            EmailQueue.entity_type.is_not(None),
+            EmailQueue.entity_id.is_not(None),
+        )
+        .limit(1)
+    )
+    row = eq.first()
+    if row is not None:
+        return row.entity_type, row.entity_id
+
+    # InboundEmail has no owner column; scope via the receiving mailbox instead.
+    ib = await db.execute(
+        select(InboundEmail.entity_type, InboundEmail.entity_id)
+        .where(
+            InboundEmail.thread_id == thread_id,
+            InboundEmail.to_email == connection.email,
+            InboundEmail.entity_type.is_not(None),
+            InboundEmail.entity_id.is_not(None),
+        )
+        .limit(1)
+    )
+    row = ib.first()
+    if row is not None:
+        return row.entity_type, row.entity_id
+
+    return None, None
+
+
 async def _store_sent(
     msg: dict,
     connection: GmailConnection,
@@ -173,6 +220,11 @@ async def _store_sent(
         if contact:
             entity_type = "contacts"
             entity_id = contact.id
+
+    if entity_id is None:
+        entity_type, entity_id = await _resolve_entity_from_thread(
+            msg.get("thread_id"), connection, db
+        )
 
     row = EmailQueue(
         status="sent",
@@ -211,6 +263,11 @@ async def _store_inbound(
     if contact:
         entity_type = "contacts"
         entity_id = contact.id
+
+    if entity_id is None:
+        entity_type, entity_id = await _resolve_entity_from_thread(
+            msg.get("thread_id"), connection, db
+        )
 
     # resend_email_id is required by the model's unique constraint; use Gmail message id
     row = InboundEmail(
