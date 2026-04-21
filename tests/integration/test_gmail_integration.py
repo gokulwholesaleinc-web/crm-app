@@ -427,7 +427,7 @@ class TestFindThreadContext:
         from src.email.service import _find_thread_context
 
         thread_id, message_id = await _find_thread_context(
-            db_session, "contacts", contact.id, contact.email
+            db_session, "contacts", contact.id
         )
         assert thread_id is None
         assert message_id is None
@@ -456,7 +456,7 @@ class TestFindThreadContext:
         await db_session.flush()
 
         thread_id, message_id = await _find_thread_context(
-            db_session, "contacts", contact.id, contact.email
+            db_session, "contacts", contact.id
         )
         assert thread_id == "thread-outbound-1"
         assert message_id == "<outbound-1@linkcreative.com>"
@@ -483,7 +483,7 @@ class TestFindThreadContext:
         await db_session.flush()
 
         thread_id, message_id = await _find_thread_context(
-            db_session, "contacts", contact.id, contact.email
+            db_session, "contacts", contact.id
         )
         assert thread_id == "thread-inbound-1"
         assert message_id == "<inbound-1@example.com>"
@@ -524,7 +524,7 @@ class TestFindThreadContext:
         await db_session.flush()
 
         thread_id, message_id = await _find_thread_context(
-            db_session, "contacts", contact.id, contact.email
+            db_session, "contacts", contact.id
         )
         assert thread_id == "thread-newer"
         assert message_id == "<newer@example.com>"
@@ -562,7 +562,7 @@ class TestFindThreadContext:
         await db_session.flush()
 
         thread_id, message_id = await _find_thread_context(
-            db_session, "contacts", contact.id, contact.email
+            db_session, "contacts", contact.id
         )
         assert thread_id is None
         assert message_id is None
