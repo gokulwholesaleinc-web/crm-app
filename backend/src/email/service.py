@@ -19,7 +19,13 @@ from src.email.models import EmailQueue, InboundEmail
 logger = logging.getLogger(__name__)
 
 
-async def _try_gmail_send(email: EmailQueue, db: AsyncSession) -> bool:
+async def _try_gmail_send(
+    email: EmailQueue,
+    db: AsyncSession,
+    *,
+    reply_to_email_id: int | None = None,
+    reply_to_inbound_id: int | None = None,
+) -> bool:
     if not email.sent_by_id:
         return False
     from src.integrations.gmail.models import GmailConnection
@@ -36,8 +42,13 @@ async def _try_gmail_send(email: EmailQueue, db: AsyncSession) -> bool:
     from src.integrations.gmail.client import GmailClient
     from src.integrations.gmail.sender import build_rfc822
 
-    prior_thread_id, prior_message_id = await _find_thread_context(
-        db, email.entity_type, email.entity_id, email.to_email
+    prior_thread_id, prior_message_id = await _resolve_reply_context(
+        db,
+        reply_to_email_id=reply_to_email_id,
+        reply_to_inbound_id=reply_to_inbound_id,
+        entity_type=email.entity_type,
+        entity_id=email.entity_id,
+        sent_by_id=email.sent_by_id,
     )
 
     raw = build_rfc822(
@@ -54,27 +65,74 @@ async def _try_gmail_send(email: EmailQueue, db: AsyncSession) -> bool:
     async with GmailClient(conn, db) as client:
         result = await client.send_message(raw, thread_id=prior_thread_id)
 
-    email.message_id = result.get("id", "")
-    email.thread_id = result.get("threadId", "")
+    # Store None, not "", when Gmail omits a field. Empty strings slip past
+    # `thread_id IS NOT NULL` filters and poison future thread-context lookups.
+    email.message_id = result.get("id") or None
+    email.thread_id = result.get("threadId") or None
     email.sent_via = "gmail"
     return True
+
+
+async def _resolve_reply_context(
+    db: AsyncSession,
+    *,
+    reply_to_email_id: int | None,
+    reply_to_inbound_id: int | None,
+    entity_type: str | None = None,
+    entity_id: int | None = None,
+    sent_by_id: int | None = None,
+) -> tuple[str | None, str | None]:
+    """Resolve thread/message-id to use for In-Reply-To / threadId on a send.
+
+    Prefers the exact email the user clicked Reply on (only one of the two IDs
+    is used per send). Falls back to the newest message-bearing row on the
+    entity so replies still thread when no explicit target was supplied.
+
+    Reply targets are scoped to the outgoing email's entity so a caller can't
+    pass an id from another contact/tenant and exfiltrate its thread metadata.
+    EmailQueue targets additionally require the sender match, since EmailQueue
+    rows are per-user.
+    """
+    if reply_to_email_id is not None and entity_type and entity_id:
+        filters = [
+            EmailQueue.id == reply_to_email_id,
+            EmailQueue.entity_type == entity_type,
+            EmailQueue.entity_id == entity_id,
+        ]
+        if sent_by_id is not None:
+            filters.append(EmailQueue.sent_by_id == sent_by_id)
+        row = await db.execute(
+            select(EmailQueue.thread_id, EmailQueue.message_id).where(*filters)
+        )
+        hit = row.first()
+        if hit is not None:
+            return hit.thread_id, hit.message_id
+    if reply_to_inbound_id is not None and entity_type and entity_id:
+        row = await db.execute(
+            select(InboundEmail.thread_id, InboundEmail.message_id).where(
+                InboundEmail.id == reply_to_inbound_id,
+                InboundEmail.entity_type == entity_type,
+                InboundEmail.entity_id == entity_id,
+            )
+        )
+        hit = row.first()
+        if hit is not None:
+            return hit.thread_id, hit.message_id
+    return await _find_thread_context(db, entity_type, entity_id)
 
 
 async def _find_thread_context(
     db: AsyncSession,
     entity_type: str | None,
     entity_id: int | None,
-    to_email: str,
 ) -> tuple[str | None, str | None]:
-    """Return (gmail thread_id, rfc-822 message_id) of the most recent message
-    on this contact's thread — inbound OR outbound. Passing thread_id to
-    Gmail's send makes the reply land inside the original Gmail thread;
-    passing message_id as In-Reply-To/References makes non-Gmail clients
-    thread correctly.
+    """Best-effort thread context for a reply when no specific target was given.
 
-    Previously we only looked at EmailQueue, so replying to a first-touch
-    inbound email (no prior outbound) would create a fresh thread instead
-    of threading into the inbound.
+    Returns the most recent message on the entity — inbound or outbound — that
+    still has a Message-ID. The Gmail threadId may be None (e.g. older rows
+    from before the Gmail integration, or Resend-only sends); callers should
+    still use the message_id for In-Reply-To/References so non-Gmail clients
+    thread correctly.
     """
     if not entity_type or not entity_id:
         return None, None
@@ -88,8 +146,7 @@ async def _find_thread_context(
         .where(
             EmailQueue.entity_type == entity_type,
             EmailQueue.entity_id == entity_id,
-            EmailQueue.to_email == to_email,
-            EmailQueue.thread_id.isnot(None),
+            EmailQueue.message_id.isnot(None),
         )
         .order_by(EmailQueue.created_at.desc())
         .limit(1)
@@ -105,8 +162,7 @@ async def _find_thread_context(
         .where(
             InboundEmail.entity_type == entity_type,
             InboundEmail.entity_id == entity_id,
-            InboundEmail.from_email == to_email,
-            InboundEmail.thread_id.isnot(None),
+            InboundEmail.message_id.isnot(None),
         )
         .order_by(InboundEmail.received_at.desc())
         .limit(1)
@@ -225,6 +281,8 @@ class EmailService:
         from_email: str | None = None,
         cc: str | None = None,
         bcc: str | None = None,
+        reply_to_email_id: int | None = None,
+        reply_to_inbound_id: int | None = None,
     ) -> EmailQueue:
         """Create an email queue entry and attempt to send."""
         from_email = self._validate_from_email(from_email)
@@ -257,20 +315,40 @@ class EmailService:
             await self.db.flush()
             return email
 
-        await self._attempt_send(email)
+        await self._attempt_send(
+            email,
+            reply_to_email_id=reply_to_email_id,
+            reply_to_inbound_id=reply_to_inbound_id,
+        )
         return email
 
-    async def _attempt_send(self, email: EmailQueue) -> None:
+    async def _attempt_send(
+        self,
+        email: EmailQueue,
+        *,
+        reply_to_email_id: int | None = None,
+        reply_to_inbound_id: int | None = None,
+    ) -> None:
         """Attempt to send via Gmail if connected, fall back to Resend."""
         email.attempts += 1
         try:
             sent_via_gmail = False
             try:
-                sent_via_gmail = await _try_gmail_send(email, self.db)
+                sent_via_gmail = await _try_gmail_send(
+                    email,
+                    self.db,
+                    reply_to_email_id=reply_to_email_id,
+                    reply_to_inbound_id=reply_to_inbound_id,
+                )
             except Exception as gmail_exc:
                 logger.info("Gmail send failed for email %s, falling back to Resend: %s", email.id, gmail_exc)
 
             if not sent_via_gmail:
+                if reply_to_email_id is not None or reply_to_inbound_id is not None:
+                    logger.warning(
+                        "Email %s is a reply but Gmail send skipped/failed — Resend fallback will not preserve thread headers",
+                        email.id,
+                    )
                 await asyncio.to_thread(
                     send_email, email.to_email, email.subject, email.body,
                     email.from_email, email.cc, email.bcc,
@@ -570,11 +648,16 @@ class EmailService:
             received_at=received_at,
         )
 
-        # Auto-match to contact by from_email
-        result = await self.db.execute(
-            select(Contact).where(Contact.email == from_email)
-        )
-        contact = result.scalar_one_or_none()
+        # Skip empty from_email: matching "" would attach inbound mail to any
+        # contact whose email column happens to be blank.
+        contact: Contact | None = None
+        if from_email:
+            result = await self.db.execute(
+                select(Contact).where(
+                    func.lower(Contact.email) == from_email.lower()
+                )
+            )
+            contact = result.scalar_one_or_none()
         if contact:
             inbound.entity_type = "contacts"
             inbound.entity_id = contact.id

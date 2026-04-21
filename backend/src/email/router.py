@@ -56,6 +56,8 @@ async def send_email(
         from_email=data.from_email,
         cc=data.cc,
         bcc=data.bcc,
+        reply_to_email_id=data.reply_to_email_id,
+        reply_to_inbound_id=data.reply_to_inbound_id,
     )
     return email
 
