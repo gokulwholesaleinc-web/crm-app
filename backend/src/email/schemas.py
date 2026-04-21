@@ -16,6 +16,11 @@ class SendEmailRequest(BaseModel):
     bcc: str | None = None
     entity_type: str | None = None
     entity_id: int | None = None
+    # When the user clicks Reply on a specific email we preserve threading by
+    # pointing at its row id (outbound lives in EmailQueue, inbound in
+    # InboundEmail — they share no id space, hence two fields).
+    reply_to_email_id: int | None = None
+    reply_to_inbound_id: int | None = None
 
 
 class SendTemplateEmailRequest(BaseModel):

@@ -3,7 +3,7 @@
 import logging
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.integrations.gmail.client import GmailAuthError, GmailClient
@@ -141,12 +141,10 @@ async def _process_message(
         return
 
     from_addr = msg["from"]
-    received_at: datetime | None = msg["date"]
-    if received_at is None:
-        received_at = datetime.now(UTC)
+    received_at: datetime = msg["date"] or datetime.now(UTC)
 
     if from_addr.lower() == connection.email.lower():
-        await _store_sent(msg, connection, db)
+        await _store_sent(msg, connection, db, received_at)
     else:
         await _store_inbound(msg, connection, db, received_at)
 
@@ -202,20 +200,20 @@ async def _store_sent(
     msg: dict,
     connection: GmailConnection,
     db: AsyncSession,
+    received_at: datetime,
 ) -> None:
     """Insert an EmailQueue row for an email sent from the user's phone/other client."""
     from src.contacts.models import Contact
     from src.email.models import EmailQueue
 
     to_addr = msg["to"]
-    received_at: datetime | None = msg["date"]
-    if received_at is None:
-        received_at = datetime.now(UTC)
 
     entity_type: str | None = None
     entity_id: int | None = None
     if to_addr:
-        result = await db.execute(select(Contact).where(Contact.email == to_addr))
+        result = await db.execute(
+            select(Contact).where(func.lower(Contact.email) == to_addr.lower())
+        )
         contact = result.scalar_one_or_none()
         if contact:
             entity_type = "contacts"
@@ -258,11 +256,14 @@ async def _store_inbound(
 
     entity_type: str | None = None
     entity_id: int | None = None
-    result = await db.execute(select(Contact).where(Contact.email == from_addr))
-    contact = result.scalar_one_or_none()
-    if contact:
-        entity_type = "contacts"
-        entity_id = contact.id
+    if from_addr:
+        result = await db.execute(
+            select(Contact).where(func.lower(Contact.email) == from_addr.lower())
+        )
+        contact = result.scalar_one_or_none()
+        if contact:
+            entity_type = "contacts"
+            entity_id = contact.id
 
     if entity_id is None:
         entity_type, entity_id = await _resolve_entity_from_thread(

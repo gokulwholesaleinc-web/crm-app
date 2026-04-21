@@ -61,6 +61,8 @@ export function EmailComposeModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const replyToEmailId = replyTo?.direction === 'outbound' ? replyTo.id : undefined;
+    const replyToInboundId = replyTo?.direction === 'inbound' ? replyTo.id : undefined;
     try {
       await sendEmailMutation.mutateAsync({
         to_email: to,
@@ -71,6 +73,8 @@ export function EmailComposeModal({
         bcc: bcc || undefined,
         entity_type: entityType,
         entity_id: entityId,
+        reply_to_email_id: replyToEmailId,
+        reply_to_inbound_id: replyToInboundId,
       });
       setTo(defaultTo);
       setSubject('');

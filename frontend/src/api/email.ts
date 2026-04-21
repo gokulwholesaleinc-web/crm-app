@@ -14,6 +14,8 @@ export interface SendEmailPayload {
   bcc?: string;
   entity_type?: string;
   entity_id?: number;
+  reply_to_email_id?: number;
+  reply_to_inbound_id?: number;
 }
 
 export interface SendTemplateEmailPayload {
