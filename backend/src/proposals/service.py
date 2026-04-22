@@ -15,7 +15,9 @@ from src.core.constants import DEFAULT_PAGE_SIZE
 from src.core.filtering import build_token_search
 from src.core.url_safety import UnsafeUrlError, validate_public_url
 from src.email.branded_templates import TenantBrandingHelper, render_proposal_email
+from src.email.pdf_render import pdf_logo_allowed_hosts, render_html_to_pdf
 from src.email.service import EmailService
+from src.email.types import EmailAttachment
 from src.proposals.models import Proposal, ProposalTemplate, ProposalView
 from src.proposals.schemas import ProposalCreate, ProposalUpdate
 
@@ -35,42 +37,6 @@ def _designated_email_for(proposal: Proposal) -> str:
     if proposal.contact and proposal.contact.email:
         return proposal.contact.email.strip().lower()
     return ""
-
-
-def _proposal_logo_allowed_hosts() -> list[str] | None:
-    """Return the optional allowlist of hostnames permitted for logo fetches.
-
-    Read from ``PROPOSAL_LOGO_ALLOWED_HOSTS`` (comma-separated). When unset,
-    :func:`validate_public_url` falls back to ``https`` + non-private-IP
-    enforcement, which is the minimum safe baseline. Operators that know
-    their tenant assets live on a single CDN can tighten this further via
-    env var without a code change.
-    """
-    raw = os.getenv("PROPOSAL_LOGO_ALLOWED_HOSTS", "").strip()
-    if not raw:
-        return None
-    return [h.strip().lower() for h in raw.split(",") if h.strip()]
-
-
-def _safe_pdf_url_fetcher(url: str):
-    """weasyprint url_fetcher that blocks SSRF attempts.
-
-    weasyprint will fetch any URL you hand it — including ``file://`` for
-    local disk reads and private-IP HTTP for internal metadata endpoints.
-    This wrapper gates every outbound fetch through the shared SSRF
-    validator before delegating to weasyprint's default fetcher.
-    """
-    try:
-        validate_public_url(
-            url,
-            allowed_schemes=("https",),
-            allowed_hostnames=_proposal_logo_allowed_hosts(),
-        )
-    except UnsafeUrlError as exc:
-        logger.warning("Rejected unsafe PDF resource URL: %s", exc)
-        raise
-    from weasyprint import default_url_fetcher  # pyright: ignore[reportMissingImports]
-    return default_url_fetcher(url)
 
 
 class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreate, ProposalUpdate]):
@@ -327,6 +293,22 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         }
         subject, html_body = render_proposal_email(branding, proposal_data)
 
+        attachments: list[EmailAttachment] | None = None
+        if attach_pdf:
+            try:
+                pdf_bytes = await self.generate_proposal_pdf(proposal_id, user_id)
+            except Exception as exc:
+                logger.warning(
+                    "PDF render failed for proposal %s — sending email without attachment: %s",
+                    proposal_id, exc,
+                )
+            else:
+                attachments = [EmailAttachment(
+                    filename=f"proposal-{proposal.proposal_number}.pdf",
+                    content=pdf_bytes,
+                    content_type="application/pdf",
+                )]
+
         email_service = EmailService(self.db)
         await email_service.queue_email(
             to_email=contact.email,
@@ -335,6 +317,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             sent_by_id=user_id,
             entity_type="proposals",
             entity_id=proposal.id,
+            attachments=attachments,
         )
 
         # Mark proposal as sent
@@ -365,7 +348,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 validate_public_url(
                     logo_url,
                     allowed_schemes=("https",),
-                    allowed_hostnames=_proposal_logo_allowed_hosts(),
+                    allowed_hostnames=pdf_logo_allowed_hosts(),
                 )
                 logo_html = (
                     f'<img src="{escape(logo_url)}" alt="{company_name}" '
@@ -439,21 +422,10 @@ body {{ font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 0; color:
 </div>
 </body></html>"""
 
-        # Convert HTML to PDF bytes. The custom url_fetcher enforces the
-        # SSRF allowlist on every resource weasyprint tries to load (logo,
-        # font, CSS) so a tenant cannot point the renderer at internal IPs
-        # or ``file://`` paths.
-        try:
-            import weasyprint  # pyright: ignore[reportMissingImports]
-            pdf_bytes = weasyprint.HTML(
-                string=html,
-                url_fetcher=_safe_pdf_url_fetcher,
-            ).write_pdf()
-        except ImportError:
-            # Fallback: return HTML as bytes if weasyprint is not available
-            pdf_bytes = html.encode("utf-8")
-
-        return pdf_bytes
+        # Shared renderer enforces the SSRF allowlist on every resource
+        # weasyprint tries to load (logo, font, CSS) so a tenant cannot
+        # point the renderer at internal IPs or ``file://`` paths.
+        return await render_html_to_pdf(html)
 
     async def get_branding_for_proposal(self, proposal: Proposal) -> dict:
         """Get tenant branding from the proposal owner's tenant."""

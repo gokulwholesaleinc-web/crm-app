@@ -401,7 +401,7 @@ async def get_quote_pdf(
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e)) from e
 
     disposition = "attachment" if download else "inline"
-    filename = f"quote-{quote.quote_number}.html"
+    filename = f"quote-{quote.quote_number}.pdf"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",

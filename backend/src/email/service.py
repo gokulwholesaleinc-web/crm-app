@@ -6,6 +6,8 @@ import logging
 import re
 from datetime import UTC, datetime, timedelta
 
+import base64
+
 import resend  # pyright: ignore[reportMissingImports]
 from sqlalchemy import and_, func, literal, select, union_all
 from sqlalchemy.exc import IntegrityError
@@ -15,8 +17,31 @@ from src.config import settings
 from src.core.constants import DEFAULT_PAGE_SIZE
 from src.email.branded_templates import TenantBrandingHelper, render_branded_email
 from src.email.models import EmailQueue, InboundEmail
+from src.email.types import EmailAttachment
 
 logger = logging.getLogger(__name__)
+
+
+async def _resolve_from_name(db: AsyncSession, user_id: int, fallback_email: str) -> str:
+    """Prefer the sender's real name over the Gmail local-part.
+
+    Order: User.full_name → tenant's ``email_from_name`` → local-part of
+    the connected Gmail address. The Gmail API always sends from the
+    authenticated mailbox regardless of this value, so we only control
+    the display-name portion of the From header here.
+    """
+    from src.auth.models import User
+
+    user = await db.get(User, user_id)
+    if user and user.full_name and user.full_name.strip():
+        return user.full_name.strip()
+
+    branding = await TenantBrandingHelper.get_branding_for_user(db, user_id)
+    tenant_name = (branding.get("email_from_name") or "").strip()
+    if tenant_name:
+        return tenant_name
+
+    return fallback_email.split("@")[0]
 
 
 async def _try_gmail_send(
@@ -25,6 +50,7 @@ async def _try_gmail_send(
     *,
     reply_to_email_id: int | None = None,
     reply_to_inbound_id: int | None = None,
+    attachments: list[EmailAttachment] | None = None,
 ) -> bool:
     if not email.sent_by_id:
         return False
@@ -51,15 +77,18 @@ async def _try_gmail_send(
         sent_by_id=email.sent_by_id,
     )
 
+    from_name = await _resolve_from_name(db, email.sent_by_id, conn.email)
+
     raw = build_rfc822(
         to=email.to_email,
         subject=email.subject,
         body_html=email.body,
         body_text=email.body,
         from_email=conn.email,
-        from_name=conn.email.split("@")[0],
+        from_name=from_name,
         in_reply_to=prior_message_id,
         references=prior_message_id,
+        attachments=attachments,
     )
 
     async with GmailClient(conn, db) as client:
@@ -207,6 +236,7 @@ def send_email(
     from_email: str | None = None,
     cc: str | None = None,
     bcc: str | None = None,
+    attachments: list[EmailAttachment] | None = None,
 ) -> None:
     """Send an email via Resend. Raises on failure."""
     resend.api_key = settings.RESEND_API_KEY
@@ -220,6 +250,15 @@ def send_email(
         payload["cc"] = [addr.strip() for addr in cc.split(",")]
     if bcc:
         payload["bcc"] = [addr.strip() for addr in bcc.split(",")]
+    if attachments:
+        payload["attachments"] = [
+            {
+                "filename": att["filename"],
+                "content": base64.b64encode(att["content"]).decode("ascii"),
+                "content_type": att["content_type"],
+            }
+            for att in attachments
+        ]
     resend.Emails.send(payload)
 
 
@@ -283,6 +322,7 @@ class EmailService:
         bcc: str | None = None,
         reply_to_email_id: int | None = None,
         reply_to_inbound_id: int | None = None,
+        attachments: list[EmailAttachment] | None = None,
     ) -> EmailQueue:
         """Create an email queue entry and attempt to send."""
         from_email = self._validate_from_email(from_email)
@@ -319,6 +359,7 @@ class EmailService:
             email,
             reply_to_email_id=reply_to_email_id,
             reply_to_inbound_id=reply_to_inbound_id,
+            attachments=attachments,
         )
         return email
 
@@ -328,8 +369,17 @@ class EmailService:
         *,
         reply_to_email_id: int | None = None,
         reply_to_inbound_id: int | None = None,
+        attachments: list[EmailAttachment] | None = None,
     ) -> None:
-        """Attempt to send via Gmail if connected, fall back to Resend."""
+        """Attempt to send via Gmail if connected, fall back to Resend.
+
+        Attachments are passed through to the provider in-memory only;
+        they are *not* persisted on the EmailQueue row, so if this send
+        hits the retry path, the retry will go out without the
+        attachment. That's acceptable for the current use case (quote /
+        proposal PDFs are re-derivable from the entity) but worth noting
+        before reusing this for attachments that can't be regenerated.
+        """
         email.attempts += 1
         try:
             sent_via_gmail = False
@@ -339,6 +389,7 @@ class EmailService:
                     self.db,
                     reply_to_email_id=reply_to_email_id,
                     reply_to_inbound_id=reply_to_inbound_id,
+                    attachments=attachments,
                 )
             except Exception as gmail_exc:
                 logger.info("Gmail send failed for email %s, falling back to Resend: %s", email.id, gmail_exc)
@@ -352,6 +403,7 @@ class EmailService:
                 await asyncio.to_thread(
                     send_email, email.to_email, email.subject, email.body,
                     email.from_email, email.cc, email.bcc,
+                    attachments,
                 )
                 email.sent_via = "resend"
 
