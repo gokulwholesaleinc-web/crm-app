@@ -2,19 +2,10 @@
 
 from email.message import EmailMessage
 from email.utils import make_msgid
-from typing import TypedDict
 
+from src.email.types import EmailAttachment
 
-class EmailAttachment(TypedDict):
-    """In-memory attachment passed to build_rfc822 / Resend.
-
-    ``content`` is raw bytes (not base64) — the sender encodes per its
-    own wire format.
-    """
-
-    filename: str
-    content: bytes
-    content_type: str  # e.g. "application/pdf"
+__all__ = ["build_rfc822", "EmailAttachment"]
 
 
 def build_rfc822(

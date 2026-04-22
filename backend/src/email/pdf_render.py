@@ -10,6 +10,7 @@ backwards compatibility with existing deployments; it now acts as a
 cross-document allowlist.
 """
 
+import asyncio
 import logging
 import os
 
@@ -46,18 +47,27 @@ def safe_pdf_url_fetcher(url: str):
     return default_url_fetcher(url)
 
 
-def render_html_to_pdf(html: str) -> bytes:
-    """Render an HTML document to PDF bytes.
-
-    Falls back to the HTML as UTF-8 bytes when weasyprint is unavailable
-    so callers get *something* rather than an exception — they can detect
-    the fallback by checking the leading bytes if it matters. The SSRF
-    allowlist above still runs on every resource weasyprint tries to load.
-    """
+def _render_html_to_pdf_sync(html: str | bytes) -> bytes:
+    """Blocking weasyprint call. Kept private; callers should use the async wrapper."""
     try:
         import weasyprint  # pyright: ignore[reportMissingImports]
     except ImportError:
         logger.warning("weasyprint not installed — returning HTML bytes in place of PDF")
-        return html.encode("utf-8")
+        return html if isinstance(html, bytes) else html.encode("utf-8")
 
-    return weasyprint.HTML(string=html, url_fetcher=safe_pdf_url_fetcher).write_pdf()
+    # weasyprint.HTML accepts either string= or bytes via file_obj; it
+    # re-encodes UTF-8 internally either way, so a bytes input just
+    # avoids a round-trip decode on the caller side.
+    html_str = html.decode("utf-8") if isinstance(html, bytes) else html
+    return weasyprint.HTML(string=html_str, url_fetcher=safe_pdf_url_fetcher).write_pdf()
+
+
+async def render_html_to_pdf(html: str | bytes) -> bytes:
+    """Render an HTML document to PDF bytes off the event loop.
+
+    Weasyprint is a synchronous CPU-bound renderer (1-5s for a typical
+    branded document) so we hand it to a worker thread rather than
+    blocking every other request for the duration. Falls back to the
+    HTML as UTF-8 bytes when weasyprint is unavailable.
+    """
+    return await asyncio.to_thread(_render_html_to_pdf_sync, html)

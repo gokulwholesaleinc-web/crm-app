@@ -17,7 +17,7 @@ from src.config import settings
 from src.core.constants import DEFAULT_PAGE_SIZE
 from src.email.branded_templates import TenantBrandingHelper, render_branded_email
 from src.email.models import EmailQueue, InboundEmail
-from src.integrations.gmail.sender import EmailAttachment
+from src.email.types import EmailAttachment
 
 logger = logging.getLogger(__name__)
 

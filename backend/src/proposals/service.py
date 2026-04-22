@@ -17,7 +17,7 @@ from src.core.url_safety import UnsafeUrlError, validate_public_url
 from src.email.branded_templates import TenantBrandingHelper, render_proposal_email
 from src.email.pdf_render import pdf_logo_allowed_hosts, render_html_to_pdf
 from src.email.service import EmailService
-from src.integrations.gmail.sender import EmailAttachment
+from src.email.types import EmailAttachment
 from src.proposals.models import Proposal, ProposalTemplate, ProposalView
 from src.proposals.schemas import ProposalCreate, ProposalUpdate
 
@@ -425,7 +425,7 @@ body {{ font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 0; color:
         # Shared renderer enforces the SSRF allowlist on every resource
         # weasyprint tries to load (logo, font, CSS) so a tenant cannot
         # point the renderer at internal IPs or ``file://`` paths.
-        return render_html_to_pdf(html)
+        return await render_html_to_pdf(html)
 
     async def get_branding_for_proposal(self, proposal: Proposal) -> dict:
         """Get tenant branding from the proposal owner's tenant."""
