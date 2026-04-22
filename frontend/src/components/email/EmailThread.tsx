@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import DOMPurify from 'dompurify';
 import { Spinner, Badge, Button } from '../ui';
 import { useEmailThread } from '../../hooks/useEmail';
@@ -98,11 +98,11 @@ function EmailBubble({
   email: ThreadEmailItem;
   onReply?: (email: ThreadEmailItem) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const isOutbound = email.direction === 'outbound';
   const status = isOutbound ? (email.status || 'pending') : 'received';
   const badge = STATUS_BADGE[status] ?? { variant: 'gray' as BadgeVariant, label: status };
   const bodyContent = email.body || '';
+  const hasBody = Boolean(email.body_html || bodyContent);
 
   return (
     <div
@@ -145,22 +145,7 @@ function EmailBubble({
           )}
         </div>
 
-        {/* Expandable body */}
-        <button
-          type="button"
-          onClick={() => setExpanded((prev) => !prev)}
-          className={`mt-2 text-xs font-medium focus-visible:outline-none focus-visible:underline ${
-            isOutbound
-              ? 'text-white/90 hover:text-white'
-              : 'text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300'
-          }`}
-          aria-label={expanded ? 'Collapse email body' : 'Expand email body'}
-          aria-expanded={expanded}
-        >
-          {expanded ? 'Hide body' : 'Show body'}
-        </button>
-
-        {expanded && (
+        {hasBody && (
           <div
             className={`mt-2 text-sm whitespace-pre-wrap break-words border-t pt-2 ${
               isOutbound
