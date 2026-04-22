@@ -2,6 +2,19 @@
 
 from email.message import EmailMessage
 from email.utils import make_msgid
+from typing import TypedDict
+
+
+class EmailAttachment(TypedDict):
+    """In-memory attachment passed to build_rfc822 / Resend.
+
+    ``content`` is raw bytes (not base64) — the sender encodes per its
+    own wire format.
+    """
+
+    filename: str
+    content: bytes
+    content_type: str  # e.g. "application/pdf"
 
 
 def build_rfc822(
@@ -13,10 +26,12 @@ def build_rfc822(
     from_name: str,
     in_reply_to: str | None = None,
     references: str | None = None,
+    attachments: list[EmailAttachment] | None = None,
 ) -> bytes:
     """Build a multipart/alternative RFC 822 message ready for Gmail API.
 
     Returns raw bytes; Gmail expects the entire message base64url-encoded.
+    Attachments are appended as additional MIME parts after the HTML body.
     """
     domain = from_email.split("@")[-1] if "@" in from_email else "localhost"
 
@@ -33,5 +48,14 @@ def build_rfc822(
 
     msg.set_content(body_text, subtype="plain")
     msg.add_alternative(body_html, subtype="html")
+
+    for att in attachments or []:
+        maintype, _, subtype = att["content_type"].partition("/")
+        msg.add_attachment(
+            att["content"],
+            maintype=maintype or "application",
+            subtype=subtype or "octet-stream",
+            filename=att["filename"],
+        )
 
     return bytes(msg)

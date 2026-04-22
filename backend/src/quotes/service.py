@@ -10,9 +10,15 @@ from sqlalchemy.orm import selectinload
 from src.core.base_service import BaseService, CRUDService, StatusTransitionMixin
 from src.core.constants import DEFAULT_PAGE_SIZE
 from src.core.filtering import build_token_search
+import logging
+
 from src.email.branded_templates import TenantBrandingHelper, render_quote_email
+from src.email.pdf_render import render_html_to_pdf
 from src.email.pdf_service import BrandedPDFGenerator
 from src.email.service import EmailService
+from src.integrations.gmail.sender import EmailAttachment
+
+logger = logging.getLogger(__name__)
 from src.quotes.models import ProductBundle, ProductBundleItem, Quote, QuoteLineItem
 from src.quotes.schemas import (
     ProductBundleCreate,
@@ -289,6 +295,22 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
 
             subject, html_body = render_quote_email(branding, quote_data)
 
+            attachments: list[EmailAttachment] | None = None
+            if attach_pdf:
+                try:
+                    pdf_bytes = await self.generate_quote_pdf(quote_id, user_id)
+                except Exception as exc:
+                    logger.warning(
+                        "PDF render failed for quote %s — sending email without attachment: %s",
+                        quote_id, exc,
+                    )
+                else:
+                    attachments = [EmailAttachment(
+                        filename=f"quote-{quote.quote_number}.pdf",
+                        content=pdf_bytes,
+                        content_type="application/pdf",
+                    )]
+
             email_service = EmailService(self.db)
             await email_service.queue_email(
                 to_email=quote.contact.email,
@@ -297,6 +319,7 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
                 sent_by_id=user_id,
                 entity_type="quotes",
                 entity_id=quote.id,
+                attachments=attachments,
             )
 
         quote.status = "sent"
@@ -307,7 +330,12 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
         return quote
 
     async def generate_quote_pdf(self, quote_id: int, user_id: int) -> bytes:
-        """Generate branded quote PDF as HTML bytes."""
+        """Generate branded quote as PDF bytes (weasyprint).
+
+        Falls back to HTML bytes only when weasyprint is not installed in
+        the runtime — in which case the caller is responsible for serving
+        the correct MIME type.
+        """
         quote = await self.get_by_id(quote_id)
         if not quote:
             raise ValueError(f"Quote {quote_id} not found")
@@ -345,7 +373,8 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
         }
 
         generator = BrandedPDFGenerator()
-        return generator.generate_quote_pdf(quote_data, branding)
+        html_doc = generator.generate_quote_pdf(quote_data, branding).decode("utf-8")
+        return render_html_to_pdf(html_doc)
 
     async def get_public_quote(self, token: str) -> Quote | None:
         """Get a quote by its unguessable public token.
