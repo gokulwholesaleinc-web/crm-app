@@ -136,13 +136,16 @@ def _base_email_html(
     terms_url = _safe_url(branding.get("terms_of_service_url", ""))
     safe_cta_url = _safe_url(cta_url)
 
-    # Logo block
+    # Logo block — height-locked, width auto to preserve aspect ratio for
+    # wordmark logos. max-width caps ultra-wide logos so the header row
+    # doesn't wrap. Outlook reads the height attribute; the style block
+    # covers Gmail/Apple Mail/web clients.
     if logo_url:
         logo_html = (
             f'<img src="{escape(logo_url)}" alt="{company}" '
-            f'width="40" height="40" '
+            f'height="40" '
             f'style="display:inline-block;vertical-align:middle;margin-right:12px;'
-            f'border-radius:6px;" />'
+            f'height:40px;width:auto;max-width:200px;border-radius:6px;" />'
         )
     else:
         logo_html = ""
