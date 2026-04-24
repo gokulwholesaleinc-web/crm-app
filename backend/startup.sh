@@ -14,5 +14,8 @@ echo "Starting CRM App..."
 echo "Running alembic migrations..."
 alembic upgrade head
 
-echo "Starting FastAPI server on port 5000..."
-exec uvicorn src.main:app --host 0.0.0.0 --port 5000
+# Railway injects PORT at runtime. Fall back to 8000 (matches
+# EXPOSE in the Dockerfile) for local/docker-compose.
+PORT="${PORT:-8000}"
+echo "Starting FastAPI server on port ${PORT}..."
+exec uvicorn src.main:app --host 0.0.0.0 --port "${PORT}"

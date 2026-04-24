@@ -16,10 +16,19 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install runtime dependencies only
+# Install runtime dependencies only.
+# weasyprint needs libpango / libharfbuzz / libpangoft2 to render
+# fonts + text shaping at PDF-generation time. Without them the
+# renderer falls back to returning raw HTML as bytes, which Gmail
+# then fails to preview as a PDF (2026-04-24 incident).
 RUN apt-get update && apt-get install -y \
     libpq-dev \
     curl \
+    libpango-1.0-0 \
+    libpangoft2-1.0-0 \
+    libharfbuzz0b \
+    fonts-liberation \
+    fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy installed Python packages from builder
@@ -34,4 +43,6 @@ USER appuser
 
 EXPOSE 8000
 
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Use startup.sh so alembic migrations run before uvicorn boots
+# (see commit history for the auto-migrate change).
+CMD ["bash", "startup.sh"]
