@@ -147,7 +147,10 @@ class TestSubscriptionQuoteCreation:
         assert response.status_code == 201
         data = response.json()
         assert data["payment_type"] == "subscription"
-        assert data["recurring_interval"] == "monthly"
+        # Legacy "monthly" is translated to Stripe-native ("month", 1) by the
+        # schema validator so the billing spawn path doesn't have to branch.
+        assert data["recurring_interval"] == "month"
+        assert data["recurring_interval_count"] == 1
 
     @pytest.mark.asyncio
     async def test_subscription_quote_requires_recurring_interval(
@@ -191,7 +194,8 @@ class TestSubscriptionQuoteCreation:
         assert response.status_code == 201
         data = response.json()
         assert data["payment_type"] == "subscription"
-        assert data["recurring_interval"] == "yearly"
+        assert data["recurring_interval"] == "year"
+        assert data["recurring_interval_count"] == 1
 
 
 # =========================================================================

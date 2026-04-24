@@ -1132,7 +1132,9 @@ class TestQuotePaymentType:
         assert response.status_code == 200
         data = response.json()
         assert data["payment_type"] == "subscription"
-        assert data["recurring_interval"] == "yearly"
+        # Legacy "yearly" normalizes to Stripe-native ("year", 1) on the
+        # response via QuoteResponse's inherited validator.
+        assert data["recurring_interval"] == "year"
 
     @pytest.mark.asyncio
     async def test_esign_fields_present_in_response(
