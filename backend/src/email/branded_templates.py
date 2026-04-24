@@ -73,9 +73,17 @@ class TenantBrandingHelper:
         dictionary of branding values.  Falls back to defaults when no
         tenant or settings are found.
         """
+        # Prefer the primary TenantUser row, but fall back to any tenant
+        # the user belongs to. `is_primary` defaults to False at the DB
+        # level, so users created through paths that don't flag primary
+        # explicitly (e.g. older seeds, some invite flows) would otherwise
+        # hit the default "CRM" branding even when their tenant settings
+        # are fully configured.
         result = await db.execute(
             select(TenantUser)
-            .where(TenantUser.user_id == user_id, TenantUser.is_primary == True)
+            .where(TenantUser.user_id == user_id)
+            .order_by(TenantUser.is_primary.desc(), TenantUser.id.asc())
+            .limit(1)
         )
         tenant_user = result.scalar_one_or_none()
         if not tenant_user:
