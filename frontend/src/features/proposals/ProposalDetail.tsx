@@ -156,7 +156,7 @@ function ProposalDetailPage() {
   // inbox — so the CRM user can resend if the first attempt got
   // stuck (bad Gmail token, Resend sandbox rejection, etc.). The
   // backend /send endpoint re-queues on every call.
-  const canSend = ['draft', 'sent', 'viewed'].includes(proposal.status);
+  const canSend = ['draft', 'sent', 'viewed'].includes(proposal.status ?? '');
   const sendLabel = isDraft ? 'Send' : 'Resend';
   const canAcceptReject = proposal.status === 'sent' || proposal.status === 'viewed';
 

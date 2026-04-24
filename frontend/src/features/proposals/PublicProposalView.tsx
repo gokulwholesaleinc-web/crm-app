@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
-import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import { sanitizeHexColor } from '../../utils/colorValidation';
 
@@ -61,6 +60,34 @@ const DEFAULT_BRANDING: ProposalBranding = {
   terms_of_service_url: null,
 };
 
+// Cadence labels shared with BillingTermsField / ProposalBillingCard so
+// the public page speaks the same language as the CRM admin form.
+const CADENCE_LABEL: Record<string, string> = {
+  'month-1': 'Monthly',
+  'month-3': 'Quarterly',
+  'month-6': 'Bi-yearly',
+  'year-1': 'Yearly',
+};
+
+function cadenceOf(interval: string | null | undefined, count: number | null | undefined): string {
+  if (!interval) return '';
+  const key = `${interval}-${count ?? 1}`;
+  return CADENCE_LABEL[key] || `Every ${count ?? 1} ${interval}${(count ?? 1) > 1 ? 's' : ''}`;
+}
+
+function formatMoney(amount: string | number | null | undefined, currency: string): string | null {
+  if (amount == null || amount === '') return null;
+  const num = typeof amount === 'string' ? Number(amount) : amount;
+  if (!Number.isFinite(num)) return null;
+  try {
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency, minimumFractionDigits: 2 }).format(num);
+  } catch {
+    // Falls through for non-ISO currency strings (shouldn't happen in
+    // practice, but defensive against stale data).
+    return `${currency} ${num.toFixed(2)}`;
+  }
+}
+
 function PublicProposalView() {
   const { token } = useParams<{ token: string }>();
   const [proposal, setProposal] = useState<PublicProposal | null>(null);
@@ -95,6 +122,20 @@ function PublicProposalView() {
 
     fetchProposal();
   }, [token]);
+
+  // Hook must run unconditionally (React rules-of-hooks) so it sits
+  // here — before the loading/error early returns below — and guards
+  // against a null proposal inside the callback.
+  const contentSections = useMemo(() => {
+    if (!proposal) return [];
+    const raw: Array<{ title: string; body: string } | null> = [
+      proposal.executive_summary ? { title: 'Executive Summary', body: proposal.executive_summary } : null,
+      proposal.scope_of_work ? { title: 'Scope of Work', body: proposal.scope_of_work } : null,
+      proposal.timeline ? { title: 'Timeline', body: proposal.timeline } : null,
+      proposal.terms ? { title: 'Terms & Conditions', body: proposal.terms } : null,
+    ];
+    return raw.filter((s): s is { title: string; body: string } => s !== null);
+  }, [proposal]);
 
   const handleAccept = async () => {
     if (!proposal) return;
@@ -160,10 +201,11 @@ function PublicProposalView() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <div className="animate-pulse text-center">
-          <div className="h-8 w-48 bg-gray-200 dark:bg-gray-700 rounded mx-auto mb-4" />
-          <div className="h-4 w-32 bg-gray-200 dark:bg-gray-700 rounded mx-auto" />
+      <div className="min-h-screen bg-neutral-950 flex items-center justify-center">
+        <div className="flex items-center gap-3 text-neutral-500 text-xs uppercase tracking-[0.3em]">
+          <span className="inline-block h-px w-8 bg-neutral-700" aria-hidden="true" />
+          Loading
+          <span className="inline-block h-px w-8 bg-neutral-700" aria-hidden="true" />
         </div>
       </div>
     );
@@ -171,27 +213,14 @@ function PublicProposalView() {
 
   if (error || !proposal) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center px-4">
+      <div className="min-h-screen bg-neutral-950 flex items-center justify-center px-6">
         <div className="text-center max-w-md">
-          <svg
-            className="mx-auto h-16 w-16 text-gray-400 dark:text-gray-500 mb-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            aria-hidden="true"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.5}
-              d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
-            />
-          </svg>
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
-            Proposal Not Found
+          <p className="text-[10px] uppercase tracking-[0.3em] text-neutral-500 mb-4">Error</p>
+          <h1 className="font-serif text-3xl text-neutral-100 mb-3 text-balance">
+            Proposal not found
           </h1>
-          <p className="text-gray-500 dark:text-gray-400">
-            {error || 'This proposal may have been removed or the link is invalid.'}
+          <p className="text-sm text-neutral-400 leading-relaxed text-pretty">
+            {error || 'This proposal may have been withdrawn or the link is no longer valid. Please contact your account manager.'}
           </p>
         </div>
       </div>
@@ -220,405 +249,370 @@ function PublicProposalView() {
     !isExpired &&
     !actionDone;
 
-  const formattedDate = proposal.valid_until
-    ? new Intl.DateTimeFormat(undefined, {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      }).format(new Date(proposal.valid_until))
+  const validUntilDate = proposal.valid_until
+    ? new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+        .format(new Date(proposal.valid_until))
     : null;
 
+  const displayedStatus = actionDone ?? (
+    proposal.status === 'accepted' ? 'accepted'
+    : proposal.status === 'rejected' ? 'rejected'
+    : proposal.status === 'paid' ? 'paid'
+    : null
+  );
+
+  const formattedAmount = formatMoney(proposal.amount, proposal.currency);
+  const cadence = proposal.payment_type === 'subscription'
+    ? cadenceOf(proposal.recurring_interval, proposal.recurring_interval_count)
+    : null;
+  const hasPricingBlock = Boolean(formattedAmount || proposal.pricing_section);
+
+  // Section numbering: title block is implicit; we start counting at 01
+  // for the first rendered section and advance through content +
+  // pricing + payment + signatory.
+  let sectionCounter = 0;
+  const nextSectionNumber = () => {
+    sectionCounter += 1;
+    return String(sectionCounter).padStart(2, '0');
+  };
+
+  const accent = branding.primary_color;
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Branded Top Bar */}
-      <header
-        className="sticky top-0 z-10 border-b border-gray-200 dark:border-gray-700"
-        style={{ backgroundColor: branding.primary_color }}
-      >
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+    <div
+      className="min-h-screen bg-neutral-950 text-neutral-200 antialiased"
+      style={{
+        // Subtle radial vignette keeps the page from feeling flat
+        // without drawing attention. Layered behind all content.
+        backgroundImage:
+          'radial-gradient(ellipse 120% 60% at 50% 0%, rgba(255,255,255,0.03), transparent 60%)',
+      }}
+    >
+      {/* Letterhead — quiet, left-aligned, with a single accent rule */}
+      <header className="border-b border-neutral-800/60">
+        <div className="mx-auto max-w-[880px] px-6 sm:px-10 py-5 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             {branding.logo_url && !logoError ? (
               <img
                 src={branding.logo_url}
                 alt={companyDisplayName}
-                width={36}
-                height={36}
-                className="rounded"
-                style={{ maxHeight: 36 }}
+                height={28}
+                className="object-contain"
+                style={{ height: 28, width: 'auto', maxWidth: 140 }}
                 onError={() => setLogoError(true)}
               />
             ) : (
               <div
-                className="h-9 w-9 rounded flex items-center justify-center flex-shrink-0"
-                style={{ backgroundColor: branding.secondary_color }}
+                className="h-7 w-7 flex items-center justify-center flex-shrink-0 border"
+                style={{ borderColor: accent, color: accent }}
               >
-                <span className="text-white font-bold text-lg">
+                <span className="font-serif text-sm leading-none">
                   {companyDisplayName[0]?.toUpperCase() || 'P'}
                 </span>
               </div>
             )}
-            <span className="text-lg font-semibold text-white truncate">
+            <span className="font-serif text-[15px] text-neutral-100 tracking-wide truncate">
               {companyDisplayName}
             </span>
           </div>
-          <div className="flex items-center gap-2 text-sm text-white/80">
-            <span>{proposal.proposal_number}</span>
-            {proposal.status === 'accepted' || actionDone === 'accepted' ? (
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                <CheckIcon className="h-3 w-3" aria-hidden="true" />
-                Accepted
+          <div className="flex items-center gap-4 text-[11px] font-mono uppercase tracking-[0.18em] text-neutral-400">
+            <span className="tabular-nums">{proposal.proposal_number}</span>
+            {displayedStatus && (
+              <span
+                className="inline-flex items-center gap-1.5"
+                style={{ color: displayedStatus === 'rejected' ? '#ef4444' : accent }}
+              >
+                <span
+                  className="inline-block h-1.5 w-1.5 rounded-full"
+                  style={{ backgroundColor: displayedStatus === 'rejected' ? '#ef4444' : accent }}
+                  aria-hidden="true"
+                />
+                {displayedStatus === 'paid' ? 'Paid' : displayedStatus}
               </span>
-            ) : proposal.status === 'rejected' || actionDone === 'rejected' ? (
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                <XMarkIcon className="h-3 w-3" aria-hidden="true" />
-                Rejected
-              </span>
-            ) : null}
+            )}
           </div>
         </div>
+        {/* Hairline accent rule — the only full-width color moment on the page */}
+        <div className="h-px w-full" style={{ backgroundColor: accent, opacity: 0.35 }} />
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        {/* Title & Valid Until */}
-        <div>
+      <main className="mx-auto max-w-[720px] px-6 sm:px-10 py-20 sm:py-28">
+        {/* Cover title block — centered, generous whitespace, framed by
+            hairline rules top and bottom to feel like a title page. */}
+        <section className="text-center pb-16 sm:pb-20 border-b border-neutral-800/80">
+          <p className="text-[10px] font-mono uppercase tracking-[0.3em] text-neutral-500 mb-6">
+            Proposal &middot; <span className="tabular-nums">{proposal.proposal_number}</span>
+          </p>
           <h1
-            className="text-2xl sm:text-3xl font-bold text-wrap-balance"
-            style={{ color: branding.primary_color }}
+            className="font-serif text-[38px] sm:text-[52px] md:text-[60px] leading-[1.05] text-neutral-50 text-balance"
+            style={{ letterSpacing: '-0.02em' }}
           >
             {proposal.title}
           </h1>
           {proposal.contact && (
-            <p className="mt-1 text-gray-500 dark:text-gray-400">
+            <p className="mt-8 font-serif italic text-lg sm:text-xl text-neutral-300">
               Prepared for {proposal.contact.full_name}
             </p>
           )}
-          {formattedDate && (
-            <p className={`mt-2 text-sm ${isExpired ? 'text-red-600 dark:text-red-400 font-medium' : 'text-gray-500 dark:text-gray-400'}`}>
-              {isExpired ? 'Expired on ' : 'Valid until '}{formattedDate}
+          {proposal.company && proposal.company.name !== companyDisplayName && (
+            <p className="mt-1 text-sm text-neutral-500 tracking-wide">
+              {proposal.company.name}
             </p>
           )}
-        </div>
+          {validUntilDate && (
+            <div className="mt-10 inline-flex items-center gap-3 text-[10px] font-mono uppercase tracking-[0.25em] text-neutral-500">
+              <span className="inline-block h-px w-8 bg-neutral-700" aria-hidden="true" />
+              <span className={isExpired ? 'text-red-400' : undefined}>
+                {isExpired ? 'Expired' : 'Valid until'} <span className="tabular-nums">{validUntilDate}</span>
+              </span>
+              <span className="inline-block h-px w-8 bg-neutral-700" aria-hidden="true" />
+            </div>
+          )}
+        </section>
 
-        {/* Cover Letter */}
+        {/* Cover letter — no card, just flowing prose under the title */}
         {proposal.cover_letter && (
-          <section className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 sm:p-8">
-            <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed break-words">
+          <section className="mt-16 sm:mt-20">
+            <p className="font-serif text-[17px] sm:text-[18px] leading-[1.7] text-neutral-200 whitespace-pre-wrap text-pretty break-words">
               {proposal.cover_letter}
             </p>
           </section>
         )}
 
-        {/* Executive Summary */}
-        {proposal.executive_summary && (
-          <section
-            className="rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 sm:p-8"
-            style={{ backgroundColor: `${branding.secondary_color}10` }}
-          >
-            <h2
-              className="text-lg font-semibold mb-4"
-              style={{ color: branding.primary_color }}
-            >
-              Executive Summary
-            </h2>
-            <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed break-words">
-              {proposal.executive_summary}
-            </p>
+        {/* Numbered content sections */}
+        {contentSections.map((section) => {
+          const num = nextSectionNumber();
+          return (
+            <section key={section.title} className="mt-20 sm:mt-24 scroll-mt-24">
+              <SectionHeader num={num} title={section.title} accent={accent} />
+              <div className="prose-document">
+                <p className="whitespace-pre-wrap text-pretty break-words">
+                  {section.body}
+                </p>
+              </div>
+            </section>
+          );
+        })}
+
+        {/* Pricing — quote-block treatment with a pull-figure */}
+        {hasPricingBlock && (
+          <section className="mt-20 sm:mt-24">
+            <SectionHeader
+              num={nextSectionNumber()}
+              title={proposal.payment_type === 'subscription' ? 'Engagement & Fees' : 'Fees'}
+              accent={accent}
+            />
+
+            {formattedAmount && (
+              <figure className="my-10 sm:my-12 text-center">
+                <div
+                  className="text-[10px] font-mono uppercase tracking-[0.3em] mb-4"
+                  style={{ color: accent }}
+                >
+                  {proposal.payment_type === 'subscription' ? 'Recurring fee' : 'Total investment'}
+                </div>
+                <div
+                  className="font-serif text-[44px] sm:text-[56px] leading-none text-neutral-50 tabular-nums"
+                  style={{ letterSpacing: '-0.02em' }}
+                >
+                  {formattedAmount}
+                </div>
+                {cadence && (
+                  <div className="mt-4 font-serif italic text-neutral-400 text-base">
+                    billed {cadence.toLowerCase()}
+                  </div>
+                )}
+                <div
+                  className="mx-auto mt-8 h-px w-24"
+                  style={{ backgroundColor: accent, opacity: 0.5 }}
+                  aria-hidden="true"
+                />
+              </figure>
+            )}
+
+            {proposal.pricing_section && (
+              <div className="prose-document">
+                <p className="whitespace-pre-wrap text-pretty break-words">
+                  {proposal.pricing_section}
+                </p>
+              </div>
+            )}
           </section>
         )}
 
-        {/* Scope of Work */}
-        {proposal.scope_of_work && (
-          <section
-            className="rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 sm:p-8"
-            style={{ backgroundColor: `${branding.secondary_color}10` }}
-          >
-            <h2
-              className="text-lg font-semibold mb-4"
-              style={{ color: branding.primary_color }}
-            >
-              Scope of Work
-            </h2>
-            <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed break-words">
-              {proposal.scope_of_work}
-            </p>
-          </section>
-        )}
-
-        {/* Pricing */}
-        {proposal.pricing_section && (
-          <section
-            className="rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 sm:p-8"
-            style={{ backgroundColor: `${branding.secondary_color}10` }}
-          >
-            <h2
-              className="text-lg font-semibold mb-4"
-              style={{ color: branding.primary_color }}
-            >
-              Pricing
-            </h2>
-            <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed break-words">
-              {proposal.pricing_section}
-            </p>
-          </section>
-        )}
-
-        {/* Timeline */}
-        {proposal.timeline && (
-          <section
-            className="rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 sm:p-8"
-            style={{ backgroundColor: `${branding.secondary_color}10` }}
-          >
-            <h2
-              className="text-lg font-semibold mb-4"
-              style={{ color: branding.primary_color }}
-            >
-              Timeline
-            </h2>
-            <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed break-words">
-              {proposal.timeline}
-            </p>
-          </section>
-        )}
-
-        {/* Terms */}
-        {proposal.terms && (
-          <section
-            className="rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 sm:p-8"
-            style={{ backgroundColor: `${branding.secondary_color}10` }}
-          >
-            <h2
-              className="text-lg font-semibold mb-4"
-              style={{ color: branding.primary_color }}
-            >
-              Terms and Conditions
-            </h2>
-            <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed break-words">
-              {proposal.terms}
-            </p>
-          </section>
-        )}
-
-        {/* Content (fallback) */}
+        {/* Content (fallback) — only when no structured sections present */}
         {proposal.content &&
-          !proposal.executive_summary &&
-          !proposal.scope_of_work && (
-            <section className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 sm:p-8">
-              <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed break-words">
-                {proposal.content}
-              </p>
+          contentSections.length === 0 &&
+          !hasPricingBlock && (
+            <section className="mt-20 sm:mt-24">
+              <SectionHeader num={nextSectionNumber()} title="Proposal" accent={accent} />
+              <div className="prose-document">
+                <p className="whitespace-pre-wrap text-pretty break-words">
+                  {proposal.content}
+                </p>
+              </div>
             </section>
           )}
 
-        {/* Accept / Reject Actions */}
-        {canRespond && (
-          <section className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 sm:p-8">
-            <h2
-              className="text-lg font-semibold mb-2"
-              style={{ color: branding.primary_color }}
-            >
-              Your Response
-            </h2>
-
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-              Please review the proposal above and accept or reject it. Typing
-              your name and email below and clicking Accept is your legally
-              binding electronic signature (see the full e-signature disclosure
-              at the bottom of this page).
-            </p>
-            <div className="grid gap-3 sm:grid-cols-2 mb-4">
-              <div>
-                <label
-                  htmlFor="signer-name"
-                  className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1"
-                >
-                  Full name
-                </label>
-                <input
-                  id="signer-name"
-                  type="text"
-                  autoComplete="name"
-                  value={signerName}
-                  onChange={(e) => setSignerName(e.target.value)}
-                  disabled={actionPending}
-                  className="w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm px-3 py-2 shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-                  style={{ outlineColor: branding.primary_color }}
-                />
-              </div>
-              <div>
-                <label
-                  htmlFor="signer-email"
-                  className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1"
-                >
-                  Email address
-                </label>
-                <input
-                  id="signer-email"
-                  type="email"
-                  autoComplete="email"
-                  inputMode="email"
-                  spellCheck={false}
-                  value={signerEmail}
-                  onChange={(e) => setSignerEmail(e.target.value)}
-                  disabled={actionPending}
-                  className="w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm px-3 py-2 shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-                  style={{ outlineColor: branding.primary_color }}
-                />
-              </div>
-            </div>
-            {signError && (
-              <p
-                role="alert"
-                aria-live="polite"
-                className="mb-4 text-sm text-red-600 dark:text-red-400"
-              >
-                {signError}
-              </p>
-            )}
-            <div className="flex flex-col sm:flex-row gap-3">
-              <button
-                type="button"
-                aria-label="Accept this proposal"
-                onClick={handleAccept}
-                disabled={actionPending}
-                className="inline-flex items-center justify-center gap-2 rounded-lg px-6 py-3 text-sm font-semibold text-white shadow-sm hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
-                style={{ backgroundColor: branding.accent_color, outlineColor: branding.accent_color }}
-              >
-                <CheckIcon className="h-5 w-5" aria-hidden="true" />
-                Accept Proposal
-              </button>
-              <button
-                type="button"
-                aria-label="Reject this proposal"
-                onClick={handleReject}
-                disabled={actionPending}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-white dark:bg-gray-700 px-6 py-3 text-sm font-semibold text-gray-900 dark:text-gray-100 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-500 disabled:opacity-50"
-              >
-                <XMarkIcon className="h-5 w-5" aria-hidden="true" />
-                Reject Proposal
-              </button>
-            </div>
-          </section>
-        )}
-
-        {/* Payment CTA — rendered whenever the backend has spawned a
-            Stripe Invoice or Checkout Session for this proposal. Uses a
-            plain <a> so the browser follows the external Stripe URL
-            without React Router intercepting it. */}
+        {/* Payment CTA — styled as its own section. Rendered whenever the
+            backend has spawned a Stripe Invoice or Checkout Session. */}
         {proposal.stripe_payment_url && proposal.status !== 'paid' && (
-          <section
-            className="rounded-lg p-6 sm:p-8 border"
-            style={{
-              backgroundColor: `${branding.accent_color}10`,
-              borderColor: `${branding.accent_color}66`,
-            }}
-          >
-            <h2
-              className="text-lg font-semibold mb-2"
-              style={{ color: branding.primary_color }}
-            >
+          <section className="mt-20 sm:mt-24">
+            <SectionHeader num={nextSectionNumber()} title="Payment" accent={accent} />
+            <p className="prose-document-p mb-8">
               {proposal.payment_type === 'subscription'
-                ? 'Complete your subscription'
-                : 'Complete payment'}
-            </h2>
-            <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
-              {proposal.payment_type === 'subscription'
-                ? 'Set up your payment method on Stripe to activate your subscription. You will be charged the first billing period when you finish checkout.'
-                : 'An invoice has been issued. Pay securely on Stripe to finalize this engagement.'}
+                ? `Set up your payment method with ${companyDisplayName} via Stripe to activate your subscription. Your first billing period will be charged upon completion of checkout.`
+                : `An invoice has been issued for this engagement. Complete payment securely via Stripe to confirm and proceed.`}
             </p>
             <a
               href={proposal.stripe_payment_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2 rounded-lg px-6 py-3 text-sm font-semibold text-white shadow-sm hover:opacity-90"
-              style={{ backgroundColor: branding.accent_color }}
+              className="inline-flex items-center gap-3 border px-8 py-3.5 font-serif text-[15px] text-neutral-50 hover:bg-neutral-900/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 transition-colors"
+              style={{ borderColor: accent, outlineColor: accent }}
             >
               {proposal.payment_type === 'subscription'
-                ? 'Set up payment on Stripe'
-                : 'Pay on Stripe'}
+                ? 'Complete payment setup'
+                : 'Proceed to payment'}
+              <span aria-hidden="true" className="inline-block" style={{ color: accent }}>
+                →
+              </span>
             </a>
           </section>
         )}
 
         {proposal.status === 'paid' && (
-          <section className="rounded-lg p-6 sm:p-8 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
-            <div className="flex items-center gap-3">
-              <CheckIcon className="h-6 w-6 text-green-600 dark:text-green-400" aria-hidden="true" />
-              <div>
-                <h3 className="font-semibold text-green-800 dark:text-green-300">
-                  Payment received
-                </h3>
-                <p className="text-sm mt-1 text-green-700 dark:text-green-400">
-                  Thank you — your payment is confirmed. We will follow up shortly.
-                </p>
-              </div>
+          <section className="mt-20 sm:mt-24">
+            <SectionHeader num={nextSectionNumber()} title="Payment Received" accent={accent} />
+            <p className="prose-document-p">
+              Your payment has been confirmed. A receipt has been sent to your email. We will
+              follow up shortly with next steps for this engagement.
+            </p>
+          </section>
+        )}
+
+        {/* Signatory block — structured like the execution section of a
+            legal document. Underlined inputs evoke a physical form. */}
+        {canRespond && (
+          <section className="mt-24 sm:mt-28">
+            <SectionHeader num={nextSectionNumber()} title="Signatory" accent={accent} />
+
+            <p className="prose-document-p mb-10">
+              By signing below, you accept this proposal and its terms on behalf of the
+              receiving organization. Your signature is legally binding under the US ESIGN
+              Act and applicable state UETA statutes; the full disclosure is at the bottom
+              of this page.
+            </p>
+
+            <div className="grid gap-8 sm:grid-cols-2 mb-8">
+              <SignatureField
+                id="signer-name"
+                label="Full Name"
+                type="text"
+                autoComplete="name"
+                value={signerName}
+                onChange={setSignerName}
+                disabled={actionPending}
+                accent={accent}
+              />
+              <SignatureField
+                id="signer-email"
+                label="Email Address"
+                type="email"
+                autoComplete="email"
+                inputMode="email"
+                spellCheck={false}
+                value={signerEmail}
+                onChange={setSignerEmail}
+                disabled={actionPending}
+                accent={accent}
+              />
+            </div>
+
+            <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-neutral-500 mb-10">
+              Signed electronically &middot; <span className="tabular-nums">
+                {new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+                  .format(new Date())}
+              </span>
+            </p>
+
+            {signError && (
+              <p
+                role="alert"
+                aria-live="polite"
+                className="mb-8 text-sm text-red-400 border-l-2 border-red-500/60 pl-4 py-1"
+              >
+                {signError}
+              </p>
+            )}
+
+            <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center">
+              <button
+                type="button"
+                aria-label="Accept this proposal"
+                onClick={handleAccept}
+                disabled={actionPending}
+                className="inline-flex items-center justify-center gap-3 px-8 py-3.5 font-serif text-[15px] text-neutral-950 hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 disabled:opacity-50 transition-opacity"
+                style={{ backgroundColor: accent, outlineColor: accent }}
+              >
+                {actionPending ? 'Recording…' : 'Accept & Sign'}
+                {!actionPending && (
+                  <span aria-hidden="true" className="inline-block">→</span>
+                )}
+              </button>
+              <button
+                type="button"
+                aria-label="Decline this proposal"
+                onClick={handleReject}
+                disabled={actionPending}
+                className="inline-flex items-center justify-center px-6 py-3.5 font-serif text-[15px] text-neutral-400 hover:text-neutral-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-neutral-500 disabled:opacity-50 transition-colors"
+              >
+                Decline proposal
+              </button>
             </div>
           </section>
         )}
 
-        {/* Action Confirmation */}
+        {/* Post-action confirmation — kept minimal, styled as a closing note */}
         {actionDone && (
-          <section
-            className={`rounded-lg p-6 sm:p-8 ${
-              actionDone === 'accepted'
-                ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
-                : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              {actionDone === 'accepted' ? (
-                <CheckIcon className="h-6 w-6 text-green-600 dark:text-green-400" aria-hidden="true" />
-              ) : (
-                <XMarkIcon className="h-6 w-6 text-red-600 dark:text-red-400" aria-hidden="true" />
-              )}
-              <div>
-                <h3
-                  className={`font-semibold ${
-                    actionDone === 'accepted' ? 'text-green-800 dark:text-green-300' : 'text-red-800 dark:text-red-300'
-                  }`}
-                >
-                  {actionDone === 'accepted'
-                    ? 'Proposal Accepted'
-                    : 'Proposal Rejected'}
-                </h3>
-                <p
-                  className={`text-sm mt-1 ${
-                    actionDone === 'accepted' ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'
-                  }`}
-                >
-                  {actionDone === 'accepted'
-                    ? proposal.stripe_payment_url
-                      ? 'Thanks! Use the payment button above to complete your transaction.'
-                      : 'Thank you for accepting this proposal. We will be in touch shortly.'
-                    : 'Thank you for your response. We appreciate your time.'}
-                </p>
-              </div>
-            </div>
+          <section className="mt-24 pt-12 border-t border-neutral-800/80 text-center">
+            <p className="text-[10px] font-mono uppercase tracking-[0.3em] text-neutral-500 mb-4">
+              {actionDone === 'accepted' ? 'Signature recorded' : 'Response recorded'}
+            </p>
+            <p className="font-serif text-2xl sm:text-3xl text-neutral-100 mb-3 text-balance">
+              {actionDone === 'accepted'
+                ? 'Thank you — your signature has been captured.'
+                : 'Thank you for your response.'}
+            </p>
+            <p className="font-serif italic text-neutral-400 text-pretty max-w-lg mx-auto leading-relaxed">
+              {actionDone === 'accepted'
+                ? proposal.stripe_payment_url
+                  ? 'Please complete payment above to finalize this engagement.'
+                  : `${companyDisplayName} will be in touch shortly with next steps.`
+                : 'We appreciate your consideration and hope to work with you in the future.'}
+            </p>
           </section>
         )}
       </main>
 
-      {/* Branded Footer + Legal/Payment Disclosure
-          Rendered at the bottom of every public proposal page. Shows:
-          - ESIGN Act / UETA electronic signature disclosure (always,
-            including for already-accepted proposals — acts as a
-            signed-contract receipt for the record)
-          - Tenant's footer text (optional)
-          - Tenant's Terms of Service / Privacy Policy links when set
-          - Stripe disclosure whenever a payment link is active (client
-            is about to hand over payment info on Stripe's hosted page)
-      */}
-      <footer className="border-t border-gray-200 dark:border-gray-700 mt-12">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 text-sm text-gray-500 dark:text-gray-400 space-y-4">
-          <details className="rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 p-3 text-xs text-gray-600 dark:text-gray-400">
-            <summary className="cursor-pointer font-medium text-gray-700 dark:text-gray-300">
-              Electronic signature disclosure &amp; terms
+      {/* Fine-print legal footer — every public view sees the same
+          ESIGN disclosure, tenant legal links (when configured), and
+          Stripe disclosure (when a payment surface is active). */}
+      <footer className="mt-24 border-t border-neutral-800/60">
+        <div className="mx-auto max-w-[720px] px-6 sm:px-10 py-12 space-y-6">
+          <details className="group border-l-2 border-neutral-800 pl-4 transition-colors open:border-neutral-700">
+            <summary className="cursor-pointer text-[10px] font-mono uppercase tracking-[0.25em] text-neutral-500 hover:text-neutral-300 list-none flex items-center gap-3 select-none">
+              <span aria-hidden="true" className="inline-block transition-transform group-open:rotate-90">
+                ▸
+              </span>
+              Electronic signature disclosure &amp; consent
             </summary>
-            <div className="mt-2 space-y-2 leading-relaxed">
+            <div className="mt-4 space-y-3 text-[12px] leading-relaxed text-neutral-400 text-pretty">
               <p>
-                By typing your name and email and clicking <strong>Accept Proposal</strong>,
-                you agree that this constitutes your legally binding electronic signature
-                under the US ESIGN Act (15 USC §7001) and applicable state UETA statutes,
-                with the same legal effect as a handwritten signature.
+                By typing your name and email and selecting <em>Accept &amp; Sign</em>, you agree
+                that this constitutes your legally binding electronic signature under the
+                US ESIGN Act (15 USC §7001) and applicable state UETA statutes, with the
+                same legal effect as a handwritten signature.
               </p>
               <p>
                 You consent to receive this proposal and the countersigned PDF copy
@@ -632,35 +626,36 @@ function PublicProposalView() {
                 the proposal for dispute resolution.
               </p>
               <p>
-                To sign, you need a modern web browser with JavaScript enabled and the ability
-                to receive email at the address you provide. If any of these are unavailable,
-                contact {companyDisplayName} to arrange an alternative signing method.
+                To sign, you need a modern web browser with JavaScript enabled and the
+                ability to receive email at the address you provide. If any of these are
+                unavailable, contact {companyDisplayName} to arrange an alternative
+                signing method.
               </p>
             </div>
           </details>
 
-          <div className="text-center">
-            {branding.footer_text ? (
-              <p className="mb-1">{branding.footer_text}</p>
-            ) : null}
-            <p>
-              {companyDisplayName} &middot; {proposal.proposal_number}
-            </p>
-          </div>
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-6 pt-4 border-t border-neutral-800/60">
+            <div className="space-y-1">
+              <p className="font-serif text-sm text-neutral-300">{companyDisplayName}</p>
+              {branding.footer_text && (
+                <p className="text-[11px] text-neutral-500 leading-relaxed max-w-sm text-pretty">
+                  {branding.footer_text}
+                </p>
+              )}
+              <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-neutral-600 pt-2">
+                <span className="tabular-nums">{proposal.proposal_number}</span>
+              </p>
+            </div>
 
-          {(branding.terms_of_service_url || branding.privacy_policy_url) && (
-            <nav
-              aria-label="Legal"
-              className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs"
-            >
+            <div className="flex flex-wrap gap-x-5 gap-y-2 text-[10px] font-mono uppercase tracking-[0.2em] text-neutral-500">
               {branding.terms_of_service_url && (
                 <a
                   href={branding.terms_of_service_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="underline hover:text-gray-700 dark:hover:text-gray-200"
+                  className="hover:text-neutral-300 transition-colors"
                 >
-                  Terms of Service
+                  Terms
                 </a>
               )}
               {branding.privacy_policy_url && (
@@ -668,43 +663,30 @@ function PublicProposalView() {
                   href={branding.privacy_policy_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="underline hover:text-gray-700 dark:hover:text-gray-200"
+                  className="hover:text-neutral-300 transition-colors"
                 >
-                  Privacy Policy
+                  Privacy
                 </a>
               )}
-            </nav>
-          )}
+            </div>
+          </div>
 
           {proposal.stripe_payment_url && (
-            <div className="text-center text-xs space-y-1">
+            <div className="pt-4 border-t border-neutral-800/60 text-[11px] text-neutral-500 leading-relaxed text-pretty">
               <p>
                 Payments are processed securely by{' '}
-                <a
-                  href="https://stripe.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline hover:text-gray-700 dark:hover:text-gray-200"
-                >
+                <a href="https://stripe.com" target="_blank" rel="noopener noreferrer"
+                  className="underline decoration-neutral-700 hover:decoration-neutral-400">
                   Stripe
                 </a>
-                . {companyDisplayName} never sees or stores your card details.
-              </p>
-              <p className="space-x-3">
-                <a
-                  href="https://stripe.com/legal/consumer"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline hover:text-gray-700 dark:hover:text-gray-200"
-                >
+                . {companyDisplayName} never sees or stores your card details.{' '}
+                <a href="https://stripe.com/legal/consumer" target="_blank" rel="noopener noreferrer"
+                  className="underline decoration-neutral-700 hover:decoration-neutral-400">
                   Stripe Terms
                 </a>
-                <a
-                  href="https://stripe.com/privacy"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline hover:text-gray-700 dark:hover:text-gray-200"
-                >
+                {' · '}
+                <a href="https://stripe.com/privacy" target="_blank" rel="noopener noreferrer"
+                  className="underline decoration-neutral-700 hover:decoration-neutral-400">
                   Stripe Privacy
                 </a>
               </p>
@@ -712,6 +694,110 @@ function PublicProposalView() {
           )}
         </div>
       </footer>
+
+      {/* Scoped utilities used throughout the document. Kept inline so
+          the component is self-contained and the Tailwind
+          arbitrary-value noise stays out of the JSX. */}
+      <style>{`
+        .prose-document {
+          font-size: 15.5px;
+          line-height: 1.75;
+          color: rgb(212 212 212);
+        }
+        .prose-document p { margin: 0; }
+        .prose-document-p {
+          font-size: 15.5px;
+          line-height: 1.75;
+          color: rgb(212 212 212);
+          max-width: 62ch;
+        }
+        details > summary::-webkit-details-marker { display: none; }
+      `}</style>
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------
+// Local components
+// -----------------------------------------------------------------
+
+interface SectionHeaderProps {
+  num: string;
+  title: string;
+  accent: string;
+}
+
+function SectionHeader({ num, title, accent }: SectionHeaderProps) {
+  return (
+    <header className="mb-8 sm:mb-10">
+      <div className="flex items-baseline gap-4 mb-3">
+        <span
+          className="font-mono text-[11px] tracking-[0.25em] tabular-nums"
+          style={{ color: accent }}
+        >
+          § {num}
+        </span>
+        <span
+          className="flex-1 h-px"
+          style={{ backgroundColor: accent, opacity: 0.25 }}
+          aria-hidden="true"
+        />
+      </div>
+      <h2
+        className="font-serif text-[26px] sm:text-[30px] leading-tight text-neutral-50 text-balance"
+        style={{ letterSpacing: '-0.015em' }}
+      >
+        {title}
+      </h2>
+    </header>
+  );
+}
+
+interface SignatureFieldProps {
+  id: string;
+  label: string;
+  type: string;
+  value: string;
+  onChange: (value: string) => void;
+  disabled: boolean;
+  accent: string;
+  autoComplete?: string;
+  inputMode?: 'text' | 'email' | 'numeric' | 'tel' | 'search' | 'url' | 'none' | 'decimal';
+  spellCheck?: boolean;
+}
+
+function SignatureField({
+  id,
+  label,
+  type,
+  value,
+  onChange,
+  disabled,
+  accent,
+  autoComplete,
+  inputMode,
+  spellCheck,
+}: SignatureFieldProps) {
+  return (
+    <div className="relative pt-5">
+      <label
+        htmlFor={id}
+        className="block text-[10px] font-mono uppercase tracking-[0.25em] text-neutral-500 mb-3"
+      >
+        {label}
+      </label>
+      <input
+        id={id}
+        type={type}
+        autoComplete={autoComplete}
+        inputMode={inputMode}
+        spellCheck={spellCheck}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        className="w-full bg-transparent border-0 border-b px-0 pb-2 font-serif text-xl text-neutral-50 placeholder-neutral-700 focus:outline-none focus:ring-0 disabled:opacity-50 transition-colors"
+        style={{ borderColor: value ? accent : 'rgb(64 64 64)' }}
+      />
     </div>
   );
 }
