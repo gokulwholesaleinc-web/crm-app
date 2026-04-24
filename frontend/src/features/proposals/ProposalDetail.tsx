@@ -151,7 +151,12 @@ function ProposalDetailPage() {
   };
 
   const isDraft = proposal.status === 'draft';
-  const canSend = isDraft;
+  // Show Send whenever the proposal hasn't moved past the client's
+  // inbox — so the CRM user can resend if the first attempt got
+  // stuck (bad Gmail token, Resend sandbox rejection, etc.). The
+  // backend /send endpoint re-queues on every call.
+  const canSend = ['draft', 'sent', 'viewed'].includes(proposal.status);
+  const sendLabel = isDraft ? 'Send' : 'Resend';
   const canAcceptReject = proposal.status === 'sent' || proposal.status === 'viewed';
 
   return (
@@ -191,8 +196,9 @@ function ProposalDetailPage() {
               onClick={handleSend}
               leftIcon={<PaperAirplaneIcon className="h-4 w-4" />}
               disabled={sendProposalMutation.isPending}
+              variant={isDraft ? 'primary' : 'secondary'}
             >
-              {sendProposalMutation.isPending ? 'Sending...' : 'Send'}
+              {sendProposalMutation.isPending ? 'Sending...' : sendLabel}
             </Button>
           )}
           {canAcceptReject && (
