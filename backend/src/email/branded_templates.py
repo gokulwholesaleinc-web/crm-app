@@ -148,6 +148,10 @@ def _base_email_html(
     # wordmark logos. max-width caps ultra-wide logos so the header row
     # doesn't wrap. Outlook reads the height attribute; the style block
     # covers Gmail/Apple Mail/web clients.
+    #
+    # When a logo image is present we assume it already contains the
+    # company wordmark and suppress the text company name next to it —
+    # otherwise you get "LINKCREATIVE  Link Creative" side-by-side.
     if logo_url:
         logo_html = (
             f'<img src="{escape(logo_url)}" alt="{company}" '
@@ -155,8 +159,10 @@ def _base_email_html(
             f'style="display:inline-block;vertical-align:middle;margin-right:12px;'
             f'height:40px;width:auto;max-width:200px;border-radius:6px;" />'
         )
+        company_label = ""
     else:
         logo_html = ""
+        company_label = company
 
     # CTA button — only render if the URL passed the scheme allowlist.
     if cta_text and safe_cta_url:
@@ -223,7 +229,7 @@ def _base_email_html(
 <tr><td style="background-color:{primary};padding:20px 24px;border-radius:8px 8px 0 0;">
   <table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr>
     <td style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:18px;font-weight:700;">
-      {logo_html}{company}
+      {logo_html}{company_label}
     </td>
   </tr></table>
 </td></tr>
