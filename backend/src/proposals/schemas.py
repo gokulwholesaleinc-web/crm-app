@@ -178,6 +178,11 @@ class ProposalResponse(ProposalBase):
     company: CompanyBrief | None = None
     opportunity: OpportunityBrief | None = None
     quote: QuoteBrief | None = None
+    # Per-view audit trail: every public-link GET appends a row with
+    # IP + user-agent + timestamp. Surfaced on the detail response so
+    # the CRM can show "viewed 12 times from 3 IPs" + the raw log for
+    # forensics / billing disputes.
+    views: list[ProposalViewResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
 
