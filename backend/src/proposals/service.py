@@ -1072,9 +1072,15 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 )],
             )
         except Exception as exc:
+            # exc_info=True forces a full traceback into the log
+            # stream. Without it we burned a cycle in 2026-04-24 with a
+            # silent signed-copy failure that looked identical between
+            # "pod rolled mid-accept" and "PDF template tripped
+            # weasyprint" — the traceback is what separates them.
             logger.warning(
                 "Failed to send signed copy for proposal %s: %s",
                 proposal.id, exc,
+                exc_info=True,
             )
 
     async def get_branding_for_proposal(self, proposal: Proposal) -> dict:
