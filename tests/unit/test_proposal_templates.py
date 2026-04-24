@@ -358,21 +358,21 @@ class TestProposalPdfSsrfDefense:
 
     def test_safe_pdf_url_fetcher_rejects_http_scheme(self):
         from src.core.url_safety import UnsafeUrlError
-        from src.proposals.service import _safe_pdf_url_fetcher
+        from src.email.pdf_render import safe_pdf_url_fetcher as _safe_pdf_url_fetcher
 
         with pytest.raises(UnsafeUrlError):
             _safe_pdf_url_fetcher("http://example.com/logo.png")
 
     def test_safe_pdf_url_fetcher_rejects_file_scheme(self):
         from src.core.url_safety import UnsafeUrlError
-        from src.proposals.service import _safe_pdf_url_fetcher
+        from src.email.pdf_render import safe_pdf_url_fetcher as _safe_pdf_url_fetcher
 
         with pytest.raises(UnsafeUrlError):
             _safe_pdf_url_fetcher("file:///etc/passwd")
 
     def test_safe_pdf_url_fetcher_rejects_loopback_ip(self):
         from src.core.url_safety import UnsafeUrlError
-        from src.proposals.service import _safe_pdf_url_fetcher
+        from src.email.pdf_render import safe_pdf_url_fetcher as _safe_pdf_url_fetcher
 
         with pytest.raises(UnsafeUrlError):
             _safe_pdf_url_fetcher("https://127.0.0.1/logo.png")
@@ -380,7 +380,7 @@ class TestProposalPdfSsrfDefense:
     def test_safe_pdf_url_fetcher_rejects_aws_metadata_ip(self):
         """``169.254.169.254`` is the AWS/GCP instance metadata endpoint."""
         from src.core.url_safety import UnsafeUrlError
-        from src.proposals.service import _safe_pdf_url_fetcher
+        from src.email.pdf_render import safe_pdf_url_fetcher as _safe_pdf_url_fetcher
 
         with pytest.raises(UnsafeUrlError):
             _safe_pdf_url_fetcher("https://169.254.169.254/latest/meta-data/")
@@ -389,7 +389,7 @@ class TestProposalPdfSsrfDefense:
         """When ``PROPOSAL_LOGO_ALLOWED_HOSTS`` is set, off-list hosts are blocked."""
         monkeypatch.setenv("PROPOSAL_LOGO_ALLOWED_HOSTS", "cdn.example.com")
         from src.core.url_safety import UnsafeUrlError
-        from src.proposals.service import _safe_pdf_url_fetcher
+        from src.email.pdf_render import safe_pdf_url_fetcher as _safe_pdf_url_fetcher
 
         with pytest.raises(UnsafeUrlError):
             _safe_pdf_url_fetcher("https://attacker.example.net/logo.png")
