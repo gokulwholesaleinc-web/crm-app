@@ -86,6 +86,7 @@ export interface Proposal extends ProposalBase {
   stripe_payment_url?: string | null;
   invoice_sent_at?: string | null;
   paid_at?: string | null;
+  billing_error?: string | null;
   created_at: string;
   updated_at: string;
   contact?: { id: number; full_name: string } | null;

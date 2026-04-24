@@ -18,6 +18,7 @@ import {
   useAcceptProposal,
   useRejectProposal,
 } from '../../hooks/useProposals';
+import { ProposalBillingCard } from './ProposalBillingCard';
 import { formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { showSuccess, showError } from '../../utils/toast';
@@ -150,7 +151,12 @@ function ProposalDetailPage() {
   };
 
   const isDraft = proposal.status === 'draft';
-  const canSend = isDraft;
+  // Show Send whenever the proposal hasn't moved past the client's
+  // inbox — so the CRM user can resend if the first attempt got
+  // stuck (bad Gmail token, Resend sandbox rejection, etc.). The
+  // backend /send endpoint re-queues on every call.
+  const canSend = ['draft', 'sent', 'viewed'].includes(proposal.status);
+  const sendLabel = isDraft ? 'Send' : 'Resend';
   const canAcceptReject = proposal.status === 'sent' || proposal.status === 'viewed';
 
   return (
@@ -190,8 +196,9 @@ function ProposalDetailPage() {
               onClick={handleSend}
               leftIcon={<PaperAirplaneIcon className="h-4 w-4" />}
               disabled={sendProposalMutation.isPending}
+              variant={isDraft ? 'primary' : 'secondary'}
             >
-              {sendProposalMutation.isPending ? 'Sending...' : 'Send'}
+              {sendProposalMutation.isPending ? 'Sending...' : sendLabel}
             </Button>
           )}
           {canAcceptReject && (
@@ -319,6 +326,12 @@ function ProposalDetailPage() {
               )}
             </dl>
           </div>
+
+          {/* Billing — shows the structured pricing Giancarlo picked on
+              create + any Stripe artifact that was spawned on e-sign
+              (invoice id / subscription id / pay URL) so the CRM side
+              mirrors what the client sees on the public page. */}
+          <ProposalBillingCard proposal={proposal} />
 
           {/* Related Entities */}
           <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700">
