@@ -157,22 +157,30 @@ function PublicQuoteView() {
 
   const handleReject = useCallback(async () => {
     if (!quote) return;
+    const email = signerEmail.trim();
+    if (!email) {
+      setEsignError('Please enter your email address to reject this quote.');
+      return;
+    }
     setActionPending(true);
+    setEsignError(null);
     try {
       const response = await publicClient.post<PublicQuote>(
         `/api/quotes/public/${token}/reject`,
-        {}
+        { signer_email: email },
       );
       setQuote(response.data);
       setActionDone('rejected');
-    } catch {
-      // Unlike the old version, do NOT mark the quote rejected on a
-      // failed network call — the actual server-side state is unknown.
-      setError('Unable to record rejection. Please contact your account manager.');
+    } catch (err) {
+      const detail =
+        (typeof err === 'object' && err !== null && 'response' in err
+          ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+          : null) || 'Unable to record rejection. Please contact your account manager.';
+      setEsignError(detail);
     } finally {
       setActionPending(false);
     }
-  }, [quote, token]);
+  }, [quote, token, signerEmail]);
 
   if (loading) {
     return (

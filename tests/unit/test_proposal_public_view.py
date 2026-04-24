@@ -156,11 +156,15 @@ class TestPublicProposalReject:
         client: AsyncClient,
         db_session: AsyncSession,
         sent_proposal: Proposal,
+        test_contact: Contact,
     ):
         """rejection_reason + signer_ip + signer_user_agent captured on reject."""
         response = await client.post(
             f"/api/proposals/public/{sent_proposal.public_token}/reject",
-            json={"reason": "Budget didn't land this quarter"},
+            json={
+                "signer_email": test_contact.email,
+                "reason": "Budget didn't land this quarter",
+            },
             headers={"User-Agent": "RejectAgent/1.0"},
         )
         assert response.status_code == 200, response.text
@@ -173,13 +177,28 @@ class TestPublicProposalReject:
         assert sent_proposal.signer_user_agent == "RejectAgent/1.0"
 
     @pytest.mark.asyncio
-    async def test_reject_without_body_succeeds(
+    async def test_reject_requires_signer_email(
         self,
         client: AsyncClient,
         sent_proposal: Proposal,
     ):
-        """Reject body is optional."""
+        """Reject must now require signer_email to prevent forwarded-link abuse."""
         response = await client.post(
             f"/api/proposals/public/{sent_proposal.public_token}/reject",
+            json={},
         )
-        assert response.status_code == 200, response.text
+        assert response.status_code == 422, response.text  # Pydantic validation
+
+    @pytest.mark.asyncio
+    async def test_reject_rejects_mismatched_signer_email(
+        self,
+        client: AsyncClient,
+        sent_proposal: Proposal,
+    ):
+        """A signer_email that doesn't match the contact must be rejected."""
+        response = await client.post(
+            f"/api/proposals/public/{sent_proposal.public_token}/reject",
+            json={"signer_email": "imposter@evil.example.com"},
+        )
+        assert response.status_code == 400, response.text
+        assert "does not match" in response.json()["detail"].lower()

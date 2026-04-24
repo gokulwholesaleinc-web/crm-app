@@ -45,15 +45,43 @@ class QuoteBase(BaseModel):
     notes: str | None = None
     owner_id: int | None = None
     payment_type: str = "one_time"
-    recurring_interval: str | None = None
+    recurring_interval: str | None = None  # 'month' | 'year'
+    recurring_interval_count: int | None = None  # 1, 3 (quarterly), 6 (bi-yearly), ...
     designated_signer_email: str | None = None
 
     @model_validator(mode="after")
     def validate_recurring_interval(self):
-        if self.payment_type == "subscription" and not self.recurring_interval:
-            raise ValueError("recurring_interval is required for subscription quotes")
-        if self.payment_type != "subscription":
+        # Accept and translate legacy values ('monthly', 'quarterly',
+        # 'yearly') that pre-date the Stripe-native ('month'|'year' +
+        # count) split. New clients should send ('month', 1),
+        # ('month', 3), ('month', 6), or ('year', 1) directly.
+        _LEGACY = {
+            "monthly": ("month", 1),
+            "quarterly": ("month", 3),
+            "bi_yearly": ("month", 6),
+            "yearly": ("year", 1),
+        }
+        if self.payment_type == "subscription":
+            if not self.recurring_interval:
+                raise ValueError(
+                    "recurring_interval is required for subscription quotes",
+                )
+            if self.recurring_interval in _LEGACY:
+                legacy_interval, legacy_count = _LEGACY[self.recurring_interval]
+                self.recurring_interval = legacy_interval
+                if self.recurring_interval_count is None:
+                    self.recurring_interval_count = legacy_count
+            if self.recurring_interval not in ("month", "year"):
+                raise ValueError(
+                    "recurring_interval must be 'month' or 'year'",
+                )
+            if self.recurring_interval_count is None:
+                self.recurring_interval_count = 1
+            elif self.recurring_interval_count < 1:
+                raise ValueError("recurring_interval_count must be >= 1")
+        else:
             self.recurring_interval = None
+            self.recurring_interval_count = None
         return self
 
 
@@ -77,6 +105,7 @@ class QuoteUpdate(BaseModel):
     owner_id: int | None = None
     payment_type: str | None = None
     recurring_interval: str | None = None
+    recurring_interval_count: int | None = None
     designated_signer_email: str | None = None
 
 
@@ -155,6 +184,7 @@ class QuotePublicResponse(BaseModel):
     terms_and_conditions: str | None = None
     payment_type: str = "one_time"
     recurring_interval: str | None = None
+    recurring_interval_count: int | None = None
     line_items: list[QuotePublicLineItem] = []
     contact: ContactBrief | None = None
     company: CompanyBrief | None = None
@@ -171,6 +201,7 @@ class QuoteAcceptRequest(BaseModel):
 
 class QuoteRejectRequest(BaseModel):
     """Request body for rejecting a quote via public link."""
+    signer_email: str
     reason: str | None = None
 
 

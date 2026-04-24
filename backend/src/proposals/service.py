@@ -5,11 +5,13 @@ import os
 import re
 import secrets
 from datetime import UTC, datetime
+from decimal import Decimal
 from html import escape
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import selectinload
 
+from src.config import settings
 from src.core.base_service import BaseService, CRUDService, StatusTransitionMixin
 from src.core.constants import DEFAULT_PAGE_SIZE
 from src.core.filtering import build_token_search
@@ -18,12 +20,69 @@ from src.email.branded_templates import TenantBrandingHelper, render_proposal_em
 from src.email.pdf_render import pdf_logo_allowed_hosts, render_html_to_pdf
 from src.email.service import EmailService
 from src.email.types import EmailAttachment
+from src.payments.service import PaymentService
 from src.proposals.models import Proposal, ProposalTemplate, ProposalView
 from src.proposals.schemas import ProposalCreate, ProposalUpdate
 
 logger = logging.getLogger(__name__)
 
 _TEMPLATE_VAR_PATTERN = re.compile(r"\{\{(\w+)\}\}")
+
+
+def _resolve_billing(proposal: Proposal) -> dict | None:
+    """Flatten a proposal's billable terms into a dict the PaymentService can act on.
+
+    Preference order:
+      1. Proposal's own structured pricing fields (amount + payment_type)
+      2. Linked Quote's total + payment_type + recurring_interval(_count)
+
+    Returns ``None`` when no billable amount can be derived, which tells
+    ``_maybe_spawn_billing`` to skip Stripe entirely and leave the
+    proposal in plain ``accepted`` state.
+    """
+    # Pick the source that carries a positive amount, preferring the
+    # proposal's own fields over the linked quote's. The proposal and
+    # quote share the same relevant attribute names (amount/total,
+    # currency, payment_type, recurring_interval[_count]) so downstream
+    # attribute lookups don't branch.
+    source = None
+    raw_amount = proposal.amount
+    if raw_amount is not None and Decimal(str(raw_amount)) > 0:
+        source = proposal
+    elif proposal.quote is not None:
+        q_total = getattr(proposal.quote, "total", None)
+        if q_total is not None and Decimal(str(q_total)) > 0:
+            source = proposal.quote
+            raw_amount = q_total
+
+    if source is None or raw_amount is None:
+        return None
+
+    amount = Decimal(str(raw_amount))
+    currency = getattr(source, "currency", "USD") or "USD"
+    payment_type = getattr(source, "payment_type", "one_time") or "one_time"
+    interval = getattr(source, "recurring_interval", None)
+    interval_count = getattr(source, "recurring_interval_count", None)
+
+    if payment_type == "subscription":
+        if not interval:
+            # Mis-configured subscription (no interval). Fall back to a
+            # one-time charge rather than silently emailing an endless
+            # retainer that the client didn't agree to.
+            payment_type = "one_time"
+            interval = None
+            interval_count = None
+        else:
+            interval_count = interval_count or 1
+
+    return {
+        "payment_type": payment_type,
+        "amount": amount,
+        "currency": currency,
+        "interval": interval,
+        "interval_count": interval_count,
+        "description": proposal.title,
+    }
 
 
 def _designated_email_for(proposal: Proposal) -> str:
@@ -37,6 +96,19 @@ def _designated_email_for(proposal: Proposal) -> str:
     if proposal.contact and proposal.contact.email:
         return proposal.contact.email.strip().lower()
     return ""
+
+
+def _assert_signer_matches(proposal: Proposal, signer_email: str | None) -> None:
+    """Guard: the supplied signer_email must match the proposal's designated
+    recipient (case-insensitive). Shared by accept/reject so a forwarded
+    public link can't be used by a third party to sign or reject.
+    """
+    expected = _designated_email_for(proposal)
+    given = (signer_email or "").strip().lower()
+    if not expected:
+        raise ValueError("Proposal has no recipient email on file")
+    if not given or given != expected:
+        raise ValueError("Signer email does not match the proposal recipient")
 
 
 class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreate, ProposalUpdate]):
@@ -160,29 +232,151 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         got hold of the public URL from signing as the customer with an
         attacker-controlled email.
 
-        Raises ValueError if the proposal is not in sent/viewed state or the
-        signer_email doesn't match.
+        After the e-signature is recorded, this tries to spawn the Stripe
+        artifact that the proposal's payment_type implies (Invoice for
+        one_time, Checkout Session for subscription). A Stripe failure
+        does NOT unwind the acceptance — the proposal stays accepted and
+        the CRM user can resend billing manually.
+
+        Raises ValueError if the proposal is not in sent/viewed state or
+        the signer_email doesn't match.
         """
         if proposal.status not in ("sent", "viewed"):
             raise ValueError(f"Cannot accept proposal in '{proposal.status}' status")
 
-        expected_email = _designated_email_for(proposal)
-        given_email = (signer_email or "").strip().lower()
-        if not expected_email:
-            raise ValueError("Proposal has no recipient email on file")
-        if not given_email or given_email != expected_email:
-            raise ValueError("Signer email does not match the proposal recipient")
+        _assert_signer_matches(proposal, signer_email)
 
+        # Atomic status transition: conditional UPDATE guarded by the
+        # same (sent|viewed) whitelist. If two accept requests arrive
+        # concurrently, only one row update will match — the other
+        # returns rowcount=0 and we raise instead of spawning a second
+        # Stripe Invoice / Checkout Session.
         now = datetime.now(UTC)
-        proposal.status = "accepted"
-        proposal.accepted_at = now
-        proposal.signer_name = signer_name
-        proposal.signer_email = signer_email
-        proposal.signer_ip = signer_ip
-        proposal.signer_user_agent = signer_user_agent
-        proposal.signed_at = now
+        stmt = (
+            update(Proposal)
+            .where(Proposal.id == proposal.id)
+            .where(Proposal.status.in_(("sent", "viewed")))
+            .values(
+                status="accepted",
+                accepted_at=now,
+                signer_name=signer_name,
+                signer_email=signer_email,
+                signer_ip=signer_ip,
+                signer_user_agent=signer_user_agent,
+                signed_at=now,
+            )
+        )
+        result = await self.db.execute(stmt)
+        if result.rowcount == 0:
+            raise ValueError(
+                "Proposal was accepted by another signer moments ago",
+            )
         await self.db.flush()
         await self.db.refresh(proposal)
+
+        # Mail the signer a signed PDF copy for their records. Runs
+        # before billing spawn so the client has the countersigned doc
+        # in hand even if Stripe is down.
+        await self.send_signed_copy_to_client(proposal)
+
+        await self._maybe_spawn_billing(proposal)
+
+        await self.db.refresh(proposal)
+        return proposal
+
+    async def _maybe_spawn_billing(self, proposal: Proposal) -> None:
+        """Create the Stripe Invoice or Checkout Session for an accepted
+        proposal, if pricing is resolvable and Stripe is configured.
+
+        Mutates the proposal row with the resulting Stripe ids + payment
+        url and moves status to 'awaiting_payment'. Stripe errors are
+        captured on ``proposal.billing_error`` (so the CRM admin can see
+        them and retry) instead of bubbling up and unwinding the
+        acceptance — the client signed, that has to stick.
+        """
+        billing = _resolve_billing(proposal)
+        if billing is None:
+            return
+
+        payments = PaymentService(self.db)
+        try:
+            if billing["payment_type"] == "one_time":
+                result = await payments.create_invoice_for_proposal(
+                    proposal_id=proposal.id,
+                    contact_id=proposal.contact_id,
+                    company_id=proposal.company_id,
+                    amount=billing["amount"],
+                    currency=billing["currency"],
+                    description=billing["description"],
+                    owner_id=proposal.owner_id,
+                )
+                proposal.stripe_invoice_id = result["stripe_invoice_id"]
+                proposal.stripe_payment_url = result["stripe_payment_url"]
+            else:
+                base = settings.FRONTEND_BASE_URL.rstrip("/")
+                if not base:
+                    proposal.billing_error = (
+                        "FRONTEND_BASE_URL is not configured; cannot build "
+                        "subscription checkout return URL"
+                    )
+                    logger.warning(
+                        "FRONTEND_BASE_URL is not set; skipping subscription "
+                        "checkout for proposal %s",
+                        proposal.id,
+                    )
+                    await self.db.flush()
+                    return
+                public_path = f"/proposals/public/{proposal.public_token}"
+                result = await payments.create_subscription_checkout_for_proposal(
+                    proposal_id=proposal.id,
+                    contact_id=proposal.contact_id,
+                    company_id=proposal.company_id,
+                    amount=billing["amount"],
+                    currency=billing["currency"],
+                    description=billing["description"],
+                    interval=billing["interval"],
+                    interval_count=billing["interval_count"],
+                    success_url=f"{base}{public_path}?paid=1",
+                    cancel_url=f"{base}{public_path}",
+                )
+                proposal.stripe_checkout_session_id = result["stripe_checkout_session_id"]
+                proposal.stripe_payment_url = result["stripe_payment_url"]
+        except ValueError as exc:
+            # Stripe disabled, customer-resolution failed, or an API
+            # error bubbled up. Record the error on the proposal so the
+            # CRM admin can see "billing setup failed" and retry; don't
+            # unwind the acceptance.
+            logger.warning(
+                "Billing spawn failed for proposal %s: %s", proposal.id, exc,
+            )
+            proposal.billing_error = str(exc)
+            await self.db.flush()
+            return
+
+        proposal.status = "awaiting_payment"
+        proposal.invoice_sent_at = datetime.now(UTC)
+        proposal.billing_error = None
+        await self.db.flush()
+
+    async def retry_billing(self, proposal: Proposal) -> Proposal:
+        """Re-run billing spawn for a proposal that previously failed.
+
+        Caller must already have authorization on the proposal
+        (enforced at the router). Idempotent: if the proposal already
+        has a ``stripe_payment_url`` or is past 'awaiting_payment',
+        refuses so we don't create a duplicate charge.
+        """
+        if proposal.status not in ("accepted", "awaiting_payment"):
+            raise ValueError(
+                "Only accepted/awaiting_payment proposals can be retried",
+            )
+        if proposal.stripe_payment_url:
+            raise ValueError(
+                "Proposal already has a payment link; cannot retry",
+            )
+        # _maybe_spawn_billing mutates `proposal` in-place and flushes,
+        # so we can return the same instance — no refresh required.
+        await self._maybe_spawn_billing(proposal)
         return proposal
 
     async def reject_proposal_public(
@@ -191,10 +385,18 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         reason: str | None = None,
         signer_ip: str | None = None,
         signer_user_agent: str | None = None,
+        signer_email: str | None = None,
     ) -> Proposal:
-        """Reject a proposal via the public link."""
+        """Reject a proposal via the public link.
+
+        Validates the signer_email against the designated or contact
+        email, same as accept. Without this check, anyone who received a
+        forwarded copy of the proposal link could permanently reject it.
+        """
         if proposal.status not in ("sent", "viewed"):
             raise ValueError(f"Cannot reject proposal in '{proposal.status}' status")
+
+        _assert_signer_matches(proposal, signer_email)
 
         now = datetime.now(UTC)
         proposal.status = "rejected"
@@ -327,8 +529,19 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             await self.db.flush()
             await self.db.refresh(proposal)
 
-    async def generate_proposal_pdf(self, proposal_id: int, user_id: int) -> bytes:
-        """Generate branded proposal PDF with all sections."""
+    async def generate_proposal_pdf(
+        self,
+        proposal_id: int,
+        user_id: int,
+        include_signature: bool = False,
+    ) -> bytes:
+        """Generate branded proposal PDF with all sections.
+
+        When ``include_signature`` is True and the proposal has been
+        signed, appends an e-signature audit block (signer name,
+        email, IP, timestamp). Used for the post-acceptance "signed
+        copy" that gets emailed to the client.
+        """
         proposal = await self.get_by_id(proposal_id)
         if not proposal:
             raise ValueError(f"Proposal {proposal_id} not found")
@@ -385,6 +598,31 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 f'</div>'
             )
 
+        signature_html = ""
+        if include_signature and proposal.signed_at:
+            signed_on = proposal.signed_at.strftime("%B %d, %Y at %H:%M UTC")
+            signer_row = (
+                f'<p style="margin:4px 0;"><strong>Signed by:</strong> '
+                f'{escape(proposal.signer_name or "")}</p>'
+                f'<p style="margin:4px 0;"><strong>Email:</strong> '
+                f'{escape(proposal.signer_email or "")}</p>'
+                f'<p style="margin:4px 0;"><strong>Signed on:</strong> {signed_on}</p>'
+            )
+            if proposal.signer_ip:
+                signer_row += (
+                    f'<p style="margin:4px 0;color:#6b7280;font-size:11px;">'
+                    f'IP: {escape(proposal.signer_ip)}</p>'
+                )
+            signature_html = (
+                f'<div style="margin-top:32px;padding:16px 20px;'
+                f'background-color:#f3f4f6;border-left:4px solid {primary_color};'
+                f'border-radius:4px;">'
+                f'<h2 style="color:{primary_color};font-size:16px;margin:0 0 8px;">'
+                f'Electronic Signature</h2>'
+                f'{signer_row}'
+                f'</div>'
+            )
+
         contact_name = ""
         if proposal.contact:
             contact_name = getattr(proposal.contact, "full_name", "") or ""
@@ -416,6 +654,7 @@ body {{ font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 0; color:
   {valid_line}
   <hr style="border:none;border-top:2px solid {secondary_color};margin:24px 0;" />
   {sections_html}
+  {signature_html}
 </div>
 <div style="background-color:#f9fafb;padding:16px 32px;text-align:center;font-size:12px;color:#6b7280;">
   {company_name}
@@ -426,6 +665,64 @@ body {{ font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 0; color:
         # weasyprint tries to load (logo, font, CSS) so a tenant cannot
         # point the renderer at internal IPs or ``file://`` paths.
         return await render_html_to_pdf(html)
+
+    async def send_signed_copy_to_client(self, proposal: Proposal) -> None:
+        """Email the client a PDF of the accepted proposal with their e-signature.
+
+        Sent via ``EmailService.queue_email(sent_by_id=proposal.owner_id)`` so
+        it routes through the proposal owner's Gmail OAuth connection when
+        they have one — otherwise falls back to the tenant's default email
+        sender. Failure is logged but does not unwind acceptance.
+        """
+        if not proposal.signed_at:
+            return
+        signer_email = (proposal.signer_email or "").strip()
+        if not signer_email:
+            logger.warning(
+                "Cannot send signed copy for proposal %s: no signer email",
+                proposal.id,
+            )
+            return
+
+        branding = await self.get_branding_for_proposal(proposal)
+        company = branding.get("company_name") or "Your provider"
+        signer_name = escape(proposal.signer_name or "")
+        title = escape(proposal.title)
+        body = (
+            f"<p>Hi {signer_name or 'there'},</p>"
+            f"<p>Thank you for accepting <strong>{title}</strong>. A signed "
+            f"PDF copy is attached for your records.</p>"
+            f"<p>{escape(company)}</p>"
+        )
+
+        # Render + queue are both best-effort: a failure in either leaves
+        # the proposal accepted but without a signed-copy email. The CRM
+        # user can resend from the admin UI.
+        try:
+            pdf_bytes = await self.generate_proposal_pdf(
+                proposal.id,
+                proposal.owner_id or 0,
+                include_signature=True,
+            )
+            email_service = EmailService(self.db)
+            await email_service.queue_email(
+                to_email=signer_email,
+                subject=f"Signed copy — {proposal.title}",
+                body=body,
+                sent_by_id=proposal.owner_id,
+                entity_type="proposals",
+                entity_id=proposal.id,
+                attachments=[EmailAttachment(
+                    filename=f"proposal-{proposal.proposal_number}-signed.pdf",
+                    content=pdf_bytes,
+                    content_type="application/pdf",
+                )],
+            )
+        except Exception as exc:
+            logger.warning(
+                "Failed to send signed copy for proposal %s: %s",
+                proposal.id, exc,
+            )
 
     async def get_branding_for_proposal(self, proposal: Proposal) -> dict:
         """Get tenant branding from the proposal owner's tenant."""

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button, SearchableSelect } from '../../components/ui';
+import BillingTermsField, { type BillingTermsValue } from '../../components/forms/BillingTermsField';
 import { useContacts } from '../../hooks/useContacts';
 import { useCompanies } from '../../hooks/useCompanies';
 import { useOpportunities, useOpportunity } from '../../hooks/useOpportunities';
@@ -32,6 +33,15 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
     timelineField: initialData?.timeline ?? '',
     terms: initialData?.terms ?? '',
     validUntil: initialData?.valid_until ?? '',
+  });
+
+  // Billing terms (pre-cast amount to string for the controlled input).
+  const [billing, setBilling] = useState<BillingTermsValue>({
+    payment_type: initialData?.payment_type ?? 'one_time',
+    recurring_interval: initialData?.recurring_interval ?? null,
+    recurring_interval_count: initialData?.recurring_interval_count ?? null,
+    amount: initialData?.amount != null ? String(initialData.amount) : '',
+    currency: initialData?.currency ?? 'USD',
   });
 
   // `touched` flips true on first edit; drives the beforeunload warning.
@@ -90,6 +100,9 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    const amountTrimmed = billing.amount.trim();
+    const amountValue = amountTrimmed === '' ? null : amountTrimmed;
+
     const data: ProposalCreate = {
       title: formData.title,
       content: formData.content || null,
@@ -104,9 +117,19 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
       contact_id: formData.contactId,
       company_id: formData.companyId,
       quote_id: formData.quoteId,
+      payment_type: billing.payment_type,
+      recurring_interval: billing.recurring_interval,
+      recurring_interval_count: billing.recurring_interval_count,
+      amount: amountValue,
+      currency: billing.currency,
     };
 
     onSubmit(data);
+  };
+
+  const handleBillingChange = (next: BillingTermsValue) => {
+    setBilling(next);
+    setTouched(true);
   };
 
   return (
@@ -173,9 +196,26 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
           />
         </div>
 
+        <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 bg-gray-50 dark:bg-gray-800/40 space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+              Billing
+            </h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              Controls what gets charged when the client accepts. Leave amount
+              blank to skip automatic invoicing.
+            </p>
+          </div>
+          <BillingTermsField
+            value={billing}
+            onChange={handleBillingChange}
+            amountHelpText="Total invoice amount (one-time) or per-period amount (subscription)."
+          />
+        </div>
+
         <div>
           <label htmlFor="proposal-pricing" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-            Pricing Section
+            Pricing Notes
           </label>
           <textarea
             id="proposal-pricing"
@@ -184,7 +224,7 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
             value={formData.pricingSection}
             onChange={(e) => updateField('pricingSection', e.target.value)}
             className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
-            placeholder="Pricing details..."
+            placeholder="Additional pricing context shown to the client (line-item breakdowns, assumptions, etc.)"
           />
         </div>
 

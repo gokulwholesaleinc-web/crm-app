@@ -40,6 +40,7 @@ export interface QuoteBase {
   owner_id?: number | null;
   payment_type?: string;
   recurring_interval?: string | null;
+  recurring_interval_count?: number | null;
 }
 
 export interface QuoteCreate extends QuoteBase {
@@ -62,6 +63,7 @@ export interface QuoteUpdate {
   owner_id?: number | null;
   payment_type?: string | null;
   recurring_interval?: string | null;
+  recurring_interval_count?: number | null;
 }
 
 export interface Quote extends QuoteBase {

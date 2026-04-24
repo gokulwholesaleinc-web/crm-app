@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     STRIPE_PUBLISHABLE_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
 
+    # Public-facing frontend URL, used to build Stripe Checkout
+    # success_url/cancel_url and post-accept payment redirects for
+    # public proposal/quote pages. No trailing slash.
+    FRONTEND_BASE_URL: str = ""
+
     META_ACCESS_TOKEN: str = ""
     META_APP_ID: str = ""
     META_APP_SECRET: str = ""

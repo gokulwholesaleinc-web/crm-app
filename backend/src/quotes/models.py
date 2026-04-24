@@ -58,9 +58,11 @@ class Quote(Base, AuditableMixin):
     payment_type: Mapped[str] = mapped_column(
         String(20), default="one_time", nullable=False
     )
-    recurring_interval: Mapped[str | None] = mapped_column(
-        String(20)
-    )  # monthly, quarterly, yearly
+    # 'month' or 'year' (Stripe's native interval). Combine with
+    # recurring_interval_count to express quarterly (month x 3) or
+    # bi-yearly (month x 6).
+    recurring_interval: Mapped[str | None] = mapped_column(String(20))
+    recurring_interval_count: Mapped[int | None] = mapped_column(Integer)
 
     # Validity and currency
     valid_until: Mapped[date | None] = mapped_column(Date)

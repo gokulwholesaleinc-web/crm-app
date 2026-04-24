@@ -41,6 +41,19 @@ def _designated_email_for(quote: Quote) -> str:
     return ""
 
 
+def _assert_signer_matches(quote: Quote, signer_email: str | None) -> None:
+    """Guard: the supplied signer_email must match the quote's designated
+    recipient (case-insensitive). Shared by accept/reject so a forwarded
+    public link can't be used by a third party to sign or reject.
+    """
+    expected = _designated_email_for(quote)
+    given = (signer_email or "").strip().lower()
+    if not expected:
+        raise ValueError("Quote has no recipient email on file")
+    if not given or given != expected:
+        raise ValueError("Signer email does not match the quote recipient")
+
+
 class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteUpdate]):
     """Service for Quote CRUD operations."""
 
@@ -426,12 +439,7 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
         if quote.status not in ("sent", "viewed"):
             raise ValueError(f"Cannot accept quote in '{quote.status}' status")
 
-        expected_email = _designated_email_for(quote)
-        given_email = (signer_email or "").strip().lower()
-        if not expected_email:
-            raise ValueError("Quote has no recipient email on file")
-        if not given_email or given_email != expected_email:
-            raise ValueError("Signer email does not match the quote recipient")
+        _assert_signer_matches(quote, signer_email)
 
         now = datetime.now(UTC)
         quote.status = "accepted"
@@ -451,10 +459,18 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
         reason: str | None = None,
         signer_ip: str | None = None,
         signer_user_agent: str | None = None,
+        signer_email: str | None = None,
     ) -> Quote:
-        """Reject a quote via the public link."""
+        """Reject a quote via the public link.
+
+        Validates signer_email against the designated/contact email, same
+        as accept — otherwise anyone with a forwarded link could
+        permanently reject the quote.
+        """
         if quote.status not in ("sent", "viewed"):
             raise ValueError(f"Cannot reject quote in '{quote.status}' status")
+
+        _assert_signer_matches(quote, signer_email)
 
         now = datetime.now(UTC)
         quote.status = "rejected"

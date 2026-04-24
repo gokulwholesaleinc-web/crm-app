@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { TrashIcon, PlusIcon, CubeIcon } from '@heroicons/react/24/outline';
 import { Button, SearchableSelect } from '../../components/ui';
+import BillingTermsField, { type BillingTermsValue } from '../../components/forms/BillingTermsField';
 import { useContacts } from '../../hooks/useContacts';
 import { useCompanies } from '../../hooks/useCompanies';
 import { useOpportunities, useOpportunity } from '../../hooks/useOpportunities';
@@ -37,9 +38,36 @@ const DEFAULT_FORM_STATE = {
   taxRate: 0,
   termsAndConditions: '',
   notes: '',
-  paymentType: 'one_time',
-  recurringInterval: '',
 };
+
+function initialBillingValue(initialData?: Partial<QuoteCreate>): BillingTermsValue {
+  // Translate legacy `recurring_interval` values ('monthly', 'quarterly',
+  // 'yearly') coming from a quote that was stored before the Stripe-
+  // native split. The component expects 'month'/'year' + count.
+  const LEGACY: Record<string, { interval: 'month' | 'year'; count: number }> = {
+    monthly: { interval: 'month', count: 1 },
+    quarterly: { interval: 'month', count: 3 },
+    bi_yearly: { interval: 'month', count: 6 },
+    yearly: { interval: 'year', count: 1 },
+  };
+  const raw = initialData?.recurring_interval ?? null;
+  if (raw && LEGACY[raw]) {
+    return {
+      payment_type: 'subscription',
+      recurring_interval: LEGACY[raw].interval,
+      recurring_interval_count: initialData?.recurring_interval_count ?? LEGACY[raw].count,
+      amount: '',
+      currency: initialData?.currency ?? 'USD',
+    };
+  }
+  return {
+    payment_type: (initialData?.payment_type as 'one_time' | 'subscription') ?? 'one_time',
+    recurring_interval: (raw as 'month' | 'year' | null) ?? null,
+    recurring_interval_count: initialData?.recurring_interval_count ?? null,
+    amount: '',
+    currency: initialData?.currency ?? 'USD',
+  };
+}
 
 export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteFormProps) {
   const [searchParams] = useSearchParams();
@@ -59,9 +87,14 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
     taxRate: initialData?.tax_rate ?? DEFAULT_FORM_STATE.taxRate,
     termsAndConditions: initialData?.terms_and_conditions ?? DEFAULT_FORM_STATE.termsAndConditions,
     notes: initialData?.notes ?? DEFAULT_FORM_STATE.notes,
-    paymentType: initialData?.payment_type ?? DEFAULT_FORM_STATE.paymentType,
-    recurringInterval: initialData?.recurring_interval ?? DEFAULT_FORM_STATE.recurringInterval,
   }));
+
+  const [billing, setBilling] = useState<BillingTermsValue>(() => initialBillingValue(initialData));
+
+  const handleBillingChange = (next: BillingTermsValue) => {
+    setBilling(next);
+    setTouched(true);
+  };
 
   // `touched` is a one-way sentinel that flips true the first time the
   // user edits any field or line item. Drives the beforeunload warning
@@ -193,8 +226,9 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
       contact_id: formData.contactId,
       company_id: formData.companyId,
       opportunity_id: formData.opportunityId,
-      payment_type: formData.paymentType,
-      recurring_interval: formData.paymentType === 'subscription' ? formData.recurringInterval : null,
+      payment_type: billing.payment_type,
+      recurring_interval: billing.payment_type === 'subscription' ? billing.recurring_interval : null,
+      recurring_interval_count: billing.payment_type === 'subscription' ? billing.recurring_interval_count : null,
       line_items: lineItems.filter((item) => item.description.trim() !== ''),
     };
 
@@ -271,60 +305,14 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
         </div>
       </div>
 
-      {/* Payment Type */}
-      <div className="space-y-4">
-        <fieldset>
-          <legend className="block text-sm font-medium text-gray-700 dark:text-gray-300">Payment Type</legend>
-          <div className="mt-2 flex gap-4">
-            <label className="inline-flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="payment_type"
-                value="one_time"
-                checked={formData.paymentType === 'one_time'}
-                onChange={() => {
-                  setFormData((prev) => ({ ...prev, paymentType: 'one_time', recurringInterval: '' }));
-                  setTouched(true);
-                }}
-                className="text-primary-600 focus-visible:ring-primary-500"
-              />
-              <span className="text-sm text-gray-700 dark:text-gray-300">One-Time Payment</span>
-            </label>
-            <label className="inline-flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="payment_type"
-                value="subscription"
-                checked={formData.paymentType === 'subscription'}
-                onChange={() => {
-                  setFormData((prev) => ({ ...prev, paymentType: 'subscription', recurringInterval: prev.recurringInterval || 'monthly' }));
-                  setTouched(true);
-                }}
-                className="text-primary-600 focus-visible:ring-primary-500"
-              />
-              <span className="text-sm text-gray-700 dark:text-gray-300">Subscription</span>
-            </label>
-          </div>
-        </fieldset>
-
-        {formData.paymentType === 'subscription' && (
-          <div className="sm:w-1/2">
-            <label htmlFor="quote-recurring-interval" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Billing Interval
-            </label>
-            <select
-              id="quote-recurring-interval"
-              name="recurring_interval"
-              value={formData.recurringInterval}
-              onChange={(e) => updateField('recurringInterval', e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
-            >
-              <option value="monthly">Monthly</option>
-              <option value="quarterly">Quarterly</option>
-              <option value="yearly">Yearly</option>
-            </select>
-          </div>
-        )}
+      {/* Billing type + cadence. Amount is hidden here because quote
+          line items drive the total; only the cadence lands on the quote. */}
+      <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 bg-gray-50 dark:bg-gray-800/40">
+        <BillingTermsField
+          value={billing}
+          onChange={handleBillingChange}
+          amountMode="hidden"
+        />
       </div>
 
       {/* Related Records */}
