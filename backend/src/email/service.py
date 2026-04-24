@@ -1,12 +1,11 @@
 """Email service layer - handles sending, tracking, and queue management."""
 
 import asyncio
+import base64
 import html
 import logging
 import re
 from datetime import UTC, datetime, timedelta
-
-import base64
 
 import resend  # pyright: ignore[reportMissingImports]
 from sqlalchemy import and_, func, literal, select, union_all

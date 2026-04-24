@@ -33,13 +33,12 @@ class ProposalBillingMixin(BaseModel):
                 )
             if self.recurring_interval_count < 1:
                 raise ValueError("recurring_interval_count must be >= 1")
-        else:
-            # one_time must not carry recurrence hints; strip them so the
-            # DB doesn't store contradictory state.
-            if self.recurring_interval is not None or self.recurring_interval_count is not None:
-                raise ValueError(
-                    "one_time proposals must not set recurring_interval/count",
-                )
+        # one_time must not carry recurrence hints; reject so we don't
+        # store contradictory state at the DB layer.
+        elif self.recurring_interval is not None or self.recurring_interval_count is not None:
+            raise ValueError(
+                "one_time proposals must not set recurring_interval/count",
+            )
         if self.amount is not None and self.amount <= 0:
             raise ValueError("amount must be > 0")
         return self
