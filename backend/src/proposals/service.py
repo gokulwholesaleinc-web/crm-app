@@ -554,12 +554,22 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         user_id: int,
         include_signature: bool = False,
     ) -> bytes:
-        """Generate branded proposal PDF with all sections.
+        """Generate a branded proposal PDF in the document-style
+        aesthetic that mirrors the public web view.
 
         When ``include_signature`` is True and the proposal has been
-        signed, appends an e-signature audit block (signer name,
-        email, IP, timestamp). Used for the post-acceptance "signed
-        copy" that gets emailed to the client.
+        signed, the PDF's signatory page carries the full e-signature
+        audit block (name, email, IP, user-agent, timestamp). Used for
+        the countersigned copy emailed to the client after acceptance.
+
+        PDF-specific constraints baked into this template:
+        - Layout uses <table>-based composition instead of flexbox
+          (WeasyPrint's flex implementation has page-fragmentation
+          bugs — issue #2076 + #2163 — that produce spacing defects
+          and broken headers in paginated output).
+        - CSS properties ignored by WeasyPrint (``text-wrap: balance``,
+          ``text-wrap: pretty``) are omitted — their absence is
+          compensated with explicit ``max-width`` on prose blocks.
         """
         proposal = await self.get_by_id(proposal_id)
         if not proposal:
@@ -567,11 +577,13 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
 
         branding = await TenantBrandingHelper.get_branding_for_user(self.db, user_id)
 
-        company_name = escape(branding.get("company_name", "CRM"))
-        primary_color = escape(branding.get("primary_color", "#6366f1"))
-        secondary_color = escape(branding.get("secondary_color", "#8b5cf6"))
+        company_name_raw = branding.get("company_name") or "CRM"
+        company_name = escape(company_name_raw)
+        accent = escape(branding.get("primary_color") or "#6366f1")
+        footer_text = branding.get("footer_text") or ""
+
         # Pre-validate the logo URL: if it fails the SSRF check, omit the
-        # <img> entirely rather than handing weasyprint a URL that it will
+        # <img> entirely rather than handing weasyprint a URL it will
         # later refuse and log as an error per page render.
         logo_html = ""
         logo_url = branding.get("logo_url") or ""
@@ -583,101 +595,536 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                     allowed_hostnames=pdf_logo_allowed_hosts(),
                 )
                 logo_html = (
-                    f'<img src="{escape(logo_url)}" alt="{company_name}" '
-                    f'style="max-height:48px;margin-right:16px;" />'
+                    f'<img src="{escape(logo_url)}" alt="{company_name}" class="letterhead-logo" />'
                 )
             except UnsafeUrlError as exc:
                 logger.warning(
                     "Skipping proposal logo for tenant user %s: %s", user_id, exc
                 )
+        if not logo_html:
+            initial = escape((company_name_raw or "P")[0].upper())
+            logo_html = f'<span class="letterhead-initial">{initial}</span>'
 
-        sections_html = ""
-        section_data = [
-            ("Cover Letter", proposal.cover_letter),
-            ("Executive Summary", proposal.executive_summary),
-            ("Scope of Work", proposal.scope_of_work),
-            ("Pricing", proposal.pricing_section),
-            ("Timeline", proposal.timeline),
-            ("Terms and Conditions", proposal.terms),
-        ]
-        for title, content in section_data:
-            if content:
-                sections_html += (
-                    f'<div style="margin-bottom:24px;">'
-                    f'<h2 style="color:{primary_color};font-size:18px;margin-bottom:8px;">'
-                    f'{escape(title)}</h2>'
-                    f'<p style="white-space:pre-wrap;line-height:1.6;">{escape(content)}</p>'
-                    f'</div>'
-                )
-
-        if proposal.content and not proposal.executive_summary and not proposal.scope_of_work:
-            sections_html += (
-                f'<div style="margin-bottom:24px;">'
-                f'<p style="white-space:pre-wrap;line-height:1.6;">{escape(proposal.content)}</p>'
-                f'</div>'
-            )
-
-        signature_html = ""
-        if include_signature and proposal.signed_at:
-            signed_on = proposal.signed_at.strftime("%B %d, %Y at %H:%M UTC")
-            signer_row = (
-                f'<p style="margin:4px 0;"><strong>Signed by:</strong> '
-                f'{escape(proposal.signer_name or "")}</p>'
-                f'<p style="margin:4px 0;"><strong>Email:</strong> '
-                f'{escape(proposal.signer_email or "")}</p>'
-                f'<p style="margin:4px 0;"><strong>Signed on:</strong> {signed_on}</p>'
-            )
-            if proposal.signer_ip:
-                signer_row += (
-                    f'<p style="margin:4px 0;color:#6b7280;font-size:11px;">'
-                    f'IP: {escape(proposal.signer_ip)}</p>'
-                )
-            signature_html = (
-                f'<div style="margin-top:32px;padding:16px 20px;'
-                f'background-color:#f3f4f6;border-left:4px solid {primary_color};'
-                f'border-radius:4px;">'
-                f'<h2 style="color:{primary_color};font-size:16px;margin:0 0 8px;">'
-                f'Electronic Signature</h2>'
-                f'{signer_row}'
-                f'</div>'
-            )
-
+        # ---------- Title / cover metadata ----------
         contact_name = ""
         if proposal.contact:
             contact_name = getattr(proposal.contact, "full_name", "") or ""
 
-        valid_line = ""
+        secondary_company = ""
+        if proposal.company and getattr(proposal.company, "name", None):
+            _cname = proposal.company.name  # type: ignore[assignment]
+            if _cname and _cname != company_name_raw:
+                secondary_company = _cname
+
+        valid_html = ""
         if proposal.valid_until:
-            valid_line = (
-                f'<p style="color:#6b7280;font-size:13px;">Valid until: '
-                f'{proposal.valid_until.isoformat()}</p>'
+            date_str = proposal.valid_until.strftime("%B %d, %Y")
+            label = "Expired" if proposal.valid_until < datetime.now(UTC).date() else "Valid until"
+            valid_html = (
+                '<div class="cover-validity">'
+                '<span class="rule"></span>'
+                f'<span class="cover-validity-text">{escape(label)} '
+                f'<span class="mono">{escape(date_str)}</span></span>'
+                '<span class="rule"></span>'
+                '</div>'
             )
+
+        # ---------- Structured pricing pull-figure ----------
+        amount_html = ""
+        cadence_label_map = {
+            ("month", 1): "Monthly",
+            ("month", 3): "Quarterly",
+            ("month", 6): "Bi-yearly",
+            ("year", 1): "Yearly",
+        }
+        amount = getattr(proposal, "amount", None)
+        currency = (getattr(proposal, "currency", None) or "USD").upper()
+        is_subscription_pricing = False
+        if amount is not None:
+            try:
+                amount_val = Decimal(str(amount))
+            except (ArithmeticError, ValueError, TypeError):
+                amount_val = None  # type: ignore[assignment]
+            if amount_val is not None and amount_val > 0:
+                symbol = {"USD": "$", "EUR": "€", "GBP": "£", "CAD": "$", "AUD": "$"}.get(currency, "")
+                num_str = f"{amount_val:,.2f}"
+                display_amount = f"{symbol}{num_str}" if symbol else f"{currency} {num_str}"
+
+                payment_type = getattr(proposal, "payment_type", "one_time")
+                interval = getattr(proposal, "recurring_interval", None)
+                interval_count = getattr(proposal, "recurring_interval_count", None) or 1
+                is_subscription_pricing = payment_type == "subscription" and bool(interval)
+                cadence_text = ""
+                if is_subscription_pricing:
+                    cadence_text = cadence_label_map.get(
+                        (interval, interval_count),
+                        f"Every {interval_count} {interval}{'s' if interval_count > 1 else ''}",
+                    )
+
+                eyebrow = "Recurring fee" if is_subscription_pricing else "Total investment"
+                cadence_html = (
+                    f'<div class="pricing-cadence">billed {escape(cadence_text.lower())}</div>'
+                    if cadence_text else ""
+                )
+                amount_html = f"""
+<figure class="pricing-figure">
+  <div class="pricing-eyebrow">{escape(eyebrow)}</div>
+  <div class="pricing-amount mono-num">{escape(display_amount)} <span class="pricing-currency">{escape(currency)}</span></div>
+  {cadence_html}
+  <span class="pricing-rule"></span>
+</figure>
+"""
+
+        # ---------- Numbered content sections ----------
+        section_data = [
+            ("Executive Summary", proposal.executive_summary),
+            ("Scope of Work", proposal.scope_of_work),
+            ("Timeline", proposal.timeline),
+            ("Terms & Conditions", proposal.terms),
+        ]
+        populated_content = [(t, c) for t, c in section_data if c]
+
+        sections_html = ""
+        counter = 0
+
+        def _section(num_str: str, title_text: str, body_html: str) -> str:
+            # Section header is a <table> (not flexbox) so weasyprint
+            # renders number + rule consistently across page breaks.
+            return (
+                '<section class="doc-section">'
+                '  <table class="doc-section-header" cellpadding="0" cellspacing="0"><tr>'
+                f'    <td class="doc-section-num mono">§ {num_str}</td>'
+                '    <td class="doc-section-rule"></td>'
+                '  </tr></table>'
+                f'  <h2 class="doc-section-title">{title_text}</h2>'
+                f'  {body_html}'
+                '</section>'
+            )
+
+        for title, content in populated_content:
+            counter += 1
+            num = f"{counter:02d}"
+            sections_html += _section(
+                num,
+                escape(title),
+                f'<p class="doc-prose">{escape(content)}</p>',
+            )
+
+        # Pricing gets its own numbered section (amount pull-figure +
+        # optional pricing_section free-text notes)
+        pricing_free_text = proposal.pricing_section
+        if amount_html or pricing_free_text:
+            counter += 1
+            num = f"{counter:02d}"
+            title_text = "Engagement & Fees" if is_subscription_pricing else "Fees"
+            body = amount_html
+            if pricing_free_text:
+                body += f'<p class="doc-prose">{escape(pricing_free_text)}</p>'
+            sections_html += _section(num, escape(title_text), body)
+
+        # Fallback `content` block if nothing structured was filled in
+        if (
+            proposal.content
+            and not populated_content
+            and not amount_html
+            and not pricing_free_text
+        ):
+            counter += 1
+            num = f"{counter:02d}"
+            sections_html += _section(
+                num,
+                "Proposal",
+                f'<p class="doc-prose">{escape(proposal.content)}</p>',
+            )
+
+        # ---------- Cover letter (under the title block, un-numbered) ----------
+        cover_letter_html = ""
+        if proposal.cover_letter:
+            cover_letter_html = (
+                '<section class="doc-cover-letter">'
+                f'<p>{escape(proposal.cover_letter)}</p>'
+                '</section>'
+            )
+
+        # ---------- Signatory / Execution page ----------
+        signatory_html = ""
+        if include_signature and proposal.signed_at:
+            signed_display = proposal.signed_at.strftime("%B %d, %Y · %H:%M UTC")
+            ua = proposal.signer_user_agent or ""
+            if len(ua) > 90:
+                ua = ua[:87] + "..."
+
+            rows = [
+                ("Signatory", proposal.signer_name or ""),
+                ("Email", proposal.signer_email or ""),
+                ("Signed at", signed_display),
+            ]
+            if proposal.signer_ip:
+                rows.append(("IP address", proposal.signer_ip))
+            if ua:
+                rows.append(("User-agent", ua))
+
+            rows_html = "".join(
+                f'<tr><th>{escape(label)}</th><td class="mono">{escape(val)}</td></tr>'
+                for label, val in rows
+            )
+
+            signatory_num = f"{counter + 1:02d}"
+            signatory_html = f"""
+<section class="doc-signatory page-break-before">
+  <table class="doc-section-header" cellpadding="0" cellspacing="0"><tr>
+    <td class="doc-section-num mono">§ {signatory_num}</td>
+    <td class="doc-section-rule"></td>
+  </tr></table>
+  <h2 class="doc-section-title">Signatory</h2>
+  <p class="doc-prose doc-signatory-preamble">
+    This proposal was accepted and electronically signed under the US ESIGN Act
+    (15 USC §7001) and applicable state UETA statutes. The signature below
+    carries the same legal effect as a handwritten signature.
+  </p>
+  <table class="doc-signatory-table">
+    <tbody>{rows_html}</tbody>
+  </table>
+  <div class="doc-signatory-footer">
+    <div class="doc-signature-line"></div>
+    <div class="doc-signature-caption mono">Signed electronically for {escape(proposal.signer_name or "")}</div>
+  </div>
+</section>
+"""
+
+        # ---------- Assemble ----------
+        title_html = escape(proposal.title)
+        proposal_number_html = escape(proposal.proposal_number)
+        contact_block = (
+            f'<p class="cover-prepared-for"><em>Prepared for</em> {escape(contact_name)}</p>'
+            if contact_name else ""
+        )
+        secondary_company_block = (
+            f'<p class="cover-secondary-company">{escape(secondary_company)}</p>'
+            if secondary_company else ""
+        )
+        footer_block = (
+            f'<footer class="doc-footer"><p>{escape(footer_text)}</p></footer>'
+            if footer_text else ""
+        )
 
         html = f"""\
 <!DOCTYPE html>
-<html><head><meta charset="utf-8"/>
+<html lang="en"><head><meta charset="utf-8"/>
 <style>
-body {{ font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 0; color: #111827; }}
+  @page {{
+    size: Letter;
+    margin: 22mm 20mm 22mm 20mm;
+    @bottom-center {{
+      content: "{escape(company_name_raw)} · {escape(proposal.proposal_number)} · Page " counter(page) " of " counter(pages);
+      font-family: Georgia, 'Times New Roman', serif;
+      font-size: 9pt;
+      color: #9ca3af;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }}
+  }}
+  @page :first {{
+    @bottom-center {{ content: ""; }}
+  }}
+  * {{ box-sizing: border-box; }}
+  html {{ font-size: 11pt; }}
+  body {{
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    color: #1a1a1a;
+    line-height: 1.7;
+    margin: 0;
+    padding: 0;
+  }}
+  .mono, .mono-num {{
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+  }}
+
+  /* ---------- Letterhead (table layout for weasyprint) ---------- */
+  .letterhead {{
+    width: 100%;
+    border-bottom: 0.75pt solid #e5e7eb;
+    margin-bottom: 18pt;
+    padding-bottom: 10pt;
+  }}
+  .letterhead td {{ vertical-align: middle; }}
+  .letterhead td.right {{ text-align: right; }}
+  .letterhead-logo {{ height: 22pt; width: auto; max-width: 120pt; }}
+  .letterhead-initial {{
+    display: inline-block;
+    width: 22pt; height: 22pt; line-height: 20pt;
+    text-align: center;
+    border: 0.75pt solid {accent};
+    color: {accent};
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 12pt;
+    margin-right: 10pt;
+    vertical-align: middle;
+  }}
+  .letterhead-company {{
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 11pt; letter-spacing: 0.02em;
+    margin-left: 8pt;
+    vertical-align: middle;
+  }}
+  .letterhead-meta {{
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 8pt;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #6b7280;
+  }}
+  .letterhead-accent-rule {{
+    height: 0.6pt;
+    background: {accent};
+    opacity: 0.4;
+    margin-bottom: 24pt;
+  }}
+
+  /* ---------- Cover title block ---------- */
+  .cover {{
+    text-align: center;
+    padding: 14pt 0 28pt;
+    border-bottom: 0.5pt solid #e5e7eb;
+    margin-bottom: 28pt;
+  }}
+  .cover-eyebrow {{
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 8pt;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: #9ca3af;
+    margin-bottom: 18pt;
+  }}
+  .cover-title {{
+    font-family: Georgia, 'Times New Roman', serif;
+    font-weight: 400;
+    font-size: 34pt;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: #0f172a;
+    margin: 0 auto 18pt;
+    max-width: 28em;
+  }}
+  .cover-prepared-for {{
+    font-family: Georgia, 'Times New Roman', serif;
+    font-style: italic;
+    font-size: 14pt;
+    color: #374151;
+    margin: 18pt 0 2pt;
+  }}
+  .cover-prepared-for em {{
+    font-style: normal;
+    color: #9ca3af;
+    font-size: 10pt;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-right: 6pt;
+  }}
+  .cover-secondary-company {{
+    font-size: 10pt;
+    color: #6b7280;
+    letter-spacing: 0.02em;
+    margin: 0 0 18pt;
+  }}
+  .cover-validity {{
+    margin-top: 22pt;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 8pt;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: #6b7280;
+  }}
+  .cover-validity .rule {{
+    display: inline-block;
+    width: 22pt;
+    height: 0.5pt;
+    background: #d1d5db;
+    vertical-align: middle;
+    margin: 0 8pt;
+  }}
+  .cover-validity-text {{ vertical-align: middle; }}
+
+  /* ---------- Cover letter (flowing prose, no box) ---------- */
+  .doc-cover-letter {{
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 12pt;
+    line-height: 1.75;
+    color: #1f2937;
+    margin: 0 0 36pt;
+    max-width: 44em;
+  }}
+  .doc-cover-letter p {{ margin: 0; white-space: pre-wrap; }}
+
+  /* ---------- Numbered sections (table-based header layout) ---------- */
+  .doc-section {{
+    margin: 0 0 36pt;
+    page-break-inside: avoid;
+  }}
+  .doc-section-header {{
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 10pt;
+  }}
+  .doc-section-header .doc-section-num {{
+    width: 40pt;
+    white-space: nowrap;
+    font-size: 8pt;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: {accent};
+    padding: 0 10pt 0 0;
+    vertical-align: middle;
+  }}
+  .doc-section-header .doc-section-rule {{
+    border-top: 0.5pt solid {accent};
+    opacity: 0.3;
+    width: 100%;
+    vertical-align: middle;
+    height: 0.5pt;
+  }}
+  .doc-section-title {{
+    font-family: Georgia, 'Times New Roman', serif;
+    font-weight: 400;
+    font-size: 19pt;
+    letter-spacing: -0.01em;
+    color: #0f172a;
+    margin: 0 0 14pt;
+    line-height: 1.2;
+    max-width: 24em;
+  }}
+  .doc-prose {{
+    font-size: 10.5pt;
+    line-height: 1.75;
+    color: #1f2937;
+    margin: 0 0 10pt;
+    white-space: pre-wrap;
+    max-width: 44em;
+  }}
+
+  /* ---------- Pricing pull-figure (text-align for weasyprint) ---------- */
+  .pricing-figure {{
+    margin: 18pt 0 20pt;
+    padding: 14pt 0;
+    text-align: center;
+  }}
+  .pricing-eyebrow {{
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 8pt;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: {accent};
+    margin-bottom: 10pt;
+  }}
+  .pricing-amount {{
+    font-family: Georgia, 'Times New Roman', serif;
+    font-weight: 400;
+    font-size: 32pt;
+    letter-spacing: -0.02em;
+    color: #0f172a;
+    line-height: 1.1;
+  }}
+  .pricing-currency {{
+    font-size: 14pt;
+    color: #9ca3af;
+    letter-spacing: 0.1em;
+  }}
+  .pricing-cadence {{
+    margin-top: 8pt;
+    font-family: Georgia, 'Times New Roman', serif;
+    font-style: italic;
+    color: #6b7280;
+    font-size: 11pt;
+  }}
+  .pricing-rule {{
+    display: block;
+    width: 40pt; height: 0.6pt;
+    background: {accent};
+    opacity: 0.5;
+    margin: 14pt auto 0;
+  }}
+
+  /* ---------- Signatory page ---------- */
+  .page-break-before {{ page-break-before: always; }}
+  .doc-signatory {{ margin-top: 0; }}
+  .doc-signatory-preamble {{
+    font-style: italic;
+    color: #4b5563;
+    max-width: 44em;
+    margin-bottom: 22pt;
+  }}
+  .doc-signatory-table {{
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0 0 36pt;
+  }}
+  .doc-signatory-table th,
+  .doc-signatory-table td {{
+    text-align: left;
+    padding: 8pt 0;
+    border-bottom: 0.5pt solid #e5e7eb;
+    vertical-align: top;
+  }}
+  .doc-signatory-table th {{
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 8pt;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: #6b7280;
+    font-weight: 400;
+    width: 28%;
+  }}
+  .doc-signatory-table td {{
+    font-size: 10pt;
+    color: #111827;
+    word-break: break-word;
+  }}
+  .doc-signatory-footer {{ margin-top: 32pt; }}
+  .doc-signature-line {{
+    width: 60%;
+    height: 0.75pt;
+    background: {accent};
+    margin-bottom: 6pt;
+  }}
+  .doc-signature-caption {{
+    font-size: 8pt;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #6b7280;
+  }}
+
+  .doc-footer {{
+    margin-top: 40pt;
+    padding-top: 12pt;
+    border-top: 0.5pt solid #e5e7eb;
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 8.5pt;
+    color: #9ca3af;
+    line-height: 1.5;
+  }}
 </style>
-</head><body>
-<div style="background-color:{primary_color};padding:24px 32px;color:#ffffff;">
-  <div style="display:flex;align-items:center;">
-    {logo_html}
-    <span style="font-size:22px;font-weight:700;">{company_name}</span>
-  </div>
-</div>
-<div style="padding:32px;">
-  <h1 style="font-size:26px;margin-bottom:4px;">{escape(proposal.title)}</h1>
-  <p style="color:#6b7280;margin-bottom:4px;">{escape(proposal.proposal_number)}</p>
-  {"<p style='color:#6b7280;'>Prepared for " + escape(contact_name) + "</p>" if contact_name else ""}
-  {valid_line}
-  <hr style="border:none;border-top:2px solid {secondary_color};margin:24px 0;" />
+</head>
+<body>
+  <table class="letterhead" cellpadding="0" cellspacing="0"><tr>
+    <td>{logo_html}<span class="letterhead-company">{company_name}</span></td>
+    <td class="right letterhead-meta">{proposal_number_html}</td>
+  </tr></table>
+  <div class="letterhead-accent-rule"></div>
+
+  <section class="cover">
+    <p class="cover-eyebrow">Proposal · {proposal_number_html}</p>
+    <h1 class="cover-title">{title_html}</h1>
+    {contact_block}
+    {secondary_company_block}
+    {valid_html}
+  </section>
+
+  {cover_letter_html}
   {sections_html}
-  {signature_html}
-</div>
-<div style="background-color:#f9fafb;padding:16px 32px;text-align:center;font-size:12px;color:#6b7280;">
-  {company_name}
-</div>
+  {signatory_html}
+
+  {footer_block}
 </body></html>"""
 
         # Shared renderer enforces the SSRF allowlist on every resource
