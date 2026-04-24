@@ -3,7 +3,7 @@
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.mixins.auditable import AuditableMixin
@@ -55,7 +55,13 @@ class Proposal(Base, AuditableMixin):
         index=True,
     )
 
-    # Status: draft, sent, viewed, accepted, rejected
+    # Status lifecycle:
+    #   draft -> sent -> viewed -> accepted -> (awaiting_payment) -> paid
+    #                                      \-> rejected
+    # `awaiting_payment` is the brief window between e-sign and Stripe
+    # webhook confirming payment; it lets the UI show "Invoice sent,
+    # waiting on payment" instead of just "Accepted" for deals that have
+    # billing wired up. `paid` is terminal.
     status: Mapped[str] = mapped_column(String(20), default="draft", nullable=False)
 
     # Content sections
@@ -68,6 +74,23 @@ class Proposal(Base, AuditableMixin):
 
     # Validity
     valid_until: Mapped[date | None] = mapped_column(Date)
+
+    # Structured pricing. When set, the CRM uses these fields to spawn a
+    # Stripe Invoice or Subscription on acceptance. `pricing_section`
+    # (free-text, below) remains for human-readable detail but is not
+    # used for billing math.
+    #   payment_type: 'one_time' | 'subscription'
+    #   recurring_interval: 'month' | 'year' (only when subscription)
+    #   recurring_interval_count: 1 = monthly/yearly, 3 = quarterly,
+    #                             6 = bi-yearly, etc.
+    #   amount: total in currency major units (e.g. 500.00 USD)
+    payment_type: Mapped[str] = mapped_column(
+        String(20), default="one_time", nullable=False
+    )
+    recurring_interval: Mapped[str | None] = mapped_column(String(20))
+    recurring_interval_count: Mapped[int | None] = mapped_column(Integer)
+    amount: Mapped[float | None] = mapped_column(Numeric(12, 2))
+    currency: Mapped[str] = mapped_column(String(3), default="USD", nullable=False)
 
     # Status timestamps
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -88,6 +111,22 @@ class Proposal(Base, AuditableMixin):
     rejection_reason: Mapped[str | None] = mapped_column(Text)
     # Optional override for who may sign. NULL falls back to contact.email.
     designated_signer_email: Mapped[str | None] = mapped_column(String(255))
+
+    # Stripe billing artifacts spawned on acceptance. Only one of
+    # stripe_invoice_id / stripe_checkout_session_id will be set, based on
+    # the linked Quote.payment_type: one_time -> invoice, subscription ->
+    # checkout session. stripe_subscription_id is filled in by the
+    # checkout.session.completed webhook when the client completes setup.
+    stripe_invoice_id: Mapped[str | None] = mapped_column(String(255), index=True)
+    stripe_subscription_id: Mapped[str | None] = mapped_column(
+        String(255), index=True
+    )
+    stripe_checkout_session_id: Mapped[str | None] = mapped_column(
+        String(255), index=True
+    )
+    stripe_payment_url: Mapped[str | None] = mapped_column(Text)
+    invoice_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Owner
     owner_id: Mapped[int | None] = mapped_column(

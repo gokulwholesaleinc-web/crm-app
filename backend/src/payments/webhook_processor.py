@@ -256,6 +256,12 @@ class WebhookProcessor:
         if not session_id:
             return
 
+        # Subscription-mode checkouts spawned from a proposal carry the
+        # proposal id in session metadata. When the session completes we
+        # record the resulting subscription id on the proposal and mark
+        # it paid — the first billing cycle just cleared.
+        await self._mark_proposal_paid_from_session(session_obj)
+
         result = await self.db.execute(
             select(Payment).where(Payment.stripe_checkout_session_id == session_id)
         )
@@ -458,6 +464,8 @@ class WebhookProcessor:
             if payment.status != "succeeded":
                 payment.status = "succeeded"
                 await self.db.flush()
+            # Fall through to also mark any linked proposal paid.
+            await self._mark_proposal_paid_from_invoice(invoice_id)
             return
 
         # ------------------------------------------------------------------
@@ -598,3 +606,59 @@ class WebhookProcessor:
         logger.info(
             "SetupIntent succeeded: %s for customer %s", setup_id, customer_id
         )
+
+    # ------------------------------------------------------------------
+    # Proposal-billing reconciliation
+    #
+    # When a proposal is accepted via the public e-sign flow, the CRM
+    # spawns a Stripe Invoice (one-time) or Checkout Session
+    # (subscription). These two helpers flip the proposal to `paid`
+    # when Stripe confirms money actually arrived.
+    # ------------------------------------------------------------------
+    async def _mark_proposal_paid_from_invoice(self, invoice_id: str) -> None:
+        # Local import sidesteps a circular import between proposals and
+        # payments — the proposal model isn't available at webhook module
+        # import time because proposals depends on payments.service.
+        from src.proposals.models import Proposal
+
+        result = await self.db.execute(
+            select(Proposal).where(Proposal.stripe_invoice_id == invoice_id)
+        )
+        proposal = result.scalar_one_or_none()
+        if proposal is None or proposal.status == "paid":
+            return
+        proposal.status = "paid"
+        proposal.paid_at = datetime.now(UTC)
+        await self.db.flush()
+
+    async def _mark_proposal_paid_from_session(self, session_obj: dict) -> None:
+        metadata = session_obj.get("metadata") or {}
+        proposal_id_str = metadata.get("proposal_id")
+        if not proposal_id_str:
+            return
+        try:
+            proposal_id = int(proposal_id_str)
+        except (TypeError, ValueError):
+            logger.warning(
+                "checkout.session.completed has non-integer proposal_id: %r",
+                proposal_id_str,
+            )
+            return
+
+        from src.proposals.models import Proposal
+
+        result = await self.db.execute(
+            select(Proposal).where(Proposal.id == proposal_id)
+        )
+        proposal = result.scalar_one_or_none()
+        if proposal is None:
+            return
+
+        subscription_id = session_obj.get("subscription")
+        if subscription_id and not proposal.stripe_subscription_id:
+            proposal.stripe_subscription_id = subscription_id
+
+        if session_obj.get("payment_status") == "paid" and proposal.status != "paid":
+            proposal.status = "paid"
+            proposal.paid_at = datetime.now(UTC)
+        await self.db.flush()

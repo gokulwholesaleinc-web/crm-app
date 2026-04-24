@@ -22,6 +22,8 @@ interface ProposalBranding {
   secondary_color: string;
   accent_color: string;
   footer_text: string | null;
+  privacy_policy_url: string | null;
+  terms_of_service_url: string | null;
 }
 
 interface PublicProposal {
@@ -36,6 +38,13 @@ interface PublicProposal {
   terms: string | null;
   valid_until: string | null;
   status: string;
+  payment_type: 'one_time' | 'subscription';
+  recurring_interval: 'month' | 'year' | null;
+  recurring_interval_count: number | null;
+  amount: string | number | null;
+  currency: string;
+  stripe_payment_url: string | null;
+  paid_at: string | null;
   company: { id: number; name: string } | null;
   contact: { id: number; full_name: string } | null;
   branding: ProposalBranding | null;
@@ -48,6 +57,8 @@ const DEFAULT_BRANDING: ProposalBranding = {
   secondary_color: '#8b5cf6',
   accent_color: '#22c55e',
   footer_text: null,
+  privacy_policy_url: null,
+  terms_of_service_url: null,
 };
 
 function PublicProposalView() {
@@ -96,11 +107,14 @@ function PublicProposalView() {
     setActionPending(true);
     setSignError(null);
     try {
-      await publicClient.post(`/api/proposals/public/${token}/accept`, {
-        signer_name: name,
-        signer_email: email,
-      });
-      setProposal((prev) => prev ? { ...prev, status: 'accepted' } : null);
+      const response = await publicClient.post<PublicProposal>(
+        `/api/proposals/public/${token}/accept`,
+        { signer_name: name, signer_email: email },
+      );
+      // Replace the whole object — the accept response carries the
+      // freshly-spawned payment_url + status (awaiting_payment) that
+      // power the "Complete Payment" CTA below.
+      setProposal(response.data);
       setActionDone('accepted');
     } catch (err) {
       // IMPORTANT: do NOT mark the proposal accepted on failure. Surface
@@ -470,6 +484,61 @@ function PublicProposalView() {
           </section>
         )}
 
+        {/* Payment CTA — rendered whenever the backend has spawned a
+            Stripe Invoice or Checkout Session for this proposal. Uses a
+            plain <a> so the browser follows the external Stripe URL
+            without React Router intercepting it. */}
+        {proposal.stripe_payment_url && proposal.status !== 'paid' && (
+          <section
+            className="rounded-lg p-6 sm:p-8 border"
+            style={{
+              backgroundColor: `${branding.accent_color}10`,
+              borderColor: `${branding.accent_color}66`,
+            }}
+          >
+            <h2
+              className="text-lg font-semibold mb-2"
+              style={{ color: branding.primary_color }}
+            >
+              {proposal.payment_type === 'subscription'
+                ? 'Complete your subscription'
+                : 'Complete payment'}
+            </h2>
+            <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
+              {proposal.payment_type === 'subscription'
+                ? 'Set up your payment method on Stripe to activate your subscription. You will be charged the first billing period when you finish checkout.'
+                : 'An invoice has been issued. Pay securely on Stripe to finalize this engagement.'}
+            </p>
+            <a
+              href={proposal.stripe_payment_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-2 rounded-lg px-6 py-3 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+              style={{ backgroundColor: branding.accent_color }}
+            >
+              {proposal.payment_type === 'subscription'
+                ? 'Set up payment on Stripe'
+                : 'Pay on Stripe'}
+            </a>
+          </section>
+        )}
+
+        {proposal.status === 'paid' && (
+          <section className="rounded-lg p-6 sm:p-8 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+            <div className="flex items-center gap-3">
+              <CheckIcon className="h-6 w-6 text-green-600 dark:text-green-400" aria-hidden="true" />
+              <div>
+                <h3 className="font-semibold text-green-800 dark:text-green-300">
+                  Payment received
+                </h3>
+                <p className="text-sm mt-1 text-green-700 dark:text-green-400">
+                  Thank you — your payment is confirmed. We will follow up shortly.
+                </p>
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* Action Confirmation */}
         {actionDone && (
           <section
@@ -501,7 +570,9 @@ function PublicProposalView() {
                   }`}
                 >
                   {actionDone === 'accepted'
-                    ? 'Thank you for accepting this proposal. We will be in touch shortly.'
+                    ? proposal.stripe_payment_url
+                      ? 'Thanks! Use the payment button above to complete your transaction.'
+                      : 'Thank you for accepting this proposal. We will be in touch shortly.'
                     : 'Thank you for your response. We appreciate your time.'}
                 </p>
               </div>
@@ -510,15 +581,86 @@ function PublicProposalView() {
         )}
       </main>
 
-      {/* Branded Footer */}
+      {/* Branded Footer + Legal/Payment Disclosure
+          Rendered at the bottom of every public proposal page. Shows:
+          - Tenant's footer text (optional)
+          - Tenant's Terms of Service / Privacy Policy links when set
+          - Stripe disclosure whenever a payment link is active (client
+            is about to hand over payment info on Stripe's hosted page)
+      */}
       <footer className="border-t border-gray-200 dark:border-gray-700 mt-12">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 text-center text-sm text-gray-400 dark:text-gray-500">
-          {branding.footer_text ? (
-            <p className="mb-1">{branding.footer_text}</p>
-          ) : null}
-          <p>
-            {companyDisplayName} &middot; {proposal.proposal_number}
-          </p>
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 text-sm text-gray-500 dark:text-gray-400 space-y-3">
+          <div className="text-center">
+            {branding.footer_text ? (
+              <p className="mb-1">{branding.footer_text}</p>
+            ) : null}
+            <p>
+              {companyDisplayName} &middot; {proposal.proposal_number}
+            </p>
+          </div>
+
+          {(branding.terms_of_service_url || branding.privacy_policy_url) && (
+            <nav
+              aria-label="Legal"
+              className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs"
+            >
+              {branding.terms_of_service_url && (
+                <a
+                  href={branding.terms_of_service_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-gray-700 dark:hover:text-gray-200"
+                >
+                  Terms of Service
+                </a>
+              )}
+              {branding.privacy_policy_url && (
+                <a
+                  href={branding.privacy_policy_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-gray-700 dark:hover:text-gray-200"
+                >
+                  Privacy Policy
+                </a>
+              )}
+            </nav>
+          )}
+
+          {proposal.stripe_payment_url && (
+            <div className="text-center text-xs space-y-1">
+              <p>
+                Payments are processed securely by{' '}
+                <a
+                  href="https://stripe.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-gray-700 dark:hover:text-gray-200"
+                >
+                  Stripe
+                </a>
+                . {companyDisplayName} never sees or stores your card details.
+              </p>
+              <p className="space-x-3">
+                <a
+                  href="https://stripe.com/legal/consumer"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-gray-700 dark:hover:text-gray-200"
+                >
+                  Stripe Terms
+                </a>
+                <a
+                  href="https://stripe.com/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-gray-700 dark:hover:text-gray-200"
+                >
+                  Stripe Privacy
+                </a>
+              </p>
+            </div>
+          )}
         </div>
       </footer>
     </div>

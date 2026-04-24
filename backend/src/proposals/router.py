@@ -321,6 +321,8 @@ async def get_public_proposal(
         secondary_color=branding_data.get("secondary_color", "#8b5cf6"),
         accent_color=branding_data.get("accent_color", "#22c55e"),
         footer_text=branding_data.get("footer_text"),
+        privacy_policy_url=branding_data.get("privacy_policy_url"),
+        terms_of_service_url=branding_data.get("terms_of_service_url"),
     )
 
     response = ProposalPublicResponse.model_validate(proposal)
@@ -369,6 +371,8 @@ async def accept_proposal_public(
         secondary_color=branding_data.get("secondary_color", "#8b5cf6"),
         accent_color=branding_data.get("accent_color", "#22c55e"),
         footer_text=branding_data.get("footer_text"),
+        privacy_policy_url=branding_data.get("privacy_policy_url"),
+        terms_of_service_url=branding_data.get("terms_of_service_url"),
     )
     return response
 
@@ -408,6 +412,8 @@ async def reject_proposal_public(
         secondary_color=branding_data.get("secondary_color", "#8b5cf6"),
         accent_color=branding_data.get("accent_color", "#22c55e"),
         footer_text=branding_data.get("footer_text"),
+        privacy_policy_url=branding_data.get("privacy_policy_url"),
+        terms_of_service_url=branding_data.get("terms_of_service_url"),
     )
     return response
 

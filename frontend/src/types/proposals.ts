@@ -4,7 +4,19 @@
 
 import type { PaginatedResponse } from './common';
 
-export interface ProposalBase {
+export type PaymentType = 'one_time' | 'subscription';
+export type RecurringInterval = 'month' | 'year';
+
+export interface ProposalBillingFields {
+  payment_type: PaymentType;
+  /** Stripe-native unit. 'month' + count=3 = quarterly, count=6 = bi-yearly. */
+  recurring_interval?: RecurringInterval | null;
+  recurring_interval_count?: number | null;
+  amount?: string | number | null;
+  currency: string;
+}
+
+export interface ProposalBase extends ProposalBillingFields {
   title: string;
   content?: string | null;
   opportunity_id?: number | null;
@@ -43,6 +55,11 @@ export interface ProposalUpdate {
   valid_until?: string | null;
   designated_signer_email?: string | null;
   owner_id?: number | null;
+  payment_type?: PaymentType;
+  recurring_interval?: RecurringInterval | null;
+  recurring_interval_count?: number | null;
+  amount?: string | number | null;
+  currency?: string;
 }
 
 export interface Proposal extends ProposalBase {
@@ -63,6 +80,12 @@ export interface Proposal extends ProposalBase {
   signer_user_agent?: string | null;
   signed_at?: string | null;
   rejection_reason?: string | null;
+  stripe_invoice_id?: string | null;
+  stripe_subscription_id?: string | null;
+  stripe_checkout_session_id?: string | null;
+  stripe_payment_url?: string | null;
+  invoice_sent_at?: string | null;
+  paid_at?: string | null;
   created_at: string;
   updated_at: string;
   contact?: { id: number; full_name: string } | null;

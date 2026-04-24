@@ -577,6 +577,73 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             raise ValueError(f"Stripe customer {customer_id} not found")
         return customer
 
+    def _stripe_create_finalize_send_invoice(
+        self,
+        *,
+        stripe,  # the stripe module
+        stripe_customer_id: str,
+        amount: float | Decimal,
+        currency: str,
+        description: str,
+        due_days: int,
+        idem_base: str,
+        metadata: dict | None = None,
+        payment_method_types: Sequence[str] | None = None,
+    ):
+        """Create+finalize+send a Stripe Invoice with a single line item.
+
+        Shared between ``create_and_send_invoice`` (quote path) and
+        ``create_invoice_for_proposal`` (proposal path). Both flows
+        follow the same idempotent Invoice.create → InvoiceItem.create →
+        finalize → send sequence, and both need to void the draft if
+        anything mid-flight fails so the orphan InvoiceItem can't
+        silently attach to the customer's next invoice.
+
+        Returns the finalized Stripe Invoice object. Raises ValueError
+        on any Stripe failure (having already attempted a void).
+        """
+        invoice = None
+        try:
+            invoice_params: dict = {
+                "customer": stripe_customer_id,
+                "collection_method": "send_invoice",
+                "days_until_due": due_days,
+                "auto_advance": False,
+            }
+            if metadata:
+                invoice_params["metadata"] = metadata
+            if payment_method_types:
+                invoice_params["payment_settings"] = {
+                    "payment_method_types": payment_method_types,
+                }
+
+            invoice = stripe.Invoice.create(
+                **invoice_params,
+                idempotency_key=idem_base,
+            )
+            if not invoice.id:
+                raise ValueError("Stripe returned an invoice without an id")
+
+            stripe.InvoiceItem.create(
+                customer=stripe_customer_id,
+                amount=_to_cents(amount),
+                currency=currency.lower(),
+                description=description,
+                invoice=invoice.id,
+                idempotency_key=f"{idem_base}_item",
+            )
+            invoice = stripe.Invoice.finalize_invoice(invoice.id)
+            return stripe.Invoice.send_invoice(invoice.id)
+        except Exception as exc:
+            if invoice and invoice.id:
+                try:
+                    stripe.Invoice.void_invoice(invoice.id)
+                except Exception:
+                    logger.warning(
+                        "Failed to void draft invoice %s after error", invoice.id,
+                    )
+            raise ValueError(f"Failed to create invoice: {exc}") from exc
+
     async def create_and_send_invoice(
         self,
         customer_id: int,
@@ -598,54 +665,16 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             raise ValueError("Stripe is not configured. Set STRIPE_SECRET_KEY environment variable.")
 
         customer = await self.sync_customer_from_id(customer_id)
-        amount_cents = _to_cents(amount)
-
-        # Create the draft Invoice FIRST (auto_advance=False so Stripe
-        # doesn't finalize it behind our back), then attach a line item
-        # pinned to that invoice. If anything after the Invoice.create
-        # fails, the InvoiceItem is scoped to this invoice and gets
-        # reaped when we void the draft — so it can't orphan-attach to
-        # the customer's NEXT invoice (which was the silent double-
-        # charge bug).
-        invoice = None
-        try:
-            invoice_params = {
-                "customer": customer.stripe_customer_id,
-                "collection_method": "send_invoice",
-                "days_until_due": due_days,
-                "auto_advance": False,
-            }
-            if payment_method_types:
-                invoice_params["payment_settings"] = {
-                    "payment_method_types": payment_method_types,
-                }
-            idem_key = f"inv_{customer_id}_{uuid.uuid4().hex[:12]}"
-            invoice = stripe.Invoice.create(
-                **invoice_params,
-                idempotency_key=idem_key,
-            )
-            if not invoice.id:
-                raise ValueError("Stripe returned an invoice without an id")
-            invoice_id: str = invoice.id
-
-            stripe.InvoiceItem.create(
-                customer=customer.stripe_customer_id,
-                amount=amount_cents,
-                currency=currency.lower(),
-                description=description,
-                invoice=invoice_id,
-                idempotency_key=f"{idem_key}_item",
-            )
-
-            invoice = stripe.Invoice.finalize_invoice(invoice_id)
-            invoice = stripe.Invoice.send_invoice(invoice_id)
-        except Exception as exc:
-            if invoice and invoice.id:
-                try:
-                    stripe.Invoice.void_invoice(invoice.id)
-                except Exception:
-                    logger.warning("Failed to void draft invoice %s after error", invoice.id)
-            raise ValueError(f"Failed to create invoice: {exc}") from exc
+        invoice = self._stripe_create_finalize_send_invoice(
+            stripe=stripe,
+            stripe_customer_id=customer.stripe_customer_id,
+            amount=amount,
+            currency=currency,
+            description=description,
+            due_days=due_days,
+            idem_base=f"inv_{customer_id}_{uuid.uuid4().hex[:12]}",
+            payment_method_types=payment_method_types,
+        )
 
         payment = Payment(
             stripe_invoice_id=invoice.id,
@@ -666,6 +695,152 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             "payment_id": payment.id,
             "status": "pending",
             "invoice_url": getattr(invoice, "hosted_invoice_url", None),
+        }
+
+    async def create_invoice_for_proposal(
+        self,
+        *,
+        proposal_id: int,
+        contact_id: int | None,
+        company_id: int | None,
+        amount: Decimal,
+        currency: str,
+        description: str,
+        owner_id: int | None,
+        due_days: int = 30,
+    ) -> dict:
+        """Create+finalize+send a Stripe Invoice for an accepted one-time proposal.
+
+        Returns ``{stripe_invoice_id, stripe_payment_url, payment_id}``.
+
+        Tags the Stripe invoice with ``metadata.proposal_id`` so the
+        webhook can match the invoice.paid event back to the CRM
+        proposal without a local-side join.
+
+        Raises ValueError when Stripe is not configured or neither
+        contact_id nor company_id is supplied.
+        """
+        if contact_id is None and company_id is None:
+            raise ValueError("proposal must link to a contact or company")
+
+        stripe = _get_stripe()
+        if not stripe:
+            raise ValueError("Stripe is not configured")
+
+        customer = await self.sync_customer(
+            contact_id=contact_id,
+            company_id=company_id,
+        )
+        if not customer.stripe_customer_id:
+            raise ValueError(
+                "Stripe customer was not created — check Stripe connectivity",
+            )
+
+        invoice = self._stripe_create_finalize_send_invoice(
+            stripe=stripe,
+            stripe_customer_id=customer.stripe_customer_id,
+            amount=amount,
+            currency=currency,
+            description=description,
+            due_days=due_days,
+            idem_base=f"proposal_{proposal_id}_{uuid.uuid4().hex[:12]}",
+            metadata={"proposal_id": str(proposal_id)},
+        )
+
+        payment = Payment(
+            stripe_invoice_id=invoice.id,
+            amount=amount,
+            currency=currency.upper(),
+            status="pending",
+            customer_id=customer.id,
+            owner_id=owner_id,
+            created_by_id=owner_id,
+        )
+        self.db.add(payment)
+        await self.db.flush()
+        await self.db.refresh(payment)
+
+        return {
+            "stripe_invoice_id": invoice.id,
+            "stripe_payment_url": getattr(invoice, "hosted_invoice_url", None),
+            "payment_id": payment.id,
+        }
+
+    async def create_subscription_checkout_for_proposal(
+        self,
+        *,
+        proposal_id: int,
+        contact_id: int | None,
+        company_id: int | None,
+        amount: Decimal,
+        currency: str,
+        description: str,
+        interval: str,
+        interval_count: int,
+        success_url: str,
+        cancel_url: str,
+    ) -> dict:
+        """Create a Stripe Checkout Session (mode=subscription) for an accepted
+        subscription proposal.
+
+        Uses Stripe's inline ``price_data`` so we don't have to pre-create
+        a Product + Price for every proposal. The client completes the
+        checkout flow, which collects payment method + charges the first
+        period, and Stripe sends us ``checkout.session.completed`` with
+        the resulting subscription id.
+
+        ``metadata.proposal_id`` carries on both the session and the
+        underlying subscription, so the webhook can reconcile.
+
+        Returns ``{stripe_checkout_session_id, stripe_payment_url}``.
+        """
+        if contact_id is None and company_id is None:
+            raise ValueError("proposal must link to a contact or company")
+        if interval not in ("month", "year"):
+            raise ValueError("interval must be 'month' or 'year'")
+        if interval_count < 1:
+            raise ValueError("interval_count must be >= 1")
+
+        stripe = _get_stripe()
+        if not stripe:
+            raise ValueError("Stripe is not configured")
+
+        customer = await self.sync_customer(
+            contact_id=contact_id,
+            company_id=company_id,
+        )
+        if not customer.stripe_customer_id:
+            raise ValueError(
+                "Stripe customer was not created — check Stripe connectivity",
+            )
+
+        session = stripe.checkout.Session.create(
+            mode="subscription",
+            customer=customer.stripe_customer_id,
+            success_url=success_url,
+            cancel_url=cancel_url,
+            line_items=[
+                {
+                    "quantity": 1,
+                    "price_data": {
+                        "currency": currency.lower(),
+                        "unit_amount": _to_cents(amount),
+                        "recurring": {
+                            "interval": interval,
+                            "interval_count": interval_count,
+                        },
+                        "product_data": {"name": description},
+                    },
+                },
+            ],
+            metadata={"proposal_id": str(proposal_id)},
+            subscription_data={"metadata": {"proposal_id": str(proposal_id)}},
+            idempotency_key=f"proposal_sub_{proposal_id}_{uuid.uuid4().hex[:12]}",
+        )
+
+        return {
+            "stripe_checkout_session_id": session.id,
+            "stripe_payment_url": session.url,
         }
 
     async def create_onboarding_link(
