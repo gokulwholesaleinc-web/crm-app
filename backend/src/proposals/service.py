@@ -554,22 +554,21 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         user_id: int,
         include_signature: bool = False,
     ) -> bytes:
-        """Generate a branded proposal PDF in the document-style
+        """Generate a branded proposal PDF in the corporate-professional
         aesthetic that mirrors the public web view.
 
         When ``include_signature`` is True and the proposal has been
-        signed, the PDF's signatory page carries the full e-signature
-        audit block (name, email, IP, user-agent, timestamp). Used for
-        the countersigned copy emailed to the client after acceptance.
+        signed, the PDF includes a signature section with the full
+        e-signature audit (name, email, IP, user-agent, timestamp).
 
-        PDF-specific constraints baked into this template:
-        - Layout uses <table>-based composition instead of flexbox
-          (WeasyPrint's flex implementation has page-fragmentation
-          bugs — issue #2076 + #2163 — that produce spacing defects
-          and broken headers in paginated output).
-        - CSS properties ignored by WeasyPrint (``text-wrap: balance``,
-          ``text-wrap: pretty``) are omitted — their absence is
-          compensated with explicit ``max-width`` on prose blocks.
+        PDF-specific notes:
+        - Uses <table> layout instead of flexbox (weasyprint's flex
+          has page-fragmentation bugs — issues #2076 + #2163).
+        - Omits `text-wrap: balance/pretty` (weasyprint ignores them),
+          uses `max-width` constraints on prose blocks instead.
+        - Plain business-document styling: clean sans throughout,
+          section titles with a short accent rule, no § numbering or
+          editorial drama.
         """
         proposal = await self.get_by_id(proposal_id)
         if not proposal:
@@ -586,6 +585,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         # <img> entirely rather than handing weasyprint a URL it will
         # later refuse and log as an error per page render.
         logo_html = ""
+        logo_is_image = False
         logo_url = branding.get("logo_url") or ""
         if logo_url:
             try:
@@ -597,6 +597,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 logo_html = (
                     f'<img src="{escape(logo_url)}" alt="{company_name}" class="letterhead-logo" />'
                 )
+                logo_is_image = True
             except UnsafeUrlError as exc:
                 logger.warning(
                     "Skipping proposal logo for tenant user %s: %s", user_id, exc
@@ -604,6 +605,13 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         if not logo_html:
             initial = escape((company_name_raw or "P")[0].upper())
             logo_html = f'<span class="letterhead-initial">{initial}</span>'
+
+        # When the uploaded logo is an image that already contains the
+        # wordmark (common case for branded PNG/SVG marks), suppress
+        # the text company name to avoid "Link Creative  Link Creative".
+        letterhead_company_html = (
+            "" if logo_is_image else f'<span class="letterhead-company">{company_name}</span>'
+        )
 
         # ---------- Title / cover metadata ----------
         contact_name = ""
@@ -621,16 +629,12 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             date_str = proposal.valid_until.strftime("%B %d, %Y")
             label = "Expired" if proposal.valid_until < datetime.now(UTC).date() else "Valid until"
             valid_html = (
-                '<div class="cover-validity">'
-                '<span class="rule"></span>'
-                f'<span class="cover-validity-text">{escape(label)} '
-                f'<span class="mono">{escape(date_str)}</span></span>'
-                '<span class="rule"></span>'
-                '</div>'
+                f'<p class="cover-validity">{escape(label)} '
+                f'<span class="tabular">{escape(date_str)}</span></p>'
             )
 
-        # ---------- Structured pricing pull-figure ----------
-        amount_html = ""
+        # ---------- Structured pricing block ----------
+        pricing_block_html = ""
         cadence_label_map = {
             ("month", 1): "Monthly",
             ("month", 3): "Quarterly",
@@ -661,21 +665,22 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                         f"Every {interval_count} {interval}{'s' if interval_count > 1 else ''}",
                     )
 
-                eyebrow = "Recurring fee" if is_subscription_pricing else "Total investment"
-                cadence_html = (
-                    f'<div class="pricing-cadence">billed {escape(cadence_text.lower())}</div>'
+                label = "Recurring fee" if is_subscription_pricing else "Total"
+                cadence_cell = (
+                    f'<td class="pricing-cadence">billed {escape(cadence_text.lower())}</td>'
                     if cadence_text else ""
                 )
-                amount_html = f"""
-<figure class="pricing-figure">
-  <div class="pricing-eyebrow">{escape(eyebrow)}</div>
-  <div class="pricing-amount mono-num">{escape(display_amount)} <span class="pricing-currency">{escape(currency)}</span></div>
-  {cadence_html}
-  <span class="pricing-rule"></span>
-</figure>
+                pricing_block_html = f"""
+<table class="pricing-block" cellpadding="0" cellspacing="0"><tr>
+  <td>
+    <div class="pricing-label">{escape(label)}</div>
+    <div class="pricing-amount tabular">{escape(display_amount)}</div>
+  </td>
+  {cadence_cell}
+</tr></table>
 """
 
-        # ---------- Numbered content sections ----------
+        # ---------- Content sections ----------
         section_data = [
             ("Executive Summary", proposal.executive_summary),
             ("Scope of Work", proposal.scope_of_work),
@@ -685,59 +690,44 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         populated_content = [(t, c) for t, c in section_data if c]
 
         sections_html = ""
-        counter = 0
 
-        def _section(num_str: str, title_text: str, body_html: str) -> str:
-            # Section header is a <table> (not flexbox) so weasyprint
-            # renders number + rule consistently across page breaks.
+        def _section(title_text: str, body_html: str) -> str:
             return (
                 '<section class="doc-section">'
-                '  <table class="doc-section-header" cellpadding="0" cellspacing="0"><tr>'
-                f'    <td class="doc-section-num mono">§ {num_str}</td>'
-                '    <td class="doc-section-rule"></td>'
-                '  </tr></table>'
+                f'  <div class="doc-section-rule"></div>'
                 f'  <h2 class="doc-section-title">{title_text}</h2>'
                 f'  {body_html}'
                 '</section>'
             )
 
         for title, content in populated_content:
-            counter += 1
-            num = f"{counter:02d}"
             sections_html += _section(
-                num,
                 escape(title),
                 f'<p class="doc-prose">{escape(content)}</p>',
             )
 
-        # Pricing gets its own numbered section (amount pull-figure +
-        # optional pricing_section free-text notes)
+        # Pricing section — standard heading + pricing block + optional notes
         pricing_free_text = proposal.pricing_section
-        if amount_html or pricing_free_text:
-            counter += 1
-            num = f"{counter:02d}"
+        if pricing_block_html or pricing_free_text:
             title_text = "Engagement & Fees" if is_subscription_pricing else "Fees"
-            body = amount_html
+            body = pricing_block_html
             if pricing_free_text:
                 body += f'<p class="doc-prose">{escape(pricing_free_text)}</p>'
-            sections_html += _section(num, escape(title_text), body)
+            sections_html += _section(escape(title_text), body)
 
         # Fallback `content` block if nothing structured was filled in
         if (
             proposal.content
             and not populated_content
-            and not amount_html
+            and not pricing_block_html
             and not pricing_free_text
         ):
-            counter += 1
-            num = f"{counter:02d}"
             sections_html += _section(
-                num,
                 "Proposal",
                 f'<p class="doc-prose">{escape(proposal.content)}</p>',
             )
 
-        # ---------- Cover letter (under the title block, un-numbered) ----------
+        # ---------- Cover letter (under the title block) ----------
         cover_letter_html = ""
         if proposal.cover_letter:
             cover_letter_html = (
@@ -746,7 +736,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 '</section>'
             )
 
-        # ---------- Signatory / Execution page ----------
+        # ---------- Signatory section ----------
         signatory_html = ""
         if include_signature and proposal.signed_at:
             signed_display = proposal.signed_at.strftime("%B %d, %Y · %H:%M UTC")
@@ -765,19 +755,15 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 rows.append(("User-agent", ua))
 
             rows_html = "".join(
-                f'<tr><th>{escape(label)}</th><td class="mono">{escape(val)}</td></tr>'
+                f'<tr><th>{escape(label)}</th><td class="tabular">{escape(val)}</td></tr>'
                 for label, val in rows
             )
 
-            signatory_num = f"{counter + 1:02d}"
             signatory_html = f"""
 <section class="doc-signatory page-break-before">
-  <table class="doc-section-header" cellpadding="0" cellspacing="0"><tr>
-    <td class="doc-section-num mono">§ {signatory_num}</td>
-    <td class="doc-section-rule"></td>
-  </tr></table>
+  <div class="doc-section-rule"></div>
   <h2 class="doc-section-title">Signatory</h2>
-  <p class="doc-prose doc-signatory-preamble">
+  <p class="doc-prose">
     This proposal was accepted and electronically signed under the US ESIGN Act
     (15 USC §7001) and applicable state UETA statutes. The signature below
     carries the same legal effect as a handwritten signature.
@@ -785,10 +771,8 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
   <table class="doc-signatory-table">
     <tbody>{rows_html}</tbody>
   </table>
-  <div class="doc-signatory-footer">
-    <div class="doc-signature-line"></div>
-    <div class="doc-signature-caption mono">Signed electronically for {escape(proposal.signer_name or "")}</div>
-  </div>
+  <div class="doc-signature-line"></div>
+  <p class="doc-signature-caption">Signed electronically for {escape(proposal.signer_name or "")}</p>
 </section>
 """
 
@@ -796,12 +780,10 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         title_html = escape(proposal.title)
         proposal_number_html = escape(proposal.proposal_number)
         contact_block = (
-            f'<p class="cover-prepared-for"><em>Prepared for</em> {escape(contact_name)}</p>'
+            f'<p class="cover-prepared-for">Prepared for <strong>{escape(contact_name)}</strong>'
+            + (f' &middot; <span class="cover-company">{escape(secondary_company)}</span>' if secondary_company else '')
+            + '</p>'
             if contact_name else ""
-        )
-        secondary_company_block = (
-            f'<p class="cover-secondary-company">{escape(secondary_company)}</p>'
-            if secondary_company else ""
         )
         footer_block = (
             f'<footer class="doc-footer"><p>{escape(footer_text)}</p></footer>'
@@ -814,265 +796,175 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
 <style>
   @page {{
     size: Letter;
-    margin: 22mm 20mm 22mm 20mm;
-    @bottom-center {{
-      content: "{escape(company_name_raw)} · {escape(proposal.proposal_number)} · Page " counter(page) " of " counter(pages);
-      font-family: Georgia, 'Times New Roman', serif;
-      font-size: 9pt;
-      color: #9ca3af;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-    }}
-  }}
-  @page :first {{
-    @bottom-center {{ content: ""; }}
+    margin: 20mm 20mm 20mm 20mm;
   }}
   * {{ box-sizing: border-box; }}
   html {{ font-size: 11pt; }}
   body {{
     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-    color: #1a1a1a;
-    line-height: 1.7;
+    color: #111827;
+    line-height: 1.6;
     margin: 0;
     padding: 0;
   }}
-  .mono, .mono-num {{
-    font-family: "SF Mono", Menlo, Consolas, monospace;
-    font-variant-numeric: tabular-nums;
-  }}
+  .tabular {{ font-variant-numeric: tabular-nums; }}
 
-  /* ---------- Letterhead (table layout for weasyprint) ---------- */
+  /* ---------- Letterhead ---------- */
   .letterhead {{
     width: 100%;
     border-bottom: 0.75pt solid #e5e7eb;
-    margin-bottom: 18pt;
+    margin-bottom: 24pt;
     padding-bottom: 10pt;
   }}
   .letterhead td {{ vertical-align: middle; }}
   .letterhead td.right {{ text-align: right; }}
-  .letterhead-logo {{ height: 22pt; width: auto; max-width: 120pt; }}
+  .letterhead-logo {{ height: 22pt; width: auto; max-width: 140pt; }}
   .letterhead-initial {{
     display: inline-block;
-    width: 22pt; height: 22pt; line-height: 20pt;
+    width: 20pt; height: 20pt; line-height: 20pt;
     text-align: center;
-    border: 0.75pt solid {accent};
-    color: {accent};
-    font-family: Georgia, 'Times New Roman', serif;
-    font-size: 12pt;
-    margin-right: 10pt;
+    background: {accent};
+    color: #ffffff;
+    font-size: 10pt;
+    font-weight: 600;
+    margin-right: 8pt;
     vertical-align: middle;
   }}
   .letterhead-company {{
-    font-family: Georgia, 'Times New Roman', serif;
-    font-size: 11pt; letter-spacing: 0.02em;
-    margin-left: 8pt;
+    font-size: 11pt;
+    font-weight: 600;
+    color: #111827;
     vertical-align: middle;
   }}
   .letterhead-meta {{
-    font-family: "SF Mono", Menlo, Consolas, monospace;
-    font-size: 8pt;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
+    font-size: 9pt;
     color: #6b7280;
   }}
-  .letterhead-accent-rule {{
-    height: 0.6pt;
-    background: {accent};
-    opacity: 0.4;
+
+  /* ---------- Cover title block (left-aligned, business-document) ---------- */
+  .cover {{
+    padding: 0 0 20pt;
+    border-bottom: 0.5pt solid #e5e7eb;
     margin-bottom: 24pt;
   }}
-
-  /* ---------- Cover title block ---------- */
-  .cover {{
-    text-align: center;
-    padding: 14pt 0 28pt;
-    border-bottom: 0.5pt solid #e5e7eb;
-    margin-bottom: 28pt;
-  }}
   .cover-eyebrow {{
-    font-family: "SF Mono", Menlo, Consolas, monospace;
-    font-size: 8pt;
-    letter-spacing: 0.3em;
+    font-size: 8.5pt;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: #9ca3af;
-    margin-bottom: 18pt;
+    color: #6b7280;
+    margin: 0 0 8pt;
   }}
   .cover-title {{
-    font-family: Georgia, 'Times New Roman', serif;
-    font-weight: 400;
-    font-size: 34pt;
-    line-height: 1.1;
-    letter-spacing: -0.02em;
+    font-weight: 600;
+    font-size: 24pt;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
     color: #0f172a;
-    margin: 0 auto 18pt;
-    max-width: 28em;
+    margin: 0 0 10pt;
+    max-width: 32em;
   }}
   .cover-prepared-for {{
-    font-family: Georgia, 'Times New Roman', serif;
-    font-style: italic;
-    font-size: 14pt;
+    font-size: 11pt;
     color: #374151;
-    margin: 18pt 0 2pt;
+    margin: 0 0 4pt;
   }}
-  .cover-prepared-for em {{
-    font-style: normal;
-    color: #9ca3af;
-    font-size: 10pt;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    margin-right: 6pt;
-  }}
-  .cover-secondary-company {{
-    font-size: 10pt;
-    color: #6b7280;
-    letter-spacing: 0.02em;
-    margin: 0 0 18pt;
-  }}
+  .cover-prepared-for strong {{ font-weight: 600; color: #111827; }}
+  .cover-company {{ color: #6b7280; }}
   .cover-validity {{
-    margin-top: 22pt;
-    font-family: "SF Mono", Menlo, Consolas, monospace;
-    font-size: 8pt;
-    letter-spacing: 0.25em;
-    text-transform: uppercase;
+    font-size: 9pt;
     color: #6b7280;
+    margin: 8pt 0 0;
   }}
-  .cover-validity .rule {{
-    display: inline-block;
-    width: 22pt;
-    height: 0.5pt;
-    background: #d1d5db;
-    vertical-align: middle;
-    margin: 0 8pt;
-  }}
-  .cover-validity-text {{ vertical-align: middle; }}
 
-  /* ---------- Cover letter (flowing prose, no box) ---------- */
+  /* ---------- Cover letter ---------- */
   .doc-cover-letter {{
-    font-family: Georgia, 'Times New Roman', serif;
-    font-size: 12pt;
-    line-height: 1.75;
-    color: #1f2937;
-    margin: 0 0 36pt;
+    font-size: 11pt;
+    line-height: 1.7;
+    color: #374151;
+    margin: 0 0 24pt;
     max-width: 44em;
   }}
   .doc-cover-letter p {{ margin: 0; white-space: pre-wrap; }}
 
-  /* ---------- Numbered sections (table-based header layout) ---------- */
+  /* ---------- Sections ---------- */
   .doc-section {{
-    margin: 0 0 36pt;
+    margin: 0 0 24pt;
     page-break-inside: avoid;
   }}
-  .doc-section-header {{
-    width: 100%;
-    border-collapse: collapse;
-    margin-bottom: 10pt;
-  }}
-  .doc-section-header .doc-section-num {{
-    width: 40pt;
-    white-space: nowrap;
-    font-size: 8pt;
-    letter-spacing: 0.25em;
-    text-transform: uppercase;
-    color: {accent};
-    padding: 0 10pt 0 0;
-    vertical-align: middle;
-  }}
-  .doc-section-header .doc-section-rule {{
-    border-top: 0.5pt solid {accent};
-    opacity: 0.3;
-    width: 100%;
-    vertical-align: middle;
-    height: 0.5pt;
+  .doc-section-rule {{
+    width: 24pt;
+    height: 1.5pt;
+    background: {accent};
+    margin-bottom: 8pt;
   }}
   .doc-section-title {{
-    font-family: Georgia, 'Times New Roman', serif;
-    font-weight: 400;
-    font-size: 19pt;
+    font-size: 14pt;
+    font-weight: 600;
     letter-spacing: -0.01em;
-    color: #0f172a;
-    margin: 0 0 14pt;
-    line-height: 1.2;
-    max-width: 24em;
+    color: #111827;
+    margin: 0 0 10pt;
+    line-height: 1.3;
   }}
   .doc-prose {{
     font-size: 10.5pt;
-    line-height: 1.75;
-    color: #1f2937;
+    line-height: 1.7;
+    color: #374151;
     margin: 0 0 10pt;
     white-space: pre-wrap;
     max-width: 44em;
   }}
 
-  /* ---------- Pricing pull-figure (text-align for weasyprint) ---------- */
-  .pricing-figure {{
-    margin: 18pt 0 20pt;
-    padding: 14pt 0;
-    text-align: center;
+  /* ---------- Pricing block (simple bordered table) ---------- */
+  .pricing-block {{
+    width: 100%;
+    max-width: 40em;
+    border: 0.75pt solid {accent}40;
+    background: {accent}0a;
+    margin: 8pt 0 14pt;
   }}
-  .pricing-eyebrow {{
-    font-family: "SF Mono", Menlo, Consolas, monospace;
-    font-size: 8pt;
-    letter-spacing: 0.3em;
+  .pricing-block td {{
+    padding: 12pt 16pt;
+    vertical-align: middle;
+  }}
+  .pricing-label {{
+    font-size: 8.5pt;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: {accent};
-    margin-bottom: 10pt;
+    color: #6b7280;
+    margin-bottom: 4pt;
   }}
   .pricing-amount {{
-    font-family: Georgia, 'Times New Roman', serif;
-    font-weight: 400;
-    font-size: 32pt;
-    letter-spacing: -0.02em;
+    font-size: 22pt;
+    font-weight: 600;
     color: #0f172a;
+    letter-spacing: -0.01em;
     line-height: 1.1;
   }}
-  .pricing-currency {{
-    font-size: 14pt;
-    color: #9ca3af;
-    letter-spacing: 0.1em;
-  }}
   .pricing-cadence {{
-    margin-top: 8pt;
-    font-family: Georgia, 'Times New Roman', serif;
-    font-style: italic;
-    color: #6b7280;
-    font-size: 11pt;
-  }}
-  .pricing-rule {{
-    display: block;
-    width: 40pt; height: 0.6pt;
-    background: {accent};
-    opacity: 0.5;
-    margin: 14pt auto 0;
+    text-align: right;
+    font-size: 10pt;
+    color: #4b5563;
   }}
 
-  /* ---------- Signatory page ---------- */
+  /* ---------- Signatory section ---------- */
   .page-break-before {{ page-break-before: always; }}
-  .doc-signatory {{ margin-top: 0; }}
-  .doc-signatory-preamble {{
-    font-style: italic;
-    color: #4b5563;
-    max-width: 44em;
-    margin-bottom: 22pt;
-  }}
   .doc-signatory-table {{
     width: 100%;
+    max-width: 44em;
     border-collapse: collapse;
-    margin: 0 0 36pt;
+    margin: 14pt 0 18pt;
   }}
   .doc-signatory-table th,
   .doc-signatory-table td {{
     text-align: left;
-    padding: 8pt 0;
+    padding: 7pt 0;
     border-bottom: 0.5pt solid #e5e7eb;
     vertical-align: top;
   }}
   .doc-signatory-table th {{
-    font-family: "SF Mono", Menlo, Consolas, monospace;
-    font-size: 8pt;
-    letter-spacing: 0.25em;
-    text-transform: uppercase;
+    font-size: 9pt;
     color: #6b7280;
-    font-weight: 400;
+    font-weight: 500;
     width: 28%;
   }}
   .doc-signatory-table td {{
@@ -1080,25 +972,22 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
     color: #111827;
     word-break: break-word;
   }}
-  .doc-signatory-footer {{ margin-top: 32pt; }}
   .doc-signature-line {{
-    width: 60%;
+    width: 50%;
     height: 0.75pt;
-    background: {accent};
-    margin-bottom: 6pt;
+    background: #d1d5db;
+    margin: 24pt 0 6pt;
   }}
   .doc-signature-caption {{
-    font-size: 8pt;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
+    font-size: 9pt;
     color: #6b7280;
+    margin: 0;
   }}
 
   .doc-footer {{
-    margin-top: 40pt;
+    margin-top: 32pt;
     padding-top: 12pt;
     border-top: 0.5pt solid #e5e7eb;
-    font-family: Georgia, 'Times New Roman', serif;
     font-size: 8.5pt;
     color: #9ca3af;
     line-height: 1.5;
@@ -1107,16 +996,14 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
 </head>
 <body>
   <table class="letterhead" cellpadding="0" cellspacing="0"><tr>
-    <td>{logo_html}<span class="letterhead-company">{company_name}</span></td>
-    <td class="right letterhead-meta">{proposal_number_html}</td>
+    <td>{logo_html}{letterhead_company_html}</td>
+    <td class="right letterhead-meta tabular">{proposal_number_html}</td>
   </tr></table>
-  <div class="letterhead-accent-rule"></div>
 
   <section class="cover">
-    <p class="cover-eyebrow">Proposal · {proposal_number_html}</p>
+    <p class="cover-eyebrow">Proposal &middot; <span class="tabular">{proposal_number_html}</span></p>
     <h1 class="cover-title">{title_html}</h1>
     {contact_block}
-    {secondary_company_block}
     {valid_html}
   </section>
 
