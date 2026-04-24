@@ -148,6 +148,11 @@ class ProposalViewResponse(BaseModel):
 class ProposalResponse(ProposalBase):
     id: int
     proposal_number: str
+    # Unguessable token used to build the public /proposals/public/{token}
+    # URL. The frontend's "Copy Link" button reads this off the detail
+    # response; omitting it made every copy fall through to the
+    # "no public link" error after the first page load.
+    public_token: str | None = None
     view_count: int
     last_viewed_at: datetime | None = None
     sent_at: datetime | None = None
