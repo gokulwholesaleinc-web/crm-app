@@ -18,6 +18,7 @@ import {
   useAcceptProposal,
   useRejectProposal,
 } from '../../hooks/useProposals';
+import { ProposalBillingCard } from './ProposalBillingCard';
 import { formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { showSuccess, showError } from '../../utils/toast';
@@ -319,6 +320,12 @@ function ProposalDetailPage() {
               )}
             </dl>
           </div>
+
+          {/* Billing — shows the structured pricing Giancarlo picked on
+              create + any Stripe artifact that was spawned on e-sign
+              (invoice id / subscription id / pay URL) so the CRM side
+              mirrors what the client sees on the public page. */}
+          <ProposalBillingCard proposal={proposal} />
 
           {/* Related Entities */}
           <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700">
