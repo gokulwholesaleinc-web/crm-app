@@ -209,6 +209,15 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         proposal_data["proposal_number"] = proposal_number
         proposal_data["public_token"] = secrets.token_urlsafe(32)
         proposal_data["created_by_id"] = user_id
+        # Default ownership to the creating user when the form didn't
+        # specify one. owner_id is load-bearing downstream: it drives
+        # tenant-branding lookups (public proposal page colors/logo),
+        # signed-PDF email routing through the owner's Gmail OAuth,
+        # and "my proposals" data scoping. A NULL owner silently falls
+        # back to the generic "CRM" defaults and Resend, which is why
+        # early Link Creative proposals rendered unbranded.
+        if proposal_data.get("owner_id") is None:
+            proposal_data["owner_id"] = user_id
 
         proposal = Proposal(**proposal_data)
         self.db.add(proposal)
@@ -243,6 +252,16 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         """
         if proposal.status not in ("sent", "viewed"):
             raise ValueError(f"Cannot accept proposal in '{proposal.status}' status")
+
+        # Hard-block expired proposals server-side. The public page
+        # already shows "Expired" in the UI, but without this a signer
+        # could craft a direct POST and sign past the expiry, which
+        # undermines the "Valid until" commitment they saw.
+        if proposal.valid_until and proposal.valid_until < datetime.now(UTC).date():
+            raise ValueError(
+                f"This proposal expired on {proposal.valid_until.isoformat()} "
+                "and can no longer be accepted",
+            )
 
         _assert_signer_matches(proposal, signer_email)
 

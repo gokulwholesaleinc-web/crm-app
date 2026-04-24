@@ -19,6 +19,7 @@ import {
   useRejectProposal,
 } from '../../hooks/useProposals';
 import { ProposalBillingCard } from './ProposalBillingCard';
+import { ProposalAuditCard } from './ProposalAuditCard';
 import { formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { showSuccess, showError } from '../../utils/toast';
@@ -332,6 +333,11 @@ function ProposalDetailPage() {
               (invoice id / subscription id / pay URL) so the CRM side
               mirrors what the client sees on the public page. */}
           <ProposalBillingCard proposal={proposal} />
+
+          {/* E-sign + view audit trail. Signer name/email/IP/UA +
+              timestamp on accept, plus the full public-link view log
+              for forensics and billing disputes. */}
+          <ProposalAuditCard proposal={proposal} />
 
           {/* Related Entities */}
           <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700">

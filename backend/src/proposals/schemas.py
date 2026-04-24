@@ -148,6 +148,11 @@ class ProposalViewResponse(BaseModel):
 class ProposalResponse(ProposalBase):
     id: int
     proposal_number: str
+    # Unguessable token used to build the public /proposals/public/{token}
+    # URL. The frontend's "Copy Link" button reads this off the detail
+    # response; omitting it made every copy fall through to the
+    # "no public link" error after the first page load.
+    public_token: str | None = None
     view_count: int
     last_viewed_at: datetime | None = None
     sent_at: datetime | None = None
@@ -173,6 +178,11 @@ class ProposalResponse(ProposalBase):
     company: CompanyBrief | None = None
     opportunity: OpportunityBrief | None = None
     quote: QuoteBrief | None = None
+    # Per-view audit trail: every public-link GET appends a row with
+    # IP + user-agent + timestamp. Surfaced on the detail response so
+    # the CRM can show "viewed 12 times from 3 IPs" + the raw log for
+    # forensics / billing disputes.
+    views: list[ProposalViewResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
 

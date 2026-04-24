@@ -62,6 +62,14 @@ export interface ProposalUpdate {
   currency?: string;
 }
 
+export interface ProposalView {
+  id: number;
+  proposal_id: number;
+  viewed_at: string;
+  ip_address?: string | null;
+  user_agent?: string | null;
+}
+
 export interface Proposal extends ProposalBase {
   id: number;
   proposal_number: string;
@@ -87,6 +95,8 @@ export interface Proposal extends ProposalBase {
   invoice_sent_at?: string | null;
   paid_at?: string | null;
   billing_error?: string | null;
+  /** Per-view audit log. Populated on every public-link GET. */
+  views?: ProposalView[];
   created_at: string;
   updated_at: string;
   contact?: { id: number; full_name: string } | null;
