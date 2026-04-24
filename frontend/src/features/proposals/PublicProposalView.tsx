@@ -419,46 +419,11 @@ function PublicProposalView() {
               Your Response
             </h2>
 
-            {/* E-signature consent block — satisfies the intent-to-sign
-                + consent-to-electronic-records disclosures required by
-                the US ESIGN Act (15 USC §7001) and state UETA statutes.
-                The signer's name, email, IP, user-agent, and timestamp
-                are captured on submit and embedded in the PDF copy
-                emailed to them. */}
-            <details className="mb-4 rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 p-3 text-xs text-gray-600 dark:text-gray-400">
-              <summary className="cursor-pointer font-medium text-gray-700 dark:text-gray-300">
-                Electronic signature disclosure (required reading)
-              </summary>
-              <div className="mt-2 space-y-2 leading-relaxed">
-                <p>
-                  By typing your name and email below and clicking <strong>Accept Proposal</strong>,
-                  you agree that this constitutes your legally binding electronic signature under
-                  the US ESIGN Act and applicable state UETA statutes, with the same legal effect
-                  as a handwritten signature.
-                </p>
-                <p>
-                  You consent to receive this proposal and the countersigned PDF copy
-                  electronically. A signed copy will be emailed to the address you provide below.
-                  You may withdraw consent by contacting {companyDisplayName} directly — this
-                  does not retroactively invalidate signatures already captured.
-                </p>
-                <p>
-                  We record your name, email address, IP address, browser user-agent, and
-                  timestamp at the moment you submit. This audit trail is retained alongside
-                  the proposal for dispute resolution.
-                </p>
-                <p>
-                  To sign, you need a modern web browser with JavaScript enabled and the ability
-                  to receive email at the address you enter. If any of these are unavailable,
-                  contact {companyDisplayName} to arrange an alternative signing method.
-                </p>
-              </div>
-            </details>
-
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
               Please review the proposal above and accept or reject it. Typing
               your name and email below and clicking Accept is your legally
-              binding electronic signature.
+              binding electronic signature (see the full e-signature disclosure
+              at the bottom of this page).
             </p>
             <div className="grid gap-3 sm:grid-cols-2 mb-4">
               <div>
@@ -634,13 +599,46 @@ function PublicProposalView() {
 
       {/* Branded Footer + Legal/Payment Disclosure
           Rendered at the bottom of every public proposal page. Shows:
+          - ESIGN Act / UETA electronic signature disclosure (always,
+            including for already-accepted proposals — acts as a
+            signed-contract receipt for the record)
           - Tenant's footer text (optional)
           - Tenant's Terms of Service / Privacy Policy links when set
           - Stripe disclosure whenever a payment link is active (client
             is about to hand over payment info on Stripe's hosted page)
       */}
       <footer className="border-t border-gray-200 dark:border-gray-700 mt-12">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 text-sm text-gray-500 dark:text-gray-400 space-y-3">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 text-sm text-gray-500 dark:text-gray-400 space-y-4">
+          <details className="rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 p-3 text-xs text-gray-600 dark:text-gray-400">
+            <summary className="cursor-pointer font-medium text-gray-700 dark:text-gray-300">
+              Electronic signature disclosure &amp; terms
+            </summary>
+            <div className="mt-2 space-y-2 leading-relaxed">
+              <p>
+                By typing your name and email and clicking <strong>Accept Proposal</strong>,
+                you agree that this constitutes your legally binding electronic signature
+                under the US ESIGN Act (15 USC §7001) and applicable state UETA statutes,
+                with the same legal effect as a handwritten signature.
+              </p>
+              <p>
+                You consent to receive this proposal and the countersigned PDF copy
+                electronically. A signed copy is emailed to the address you provide at
+                acceptance. You may withdraw consent by contacting {companyDisplayName}
+                directly — this does not retroactively invalidate signatures already captured.
+              </p>
+              <p>
+                We record your name, email address, IP address, browser user-agent, and
+                timestamp at the moment you submit. This audit trail is retained alongside
+                the proposal for dispute resolution.
+              </p>
+              <p>
+                To sign, you need a modern web browser with JavaScript enabled and the ability
+                to receive email at the address you provide. If any of these are unavailable,
+                contact {companyDisplayName} to arrange an alternative signing method.
+              </p>
+            </div>
+          </details>
+
           <div className="text-center">
             {branding.footer_text ? (
               <p className="mb-1">{branding.footer_text}</p>
