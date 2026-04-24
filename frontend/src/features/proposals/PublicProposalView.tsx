@@ -288,7 +288,11 @@ function PublicProposalView() {
           'radial-gradient(ellipse 120% 60% at 50% 0%, rgba(255,255,255,0.03), transparent 60%)',
       }}
     >
-      {/* Letterhead — quiet, left-aligned, with a single accent rule */}
+      {/* Letterhead — quiet, left-aligned. When the tenant ships a
+          logo that already contains their wordmark (the common case
+          for branded PNG/SVG marks), the text label is redundant — we
+          drop it to avoid the "Link Creative LINK CREATIVE" double.
+          The fallback letterform tile still pairs with the name. */}
       <header className="border-b border-neutral-800/60">
         <div className="mx-auto max-w-[880px] px-6 sm:px-10 py-5 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
@@ -298,22 +302,24 @@ function PublicProposalView() {
                 alt={companyDisplayName}
                 height={28}
                 className="object-contain"
-                style={{ height: 28, width: 'auto', maxWidth: 140 }}
+                style={{ height: 28, width: 'auto', maxWidth: 160 }}
                 onError={() => setLogoError(true)}
               />
             ) : (
-              <div
-                className="h-7 w-7 flex items-center justify-center flex-shrink-0 border"
-                style={{ borderColor: accent, color: accent }}
-              >
-                <span className="font-serif text-sm leading-none">
-                  {companyDisplayName[0]?.toUpperCase() || 'P'}
+              <>
+                <div
+                  className="h-7 w-7 flex items-center justify-center flex-shrink-0 border"
+                  style={{ borderColor: accent, color: accent }}
+                >
+                  <span className="font-serif text-sm leading-none">
+                    {companyDisplayName[0]?.toUpperCase() || 'P'}
+                  </span>
+                </div>
+                <span className="font-serif text-[15px] text-neutral-100 tracking-wide truncate">
+                  {companyDisplayName}
                 </span>
-              </div>
+              </>
             )}
-            <span className="font-serif text-[15px] text-neutral-100 tracking-wide truncate">
-              {companyDisplayName}
-            </span>
           </div>
           <div className="flex items-center gap-4 text-[11px] font-mono uppercase tracking-[0.18em] text-neutral-400">
             <span className="tabular-nums">{proposal.proposal_number}</span>
@@ -336,44 +342,41 @@ function PublicProposalView() {
         <div className="h-px w-full" style={{ backgroundColor: accent, opacity: 0.35 }} />
       </header>
 
-      <main className="mx-auto max-w-[720px] px-6 sm:px-10 py-20 sm:py-28">
-        {/* Cover title block — centered, generous whitespace, framed by
-            hairline rules top and bottom to feel like a title page. */}
-        <section className="text-center pb-16 sm:pb-20 border-b border-neutral-800/80">
-          <p className="text-[10px] font-mono uppercase tracking-[0.3em] text-neutral-500 mb-6">
+      <main className="mx-auto max-w-[720px] px-6 sm:px-10 py-14 sm:py-20">
+        {/* Cover title block — LEFT-aligned so it reads like the first
+            page of a document, not a magazine cover. Smaller type,
+            tighter metadata, plain "Valid until" line. */}
+        <section className="pb-10 sm:pb-12 border-b border-neutral-800/80">
+          <p className="text-[10px] font-mono uppercase tracking-[0.3em] text-neutral-500 mb-5">
             Proposal &middot; <span className="tabular-nums">{proposal.proposal_number}</span>
           </p>
           <h1
-            className="font-serif text-[38px] sm:text-[52px] md:text-[60px] leading-[1.05] text-neutral-50 text-balance"
-            style={{ letterSpacing: '-0.02em' }}
+            className="font-serif text-[32px] sm:text-[42px] md:text-[46px] leading-[1.1] text-neutral-50 text-balance"
+            style={{ letterSpacing: '-0.015em' }}
           >
             {proposal.title}
           </h1>
           {proposal.contact && (
-            <p className="mt-8 font-serif italic text-lg sm:text-xl text-neutral-300">
+            <p className="mt-6 font-serif italic text-lg text-neutral-300">
               Prepared for {proposal.contact.full_name}
-            </p>
-          )}
-          {proposal.company && proposal.company.name !== companyDisplayName && (
-            <p className="mt-1 text-sm text-neutral-500 tracking-wide">
-              {proposal.company.name}
+              {proposal.company && proposal.company.name !== companyDisplayName && (
+                <span className="not-italic text-neutral-500"> · {proposal.company.name}</span>
+              )}
             </p>
           )}
           {validUntilDate && (
-            <div className="mt-10 inline-flex items-center gap-3 text-[10px] font-mono uppercase tracking-[0.25em] text-neutral-500">
-              <span className="inline-block h-px w-8 bg-neutral-700" aria-hidden="true" />
+            <p className="mt-5 text-[10px] font-mono uppercase tracking-[0.22em] text-neutral-500">
               <span className={isExpired ? 'text-red-400' : undefined}>
                 {isExpired ? 'Expired' : 'Valid until'} <span className="tabular-nums">{validUntilDate}</span>
               </span>
-              <span className="inline-block h-px w-8 bg-neutral-700" aria-hidden="true" />
-            </div>
+            </p>
           )}
         </section>
 
         {/* Cover letter — no card, just flowing prose under the title */}
         {proposal.cover_letter && (
-          <section className="mt-16 sm:mt-20">
-            <p className="font-serif text-[17px] sm:text-[18px] leading-[1.7] text-neutral-200 whitespace-pre-wrap text-pretty break-words">
+          <section className="mt-10 sm:mt-12">
+            <p className="font-serif text-[17px] leading-[1.7] text-neutral-200 whitespace-pre-wrap text-pretty break-words">
               {proposal.cover_letter}
             </p>
           </section>
@@ -383,7 +386,7 @@ function PublicProposalView() {
         {contentSections.map((section) => {
           const num = nextSectionNumber();
           return (
-            <section key={section.title} className="mt-20 sm:mt-24 scroll-mt-24">
+            <section key={section.title} className="mt-12 sm:mt-14 scroll-mt-24">
               <SectionHeader num={num} title={section.title} accent={accent} />
               <div className="prose-document">
                 <p className="whitespace-pre-wrap text-pretty break-words">
@@ -396,7 +399,7 @@ function PublicProposalView() {
 
         {/* Pricing — quote-block treatment with a pull-figure */}
         {hasPricingBlock && (
-          <section className="mt-20 sm:mt-24">
+          <section className="mt-12 sm:mt-14">
             <SectionHeader
               num={nextSectionNumber()}
               title={proposal.payment_type === 'subscription' ? 'Engagement & Fees' : 'Fees'}
@@ -457,7 +460,7 @@ function PublicProposalView() {
         {/* Payment CTA — styled as its own section. Rendered whenever the
             backend has spawned a Stripe Invoice or Checkout Session. */}
         {proposal.stripe_payment_url && proposal.status !== 'paid' && (
-          <section className="mt-20 sm:mt-24">
+          <section className="mt-12 sm:mt-14">
             <SectionHeader num={nextSectionNumber()} title="Payment" accent={accent} />
             <p className="prose-document-p mb-8">
               {proposal.payment_type === 'subscription'
@@ -482,7 +485,7 @@ function PublicProposalView() {
         )}
 
         {proposal.status === 'paid' && (
-          <section className="mt-20 sm:mt-24">
+          <section className="mt-12 sm:mt-14">
             <SectionHeader num={nextSectionNumber()} title="Payment Received" accent={accent} />
             <p className="prose-document-p">
               Your payment has been confirmed. A receipt has been sent to your email. We will
