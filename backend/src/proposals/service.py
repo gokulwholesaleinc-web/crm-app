@@ -98,6 +98,19 @@ def _designated_email_for(proposal: Proposal) -> str:
     return ""
 
 
+def _assert_signer_matches(proposal: Proposal, signer_email: str | None) -> None:
+    """Guard: the supplied signer_email must match the proposal's designated
+    recipient (case-insensitive). Shared by accept/reject so a forwarded
+    public link can't be used by a third party to sign or reject.
+    """
+    expected = _designated_email_for(proposal)
+    given = (signer_email or "").strip().lower()
+    if not expected:
+        raise ValueError("Proposal has no recipient email on file")
+    if not given or given != expected:
+        raise ValueError("Signer email does not match the proposal recipient")
+
+
 class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreate, ProposalUpdate]):
     """Service for Proposal CRUD operations."""
 
@@ -231,12 +244,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         if proposal.status not in ("sent", "viewed"):
             raise ValueError(f"Cannot accept proposal in '{proposal.status}' status")
 
-        expected_email = _designated_email_for(proposal)
-        given_email = (signer_email or "").strip().lower()
-        if not expected_email:
-            raise ValueError("Proposal has no recipient email on file")
-        if not given_email or given_email != expected_email:
-            raise ValueError("Signer email does not match the proposal recipient")
+        _assert_signer_matches(proposal, signer_email)
 
         # Atomic status transition: conditional UPDATE guarded by the
         # same (sent|viewed) whitelist. If two accept requests arrive
@@ -281,9 +289,10 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         proposal, if pricing is resolvable and Stripe is configured.
 
         Mutates the proposal row with the resulting Stripe ids + payment
-        url and moves status to 'awaiting_payment'. Swallows Stripe
-        errors (logged) so acceptance itself never fails because of a
-        downstream billing hiccup.
+        url and moves status to 'awaiting_payment'. Stripe errors are
+        captured on ``proposal.billing_error`` (so the CRM admin can see
+        them and retry) instead of bubbling up and unwinding the
+        acceptance — the client signed, that has to stick.
         """
         billing = _resolve_billing(proposal)
         if billing is None:
@@ -306,11 +315,16 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             else:
                 base = settings.FRONTEND_BASE_URL.rstrip("/")
                 if not base:
+                    proposal.billing_error = (
+                        "FRONTEND_BASE_URL is not configured; cannot build "
+                        "subscription checkout return URL"
+                    )
                     logger.warning(
                         "FRONTEND_BASE_URL is not set; skipping subscription "
                         "checkout for proposal %s",
                         proposal.id,
                     )
+                    await self.db.flush()
                     return
                 public_path = f"/proposals/public/{proposal.public_token}"
                 result = await payments.create_subscription_checkout_for_proposal(
@@ -329,17 +343,41 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 proposal.stripe_payment_url = result["stripe_payment_url"]
         except ValueError as exc:
             # Stripe disabled, customer-resolution failed, or an API
-            # error bubbled up — keep the acceptance but leave the
-            # proposal without a payment link so the CRM user knows to
-            # retry from the admin UI.
+            # error bubbled up. Record the error on the proposal so the
+            # CRM admin can see "billing setup failed" and retry; don't
+            # unwind the acceptance.
             logger.warning(
                 "Billing spawn failed for proposal %s: %s", proposal.id, exc,
             )
+            proposal.billing_error = str(exc)
+            await self.db.flush()
             return
 
         proposal.status = "awaiting_payment"
         proposal.invoice_sent_at = datetime.now(UTC)
+        proposal.billing_error = None
         await self.db.flush()
+
+    async def retry_billing(self, proposal: Proposal) -> Proposal:
+        """Re-run billing spawn for a proposal that previously failed.
+
+        Caller must already have authorization on the proposal
+        (enforced at the router). Idempotent: if the proposal already
+        has a ``stripe_payment_url`` or is past 'awaiting_payment',
+        refuses so we don't create a duplicate charge.
+        """
+        if proposal.status not in ("accepted", "awaiting_payment"):
+            raise ValueError(
+                "Only accepted/awaiting_payment proposals can be retried",
+            )
+        if proposal.stripe_payment_url:
+            raise ValueError(
+                "Proposal already has a payment link; cannot retry",
+            )
+        # _maybe_spawn_billing mutates `proposal` in-place and flushes,
+        # so we can return the same instance — no refresh required.
+        await self._maybe_spawn_billing(proposal)
+        return proposal
 
     async def reject_proposal_public(
         self,
@@ -347,10 +385,18 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         reason: str | None = None,
         signer_ip: str | None = None,
         signer_user_agent: str | None = None,
+        signer_email: str | None = None,
     ) -> Proposal:
-        """Reject a proposal via the public link."""
+        """Reject a proposal via the public link.
+
+        Validates the signer_email against the designated or contact
+        email, same as accept. Without this check, anyone who received a
+        forwarded copy of the proposal link could permanently reject it.
+        """
         if proposal.status not in ("sent", "viewed"):
             raise ValueError(f"Cannot reject proposal in '{proposal.status}' status")
+
+        _assert_signer_matches(proposal, signer_email)
 
         now = datetime.now(UTC)
         proposal.status = "rejected"

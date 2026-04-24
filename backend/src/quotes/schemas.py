@@ -201,6 +201,7 @@ class QuoteAcceptRequest(BaseModel):
 
 class QuoteRejectRequest(BaseModel):
     """Request body for rejecting a quote via public link."""
+    signer_email: str
     reason: str | None = None
 
 

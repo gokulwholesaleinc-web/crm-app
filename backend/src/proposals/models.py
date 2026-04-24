@@ -127,6 +127,12 @@ class Proposal(Base, AuditableMixin):
     stripe_payment_url: Mapped[str | None] = mapped_column(Text)
     invoice_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Most-recent Stripe-spawn failure (bad key, customer resolution,
+    # Stripe API error). Populated by `_maybe_spawn_billing` when the
+    # try/except swallows a ValueError so the CRM UI can show the admin
+    # "billing setup failed — retry" instead of a silent "accepted" with
+    # no payment link. Cleared on successful retry.
+    billing_error: Mapped[str | None] = mapped_column(Text)
 
     # Owner
     owner_id: Mapped[int | None] = mapped_column(

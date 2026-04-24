@@ -496,11 +496,12 @@ class TestPublicQuoteReject:
         db_session: AsyncSession,
         sent_quote_with_items: Quote,
         branded_tenant_user: TenantUser,
+        test_contact: Contact,
     ):
         """Test rejecting a quote via public link."""
         response = await client.post(
             f"/api/quotes/public/{sent_quote_with_items.public_token}/reject",
-            json={"reason": "Budget constraints"},
+            json={"signer_email": test_contact.email, "reason": "Budget constraints"},
         )
 
         assert response.status_code == 200
@@ -520,11 +521,12 @@ class TestPublicQuoteReject:
         db_session: AsyncSession,
         sent_quote_with_items: Quote,
         branded_tenant_user: TenantUser,
+        test_contact: Contact,
     ):
         """Test rejecting a quote without providing a reason."""
         response = await client.post(
             f"/api/quotes/public/{sent_quote_with_items.public_token}/reject",
-            json={},
+            json={"signer_email": test_contact.email},
         )
 
         assert response.status_code == 200
@@ -541,11 +543,12 @@ class TestPublicQuoteReject:
         db_session: AsyncSession,
         sent_quote_with_items: Quote,
         branded_tenant_user: TenantUser,
+        test_contact: Contact,
     ):
         """Test that reject response includes branding."""
         response = await client.post(
             f"/api/quotes/public/{sent_quote_with_items.public_token}/reject",
-            json={},
+            json={"signer_email": test_contact.email},
         )
 
         assert response.status_code == 200
@@ -558,11 +561,12 @@ class TestPublicQuoteReject:
         client: AsyncClient,
         db_session: AsyncSession,
         draft_quote: Quote,
+        test_contact: Contact,
     ):
         """Test that rejecting a draft quote returns 400."""
         response = await client.post(
             f"/api/quotes/public/{draft_quote.public_token}/reject",
-            json={},
+            json={"signer_email": test_contact.email},
         )
 
         assert response.status_code == 400
@@ -573,11 +577,12 @@ class TestPublicQuoteReject:
         client: AsyncClient,
         db_session: AsyncSession,
         accepted_quote: Quote,
+        test_contact: Contact,
     ):
         """Test that rejecting an already-accepted quote returns 400."""
         response = await client.post(
             f"/api/quotes/public/{accepted_quote.public_token}/reject",
-            json={},
+            json={"signer_email": test_contact.email},
         )
 
         assert response.status_code == 400

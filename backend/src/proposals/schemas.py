@@ -92,6 +92,35 @@ class ProposalUpdate(BaseModel):
     amount: Decimal | None = None
     currency: str | None = None
 
+    @model_validator(mode="after")
+    def _check_billing_consistency(self) -> "ProposalUpdate":
+        """Validate the subset of billing fields present in a PATCH.
+
+        Partial updates pass this validator, but if any billing field is
+        *explicitly* set, the combination still has to be internally
+        consistent so we never land a half-configured subscription in
+        the DB.
+        """
+        if self.payment_type == "subscription":
+            # When turning a proposal into a subscription, interval + count
+            # must land in the same PATCH (the service layer doesn't
+            # merge-then-validate against the existing row).
+            if not self.recurring_interval or not self.recurring_interval_count:
+                raise ValueError(
+                    "switching to subscription requires recurring_interval "
+                    "and recurring_interval_count in the same update",
+                )
+            if self.recurring_interval_count < 1:
+                raise ValueError("recurring_interval_count must be >= 1")
+        elif self.payment_type == "one_time":
+            if self.recurring_interval is not None or self.recurring_interval_count is not None:
+                raise ValueError(
+                    "one_time proposals must not set recurring_interval/count",
+                )
+        if self.amount is not None and self.amount <= 0:
+            raise ValueError("amount must be > 0")
+        return self
+
 
 class ProposalAcceptRequest(BaseModel):
     """E-signature payload submitted from the public accept page."""
@@ -100,6 +129,7 @@ class ProposalAcceptRequest(BaseModel):
 
 
 class ProposalRejectRequest(BaseModel):
+    signer_email: str
     reason: str | None = None
 
 
@@ -137,6 +167,7 @@ class ProposalResponse(ProposalBase):
     stripe_payment_url: str | None = None
     invoice_sent_at: datetime | None = None
     paid_at: datetime | None = None
+    billing_error: str | None = None
     created_at: datetime
     updated_at: datetime
     contact: ContactBrief | None = None

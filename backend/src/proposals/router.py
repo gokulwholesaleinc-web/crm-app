@@ -15,6 +15,7 @@ from src.audit.utils import (
 from src.core.constants import ENTITY_TYPE_PROPOSALS, EntityNames, HTTPStatus
 from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
 from src.core.http_errors import value_error_as_400
+from src.core.rate_limit import limiter
 from src.core.router_utils import (
     CurrentUser,
     DBSession,
@@ -290,6 +291,7 @@ async def generate_proposal(
 
 
 @router.get("/public/{token}", response_model=ProposalPublicResponse)
+@limiter.limit("60/minute")
 async def get_public_proposal(
     token: str,
     request: Request,
@@ -331,6 +333,7 @@ async def get_public_proposal(
 
 
 @router.post("/public/{token}/accept", response_model=ProposalPublicResponse)
+@limiter.limit("10/minute")
 async def accept_proposal_public(
     token: str,
     accept_data: ProposalAcceptRequest,
@@ -378,13 +381,19 @@ async def accept_proposal_public(
 
 
 @router.post("/public/{token}/reject", response_model=ProposalPublicResponse)
+@limiter.limit("10/minute")
 async def reject_proposal_public(
     token: str,
+    reject_data: ProposalRejectRequest,
     request: Request,
     db: DBSession,
-    reject_data: ProposalRejectRequest | None = None,
 ):
-    """Reject a proposal via public link (no auth required)."""
+    """Reject a proposal via public link (no auth required).
+
+    Requires signer_email to match the designated/contact email on the
+    proposal — otherwise anyone who received a forwarded link could
+    permanently reject.
+    """
     import hmac as _hmac
 
     service = ProposalService(db)
@@ -394,13 +403,13 @@ async def reject_proposal_public(
 
     signer_ip = request.client.host if request.client else None
     signer_user_agent = request.headers.get("user-agent")
-    reason = reject_data.reason if reject_data else None
     with value_error_as_400():
         proposal = await service.reject_proposal_public(
             proposal,
-            reason=reason,
+            reason=reject_data.reason,
             signer_ip=signer_ip,
             signer_user_agent=signer_user_agent,
+            signer_email=reject_data.signer_email,
         )
 
     branding_data = await service.get_branding_for_proposal(proposal)
@@ -501,6 +510,26 @@ async def send_proposal(
         "data": {"proposal_number": proposal.proposal_number, "status": proposal.status},
     })
 
+    return ProposalResponse.model_validate(proposal)
+
+
+@router.post("/{proposal_id}/retry-billing", response_model=ProposalResponse)
+async def retry_proposal_billing(
+    proposal_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Re-run the Stripe spawn for a proposal whose billing previously failed.
+
+    Used after fixing a Stripe mis-configuration (missing key, wrong
+    permissions) on an already-accepted proposal. Refuses if a payment
+    URL is already present so we can't double-charge.
+    """
+    service = ProposalService(db)
+    proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
+    check_ownership(proposal, current_user, EntityNames.PROPOSAL)
+    with value_error_as_400():
+        proposal = await service.retry_billing(proposal)
     return ProposalResponse.model_validate(proposal)
 
 

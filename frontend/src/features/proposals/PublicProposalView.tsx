@@ -132,13 +132,27 @@ function PublicProposalView() {
 
   const handleReject = async () => {
     if (!proposal) return;
+    const email = signerEmail.trim();
+    if (!email) {
+      // Enforce the same signer-email gate accept has so a forwarded
+      // link can't be used by a third party to permanently reject.
+      setSignError('Please enter your email address to reject this proposal.');
+      return;
+    }
     setActionPending(true);
+    setSignError(null);
     try {
-      await publicClient.post(`/api/proposals/public/${token}/reject`);
+      await publicClient.post(`/api/proposals/public/${token}/reject`, {
+        signer_email: email,
+      });
       setProposal((prev) => prev ? { ...prev, status: 'rejected' } : null);
       setActionDone('rejected');
-    } catch {
-      setError('Unable to record rejection. Please contact your account manager.');
+    } catch (err) {
+      const detail =
+        (typeof err === 'object' && err !== null && 'response' in err
+          ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+          : null) || 'Unable to record rejection. Please contact your account manager.';
+      setSignError(detail);
     } finally {
       setActionPending(false);
     }

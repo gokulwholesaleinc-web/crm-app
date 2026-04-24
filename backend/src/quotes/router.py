@@ -14,6 +14,7 @@ from src.audit.utils import (
 )
 from src.core.constants import ENTITY_TYPE_QUOTES, EntityNames, HTTPStatus
 from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
+from src.core.rate_limit import limiter
 from src.core.router_utils import (
     CurrentUser,
     DBSession,
@@ -207,6 +208,7 @@ async def delete_bundle(
 # quote_number, which let an attacker enumerate every customer quote in
 # the system and forge e-signatures.
 @router.get("/public/{token}", response_model=QuotePublicResponse)
+@limiter.limit("60/minute")
 async def get_public_quote(
     token: str,
     request: Request,
@@ -232,6 +234,7 @@ async def get_public_quote(
 
 
 @router.post("/public/{token}/accept", response_model=QuotePublicResponse)
+@limiter.limit("10/minute")
 async def accept_quote_public(
     token: str,
     accept_data: QuoteAcceptRequest,
@@ -263,13 +266,19 @@ async def accept_quote_public(
 
 
 @router.post("/public/{token}/reject", response_model=QuotePublicResponse)
+@limiter.limit("10/minute")
 async def reject_quote_public(
     token: str,
+    reject_data: QuoteRejectRequest,
     request: Request,
     db: DBSession,
-    reject_data: QuoteRejectRequest | None = None,
 ):
-    """Reject a quote via public link (no auth required)."""
+    """Reject a quote via public link (no auth required).
+
+    Requires signer_email to match the designated/contact email on the
+    quote — otherwise anyone with a forwarded link could permanently
+    reject.
+    """
     import hmac as _hmac
 
     service = QuoteService(db)
@@ -279,10 +288,13 @@ async def reject_quote_public(
 
     signer_ip = request.client.host if request.client else None
     signer_user_agent = request.headers.get("user-agent")
-    reason = reject_data.reason if reject_data else None
     try:
         quote = await service.reject_quote_public(
-            quote, reason=reason, signer_ip=signer_ip, signer_user_agent=signer_user_agent,
+            quote,
+            reason=reject_data.reason,
+            signer_ip=signer_ip,
+            signer_user_agent=signer_user_agent,
+            signer_email=reject_data.signer_email,
         )
     except ValueError as e:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e)) from e

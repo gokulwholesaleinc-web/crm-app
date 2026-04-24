@@ -619,6 +619,13 @@ class WebhookProcessor:
         # Local import sidesteps a circular import between proposals and
         # payments — the proposal model isn't available at webhook module
         # import time because proposals depends on payments.service.
+        #
+        # Tenant scope: Stripe invoice ids are globally unique across
+        # accounts, so this lookup is unambiguous in the single-tenant
+        # deploy today. If a second tenant ever onboards with their own
+        # Stripe credentials + shared webhook endpoint, add a tenant_id
+        # filter here (and mirror it in _mark_proposal_paid_from_session)
+        # so events from one account can't flip another tenant's rows.
         from src.proposals.models import Proposal
 
         result = await self.db.execute(
