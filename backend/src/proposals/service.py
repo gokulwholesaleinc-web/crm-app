@@ -421,7 +421,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 await self.db.flush()
                 return {
                     "action": "already_paid_reconciled",
-                    "stripe_invoice_id": inv.id,
+                    "stripe_invoice_id": proposal.stripe_invoice_id,
                     "hosted_invoice_url": getattr(inv, "hosted_invoice_url", None),
                 }
             if inv_status in ("void", "uncollectible"):
@@ -434,13 +434,13 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 )
 
             try:
-                stripe.Invoice.send_invoice(inv.id)
+                stripe.Invoice.send_invoice(proposal.stripe_invoice_id)
             except Exception as exc:
                 raise ValueError(f"Stripe rejected resend: {exc}") from exc
 
             return {
                 "action": "resent",
-                "stripe_invoice_id": inv.id,
+                "stripe_invoice_id": proposal.stripe_invoice_id,
                 "hosted_invoice_url": getattr(inv, "hosted_invoice_url", None),
             }
 
