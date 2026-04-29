@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { CheckIcon } from '@heroicons/react/24/outline';
 import { Button, Modal } from '../../../components/ui';
@@ -49,6 +49,7 @@ export function ConvertLeadModal({
     register,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors },
   } = useForm<ConvertLeadFormData>({
     defaultValues: {
@@ -59,6 +60,12 @@ export function ConvertLeadModal({
       opportunityStage: defaultStageId,
     },
   });
+
+  useEffect(() => {
+    if (pipelineStages && pipelineStages.length > 0) {
+      setValue('opportunityStage', pipelineStages[0].id);
+    }
+  }, [pipelineStages, setValue]);
 
   const createOpportunity = watch('createOpportunity');
 
