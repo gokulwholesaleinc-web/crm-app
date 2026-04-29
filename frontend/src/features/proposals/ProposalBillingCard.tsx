@@ -1,5 +1,6 @@
 import { CheckCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import type { Proposal } from '../../types';
+import { cadenceLabel, formatProposalMoneyOrDash } from './billing';
 
 /**
  * Sidebar card on the proposal detail page that surfaces what the
@@ -13,40 +14,12 @@ interface ProposalBillingCardProps {
   proposal: Proposal;
 }
 
-const CADENCE_LABELS: Record<string, string> = {
-  'month-1': 'Monthly',
-  'month-3': 'Quarterly',
-  'month-6': 'Bi-yearly',
-  'year-1': 'Yearly',
-};
-
-function formatMoney(amount: string | number | null | undefined, currency: string): string {
-  if (amount == null || amount === '') return '—';
-  const num = typeof amount === 'string' ? Number(amount) : amount;
-  if (!Number.isFinite(num)) return '—';
-  try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(num);
-  } catch {
-    // Falls through for non-ISO currency strings (shouldn't happen in
-    // practice, but defensive against stale data).
-    return `${currency} ${num.toFixed(2)}`;
-  }
-}
-
-function cadenceLabel(interval: string | null | undefined, count: number | null | undefined): string {
-  if (!interval) return '';
-  const key = `${interval}-${count ?? 1}`;
-  if (CADENCE_LABELS[key]) return CADENCE_LABELS[key];
-  const plural = count && count > 1 ? 's' : '';
-  return `Every ${count ?? 1} ${interval}${plural}`;
-}
-
 export function ProposalBillingCard({ proposal }: ProposalBillingCardProps) {
   const hasAmount = proposal.amount != null && proposal.amount !== '';
   const currency = proposal.currency ?? 'USD';
   const isSubscription = proposal.payment_type === 'subscription';
 
-  const amountLine = hasAmount ? formatMoney(proposal.amount, currency) : '—';
+  const amountLine = formatProposalMoneyOrDash(proposal.amount, currency);
   const cadence = isSubscription
     ? cadenceLabel(proposal.recurring_interval, proposal.recurring_interval_count)
     : '';
