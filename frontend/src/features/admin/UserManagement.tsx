@@ -47,10 +47,8 @@ export default function UserManagement() {
   const [editForm, setEditForm] = useState<EditUserFormData>({ full_name: '', email: '' });
   const [editError, setEditError] = useState<string | null>(null);
   const [deletingUser, setDeletingUser] = useState<AdminUser | null>(null);
-  // Pending role change — held in state so we can show a ConfirmDialog
-  // before the mutation runs. Users previously could click the role
-  // dropdown and instantly demote themselves from admin. See
-  // settings-admin.md audit P0 #2.
+  // Holds a pending role change so ConfirmDialog can gate it — prevents
+  // one-click self-demotion from admin.
   const [pendingRoleChange, setPendingRoleChange] = useState<{
     user: AdminUser;
     newRole: string;

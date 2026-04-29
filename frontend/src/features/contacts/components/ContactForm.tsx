@@ -23,7 +23,6 @@ export interface ContactFormData {
   tags?: string[];
 }
 
-/** Map ContactFormData camelCase fields to API snake_case for create. */
 export function contactFormDataToCreate(data: ContactFormData): ContactCreate {
   return {
     first_name: data.firstName,
@@ -43,7 +42,6 @@ export function contactFormDataToCreate(data: ContactFormData): ContactCreate {
   };
 }
 
-/** Map ContactFormData camelCase fields to API snake_case for update. */
 export function contactFormDataToUpdate(data: ContactFormData): ContactUpdate {
   return {
     first_name: data.firstName,
@@ -62,7 +60,6 @@ export function contactFormDataToUpdate(data: ContactFormData): ContactUpdate {
   };
 }
 
-/** Populate ContactFormData from a server Contact object. */
 export function contactToFormData(contact: Contact): Partial<ContactFormData> {
   return {
     firstName: contact.first_name,

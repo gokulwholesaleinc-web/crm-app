@@ -1,8 +1,3 @@
-/**
- * Leads hooks using the entity CRUD factory pattern.
- * Uses TanStack Query for data fetching and caching.
- */
-
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { createEntityHooks, createQueryKeys } from './useEntityCRUD';
 import { leadsApi } from '../api/leads';
@@ -46,46 +41,28 @@ const leadEntityHooks = createEntityHooks<
   queryKey: 'leads',
 });
 
-/**
- * Hook to fetch a paginated list of leads
- */
 export function useLeads(filters?: LeadFilters) {
   return leadEntityHooks.useList(filters);
 }
 
-/**
- * Hook to fetch a single lead by ID
- */
 export function useLead(id: number | undefined) {
   return leadEntityHooks.useOne(id);
 }
 
-/**
- * Hook to create a new lead
- */
 export function useCreateLead() {
   return leadEntityHooks.useCreate();
 }
 
-/**
- * Hook to update a lead
- */
 export function useUpdateLead() {
   return leadEntityHooks.useUpdate();
 }
 
-/**
- * Hook to delete a lead
- */
 export function useDeleteLead() {
   return leadEntityHooks.useDelete();
 }
 
 // Lead Conversion Hooks
 
-/**
- * Hook to convert a lead to a contact
- */
 export function useConvertLeadToContact() {
   const queryClient = useQueryClient();
 
@@ -95,17 +72,12 @@ export function useConvertLeadToContact() {
     onSuccess: (_, { leadId }) => {
       queryClient.invalidateQueries({ queryKey: leadKeys.lists() });
       queryClient.invalidateQueries({ queryKey: leadKeys.detail(leadId) });
-      // Also invalidate contacts as a new one was created
       queryClient.invalidateQueries({ queryKey: contactKeys.lists() });
-      // Invalidate companies if a company was created
       queryClient.invalidateQueries({ queryKey: companyKeys.lists() });
     },
   });
 }
 
-/**
- * Hook to convert a lead to an opportunity
- */
 export function useConvertLeadToOpportunity() {
   const queryClient = useQueryClient();
 
@@ -115,15 +87,11 @@ export function useConvertLeadToOpportunity() {
     onSuccess: (_, { leadId }) => {
       queryClient.invalidateQueries({ queryKey: leadKeys.lists() });
       queryClient.invalidateQueries({ queryKey: leadKeys.detail(leadId) });
-      // Also invalidate opportunities as a new one was created
       queryClient.invalidateQueries({ queryKey: opportunityKeys.lists() });
     },
   });
 }
 
-/**
- * Hook for full lead conversion: Lead -> Contact + Company + Opportunity
- */
 export function useConvertLead() {
   const queryClient = useQueryClient();
 
@@ -133,7 +101,6 @@ export function useConvertLead() {
     onSuccess: (_, { leadId }) => {
       queryClient.invalidateQueries({ queryKey: leadKeys.lists() });
       queryClient.invalidateQueries({ queryKey: leadKeys.detail(leadId) });
-      // Invalidate all related entities
       queryClient.invalidateQueries({ queryKey: contactKeys.lists() });
       queryClient.invalidateQueries({ queryKey: companyKeys.lists() });
       queryClient.invalidateQueries({ queryKey: opportunityKeys.lists() });
@@ -143,9 +110,6 @@ export function useConvertLead() {
 
 // Lead Source Hooks
 
-/**
- * Hook to fetch all lead sources
- */
 export function useLeadSources(activeOnly = true) {
   return useQuery({
     queryKey: leadSourceKeys.list(activeOnly),
@@ -154,9 +118,6 @@ export function useLeadSources(activeOnly = true) {
   });
 }
 
-/**
- * Hook to create a new lead source
- */
 export function useCreateLeadSource() {
   const queryClient = useQueryClient();
 
@@ -176,9 +137,6 @@ export const leadPipelineKeys = {
   kanban: (ownerId?: number) => [...leadPipelineKeys.all, 'kanban', { ownerId }] as const,
 };
 
-/**
- * Hook to fetch lead pipeline stages
- */
 export function useLeadPipelineStages() {
   return useQuery({
     queryKey: leadPipelineKeys.stages(),
@@ -187,9 +145,6 @@ export function useLeadPipelineStages() {
   });
 }
 
-/**
- * Hook to fetch lead Kanban board data
- */
 export function useLeadKanban(ownerId?: number) {
   return useQuery({
     queryKey: leadPipelineKeys.kanban(ownerId),
@@ -197,9 +152,6 @@ export function useLeadKanban(ownerId?: number) {
   });
 }
 
-/**
- * Hook to move a lead to a different pipeline stage
- */
 export function useMoveLeadStage() {
   const queryClient = useQueryClient();
 
@@ -246,7 +198,6 @@ export function useMoveLeadStage() {
       queryClient.invalidateQueries({ queryKey: leadKeys.lists() });
     },
     onSuccess: (data) => {
-      // If auto-conversion happened, invalidate opportunity and contact caches too
       if (data.conversion) {
         queryClient.invalidateQueries({ queryKey: opportunityKeys.lists() });
         queryClient.invalidateQueries({ queryKey: contactKeys.lists() });
@@ -272,9 +223,6 @@ export function useSendCampaign() {
 
 // Search Hook
 
-/**
- * Hook to search leads by name or email
- */
 export function useLeadSearch(searchTerm: string, limit = 10) {
   return useQuery({
     queryKey: [...leadKeys.lists(), 'search', searchTerm],
