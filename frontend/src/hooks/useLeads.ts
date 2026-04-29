@@ -11,6 +11,7 @@ import { contactKeys } from './useContacts';
 import { companyKeys } from './useCompanies';
 import { opportunityKeys } from './useOpportunities';
 import { CACHE_TIMES } from '../config/queryConfig';
+import { showError } from '../utils/toast';
 import type {
   Lead,
   LeadCreate,
@@ -20,6 +21,7 @@ import type {
   LeadConvertToContactRequest,
   LeadConvertToOpportunityRequest,
   LeadFullConversionRequest,
+  LeadKanbanResponse,
 } from '../types';
 
 // Query Keys
@@ -209,10 +211,41 @@ export function useMoveLeadStage() {
       leadId: number;
       newStageId: number;
     }) => leadsApi.moveLeadStage(leadId, { new_stage_id: newStageId }),
-    onSuccess: (data, { leadId }) => {
+    onMutate: async ({ leadId, newStageId }) => {
+      await queryClient.cancelQueries({ queryKey: leadPipelineKeys.kanban() });
+      const snapshot = queryClient.getQueryData<LeadKanbanResponse>(leadPipelineKeys.kanban());
+      if (snapshot) {
+        const optimistic: LeadKanbanResponse = {
+          stages: snapshot.stages.map((stage) => {
+            const lead = stage.leads.find((l) => l.id === leadId);
+            if (lead && stage.stage_id !== newStageId) {
+              return { ...stage, leads: stage.leads.filter((l) => l.id !== leadId), count: stage.count - 1 };
+            }
+            if (!lead && stage.stage_id === newStageId) {
+              const movingLead = snapshot.stages.flatMap((s) => s.leads).find((l) => l.id === leadId);
+              if (movingLead) {
+                return { ...stage, leads: [...stage.leads, movingLead], count: stage.count + 1 };
+              }
+            }
+            return stage;
+          }),
+        };
+        queryClient.setQueryData(leadPipelineKeys.kanban(), optimistic);
+      }
+      return { snapshot };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.snapshot) {
+        queryClient.setQueryData(leadPipelineKeys.kanban(), context.snapshot);
+      }
+      showError('Failed to move lead — change has been reverted.');
+    },
+    onSettled: (_data, _err, { leadId }) => {
       queryClient.invalidateQueries({ queryKey: leadPipelineKeys.kanban() });
       queryClient.invalidateQueries({ queryKey: leadKeys.detail(leadId) });
       queryClient.invalidateQueries({ queryKey: leadKeys.lists() });
+    },
+    onSuccess: (data) => {
       // If auto-conversion happened, invalidate opportunity and contact caches too
       if (data.conversion) {
         queryClient.invalidateQueries({ queryKey: opportunityKeys.lists() });

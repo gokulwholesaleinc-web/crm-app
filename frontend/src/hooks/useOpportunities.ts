@@ -7,6 +7,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { createEntityHooks, createQueryKeys } from './useEntityCRUD';
 import { opportunitiesApi } from '../api/opportunities';
 import { CACHE_TIMES } from '../config/queryConfig';
+import { showError } from '../utils/toast';
 import type {
   Opportunity,
   OpportunityCreate,
@@ -14,6 +15,7 @@ import type {
   OpportunityFilters,
   PipelineStageCreate,
   PipelineStageUpdate,
+  KanbanResponse,
 } from '../types';
 
 // Query Keys
@@ -208,7 +210,46 @@ export function useMoveOpportunity() {
       opportunityId: number;
       newStageId: number;
     }) => opportunitiesApi.moveOpportunity(opportunityId, { new_stage_id: newStageId }),
-    onSuccess: (_, { opportunityId }) => {
+    onMutate: async ({ opportunityId, newStageId }) => {
+      await queryClient.cancelQueries({ queryKey: pipelineKeys.kanban() });
+      const snapshot = queryClient.getQueryData<KanbanResponse>(pipelineKeys.kanban());
+      if (snapshot) {
+        const movingOpp = snapshot.stages.flatMap((s) => s.opportunities).find((o) => o.id === opportunityId);
+        const optimistic: KanbanResponse = {
+          stages: snapshot.stages.map((stage) => {
+            const hasOpp = stage.opportunities.some((o) => o.id === opportunityId);
+            if (hasOpp && stage.stage_id !== newStageId) {
+              return {
+                ...stage,
+                opportunities: stage.opportunities.filter((o) => o.id !== opportunityId),
+                count: stage.count - 1,
+                total_amount: stage.total_amount - (movingOpp?.amount ?? 0),
+                total_weighted: stage.total_weighted - (movingOpp?.weighted_amount ?? 0),
+              };
+            }
+            if (!hasOpp && stage.stage_id === newStageId && movingOpp) {
+              return {
+                ...stage,
+                opportunities: [...stage.opportunities, movingOpp],
+                count: stage.count + 1,
+                total_amount: stage.total_amount + (movingOpp.amount ?? 0),
+                total_weighted: stage.total_weighted + (movingOpp.weighted_amount ?? 0),
+              };
+            }
+            return stage;
+          }),
+        };
+        queryClient.setQueryData(pipelineKeys.kanban(), optimistic);
+      }
+      return { snapshot };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.snapshot) {
+        queryClient.setQueryData(pipelineKeys.kanban(), context.snapshot);
+      }
+      showError('Failed to move opportunity — change has been reverted.');
+    },
+    onSettled: (_data, _err, { opportunityId }) => {
       queryClient.invalidateQueries({ queryKey: pipelineKeys.kanban() });
       queryClient.invalidateQueries({ queryKey: opportunityKeys.detail(opportunityId) });
       queryClient.invalidateQueries({ queryKey: opportunityKeys.lists() });
