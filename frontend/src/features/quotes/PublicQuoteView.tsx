@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import { sanitizeHexColor } from '../../utils/colorValidation';
+import { Modal, ModalFooter } from '../../components/ui/Modal';
 
 // Bare axios for public (unauthenticated) quote endpoints. Does NOT
 // attach CRM Bearer token or X-Tenant-Slug header so a CRM staff user
@@ -93,6 +94,9 @@ function PublicQuoteView() {
   // E-sign modal state
   const [logoError, setLogoError] = useState(false);
   const [showEsignModal, setShowEsignModal] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectEmail, setRejectEmail] = useState('');
+  const [rejectError, setRejectError] = useState<string | null>(null);
   const [signerName, setSignerName] = useState('');
   const [signerEmail, setSignerEmail] = useState('');
   const [esignError, setEsignError] = useState<string | null>(null);
@@ -155,15 +159,20 @@ function PublicQuoteView() {
     }
   }, [token, signerName, signerEmail]);
 
-  const handleReject = useCallback(async () => {
+  const handleRejectClick = useCallback(() => {
+    setRejectError(null);
+    setShowRejectModal(true);
+  }, []);
+
+  const handleRejectSubmit = useCallback(async () => {
     if (!quote) return;
-    const email = signerEmail.trim();
+    const email = rejectEmail.trim();
     if (!email) {
-      setEsignError('Please enter your email address to reject this quote.');
+      setRejectError('Please enter your email address to reject this quote.');
       return;
     }
     setActionPending(true);
-    setEsignError(null);
+    setRejectError(null);
     try {
       const response = await publicClient.post<PublicQuote>(
         `/api/quotes/public/${token}/reject`,
@@ -171,16 +180,17 @@ function PublicQuoteView() {
       );
       setQuote(response.data);
       setActionDone('rejected');
+      setShowRejectModal(false);
     } catch (err) {
       const detail =
         (typeof err === 'object' && err !== null && 'response' in err
           ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
           : null) || 'Unable to record rejection. Please contact your account manager.';
-      setEsignError(detail);
+      setRejectError(detail);
     } finally {
       setActionPending(false);
     }
-  }, [quote, token, signerEmail]);
+  }, [quote, token, rejectEmail]);
 
   if (loading) {
     return (
@@ -485,7 +495,7 @@ function PublicQuoteView() {
               <button
                 type="button"
                 aria-label="Reject this quote"
-                onClick={handleReject}
+                onClick={handleRejectClick}
                 disabled={actionPending}
                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-white dark:bg-gray-700 px-6 py-3 text-sm font-semibold text-gray-900 dark:text-gray-100 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-500 disabled:opacity-50"
               >
@@ -549,97 +559,150 @@ function PublicQuoteView() {
       </footer>
 
       {/* E-Sign Modal */}
-      {showEsignModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="esign-modal-title"
-        >
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6 sm:p-8">
-            <h2
-              id="esign-modal-title"
-              className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1"
+      <Modal
+        isOpen={showEsignModal}
+        onClose={() => setShowEsignModal(false)}
+        title="Confirm Acceptance"
+        description="By providing your name and email, you agree to accept this quote as a binding agreement."
+        size="md"
+        closeOnOverlayClick={!actionPending}
+      >
+        {esignError && (
+          <div
+            role="alert"
+            aria-live="polite"
+            className="mb-4 rounded-md bg-red-50 dark:bg-red-900/20 p-3 text-sm text-red-700 dark:text-red-300"
+          >
+            {esignError}
+          </div>
+        )}
+
+        <div className="space-y-4">
+          <div>
+            <label
+              htmlFor="signer-name"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
             >
-              Confirm Acceptance
-            </h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-              By providing your name and email, you agree to accept this quote as a binding agreement.
-            </p>
-
-            {esignError && (
-              <div className="mb-4 rounded-md bg-red-50 dark:bg-red-900/20 p-3 text-sm text-red-700 dark:text-red-300">
-                {esignError}
-              </div>
-            )}
-
-            <div className="space-y-4">
-              <div>
-                <label
-                  htmlFor="signer-name"
-                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-                >
-                  Full Name
-                </label>
-                <input
-                  id="signer-name"
-                  type="text"
-                  name="signer_name"
-                  autoComplete="name"
-                  value={signerName}
-                  onChange={(e) => setSignerName(e.target.value)}
-                  placeholder="Jane Smith..."
-                  className="block w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-0"
-                  style={{ outlineColor: branding.primary_color }}
-                />
-              </div>
-              <div>
-                <label
-                  htmlFor="signer-email"
-                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-                >
-                  Email Address
-                </label>
-                <input
-                  id="signer-email"
-                  type="email"
-                  name="signer_email"
-                  autoComplete="email"
-                  inputMode="email"
-                  spellCheck={false}
-                  value={signerEmail}
-                  onChange={(e) => setSignerEmail(e.target.value)}
-                  placeholder="jane@company.com..."
-                  className="block w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-0"
-                  style={{ outlineColor: branding.primary_color }}
-                />
-              </div>
-            </div>
-
-            <div className="flex flex-col-reverse sm:flex-row gap-3 mt-6">
-              <button
-                type="button"
-                aria-label="Cancel acceptance"
-                onClick={() => setShowEsignModal(false)}
-                disabled={actionPending}
-                className="flex-1 rounded-lg bg-white dark:bg-gray-700 px-4 py-2.5 text-sm font-semibold text-gray-900 dark:text-gray-100 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-500 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                aria-label="Confirm and sign acceptance"
-                onClick={handleEsignSubmit}
-                disabled={actionPending}
-                className="flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
-                style={{ backgroundColor: branding.accent_color, outlineColor: branding.accent_color }}
-              >
-                {actionPending ? 'Signing...' : 'Accept & Sign'}
-              </button>
-            </div>
+              Full Name
+            </label>
+            <input
+              id="signer-name"
+              type="text"
+              name="signer_name"
+              autoComplete="name"
+              value={signerName}
+              onChange={(e) => setSignerName(e.target.value)}
+              placeholder="Jane Smith..."
+              className="block w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-0"
+              style={{ outlineColor: branding.primary_color }}
+            />
+          </div>
+          <div>
+            <label
+              htmlFor="signer-email"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+            >
+              Email Address
+            </label>
+            <input
+              id="signer-email"
+              type="email"
+              name="signer_email"
+              autoComplete="email"
+              inputMode="email"
+              spellCheck={false}
+              value={signerEmail}
+              onChange={(e) => setSignerEmail(e.target.value)}
+              placeholder="jane@company.com..."
+              className="block w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-0"
+              style={{ outlineColor: branding.primary_color }}
+            />
           </div>
         </div>
-      )}
+
+        <ModalFooter>
+          <button
+            type="button"
+            aria-label="Cancel acceptance"
+            onClick={() => setShowEsignModal(false)}
+            disabled={actionPending}
+            className="flex-1 rounded-lg bg-white dark:bg-gray-700 px-4 py-2.5 text-sm font-semibold text-gray-900 dark:text-gray-100 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-500 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            aria-label="Confirm and sign acceptance"
+            onClick={handleEsignSubmit}
+            disabled={actionPending}
+            className="flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
+            style={{ backgroundColor: branding.accent_color, outlineColor: branding.accent_color }}
+          >
+            {actionPending ? 'Signing...' : 'Accept & Sign'}
+          </button>
+        </ModalFooter>
+      </Modal>
+
+      {/* Reject Modal */}
+      <Modal
+        isOpen={showRejectModal}
+        onClose={() => setShowRejectModal(false)}
+        title="Reject Quote"
+        description="Please provide your email address to confirm the rejection."
+        size="sm"
+        closeOnOverlayClick={!actionPending}
+      >
+        {rejectError && (
+          <div
+            role="alert"
+            aria-live="polite"
+            className="mb-4 rounded-md bg-red-50 dark:bg-red-900/20 p-3 text-sm text-red-700 dark:text-red-300"
+          >
+            {rejectError}
+          </div>
+        )}
+
+        <div>
+          <label
+            htmlFor="reject-email"
+            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+          >
+            Email Address
+          </label>
+          <input
+            id="reject-email"
+            type="email"
+            name="reject_email"
+            autoComplete="email"
+            inputMode="email"
+            spellCheck={false}
+            value={rejectEmail}
+            onChange={(e) => setRejectEmail(e.target.value)}
+            placeholder="jane@company.com..."
+            className="block w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-0"
+            style={{ outlineColor: branding.primary_color }}
+          />
+        </div>
+
+        <ModalFooter>
+          <button
+            type="button"
+            onClick={() => setShowRejectModal(false)}
+            disabled={actionPending}
+            className="flex-1 rounded-lg bg-white dark:bg-gray-700 px-4 py-2.5 text-sm font-semibold text-gray-900 dark:text-gray-100 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-500 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleRejectSubmit}
+            disabled={actionPending}
+            className="flex-1 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600 disabled:opacity-50"
+          >
+            {actionPending ? 'Rejecting...' : 'Confirm Rejection'}
+          </button>
+        </ModalFooter>
+      </Modal>
     </div>
   );
 }
