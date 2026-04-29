@@ -79,7 +79,7 @@ function WebhookForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label htmlFor="webhook-name" className="block text-sm font-medium text-gray-700">
+        <label htmlFor="webhook-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
           Name
         </label>
         <input
@@ -88,11 +88,11 @@ function WebhookForm({
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+          className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
         />
       </div>
       <div>
-        <label htmlFor="webhook-url" className="block text-sm font-medium text-gray-700">
+        <label htmlFor="webhook-url" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
           URL
         </label>
         <input
@@ -102,11 +102,11 @@ function WebhookForm({
           onChange={(e) => setUrl(e.target.value)}
           required
           placeholder="https://example.com/webhook..."
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+          className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
         />
       </div>
       <div>
-        <label htmlFor="webhook-secret" className="block text-sm font-medium text-gray-700">
+        <label htmlFor="webhook-secret" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
           Secret (optional, for HMAC signature)
         </label>
         <input
@@ -114,19 +114,19 @@ function WebhookForm({
           type="text"
           value={secret}
           onChange={(e) => setSecret(e.target.value)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+          className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
         />
       </div>
       <div>
-        <span className="block text-sm font-medium text-gray-700 mb-2">Events</span>
+        <span className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Events</span>
         <div className="grid grid-cols-2 gap-2">
           {AVAILABLE_EVENTS.map((event) => (
-            <label key={event} className="flex items-center gap-2 text-sm cursor-pointer">
+            <label key={event} className="flex items-center gap-2 text-sm cursor-pointer text-gray-900 dark:text-gray-100">
               <input
                 type="checkbox"
                 checked={events.includes(event)}
                 onChange={() => toggleEvent(event)}
-                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
               />
               {event}
             </label>
@@ -139,9 +139,9 @@ function WebhookForm({
           type="checkbox"
           checked={isActive}
           onChange={(e) => setIsActive(e.target.checked)}
-          className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+          className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
         />
-        <label htmlFor="webhook-active" className="text-sm text-gray-700">
+        <label htmlFor="webhook-active" className="text-sm text-gray-700 dark:text-gray-300">
           Active
         </label>
       </div>
@@ -169,16 +169,16 @@ function DeliveryLog({ webhookId }: { webhookId: number }) {
     <div className="overflow-x-auto">
       <table className="min-w-full text-sm">
         <thead>
-          <tr className="border-b border-gray-200">
-            <th className="text-left py-2 px-2 font-medium text-gray-500">Event</th>
-            <th className="text-left py-2 px-2 font-medium text-gray-500">Status</th>
-            <th className="text-left py-2 px-2 font-medium text-gray-500">Code</th>
-            <th className="text-left py-2 px-2 font-medium text-gray-500">Time</th>
+          <tr className="border-b border-gray-200 dark:border-gray-700">
+            <th className="text-left py-2 px-2 font-medium text-gray-500 dark:text-gray-400">Event</th>
+            <th className="text-left py-2 px-2 font-medium text-gray-500 dark:text-gray-400">Status</th>
+            <th className="text-left py-2 px-2 font-medium text-gray-500 dark:text-gray-400">Code</th>
+            <th className="text-left py-2 px-2 font-medium text-gray-500 dark:text-gray-400">Time</th>
           </tr>
         </thead>
         <tbody>
           {deliveries.map((d) => (
-            <tr key={d.id} className="border-b border-gray-100">
+            <tr key={d.id} className="border-b border-gray-100 dark:border-gray-700 text-gray-900 dark:text-gray-100">
               <td className="py-2 px-2">{d.event_type}</td>
               <td className="py-2 px-2">
                 <span
@@ -258,8 +258,8 @@ export function WebhooksSection() {
       />
       <CardBody className="p-4 sm:p-6">
         {showForm && !editingWebhook && (
-          <div className="mb-4 p-4 border border-gray-200 rounded-lg">
-            <h4 className="text-sm font-medium text-gray-900 mb-3">New Webhook</h4>
+          <div className="mb-4 p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
+            <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">New Webhook</h4>
             <WebhookForm
               onSubmit={handleCreate}
               onCancel={() => setShowForm(false)}
@@ -281,11 +281,11 @@ export function WebhooksSection() {
             {webhooks.map((webhook) => (
               <div
                 key={webhook.id}
-                className="border border-gray-200 rounded-lg"
+                className="border border-gray-200 dark:border-gray-700 rounded-lg"
               >
                 {editingWebhook?.id === webhook.id ? (
                   <div className="p-4">
-                    <h4 className="text-sm font-medium text-gray-900 mb-3">
+                    <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
                       Edit Webhook
                     </h4>
                     <WebhookForm
@@ -305,10 +305,10 @@ export function WebhooksSection() {
                           }`}
                         />
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-gray-900 truncate">
+                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                             {webhook.name}
                           </p>
-                          <p className="text-xs text-gray-500 truncate">
+                          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
                             {webhook.url}
                           </p>
                         </div>
@@ -360,7 +360,7 @@ export function WebhooksSection() {
                         {webhook.events.map((event) => (
                           <span
                             key={event}
-                            className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600"
+                            className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
                           >
                             {event}
                           </span>
@@ -368,8 +368,8 @@ export function WebhooksSection() {
                       </div>
                     </div>
                     {expandedId === webhook.id && (
-                      <div className="border-t border-gray-200 p-4">
-                        <h5 className="text-sm font-medium text-gray-700 mb-2">
+                      <div className="border-t border-gray-200 dark:border-gray-700 p-4">
+                        <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           Delivery Log
                         </h5>
                         <DeliveryLog webhookId={webhook.id} />
