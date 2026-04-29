@@ -5,13 +5,14 @@ import { Table } from '../../components/ui/Table';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
+import { Modal, ModalFooter } from '../../components/ui/Modal';
 import { useAdminUsers, useUpdateAdminUser } from '../../hooks/useAdmin';
 import { useAuthStore } from '../../store/authStore';
 import { deleteUserPermanently } from '../../api/admin';
 import toast from 'react-hot-toast';
 import type { AdminUser } from '../../types';
 import type { Column } from '../../components/ui/Table';
-import { PencilSquareIcon, XMarkIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { PencilSquareIcon, TrashIcon } from '@heroicons/react/24/outline';
 
 const ROLE_LABELS: Record<string, string> = {
   admin: 'Admin',
@@ -295,88 +296,70 @@ export default function UserManagement() {
       </CardBody>
 
       {/* Edit User Modal */}
-      {editingUser && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setEditingUser(null);
-          }}
-        >
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                Edit User
-              </h3>
-              <button
-                type="button"
-                onClick={() => setEditingUser(null)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-                aria-label="Close modal"
-              >
-                <XMarkIcon className="h-5 w-5" aria-hidden="true" />
-              </button>
-            </div>
+      <Modal
+        isOpen={editingUser !== null}
+        onClose={() => { setEditingUser(null); setEditError(null); }}
+        title="Edit User"
+        size="md"
+      >
+        <div className="space-y-4">
+          {editError && (
+            <p className="text-sm text-red-600 dark:text-red-400" role="alert" aria-live="polite">
+              {editError}
+            </p>
+          )}
 
-            <div className="px-6 py-4 space-y-4">
-              {editError && (
-                <p className="text-sm text-red-600 dark:text-red-400" role="alert">
-                  {editError}
-                </p>
-              )}
+          <div>
+            <label
+              htmlFor="edit-user-name"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+            >
+              Full Name
+            </label>
+            <input
+              id="edit-user-name"
+              type="text"
+              value={editForm.full_name}
+              onChange={(e) => setEditForm((f) => ({ ...f, full_name: e.target.value }))}
+              autoComplete="name"
+              className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+            />
+          </div>
 
-              <div>
-                <label
-                  htmlFor="edit-user-name"
-                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-                >
-                  Full Name
-                </label>
-                <input
-                  id="edit-user-name"
-                  type="text"
-                  value={editForm.full_name}
-                  onChange={(e) => setEditForm((f) => ({ ...f, full_name: e.target.value }))}
-                  autoComplete="name"
-                  className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="edit-user-email"
-                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-                >
-                  Email
-                </label>
-                <input
-                  id="edit-user-email"
-                  type="email"
-                  value={editForm.email}
-                  onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
-                  autoComplete="email"
-                  spellCheck={false}
-                  className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setEditingUser(null);
-                  setEditError(null);
-                }}
-              >
-                Cancel
-              </Button>
-              <Button onClick={handleSaveEdit} disabled={updateUser.isPending}>
-                {updateUser.isPending ? 'Saving...' : 'Save Changes'}
-              </Button>
-            </div>
+          <div>
+            <label
+              htmlFor="edit-user-email"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+            >
+              Email
+            </label>
+            <input
+              id="edit-user-email"
+              type="email"
+              value={editForm.email}
+              onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
+              autoComplete="email"
+              spellCheck={false}
+              className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+            />
           </div>
         </div>
-      )}
+
+        <ModalFooter>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setEditingUser(null);
+              setEditError(null);
+            }}
+          >
+            Cancel
+          </Button>
+          <Button onClick={handleSaveEdit} disabled={updateUser.isPending}>
+            {updateUser.isPending ? 'Saving...' : 'Save Changes'}
+          </Button>
+        </ModalFooter>
+      </Modal>
       {/* Role Change Confirmation — prevents accidental one-click
           self-demotion or permission escalation. */}
       <ConfirmDialog
@@ -410,48 +393,38 @@ export default function UserManagement() {
       />
 
       {/* Delete Confirmation Modal */}
-      {deletingUser && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setDeletingUser(null);
-          }}
-        >
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-sm mx-4">
-            <div className="px-6 py-5">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="flex-shrink-0 h-10 w-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
-                  <TrashIcon className="h-5 w-5 text-red-600 dark:text-red-400" aria-hidden="true" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                    Delete User
-                  </h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    This action cannot be undone.
-                  </p>
-                </div>
-              </div>
-              <p className="text-sm text-gray-700 dark:text-gray-300">
-                Permanently delete <strong>{deletingUser.full_name}</strong> ({deletingUser.email})?
-                Their owned records will have the owner cleared.
-              </p>
-            </div>
-            <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
-              <Button variant="secondary" onClick={() => setDeletingUser(null)}>
-                Cancel
-              </Button>
-              <Button
-                variant="danger"
-                onClick={() => deleteMutation.mutate(deletingUser.id)}
-                disabled={deleteMutation.isPending}
-              >
-                {deleteMutation.isPending ? 'Deleting...' : 'Delete Permanently'}
-              </Button>
-            </div>
+      <Modal
+        isOpen={deletingUser !== null}
+        onClose={() => setDeletingUser(null)}
+        title="Delete User"
+        size="sm"
+      >
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex-shrink-0 h-10 w-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+            <TrashIcon className="h-5 w-5 text-red-600 dark:text-red-400" aria-hidden="true" />
           </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400">This action cannot be undone.</p>
         </div>
-      )}
+        {deletingUser && (
+          <p className="text-sm text-gray-700 dark:text-gray-300">
+            Permanently delete <strong>{deletingUser.full_name}</strong> ({deletingUser.email})?
+            Their owned records will have the owner cleared.
+          </p>
+        )}
+
+        <ModalFooter>
+          <Button variant="secondary" onClick={() => setDeletingUser(null)}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => deletingUser && deleteMutation.mutate(deletingUser.id)}
+            disabled={deleteMutation.isPending}
+          >
+            {deleteMutation.isPending ? 'Deleting...' : 'Delete Permanently'}
+          </Button>
+        </ModalFooter>
+      </Modal>
     </Card>
   );
 }
