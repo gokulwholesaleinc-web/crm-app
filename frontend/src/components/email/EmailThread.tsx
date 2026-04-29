@@ -19,6 +19,20 @@ const STATUS_BADGE: Record<string, { variant: BadgeVariant; label: string }> = {
   received: { variant: 'blue', label: 'Received' },
 };
 
+// The EmailQueue table stores a single `body` column. Branded
+// proposal/quote emails write the rendered HTML straight into it (no
+// `body_html` column to fall back to), so any thread message starting
+// with a doctype or root HTML tag is intended to render as HTML, not
+// be displayed as plain-text source.
+function looksLikeHtml(value: string): boolean {
+  const trimmed = value.trimStart().slice(0, 200).toLowerCase();
+  return (
+    trimmed.startsWith('<!doctype html') ||
+    trimmed.startsWith('<html') ||
+    /<(body|table|div|p|span|a|img|br|h[1-6])\b/.test(trimmed)
+  );
+}
+
 const REPLY_ARROW_ICON = (
   <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
@@ -103,6 +117,9 @@ function EmailBubble({
   const badge = STATUS_BADGE[status] ?? { variant: 'gray' as BadgeVariant, label: status };
   const bodyContent = email.body || '';
   const hasBody = Boolean(email.body_html || bodyContent);
+  // Fall back to body when body_html is absent (the EmailQueue model
+  // doesn't currently persist a separate HTML column for outbound).
+  const renderableHtml = email.body_html || (looksLikeHtml(bodyContent) ? bodyContent : null);
 
   return (
     <div
@@ -147,16 +164,22 @@ function EmailBubble({
 
         {hasBody && (
           <div
-            className={`mt-2 text-sm whitespace-pre-wrap break-words border-t pt-2 ${
+            className={`mt-2 text-sm break-words border-t pt-2 ${
+              renderableHtml ? '' : 'whitespace-pre-wrap'
+            } ${
               isOutbound
                 ? 'border-white/20 text-white'
                 : 'border-gray-200 dark:border-gray-600 text-gray-800 dark:text-gray-200'
             }`}
           >
-            {email.body_html ? (
+            {renderableHtml ? (
               <div
+                className="email-html-content"
                 dangerouslySetInnerHTML={{
-                  __html: DOMPurify.sanitize(email.body_html, { FORBID_TAGS: ['style', 'form'], FORBID_ATTR: ['style'] }),
+                  __html: DOMPurify.sanitize(renderableHtml, {
+                    FORBID_TAGS: ['form', 'script'],
+                    FORBID_ATTR: ['onerror', 'onload', 'onclick'],
+                  }),
                 }}
               />
             ) : (

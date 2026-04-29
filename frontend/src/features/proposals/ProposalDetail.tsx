@@ -17,6 +17,7 @@ import {
   useSendProposal,
   useAcceptProposal,
   useRejectProposal,
+  useResendProposalPaymentLink,
 } from '../../hooks/useProposals';
 import { ProposalBillingCard } from './ProposalBillingCard';
 import { ProposalAuditCard } from './ProposalAuditCard';
@@ -38,6 +39,7 @@ function ProposalDetailPage() {
   const sendProposalMutation = useSendProposal();
   const acceptProposalMutation = useAcceptProposal();
   const rejectProposalMutation = useRejectProposal();
+  const resendPaymentLinkMutation = useResendProposalPaymentLink();
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -95,6 +97,24 @@ function ProposalDetailPage() {
       showSuccess('Proposal rejected');
     } catch {
       showError('Failed to reject proposal');
+    }
+  };
+
+  const handleResendPaymentLink = async () => {
+    try {
+      const result = await resendPaymentLinkMutation.mutateAsync(proposal.id);
+      if (result.action === 'already_paid_reconciled') {
+        showSuccess('Already paid — status reconciled');
+      } else {
+        showSuccess('Payment link re-emailed to the customer');
+      }
+    } catch (err) {
+      // axios surfaces the FastAPI 400 detail as response.data.detail
+      const detail =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+          : null;
+      showError(detail || 'Failed to resend payment link');
     }
   };
 
@@ -159,6 +179,12 @@ function ProposalDetailPage() {
   const canSend = ['draft', 'sent', 'viewed'].includes(proposal.status ?? '');
   const sendLabel = isDraft ? 'Send' : 'Resend';
   const canAcceptReject = proposal.status === 'sent' || proposal.status === 'viewed';
+  // Resend the payment link only when the customer has signed but
+  // hasn't paid. Restricting to awaiting_payment + null paid_at keeps
+  // us from re-emitting an invoice for a one-shot proposal that's
+  // already been settled.
+  const canResendPaymentLink =
+    proposal.status === 'awaiting_payment' && !proposal.paid_at && Boolean(proposal.stripe_invoice_id);
 
   return (
     <div className="space-y-6">
@@ -220,6 +246,16 @@ function ProposalDetailPage() {
                 Reject
               </Button>
             </>
+          )}
+          {canResendPaymentLink && (
+            <Button
+              variant="secondary"
+              onClick={handleResendPaymentLink}
+              leftIcon={<PaperAirplaneIcon className="h-4 w-4" />}
+              disabled={resendPaymentLinkMutation.isPending}
+            >
+              {resendPaymentLinkMutation.isPending ? 'Resending...' : 'Resend Payment Link'}
+            </Button>
           )}
           <Button variant="danger" onClick={() => setShowDeleteConfirm(true)}>
             Delete

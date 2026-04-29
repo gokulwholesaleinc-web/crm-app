@@ -134,6 +134,21 @@ export function useRejectProposal() {
   });
 }
 
+/**
+ * Resend the payment link for an unpaid accepted proposal.
+ * Reuses the existing Stripe Invoice (no duplicate charge).
+ */
+export function useResendProposalPaymentLink() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (proposalId: number) => proposalsApi.resendPaymentLink(proposalId),
+    onSuccess: (_data, proposalId) => {
+      queryClient.invalidateQueries({ queryKey: proposalKeys.detail(proposalId) });
+    },
+  });
+}
+
 // AI Generation Hook
 
 /**
