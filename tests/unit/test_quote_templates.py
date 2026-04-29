@@ -5,9 +5,27 @@ Tests for sending branded quote emails, generating branded PDFs,
 correct recipient handling, line item rendering, and status transitions.
 """
 
+from io import BytesIO
+
 import pytest
 from datetime import date, timedelta
 from httpx import AsyncClient
+from pypdf import PdfReader
+
+
+def _extract_pdf_text(content: bytes) -> str:
+    """Return searchable text from a PDF response body.
+
+    On CI weasyprint is installed (apt) and the endpoint returns real
+    binary PDF bytes — utf-8 decoding fails, so use pypdf. Locally the
+    weasyprint Python wheel is often absent, in which case
+    `pdf_render.py` falls back to raw HTML bytes; those decode as utf-8.
+    Sniff the magic so the same assertions work in both environments.
+    """
+    if content.startswith(b"%PDF"):
+        reader = PdfReader(BytesIO(content))
+        return "\n".join(page.extract_text() or "" for page in reader.pages)
+    return content.decode("utf-8")
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -362,7 +380,7 @@ class TestGenerateQuotePDF:
         )
 
         assert response.status_code == 200
-        content = response.content.decode("utf-8")
+        content = _extract_pdf_text(response.content)
         assert "Web Development" in content
         assert "Design Services" in content
         assert "QT-2026-TMPL-001" in content
@@ -384,7 +402,7 @@ class TestGenerateQuotePDF:
         )
 
         assert response.status_code == 200
-        content = response.content.decode("utf-8")
+        content = _extract_pdf_text(response.content)
         assert "Branded Co Inc" in content
         assert "#3b82f6" in content
 
@@ -405,7 +423,7 @@ class TestGenerateQuotePDF:
         )
 
         assert response.status_code == 200
-        content = response.content.decode("utf-8")
+        content = _extract_pdf_text(response.content)
         assert "9130.00" in content
         assert "8300.00" in content
 
@@ -506,6 +524,6 @@ class TestGenerateQuotePDF:
         )
 
         assert response.status_code == 200
-        content = response.content.decode("utf-8")
+        content = _extract_pdf_text(response.content)
         assert "QT-2026-NOCON-PDF" in content
         assert "500.00" in content
