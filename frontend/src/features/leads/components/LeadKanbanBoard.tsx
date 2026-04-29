@@ -204,11 +204,11 @@ export function LeadKanbanBoard({ onLeadClick }: LeadKanbanBoardProps) {
   useEffect(() => {
     if (!kanbanData?.stages || activeLead) return;
     const dataKey = JSON.stringify(kanbanData.stages.map((s) => `${s.stage_id}:${s.leads.map((l) => l.id).join(',')}`));
-    const localKey = JSON.stringify(localStages?.map((s) => `${s.stage_id}:${s.leads.map((l) => l.id).join(',')}`));
-    if (dataKey !== localKey) {
-      setLocalStages(kanbanData.stages);
-    }
-  }, [kanbanData, activeLead, localStages]);
+    setLocalStages((prev) => {
+      const localKey = JSON.stringify(prev?.map((s) => `${s.stage_id}:${s.leads.map((l) => l.id).join(',')}`));
+      return dataKey !== localKey ? kanbanData.stages : prev;
+    });
+  }, [kanbanData, activeLead]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
