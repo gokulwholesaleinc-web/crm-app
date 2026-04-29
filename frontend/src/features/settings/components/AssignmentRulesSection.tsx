@@ -15,6 +15,7 @@ import {
   useDeleteAssignmentRule,
   useAssignmentStats,
 } from '../../../hooks/useAssignment';
+import { useUsers } from '../../../hooks/useAuth';
 import type {
   AssignmentRule,
   AssignmentRuleCreate,
@@ -25,6 +26,7 @@ import {
   TrashIcon,
   PencilSquareIcon,
   ChartBarIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
 
 function RuleForm({
@@ -42,9 +44,7 @@ function RuleForm({
   const [assignmentType, setAssignmentType] = useState<'round_robin' | 'load_balance'>(
     rule?.assignment_type || 'round_robin'
   );
-  const [userIdsStr, setUserIdsStr] = useState(
-    rule?.user_ids?.join(', ') || ''
-  );
+  const [selectedUserIds, setSelectedUserIds] = useState<number[]>(rule?.user_ids ?? []);
   const [filterSource, setFilterSource] = useState(
     (rule?.filters as Record<string, unknown>)?.source_id?.toString() || ''
   );
@@ -53,13 +53,18 @@ function RuleForm({
   );
   const [isActive, setIsActive] = useState(rule?.is_active ?? true);
 
+  const { data: allUsers } = useUsers();
+
+  const availableUsers = allUsers?.filter((u) => !selectedUserIds.includes(u.id)) ?? [];
+
+  const toggleUser = (userId: number) => {
+    setSelectedUserIds((prev) =>
+      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
+    );
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const userIds = userIdsStr
-      .split(',')
-      .map((s) => parseInt(s.trim(), 10))
-      .filter((n) => !isNaN(n));
-
     const filters: Record<string, unknown> = {};
     if (filterSource) filters.source_id = parseInt(filterSource, 10);
     if (filterIndustry) filters.industry = filterIndustry;
@@ -67,16 +72,18 @@ function RuleForm({
     onSubmit({
       name,
       assignment_type: assignmentType,
-      user_ids: userIds,
+      user_ids: selectedUserIds,
       filters: Object.keys(filters).length > 0 ? filters : null,
       is_active: isActive,
     });
   };
 
+  const selectedUsers = allUsers?.filter((u) => selectedUserIds.includes(u.id)) ?? [];
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label htmlFor="rule-name" className="block text-sm font-medium text-gray-700">
+        <label htmlFor="rule-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
           Rule Name
         </label>
         <input
@@ -85,11 +92,11 @@ function RuleForm({
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+          className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
         />
       </div>
       <div>
-        <label htmlFor="assignment-type" className="block text-sm font-medium text-gray-700">
+        <label htmlFor="assignment-type" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
           Assignment Type
         </label>
         <select
@@ -98,29 +105,59 @@ function RuleForm({
           onChange={(e) =>
             setAssignmentType(e.target.value as 'round_robin' | 'load_balance')
           }
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+          className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
         >
           <option value="round_robin">Round Robin</option>
           <option value="load_balance">Load Balance</option>
         </select>
       </div>
       <div>
-        <label htmlFor="user-ids" className="block text-sm font-medium text-gray-700">
-          User IDs (comma-separated)
-        </label>
-        <input
-          id="user-ids"
-          type="text"
-          value={userIdsStr}
-          onChange={(e) => setUserIdsStr(e.target.value)}
-          required
-          placeholder="1, 2, 3..."
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-        />
+        <span className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          Assign to Users
+        </span>
+        {selectedUsers.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {selectedUsers.map((u) => (
+              <span
+                key={u.id}
+                className="inline-flex items-center gap-1 pl-2.5 pr-1 py-0.5 rounded-full text-xs font-medium bg-primary-100 dark:bg-primary-900/40 text-primary-800 dark:text-primary-300"
+              >
+                {u.full_name}
+                <button
+                  type="button"
+                  onClick={() => toggleUser(u.id)}
+                  className="flex items-center justify-center h-4 w-4 rounded-full hover:bg-primary-200 dark:hover:bg-primary-800 text-primary-600 dark:text-primary-400"
+                  aria-label={`Remove ${u.full_name}`}
+                >
+                  <XMarkIcon className="h-3 w-3" aria-hidden="true" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+        <select
+          id="user-picker"
+          value=""
+          onChange={(e) => {
+            const id = Number(e.target.value);
+            if (id) toggleUser(id);
+          }}
+          className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+        >
+          <option value="">Add a user...</option>
+          {availableUsers.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.full_name} ({u.email})
+            </option>
+          ))}
+        </select>
+        {selectedUserIds.length === 0 && (
+          <p className="mt-1 text-xs text-red-600 dark:text-red-400">At least one user is required.</p>
+        )}
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label htmlFor="filter-source" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="filter-source" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
             Filter: Source ID (optional)
           </label>
           <input
@@ -128,11 +165,11 @@ function RuleForm({
             type="number"
             value={filterSource}
             onChange={(e) => setFilterSource(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+            className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
           />
         </div>
         <div>
-          <label htmlFor="filter-industry" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="filter-industry" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
             Filter: Industry (optional)
           </label>
           <input
@@ -140,7 +177,7 @@ function RuleForm({
             type="text"
             value={filterIndustry}
             onChange={(e) => setFilterIndustry(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+            className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
           />
         </div>
       </div>
@@ -150,9 +187,9 @@ function RuleForm({
           type="checkbox"
           checked={isActive}
           onChange={(e) => setIsActive(e.target.checked)}
-          className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+          className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
         />
-        <label htmlFor="rule-active" className="text-sm text-gray-700">
+        <label htmlFor="rule-active" className="text-sm text-gray-700 dark:text-gray-300">
           Active
         </label>
       </div>
@@ -160,7 +197,7 @@ function RuleForm({
         <Button type="button" variant="secondary" size="sm" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" size="sm" disabled={isLoading}>
+        <Button type="submit" size="sm" disabled={isLoading || selectedUserIds.length === 0}>
           {isLoading ? <Spinner size="sm" /> : rule ? 'Update' : 'Create'}
         </Button>
       </div>
@@ -179,13 +216,13 @@ function RuleStats({ ruleId }: { ruleId: number }) {
       {stats.map((s) => (
         <div
           key={s.user_id}
-          className="bg-gray-50 rounded-lg p-3 text-center"
+          className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 text-center"
         >
-          <p className="text-xs text-gray-500">User #{s.user_id}</p>
-          <p className="text-lg font-semibold text-gray-900">
+          <p className="text-xs text-gray-500 dark:text-gray-400">User #{s.user_id}</p>
+          <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
             {s.active_leads_count}
           </p>
-          <p className="text-xs text-gray-500">active leads</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">active leads</p>
         </div>
       ))}
     </div>
@@ -239,8 +276,8 @@ export function AssignmentRulesSection() {
       />
       <CardBody className="p-4 sm:p-6">
         {showForm && !editingRule && (
-          <div className="mb-4 p-4 border border-gray-200 rounded-lg">
-            <h4 className="text-sm font-medium text-gray-900 mb-3">New Rule</h4>
+          <div className="mb-4 p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
+            <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">New Rule</h4>
             <RuleForm
               onSubmit={handleCreate}
               onCancel={() => setShowForm(false)}
@@ -262,11 +299,11 @@ export function AssignmentRulesSection() {
             {rules.map((rule) => (
               <div
                 key={rule.id}
-                className="border border-gray-200 rounded-lg"
+                className="border border-gray-200 dark:border-gray-700 rounded-lg"
               >
                 {editingRule?.id === rule.id ? (
                   <div className="p-4">
-                    <h4 className="text-sm font-medium text-gray-900 mb-3">
+                    <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
                       Edit Rule
                     </h4>
                     <RuleForm
@@ -286,10 +323,10 @@ export function AssignmentRulesSection() {
                           }`}
                         />
                         <div>
-                          <p className="text-sm font-medium text-gray-900">
+                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
                             {rule.name}
                           </p>
-                          <p className="text-xs text-gray-500">
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
                             {rule.assignment_type === 'round_robin'
                               ? 'Round Robin'
                               : 'Load Balance'}{' '}
@@ -339,8 +376,8 @@ export function AssignmentRulesSection() {
                       </div>
                     )}
                     {showStatsId === rule.id && (
-                      <div className="mt-3 pt-3 border-t border-gray-200">
-                        <h5 className="text-sm font-medium text-gray-700 mb-2">
+                      <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                        <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           Assignment Stats
                         </h5>
                         <RuleStats ruleId={rule.id} />
