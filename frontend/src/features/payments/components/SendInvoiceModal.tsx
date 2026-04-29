@@ -74,10 +74,18 @@ export function SendInvoiceModal({
       });
 
       const recipientEmail = customers.find((c: StripeCustomer) => c.id === customerId)?.email ?? contactEmail ?? 'customer';
-      showSuccess(`Invoice sent to ${recipientEmail}`);
-
+      // Stripe already emails the customer; copy the URL instead of
+      // opening it (auto-open confused admins into thinking nothing
+      // had been sent).
       if (result.invoice_url) {
-        window.open(result.invoice_url, '_blank', 'noopener,noreferrer');
+        try {
+          await navigator.clipboard.writeText(result.invoice_url);
+          showSuccess(`Invoice emailed to ${recipientEmail} — link also copied to clipboard`);
+        } catch {
+          showSuccess(`Invoice emailed to ${recipientEmail}`);
+        }
+      } else {
+        showSuccess(`Invoice emailed to ${recipientEmail}`);
       }
 
       setAmount('');

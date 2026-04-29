@@ -465,3 +465,129 @@ class TestWebhookFlipsProposalPaid:
 
         await db_session.refresh(proposal)
         assert proposal.paid_at == original_paid_at
+
+
+# ---------------------------------------------------------------------------
+# Resend payment link (idempotent, never spawns a duplicate invoice)
+# ---------------------------------------------------------------------------
+
+
+class _ResendStripeStub:
+    """Stripe stub for resend tests; Invoice.create raises so any duplicate is caught."""
+
+    def __init__(self, *, status: str = "open"):
+        self._status = status
+        self.retrieved: list[str] = []
+        self.sent: list[str] = []
+        self.created: list[dict] = []
+
+    @property
+    def Invoice(self):
+        outer = self
+
+        class _Invoice:
+            @staticmethod
+            def retrieve(invoice_id):
+                outer.retrieved.append(invoice_id)
+                return SimpleNamespace(
+                    id=invoice_id,
+                    status=outer._status,
+                    hosted_invoice_url=f"https://invoice.stripe.test/{invoice_id}",
+                )
+
+            @staticmethod
+            def send_invoice(invoice_id):
+                outer.sent.append(invoice_id)
+                return SimpleNamespace(id=invoice_id)
+
+            @staticmethod
+            def create(**kwargs):  # pragma: no cover - failing test signal
+                outer.created.append(kwargs)
+                raise AssertionError(
+                    "resend_payment_link must never create a new Invoice",
+                )
+
+        return _Invoice
+
+
+class TestResendPaymentLink:
+    @pytest.mark.asyncio
+    async def test_open_invoice_resend_calls_send_only(
+        self,
+        db_session: AsyncSession,
+        billing_proposal: Proposal,
+    ):
+        billing_proposal.status = "awaiting_payment"
+        billing_proposal.stripe_invoice_id = "in_existing_123"
+        billing_proposal.stripe_payment_url = "https://invoice.stripe.test/in_existing_123"
+        await db_session.commit()
+
+        stub = _ResendStripeStub(status="open")
+        with patch("src.payments.service._get_stripe", return_value=stub):
+            service = ProposalService(db_session)
+            result = await service.resend_payment_link(billing_proposal)
+
+        assert stub.retrieved == ["in_existing_123"]
+        assert stub.sent == ["in_existing_123"]
+        assert stub.created == []  # critical: no duplicate invoice
+        assert result["action"] == "resent"
+        assert result["stripe_invoice_id"] == "in_existing_123"
+
+    @pytest.mark.asyncio
+    async def test_already_paid_reconciles_db(
+        self,
+        db_session: AsyncSession,
+        billing_proposal: Proposal,
+    ):
+        billing_proposal.status = "awaiting_payment"
+        billing_proposal.stripe_invoice_id = "in_paid_456"
+        await db_session.commit()
+
+        stub = _ResendStripeStub(status="paid")
+        with patch("src.payments.service._get_stripe", return_value=stub):
+            service = ProposalService(db_session)
+            result = await service.resend_payment_link(billing_proposal)
+
+        await db_session.refresh(billing_proposal)
+        assert billing_proposal.status == "paid"
+        assert billing_proposal.paid_at is not None
+        assert stub.sent == []  # don't re-email when already paid
+        assert result["action"] == "already_paid_reconciled"
+
+    @pytest.mark.asyncio
+    async def test_voided_invoice_refuses(
+        self,
+        db_session: AsyncSession,
+        billing_proposal: Proposal,
+    ):
+        billing_proposal.status = "awaiting_payment"
+        billing_proposal.stripe_invoice_id = "in_void_789"
+        await db_session.commit()
+
+        stub = _ResendStripeStub(status="void")
+        with patch("src.payments.service._get_stripe", return_value=stub):
+            service = ProposalService(db_session)
+            with pytest.raises(ValueError, match="void"):
+                await service.resend_payment_link(billing_proposal)
+
+        assert stub.sent == []  # never re-emit a voided invoice
+        assert stub.created == []
+
+    @pytest.mark.asyncio
+    async def test_already_paid_proposal_refuses(
+        self,
+        db_session: AsyncSession,
+        billing_proposal: Proposal,
+    ):
+        billing_proposal.status = "paid"
+        billing_proposal.paid_at = datetime.now(UTC)
+        billing_proposal.stripe_invoice_id = "in_paid_999"
+        await db_session.commit()
+
+        stub = _ResendStripeStub(status="paid")
+        with patch("src.payments.service._get_stripe", return_value=stub):
+            service = ProposalService(db_session)
+            with pytest.raises(ValueError, match="already paid"):
+                await service.resend_payment_link(billing_proposal)
+
+        assert stub.retrieved == []  # short-circuit before touching Stripe

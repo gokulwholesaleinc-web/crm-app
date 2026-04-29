@@ -86,6 +86,21 @@ export const rejectProposal = async (proposalId: number): Promise<Proposal> => {
   return response.data;
 };
 
+export interface ResendPaymentLinkResult {
+  action: 'resent' | 'already_paid_reconciled';
+  stripe_invoice_id?: string;
+  hosted_invoice_url?: string | null;
+}
+
+export const resendProposalPaymentLink = async (
+  proposalId: number,
+): Promise<ResendPaymentLinkResult> => {
+  const response = await apiClient.post<ResendPaymentLinkResult>(
+    `${PROPOSALS_BASE}/${proposalId}/resend-payment-link`,
+  );
+  return response.data;
+};
+
 /**
  * Generate a proposal using AI
  */
@@ -180,6 +195,7 @@ export const proposalsApi = {
   sendWithEmail: sendProposalWithEmail,
   accept: acceptProposal,
   reject: rejectProposal,
+  resendPaymentLink: resendProposalPaymentLink,
   generate: generateProposal,
   listTemplates: listProposalTemplates,
   createTemplate: createProposalTemplate,

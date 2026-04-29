@@ -390,6 +390,83 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         proposal.billing_error = None
         await self.db.flush()
 
+    async def resend_payment_link(self, proposal: Proposal) -> dict:
+        """Re-emit the existing Stripe Invoice. Never creates a new one.
+
+        Acquires SELECT FOR UPDATE on the proposal row so two concurrent
+        clicks can't both call Invoice.send_invoice and double-email the
+        customer.
+        """
+        from src.payments.service import _get_stripe
+
+        # Lock the row for the duration of the transaction. Postgres
+        # honors this; SQLite (test) treats it as a no-op which is fine
+        # because tests are single-threaded.
+        locked = await self.db.execute(
+            select(Proposal).where(Proposal.id == proposal.id).with_for_update(),
+        )
+        proposal = locked.scalar_one()
+
+        if proposal.paid_at is not None:
+            raise ValueError("Proposal is already paid")
+        if proposal.status not in ("accepted", "awaiting_payment"):
+            raise ValueError(
+                f"Cannot resend payment link for proposal in '{proposal.status}' status",
+            )
+
+        stripe = _get_stripe()
+        if not stripe:
+            raise ValueError(
+                "Stripe is not configured — set STRIPE_SECRET_KEY in the environment",
+            )
+
+        if proposal.stripe_invoice_id:
+            try:
+                inv = stripe.Invoice.retrieve(proposal.stripe_invoice_id)
+            except Exception as exc:
+                raise ValueError(f"Failed to retrieve invoice: {exc}") from exc
+
+            inv_status = getattr(inv, "status", None)
+            if inv_status == "paid":
+                # DB drift — webhook missed. Reconcile rather than spawn.
+                proposal.status = "paid"
+                proposal.paid_at = datetime.now(UTC)
+                await self.db.flush()
+                return {
+                    "action": "already_paid_reconciled",
+                    "stripe_invoice_id": proposal.stripe_invoice_id,
+                    "hosted_invoice_url": getattr(inv, "hosted_invoice_url", None),
+                }
+            if inv_status in ("void", "uncollectible"):
+                raise ValueError(
+                    f"Invoice was {inv_status} — clone the proposal to bill again",
+                )
+            if inv_status not in ("open", "draft"):
+                raise ValueError(
+                    f"Cannot resend invoice in '{inv_status}' status",
+                )
+
+            try:
+                stripe.Invoice.send_invoice(proposal.stripe_invoice_id)
+            except Exception as exc:
+                raise ValueError(f"Stripe rejected resend: {exc}") from exc
+
+            return {
+                "action": "resent",
+                "stripe_invoice_id": proposal.stripe_invoice_id,
+                "hosted_invoice_url": getattr(inv, "hosted_invoice_url", None),
+            }
+
+        if proposal.stripe_subscription_id:
+            raise ValueError(
+                "Subscription is active — Stripe charges the saved payment method "
+                "on the next billing cycle, no resend needed",
+            )
+
+        raise ValueError(
+            "No Stripe artifact on this proposal — accept it first to spawn billing",
+        )
+
     async def retry_billing(self, proposal: Proposal) -> Proposal:
         """Re-run billing spawn for a proposal that previously failed.
 

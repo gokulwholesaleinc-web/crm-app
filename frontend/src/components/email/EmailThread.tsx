@@ -19,6 +19,24 @@ const STATUS_BADGE: Record<string, { variant: BadgeVariant; label: string }> = {
   received: { variant: 'blue', label: 'Received' },
 };
 
+// EmailQueue persists outbound HTML in `body` (no body_html column);
+// sniff for HTML markers so branded proposal/quote emails render
+// instead of leaking source code.
+const HTML_MARKER_RE = /^\s*(<!doctype html|<html|<(body|table|div|p|span|a|img|br|h[1-6])\b)/i;
+function looksLikeHtml(value: string): boolean {
+  return HTML_MARKER_RE.test(value);
+}
+
+// DOMPurify allowlist for thread-rendered email bodies. Outbound HTML
+// is ours, but inbound is hostile; deny iframes, embeds, JS-bearing
+// attrs, and inline `style` (history of CSS exfil bugs in mail clients).
+const EMAIL_HTML_PURIFY_CONFIG = {
+  USE_PROFILES: { html: true },
+  FORBID_TAGS: ['form', 'script', 'iframe', 'object', 'embed', 'base', 'meta', 'link', 'style'],
+  FORBID_ATTR: ['style', 'srcdoc', 'formaction', 'action', 'ping', 'target'],
+  ALLOW_DATA_ATTR: false,
+};
+
 const REPLY_ARROW_ICON = (
   <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
@@ -103,6 +121,7 @@ function EmailBubble({
   const badge = STATUS_BADGE[status] ?? { variant: 'gray' as BadgeVariant, label: status };
   const bodyContent = email.body || '';
   const hasBody = Boolean(email.body_html || bodyContent);
+  const renderableHtml = email.body_html || (looksLikeHtml(bodyContent) ? bodyContent : null);
 
   return (
     <div
@@ -147,16 +166,19 @@ function EmailBubble({
 
         {hasBody && (
           <div
-            className={`mt-2 text-sm whitespace-pre-wrap break-words border-t pt-2 ${
+            className={`mt-2 text-sm break-words border-t pt-2 ${
+              renderableHtml ? '' : 'whitespace-pre-wrap'
+            } ${
               isOutbound
                 ? 'border-white/20 text-white'
                 : 'border-gray-200 dark:border-gray-600 text-gray-800 dark:text-gray-200'
             }`}
           >
-            {email.body_html ? (
+            {renderableHtml ? (
               <div
+                className="email-html-content"
                 dangerouslySetInnerHTML={{
-                  __html: DOMPurify.sanitize(email.body_html, { FORBID_TAGS: ['style', 'form'], FORBID_ATTR: ['style'] }),
+                  __html: DOMPurify.sanitize(renderableHtml, EMAIL_HTML_PURIFY_CONFIG),
                 }}
               />
             ) : (

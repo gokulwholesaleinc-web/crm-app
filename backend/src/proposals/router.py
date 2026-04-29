@@ -534,6 +534,30 @@ async def retry_proposal_billing(
     return ProposalResponse.model_validate(proposal)
 
 
+@router.post("/{proposal_id}/resend-payment-link")
+async def resend_proposal_payment_link(
+    proposal_id: int,
+    request: Request,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Re-emit the existing Stripe Invoice's payment link to the customer."""
+    service = ProposalService(db)
+    proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
+    check_ownership(proposal, current_user, EntityNames.PROPOSAL)
+    before = {"status": proposal.status, "stripe_invoice_id": proposal.stripe_invoice_id}
+    with value_error_as_400():
+        result = await service.resend_payment_link(proposal)
+    ip_address = request.client.host if request.client else None
+    await audit_entity_update(
+        db, "proposal", proposal.id, current_user.id,
+        before,
+        {"action": result["action"], "stripe_invoice_id": result.get("stripe_invoice_id")},
+        ip_address,
+    )
+    return result
+
+
 @router.get("/{proposal_id}/pdf")
 async def get_proposal_pdf(
     proposal_id: int,
