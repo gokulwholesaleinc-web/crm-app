@@ -46,14 +46,11 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const styles = variantStyles[variant];
 
-  const handleConfirm = () => {
-    onConfirm();
-  };
-
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
+      title={title}
       size="sm"
       showCloseButton={false}
       closeOnOverlayClick={!isLoading}
@@ -67,15 +64,12 @@ export function ConfirmDialog({
             aria-hidden="true"
           />
         </div>
+        {/* `message` is typed as ReactNode so callers can pass rich content
+            (fragments, block-level spans, warnings, lists). Use a div so
+            block children are valid — a `<p>` wrapper would trigger
+            React's validateDOMNesting warning and silently break layout
+            when callers pass anything other than inline text. */}
         <div className="mt-3 text-center sm:ml-4 sm:mt-0 sm:text-left">
-          <h3 className="text-base font-semibold leading-6 text-gray-900 dark:text-gray-100">
-            {title}
-          </h3>
-          {/* `message` is typed as ReactNode so callers can pass rich content
-              (fragments, block-level spans, warnings, lists). Use a div so
-              block children are valid — a `<p>` wrapper would trigger
-              React's validateDOMNesting warning and silently break layout
-              when callers pass anything other than inline text. */}
           <div className="mt-2 text-sm text-gray-500 dark:text-gray-400">
             {message}
           </div>
@@ -86,13 +80,14 @@ export function ConfirmDialog({
           variant="secondary"
           onClick={onClose}
           disabled={isLoading}
+          autoFocus
           className="w-full sm:w-auto min-h-[44px] sm:min-h-0"
         >
           {cancelLabel}
         </Button>
         <Button
           variant={styles.button}
-          onClick={handleConfirm}
+          onClick={onConfirm}
           isLoading={isLoading}
           disabled={isLoading}
           className="w-full sm:w-auto min-h-[44px] sm:min-h-0"
