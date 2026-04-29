@@ -378,29 +378,21 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         await self.db.flush()
 
     async def resend_payment_link(self, proposal: Proposal) -> dict:
-        """Re-emit the payment link for an unpaid accepted proposal.
+        """Re-emit the existing Stripe Invoice. Never creates a new one.
 
-        Reuses the existing Stripe artifact rather than creating a new
-        Invoice or Checkout Session, so a customer is never charged
-        twice and we never end up with two open invoices for the same
-        signed scope:
-
-        - ``stripe_invoice_id`` set (one-time invoice flow): call
-          ``stripe.Invoice.send_invoice(invoice_id)`` — Stripe re-emails
-          the same hosted-invoice link to the customer. Same row in
-          Stripe, same total, no new charge attempt.
-        - ``stripe_subscription_id`` set (subscription flow): the sub
-          is already active and a payment method is on file — Stripe
-          will charge automatically on the next cycle. There is nothing
-          meaningful to "resend"; refuse rather than create a duplicate
-          subscription.
-        - Already paid / voided / uncollectible: refuse.
-
-        Returns a dict describing what happened: ``{"action": ...}``.
-        Audit logging belongs to the caller (router) so the IP is
-        captured.
+        Acquires SELECT FOR UPDATE on the proposal row so two concurrent
+        clicks can't both call Invoice.send_invoice and double-email the
+        customer.
         """
         from src.payments.service import _get_stripe
+
+        # Lock the row for the duration of the transaction. Postgres
+        # honors this; SQLite (test) treats it as a no-op which is fine
+        # because tests are single-threaded.
+        locked = await self.db.execute(
+            select(Proposal).where(Proposal.id == proposal.id).with_for_update(),
+        )
+        proposal = locked.scalar_one()
 
         if proposal.paid_at is not None:
             raise ValueError("Proposal is already paid")
@@ -423,8 +415,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
 
             inv_status = getattr(inv, "status", None)
             if inv_status == "paid":
-                # DB drift — webhook missed. Reconcile rather than
-                # spawning anything new.
+                # DB drift — webhook missed. Reconcile rather than spawn.
                 proposal.status = "paid"
                 proposal.paid_at = datetime.now(UTC)
                 await self.db.flush()

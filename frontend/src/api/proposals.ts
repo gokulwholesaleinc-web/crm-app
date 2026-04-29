@@ -92,11 +92,6 @@ export interface ResendPaymentLinkResult {
   hosted_invoice_url?: string | null;
 }
 
-/**
- * Re-emit the payment link for an unpaid accepted proposal. Reuses the
- * existing Stripe Invoice — never creates a new one — so the customer
- * cannot be charged twice for the same signed scope.
- */
 export const resendProposalPaymentLink = async (
   proposalId: number,
 ): Promise<ResendPaymentLinkResult> => {

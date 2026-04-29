@@ -473,11 +473,7 @@ class TestWebhookFlipsProposalPaid:
 
 
 class _ResendStripeStub:
-    """Single-invoice stub — only re-emit (`Invoice.send_invoice`) is exercised.
-
-    Tracks `retrieved` (id passed to retrieve) and `sent` (ids re-emitted)
-    so tests can assert no duplicate Invoice.create call ever happens.
-    """
+    """Stripe stub for resend tests; Invoice.create raises so any duplicate is caught."""
 
     def __init__(self, *, status: str = "open"):
         self._status = status

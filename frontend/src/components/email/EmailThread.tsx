@@ -19,19 +19,23 @@ const STATUS_BADGE: Record<string, { variant: BadgeVariant; label: string }> = {
   received: { variant: 'blue', label: 'Received' },
 };
 
-// The EmailQueue table stores a single `body` column. Branded
-// proposal/quote emails write the rendered HTML straight into it (no
-// `body_html` column to fall back to), so any thread message starting
-// with a doctype or root HTML tag is intended to render as HTML, not
-// be displayed as plain-text source.
+// EmailQueue persists outbound HTML in `body` (no body_html column);
+// sniff for HTML markers so branded proposal/quote emails render
+// instead of leaking source code.
+const HTML_MARKER_RE = /^\s*(<!doctype html|<html|<(body|table|div|p|span|a|img|br|h[1-6])\b)/i;
 function looksLikeHtml(value: string): boolean {
-  const trimmed = value.trimStart().slice(0, 200).toLowerCase();
-  return (
-    trimmed.startsWith('<!doctype html') ||
-    trimmed.startsWith('<html') ||
-    /<(body|table|div|p|span|a|img|br|h[1-6])\b/.test(trimmed)
-  );
+  return HTML_MARKER_RE.test(value);
 }
+
+// DOMPurify allowlist for thread-rendered email bodies. Outbound HTML
+// is ours, but inbound is hostile; deny iframes, embeds, JS-bearing
+// attrs, and inline `style` (history of CSS exfil bugs in mail clients).
+const EMAIL_HTML_PURIFY_CONFIG = {
+  USE_PROFILES: { html: true },
+  FORBID_TAGS: ['form', 'script', 'iframe', 'object', 'embed', 'base', 'meta', 'link', 'style'],
+  FORBID_ATTR: ['style', 'srcdoc', 'formaction', 'action', 'ping', 'target'],
+  ALLOW_DATA_ATTR: false,
+};
 
 const REPLY_ARROW_ICON = (
   <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -117,8 +121,6 @@ function EmailBubble({
   const badge = STATUS_BADGE[status] ?? { variant: 'gray' as BadgeVariant, label: status };
   const bodyContent = email.body || '';
   const hasBody = Boolean(email.body_html || bodyContent);
-  // Fall back to body when body_html is absent (the EmailQueue model
-  // doesn't currently persist a separate HTML column for outbound).
   const renderableHtml = email.body_html || (looksLikeHtml(bodyContent) ? bodyContent : null);
 
   return (
@@ -176,10 +178,7 @@ function EmailBubble({
               <div
                 className="email-html-content"
                 dangerouslySetInnerHTML={{
-                  __html: DOMPurify.sanitize(renderableHtml, {
-                    FORBID_TAGS: ['form', 'script'],
-                    FORBID_ATTR: ['onerror', 'onload', 'onclick'],
-                  }),
+                  __html: DOMPurify.sanitize(renderableHtml, EMAIL_HTML_PURIFY_CONFIG),
                 }}
               />
             ) : (

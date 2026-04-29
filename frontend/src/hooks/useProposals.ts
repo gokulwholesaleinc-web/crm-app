@@ -134,10 +134,6 @@ export function useRejectProposal() {
   });
 }
 
-/**
- * Resend the payment link for an unpaid accepted proposal.
- * Reuses the existing Stripe Invoice (no duplicate charge).
- */
 export function useResendProposalPaymentLink() {
   const queryClient = useQueryClient();
 

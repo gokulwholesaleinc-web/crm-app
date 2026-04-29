@@ -179,10 +179,6 @@ function ProposalDetailPage() {
   const canSend = ['draft', 'sent', 'viewed'].includes(proposal.status ?? '');
   const sendLabel = isDraft ? 'Send' : 'Resend';
   const canAcceptReject = proposal.status === 'sent' || proposal.status === 'viewed';
-  // Resend the payment link only when the customer has signed but
-  // hasn't paid. Restricting to awaiting_payment + null paid_at keeps
-  // us from re-emitting an invoice for a one-shot proposal that's
-  // already been settled.
   const canResendPaymentLink =
     proposal.status === 'awaiting_payment' && !proposal.paid_at && Boolean(proposal.stripe_invoice_id);
 
