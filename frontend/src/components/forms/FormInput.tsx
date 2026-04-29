@@ -48,11 +48,11 @@ export const FormInput = ({
         className={clsx(
           'block w-full rounded-md shadow-sm text-base sm:text-sm',
           'py-2.5 sm:py-2 px-3', // Better touch targets on mobile
-          'focus-visible:outline-none focus:ring-2 sm:focus:ring-1',
+          'focus-visible:outline-none focus-visible:ring-2 sm:focus-visible:ring-1',
           'disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed dark:disabled:bg-gray-800 dark:disabled:text-gray-500',
           hasError
-            ? 'border-red-300 dark:border-red-600 text-red-900 dark:text-red-300 focus:border-red-500 focus:ring-red-500'
-            : 'border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 focus:border-primary-500 focus:ring-primary-500',
+            ? 'border-red-300 dark:border-red-600 text-red-900 dark:text-red-300 focus-visible:border-red-500 focus-visible:ring-red-500'
+            : 'border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 focus-visible:border-primary-500 focus-visible:ring-primary-500',
           className
         )}
         aria-invalid={hasError}
