@@ -539,13 +539,24 @@ async def get_proposal_pdf(
     current_user: CurrentUser,
     db: DBSession,
 ):
-    """Generate and return branded proposal PDF."""
+    """Generate and return branded proposal PDF.
+
+    If the proposal has been e-signed, the rendered PDF includes the
+    signature block (signer name, email, timestamp, IP, user-agent) so
+    the downloaded copy matches the signed-copy email sent to the
+    customer on acceptance.
+    """
     service = ProposalService(db)
     proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
     check_ownership(proposal, current_user, EntityNames.PROPOSAL)
     with value_error_as_400():
-        pdf_bytes = await service.generate_proposal_pdf(proposal_id, current_user.id)
-    filename = f"proposal-{proposal.proposal_number}.pdf"
+        pdf_bytes = await service.generate_proposal_pdf(
+            proposal_id,
+            current_user.id,
+            include_signature=bool(proposal.signed_at),
+        )
+    suffix = "-signed" if proposal.signed_at else ""
+    filename = f"proposal-{proposal.proposal_number}{suffix}.pdf"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
