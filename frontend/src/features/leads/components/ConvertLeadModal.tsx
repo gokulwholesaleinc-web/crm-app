@@ -1,14 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { CheckIcon } from '@heroicons/react/24/outline';
 import { Button, Modal } from '../../../components/ui';
+import { usePipelineStages } from '../../../hooks/useOpportunities';
 
 interface ConvertLeadFormData {
   createContact: boolean;
   createOpportunity: boolean;
   opportunityName?: string;
   opportunityValue?: number;
-  opportunityStage?: string;
+  opportunityStage?: number;
 }
 
 interface ConvertLeadModalProps {
@@ -19,14 +20,14 @@ interface ConvertLeadModalProps {
   onConvert: (data: ConvertLeadFormData) => Promise<void>;
 }
 
-const opportunityStages = [
-  { value: 'discovery', label: 'Discovery' },
-  { value: 'proposal', label: 'Proposal' },
-  { value: 'negotiation', label: 'Negotiation' },
-  { value: 'scoping', label: 'Scoping' },
-  { value: 'stalling', label: 'Stalling' },
-  { value: 'won', label: 'Won' },
-  { value: 'lost', label: 'Lost' },
+const FALLBACK_STAGES = [
+  { value: 1, label: 'Discovery' },
+  { value: 2, label: 'Proposal' },
+  { value: 3, label: 'Negotiation' },
+  { value: 4, label: 'Scoping' },
+  { value: 5, label: 'Stalling' },
+  { value: 6, label: 'Won' },
+  { value: 7, label: 'Lost' },
 ];
 
 export function ConvertLeadModal({
@@ -36,11 +37,19 @@ export function ConvertLeadModal({
   onConvert,
 }: ConvertLeadModalProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const { data: pipelineStages, isLoading: stagesLoading } = usePipelineStages(true, 'opportunity');
+
+  const opportunityStages = pipelineStages
+    ? pipelineStages.map((s) => ({ value: s.id, label: s.name }))
+    : FALLBACK_STAGES;
+
+  const defaultStageId = opportunityStages[0]?.value ?? 1;
 
   const {
     register,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors },
   } = useForm<ConvertLeadFormData>({
     defaultValues: {
@@ -48,9 +57,15 @@ export function ConvertLeadModal({
       createOpportunity: false,
       opportunityName: '',
       opportunityValue: 0,
-      opportunityStage: 'discovery',
+      opportunityStage: defaultStageId,
     },
   });
+
+  useEffect(() => {
+    if (pipelineStages && pipelineStages.length > 0) {
+      setValue('opportunityStage', pipelineStages[0].id);
+    }
+  }, [pipelineStages, setValue]);
 
   const createOpportunity = watch('createOpportunity');
 
@@ -197,14 +212,19 @@ export function ConvertLeadModal({
                   </label>
                   <select
                     id="opportunityStage"
-                    {...register('opportunityStage')}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 py-2.5 sm:py-2 text-base sm:text-sm"
+                    {...register('opportunityStage', { valueAsNumber: true })}
+                    disabled={stagesLoading}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 py-2.5 sm:py-2 text-base sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {opportunityStages.map((stage) => (
-                      <option key={stage.value} value={stage.value}>
-                        {stage.label}
-                      </option>
-                    ))}
+                    {stagesLoading ? (
+                      <option value="">Loading stages...</option>
+                    ) : (
+                      opportunityStages.map((stage) => (
+                        <option key={stage.value} value={stage.value}>
+                          {stage.label}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
               </div>

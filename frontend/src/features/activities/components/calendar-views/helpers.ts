@@ -48,6 +48,8 @@ export function getMonthDays(year: number, month: number): Date[] {
   return days;
 }
 
+export const timeFormatter = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
+
 export function getWeekDays(baseDate: Date): Date[] {
   const day = baseDate.getDay();
   const start = new Date(baseDate);

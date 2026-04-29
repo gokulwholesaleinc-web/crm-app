@@ -8,7 +8,7 @@ from sqlalchemy import func, or_, select
 from src.activities.models import Activity, ActivityType
 from src.activities.schemas import ActivityCreate, ActivityUpdate
 from src.core.base_service import CRUDService
-from src.core.constants import DEFAULT_PAGE_SIZE
+from src.core.constants import DEFAULT_PAGE_SIZE, ENTITY_TYPE_USERS
 from src.core.filtering import apply_filters_to_query
 
 
@@ -33,9 +33,24 @@ class ActivityService(CRUDService[Activity, ActivityCreate, ActivityUpdate]):
         priority: str | None = None,
         filters: dict[str, Any] | None = None,
         shared_entity_ids: list[int] | None = None,
+        current_user_id: int | None = None,
     ) -> tuple[list[Activity], int]:
-        """Get paginated list of activities with filters."""
+        """Get paginated list of activities with filters.
+
+        `current_user_id` is required for privacy: activities with
+        entity_type='users' are personal mirrors (today, Google Calendar
+        events synced from a user's own account). They must never be
+        visible to anyone but that user — admin role does NOT override.
+        """
         query = select(Activity)
+
+        if current_user_id is not None:
+            query = query.where(
+                or_(
+                    Activity.entity_type != ENTITY_TYPE_USERS,
+                    Activity.entity_id == current_user_id,
+                )
+            )
 
         if filters:
             query = apply_filters_to_query(query, Activity, filters)

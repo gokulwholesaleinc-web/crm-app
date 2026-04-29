@@ -659,7 +659,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 interval_count = getattr(proposal, "recurring_interval_count", None) or 1
                 is_subscription_pricing = payment_type == "subscription" and bool(interval)
                 cadence_text = ""
-                if is_subscription_pricing:
+                if is_subscription_pricing and interval:
                     cadence_text = cadence_label_map.get(
                         (interval, interval_count),
                         f"Every {interval_count} {interval}{'s' if interval_count > 1 else ''}",

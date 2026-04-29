@@ -1,7 +1,3 @@
-/**
- * Timeline component showing activities
- */
-
 import { format, isToday, isYesterday } from 'date-fns';
 import clsx from 'clsx';
 import {
@@ -31,6 +27,8 @@ const activityIcons: Record<string, React.ComponentType<{ className?: string }>>
   note: DocumentTextIcon,
 };
 
+const timeFormatter = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
+
 const defaultColors = { bg: 'bg-gray-500', ring: 'ring-gray-100', text: 'text-gray-600' };
 
 const activityColors: Record<string, { bg: string; ring: string; text: string }> = {
@@ -50,7 +48,7 @@ function formatDateHeader(dateString: string): string {
 
 function formatTime(dateString: string): string {
   try {
-    return format(new Date(dateString), 'h:mm a');
+    return timeFormatter.format(new Date(dateString));
   } catch {
     return '';
   }

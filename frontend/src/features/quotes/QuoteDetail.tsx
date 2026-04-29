@@ -101,7 +101,7 @@ function QuoteDetailPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `quote-${quote.quote_number}.html`;
+      a.download = `quote-${quote.quote_number}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -203,7 +203,8 @@ function QuoteDetailPage() {
   };
 
   const isDraft = quote.status === 'draft';
-  const canSend = isDraft;
+  const canSend = ['draft', 'sent', 'viewed'].includes(quote.status ?? '');
+  const sendLabel = isDraft ? 'Send Quote' : 'Resend Quote';
   const canAcceptReject = quote.status === 'sent' || quote.status === 'viewed';
 
   return (
@@ -251,7 +252,7 @@ function QuoteDetailPage() {
               disabled={sendQuoteMutation.isPending}
               aria-label="Send quote email"
             >
-              {sendQuoteMutation.isPending ? 'Sending...' : 'Send Quote'}
+              {sendQuoteMutation.isPending ? 'Sending...' : sendLabel}
             </Button>
           )}
           {canAcceptReject && (

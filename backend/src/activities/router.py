@@ -23,7 +23,7 @@ from src.audit.utils import (
     audit_entity_update,
     snapshot_entity,
 )
-from src.core.constants import ENTITY_TYPE_ACTIVITIES, EntityNames, HTTPStatus
+from src.core.constants import ENTITY_TYPE_ACTIVITIES, ENTITY_TYPE_USERS, EntityNames, HTTPStatus
 from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
 from src.core.router_utils import (
     CurrentUser,
@@ -82,6 +82,15 @@ async def get_calendar_activities(
     # Auto-scope to current user's data by default
     effective_owner_id = owner_id if owner_id is not None else current_user.id
     filters.append(ActivityModel.owner_id == effective_owner_id)
+    # Personal calendar mirrors (entity_type='users') are private to that
+    # user — admin/manager scope does NOT override. Same invariant
+    # enforced on the list endpoint.
+    filters.append(
+        or_(
+            ActivityModel.entity_type != ENTITY_TYPE_USERS,
+            ActivityModel.entity_id == current_user.id,
+        )
+    )
 
     query = query.where(and_(*filters))
     result = await db.execute(query)
@@ -161,6 +170,7 @@ async def list_activities(
         priority=priority,
         filters=parsed_filters,
         shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_ACTIVITIES),
+        current_user_id=current_user.id,
     )
 
     return ActivityListResponse(

@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState } from 'react';
+import { Modal } from '../../components/ui/Modal';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { NumberCard } from './components/NumberCard';
 import { ChartCard } from './components/ChartCard';
@@ -73,14 +74,13 @@ function ReportWidgetsSection() {
           </svg>
           Add Widget
         </button>
-        {showAddModal && (
-          <AddWidgetModal
-            reports={availableReports}
-            onAdd={(reportId) => addMutation.mutate({ report_id: reportId, position: visibleWidgets.length })}
-            onClose={() => setShowAddModal(false)}
-            isLoading={addMutation.isPending}
-          />
-        )}
+        <AddWidgetModal
+          isOpen={showAddModal}
+          reports={availableReports}
+          onAdd={(reportId) => addMutation.mutate({ report_id: reportId, position: visibleWidgets.length })}
+          onClose={() => setShowAddModal(false)}
+          isLoading={addMutation.isPending}
+        />
       </div>
     );
   }
@@ -110,80 +110,60 @@ function ReportWidgetsSection() {
           </div>
         ))}
       </div>
-      {showAddModal && (
-        <AddWidgetModal
-          reports={availableReports}
-          onAdd={(reportId) => addMutation.mutate({ report_id: reportId, position: visibleWidgets.length })}
-          onClose={() => setShowAddModal(false)}
-          isLoading={addMutation.isPending}
-        />
-      )}
+      <AddWidgetModal
+        isOpen={showAddModal}
+        reports={availableReports}
+        onAdd={(reportId) => addMutation.mutate({ report_id: reportId, position: visibleWidgets.length })}
+        onClose={() => setShowAddModal(false)}
+        isLoading={addMutation.isPending}
+      />
     </div>
   );
 }
 
 function AddWidgetModal({
+  isOpen,
   reports,
   onAdd,
   onClose,
   isLoading,
 }: {
+  isOpen: boolean;
   reports: { id: number; name: string; chart_type: string; entity_type: string }[];
   onAdd: (reportId: number) => void;
   onClose: () => void;
   isLoading: boolean;
 }) {
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Add report widget"
-    >
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4 max-h-[70vh] flex flex-col">
-        <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Add Report Widget</h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-            aria-label="Close"
-          >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        <div className="overflow-y-auto flex-1 p-4">
-          {reports.length === 0 ? (
-            <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-6">
-              No saved reports available. Create a report first.
-            </p>
-          ) : (
-            <ul className="space-y-2">
-              {reports.map(report => (
-                <li key={report.id}>
-                  <button
-                    type="button"
-                    disabled={isLoading}
-                    onClick={() => onAdd(report.id)}
-                    className="w-full px-3 py-2.5 text-left rounded-md border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-                  >
-                    <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">
-                      {report.name}
-                    </span>
-                    <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                      {report.entity_type} - {report.chart_type}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+    <Modal isOpen={isOpen} onClose={onClose} title="Add Report Widget" size="md">
+      <div className="overflow-y-auto max-h-[50vh]">
+        {reports.length === 0 ? (
+          <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-6">
+            No saved reports available. Create a report first.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {reports.map(report => (
+              <li key={report.id}>
+                <button
+                  type="button"
+                  disabled={isLoading}
+                  onClick={() => onAdd(report.id)}
+                  className="w-full px-3 py-2.5 text-left rounded-md border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                >
+                  <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">
+                    {report.name}
+                  </span>
+                  <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    {report.entity_type} - {report.chart_type}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
-    </div>
+    </Modal>
   );
 }
 

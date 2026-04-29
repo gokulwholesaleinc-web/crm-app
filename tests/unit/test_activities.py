@@ -1172,3 +1172,128 @@ class TestUpcomingActivitiesOptions:
         data = response.json()
         assert "items" in data
         assert isinstance(data["items"], list)
+
+
+class TestPersonalCalendarPrivacy:
+    """Personal Google Calendar mirrors (entity_type='users') must be
+    private to the user whose calendar they came from — admin/superuser
+    role does NOT override. Regression for prod leak where an admin saw
+    107 of another user's synced calendar events on /activities.
+    """
+
+    @pytest.mark.asyncio
+    async def test_admin_does_not_see_other_users_calendar_mirror(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_user: User,
+        test_superuser: User,
+    ):
+        """Admin listing /api/activities does not see another user's calendar."""
+        from src.auth.security import create_access_token
+
+        # Calendar mirror created by Google Calendar sync for test_user
+        # — entity_type='users', entity_id=test_user.id matches
+        # google_calendar/service.py exactly.
+        calendar_mirror = Activity(
+            activity_type="meeting",
+            subject="Private 1:1 with manager",
+            entity_type="users",
+            entity_id=test_user.id,
+            scheduled_at=datetime.now(timezone.utc) + timedelta(days=1),
+            priority="normal",
+            is_completed=False,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(calendar_mirror)
+        await db_session.commit()
+
+        admin_token = create_access_token(data={"sub": str(test_superuser.id)})
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+
+        response = await client.get("/api/activities", headers=admin_headers)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert all(a["id"] != calendar_mirror.id for a in data["items"]), (
+            "Admin must not see another user's personal calendar mirror"
+        )
+
+    @pytest.mark.asyncio
+    async def test_user_still_sees_own_calendar_mirror(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """A user's own calendar mirror is still listed for them."""
+        own_mirror = Activity(
+            activity_type="meeting",
+            subject="My Google Calendar event",
+            entity_type="users",
+            entity_id=test_user.id,
+            scheduled_at=datetime.now(timezone.utc) + timedelta(days=1),
+            priority="normal",
+            is_completed=False,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(own_mirror)
+        await db_session.commit()
+
+        response = await client.get("/api/activities", headers=auth_headers)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert any(a["id"] == own_mirror.id for a in data["items"])
+
+    @pytest.mark.asyncio
+    async def test_admin_calendar_view_does_not_pull_other_user(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_user: User,
+        test_superuser: User,
+    ):
+        """Admin passing ?owner_id=<other> to /calendar must not return
+        that user's personal mirror — same invariant as the list endpoint.
+        """
+        from src.auth.security import create_access_token
+
+        scheduled = datetime.now(timezone.utc) + timedelta(days=1)
+        calendar_mirror = Activity(
+            activity_type="meeting",
+            subject="Other user's private event",
+            entity_type="users",
+            entity_id=test_user.id,
+            scheduled_at=scheduled,
+            priority="normal",
+            is_completed=False,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(calendar_mirror)
+        await db_session.commit()
+
+        admin_token = create_access_token(data={"sub": str(test_superuser.id)})
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+
+        start = (scheduled - timedelta(days=1)).date().isoformat()
+        end = (scheduled + timedelta(days=1)).date().isoformat()
+
+        response = await client.get(
+            "/api/activities/calendar",
+            headers=admin_headers,
+            params={"start_date": start, "end_date": end, "owner_id": test_user.id},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        all_ids = [
+            item["id"]
+            for date_items in data["dates"].values()
+            for item in date_items
+        ]
+        assert calendar_mirror.id not in all_ids

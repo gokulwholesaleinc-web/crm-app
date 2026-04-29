@@ -5,6 +5,7 @@ import {
   WEEKDAY_LABELS,
   formatDateKey,
   getWeekDays,
+  timeFormatter,
 } from './helpers';
 
 interface WeekViewProps {
@@ -52,7 +53,7 @@ export function WeekView({ currentDate, today, activitiesByDate, onSelectActivit
                   <div className="font-medium truncate">{act.subject}</div>
                   {act.scheduled_at && (
                     <div className="text-xs opacity-75">
-                      {new Date(act.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {timeFormatter.format(new Date(act.scheduled_at))}
                     </div>
                   )}
                 </button>
