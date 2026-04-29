@@ -62,19 +62,33 @@ type ViewMode = 'list' | 'kanban';
 function LeadsPage() {
   usePageTitle('Leads');
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const [viewMode, setViewMode] = useState<ViewMode>('list');
-  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const viewMode = (searchParams.get('view') as ViewMode) || 'list';
+  const searchQuery = searchParams.get('search') || '';
+  const statusFilter = searchParams.get('status') || '';
+  const currentPage = Number(searchParams.get('page') || '1');
+  const pageSize = Number(searchParams.get('per_page') || '25');
+
   const debouncedSearch = useDebouncedValue(searchQuery, 300);
-  const [statusFilter, setStatusFilter] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
+
+  const setViewMode = (v: ViewMode) =>
+    setSearchParams((prev) => { prev.set('view', v); return prev; }, { replace: true });
+  const setSearchQuery = (q: string) =>
+    setSearchParams((prev) => { if (q) prev.set('search', q); else prev.delete('search'); prev.set('page', '1'); return prev; }, { replace: true });
+  const setStatusFilter = (s: string) =>
+    setSearchParams((prev) => { if (s) prev.set('status', s); else prev.delete('status'); prev.set('page', '1'); return prev; }, { replace: true });
+  const setCurrentPage = (p: number) =>
+    setSearchParams((prev) => { prev.set('page', String(p)); return prev; }, { replace: true });
+  const setPageSize = (n: number) =>
+    setSearchParams((prev) => { prev.set('per_page', String(n)); prev.set('page', '1'); return prev; }, { replace: true });
+
   const [showForm, setShowForm] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; lead: Lead | null }>(INITIAL_DELETE_CONFIRM);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [showCampaignModal, setShowCampaignModal] = useState(false);
   const [showAddToCampaign, setShowAddToCampaign] = useState(false);
-  const [pageSize, setPageSize] = useState(25);
   const [pendingFormData, setPendingFormData] = useState<LeadFormData | null>(null);
   const [duplicateResults, setDuplicateResults] = useState<DuplicateMatch[]>([]);
   const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
