@@ -201,6 +201,19 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
 
         return proposals, total
 
+    async def update(
+        self,
+        instance: Proposal,
+        data: ProposalUpdate,
+        user_id: int,
+    ) -> Proposal:
+        """Reject edits once the customer has signed; clone or void instead."""
+        if instance.signed_at is not None:
+            raise ValueError(
+                "Proposal has been signed and is locked — clone it to make changes",
+            )
+        return await super().update(instance, data, user_id)
+
     async def create(self, data: ProposalCreate, user_id: int) -> Proposal:
         """Create a new proposal with auto-generated number + public token."""
         proposal_number = await self._generate_proposal_number()
@@ -594,15 +607,18 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         attachments: list[EmailAttachment] | None = None
         if attach_pdf:
             try:
-                pdf_bytes = await self.generate_proposal_pdf(proposal_id, user_id)
+                pdf_bytes = await self.generate_proposal_pdf(
+                    proposal_id, user_id, include_signature=bool(proposal.signed_at),
+                )
             except Exception as exc:
                 logger.warning(
                     "PDF render failed for proposal %s — sending email without attachment: %s",
                     proposal_id, exc,
                 )
             else:
+                suffix = "-signed" if proposal.signed_at else ""
                 attachments = [EmailAttachment(
-                    filename=f"proposal-{proposal.proposal_number}.pdf",
+                    filename=f"proposal-{proposal.proposal_number}{suffix}.pdf",
                     content=pdf_bytes,
                     content_type="application/pdf",
                 )]

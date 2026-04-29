@@ -460,7 +460,8 @@ async def update_proposal(
     update_fields = list(proposal_data.model_dump(exclude_unset=True).keys())
     old_data = snapshot_entity(proposal, update_fields)
 
-    updated_proposal = await service.update(proposal, proposal_data, current_user.id)
+    with value_error_as_400():
+        updated_proposal = await service.update(proposal, proposal_data, current_user.id)
 
     new_data = snapshot_entity(updated_proposal, update_fields)
     ip_address = request.client.host if request.client else None
@@ -563,13 +564,18 @@ async def get_proposal_pdf(
     current_user: CurrentUser,
     db: DBSession,
 ):
-    """Generate and return branded proposal PDF."""
+    """Branded proposal PDF; includes signature block when signed_at is set."""
     service = ProposalService(db)
     proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
     check_ownership(proposal, current_user, EntityNames.PROPOSAL)
     with value_error_as_400():
-        pdf_bytes = await service.generate_proposal_pdf(proposal_id, current_user.id)
-    filename = f"proposal-{proposal.proposal_number}.pdf"
+        pdf_bytes = await service.generate_proposal_pdf(
+            proposal_id,
+            current_user.id,
+            include_signature=bool(proposal.signed_at),
+        )
+    suffix = "-signed" if proposal.signed_at else ""
+    filename = f"proposal-{proposal.proposal_number}{suffix}.pdf"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
