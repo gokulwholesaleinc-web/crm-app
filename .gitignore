@@ -60,3 +60,6 @@ credentials.json
 
 # User uploads (dev-local files; not source-controlled)
 backend/uploads/
+---
+# Local audit artifacts (not for commit)
+.audit-findings/
