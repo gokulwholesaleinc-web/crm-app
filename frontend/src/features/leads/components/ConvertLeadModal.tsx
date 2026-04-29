@@ -62,8 +62,9 @@ export function ConvertLeadModal({
   });
 
   useEffect(() => {
-    if (pipelineStages && pipelineStages.length > 0) {
-      setValue('opportunityStage', pipelineStages[0].id);
+    const firstStage = pipelineStages?.[0];
+    if (firstStage) {
+      setValue('opportunityStage', firstStage.id);
     }
   }, [pipelineStages, setValue]);
 

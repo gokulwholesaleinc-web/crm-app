@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { contactFormDataToCreate, contactFormDataToUpdate, contactToFormData } from './ContactForm';
-import type { ContactFormData } from './ContactForm';
+import { contactFormDataToCreate, contactFormDataToUpdate, contactToFormData } from './ContactForm.helpers';
+import type { ContactFormData } from './ContactForm.helpers';
 import type { Contact } from '../../../types';
 
 const fullFormData: ContactFormData = {

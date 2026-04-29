@@ -4,7 +4,9 @@ import { PlusIcon, FunnelIcon, BookmarkIcon, XMarkIcon } from '@heroicons/react/
 import { Button, Modal, PaginationBar } from '../../components/ui';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { DuplicateWarningModal } from '../../components/shared/DuplicateWarningModal';
-import { ContactForm, ContactFormData, contactFormDataToCreate, contactFormDataToUpdate, contactToFormData } from './components/ContactForm';
+import { ContactForm } from './components/ContactForm';
+import type { ContactFormData } from './components/ContactForm.helpers';
+import { contactFormDataToCreate, contactFormDataToUpdate, contactToFormData } from './components/ContactForm.helpers';
 import { SmartListBuilder } from './components/SmartListBuilder';
 import { useContacts, useCreateContact, useUpdateContact } from '../../hooks/useContacts';
 import { useCheckDuplicates } from '../../hooks/useDedup';
