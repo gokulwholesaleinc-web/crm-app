@@ -1,6 +1,6 @@
 import clsx from 'clsx';
 import type { CalendarActivity } from '../../../../api/activities';
-import { ACTIVITY_COLORS, formatDateKey } from './helpers';
+import { ACTIVITY_COLORS, formatDateKey, timeFormatter } from './helpers';
 
 interface DayViewProps {
   currentDate: Date;
@@ -42,7 +42,7 @@ export function DayView({ currentDate, activitiesByDate, onSelectActivity }: Day
               <div className="flex items-center gap-4 mt-2 text-xs opacity-75">
                 {act.scheduled_at && (
                   <span>
-                    {new Date(act.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {timeFormatter.format(new Date(act.scheduled_at))}
                   </span>
                 )}
                 {act.meeting_location && <span>{act.meeting_location}</span>}

@@ -5,8 +5,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
-type Theme = 'light' | 'dark' | 'system';
-
 interface ModalState {
   isOpen: boolean;
   type: string | null;
@@ -26,9 +24,6 @@ interface UIState {
   sidebarOpen: boolean;
   sidebarCollapsed: boolean;
 
-  // Theme
-  theme: Theme;
-
   // Modals
   modals: Record<string, ModalState>;
 
@@ -46,9 +41,6 @@ interface UIState {
   setSidebarOpen: (open: boolean) => void;
   toggleSidebarCollapsed: () => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
-
-  // Actions - Theme
-  setTheme: (theme: Theme) => void;
 
   // Actions - Modals
   openModal: (modalId: string, type: string, data?: Record<string, unknown>) => void;
@@ -77,7 +69,6 @@ export const useUIStore = create<UIState>()(
       // Initial state
       sidebarOpen: true,
       sidebarCollapsed: false,
-      theme: 'system',
       modals: {},
       toasts: [],
       globalLoading: false,
@@ -89,9 +80,6 @@ export const useUIStore = create<UIState>()(
       toggleSidebarCollapsed: () =>
         set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
-
-      // Theme actions
-      setTheme: (theme) => set({ theme }),
 
       // Modal actions
       openModal: (modalId, type, data) =>
@@ -152,7 +140,6 @@ export const useUIStore = create<UIState>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         sidebarCollapsed: state.sidebarCollapsed,
-        theme: state.theme,
       }),
     }
   )

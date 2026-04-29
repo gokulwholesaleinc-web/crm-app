@@ -98,7 +98,7 @@ export function RolesSection() {
                 <ShieldCheckIcon className="h-5 w-5 text-indigo-600" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-900">Your Role</p>
+                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Your Role</p>
                 <Badge variant={ROLE_BADGE_COLORS[myPermissions?.role ?? 'sales_rep'] ?? 'gray'}>
                   {ROLE_LABELS[myPermissions?.role ?? 'sales_rep'] ?? myPermissions?.role ?? 'Sales Rep'}
                 </Badge>
@@ -108,10 +108,10 @@ export function RolesSection() {
             {/* Permissions Summary */}
             {myPermissions && (
               <div>
-                <p className="text-sm font-medium text-gray-700 mb-2">Your Permissions</p>
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Your Permissions</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {formatPermissions(myPermissions.permissions).map((line) => (
-                    <div key={line} className="text-xs text-gray-600 bg-gray-50 rounded px-3 py-2">
+                    <div key={line} className="text-xs text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-700 rounded px-3 py-2">
                       {line}
                     </div>
                   ))}
@@ -122,7 +122,7 @@ export function RolesSection() {
             {/* All Roles (visible to everyone) */}
             {roles && roles.length > 0 && (
               <div>
-                <p className="text-sm font-medium text-gray-700 mb-2">Available Roles</p>
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Available Roles</p>
                 <div className="flex flex-wrap gap-2">
                   {roles.map((role) => (
                     <Badge
@@ -150,18 +150,18 @@ export function RolesSection() {
       >
         <div className="space-y-4">
           {assignMutation.isError && (
-            <div className="rounded-md bg-red-50 p-3">
-              <p className="text-sm text-red-800">Failed to assign role. Please try again.</p>
+            <div className="rounded-md bg-red-50 dark:bg-red-900/30 p-3">
+              <p className="text-sm text-red-800 dark:text-red-300">Failed to assign role. Please try again.</p>
             </div>
           )}
 
           <div>
-            <label htmlFor="assign-user" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="assign-user" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               User
             </label>
             <select
               id="assign-user"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               value={selectedUserId}
               onChange={(e) => setSelectedUserId(Number(e.target.value))}
             >
@@ -175,12 +175,12 @@ export function RolesSection() {
           </div>
 
           <div>
-            <label htmlFor="assign-role" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="assign-role" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Role
             </label>
             <select
               id="assign-role"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               value={selectedRoleId}
               onChange={(e) => setSelectedRoleId(Number(e.target.value))}
             >

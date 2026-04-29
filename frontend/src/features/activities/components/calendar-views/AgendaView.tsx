@@ -1,6 +1,6 @@
 import clsx from 'clsx';
 import type { CalendarActivity } from '../../../../api/activities';
-import { ACTIVITY_COLORS, GOOGLE_SYNC_ENTITY_TYPE } from './helpers';
+import { ACTIVITY_COLORS, GOOGLE_SYNC_ENTITY_TYPE, timeFormatter } from './helpers';
 
 interface AgendaViewProps {
   today: string;
@@ -58,7 +58,7 @@ export function AgendaView({ today, activitiesByDate, onSelectActivity }: Agenda
                   >
                     <span className="text-xs font-mono mt-0.5 opacity-75 min-w-[48px]">
                       {act.scheduled_at
-                        ? new Date(act.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                        ? timeFormatter.format(new Date(act.scheduled_at))
                         : 'All day'}
                     </span>
                     <span className="flex-1 min-w-0">

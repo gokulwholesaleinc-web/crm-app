@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -200,12 +200,15 @@ export function LeadKanbanBoard({ onLeadClick }: LeadKanbanBoardProps) {
     [localStages, kanbanData]
   );
 
-  // Sync local state when data changes
-  const dataKey = JSON.stringify(kanbanData?.stages?.map((s) => `${s.stage_id}:${s.leads.map((l) => l.id).join(',')}`));
-  const localKey = JSON.stringify(localStages?.map((s) => `${s.stage_id}:${s.leads.map((l) => l.id).join(',')}`));
-  if (kanbanData?.stages && dataKey !== localKey && !activeLead) {
-    setLocalStages(kanbanData.stages);
-  }
+  // Sync local state when server data changes (only while no drag is active)
+  useEffect(() => {
+    if (!kanbanData?.stages || activeLead) return;
+    const dataKey = JSON.stringify(kanbanData.stages.map((s) => `${s.stage_id}:${s.leads.map((l) => l.id).join(',')}`));
+    setLocalStages((prev) => {
+      const localKey = JSON.stringify(prev?.map((s) => `${s.stage_id}:${s.leads.map((l) => l.id).join(',')}`));
+      return dataKey !== localKey ? kanbanData.stages : prev;
+    });
+  }, [kanbanData, activeLead]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
