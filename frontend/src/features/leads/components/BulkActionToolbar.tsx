@@ -52,18 +52,14 @@ export function BulkActionToolbar({
         {/* Status Update */}
         {statusOptions.length > 0 && (
           <Menu as="div" className="relative">
-            {({ open }) => (
+            {() => (
               <>
-                <Menu.Button
-                  as={Fragment}
-                >
+                <Menu.Button as={Fragment}>
                   <Button
                     size="sm"
                     variant="secondary"
                     leftIcon={<ArrowPathIcon className="h-4 w-4" />}
                     disabled={isLoading}
-                    aria-haspopup="true"
-                    aria-expanded={open}
                   >
                     Update Status
                   </Button>
@@ -100,18 +96,14 @@ export function BulkActionToolbar({
         {/* Assign Owner */}
         {users.length > 0 && (
           <Menu as="div" className="relative">
-            {({ open }) => (
+            {() => (
               <>
-                <Menu.Button
-                  as={Fragment}
-                >
+                <Menu.Button as={Fragment}>
                   <Button
                     size="sm"
                     variant="secondary"
                     leftIcon={<UserGroupIcon className="h-4 w-4" />}
                     disabled={isLoading}
-                    aria-haspopup="true"
-                    aria-expanded={open}
                   >
                     Assign
                   </Button>
