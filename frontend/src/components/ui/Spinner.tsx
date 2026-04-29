@@ -5,6 +5,9 @@ export type SpinnerSize = 'sm' | 'md' | 'lg';
 export interface SpinnerProps {
   size?: SpinnerSize;
   className?: string;
+  /** When provided the spinner announces itself to screen readers as a live region.
+   *  Omit when the spinner is decorative inside a button/label that already conveys loading. */
+  label?: string;
 }
 
 const sizeStyles: Record<SpinnerSize, string> = {
@@ -13,7 +16,7 @@ const sizeStyles: Record<SpinnerSize, string> = {
   lg: 'h-8 w-8',
 };
 
-export function Spinner({ size = 'md', className }: SpinnerProps) {
+export function Spinner({ size = 'md', className, label }: SpinnerProps) {
   return (
     <svg
       className={clsx(
@@ -24,7 +27,9 @@ export function Spinner({ size = 'md', className }: SpinnerProps) {
       xmlns="http://www.w3.org/2000/svg"
       fill="none"
       viewBox="0 0 24 24"
-      aria-hidden="true"
+      {...(label
+        ? { role: 'status', 'aria-label': label }
+        : { 'aria-hidden': true })}
     >
       <circle
         className="opacity-25"

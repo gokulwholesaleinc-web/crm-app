@@ -1,12 +1,8 @@
-/**
- * Opportunities hooks using the entity CRUD factory pattern.
- * Uses TanStack Query for data fetching and caching.
- */
-
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { createEntityHooks, createQueryKeys } from './useEntityCRUD';
 import { opportunitiesApi } from '../api/opportunities';
 import { CACHE_TIMES } from '../config/queryConfig';
+import { showError } from '../utils/toast';
 import type {
   Opportunity,
   OpportunityCreate,
@@ -14,6 +10,7 @@ import type {
   OpportunityFilters,
   PipelineStageCreate,
   PipelineStageUpdate,
+  KanbanResponse,
 } from '../types';
 
 // Query Keys
@@ -42,23 +39,14 @@ const opportunityEntityHooks = createEntityHooks<
   queryKey: 'opportunities',
 });
 
-/**
- * Hook to fetch a paginated list of opportunities
- */
 export function useOpportunities(filters?: OpportunityFilters) {
   return opportunityEntityHooks.useList(filters);
 }
 
-/**
- * Hook to fetch a single opportunity by ID
- */
 export function useOpportunity(id: number | undefined) {
   return opportunityEntityHooks.useOne(id);
 }
 
-/**
- * Hook to create a new opportunity
- */
 export function useCreateOpportunity() {
   const queryClient = useQueryClient();
 
@@ -72,9 +60,6 @@ export function useCreateOpportunity() {
   });
 }
 
-/**
- * Hook to update an opportunity
- */
 export function useUpdateOpportunity() {
   const queryClient = useQueryClient();
 
@@ -90,9 +75,6 @@ export function useUpdateOpportunity() {
   });
 }
 
-/**
- * Hook to delete an opportunity
- */
 export function useDeleteOpportunity() {
   const queryClient = useQueryClient();
 
@@ -109,9 +91,6 @@ export function useDeleteOpportunity() {
 
 // Pipeline Stage Hooks
 
-/**
- * Hook to fetch all pipeline stages
- */
 export function usePipelineStages(activeOnly = true, pipelineType?: string) {
   return useQuery({
     queryKey: pipelineKeys.stages(activeOnly, pipelineType),
@@ -120,9 +99,6 @@ export function usePipelineStages(activeOnly = true, pipelineType?: string) {
   });
 }
 
-/**
- * Hook to create a new pipeline stage
- */
 export function useCreatePipelineStage() {
   const queryClient = useQueryClient();
 
@@ -135,9 +111,6 @@ export function useCreatePipelineStage() {
   });
 }
 
-/**
- * Hook to update a pipeline stage
- */
 export function useUpdatePipelineStage() {
   const queryClient = useQueryClient();
 
@@ -151,9 +124,6 @@ export function useUpdatePipelineStage() {
   });
 }
 
-/**
- * Hook to delete a pipeline stage
- */
 export function useDeletePipelineStage() {
   const queryClient = useQueryClient();
 
@@ -166,9 +136,6 @@ export function useDeletePipelineStage() {
   });
 }
 
-/**
- * Hook to reorder pipeline stages
- */
 export function useReorderPipelineStages() {
   const queryClient = useQueryClient();
 
@@ -184,9 +151,6 @@ export function useReorderPipelineStages() {
 
 // Kanban / Pipeline View Hooks
 
-/**
- * Hook to fetch Kanban board view of the pipeline
- */
 export function useKanban(ownerId?: number) {
   return useQuery({
     queryKey: pipelineKeys.kanban(ownerId),
@@ -194,9 +158,6 @@ export function useKanban(ownerId?: number) {
   });
 }
 
-/**
- * Hook to move an opportunity to a different pipeline stage
- */
 export function useMoveOpportunity() {
   const queryClient = useQueryClient();
 
@@ -208,7 +169,46 @@ export function useMoveOpportunity() {
       opportunityId: number;
       newStageId: number;
     }) => opportunitiesApi.moveOpportunity(opportunityId, { new_stage_id: newStageId }),
-    onSuccess: (_, { opportunityId }) => {
+    onMutate: async ({ opportunityId, newStageId }) => {
+      await queryClient.cancelQueries({ queryKey: pipelineKeys.kanban() });
+      const snapshot = queryClient.getQueryData<KanbanResponse>(pipelineKeys.kanban());
+      if (snapshot) {
+        const movingOpp = snapshot.stages.flatMap((s) => s.opportunities).find((o) => o.id === opportunityId);
+        const optimistic: KanbanResponse = {
+          stages: snapshot.stages.map((stage) => {
+            const hasOpp = stage.opportunities.some((o) => o.id === opportunityId);
+            if (hasOpp && stage.stage_id !== newStageId) {
+              return {
+                ...stage,
+                opportunities: stage.opportunities.filter((o) => o.id !== opportunityId),
+                count: stage.count - 1,
+                total_amount: stage.total_amount - (movingOpp?.amount ?? 0),
+                total_weighted: stage.total_weighted - (movingOpp?.weighted_amount ?? 0),
+              };
+            }
+            if (!hasOpp && stage.stage_id === newStageId && movingOpp) {
+              return {
+                ...stage,
+                opportunities: [...stage.opportunities, movingOpp],
+                count: stage.count + 1,
+                total_amount: stage.total_amount + (movingOpp.amount ?? 0),
+                total_weighted: stage.total_weighted + (movingOpp.weighted_amount ?? 0),
+              };
+            }
+            return stage;
+          }),
+        };
+        queryClient.setQueryData(pipelineKeys.kanban(), optimistic);
+      }
+      return { snapshot };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.snapshot) {
+        queryClient.setQueryData(pipelineKeys.kanban(), context.snapshot);
+      }
+      showError('Failed to move opportunity — change has been reverted.');
+    },
+    onSettled: (_data, _err, { opportunityId }) => {
       queryClient.invalidateQueries({ queryKey: pipelineKeys.kanban() });
       queryClient.invalidateQueries({ queryKey: opportunityKeys.detail(opportunityId) });
       queryClient.invalidateQueries({ queryKey: opportunityKeys.lists() });
@@ -218,9 +218,6 @@ export function useMoveOpportunity() {
 
 // Forecasting Hooks
 
-/**
- * Hook to fetch revenue forecast
- */
 export function useForecast(monthsAhead = 6, ownerId?: number) {
   return useQuery({
     queryKey: pipelineKeys.forecast(monthsAhead, ownerId),
@@ -228,9 +225,6 @@ export function useForecast(monthsAhead = 6, ownerId?: number) {
   });
 }
 
-/**
- * Hook to fetch pipeline summary
- */
 export function usePipelineSummary(ownerId?: number) {
   return useQuery({
     queryKey: pipelineKeys.summary(ownerId),
@@ -240,9 +234,6 @@ export function usePipelineSummary(ownerId?: number) {
 
 // Search Hook
 
-/**
- * Hook to search opportunities by name
- */
 export function useOpportunitySearch(searchTerm: string, limit = 10) {
   return useQuery({
     queryKey: [...opportunityKeys.lists(), 'search', searchTerm],

@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Link, useSearchParams, useNavigate } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { PlusIcon, FunnelIcon, BookmarkIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { Button, Modal, PaginationBar } from '../../components/ui';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { DuplicateWarningModal } from '../../components/shared/DuplicateWarningModal';
-import { ContactForm, ContactFormData } from './components/ContactForm';
+import { ContactForm, ContactFormData, contactFormDataToCreate, contactFormDataToUpdate, contactToFormData } from './components/ContactForm';
 import { SmartListBuilder } from './components/SmartListBuilder';
 import { useContacts, useCreateContact, useUpdateContact } from '../../hooks/useContacts';
 import { useCheckDuplicates } from '../../hooks/useDedup';
@@ -13,13 +13,12 @@ import { formatDate, formatPhoneNumber } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { showSuccess, showError } from '../../utils/toast';
-import type { Contact, ContactCreate, ContactUpdate } from '../../types';
+import type { Contact } from '../../types';
 import type { DuplicateMatch } from '../../api/dedup';
 import type { FilterGroup } from '../../api/filters';
 
 function ContactsPage() {
   usePageTitle('Contacts');
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
   const debouncedSearch = useDebouncedValue(searchQuery, 300);
@@ -77,16 +76,7 @@ function ContactsPage() {
   };
 
   const doCreateContact = async (data: ContactFormData) => {
-    const createData: ContactCreate = {
-      first_name: data.firstName,
-      last_name: data.lastName,
-      email: data.email,
-      phone: data.phone,
-      job_title: data.jobTitle,
-      company_id: data.company_id ?? undefined,
-      status: 'active',
-    };
-    await createContactMutation.mutateAsync(createData);
+    await createContactMutation.mutateAsync(contactFormDataToCreate(data));
     showSuccess('Contact created successfully');
     setShowForm(false);
     setEditingContact(null);
@@ -96,17 +86,9 @@ function ContactsPage() {
   const handleFormSubmit = async (data: ContactFormData) => {
     try {
       if (editingContact) {
-        const updateData: ContactUpdate = {
-          first_name: data.firstName,
-          last_name: data.lastName,
-          email: data.email,
-          phone: data.phone,
-          job_title: data.jobTitle,
-          company_id: data.company_id ?? undefined,
-        };
         await updateContactMutation.mutateAsync({
           id: editingContact.id,
-          data: updateData,
+          data: contactFormDataToUpdate(data),
         });
         showSuccess('Contact updated successfully');
         setShowForm(false);
@@ -147,9 +129,7 @@ function ContactsPage() {
 
   const handleViewDuplicate = (id: number) => {
     setShowDuplicateWarning(false);
-    setShowForm(false);
-    setPendingFormData(null);
-    navigate(`/contacts/${id}`);
+    window.open(`/contacts/${id}`, '_blank', 'noopener,noreferrer');
   };
 
   const handleFormCancel = () => {
@@ -159,14 +139,7 @@ function ContactsPage() {
 
   const getInitialFormData = (): Partial<ContactFormData> | undefined => {
     if (!editingContact) return undefined;
-    return {
-      firstName: editingContact.first_name,
-      lastName: editingContact.last_name,
-      email: editingContact.email || '',
-      phone: editingContact.phone || '',
-      jobTitle: editingContact.job_title || '',
-      company_id: editingContact.company_id ?? null,
-    };
+    return contactToFormData(editingContact);
   };
 
   const handleApplySmartListFilters = (filters: FilterGroup) => {
