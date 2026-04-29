@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import { sanitizeHexColor } from '../../utils/colorValidation';
+import { cadenceLabel, formatProposalMoney } from './billing';
 
 // Bare axios instance for public (unauthenticated) proposal endpoints.
 // Deliberately does NOT attach the CRM Bearer token or X-Tenant-Slug
@@ -60,30 +61,6 @@ const DEFAULT_BRANDING: ProposalBranding = {
   privacy_policy_url: null,
   terms_of_service_url: null,
 };
-
-const CADENCE_LABEL: Record<string, string> = {
-  'month-1': 'Monthly',
-  'month-3': 'Quarterly',
-  'month-6': 'Bi-yearly',
-  'year-1': 'Yearly',
-};
-
-function cadenceOf(interval: string | null | undefined, count: number | null | undefined): string {
-  if (!interval) return '';
-  const key = `${interval}-${count ?? 1}`;
-  return CADENCE_LABEL[key] || `Every ${count ?? 1} ${interval}${(count ?? 1) > 1 ? 's' : ''}`;
-}
-
-function formatMoney(amount: string | number | null | undefined, currency: string): string | null {
-  if (amount == null || amount === '') return null;
-  const num = typeof amount === 'string' ? Number(amount) : amount;
-  if (!Number.isFinite(num)) return null;
-  try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency, minimumFractionDigits: 2 }).format(num);
-  } catch {
-    return `${currency} ${num.toFixed(2)}`;
-  }
-}
 
 function PublicProposalView() {
   const { token } = useParams<{ token: string }>();
@@ -240,9 +217,9 @@ function PublicProposalView() {
         .format(new Date(proposal.valid_until))
     : null;
 
-  const formattedAmount = formatMoney(proposal.amount, proposal.currency);
+  const formattedAmount = formatProposalMoney(proposal.amount, proposal.currency);
   const cadence = proposal.payment_type === 'subscription'
-    ? cadenceOf(proposal.recurring_interval, proposal.recurring_interval_count)
+    ? cadenceLabel(proposal.recurring_interval, proposal.recurring_interval_count)
     : null;
   const hasPricingBlock = Boolean(formattedAmount || proposal.pricing_section);
 
