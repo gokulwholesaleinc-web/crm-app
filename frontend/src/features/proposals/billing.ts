@@ -1,13 +1,7 @@
-/**
- * Shared proposal billing formatters.
- *
- * Used by the public proposal page and the CRM billing sidebar card
- * so both surfaces speak the same language for payment cadence and
- * amount formatting. The two money variants differ only in fallback
- * (`'—'` for CRM tables vs `null` for the document view pull-figure)
- * and in fraction digits (forced 2 for the public view to always show
- * cents on receipts; currency-default for the CRM card).
- */
+// Shared proposal billing formatters used by both the CRM billing card
+// and the public proposal page. Two money variants exist because their
+// fallbacks differ ('—' vs null) and the public view forces 2 fraction
+// digits to always show cents on the pull-figure.
 
 export const CADENCE_LABELS: Record<string, string> = {
   'month-1': 'Monthly',
@@ -34,41 +28,31 @@ function parseAmount(amount: string | number | null | undefined): number | null 
   return Number.isFinite(num) ? num : null;
 }
 
-/**
- * Returns `null` for missing/invalid amounts. Forces 2 fraction digits
- * so the public document always shows cents on the pull-figure.
- */
-export function formatProposalMoney(
+function formatMoney<F>(
   amount: string | number | null | undefined,
   currency: string,
-): string | null {
+  fallback: F,
+  options?: Intl.NumberFormatOptions,
+): string | F {
   const num = parseAmount(amount);
-  if (num === null) return null;
+  if (num === null) return fallback;
   try {
-    return new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency,
-      minimumFractionDigits: 2,
-    }).format(num);
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency, ...options }).format(num);
   } catch {
     return `${currency} ${num.toFixed(2)}`;
   }
 }
 
-/**
- * Returns `'—'` for missing/invalid amounts. Uses the currency's own
- * default fraction digits (e.g. JPY → 0), matching the original CRM
- * billing card behavior.
- */
+export function formatProposalMoney(
+  amount: string | number | null | undefined,
+  currency: string,
+): string | null {
+  return formatMoney(amount, currency, null, { minimumFractionDigits: 2 });
+}
+
 export function formatProposalMoneyOrDash(
   amount: string | number | null | undefined,
   currency: string,
 ): string {
-  const num = parseAmount(amount);
-  if (num === null) return '—';
-  try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(num);
-  } catch {
-    return `${currency} ${num.toFixed(2)}`;
-  }
+  return formatMoney(amount, currency, '—');
 }
