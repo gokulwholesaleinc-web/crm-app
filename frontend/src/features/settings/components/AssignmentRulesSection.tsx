@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { Card, CardHeader, CardBody } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { Spinner } from '../../../components/ui/Spinner';
+import { ConfirmDialog } from '../../../components/ui/ConfirmDialog';
 import {
   useAssignmentRules,
   useCreateAssignmentRule,
@@ -199,6 +200,10 @@ export function AssignmentRulesSection() {
   const [showForm, setShowForm] = useState(false);
   const [editingRule, setEditingRule] = useState<AssignmentRule | null>(null);
   const [showStatsId, setShowStatsId] = useState<number | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; rule: AssignmentRule | null }>({
+    isOpen: false,
+    rule: null,
+  });
 
   const handleCreate = (data: AssignmentRuleCreate | AssignmentRuleUpdate) => {
     createMutation.mutate(data as AssignmentRuleCreate, {
@@ -314,11 +319,7 @@ export function AssignmentRulesSection() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => {
-                            if (window.confirm('Delete this rule?')) {
-                              deleteMutation.mutate(rule.id);
-                            }
-                          }}
+                          onClick={() => setDeleteConfirm({ isOpen: true, rule })}
                           aria-label="Delete rule"
                         >
                           <TrashIcon className="h-4 w-4 text-red-500" aria-hidden="true" />
@@ -352,6 +353,20 @@ export function AssignmentRulesSection() {
           </div>
         )}
       </CardBody>
+      <ConfirmDialog
+        isOpen={deleteConfirm.isOpen}
+        onClose={() => setDeleteConfirm({ isOpen: false, rule: null })}
+        onConfirm={() => {
+          if (deleteConfirm.rule) deleteMutation.mutate(deleteConfirm.rule.id);
+          setDeleteConfirm({ isOpen: false, rule: null });
+        }}
+        title="Delete Rule"
+        message={`Are you sure you want to delete "${deleteConfirm.rule?.name}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+        isLoading={deleteMutation.isPending}
+      />
     </Card>
   );
 }

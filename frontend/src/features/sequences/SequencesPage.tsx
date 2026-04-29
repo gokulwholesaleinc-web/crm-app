@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { Card, CardHeader, CardBody } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Spinner } from '../../components/ui/Spinner';
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import {
   useSequences,
   useCreateSequence,
@@ -255,6 +256,10 @@ function SequencesPage() {
   const [editingSequence, setEditingSequence] = useState<Sequence | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [enrollingId, setEnrollingId] = useState<number | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; sequence: Sequence | null }>({
+    isOpen: false,
+    sequence: null,
+  });
 
   const handleCreate = (data: SequenceCreate | SequenceUpdate) => {
     createMutation.mutate(data as SequenceCreate, {
@@ -386,11 +391,7 @@ function SequencesPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => {
-                          if (window.confirm('Delete this sequence?')) {
-                            deleteMutation.mutate(seq.id);
-                          }
-                        }}
+                        onClick={() => setDeleteConfirm({ isOpen: true, sequence: seq })}
                         aria-label="Delete sequence"
                       >
                         <TrashIcon className="h-4 w-4 text-red-500" aria-hidden="true" />
@@ -469,6 +470,21 @@ function SequencesPage() {
           </p>
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={deleteConfirm.isOpen}
+        onClose={() => setDeleteConfirm({ isOpen: false, sequence: null })}
+        onConfirm={() => {
+          if (deleteConfirm.sequence) deleteMutation.mutate(deleteConfirm.sequence.id);
+          setDeleteConfirm({ isOpen: false, sequence: null });
+        }}
+        title="Delete Sequence"
+        message={`Are you sure you want to delete "${deleteConfirm.sequence?.name}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+        isLoading={deleteMutation.isPending}
+      />
     </div>
   );
 }
