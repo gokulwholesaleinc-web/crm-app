@@ -3,7 +3,12 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { TabBar, ActivitiesTab, CommonTabContent, SuspenseFallback } from '../../components/shared/DetailPageShell';
 import { EmailComposeModal, EmailThread } from '../../components/email';
-import { ContactForm, ContactFormData, contactFormDataToUpdate, contactToFormData } from './components/ContactForm';
+import { ContactForm } from './components/ContactForm';
+import {
+  contactFormDataToUpdate,
+  contactToFormData,
+  type ContactFormData,
+} from './components/contactFormHelpers';
 import { NextBestActionCard } from '../../components/ai';
 import { useContact, useDeleteContact, useUpdateContact } from '../../hooks/useContacts';
 import { showSuccess, showError } from '../../utils/toast';
