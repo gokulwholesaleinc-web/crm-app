@@ -32,7 +32,6 @@ export function AddMembersModal({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
-  // Fetch contacts and leads
   const { data: contactsData, isLoading: isLoadingContacts } = useContacts({
     page_size: 100,
     search: searchQuery || undefined,
@@ -42,7 +41,6 @@ export function AddMembersModal({
     search: searchQuery || undefined,
   });
 
-  // Filter out already added members using Set for O(1) lookups
   const existingContactIds = useMemo(
     () => new Set(existingMemberIds.contacts),
     [existingMemberIds.contacts]
