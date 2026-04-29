@@ -48,14 +48,14 @@ export const Input = ({
           className={clsx(
             'block w-full rounded-lg border shadow-sm transition-colors duration-200',
             'placeholder:text-gray-400 dark:placeholder:text-gray-500',
-            'focus-visible:outline-none focus:ring-2 focus:ring-offset-0',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-0',
             'disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed dark:disabled:bg-gray-800',
             leftIcon ? 'pl-10' : 'pl-3',
             rightIcon ? 'pr-10' : 'pr-3',
             'py-2 text-sm',
             hasError
-              ? 'border-red-300 text-red-900 focus:border-red-500 focus:ring-red-500 dark:border-red-600 dark:text-red-400'
-              : 'border-gray-300 text-gray-900 focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100',
+              ? 'border-red-300 text-red-900 focus-visible:border-red-500 focus-visible:ring-red-500 dark:border-red-600 dark:text-red-400'
+              : 'border-gray-300 text-gray-900 focus-visible:border-primary-500 focus-visible:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100',
             className
           )}
           aria-invalid={hasError}

@@ -122,7 +122,7 @@ export function DateRangePicker({ value = 'all_time', onChange }: DateRangePicke
             type="date"
             value={customFrom}
             onChange={(e) => handleCustomChange(e.target.value, customTo)}
-            className="px-2.5 py-1.5 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus-visible:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            className="px-2.5 py-1.5 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:border-primary-500"
           />
           <span className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">to</span>
           <label className="sr-only" htmlFor="date-range-to">To date</label>
@@ -131,7 +131,7 @@ export function DateRangePicker({ value = 'all_time', onChange }: DateRangePicke
             type="date"
             value={customTo}
             onChange={(e) => handleCustomChange(customFrom, e.target.value)}
-            className="px-2.5 py-1.5 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus-visible:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            className="px-2.5 py-1.5 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:border-primary-500"
           />
         </div>
       )}
