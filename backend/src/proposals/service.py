@@ -201,6 +201,26 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
 
         return proposals, total
 
+    async def update(
+        self,
+        instance: Proposal,
+        data: ProposalUpdate,
+        user_id: int,
+    ) -> Proposal:
+        """Update a proposal, refusing edits once the customer has signed.
+
+        After signature, the proposal carries the same legal weight as a
+        handwritten contract — letting a CRM user mutate scope/pricing
+        out from under the signed PDF would silently break the binding
+        copy the customer holds. Reject the write and force the user to
+        clone or void instead.
+        """
+        if instance.signed_at is not None:
+            raise ValueError(
+                "Proposal has been signed and is locked — clone it to make changes",
+            )
+        return await super().update(instance, data, user_id)
+
     async def create(self, data: ProposalCreate, user_id: int) -> Proposal:
         """Create a new proposal with auto-generated number + public token."""
         proposal_number = await self._generate_proposal_number()

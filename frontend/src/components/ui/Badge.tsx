@@ -97,6 +97,8 @@ export type StatusType =
   | 'sent'
   | 'viewed'
   | 'accepted'
+  | 'awaiting_payment'
+  | 'paid'
   | 'rejected'
   | 'expired'
   | 'succeeded'
@@ -130,6 +132,8 @@ const statusConfig: Record<StatusType, { variant: BadgeVariant; label: string }>
   sent: { variant: 'blue', label: 'Sent' },
   viewed: { variant: 'yellow', label: 'Viewed' },
   accepted: { variant: 'green', label: 'Accepted' },
+  awaiting_payment: { variant: 'yellow', label: 'Awaiting payment' },
+  paid: { variant: 'green', label: 'Paid' },
   rejected: { variant: 'red', label: 'Rejected' },
   expired: { variant: 'gray', label: 'Expired' },
   succeeded: { variant: 'green', label: 'Succeeded' },

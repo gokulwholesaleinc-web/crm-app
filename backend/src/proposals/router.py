@@ -460,7 +460,8 @@ async def update_proposal(
     update_fields = list(proposal_data.model_dump(exclude_unset=True).keys())
     old_data = snapshot_entity(proposal, update_fields)
 
-    updated_proposal = await service.update(proposal, proposal_data, current_user.id)
+    with value_error_as_400():
+        updated_proposal = await service.update(proposal, proposal_data, current_user.id)
 
     new_data = snapshot_entity(updated_proposal, update_fields)
     ip_address = request.client.host if request.client else None

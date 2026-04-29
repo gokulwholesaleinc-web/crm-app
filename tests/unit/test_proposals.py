@@ -398,6 +398,35 @@ class TestProposalsUpdate:
         assert data["status"] == "accepted"
 
     @pytest.mark.asyncio
+    async def test_update_signed_proposal_is_rejected(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_proposal: Proposal,
+    ):
+        """A signed proposal is locked — PATCH must 400 instead of mutating
+        scope/pricing under the customer's signed PDF."""
+        from datetime import datetime, timezone
+
+        test_proposal.signed_at = datetime(2026, 4, 29, 17, 30, tzinfo=timezone.utc)
+        test_proposal.signer_name = "Alice Q. Client"
+        test_proposal.signer_email = "alice@example.com"
+        test_proposal.status = "accepted"
+        await db_session.commit()
+
+        response = await client.patch(
+            f"/api/proposals/{test_proposal.id}",
+            headers=auth_headers,
+            json={"title": "Sneaky Edit", "pricing_section": "$1,000,000"},
+        )
+
+        assert response.status_code == 400
+        # Ensure the proposal in DB was not mutated.
+        await db_session.refresh(test_proposal)
+        assert test_proposal.title != "Sneaky Edit"
+
+    @pytest.mark.asyncio
     async def test_update_proposal_not_found(
         self,
         client: AsyncClient,
