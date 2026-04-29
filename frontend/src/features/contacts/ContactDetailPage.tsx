@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { TabBar, ActivitiesTab, CommonTabContent, SuspenseFallback } from '../../components/shared/DetailPageShell';
 import { EmailComposeModal, EmailThread } from '../../components/email';
-import { ContactForm, ContactFormData } from './components/ContactForm';
+import { ContactForm, ContactFormData, contactFormDataToUpdate, contactToFormData } from './components/ContactForm';
 import { NextBestActionCard } from '../../components/ai';
 import { useContact, useDeleteContact, useUpdateContact } from '../../hooks/useContacts';
 import { showSuccess, showError } from '../../utils/toast';
@@ -11,7 +11,7 @@ import { useQuotes } from '../../hooks/useQuotes';
 import { useProposals } from '../../hooks/useProposals';
 import { formatDate, formatPhoneNumber, formatCurrency } from '../../utils/formatters';
 import { StatusBadge } from '../../components/ui';
-import type { ContactUpdate, Quote, Proposal } from '../../types';
+import type { Quote, Proposal } from '../../types';
 import type { ThreadEmailItem } from '../../types/email';
 
 const ContractsList = lazy(() => import('../../components/shared/ContractsList'));
@@ -67,15 +67,7 @@ function ContactDetailPage() {
   const handleEditSubmit = async (data: ContactFormData) => {
     if (!contactId) return;
     try {
-      const updateData: ContactUpdate = {
-        first_name: data.firstName,
-        last_name: data.lastName,
-        email: data.email,
-        phone: data.phone,
-        job_title: data.jobTitle,
-        company_id: data.company_id ?? undefined,
-      };
-      await updateContactMutation.mutateAsync({ id: contactId, data: updateData });
+      await updateContactMutation.mutateAsync({ id: contactId, data: contactFormDataToUpdate(data) });
       setShowEditForm(false);
       showSuccess('Contact updated successfully');
     } catch {
@@ -85,14 +77,7 @@ function ContactDetailPage() {
 
   const getInitialFormData = (): Partial<ContactFormData> | undefined => {
     if (!contact) return undefined;
-    return {
-      firstName: contact.first_name,
-      lastName: contact.last_name,
-      email: contact.email || '',
-      phone: contact.phone || '',
-      jobTitle: contact.job_title || '',
-      company_id: contact.company_id ?? null,
-    };
+    return contactToFormData(contact);
   };
 
   const handleDeleteConfirm = async () => {
