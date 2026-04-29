@@ -1,6 +1,3 @@
 ruff==0.5.7
 pyright==1.1.408
-# Test-only — extracts text from generated quote/proposal PDFs so
-# tests can assert on rendered content without UTF-8-decoding raw
-# binary PDF bytes.
-pypdf==6.10.2
+pypdf==6.10.2  # PDF text extraction in quote/proposal tests

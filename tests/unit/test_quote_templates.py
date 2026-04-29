@@ -14,14 +14,7 @@ from pypdf import PdfReader
 
 
 def _extract_pdf_text(content: bytes) -> str:
-    """Return searchable text from a PDF response body.
-
-    On CI weasyprint is installed (apt) and the endpoint returns real
-    binary PDF bytes — utf-8 decoding fails, so use pypdf. Locally the
-    weasyprint Python wheel is often absent, in which case
-    `pdf_render.py` falls back to raw HTML bytes; those decode as utf-8.
-    Sniff the magic so the same assertions work in both environments.
-    """
+    """Real PDF in CI (via pypdf), HTML fallback locally when weasyprint is absent."""
     if content.startswith(b"%PDF"):
         reader = PdfReader(BytesIO(content))
         return "\n".join(page.extract_text() or "" for page in reader.pages)

@@ -22,14 +22,7 @@ from src.whitelabel.models import Tenant, TenantSettings, TenantUser
 
 
 def _extract_pdf_text(content: bytes) -> str:
-    """Return searchable text from a PDF response body.
-
-    On CI weasyprint is installed and the endpoint returns real binary
-    PDF bytes — utf-8 decoding fails, so use pypdf. Locally the
-    weasyprint Python wheel is often absent, in which case the
-    pdf_render.py fallback returns raw HTML bytes; those decode as
-    utf-8. Sniff the magic so the same assertions work in both.
-    """
+    """Real PDF in CI (via pypdf), HTML fallback locally when weasyprint is absent."""
     if content.startswith(b"%PDF"):
         from io import BytesIO
         from pypdf import PdfReader

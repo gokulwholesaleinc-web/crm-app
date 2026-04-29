@@ -159,9 +159,6 @@ function ProposalDetailPage() {
   const canSend = ['draft', 'sent', 'viewed'].includes(proposal.status ?? '');
   const sendLabel = isDraft ? 'Send' : 'Resend';
   const canAcceptReject = proposal.status === 'sent' || proposal.status === 'viewed';
-  // Edit stays open until the customer signs. Once accepted the
-  // pricing/scope is locked — anything billed off it shouldn't drift
-  // out from under the signed copy.
   const canEdit = ['draft', 'sent', 'viewed'].includes(proposal.status ?? '');
 
   return (
@@ -181,9 +178,8 @@ function ProposalDetailPage() {
               <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">
                 {proposal.title}
               </h1>
-              {/* Once the customer signs, the proposal is permanently
-                  Accepted — the lifecycle status (awaiting payment / paid)
-                  stacks alongside instead of overwriting. */}
+              {/* Stack an Accepted pill once signed so awaiting_payment/paid
+                  doesn't visually overwrite the fact that the customer signed. */}
               {proposal.signed_at && proposal.status !== 'accepted' && (
                 <StatusBadge status="accepted" size="sm" showDot={false} />
               )}

@@ -207,14 +207,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         data: ProposalUpdate,
         user_id: int,
     ) -> Proposal:
-        """Update a proposal, refusing edits once the customer has signed.
-
-        After signature, the proposal carries the same legal weight as a
-        handwritten contract — letting a CRM user mutate scope/pricing
-        out from under the signed PDF would silently break the binding
-        copy the customer holds. Reject the write and force the user to
-        clone or void instead.
-        """
+        """Reject edits once the customer has signed; clone or void instead."""
         if instance.signed_at is not None:
             raise ValueError(
                 "Proposal has been signed and is locked — clone it to make changes",
@@ -537,15 +530,18 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         attachments: list[EmailAttachment] | None = None
         if attach_pdf:
             try:
-                pdf_bytes = await self.generate_proposal_pdf(proposal_id, user_id)
+                pdf_bytes = await self.generate_proposal_pdf(
+                    proposal_id, user_id, include_signature=bool(proposal.signed_at),
+                )
             except Exception as exc:
                 logger.warning(
                     "PDF render failed for proposal %s — sending email without attachment: %s",
                     proposal_id, exc,
                 )
             else:
+                suffix = "-signed" if proposal.signed_at else ""
                 attachments = [EmailAttachment(
-                    filename=f"proposal-{proposal.proposal_number}.pdf",
+                    filename=f"proposal-{proposal.proposal_number}{suffix}.pdf",
                     content=pdf_bytes,
                     content_type="application/pdf",
                 )]
