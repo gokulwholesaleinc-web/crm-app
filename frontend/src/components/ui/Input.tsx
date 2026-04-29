@@ -1,4 +1,4 @@
-import { InputHTMLAttributes } from 'react';
+import { InputHTMLAttributes, useId } from 'react';
 import clsx from 'clsx';
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
@@ -22,7 +22,8 @@ export const Input = ({
   ref,
   ...props
 }: InputProps) => {
-  const inputId = id || label?.toLowerCase().replace(/\s+/g, '-');
+  const generatedId = useId();
+  const inputId = id ?? generatedId;
   const hasError = Boolean(error);
 
   return (

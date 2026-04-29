@@ -1,4 +1,4 @@
-import { SelectHTMLAttributes } from 'react';
+import { SelectHTMLAttributes, useId } from 'react';
 import clsx from 'clsx';
 import { ChevronDownIcon } from '@heroicons/react/20/solid';
 
@@ -29,7 +29,8 @@ export const Select = ({
   ref,
   ...props
 }: SelectProps) => {
-  const selectId = id || label?.toLowerCase().replace(/\s+/g, '-');
+  const generatedId = useId();
+  const selectId = id ?? generatedId;
   const hasError = Boolean(error);
 
   return (
