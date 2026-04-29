@@ -73,15 +73,15 @@ function LeadsPage() {
   const debouncedSearch = useDebouncedValue(searchQuery, 300);
 
   const setViewMode = (v: ViewMode) =>
-    setSearchParams((prev) => { prev.set('view', v); return prev; }, { replace: true });
+    setSearchParams((prev) => { if (v === 'list') prev.delete('view'); else prev.set('view', v); return prev; }, { replace: true });
   const setSearchQuery = (q: string) =>
-    setSearchParams((prev) => { if (q) prev.set('search', q); else prev.delete('search'); prev.set('page', '1'); return prev; }, { replace: true });
+    setSearchParams((prev) => { if (q) prev.set('search', q); else prev.delete('search'); prev.delete('page'); return prev; }, { replace: true });
   const setStatusFilter = (s: string) =>
-    setSearchParams((prev) => { if (s) prev.set('status', s); else prev.delete('status'); prev.set('page', '1'); return prev; }, { replace: true });
+    setSearchParams((prev) => { if (s) prev.set('status', s); else prev.delete('status'); prev.delete('page'); return prev; }, { replace: true });
   const setCurrentPage = (p: number) =>
-    setSearchParams((prev) => { prev.set('page', String(p)); return prev; }, { replace: true });
+    setSearchParams((prev) => { if (p === 1) prev.delete('page'); else prev.set('page', String(p)); return prev; }, { replace: true });
   const setPageSize = (n: number) =>
-    setSearchParams((prev) => { prev.set('per_page', String(n)); prev.set('page', '1'); return prev; }, { replace: true });
+    setSearchParams((prev) => { if (n === 25) prev.delete('per_page'); else prev.set('per_page', String(n)); prev.delete('page'); return prev; }, { replace: true });
 
   const [showForm, setShowForm] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
@@ -381,7 +381,7 @@ function LeadsPage() {
                 name="search"
                 id="search"
                 value={searchQuery}
-                onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 className="block w-full pl-10 pr-3 py-2.5 sm:py-2 border border-gray-300 dark:border-gray-600 rounded-md leading-5 bg-white dark:bg-gray-700 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus-visible:outline-none focus-visible:placeholder-gray-400 focus-visible:ring-1 focus-visible:ring-primary-500 focus-visible:border-primary-500 text-base sm:text-sm"
                 placeholder="Search by name, email, or company..."
               />
@@ -394,10 +394,7 @@ function LeadsPage() {
                 id="status-filter"
                 name="status"
                 value={statusFilter}
-                onChange={(e) => {
-                  setStatusFilter(e.target.value);
-                  setCurrentPage(1);
-                }}
+                onChange={(e) => setStatusFilter(e.target.value)}
                 className="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 py-2.5 sm:py-2 text-base sm:text-sm"
               >
                 {statusOptions.map((option) => (
@@ -649,10 +646,7 @@ function LeadsPage() {
               <div className="flex items-center gap-4 mb-2 md:mb-0">
                 <select
                   value={pageSize}
-                  onChange={(e) => {
-                    setPageSize(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
+                  onChange={(e) => setPageSize(Number(e.target.value))}
                   aria-label="Results per page"
                   className="text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1"
                 >
