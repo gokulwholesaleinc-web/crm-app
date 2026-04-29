@@ -475,8 +475,12 @@ function SequencesPage() {
         isOpen={deleteConfirm.isOpen}
         onClose={() => setDeleteConfirm({ isOpen: false, sequence: null })}
         onConfirm={() => {
-          if (deleteConfirm.sequence) deleteMutation.mutate(deleteConfirm.sequence.id);
-          setDeleteConfirm({ isOpen: false, sequence: null });
+          if (deleteConfirm.sequence) {
+            deleteMutation.mutate(deleteConfirm.sequence.id, {
+              onSuccess: () => setDeleteConfirm({ isOpen: false, sequence: null }),
+              onError: () => setDeleteConfirm({ isOpen: false, sequence: null }),
+            });
+          }
         }}
         title="Delete Sequence"
         message={`Are you sure you want to delete "${deleteConfirm.sequence?.name}"? This action cannot be undone.`}

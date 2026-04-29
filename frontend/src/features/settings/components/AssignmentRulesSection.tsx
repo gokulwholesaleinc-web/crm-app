@@ -357,8 +357,12 @@ export function AssignmentRulesSection() {
         isOpen={deleteConfirm.isOpen}
         onClose={() => setDeleteConfirm({ isOpen: false, rule: null })}
         onConfirm={() => {
-          if (deleteConfirm.rule) deleteMutation.mutate(deleteConfirm.rule.id);
-          setDeleteConfirm({ isOpen: false, rule: null });
+          if (deleteConfirm.rule) {
+            deleteMutation.mutate(deleteConfirm.rule.id, {
+              onSuccess: () => setDeleteConfirm({ isOpen: false, rule: null }),
+              onError: () => setDeleteConfirm({ isOpen: false, rule: null }),
+            });
+          }
         }}
         title="Delete Rule"
         message={`Are you sure you want to delete "${deleteConfirm.rule?.name}"? This action cannot be undone.`}
