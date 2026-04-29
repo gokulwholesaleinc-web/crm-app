@@ -96,20 +96,11 @@ function LeadDetailPage() {
     createOpportunity: boolean;
     opportunityName?: string;
     opportunityValue?: number;
-    opportunityStage?: string;
+    opportunityStage?: number;
   }) => {
     if (!leadId) return;
     try {
-      const stageMapping: Record<string, number> = {
-        discovery: 1,
-        proposal: 2,
-        negotiation: 3,
-        scoping: 4,
-        stalling: 5,
-        won: 6,
-        lost: 7,
-      };
-      const stageId = data.opportunityStage ? (stageMapping[data.opportunityStage] || 1) : 1;
+      const stageId = data.opportunityStage ?? 1;
       const result = await convertLeadMutation.mutateAsync({
         leadId: leadId,
         data: {
