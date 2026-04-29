@@ -74,10 +74,22 @@ export function SendInvoiceModal({
       });
 
       const recipientEmail = customers.find((c: StripeCustomer) => c.id === customerId)?.email ?? contactEmail ?? 'customer';
-      showSuccess(`Invoice sent to ${recipientEmail}`);
-
+      // Stripe.Invoice.send_invoice (server-side) already emails the
+      // hosted-invoice link to the customer. Auto-opening that URL on
+      // the admin's machine made admins think the invoice hadn't been
+      // sent — they were looking at the customer-facing pay page in
+      // their own browser. Drop the auto-open; copy the link to the
+      // clipboard instead so the admin can forward it via a different
+      // channel if they want.
       if (result.invoice_url) {
-        window.open(result.invoice_url, '_blank', 'noopener,noreferrer');
+        try {
+          await navigator.clipboard.writeText(result.invoice_url);
+          showSuccess(`Invoice emailed to ${recipientEmail} — link also copied to clipboard`);
+        } catch {
+          showSuccess(`Invoice emailed to ${recipientEmail}`);
+        }
+      } else {
+        showSuccess(`Invoice emailed to ${recipientEmail}`);
       }
 
       setAmount('');
