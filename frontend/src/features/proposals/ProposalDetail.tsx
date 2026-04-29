@@ -159,6 +159,7 @@ function ProposalDetailPage() {
   const canSend = ['draft', 'sent', 'viewed'].includes(proposal.status ?? '');
   const sendLabel = isDraft ? 'Send' : 'Resend';
   const canAcceptReject = proposal.status === 'sent' || proposal.status === 'viewed';
+  const canEdit = ['draft', 'sent', 'viewed'].includes(proposal.status ?? '');
 
   return (
     <div className="space-y-6">
@@ -173,10 +174,15 @@ function ProposalDetailPage() {
             <ArrowLeftIcon className="h-5 w-5" aria-hidden="true" />
           </Link>
           <div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">
                 {proposal.title}
               </h1>
+              {/* Stack an Accepted pill once signed so awaiting_payment/paid
+                  doesn't visually overwrite the fact that the customer signed. */}
+              {proposal.signed_at && proposal.status !== 'accepted' && (
+                <StatusBadge status="accepted" size="sm" showDot={false} />
+              )}
               <StatusBadge status={proposal.status} size="sm" showDot={false} />
             </div>
             <p className="text-sm text-gray-500 dark:text-gray-400">{proposal.proposal_number}</p>
@@ -184,7 +190,7 @@ function ProposalDetailPage() {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {isDraft && (
+          {canEdit && (
             <Button variant="secondary" onClick={openEditModal} leftIcon={<PencilIcon className="h-4 w-4" />}>
               Edit
             </Button>

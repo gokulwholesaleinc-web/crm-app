@@ -7,7 +7,7 @@ and proposal email content.
 """
 
 import pytest
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -19,6 +19,17 @@ from src.contacts.models import Contact
 from src.companies.models import Company
 from src.email.models import EmailQueue
 from src.whitelabel.models import Tenant, TenantSettings, TenantUser
+
+
+def _extract_pdf_text(content: bytes) -> str:
+    """Real PDF in CI (via pypdf), HTML fallback locally when weasyprint is absent."""
+    if content.startswith(b"%PDF"):
+        from io import BytesIO
+        from pypdf import PdfReader
+
+        reader = PdfReader(BytesIO(content))
+        return "\n".join(page.extract_text() or "" for page in reader.pages)
+    return content.decode("utf-8")
 
 
 # =============================================================================
@@ -340,6 +351,60 @@ class TestGenerateProposalPDF:
         )
 
         assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_signed_proposal_pdf_includes_signature_block(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        branded_auth_headers: dict,
+        branded_proposal: Proposal,
+    ):
+        """Signed proposal PDF download contains signer name + email + signed_at."""
+        branded_proposal.signer_name = "Alice Q. Client"
+        branded_proposal.signer_email = "alice.client@example.com"
+        branded_proposal.signed_at = datetime(2026, 4, 29, 17, 30, tzinfo=timezone.utc)
+        branded_proposal.signer_ip = "203.0.113.42"
+        branded_proposal.signer_user_agent = "Mozilla/5.0 (TestRunner)"
+        branded_proposal.status = "accepted"
+        await db_session.commit()
+
+        response = await client.get(
+            f"/api/proposals/{branded_proposal.id}/pdf",
+            headers=branded_auth_headers,
+        )
+
+        assert response.status_code == 200
+        content = _extract_pdf_text(response.content)
+        assert "Alice Q. Client" in content
+        assert "alice.client@example.com" in content
+        # ESIGN disclosure prose anchors the signatory section
+        assert "ESIGN" in content
+        # Filename should be marked as signed so downstream filing distinguishes
+        # it from the pre-signature draft.
+        content_disp = response.headers.get("content-disposition", "")
+        assert "-signed.pdf" in content_disp
+
+    @pytest.mark.asyncio
+    async def test_unsigned_proposal_pdf_omits_signature_block(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        branded_auth_headers: dict,
+        branded_proposal: Proposal,
+    ):
+        """Unsigned proposal PDF download has no Signatory section, no -signed suffix."""
+        # branded_proposal fixture has no signed_at set
+        response = await client.get(
+            f"/api/proposals/{branded_proposal.id}/pdf",
+            headers=branded_auth_headers,
+        )
+
+        assert response.status_code == 200
+        content = _extract_pdf_text(response.content)
+        assert "ESIGN" not in content
+        content_disp = response.headers.get("content-disposition", "")
+        assert "-signed.pdf" not in content_disp
 
 
 # =============================================================================
