@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Modal, Button } from '../ui';
+import { Modal, Button, ConfirmDialog } from '../ui';
 import { useSendEmail } from '../../hooks/useEmail';
+import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
 import type { ThreadEmailItem } from '../../types/email';
 
 interface EmailComposeModalProps {
@@ -28,7 +29,19 @@ export function EmailComposeModal({
   const [cc, setCc] = useState('');
   const [bcc, setBcc] = useState('');
   const [showCcBcc, setShowCcBcc] = useState(false);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const sendEmailMutation = useSendEmail();
+
+  const isDirty = subject !== '' || body !== '' || cc !== '' || bcc !== '';
+  useUnsavedChangesWarning(isDirty);
+
+  const handleClose = () => {
+    if (isDirty) {
+      setShowDiscardConfirm(true);
+    } else {
+      onClose();
+    }
+  };
 
   // Pre-fill on mount and whenever the reply target changes.
   // Intentionally excludes `defaultTo` from deps so a parent re-render with
@@ -94,7 +107,7 @@ export function EmailComposeModal({
   return (
     <Modal
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={handleClose}
       title={replyTo ? 'Reply to Email' : 'Compose Email'}
       size="lg"
     >
@@ -222,7 +235,7 @@ export function EmailComposeModal({
         </div>
 
         <div className="flex justify-end gap-3 pt-2">
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button type="button" variant="secondary" onClick={handleClose}>
             Cancel
           </Button>
           <Button type="submit" isLoading={sendEmailMutation.isPending}>
@@ -230,6 +243,20 @@ export function EmailComposeModal({
           </Button>
         </div>
       </form>
+
+      <ConfirmDialog
+        isOpen={showDiscardConfirm}
+        onClose={() => setShowDiscardConfirm(false)}
+        onConfirm={() => {
+          setShowDiscardConfirm(false);
+          onClose();
+        }}
+        title="Discard email draft?"
+        message="Your unsent changes will be lost."
+        confirmLabel="Discard"
+        cancelLabel="Keep editing"
+        variant="danger"
+      />
     </Modal>
   );
 }

@@ -5,6 +5,15 @@ import { useEmailThread } from '../../hooks/useEmail';
 import type { ThreadEmailItem } from '../../types/email';
 import type { BadgeVariant } from '../ui/Badge';
 
+// Force all sanitized anchors to open safely in a new tab.
+// Registered once at module scope so it runs only on first import.
+DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+  if (node.tagName === 'A') {
+    node.setAttribute('rel', 'noopener noreferrer');
+    node.setAttribute('target', '_blank');
+  }
+});
+
 interface EmailThreadProps {
   entityType: string;
   entityId: number;
@@ -122,6 +131,8 @@ function EmailBubble({
   const bodyContent = email.body || '';
   const hasBody = Boolean(email.body_html || bodyContent);
   const renderableHtml = email.body_html || (looksLikeHtml(bodyContent) ? bodyContent : null);
+  // click_count may not yet exist on older records; safe-access via cast
+  const clickCount = (email as ThreadEmailItem & { click_count?: number | null }).click_count;
 
   return (
     <div
@@ -161,6 +172,9 @@ function EmailBubble({
           <span>{formatTimestamp(email.timestamp)}</span>
           {isOutbound && email.open_count != null && email.open_count > 0 && (
             <span>Opened {email.open_count}x</span>
+          )}
+          {isOutbound && clickCount != null && clickCount > 0 && (
+            <span>Clicked {clickCount}x</span>
           )}
         </div>
 
