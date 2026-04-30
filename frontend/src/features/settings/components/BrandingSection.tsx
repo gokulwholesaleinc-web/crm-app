@@ -149,6 +149,10 @@ export function BrandingSection() {
               size="sm"
               leftIcon={<SwatchIcon className="h-4 w-4" />}
               onClick={startEditing}
+              // Block Edit until tenant has loaded — otherwise startEditing
+              // seeds formData with hardcoded defaults, then a delayed tenant
+              // refetch flips isDirty true and fires a spurious beforeunload.
+              disabled={!tenant}
             >
               Edit Branding
             </Button>
