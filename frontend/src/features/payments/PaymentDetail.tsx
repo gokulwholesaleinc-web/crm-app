@@ -218,13 +218,23 @@ function PaymentDetailPage() {
                   </dd>
                 </div>
               )}
+              {payment.proposal && (
+                <div>
+                  <dt className="text-xs text-gray-500 dark:text-gray-400">Proposal</dt>
+                  <dd className="text-sm font-medium">
+                    <EntityLink type="proposal" id={payment.proposal.id}>
+                      {payment.proposal.title} ({payment.proposal.proposal_number})
+                    </EntityLink>
+                  </dd>
+                </div>
+              )}
               {payment.opportunity && (
                 <div>
                   <dt className="text-xs text-gray-500 dark:text-gray-400">Opportunity</dt>
                   <dd className="text-sm font-medium">
-                    <Link to={`/opportunities/${payment.opportunity.id}`} className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300">
+                    <EntityLink type="opportunity" id={payment.opportunity.id}>
                       {payment.opportunity.name}
-                    </Link>
+                    </EntityLink>
                   </dd>
                 </div>
               )}
@@ -232,13 +242,13 @@ function PaymentDetailPage() {
                 <div>
                   <dt className="text-xs text-gray-500 dark:text-gray-400">Quote</dt>
                   <dd className="text-sm font-medium">
-                    <Link to={`/quotes/${payment.quote.id}`} className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300">
+                    <EntityLink type="quote" id={payment.quote.id}>
                       {payment.quote.title}
-                    </Link>
+                    </EntityLink>
                   </dd>
                 </div>
               )}
-              {!payment.customer && !payment.opportunity && !payment.quote && (
+              {!payment.customer && !payment.opportunity && !payment.quote && !payment.proposal && (
                 <p className="text-sm text-gray-500 dark:text-gray-400">No related entities</p>
               )}
             </dl>

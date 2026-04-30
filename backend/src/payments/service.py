@@ -73,6 +73,41 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             selectinload(Payment.quote),
         ]
 
+    async def attach_proposals(self, payments: list[Payment]) -> None:
+        """Look up Proposals matching each payment's Stripe identifiers and
+        stuff them onto the SQLAlchemy instance as `.proposal` so PaymentResponse
+        (which uses `from_attributes=True`) serializes them. Proposals don't
+        carry a payment_id FK; the only link is shared Stripe artifact IDs.
+        """
+        if not payments:
+            return
+
+        from src.proposals.models import Proposal
+
+        invoice_ids = {p.stripe_invoice_id for p in payments if p.stripe_invoice_id}
+        checkout_ids = {p.stripe_checkout_session_id for p in payments if p.stripe_checkout_session_id}
+        if not invoice_ids and not checkout_ids:
+            for p in payments:
+                p.proposal = None  # type: ignore[attr-defined]
+            return
+
+        clauses = []
+        if invoice_ids:
+            clauses.append(Proposal.stripe_invoice_id.in_(invoice_ids))
+        if checkout_ids:
+            clauses.append(Proposal.stripe_checkout_session_id.in_(checkout_ids))
+        result = await self.db.execute(select(Proposal).where(or_(*clauses)))
+        proposals = list(result.scalars().all())
+        by_invoice = {pr.stripe_invoice_id: pr for pr in proposals if pr.stripe_invoice_id}
+        by_checkout = {pr.stripe_checkout_session_id: pr for pr in proposals if pr.stripe_checkout_session_id}
+        for p in payments:
+            match = None
+            if p.stripe_invoice_id:
+                match = by_invoice.get(p.stripe_invoice_id)
+            if not match and p.stripe_checkout_session_id:
+                match = by_checkout.get(p.stripe_checkout_session_id)
+            p.proposal = match  # type: ignore[attr-defined]
+
     async def get_list(
         self,
         page: int = 1,

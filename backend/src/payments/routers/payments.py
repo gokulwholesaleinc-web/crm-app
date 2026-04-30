@@ -228,4 +228,5 @@ async def get_payment(
         payment, current_user, data_scope.role_name,
         shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_PAYMENTS),
     )
+    await service.attach_proposals([payment])
     return PaymentResponse.model_validate(payment)

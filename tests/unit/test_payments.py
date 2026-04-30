@@ -23,6 +23,7 @@ from src.companies.models import Company
 from src.roles.models import Role, UserRole
 from src.payments.models import StripeCustomer, Product, Price, Payment, Subscription
 from src.payments.service import PaymentService
+from src.proposals.models import Proposal
 
 
 # =========================================================================
@@ -266,6 +267,54 @@ class TestPaymentCRUD:
         assert data["customer"] is not None
         assert data["customer"]["contact_id"] == test_contact.id
         assert data["customer"]["company_id"] is None
+
+    @pytest.mark.asyncio
+    async def test_payment_resolves_proposal_via_stripe_invoice_id(
+        self, client: AsyncClient, db_session, sales_rep_a, rep_a_payment, test_contact,
+    ):
+        """A payment whose stripe_invoice_id matches a Proposal's should
+        surface that proposal in the response so the /payments list can render
+        a 'For Proposal X' link."""
+        rep_a_payment.stripe_invoice_id = "in_test_link_proposal"
+        proposal = Proposal(
+            title="Linkable Proposal",
+            proposal_number="PR-9999-0001",
+            contact_id=test_contact.id,
+            status="awaiting_payment",
+            stripe_invoice_id="in_test_link_proposal",
+            owner_id=sales_rep_a.id,
+            created_by_id=sales_rep_a.id,
+        )
+        db_session.add(proposal)
+        await db_session.commit()
+
+        # List endpoint
+        list_resp = await client.get("/api/payments", headers=_token(sales_rep_a))
+        assert list_resp.status_code == 200
+        items = list_resp.json()["items"]
+        match = next((p for p in items if p["id"] == rep_a_payment.id), None)
+        assert match is not None
+        assert match["proposal"] is not None
+        assert match["proposal"]["id"] == proposal.id
+        assert match["proposal"]["proposal_number"] == "PR-9999-0001"
+
+        # Detail endpoint
+        detail_resp = await client.get(
+            f"/api/payments/{rep_a_payment.id}", headers=_token(sales_rep_a),
+        )
+        assert detail_resp.status_code == 200
+        assert detail_resp.json()["proposal"]["id"] == proposal.id
+
+    @pytest.mark.asyncio
+    async def test_payment_proposal_is_null_when_no_match(
+        self, client: AsyncClient, sales_rep_a, rep_a_payment,
+    ):
+        """A payment with no Stripe invoice should serialize proposal as null."""
+        response = await client.get(
+            f"/api/payments/{rep_a_payment.id}", headers=_token(sales_rep_a),
+        )
+        assert response.status_code == 200
+        assert response.json()["proposal"] is None
 
 
 class TestProductCRUD:
