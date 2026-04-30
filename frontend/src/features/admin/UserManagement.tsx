@@ -53,6 +53,8 @@ export default function UserManagement() {
     user: AdminUser;
     newRole: string;
   } | null>(null);
+  // Holds a pending status toggle so ConfirmDialog can gate it.
+  const [pendingToggle, setPendingToggle] = useState<AdminUser | null>(null);
   const queryClient = useQueryClient();
 
   const deleteMutation = useMutation({
@@ -133,11 +135,39 @@ export default function UserManagement() {
   }, [pendingRoleChange, updateUser]);
 
   const handleToggleActive = useCallback(
-    (userId: number, currentlyActive: boolean) => {
-      updateUser.mutate({ userId, data: { is_active: !currentlyActive } });
+    (user: AdminUser) => {
+      // Last-admin guard: block deactivating the only remaining active admin.
+      if (user.is_active && user.role === 'admin') {
+        const activeAdmins = (users ?? []).filter((u) => u.role === 'admin' && u.is_active);
+        if (activeAdmins.length === 1) {
+          toast.error('Cannot deactivate the last active admin.');
+          return;
+        }
+      }
+      setPendingToggle(user);
     },
-    [updateUser]
+    [users]
   );
+
+  const handleConfirmToggle = useCallback(() => {
+    if (!pendingToggle) return;
+    updateUser.mutate(
+      { userId: pendingToggle.id, data: { is_active: !pendingToggle.is_active } },
+      {
+        onSuccess: () => {
+          toast.success(
+            `${pendingToggle.full_name} is now ${pendingToggle.is_active ? 'inactive' : 'active'}`
+          );
+          setPendingToggle(null);
+        },
+        onError: (err: unknown) => {
+          const msg = err instanceof Error ? err.message : 'Failed to update status';
+          toast.error(msg);
+          setPendingToggle(null);
+        },
+      }
+    );
+  }, [pendingToggle, updateUser]);
 
   const filteredUsers = (users ?? [])
     .filter((u) => {
@@ -204,7 +234,7 @@ export default function UserManagement() {
       render: (row) => (
         <button
           type="button"
-          onClick={() => handleToggleActive(row.id, row.is_active)}
+          onClick={() => handleToggleActive(row)}
           className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
           aria-label={`${row.is_active ? 'Deactivate' : 'Activate'} ${row.full_name}`}
         >
@@ -387,6 +417,34 @@ export default function UserManagement() {
         }
         confirmLabel="Change role"
         variant="warning"
+        isLoading={updateUser.isPending}
+      />
+
+      {/* Status Toggle Confirmation — same friction pattern as role change. */}
+      <ConfirmDialog
+        isOpen={pendingToggle !== null}
+        onClose={() => setPendingToggle(null)}
+        onConfirm={handleConfirmToggle}
+        title={
+          pendingToggle?.is_active ? 'Deactivate user?' : 'Reactivate user?'
+        }
+        message={
+          pendingToggle ? (
+            <>
+              {pendingToggle.is_active ? 'Deactivate' : 'Reactivate'}{' '}
+              <strong>{pendingToggle.full_name}</strong> ({pendingToggle.email})?
+              {pendingToggle.is_active && (
+                <span className="mt-2 block text-gray-600 dark:text-gray-400">
+                  Deactivated users lose login immediately. Owned records remain assigned.
+                </span>
+              )}
+            </>
+          ) : (
+            ''
+          )
+        }
+        confirmLabel={pendingToggle?.is_active ? 'Deactivate' : 'Reactivate'}
+        variant={pendingToggle?.is_active ? 'danger' : 'warning'}
         isLoading={updateUser.isPending}
       />
 

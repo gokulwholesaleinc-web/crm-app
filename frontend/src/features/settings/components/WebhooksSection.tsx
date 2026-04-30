@@ -26,6 +26,8 @@ import {
   BeakerIcon,
   ChevronDownIcon,
   ChevronUpIcon,
+  EyeIcon,
+  EyeSlashIcon,
 } from '@heroicons/react/24/outline';
 
 const AVAILABLE_EVENTS = [
@@ -52,9 +54,14 @@ function WebhookForm({
   onCancel: () => void;
   isLoading: boolean;
 }) {
+  const isEdit = webhook !== undefined;
   const [name, setName] = useState(webhook?.name || '');
   const [url, setUrl] = useState(webhook?.url || '');
-  const [secret, setSecret] = useState(webhook?.secret || '');
+  // Edit mode: start locked (show placeholder ••••••••). User must click "Rotate secret" to enter a new one.
+  // Create mode: start with visible secret input immediately.
+  const [secretRotating, setSecretRotating] = useState(!isEdit);
+  const [secret, setSecret] = useState('');
+  const [showSecret, setShowSecret] = useState(false);
   const [events, setEvents] = useState<string[]>(webhook?.events || []);
   const [isActive, setIsActive] = useState(webhook?.is_active ?? true);
 
@@ -66,12 +73,15 @@ function WebhookForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const data = {
+    // Only transmit `secret` when the user has entered a new one.
+    // In edit mode without rotation, omit secret so the backend keeps the existing value.
+    const secretPayload = secretRotating && secret ? { secret } : {};
+    const data: WebhookCreate | WebhookUpdate = {
       name,
       url,
       events,
-      secret: secret || undefined,
       is_active: isActive,
+      ...secretPayload,
     };
     onSubmit(data);
   };
@@ -109,13 +119,56 @@ function WebhookForm({
         <label htmlFor="webhook-secret" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
           Secret (optional, for HMAC signature)
         </label>
-        <input
-          id="webhook-secret"
-          type="text"
-          value={secret}
-          onChange={(e) => setSecret(e.target.value)}
-          className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-        />
+        {isEdit && !secretRotating ? (
+          <div className="mt-1 flex items-center gap-2">
+            <input
+              id="webhook-secret"
+              type="password"
+              value="placeholder"
+              readOnly
+              placeholder="••••••••"
+              aria-label="Current webhook secret (hidden)"
+              className="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-transparent shadow-sm sm:text-sm"
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setSecretRotating(true);
+                setSecret('');
+                setShowSecret(false);
+              }}
+            >
+              Rotate secret
+            </Button>
+          </div>
+        ) : (
+          <div className="mt-1 relative">
+            <input
+              id="webhook-secret"
+              type={showSecret ? 'text' : 'password'}
+              value={secret}
+              onChange={(e) => setSecret(e.target.value)}
+              autoComplete="new-password"
+              spellCheck={false}
+              placeholder={isEdit ? 'Enter new secret...' : 'Optional HMAC secret...'}
+              className="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm pr-10"
+            />
+            <button
+              type="button"
+              onClick={() => setShowSecret((v) => !v)}
+              aria-label={showSecret ? 'Hide secret' : 'Show secret'}
+              className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 focus-visible:outline-none"
+            >
+              {showSecret ? (
+                <EyeSlashIcon className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <EyeIcon className="h-4 w-4" aria-hidden="true" />
+              )}
+            </button>
+          </div>
+        )}
       </div>
       <div>
         <span className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Events</span>

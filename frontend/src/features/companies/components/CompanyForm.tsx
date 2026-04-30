@@ -203,6 +203,7 @@ export function CompanyForm({
         <Input
           {...register('name', { required: 'Company name is required' })}
           label="Company Name"
+          autoComplete="organization"
           placeholder="Enter company name..."
           error={errors.name?.message}
         />
@@ -220,14 +221,17 @@ export function CompanyForm({
           {...register('website')}
           type="url"
           label="Website"
+          autoComplete="url"
           placeholder="https://example.com..."
         />
         <Input
           {...register('email')}
           type="email"
           label="Email"
-          placeholder="contact@example.com..."
+          autoComplete="email"
+          inputMode="email"
           spellCheck={false}
+          placeholder="contact@example.com..."
         />
       </div>
 
@@ -260,13 +264,15 @@ export function CompanyForm({
           {...register('phone')}
           type="tel"
           label="Phone"
+          autoComplete="tel"
+          inputMode="tel"
           placeholder="+1 (555) 000-0000..."
         />
       </div>
 
       {/* Business Info */}
       <div className="border-t pt-4 mt-4">
-        <h4 className="text-sm font-medium text-gray-700 mb-3">Business Details</h4>
+        <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Business Details</h4>
         <div className="grid grid-cols-2 gap-4">
           <Input
             {...register('annual_revenue')}
@@ -285,16 +291,18 @@ export function CompanyForm({
 
       {/* Address */}
       <div className="border-t pt-4 mt-4">
-        <h4 className="text-sm font-medium text-gray-700 mb-3">Address</h4>
+        <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Address</h4>
         <Input
           {...register('address_line1')}
           label="Address Line 1"
+          autoComplete="address-line1"
           placeholder="Street address..."
         />
         <div className="mt-4">
           <Input
             {...register('address_line2')}
             label="Address Line 2"
+            autoComplete="address-line2"
             placeholder="Suite, unit, etc. (optional)"
           />
         </div>
@@ -302,11 +310,13 @@ export function CompanyForm({
           <Input
             {...register('city')}
             label="City"
+            autoComplete="address-level2"
             placeholder="City..."
           />
           <Input
             {...register('state')}
             label="State/Province"
+            autoComplete="address-level1"
             placeholder="State..."
           />
         </div>
@@ -314,11 +324,13 @@ export function CompanyForm({
           <Input
             {...register('postal_code')}
             label="Postal Code"
+            autoComplete="postal-code"
             placeholder="Postal code..."
           />
           <Input
             {...register('country')}
             label="Country"
+            autoComplete="country-name"
             placeholder="Country..."
           />
         </div>
@@ -326,12 +338,13 @@ export function CompanyForm({
 
       {/* Social */}
       <div className="border-t pt-4 mt-4">
-        <h4 className="text-sm font-medium text-gray-700 mb-3">Social Links</h4>
+        <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Social Links</h4>
         <div className="grid grid-cols-2 gap-4">
           <Input
             {...register('linkedin_url')}
             type="url"
             label="LinkedIn URL"
+            autoComplete="url"
             spellCheck={false}
             placeholder="https://linkedin.com/company/..."
           />
@@ -346,7 +359,7 @@ export function CompanyForm({
 
       {/* Account & Creative */}
       <div className="border-t pt-4 mt-4">
-        <h4 className="text-sm font-medium text-gray-700 mb-3">Account & Creative</h4>
+        <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Account & Creative</h4>
         <div className="grid grid-cols-2 gap-4">
           <Controller
             name="link_creative_tier"

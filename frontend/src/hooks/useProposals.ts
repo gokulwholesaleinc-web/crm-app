@@ -134,6 +134,17 @@ export function useRejectProposal() {
   });
 }
 
+export function useResendProposalPaymentLink() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (proposalId: number) => proposalsApi.resendPaymentLink(proposalId),
+    onSuccess: (_data, proposalId) => {
+      queryClient.invalidateQueries({ queryKey: proposalKeys.detail(proposalId) });
+    },
+  });
+}
+
 // AI Generation Hook
 
 /**

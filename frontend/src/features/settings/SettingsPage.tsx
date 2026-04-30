@@ -11,7 +11,6 @@ import { Avatar } from '../../components/ui/Avatar';
 import { Spinner } from '../../components/ui/Spinner';
 import { Button } from '../../components/ui/Button';
 import {
-  UserCircleIcon,
   Cog6ToothIcon,
   BellIcon,
   ShieldCheckIcon,
@@ -248,31 +247,6 @@ function SettingsPage() {
               </div>
             </div>
 
-            {/* Profile Settings */}
-            <button
-              type="button"
-              className="w-full py-3 sm:py-4 first:pt-0 last:pb-0 text-left hover:bg-gray-50 dark:hover:bg-gray-700 -mx-4 sm:-mx-6 px-4 sm:px-6 transition-colors"
-              onClick={() => setIsEditModalOpen(true)}
-            >
-              <div className="flex items-start sm:items-center gap-3 sm:space-x-4">
-                <div className="flex-shrink-0">
-                  <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
-                    <UserCircleIcon className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600 dark:text-orange-400" />
-                  </div>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                    Edit Profile
-                  </p>
-                  <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-                    Update your personal information and avatar
-                  </p>
-                </div>
-                <div className="text-xs sm:text-sm text-primary-600 font-medium flex-shrink-0">
-                  Edit
-                </div>
-              </div>
-            </button>
           </div>
         </CardBody>
       </Card>

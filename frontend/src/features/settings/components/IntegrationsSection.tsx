@@ -4,10 +4,12 @@
  * with connect/disconnect/sync actions.
  */
 
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardHeader, CardBody } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { Spinner } from '../../../components/ui/Spinner';
+import { ConfirmDialog } from '../../../components/ui/ConfirmDialog';
 import {
   getCalendarAuthUrl,
   disconnectCalendar,
@@ -44,8 +46,7 @@ function ConnectionBadge({ connected }: { connected: boolean }) {
   );
 }
 
-function GoogleCalendarCard() {
-  const queryClient = useQueryClient();
+function GoogleCalendarCard({ onRequestDisconnect }: { onRequestDisconnect: () => void }) {
   const { status, connected, isLoadingStatus, sync, isSyncing } = useGoogleCalendarSync();
 
   const connectMutation = useMutation({
@@ -58,14 +59,6 @@ function GoogleCalendarCard() {
     },
     onError: () => {
       toast.error('Google Calendar integration is not configured. Contact your administrator.');
-    },
-  });
-
-  const disconnectMutation = useMutation({
-    mutationFn: disconnectCalendar,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['integrations', 'google-calendar'] });
-      toast.success('Google Calendar disconnected');
     },
   });
 
@@ -113,8 +106,7 @@ function GoogleCalendarCard() {
               variant="danger"
               size="sm"
               leftIcon={<XMarkIcon className="h-4 w-4" />}
-              onClick={() => disconnectMutation.mutate()}
-              disabled={disconnectMutation.isPending}
+              onClick={onRequestDisconnect}
               aria-label="Disconnect Google Calendar"
             >
               Disconnect
@@ -137,9 +129,7 @@ function GoogleCalendarCard() {
   );
 }
 
-function MetaCard() {
-  const queryClient = useQueryClient();
-
+function MetaCard({ onRequestDisconnect }: { onRequestDisconnect: () => void }) {
   const { data: status, isLoading } = useQuery<MetaConnectionStatus>({
     queryKey: ['integrations', 'meta', 'status'],
     queryFn: getMetaStatus,
@@ -155,14 +145,6 @@ function MetaCard() {
     },
     onError: () => {
       toast.error('Meta integration is not configured. Contact your administrator.');
-    },
-  });
-
-  const disconnectMutation = useMutation({
-    mutationFn: disconnectMeta,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['integrations', 'meta'] });
-      toast.success('Meta disconnected');
     },
   });
 
@@ -213,8 +195,7 @@ function MetaCard() {
             variant="danger"
             size="sm"
             leftIcon={<XMarkIcon className="h-4 w-4" />}
-            onClick={() => disconnectMutation.mutate()}
-            disabled={disconnectMutation.isPending}
+            onClick={onRequestDisconnect}
             aria-label="Disconnect Meta"
           >
             Disconnect
@@ -236,7 +217,7 @@ function MetaCard() {
   );
 }
 
-function GmailCard() {
+function GmailCard({ onRequestDisconnect }: { onRequestDisconnect: () => void }) {
   const queryClient = useQueryClient();
 
   const { data: status, isLoading } = useQuery<GmailStatus>({
@@ -253,14 +234,6 @@ function GmailCard() {
     },
     onError: () => {
       toast.error('Gmail integration is not configured. Contact your administrator.');
-    },
-  });
-
-  const disconnectMutation = useMutation({
-    mutationFn: disconnectGmail,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['integrations', 'gmail'] });
-      toast.success('Gmail disconnected');
     },
   });
 
@@ -322,8 +295,7 @@ function GmailCard() {
               variant="danger"
               size="sm"
               leftIcon={<XMarkIcon className="h-4 w-4" />}
-              onClick={() => disconnectMutation.mutate()}
-              disabled={disconnectMutation.isPending}
+              onClick={onRequestDisconnect}
               aria-label="Disconnect Gmail"
             >
               Disconnect
@@ -346,7 +318,62 @@ function GmailCard() {
   );
 }
 
+type DisconnectingIntegration = 'gmail' | 'calendar' | 'meta' | null;
+
+const DISCONNECT_MESSAGES: Record<Exclude<DisconnectingIntegration, null>, string> = {
+  gmail: 'The CRM will stop sending emails on your behalf and inbound sync will pause.',
+  calendar: 'Activities will no longer sync to/from Google Calendar.',
+  meta: 'LinkedIn campaigns will stop syncing audiences.',
+};
+
+const DISCONNECT_TITLES: Record<Exclude<DisconnectingIntegration, null>, string> = {
+  gmail: 'Disconnect Gmail?',
+  calendar: 'Disconnect Google Calendar?',
+  meta: 'Disconnect Meta?',
+};
+
 export function IntegrationsSection() {
+  const queryClient = useQueryClient();
+  const [disconnectingIntegration, setDisconnectingIntegration] = useState<DisconnectingIntegration>(null);
+
+  const calendarDisconnectMutation = useMutation({
+    mutationFn: disconnectCalendar,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['integrations', 'google-calendar'] });
+      toast.success('Google Calendar disconnected');
+      setDisconnectingIntegration(null);
+    },
+  });
+
+  const metaDisconnectMutation = useMutation({
+    mutationFn: disconnectMeta,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['integrations', 'meta'] });
+      toast.success('Meta disconnected');
+      setDisconnectingIntegration(null);
+    },
+  });
+
+  const gmailDisconnectMutation = useMutation({
+    mutationFn: disconnectGmail,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['integrations', 'gmail'] });
+      toast.success('Gmail disconnected');
+      setDisconnectingIntegration(null);
+    },
+  });
+
+  const handleConfirmDisconnect = () => {
+    if (disconnectingIntegration === 'gmail') gmailDisconnectMutation.mutate();
+    else if (disconnectingIntegration === 'calendar') calendarDisconnectMutation.mutate();
+    else if (disconnectingIntegration === 'meta') metaDisconnectMutation.mutate();
+  };
+
+  const isDisconnecting =
+    gmailDisconnectMutation.isPending ||
+    calendarDisconnectMutation.isPending ||
+    metaDisconnectMutation.isPending;
+
   return (
     <div id="integrations" className="scroll-mt-20">
       <Card>
@@ -356,12 +383,23 @@ export function IntegrationsSection() {
         />
         <CardBody className="p-4 sm:p-6">
           <div className="divide-y divide-gray-200 dark:divide-gray-700">
-            <GmailCard />
-            <GoogleCalendarCard />
-            <MetaCard />
+            <GmailCard onRequestDisconnect={() => setDisconnectingIntegration('gmail')} />
+            <GoogleCalendarCard onRequestDisconnect={() => setDisconnectingIntegration('calendar')} />
+            <MetaCard onRequestDisconnect={() => setDisconnectingIntegration('meta')} />
           </div>
         </CardBody>
       </Card>
+
+      <ConfirmDialog
+        isOpen={disconnectingIntegration !== null}
+        onClose={() => setDisconnectingIntegration(null)}
+        onConfirm={handleConfirmDisconnect}
+        title={disconnectingIntegration ? DISCONNECT_TITLES[disconnectingIntegration] : ''}
+        message={disconnectingIntegration ? DISCONNECT_MESSAGES[disconnectingIntegration] : ''}
+        confirmLabel="Disconnect"
+        variant="danger"
+        isLoading={isDisconnecting}
+      />
     </div>
   );
 }
