@@ -159,6 +159,14 @@ class QuoteBrief(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ProposalBrief(BaseModel):
+    id: int
+    title: str
+    proposal_number: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class PaymentResponse(PaymentBase):
     id: int
     stripe_payment_intent_id: str | None = None
@@ -169,6 +177,11 @@ class PaymentResponse(PaymentBase):
     customer: CustomerBrief | None = None
     opportunity: OpportunityBrief | None = None
     quote: QuoteBrief | None = None
+    # Proposals don't have a direct FK on Payment; resolved at serialization
+    # time by matching stripe_invoice_id / stripe_checkout_session_id between
+    # Payment and Proposal. None when the payment didn't originate from a
+    # proposal e-sign accept.
+    proposal: ProposalBrief | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

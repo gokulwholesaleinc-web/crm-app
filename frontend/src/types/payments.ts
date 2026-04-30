@@ -50,6 +50,7 @@ export interface Payment extends PaymentBase {
   customer?: StripeCustomerBrief | null;
   opportunity?: { id: number; name: string } | null;
   quote?: { id: number; title: string } | null;
+  proposal?: { id: number; title: string; proposal_number: string } | null;
   created_at: string;
   updated_at: string;
 }

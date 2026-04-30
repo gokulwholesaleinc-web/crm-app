@@ -41,6 +41,8 @@ async def list_payments(
         search=search,
     )
 
+    await service.attach_proposals(payments_list)
+
     return PaymentListResponse(
         items=[PaymentResponse.model_validate(p) for p in payments_list],
         total=total,

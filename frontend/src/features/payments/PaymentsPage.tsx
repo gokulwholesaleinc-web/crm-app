@@ -34,6 +34,33 @@ function CustomerLink({
   return <>{label}</>;
 }
 
+// Renders the entity this payment is for: proposal > quote > opportunity.
+// Returns a placeholder when the payment was created standalone.
+export function PaymentForLink({ payment }: { payment: Payment }) {
+  if (payment.proposal) {
+    return (
+      <EntityLink type="proposal" id={payment.proposal.id} variant="muted" title={payment.proposal.title}>
+        Proposal {payment.proposal.proposal_number}
+      </EntityLink>
+    );
+  }
+  if (payment.quote) {
+    return (
+      <EntityLink type="quote" id={payment.quote.id} variant="muted" title={payment.quote.title}>
+        Quote #{payment.quote.id}
+      </EntityLink>
+    );
+  }
+  if (payment.opportunity) {
+    return (
+      <EntityLink type="opportunity" id={payment.opportunity.id} variant="muted" title={payment.opportunity.name}>
+        Opportunity #{payment.opportunity.id}
+      </EntityLink>
+    );
+  }
+  return <span className="text-gray-400 dark:text-gray-500">—</span>;
+}
+
 const TABS = ['All Payments', 'Subscriptions'] as const;
 type Tab = (typeof TABS)[number];
 
@@ -236,6 +263,11 @@ function PaymentsPage() {
                       </span>
                       <span className="text-gray-500 dark:text-gray-400">{formatDate(payment.created_at)}</span>
                     </div>
+                    {(payment.proposal || payment.quote || payment.opportunity) && (
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 truncate">
+                        For <PaymentForLink payment={payment} />
+                      </p>
+                    )}
                     {payment.payment_method && (
                       <p className="mt-1 text-xs text-gray-400 dark:text-gray-500 truncate">
                         {payment.payment_method}
@@ -255,6 +287,9 @@ function PaymentsPage() {
                       </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         Customer
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        For
                       </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         Status
@@ -283,6 +318,9 @@ function PaymentsPage() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                           <CustomerLink customer={payment.customer} />
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                          <PaymentForLink payment={payment} />
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <StatusBadge status={payment.status} size="sm" showDot={false} />
