@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 
 const { mockGet, mockPost, mockPublicClient } = vi.hoisted(() => {
@@ -14,9 +14,9 @@ vi.mock('axios', () => ({
 
 import PublicProposalView from './PublicProposalView';
 
-function renderAt(token = 'abc123') {
+function renderAt(token = 'abc123', search = '') {
   return render(
-    <MemoryRouter initialEntries={[`/proposals/public/${token}`]}>
+    <MemoryRouter initialEntries={[`/proposals/public/${token}${search}`]}>
       <Routes>
         <Route path="/proposals/public/:token" element={<PublicProposalView />} />
       </Routes>
@@ -261,6 +261,91 @@ describe('PublicProposalView', () => {
     renderAt();
     await waitFor(() => screen.getByRole('heading', { level: 1 }));
     expect(screen.queryByRole('button', { name: 'Accept this proposal' })).not.toBeInTheDocument();
+  });
+
+  it('shows "Confirming your payment…" banner when ?paid=1 lands and status is not yet paid', async () => {
+    mockGet.mockResolvedValue({
+      data: {
+        ...baseProposal,
+        status: 'awaiting_payment',
+        payment_type: 'subscription',
+        stripe_payment_url: 'https://checkout.stripe.com/c/pay/cs_test_xyz',
+      },
+    });
+    renderAt('abc123', '?paid=1');
+    await waitFor(() =>
+      expect(screen.getByText('Confirming your payment…')).toBeInTheDocument()
+    );
+    // Pay CTA should be hidden so user can't double-pay.
+    expect(screen.queryByRole('link', { name: /Complete payment setup/ })).not.toBeInTheDocument();
+  });
+
+  it('flips to "Payment received" once polling sees status=paid', async () => {
+    vi.useFakeTimers();
+    try {
+      const pending = {
+        ...baseProposal,
+        status: 'awaiting_payment',
+        payment_type: 'subscription' as const,
+        stripe_payment_url: 'https://checkout.stripe.com/c/pay/cs_test_xyz',
+      };
+      const paid = { ...pending, status: 'paid', paid_at: '2026-04-30T12:00:00Z' };
+      mockGet
+        .mockResolvedValueOnce({ data: pending })   // initial fetch
+        .mockResolvedValueOnce({ data: paid });     // first poll tick
+
+      renderAt('abc123', '?paid=1');
+
+      // Flush the initial fetch promise so the confirming banner renders.
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(screen.getByText('Confirming your payment…')).toBeInTheDocument();
+
+      // Advance past the first poll interval (3s); advanceTimersByTimeAsync
+      // also flushes microtasks so the GET promise + setProposal land.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3500);
+      });
+
+      expect(screen.getByText('Payment received')).toBeInTheDocument();
+      expect(screen.queryByText('Confirming your payment…')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('shows "Payment is processing" banner after the poll window expires', async () => {
+    vi.useFakeTimers();
+    try {
+      const pending = {
+        ...baseProposal,
+        status: 'awaiting_payment',
+        payment_type: 'subscription' as const,
+        stripe_payment_url: 'https://checkout.stripe.com/c/pay/cs_test_xyz',
+      };
+      // Every poll keeps returning pending — webhook never lands.
+      mockGet.mockResolvedValue({ data: pending });
+
+      renderAt('abc123', '?paid=1');
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(screen.getByText('Confirming your payment…')).toBeInTheDocument();
+
+      // 30s poll window + a couple of intervals of slack.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(35000);
+      });
+
+      expect(screen.getByText('Payment is processing')).toBeInTheDocument();
+      expect(screen.queryByText('Confirming your payment…')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('renders optional sections only when content is provided', async () => {
