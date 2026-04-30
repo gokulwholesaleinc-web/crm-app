@@ -27,6 +27,7 @@ from src.email.schemas import (
 )
 from src.email.service import EmailService
 from src.email.throttle import EmailThrottleService
+from src.email.types import EmailAttachment
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,22 @@ async def send_email(
     db: DBSession,
 ):
     """Send an email and queue it for tracking."""
+    # Decode user-supplied attachments once into the in-memory form the
+    # provider sender expects. Schema-level validators have already
+    # range-checked size + count + base64 validity, so we can decode
+    # without re-validating here. Bytes are passed straight through to
+    # the provider and never land on the EmailQueue row.
+    decoded_attachments: list[EmailAttachment] | None = None
+    if data.attachments:
+        decoded_attachments = [
+            EmailAttachment(
+                filename=att.filename,
+                content=base64.b64decode(att.content_b64),
+                content_type=att.content_type,
+            )
+            for att in data.attachments
+        ]
+
     service = EmailService(db)
     email = await service.queue_email(
         to_email=data.to_email,
@@ -58,6 +75,7 @@ async def send_email(
         bcc=data.bcc,
         reply_to_email_id=data.reply_to_email_id,
         reply_to_inbound_id=data.reply_to_inbound_id,
+        attachments=decoded_attachments,
     )
     return email
 

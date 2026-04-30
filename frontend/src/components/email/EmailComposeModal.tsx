@@ -1,8 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Modal, Button, ConfirmDialog } from '../ui';
+import { PaperClipIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { useSendEmail } from '../../hooks/useEmail';
 import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
+import { showError } from '../../utils/toast';
 import type { ThreadEmailItem } from '../../types/email';
+import type { InlineAttachmentPayload } from '../../api/email';
 
 interface EmailComposeModalProps {
   isOpen: boolean;
@@ -12,6 +15,95 @@ interface EmailComposeModalProps {
   entityId?: number;
   replyTo?: ThreadEmailItem | null;
   fromEmail?: string;
+}
+
+interface StagedAttachment {
+  filename: string;
+  content_type: string;
+  size: number;
+  content_b64: string;
+}
+
+// Mirrors backend MAX_ATTACHMENTS_TOTAL_BYTES — Gmail's 25 MB user-facing
+// cap also bounds Resend's accepted size, so the same number applies on
+// both providers. Exposed as a constant so the helper text stays in sync
+// if we ever raise the limit.
+const MAX_TOTAL_BYTES = 25 * 1024 * 1024;
+const MAX_ATTACHMENT_COUNT = 10;
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== 'string') {
+        reject(new Error('FileReader returned a non-string result'));
+        return;
+      }
+      // result is a data URL: "data:<mime>;base64,<payload>" — strip the prefix.
+      const comma = result.indexOf(',');
+      resolve(comma === -1 ? result : result.slice(comma + 1));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('FileReader failed'));
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Build the Gmail-style quote block we prefill on Reply.
+ *
+ * Plain-text only: HTML quoting requires sanitization on every render
+ * (DOMPurify allowlist drift is a known footgun) and our compose textarea
+ * is plaintext anyway. The header line follows the standard
+ * "On {date}, {sender} wrote:" form so it round-trips cleanly into the
+ * recipient's mail client even if they're reading in plain text.
+ */
+function buildQuotedReply(replyTo: ThreadEmailItem): string {
+  // The header attributes the QUOTED message to its author, not the
+  // current reply target. For outbound rows the original sender is
+  // the CRM user (`from_email`); for inbound rows it's the customer.
+  // Earlier this branch flipped to `to_email` on outbound and
+  // attributed the user's own copy to the customer.
+  const sender = replyTo.from_email ?? 'sender';
+  const when = new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(replyTo.timestamp));
+  // Prefer plain body. body_html falls back through a strip — we're
+  // displaying inside a <textarea>, so anything not stripped becomes
+  // visible markup noise. In practice CRM-sent emails have body set.
+  const rawBody = replyTo.body ?? stripHtml(replyTo.body_html ?? '') ?? '';
+  const quotedLines = rawBody
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((line) => `> ${line}`)
+    .join('\n');
+  return `On ${when}, ${sender} wrote:\n${quotedLines}`;
+}
+
+function stripHtml(html: string): string {
+  // Lightweight tag stripper. Inline within compose flow only — never
+  // used for HTML rendering, so XSS is moot here. Replace block tags
+  // with newlines so paragraphs stay readable in the quote.
+  return html
+    .replace(/<\/(p|div|br|li|tr|h[1-6])>/gi, '\n')
+    .replace(/<br\s*\/?>(\r?\n)?/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .trim();
 }
 
 export function EmailComposeModal({
@@ -30,9 +122,24 @@ export function EmailComposeModal({
   const [bcc, setBcc] = useState('');
   const [showCcBcc, setShowCcBcc] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  // Quoted-reply block sits in its own state so the user's reply text and
+  // the prefilled quote can be independently edited without one stomping
+  // the other when toggled.
+  const [quotedText, setQuotedText] = useState('');
+  const [showQuoted, setShowQuoted] = useState(false);
+  const [attachments, setAttachments] = useState<StagedAttachment[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const sendEmailMutation = useSendEmail();
 
-  const isDirty = subject !== '' || body !== '' || cc !== '' || bcc !== '';
+  const totalAttachmentBytes = attachments.reduce((sum, a) => sum + a.size, 0);
+  const overLimit = totalAttachmentBytes > MAX_TOTAL_BYTES;
+
+  const isDirty =
+    subject !== '' ||
+    body !== '' ||
+    cc !== '' ||
+    bcc !== '' ||
+    attachments.length > 0;
   useUnsavedChangesWarning(isDirty);
 
   const handleClose = () => {
@@ -48,8 +155,6 @@ export function EmailComposeModal({
   // a new default recipient doesn't wipe in-progress edits mid-compose.
   useEffect(() => {
     if (replyTo) {
-      // Outbound replyTo's from_email is the CRM user, so continue the thread
-      // by sending back to the original recipient (to_email).
       const replyRecipient =
         replyTo.direction === 'outbound' ? replyTo.to_email : replyTo.from_email;
       setTo(replyRecipient || '');
@@ -61,6 +166,9 @@ export function EmailComposeModal({
       setBody('');
       setCc(replyTo.cc || '');
       setShowCcBcc(!!replyTo.cc);
+      setQuotedText(buildQuotedReply(replyTo));
+      setShowQuoted(false); // collapsed by default — keep the compose surface focused on the user's reply
+      setAttachments([]);
     } else {
       setTo(defaultTo);
       setSubject('');
@@ -68,19 +176,83 @@ export function EmailComposeModal({
       setCc('');
       setBcc('');
       setShowCcBcc(false);
+      setQuotedText('');
+      setShowQuoted(false);
+      setAttachments([]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [replyTo]);
 
+  const handleFilesPicked = async (filesList: FileList | null) => {
+    if (!filesList || filesList.length === 0) return;
+    const files = Array.from(filesList);
+    if (attachments.length + files.length > MAX_ATTACHMENT_COUNT) {
+      showError(`Max ${MAX_ATTACHMENT_COUNT} attachments per email.`);
+      return;
+    }
+
+    try {
+      const next: StagedAttachment[] = [];
+      for (const file of files) {
+        if (file.size === 0) {
+          showError(`"${file.name}" is empty and was skipped.`);
+          continue;
+        }
+        if (file.size > MAX_TOTAL_BYTES) {
+          showError(`"${file.name}" is over the 25 MB limit.`);
+          continue;
+        }
+        const content_b64 = await readFileAsBase64(file);
+        next.push({
+          filename: file.name,
+          content_type: file.type || 'application/octet-stream',
+          size: file.size,
+          content_b64,
+        });
+      }
+      setAttachments((curr) => [...curr, ...next]);
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Failed to read attachment.');
+    } finally {
+      // Always reset the input so the same file can be re-picked.
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const removeAttachment = (index: number) => {
+    setAttachments((curr) => curr.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (overLimit) {
+      showError(
+        `Attachments total ${formatBytes(totalAttachmentBytes)} — over the 25 MB limit.`
+      );
+      return;
+    }
     const replyToEmailId = replyTo?.direction === 'outbound' ? replyTo.id : undefined;
     const replyToInboundId = replyTo?.direction === 'inbound' ? replyTo.id : undefined;
+
+    // Combined body = user reply + (always-included) quoted block. The
+    // showQuoted toggle only controls *display* of the quote in the
+    // compose surface — it always ships on send so the recipient has
+    // context.
+    const finalBody = quotedText
+      ? body.trimEnd() + '\n\n' + quotedText
+      : body;
+
+    const apiAttachments: InlineAttachmentPayload[] = attachments.map((a) => ({
+      filename: a.filename,
+      content_type: a.content_type,
+      content_b64: a.content_b64,
+    }));
+
     try {
       await sendEmailMutation.mutateAsync({
         to_email: to,
         subject,
-        body,
+        body: finalBody,
         from_email: fromEmail || undefined,
         cc: cc || undefined,
         bcc: bcc || undefined,
@@ -88,6 +260,7 @@ export function EmailComposeModal({
         entity_id: entityId,
         reply_to_email_id: replyToEmailId,
         reply_to_inbound_id: replyToInboundId,
+        attachments: apiAttachments.length > 0 ? apiAttachments : undefined,
       });
       setTo(defaultTo);
       setSubject('');
@@ -95,6 +268,9 @@ export function EmailComposeModal({
       setCc('');
       setBcc('');
       setShowCcBcc(false);
+      setQuotedText('');
+      setShowQuoted(false);
+      setAttachments([]);
       onClose();
     } catch {
       // Error handled by mutation
@@ -231,15 +407,115 @@ export function EmailComposeModal({
             value={body}
             onChange={(e) => setBody(e.target.value)}
             className={inputClass}
-            placeholder="Write your email..."
+            placeholder={replyTo ? 'Type your reply...' : 'Write your email...'}
           />
+        </div>
+
+        {/* Quoted-reply block — collapsed by default to keep the compose
+            surface focused on the user's reply, but always sent on
+            submit so the recipient has thread context. */}
+        {quotedText && (
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => setShowQuoted((v) => !v)}
+              className="text-xs text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 font-medium focus-visible:outline-none focus-visible:underline"
+              aria-expanded={showQuoted}
+              aria-controls="email-quoted-text"
+            >
+              {showQuoted ? 'Hide quoted text' : 'Show quoted text'}
+            </button>
+            {showQuoted && (
+              <textarea
+                id="email-quoted-text"
+                name="quoted"
+                rows={6}
+                value={quotedText}
+                onChange={(e) => setQuotedText(e.target.value)}
+                className={`${inputClass} font-mono text-xs`}
+                aria-label="Quoted message"
+              />
+            )}
+          </div>
+        )}
+
+        {/* Attachments */}
+        <div>
+          <div className="flex items-center justify-between">
+            <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Attachments
+            </span>
+            <span
+              className={`text-xs tabular-nums ${
+                overLimit
+                  ? 'text-red-600 dark:text-red-400'
+                  : 'text-gray-500 dark:text-gray-400'
+              }`}
+            >
+              {formatBytes(totalAttachmentBytes)} / 25 MB
+            </span>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="sr-only"
+            onChange={(e) => handleFilesPicked(e.target.files)}
+            aria-label="Attach files"
+          />
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            leftIcon={<PaperClipIcon className="h-4 w-4" />}
+            onClick={() => fileInputRef.current?.click()}
+            disabled={attachments.length >= MAX_ATTACHMENT_COUNT}
+            className="mt-1"
+          >
+            Add files
+          </Button>
+          {attachments.length > 0 && (
+            <ul className="mt-2 space-y-1.5">
+              {attachments.map((att, i) => (
+                <li
+                  key={`${att.filename}:${i}`}
+                  className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 text-xs"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <PaperClipIcon
+                      className="h-3.5 w-3.5 text-gray-400 flex-shrink-0"
+                      aria-hidden="true"
+                    />
+                    <span className="truncate text-gray-900 dark:text-gray-100">
+                      {att.filename}
+                    </span>
+                    <span className="tabular-nums text-gray-500 dark:text-gray-400 flex-shrink-0">
+                      {formatBytes(att.size)}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeAttachment(i)}
+                    className="p-0.5 rounded text-gray-400 hover:text-red-500 dark:hover:text-red-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-red-500"
+                    aria-label={`Remove attachment ${att.filename}`}
+                  >
+                    <XMarkIcon className="h-3.5 w-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         <div className="flex justify-end gap-3 pt-2">
           <Button type="button" variant="secondary" onClick={handleClose}>
             Cancel
           </Button>
-          <Button type="submit" isLoading={sendEmailMutation.isPending}>
+          <Button
+            type="submit"
+            isLoading={sendEmailMutation.isPending}
+            disabled={overLimit}
+          >
             {replyTo ? 'Send Reply' : 'Send Email'}
           </Button>
         </div>
