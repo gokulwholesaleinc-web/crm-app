@@ -5,6 +5,15 @@ import { useEmailThread } from '../../hooks/useEmail';
 import type { ThreadEmailItem } from '../../types/email';
 import type { BadgeVariant } from '../ui/Badge';
 
+// Force all sanitized anchors to open safely in a new tab.
+// Registered once at module scope so it runs only on first import.
+DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+  if (node.tagName === 'A') {
+    node.setAttribute('rel', 'noopener noreferrer');
+    node.setAttribute('target', '_blank');
+  }
+});
+
 interface EmailThreadProps {
   entityType: string;
   entityId: number;
@@ -103,6 +112,8 @@ function EmailBubble({
   const badge = STATUS_BADGE[status] ?? { variant: 'gray' as BadgeVariant, label: status };
   const bodyContent = email.body || '';
   const hasBody = Boolean(email.body_html || bodyContent);
+  // click_count may not yet exist on older records; safe-access via cast
+  const clickCount = (email as ThreadEmailItem & { click_count?: number | null }).click_count;
 
   return (
     <div
@@ -143,6 +154,9 @@ function EmailBubble({
           {isOutbound && email.open_count != null && email.open_count > 0 && (
             <span>Opened {email.open_count}x</span>
           )}
+          {isOutbound && clickCount != null && clickCount > 0 && (
+            <span>Clicked {clickCount}x</span>
+          )}
         </div>
 
         {hasBody && (
@@ -156,7 +170,11 @@ function EmailBubble({
             {email.body_html ? (
               <div
                 dangerouslySetInnerHTML={{
-                  __html: DOMPurify.sanitize(email.body_html, { FORBID_TAGS: ['style', 'form'], FORBID_ATTR: ['style'] }),
+                  __html: DOMPurify.sanitize(email.body_html, {
+                    ALLOWED_TAGS: ['a', 'b', 'i', 'em', 'strong', 'p', 'br', 'div', 'span', 'ul', 'ol', 'li', 'blockquote', 'pre', 'code', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'table', 'thead', 'tbody', 'tr', 'td', 'th', 'img', 'hr'],
+                    ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'target', 'rel'],
+                    ADD_ATTR: ['target'],
+                  }),
                 }}
               />
             ) : (
