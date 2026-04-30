@@ -3,7 +3,7 @@
  * Includes sequence builder, enrollment management, and step processing.
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardHeader, CardBody } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Spinner } from '../../components/ui/Spinner';
@@ -40,6 +40,7 @@ import {
   UserPlusIcon,
 } from '@heroicons/react/24/outline';
 import { SequenceStepBuilder } from './components/SequenceStepBuilder';
+import { useContacts } from '../../hooks/useContacts';
 
 // Step preview badge styling, keyed by SequenceStep.type.
 const STEP_TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -130,7 +131,13 @@ function SequenceForm({
   );
 }
 
-function EnrollmentList({ sequenceId }: { sequenceId: number }) {
+function EnrollmentList({
+  sequenceId,
+  contactById,
+}: {
+  sequenceId: number;
+  contactById: Map<number, { full_name: string }>;
+}) {
   const { data: enrollments, isLoading } = useSequenceEnrollments(sequenceId);
   const pauseMutation = usePauseEnrollment();
   const resumeMutation = useResumeEnrollment();
@@ -149,14 +156,16 @@ function EnrollmentList({ sequenceId }: { sequenceId: number }) {
 
   return (
     <div className="space-y-2">
-      {enrollments.map((e) => (
+      {enrollments.map((e) => {
+        const contactName = contactById.get(e.contact_id)?.full_name ?? `Contact #${e.contact_id}`;
+        return (
         <div
           key={e.id}
           className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
         >
           <div>
             <p className="text-sm text-gray-900 dark:text-gray-100">
-              Contact #{e.contact_id} - Step {e.current_step}
+              {contactName} — Step {e.current_step}
             </p>
             <span
               className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
@@ -191,7 +200,8 @@ function EnrollmentList({ sequenceId }: { sequenceId: number }) {
             )}
           </div>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -260,6 +270,21 @@ function SequencesPage() {
     isOpen: false,
     sequence: null,
   });
+  const [bannerVisible, setBannerVisible] = useState(false);
+
+  useEffect(() => {
+    if (processMutation.isSuccess) {
+      setBannerVisible(true);
+      const timer = setTimeout(() => setBannerVisible(false), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [processMutation.isSuccess]);
+
+  const { data: contactsData } = useContacts({ page_size: 1000 });
+  const contactById = useMemo(
+    () => new Map((contactsData?.items ?? []).map((c) => [c.id, c] as const)),
+    [contactsData]
+  );
 
   const handleCreate = (data: SequenceCreate | SequenceUpdate) => {
     createMutation.mutate(data as SequenceCreate, {
@@ -452,7 +477,7 @@ function SequencesPage() {
                       <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
                         Enrollments
                       </h4>
-                      <EnrollmentList sequenceId={seq.id} />
+                      <EnrollmentList sequenceId={seq.id} contactById={contactById} />
                     </div>
                   )}
                 </>
@@ -462,8 +487,12 @@ function SequencesPage() {
         </div>
       )}
 
-      {processMutation.isSuccess && processMutation.data && (
-        <div className="fixed bottom-4 right-4 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg p-3 shadow-lg">
+      {bannerVisible && processMutation.isSuccess && processMutation.data && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-4 right-4 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg p-3 shadow-lg"
+        >
           <p className="text-sm text-green-800 dark:text-green-300">
             Processed {processMutation.data.processed} due step
             {processMutation.data.processed !== 1 ? 's' : ''}.

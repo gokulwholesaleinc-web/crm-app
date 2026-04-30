@@ -157,6 +157,18 @@ export function AddMembersModal({
         </div>
       </div>
 
+      {/* Truncation banners */}
+      {memberType === 'contact' && contactsData?.total != null && contactsData.total > availableContacts.length && (
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
+          Showing {availableContacts.length} of {contactsData.total} contacts. Use search to narrow down.
+        </p>
+      )}
+      {memberType === 'lead' && leadsData?.total != null && leadsData.total > availableLeads.length && (
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
+          Showing {availableLeads.length} of {leadsData.total} leads. Use search to narrow down.
+        </p>
+      )}
+
       {/* List */}
       <div className="overflow-y-auto max-h-[40vh]">
         {isLoadingItems ? (

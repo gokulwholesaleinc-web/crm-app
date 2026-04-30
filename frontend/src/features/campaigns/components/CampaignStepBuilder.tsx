@@ -102,6 +102,7 @@ export function CampaignStepBuilder({
                   disabled={index === 0 || isLoading}
                   className="p-1 rounded hover:bg-gray-100 disabled:opacity-30"
                   title="Move up"
+                  aria-label={`Move step ${index + 1} up`}
                 >
                   <ArrowUpIcon className="h-4 w-4 text-gray-500" />
                 </button>
@@ -110,6 +111,7 @@ export function CampaignStepBuilder({
                   disabled={index === sortedSteps.length - 1 || isLoading}
                   className="p-1 rounded hover:bg-gray-100 disabled:opacity-30"
                   title="Move down"
+                  aria-label={`Move step ${index + 1} down`}
                 >
                   <ArrowDownIcon className="h-4 w-4 text-gray-500" />
                 </button>
@@ -118,6 +120,7 @@ export function CampaignStepBuilder({
                   disabled={isLoading}
                   className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500"
                   title="Remove step"
+                  aria-label={`Remove step ${index + 1}`}
                 >
                   <TrashIcon className="h-4 w-4" />
                 </button>
