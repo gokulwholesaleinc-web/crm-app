@@ -91,7 +91,9 @@ export interface KanbanOpportunity {
   currency: string;
   weighted_amount?: number | null;
   expected_close_date?: string | null;
+  contact_id?: number | null;
   contact_name?: string | null;
+  company_id?: number | null;
   company_name?: string | null;
   owner_id?: number | null;
 }

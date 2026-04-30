@@ -123,7 +123,9 @@ class KanbanOpportunity(BaseModel):
     currency: str
     weighted_amount: float | None
     expected_close_date: str | None
+    contact_id: int | None
     contact_name: str | None
+    company_id: int | None
     company_name: str | None
     owner_id: int | None
 

@@ -1,6 +1,7 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { KanbanOpportunity } from '../../../types';
+import { EntityLink } from '../../../components/ui';
 import { encodeOppDragId } from '../utils/dragIds';
 import { formatCurrency } from '../../../utils';
 
@@ -22,12 +23,22 @@ export function SortableOppCard({
     transition,
     opacity: isDragging ? 0.5 : 1,
   };
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onClick();
+    }
+  };
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onClick}
-        className="w-full text-left bg-emerald-50 dark:bg-emerald-900/20 rounded-lg shadow-sm border border-emerald-200 dark:border-emerald-800 p-3 hover:shadow-md transition-shadow duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+        onKeyDown={handleKeyDown}
+        aria-label={`Open ${opportunity.name}`}
+        className="w-full text-left bg-emerald-50 dark:bg-emerald-900/20 rounded-lg shadow-sm border border-emerald-200 dark:border-emerald-800 p-3 hover:shadow-md transition-shadow duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 cursor-pointer"
       >
         <div className="space-y-1.5">
           <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 line-clamp-2">
@@ -35,7 +46,9 @@ export function SortableOppCard({
           </h4>
           {opportunity.company_name && (
             <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-              {opportunity.company_name}
+              <EntityLink type="company" id={opportunity.company_id} variant="muted">
+                {opportunity.company_name}
+              </EntityLink>
             </p>
           )}
           <div className="flex items-center justify-between gap-2">
@@ -62,11 +75,13 @@ export function SortableOppCard({
                   d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
                 />
               </svg>
-              <span className="truncate">{opportunity.contact_name}</span>
+              <EntityLink type="contact" id={opportunity.contact_id} variant="muted" className="truncate">
+                {opportunity.contact_name}
+              </EntityLink>
             </div>
           )}
         </div>
-      </button>
+      </div>
     </div>
   );
 }

@@ -9,6 +9,8 @@ export interface StripeCustomerBrief {
   stripe_customer_id: string;
   email: string | null;
   name: string | null;
+  contact_id?: number | null;
+  company_id?: number | null;
 }
 
 export interface StripeCustomer extends StripeCustomerBrief {

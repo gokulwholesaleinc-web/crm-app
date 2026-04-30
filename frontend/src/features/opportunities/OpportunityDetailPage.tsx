@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
+import { Button, EntityLink, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { TabBar, ActivitiesTab, CommonTabContent } from '../../components/shared/DetailPageShell';
 import { OpportunityForm, OpportunityFormData } from './components/OpportunityForm';
 import { AIInsightsCard, NextBestActionCard } from '../../components/ai';
@@ -158,7 +158,11 @@ function OpportunityDetailPage() {
                 {opportunity.pipeline_stage?.name || stageName}
               </span>
               {opportunity.company?.name && (
-                <span className="text-sm text-gray-500 dark:text-gray-400">{opportunity.company.name}</span>
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  <EntityLink type="company" id={opportunity.company.id} variant="muted">
+                    {opportunity.company.name}
+                  </EntityLink>
+                </span>
               )}
             </div>
           </div>

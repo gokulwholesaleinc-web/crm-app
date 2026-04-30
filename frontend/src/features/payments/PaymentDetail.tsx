@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeftIcon, DocumentArrowDownIcon, EnvelopeIcon } from '@heroicons/react/24/outline';
-import { StatusBadge } from '../../components/ui';
+import { EntityLink, StatusBadge } from '../../components/ui';
 import { usePayment } from '../../hooks/usePayments';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
@@ -198,14 +198,23 @@ function PaymentDetailPage() {
           <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700">
             <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-4">Related</h2>
             <dl className="space-y-3">
-              {payment.customer && (
-                <div>
-                  <dt className="text-xs text-gray-500 dark:text-gray-400">Customer</dt>
-                  <dd className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                    {payment.customer.name ?? payment.customer.email ?? payment.customer.stripe_customer_id}
-                  </dd>
-                </div>
-              )}
+              {payment.customer && (() => {
+                const label = payment.customer.name ?? payment.customer.email ?? payment.customer.stripe_customer_id;
+                const linkType = payment.customer.contact_id ? 'contact' : payment.customer.company_id ? 'company' : null;
+                const linkId = payment.customer.contact_id ?? payment.customer.company_id ?? null;
+                return (
+                  <div>
+                    <dt className="text-xs text-gray-500 dark:text-gray-400">Customer</dt>
+                    <dd className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                      {linkType && linkId ? (
+                        <EntityLink type={linkType} id={linkId}>{label}</EntityLink>
+                      ) : (
+                        label
+                      )}
+                    </dd>
+                  </div>
+                );
+              })()}
               {payment.opportunity && (
                 <div>
                   <dt className="text-xs text-gray-500 dark:text-gray-400">Opportunity</dt>

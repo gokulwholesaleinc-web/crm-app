@@ -752,6 +752,43 @@ class TestKanbanView:
         data = response.json()
         assert "stages" in data
 
+    @pytest.mark.asyncio
+    async def test_kanban_includes_contact_and_company_ids(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_pipeline_stage: PipelineStage,
+        test_contact: Contact,
+        test_company: Company,
+    ):
+        """Kanban payload exposes contact_id and company_id so frontend cards can link."""
+        create_resp = await client.post(
+            "/api/opportunities",
+            headers=auth_headers,
+            json={
+                "name": "Linkable Deal",
+                "pipeline_stage_id": test_pipeline_stage.id,
+                "contact_id": test_contact.id,
+                "company_id": test_company.id,
+            },
+        )
+        assert create_resp.status_code == 201
+
+        response = await client.get("/api/opportunities/kanban", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+
+        opp = next(
+            (o for stage in data["stages"] for o in stage["opportunities"] if o["name"] == "Linkable Deal"),
+            None,
+        )
+        assert opp is not None
+        assert opp["contact_id"] == test_contact.id
+        assert opp["contact_name"] == test_contact.full_name
+        assert opp["company_id"] == test_company.id
+        assert opp["company_name"] == test_company.name
+
 
 class TestWeightedAmount:
     """Tests for weighted amount calculation."""

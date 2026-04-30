@@ -50,6 +50,10 @@ export type { PaginationBarProps } from './Pagination';
 export { SearchableSelect } from './SearchableSelect';
 export type { SearchableSelectProps, SearchableSelectOption } from './SearchableSelect';
 
+// EntityLink
+export { EntityLink, normalizeEntityType } from './EntityLink';
+export type { EntityLinkProps, EntityLinkVariant, EntityType } from './EntityLink';
+
 // Skeleton
 export {
   Skeleton,

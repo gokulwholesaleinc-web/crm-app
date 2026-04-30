@@ -251,6 +251,22 @@ class TestPaymentCRUD:
         response = await client.get("/api/payments/99999", headers=_token(test_user))
         assert response.status_code == 404
 
+    @pytest.mark.asyncio
+    async def test_payment_customer_brief_exposes_link_targets(
+        self, client: AsyncClient, sales_rep_a, rep_a_payment, test_contact,
+    ):
+        """Customer brief on payment responses exposes contact_id/company_id so the
+        frontend can render a clickable link from the payments list."""
+        response = await client.get(
+            f"/api/payments/{rep_a_payment.id}",
+            headers=_token(sales_rep_a),
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["customer"] is not None
+        assert data["customer"]["contact_id"] == test_contact.id
+        assert data["customer"]["company_id"] is None
+
 
 class TestProductCRUD:
     """Test Product CRUD operations."""

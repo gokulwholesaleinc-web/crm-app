@@ -1,6 +1,19 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { StatusBadge, Button, PaginationBar } from '../../components/ui';
+import { StatusBadge, Button, EntityLink, PaginationBar } from '../../components/ui';
+import type { StripeCustomerBrief } from '../../types';
+
+function CustomerLink({ customer, className }: { customer: StripeCustomerBrief | null | undefined; className?: string }) {
+  const label = customer?.name ?? customer?.email ?? '-';
+  if (!customer) return <span className={className}>{label}</span>;
+  if (customer.contact_id) {
+    return <EntityLink type="contact" id={customer.contact_id} variant="muted" className={className}>{label}</EntityLink>;
+  }
+  if (customer.company_id) {
+    return <EntityLink type="company" id={customer.company_id} variant="muted" className={className}>{label}</EntityLink>;
+  }
+  return <span className={className}>{label}</span>;
+}
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { usePayments, useSubscriptions, useCancelSubscription } from '../../hooks/usePayments';
 import { SendInvoiceModal } from './components/SendInvoiceModal';
@@ -192,17 +205,17 @@ function PaymentsPage() {
                 {payments.map((payment: Payment) => (
                   <div key={payment.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700">
                     <div className="flex items-start justify-between gap-2">
-                      <Link
-                        to={`/payments/${payment.id}`}
-                        className="flex-1 min-w-0"
-                      >
-                        <p className="text-sm font-medium text-primary-600 hover:text-primary-900 dark:hover:text-primary-300 truncate">
+                      <div className="flex-1 min-w-0">
+                        <Link
+                          to={`/payments/${payment.id}`}
+                          className="text-sm font-medium text-primary-600 hover:text-primary-900 dark:hover:text-primary-300 truncate block"
+                        >
                           Payment #{payment.id}
-                        </p>
+                        </Link>
                         <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                          {payment.customer?.name ?? payment.customer?.email ?? 'No customer'}
+                          <CustomerLink customer={payment.customer} />
                         </p>
-                      </Link>
+                      </div>
                       <StatusBadge status={payment.status} size="sm" showDot={false} className="flex-shrink-0" />
                     </div>
                     <div className="mt-2 flex items-center justify-between text-sm">
@@ -257,7 +270,7 @@ function PaymentsPage() {
                           </Link>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                          {payment.customer?.name ?? payment.customer?.email ?? '-'}
+                          <CustomerLink customer={payment.customer} />
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <StatusBadge status={payment.status} size="sm" showDot={false} />

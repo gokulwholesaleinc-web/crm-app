@@ -16,7 +16,7 @@ import {
   ClipboardDocumentCheckIcon,
   DocumentTextIcon,
 } from '@heroicons/react/24/outline';
-import { Button, Select, Spinner, Modal, ConfirmDialog } from '../../components/ui';
+import { Button, EntityLink, normalizeEntityType, Select, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { ActivityCard } from './components/ActivityCard';
 import { ActivityTimeline } from './components/ActivityTimeline';
 import { ActivityForm } from './components/ActivityForm';
@@ -415,11 +415,21 @@ export function ActivitiesPage() {
                           </div>
                           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
                             <span className="capitalize">{activity.activity_type}</span>
-                            {activity.entity_type && (
-                              <span className="truncate">
-                                {activity.entity_type} #{activity.entity_id}
-                              </span>
-                            )}
+                            {activity.entity_type && (() => {
+                              const t = normalizeEntityType(activity.entity_type);
+                              const label = `${activity.entity_type} #${activity.entity_id}`;
+                              return (
+                                <span className="truncate">
+                                  {t ? (
+                                    <EntityLink type={t} id={activity.entity_id} variant="muted">
+                                      {label}
+                                    </EntityLink>
+                                  ) : (
+                                    label
+                                  )}
+                                </span>
+                              );
+                            })()}
                             {activity.due_date ? (
                               <span className={clsx('flex items-center gap-1', isOverdue ? 'text-red-600 dark:text-red-400' : '')}>
                                 <CalendarIcon className="h-3 w-3 flex-shrink-0" aria-hidden="true" />

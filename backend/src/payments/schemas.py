@@ -139,6 +139,8 @@ class CustomerBrief(BaseModel):
     stripe_customer_id: str
     email: str | None = None
     name: str | None = None
+    contact_id: int | None = None
+    company_id: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
