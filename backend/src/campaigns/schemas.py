@@ -199,3 +199,15 @@ class EmailCampaignStepResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class EmailCampaignStepReorderRequest(BaseModel):
+    """Atomic reorder: caller submits the full list of step IDs in the
+    desired order. Server assigns step_order = index + 1.
+
+    The endpoint validates that the submitted set matches the campaign's
+    current step set exactly — no extras, no missing — so a stale client
+    can't accidentally drop a step that another user just added.
+    """
+
+    step_ids: list[int]
