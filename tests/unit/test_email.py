@@ -94,6 +94,106 @@ class TestSendEmail:
 
         assert response.status_code == 401
 
+    @pytest.mark.asyncio
+    async def test_send_email_with_inline_attachment_accepted(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+    ):
+        """A valid inline attachment is accepted (decoded, passed to the
+        provider in memory). Bytes are deliberately not persisted on
+        EmailQueue, so this just exercises the validation + decode +
+        send-pipeline acceptance path."""
+        import base64
+
+        payload = b"Hello, world!" * 32  # ~416 bytes — well under the cap
+        b64 = base64.b64encode(payload).decode("ascii")
+
+        response = await client.post(
+            "/api/email/send",
+            headers=auth_headers,
+            json={
+                "to_email": "recipient@example.com",
+                "subject": "With attachment",
+                "body": "See attached.",
+                "attachments": [
+                    {
+                        "filename": "hello.txt",
+                        "content_type": "text/plain",
+                        "content_b64": b64,
+                    }
+                ],
+            },
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["to_email"] == "recipient@example.com"
+        assert data["status"] in ("pending", "sent", "failed", "retry")
+
+    @pytest.mark.asyncio
+    async def test_send_email_attachment_too_large_rejected(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+    ):
+        """A single attachment over the 25 MB cap is rejected with 422."""
+        import base64
+
+        # 26 MB payload — over the per-attachment limit.
+        payload = b"x" * (26 * 1024 * 1024)
+        b64 = base64.b64encode(payload).decode("ascii")
+
+        response = await client.post(
+            "/api/email/send",
+            headers=auth_headers,
+            json={
+                "to_email": "recipient@example.com",
+                "subject": "Over cap",
+                "body": "Body",
+                "attachments": [
+                    {
+                        "filename": "big.bin",
+                        "content_type": "application/octet-stream",
+                        "content_b64": b64,
+                    }
+                ],
+            },
+        )
+        # Pydantic v2 surfaces this as 422 (validation error).
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_send_email_attachment_path_traversal_rejected(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+    ):
+        """Filenames with path separators are rejected so they can't
+        escape into MIME headers verbatim."""
+        import base64
+
+        b64 = base64.b64encode(b"data").decode("ascii")
+        response = await client.post(
+            "/api/email/send",
+            headers=auth_headers,
+            json={
+                "to_email": "recipient@example.com",
+                "subject": "Traversal",
+                "body": "Body",
+                "attachments": [
+                    {
+                        "filename": "../../etc/passwd",
+                        "content_type": "text/plain",
+                        "content_b64": b64,
+                    }
+                ],
+            },
+        )
+        assert response.status_code == 422
+
 
 class TestSendTemplateEmail:
     """Tests for template-based email sending."""

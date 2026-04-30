@@ -323,7 +323,15 @@ class EmailService:
         reply_to_inbound_id: int | None = None,
         attachments: list[EmailAttachment] | None = None,
     ) -> EmailQueue:
-        """Create an email queue entry and attempt to send."""
+        """Create an email queue entry and attempt to send.
+
+        ``attachments`` carries raw bytes through to the provider in
+        memory only — the EmailQueue row has no column for them, so
+        nothing is persisted server-side. Surfacing attachment metadata
+        on the email log would require an Alembic migration; left out
+        of this PR deliberately, with sender's "Sent" folder as the
+        ground truth in the meantime.
+        """
         from_email = self._validate_from_email(from_email)
         email = EmailQueue(
             to_email=to_email,

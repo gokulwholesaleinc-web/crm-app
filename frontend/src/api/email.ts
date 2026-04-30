@@ -5,6 +5,13 @@
 import { apiClient } from './client';
 import type { ThreadResponse } from '../types/email';
 
+export interface InlineAttachmentPayload {
+  filename: string;
+  content_type: string;
+  /** Base64-encoded raw bytes — NOT a data URL. */
+  content_b64: string;
+}
+
 export interface SendEmailPayload {
   to_email: string;
   subject: string;
@@ -16,6 +23,7 @@ export interface SendEmailPayload {
   entity_id?: number;
   reply_to_email_id?: number;
   reply_to_inbound_id?: number;
+  attachments?: InlineAttachmentPayload[];
 }
 
 export interface SendTemplateEmailPayload {

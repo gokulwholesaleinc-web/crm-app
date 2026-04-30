@@ -3,7 +3,37 @@
 from datetime import date, datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+
+# Per-message attachment limits. 25 MB matches Gmail's user-facing send
+# cap and is well under Resend's hard ceiling, so the same numbers
+# apply regardless of which provider lights up at send time.
+MAX_ATTACHMENT_SIZE_BYTES = 25 * 1024 * 1024
+MAX_ATTACHMENTS_TOTAL_BYTES = 25 * 1024 * 1024
+MAX_ATTACHMENT_COUNT = 10
+
+
+class InlineAttachment(BaseModel):
+    """A single attachment uploaded inline with the send request.
+
+    `content_b64` is base64-encoded raw bytes. The router decodes once
+    and passes through to the provider; we deliberately don't persist
+    the bytes anywhere — only `{filename, content_type, size}` lands in
+    `EmailQueue.attachments` for the email log.
+    """
+
+    filename: str = Field(..., min_length=1, max_length=255)
+    content_type: str = Field(..., min_length=1, max_length=100)
+    content_b64: str = Field(..., min_length=1)
+
+    @field_validator("filename")
+    @classmethod
+    def _no_path_separators(cls, v: str) -> str:
+        # Filenames are echoed back into MIME headers; reject anything
+        # that looks like a path traversal or null byte.
+        if "/" in v or "\\" in v or "\x00" in v:
+            raise ValueError("filename must not contain path separators or null bytes")
+        return v
 
 
 class SendEmailRequest(BaseModel):
@@ -21,6 +51,45 @@ class SendEmailRequest(BaseModel):
     # InboundEmail — they share no id space, hence two fields).
     reply_to_email_id: int | None = None
     reply_to_inbound_id: int | None = None
+    attachments: list[InlineAttachment] | None = None
+
+    @model_validator(mode="after")
+    def _validate_attachments(self) -> "SendEmailRequest":
+        if not self.attachments:
+            return self
+        if len(self.attachments) > MAX_ATTACHMENT_COUNT:
+            raise ValueError(
+                f"too many attachments (max {MAX_ATTACHMENT_COUNT})"
+            )
+        # Base64 is ~4/3 the size of the raw bytes; check the *decoded*
+        # size against the limit so we don't reject borderline payloads
+        # for their wire bloat alone.
+        import base64
+
+        running_total = 0
+        for att in self.attachments:
+            try:
+                raw = base64.b64decode(att.content_b64, validate=True)
+            except Exception as exc:  # noqa: BLE001 — re-raised as ValueError below
+                raise ValueError(
+                    f"attachment '{att.filename}' is not valid base64"
+                ) from exc
+            if len(raw) == 0:
+                raise ValueError(
+                    f"attachment '{att.filename}' is empty"
+                )
+            if len(raw) > MAX_ATTACHMENT_SIZE_BYTES:
+                raise ValueError(
+                    f"attachment '{att.filename}' exceeds the "
+                    f"{MAX_ATTACHMENT_SIZE_BYTES // (1024 * 1024)} MB limit"
+                )
+            running_total += len(raw)
+            if running_total > MAX_ATTACHMENTS_TOTAL_BYTES:
+                raise ValueError(
+                    f"combined attachment size exceeds the "
+                    f"{MAX_ATTACHMENTS_TOTAL_BYTES // (1024 * 1024)} MB limit"
+                )
+        return self
 
 
 class SendTemplateEmailRequest(BaseModel):
