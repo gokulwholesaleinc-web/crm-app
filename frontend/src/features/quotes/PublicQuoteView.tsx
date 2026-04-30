@@ -279,6 +279,9 @@ function PublicQuoteView() {
     ? formatDate(quote.valid_until)
     : null;
 
+  const onPrimary = pickReadableText(branding.primary_color);
+  const onSecondary = pickReadableText(branding.secondary_color);
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Branded Top Bar — text color picked from primary_color luminance so a
@@ -305,16 +308,16 @@ function PublicQuoteView() {
                 className="h-9 w-9 rounded flex items-center justify-center flex-shrink-0"
                 style={{ backgroundColor: branding.secondary_color }}
               >
-                <span className={`font-bold text-lg ${pickReadableText(branding.secondary_color) === 'white' ? 'text-white' : 'text-gray-900'}`}>
+                <span className={`font-bold text-lg ${onSecondary === 'white' ? 'text-white' : 'text-gray-900'}`}>
                   {companyDisplayName[0]?.toUpperCase() || 'Q'}
                 </span>
               </div>
             )}
-            <span className={`text-lg font-semibold truncate ${pickReadableText(branding.primary_color) === 'white' ? 'text-white' : 'text-gray-900'}`}>
+            <span className={`text-lg font-semibold truncate ${onPrimary === 'white' ? 'text-white' : 'text-gray-900'}`}>
               {companyDisplayName}
             </span>
           </div>
-          <div className={`flex items-center gap-2 text-sm ${pickReadableText(branding.primary_color) === 'white' ? 'text-white/80' : 'text-gray-700'}`}>
+          <div className={`flex items-center gap-2 text-sm ${onPrimary === 'white' ? 'text-white/80' : 'text-gray-700'}`}>
             <span>{quote.quote_number}</span>
             {quote.status === 'accepted' || actionDone === 'accepted' ? (
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
