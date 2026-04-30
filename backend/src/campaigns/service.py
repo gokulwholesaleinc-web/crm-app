@@ -480,9 +480,16 @@ class EmailCampaignStepService(BaseService[EmailCampaignStep]):
         steps = await self.get_steps(campaign_id)
         existing_ids = {s.id for s in steps}
         submitted_ids = set(step_ids)
-        if existing_ids != submitted_ids or len(step_ids) != len(steps):
+        if existing_ids != submitted_ids:
             raise ValueError(
                 "submitted step_ids do not match the campaign's step set"
+            )
+        # Also reject duplicates in the input — the set equality above
+        # would silently accept [1, 1] for a campaign with steps {1, 2}
+        # and the dedup would be just half a reorder.
+        if len(submitted_ids) != len(step_ids):
+            raise ValueError(
+                "submitted step_ids contains duplicates"
             )
         by_id = {s.id: s for s in steps}
         # Phase 1: park everything at unique negative orders.
