@@ -88,12 +88,26 @@ export function setPublicPageMeta({ title, description, type = 'article', canoni
 }
 
 // Standard relative-luminance calc per WCAG 2.x. Returns a value in [0,1].
+// Accepts both #fff (3-char shorthand) and #ffffff (6-char) — sanitizeHexColor
+// passes 3-char inputs through unchanged so we must expand them here, otherwise
+// a tenant configuring a pale 3-char primary would land on luminance 0 and
+// pickReadableText would return 'white' — exactly the white-on-white failure
+// the helper is meant to prevent.
 function relativeLuminance(hex: string): number {
-  const normalized = hex.startsWith('#') ? hex.slice(1) : hex;
-  if (normalized.length !== 6) return 0;
+  const raw = hex.startsWith('#') ? hex.slice(1) : hex;
+  let normalized: string;
+  if (raw.length === 3) {
+    // expand #abc → #aabbcc
+    normalized = raw.split('').map((c) => c + c).join('');
+  } else if (raw.length === 6) {
+    normalized = raw;
+  } else {
+    return 0.5; // unknown input — neutral midpoint, neither pole wins
+  }
   const r = parseInt(normalized.slice(0, 2), 16) / 255;
   const g = parseInt(normalized.slice(2, 4), 16) / 255;
   const b = parseInt(normalized.slice(4, 6), 16) / 255;
+  if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) return 0.5;
   const channel = (c: number) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
   return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
 }

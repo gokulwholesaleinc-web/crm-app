@@ -42,7 +42,6 @@ import {
   UserPlusIcon,
 } from '@heroicons/react/24/outline';
 import { SequenceStepBuilder } from './components/SequenceStepBuilder';
-import { useContacts } from '../../hooks/useContacts';
 
 // Step preview badge styling, keyed by SequenceStep.type.
 const STEP_TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
