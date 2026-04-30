@@ -170,7 +170,7 @@ function RuleForm({
           >
             <option value="">Any source...</option>
             {leadSources?.map((s) => (
-              <option key={s.id} value={s.id}>
+              <option key={s.id} value={String(s.id)}>
                 {s.name}
               </option>
             ))}

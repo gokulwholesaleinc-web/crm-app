@@ -207,9 +207,25 @@ export function CampaignDetailPage() {
   const { data: stats, isLoading: isLoadingStats } = useCampaignStats(campaignId);
   const { data: members, isLoading: isLoadingMembers } = useCampaignMembers(campaignId);
 
-  // Fetch contacts and leads for name resolution
-  const { data: contactsData } = useContacts({ page_size: 1000 });
-  const { data: leadsData } = useLeads({ page_size: 1000 });
+  // Client-side name resolution: only worth fetching if there's at least
+  // one of each member type to look up. Stopgap until the backend joins
+  // member name into /campaign-members.
+  const memberContactCount = useMemo(
+    () => (members ?? []).filter((m) => m.member_type === 'contact').length,
+    [members]
+  );
+  const memberLeadCount = useMemo(
+    () => (members ?? []).filter((m) => m.member_type === 'lead').length,
+    [members]
+  );
+  const { data: contactsData } = useContacts(
+    { page_size: 1000 },
+    { enabled: memberContactCount > 0, staleTime: 5 * 60 * 1000 }
+  );
+  const { data: leadsData } = useLeads(
+    { page_size: 1000 },
+    { enabled: memberLeadCount > 0, staleTime: 5 * 60 * 1000 }
+  );
 
   const contactById = useMemo(
     () => new Map((contactsData?.items ?? []).map((c) => [c.id, c] as const)),

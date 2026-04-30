@@ -3,7 +3,7 @@
  * Allows updating company name, colors, logo URL, and favicon URL.
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { apiClient } from '../../../api/client';
@@ -39,7 +39,23 @@ export function BrandingSection() {
     footer_text: '',
   });
 
-  useUnsavedChangesWarning(isEditing);
+  // Real dirty check: only warn on unload when the form's actually been
+  // mutated, not just because the user clicked Edit and the form was
+  // seeded with server values.
+  const isDirty = useMemo(() => {
+    if (!isEditing) return false;
+    return (
+      formData.company_name !== (tenant?.company_name ?? '') ||
+      formData.primary_color !== (tenant?.primary_color ?? '#6366f1') ||
+      formData.secondary_color !== (tenant?.secondary_color ?? '#8b5cf6') ||
+      formData.accent_color !== (tenant?.accent_color ?? '#22c55e') ||
+      formData.logo_url !== (tenant?.logo_url ?? '') ||
+      formData.favicon_url !== (tenant?.favicon_url ?? '') ||
+      formData.footer_text !== (tenant?.footer_text ?? '')
+    );
+  }, [isEditing, formData, tenant]);
+
+  useUnsavedChangesWarning(isDirty);
 
   const startEditing = () => {
     setFormData({

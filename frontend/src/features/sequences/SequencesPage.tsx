@@ -280,7 +280,14 @@ function SequencesPage() {
     }
   }, [processMutation.isSuccess]);
 
-  const { data: contactsData } = useContacts({ page_size: 1000 });
+  // Client-side name resolution lookup map. Skip the bulk fetch entirely
+  // when there are no sequences to render, and add a 5-min staleTime so
+  // navigating away+back doesn't re-fetch. Stopgap until enrollments
+  // endpoint joins contact name.
+  const { data: contactsData } = useContacts(
+    { page_size: 1000 },
+    { enabled: (sequences?.length ?? 0) > 0, staleTime: 5 * 60 * 1000 }
+  );
   const contactById = useMemo(
     () => new Map((contactsData?.items ?? []).map((c) => [c.id, c] as const)),
     [contactsData]

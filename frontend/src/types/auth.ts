@@ -10,6 +10,10 @@ export interface User {
   job_title?: string | null;
   is_active: boolean;
   is_superuser: boolean;
+  // Backend includes the user's primary role on /auth/users responses;
+  // RolesSection's last-admin guard reads it. Optional to keep older
+  // payloads compatible.
+  role?: string;
   avatar_url?: string | null;
   created_at: string;
   last_login?: string | null;
