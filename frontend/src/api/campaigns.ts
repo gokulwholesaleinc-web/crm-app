@@ -229,6 +229,17 @@ export const deleteCampaignStep = async (
   await apiClient.delete(`${CAMPAIGNS_BASE}/${campaignId}/steps/${stepId}`);
 };
 
+export const reorderCampaignSteps = async (
+  campaignId: number,
+  stepIds: number[]
+): Promise<EmailCampaignStep[]> => {
+  const response = await apiClient.put<EmailCampaignStep[]>(
+    `${CAMPAIGNS_BASE}/${campaignId}/steps/order`,
+    { step_ids: stepIds }
+  );
+  return response.data;
+};
+
 export const executeCampaign = async (
   campaignId: number
 ): Promise<{ message: string; status: string }> => {
@@ -295,6 +306,7 @@ export const campaignsApi = {
   addStep: addCampaignStep,
   updateStep: updateCampaignStep,
   deleteStep: deleteCampaignStep,
+  reorderSteps: reorderCampaignSteps,
   // Execute
   execute: executeCampaign,
   // LinkedIn / Import

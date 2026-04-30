@@ -13,9 +13,11 @@ import type {
   CampaignFilters,
   AddMembersRequest,
   EmailSettingsUpdate,
+  EmailCampaignStep,
   EmailCampaignStepCreate,
   EmailCampaignStepUpdate,
 } from '../types';
+import { showError } from '../utils/toast';
 
 // Query Keys
 
@@ -240,6 +242,47 @@ export function useDeleteCampaignStep() {
     mutationFn: ({ campaignId, stepId }: { campaignId: number; stepId: number }) =>
       campaignsApi.deleteStep(campaignId, stepId),
     onSuccess: (_, { campaignId }) => {
+      queryClient.invalidateQueries({ queryKey: ['campaigns', 'steps', campaignId] });
+    },
+  });
+}
+
+/**
+ * Atomic reorder with optimistic UI: snapshot + reshuffle the cached
+ * step list so the UI updates instantly, then call the server. On
+ * error or 409 (stale step set), roll back to the snapshot and toast
+ * the user — they can drag again on a refreshed list.
+ */
+export function useReorderCampaignSteps() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ campaignId, stepIds }: { campaignId: number; stepIds: number[] }) =>
+      campaignsApi.reorderSteps(campaignId, stepIds),
+    onMutate: async ({ campaignId, stepIds }) => {
+      const queryKey = ['campaigns', 'steps', campaignId] as const;
+      await queryClient.cancelQueries({ queryKey });
+      const snapshot = queryClient.getQueryData<EmailCampaignStep[]>(queryKey);
+      if (snapshot) {
+        const byId = new Map(snapshot.map((s) => [s.id, s]));
+        const optimistic = stepIds
+          .map((id, index) => {
+            const step = byId.get(id);
+            return step ? { ...step, step_order: index + 1 } : null;
+          })
+          .filter((s): s is EmailCampaignStep => s !== null);
+        queryClient.setQueryData<EmailCampaignStep[]>(queryKey, optimistic);
+      }
+      return { snapshot, queryKey };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.snapshot && context.queryKey) {
+        queryClient.setQueryData(context.queryKey, context.snapshot);
+      }
+      showError('Failed to reorder steps — change has been reverted.');
+    },
+    onSettled: (_data, _err, { campaignId }) => {
+      // Always refetch to converge on server truth.
       queryClient.invalidateQueries({ queryKey: ['campaigns', 'steps', campaignId] });
     },
   });

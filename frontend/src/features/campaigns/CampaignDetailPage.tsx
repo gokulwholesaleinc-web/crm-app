@@ -29,8 +29,8 @@ import {
   useAddCampaignMembers,
   useCampaignSteps,
   useAddCampaignStep,
-  useUpdateCampaignStep,
   useDeleteCampaignStep,
+  useReorderCampaignSteps,
   useExecuteCampaign,
   useEmailTemplates,
 } from '../../hooks/useCampaigns';
@@ -236,8 +236,8 @@ export function CampaignDetailPage() {
   const removeMember = useRemoveCampaignMember();
   const addMembers = useAddCampaignMembers();
   const addStep = useAddCampaignStep();
-  const updateStep = useUpdateCampaignStep();
   const deleteStep = useDeleteCampaignStep();
+  const reorderSteps = useReorderCampaignSteps();
   const executeCampaign = useExecuteCampaign();
 
   const { data: steps = [] } = useCampaignSteps(campaignId);
@@ -298,9 +298,9 @@ export function CampaignDetailPage() {
     await addStep.mutateAsync({ campaignId, data: { template_id: templateId, delay_days: delayDays, step_order: stepOrder } });
   };
 
-  const handleUpdateStep = async (stepId: number, data: { delay_days?: number; step_order?: number }) => {
+  const handleReorderSteps = async (stepIds: number[]) => {
     if (!campaignId) return;
-    await updateStep.mutateAsync({ campaignId, stepId, data });
+    await reorderSteps.mutateAsync({ campaignId, stepIds });
   };
 
   const handleDeleteStep = async (stepId: number) => {
@@ -506,9 +506,11 @@ export function CampaignDetailPage() {
             steps={steps}
             templates={templates}
             onAddStep={handleAddStep}
-            onUpdateStep={handleUpdateStep}
+            onReorderSteps={handleReorderSteps}
             onDeleteStep={handleDeleteStep}
-            isLoading={addStep.isPending || updateStep.isPending || deleteStep.isPending}
+            isLoading={
+              addStep.isPending || reorderSteps.isPending || deleteStep.isPending
+            }
           />
         </div>
       )}

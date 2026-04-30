@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from src.campaigns.schemas import (
     AddMembersRequest,
@@ -16,6 +16,7 @@ from src.campaigns.schemas import (
     CampaignUpdate,
     CreateFromImportRequest,
     EmailCampaignStepCreate,
+    EmailCampaignStepReorderRequest,
     EmailCampaignStepResponse,
     EmailCampaignStepUpdate,
     EmailTemplateCreate,
@@ -435,6 +436,35 @@ async def get_campaign_steps(
 
     step_service = EmailCampaignStepService(db)
     steps = await step_service.get_steps(campaign_id)
+    return [EmailCampaignStepResponse.model_validate(s) for s in steps]
+
+
+@router.put("/{campaign_id}/steps/order", response_model=list[EmailCampaignStepResponse])
+async def reorder_campaign_steps(
+    campaign_id: int,
+    payload: EmailCampaignStepReorderRequest,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Atomically reorder all steps in a campaign.
+
+    Caller submits the full list of step ids in the desired order. The
+    server validates the set matches the campaign's current steps and
+    rewrites ``step_order`` accordingly. Returns the canonical reordered
+    list.
+
+    Returns 409 if the submitted set doesn't match (e.g. another user
+    added or removed a step since the caller fetched).
+    """
+    campaign_service = CampaignService(db)
+    campaign = await get_entity_or_404(campaign_service, campaign_id, EntityNames.CAMPAIGN)
+    check_ownership(campaign, current_user, EntityNames.CAMPAIGN)
+
+    step_service = EmailCampaignStepService(db)
+    try:
+        steps = await step_service.reorder_steps(campaign_id, payload.step_ids)
+    except ValueError as exc:
+        raise HTTPException(status_code=HTTPStatus.CONFLICT, detail=str(exc)) from exc
     return [EmailCampaignStepResponse.model_validate(s) for s in steps]
 
 

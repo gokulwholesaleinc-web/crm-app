@@ -1109,6 +1109,106 @@ class TestCampaignSteps:
         steps = list_response.json()
         assert len(steps) == 3
 
+    @pytest.mark.asyncio
+    async def test_reorder_steps_atomic(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_campaign: Campaign,
+    ):
+        """PUT /steps/order rewrites step_order in one shot, no swap fragility."""
+        template_response = await client.post(
+            "/api/campaigns/templates",
+            headers=auth_headers,
+            json={
+                "name": "Reorder Template",
+                "subject_template": "Subj",
+                "body_template": "Body",
+            },
+        )
+        template_id = template_response.json()["id"]
+
+        step_ids: list[int] = []
+        for order in (1, 2, 3):
+            r = await client.post(
+                f"/api/campaigns/{test_campaign.id}/steps",
+                headers=auth_headers,
+                json={"template_id": template_id, "delay_days": order, "step_order": order},
+            )
+            step_ids.append(r.json()["id"])
+
+        # Reverse the order: [3rd, 2nd, 1st] → step_orders should become [1, 2, 3]
+        # mapped to those new positions.
+        reversed_ids = list(reversed(step_ids))
+        response = await client.put(
+            f"/api/campaigns/{test_campaign.id}/steps/order",
+            headers=auth_headers,
+            json={"step_ids": reversed_ids},
+        )
+        assert response.status_code == 200
+        ordered = response.json()
+        assert [s["id"] for s in ordered] == reversed_ids
+        assert [s["step_order"] for s in ordered] == [1, 2, 3]
+
+    @pytest.mark.asyncio
+    async def test_reorder_steps_409_when_set_does_not_match(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_campaign: Campaign,
+    ):
+        """A stale client submitting a step set that doesn't match
+        what's persisted gets 409 — they refetch and try again."""
+        template_response = await client.post(
+            "/api/campaigns/templates",
+            headers=auth_headers,
+            json={
+                "name": "Stale Template",
+                "subject_template": "S",
+                "body_template": "B",
+            },
+        )
+        template_id = template_response.json()["id"]
+
+        step_ids: list[int] = []
+        for order in (1, 2):
+            r = await client.post(
+                f"/api/campaigns/{test_campaign.id}/steps",
+                headers=auth_headers,
+                json={"template_id": template_id, "delay_days": 0, "step_order": order},
+            )
+            step_ids.append(r.json()["id"])
+
+        # Submit a set with a bogus extra id.
+        bad_response = await client.put(
+            f"/api/campaigns/{test_campaign.id}/steps/order",
+            headers=auth_headers,
+            json={"step_ids": [*step_ids, 999_999]},
+        )
+        assert bad_response.status_code == 409
+
+        # Submit a set missing one — also 409.
+        missing_response = await client.put(
+            f"/api/campaigns/{test_campaign.id}/steps/order",
+            headers=auth_headers,
+            json={"step_ids": [step_ids[0]]},
+        )
+        assert missing_response.status_code == 409
+
+    @pytest.mark.asyncio
+    async def test_reorder_steps_campaign_not_found(
+        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+    ):
+        """Reordering on a missing campaign returns 404."""
+        response = await client.put(
+            "/api/campaigns/99999/steps/order",
+            headers=auth_headers,
+            json={"step_ids": []},
+        )
+        assert response.status_code == 404
+
 
 class TestCampaignStatsWithMembers:
     """Tests for campaign stats with actual member data."""

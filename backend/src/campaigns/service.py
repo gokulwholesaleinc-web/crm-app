@@ -459,3 +459,38 @@ class EmailCampaignStepService(BaseService[EmailCampaignStep]):
     async def delete_step(self, step: EmailCampaignStep) -> None:
         await self.db.delete(step)
         await self.db.flush()
+
+    async def reorder_steps(
+        self, campaign_id: int, step_ids: list[int]
+    ) -> list[EmailCampaignStep]:
+        """Atomically reorder all steps in a campaign.
+
+        Caller submits the full list of step ids in desired order; we
+        validate the set matches what's actually persisted, then write
+        ``step_order = index + 1`` for each. If the sets don't match
+        (e.g. a step was added or removed by another user since the
+        caller fetched), raise ValueError so the router can return a
+        409 — the caller refetches and tries again.
+
+        Two-phase write: we first move all rows to negative offsets to
+        side-step the (campaign_id, step_order) uniqueness window, then
+        write the final 1-based positions. Without this a swap of two
+        adjacent rows can collide on the unique index mid-update.
+        """
+        steps = await self.get_steps(campaign_id)
+        existing_ids = {s.id for s in steps}
+        submitted_ids = set(step_ids)
+        if existing_ids != submitted_ids or len(step_ids) != len(steps):
+            raise ValueError(
+                "submitted step_ids do not match the campaign's step set"
+            )
+        by_id = {s.id: s for s in steps}
+        # Phase 1: park everything at unique negative orders.
+        for offset, step_id in enumerate(step_ids, start=1):
+            by_id[step_id].step_order = -offset
+        await self.db.flush()
+        # Phase 2: write final positions.
+        for index, step_id in enumerate(step_ids, start=1):
+            by_id[step_id].step_order = index
+        await self.db.flush()
+        return await self.get_steps(campaign_id)
