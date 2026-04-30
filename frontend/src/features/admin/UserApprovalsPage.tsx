@@ -6,6 +6,7 @@ import { Card, CardHeader, CardBody } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Spinner } from '../../components/ui/Spinner';
 import { Modal } from '../../components/ui/Modal';
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { useAuthStore } from '../../store/authStore';
 import {
   getPendingUsers,
@@ -89,6 +90,8 @@ export default function UserApprovalsPage() {
 
   const [selectedRoles, setSelectedRoles] = useState<Record<number, ApprovalRole>>({});
   const [rejectTarget, setRejectTarget] = useState<PendingUser | null>(null);
+  // Confirm gate for granting admin — non-admin roles approve in one click.
+  const [adminApprovalTarget, setAdminApprovalTarget] = useState<PendingUser | null>(null);
 
   const approveMutation = useMutation({
     mutationFn: ({ id, role }: { id: number; role: ApprovalRole }) => approveUser(id, role),
@@ -191,7 +194,13 @@ export default function UserApprovalsPage() {
                             size="sm"
                             className="min-h-[44px] sm:min-h-0"
                             isLoading={approveMutation.isPending && approveMutation.variables?.id === u.id}
-                            onClick={() => approveMutation.mutate({ id: u.id, role: getRoleForUser(u.id) })}
+                            onClick={() => {
+                              if (getRoleForUser(u.id) === 'admin') {
+                                setAdminApprovalTarget(u);
+                              } else {
+                                approveMutation.mutate({ id: u.id, role: getRoleForUser(u.id) });
+                              }
+                            }}
                             disabled={rejectMutation.isPending}
                           >
                             Approve
@@ -277,6 +286,33 @@ export default function UserApprovalsPage() {
           onCancel={() => setRejectTarget(null)}
         />
       )}
+
+      <ConfirmDialog
+        isOpen={adminApprovalTarget !== null}
+        onClose={() => setAdminApprovalTarget(null)}
+        onConfirm={() => {
+          if (adminApprovalTarget) {
+            approveMutation.mutate(
+              { id: adminApprovalTarget.id, role: 'admin' },
+              { onSettled: () => setAdminApprovalTarget(null) }
+            );
+          }
+        }}
+        title="Approve as admin?"
+        message={
+          adminApprovalTarget ? (
+            <>
+              Approve <strong>{adminApprovalTarget.email}</strong> as <strong>admin</strong>?
+              They will have full access to all data, settings, and other users.
+            </>
+          ) : (
+            ''
+          )
+        }
+        confirmLabel="Approve admin"
+        variant="danger"
+        isLoading={approveMutation.isPending}
+      />
     </div>
   );
 }
