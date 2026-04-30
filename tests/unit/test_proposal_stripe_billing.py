@@ -591,3 +591,155 @@ class TestResendPaymentLink:
                 await service.resend_payment_link(billing_proposal)
 
         assert stub.retrieved == []  # short-circuit before touching Stripe
+
+    @pytest.mark.asyncio
+    async def test_resend_cooldown_blocks_rapid_repeats(
+        self,
+        db_session: AsyncSession,
+        billing_proposal: Proposal,
+    ):
+        """A second Resend within the cooldown window must be refused without
+        touching Stripe — protects the customer's inbox from rapid clicks."""
+        billing_proposal.status = "awaiting_payment"
+        billing_proposal.stripe_invoice_id = "in_cool_001"
+        billing_proposal.invoice_sent_at = datetime.now(UTC)  # just sent
+        await db_session.commit()
+
+        stub = _ResendStripeStub(status="open")
+        with patch("src.payments.service._get_stripe", return_value=stub):
+            service = ProposalService(db_session)
+            with pytest.raises(ValueError, match="please wait"):
+                await service.resend_payment_link(billing_proposal)
+
+        assert stub.retrieved == []
+        assert stub.sent == []
+
+    @pytest.mark.asyncio
+    async def test_resend_after_cooldown_succeeds_and_bumps_timestamp(
+        self,
+        db_session: AsyncSession,
+        billing_proposal: Proposal,
+    ):
+        """After the cooldown elapses, resend works AND bumps invoice_sent_at
+        so the next cooldown is measured from this resend, not the original."""
+        from datetime import timedelta
+        old_sent = datetime.now(UTC) - timedelta(seconds=120)
+        billing_proposal.status = "awaiting_payment"
+        billing_proposal.stripe_invoice_id = "in_cool_002"
+        billing_proposal.invoice_sent_at = old_sent
+        await db_session.commit()
+
+        stub = _ResendStripeStub(status="open")
+        with patch("src.payments.service._get_stripe", return_value=stub):
+            service = ProposalService(db_session)
+            result = await service.resend_payment_link(billing_proposal)
+
+        assert result["action"] == "resent"
+        assert stub.sent == ["in_cool_002"]
+        await db_session.refresh(billing_proposal)
+        # SQLite drops tzinfo on roundtrip; normalize both to naive UTC for
+        # the comparison. The semantic check is "the timestamp moved forward".
+        bumped = billing_proposal.invoice_sent_at
+        if bumped.tzinfo is None:
+            bumped = bumped.replace(tzinfo=UTC)
+        assert bumped > old_sent
+
+
+class TestRetryBilling:
+    """retry-billing must refuse on any Stripe artifact, not just payment_url —
+    a partial spawn that set invoice_id but missed the URL fetch can't be
+    allowed to create a second invoice."""
+
+    @pytest.mark.asyncio
+    async def test_refuses_when_invoice_id_set_without_payment_url(
+        self,
+        db_session: AsyncSession,
+        billing_proposal: Proposal,
+    ):
+        billing_proposal.status = "awaiting_payment"
+        billing_proposal.stripe_invoice_id = "in_partial_777"
+        billing_proposal.stripe_payment_url = None  # the gap
+        await db_session.commit()
+
+        registry = _InvoiceRegistry()
+        stub = _make_stripe_stub(registry)
+        with patch("src.payments.service._get_stripe", return_value=stub):
+            service = ProposalService(db_session)
+            with pytest.raises(ValueError, match="already has a Stripe artifact"):
+                await service.retry_billing(billing_proposal)
+
+        assert registry.created == []  # crucial: no second invoice attempted
+
+    @pytest.mark.asyncio
+    async def test_refuses_when_checkout_session_set(
+        self,
+        db_session: AsyncSession,
+        billing_proposal: Proposal,
+    ):
+        billing_proposal.status = "awaiting_payment"
+        billing_proposal.stripe_checkout_session_id = "cs_partial_888"
+        billing_proposal.stripe_payment_url = None
+        await db_session.commit()
+
+        registry = _InvoiceRegistry()
+        stub = _make_stripe_stub(registry)
+        with patch("src.payments.service._get_stripe", return_value=stub):
+            service = ProposalService(db_session)
+            with pytest.raises(ValueError, match="already has a Stripe artifact"):
+                await service.retry_billing(billing_proposal)
+
+
+class TestIdempotencyKeysAreDeterministic:
+    """A uuid-randomized idempotency key defeats Stripe's dedup. Same logical
+    operation (same proposal_id) must produce the same key so a Stripe-side
+    retry returns the cached invoice instead of creating a duplicate."""
+
+    @pytest.mark.asyncio
+    async def test_proposal_invoice_idempotency_key_omits_uuid(
+        self,
+        db_session: AsyncSession,
+        billing_proposal: Proposal,
+        test_contact: Contact,
+    ):
+        registry = _InvoiceRegistry()
+        stub = _make_stripe_stub(registry)
+        with patch("src.payments.service._get_stripe", return_value=stub):
+            service = ProposalService(db_session)
+            await service.accept_proposal_public(
+                billing_proposal,
+                signer_name="Jane Client",
+                signer_email=test_contact.email,
+            )
+
+        invoice_call = registry.created[0]
+        assert invoice_call.get("idempotency_key") == f"proposal_{billing_proposal.id}_invoice_v1"
+        item_call = registry.items[0]
+        assert item_call.get("idempotency_key") == f"proposal_{billing_proposal.id}_invoice_v1_item"
+
+    @pytest.mark.asyncio
+    async def test_proposal_subscription_idempotency_key_omits_uuid(
+        self,
+        db_session: AsyncSession,
+        billing_proposal: Proposal,
+        test_contact: Contact,
+    ):
+        billing_proposal.payment_type = "subscription"
+        billing_proposal.recurring_interval = "month"
+        billing_proposal.recurring_interval_count = 1
+        await db_session.commit()
+        await db_session.refresh(billing_proposal)
+
+        registry = _InvoiceRegistry()
+        stub = _make_stripe_stub(registry)
+        with patch("src.payments.service._get_stripe", return_value=stub), \
+             patch("src.proposals.service.settings") as mock_settings:
+            mock_settings.FRONTEND_BASE_URL = "https://crm.test"
+            service = ProposalService(db_session)
+            await service.accept_proposal_public(
+                billing_proposal,
+                signer_name="Jane Client",
+                signer_email=test_contact.email,
+            )
+
+        sessions = stub.checkout.Session.created
+        assert sessions[0].get("idempotency_key") == f"proposal_sub_{billing_proposal.id}_v1"

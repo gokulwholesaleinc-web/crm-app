@@ -771,6 +771,12 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
                 "Stripe customer was not created — check Stripe connectivity",
             )
 
+        # Deterministic idempotency key — if this method is ever called
+        # twice for the same proposal (transient retry, race the row lock
+        # missed, etc.) Stripe returns the original invoice instead of
+        # creating a second charge. The proposal_id is the logical
+        # operation identifier; bump the suffix when we intentionally
+        # change the invoice shape (e.g. moving to multi-line items).
         invoice = self._stripe_create_finalize_send_invoice(
             stripe=stripe,
             stripe_customer_id=customer.stripe_customer_id,
@@ -778,7 +784,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             currency=currency,
             description=description,
             due_days=due_days,
-            idem_base=f"proposal_{proposal_id}_{uuid.uuid4().hex[:12]}",
+            idem_base=f"proposal_{proposal_id}_invoice_v1",
             metadata={"proposal_id": str(proposal_id)},
         )
 
@@ -870,7 +876,8 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             ],
             metadata={"proposal_id": str(proposal_id)},
             subscription_data={"metadata": {"proposal_id": str(proposal_id)}},
-            idempotency_key=f"proposal_sub_{proposal_id}_{uuid.uuid4().hex[:12]}",
+            # Deterministic key — same reasoning as create_invoice_for_proposal.
+            idempotency_key=f"proposal_sub_{proposal_id}_v1",
         )
 
         return {
