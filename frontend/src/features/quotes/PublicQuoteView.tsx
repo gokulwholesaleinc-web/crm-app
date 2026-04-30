@@ -105,6 +105,15 @@ function PublicQuoteView() {
     setLogoError(false);
   }, [quote?.branding?.logo_url]);
 
+  const quoteNumber = quote?.quote_number;
+  const quoteBrandingCompanyName = quote?.branding?.company_name;
+  useEffect(() => {
+    if (!quoteNumber) return;
+    const previous = document.title;
+    document.title = `Quote ${quoteNumber} — ${quoteBrandingCompanyName ?? 'Quote'}`;
+    return () => { document.title = previous; };
+  }, [quoteNumber, quoteBrandingCompanyName]);
+
   useEffect(() => {
     if (!token) return;
 
@@ -195,7 +204,7 @@ function PublicQuoteView() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <div className="animate-pulse text-center">
+        <div role="status" aria-label="Loading quote…" className="animate-pulse motion-reduce:animate-none text-center">
           <div className="h-8 w-48 bg-gray-200 dark:bg-gray-700 rounded mx-auto mb-4" />
           <div className="h-4 w-32 bg-gray-200 dark:bg-gray-700 rounded mx-auto" />
         </div>
@@ -509,6 +518,8 @@ function PublicQuoteView() {
         {/* Action Confirmation */}
         {actionDone && (
           <section
+            role="status"
+            aria-live="polite"
             className={`rounded-lg p-6 sm:p-8 ${
               actionDone === 'accepted'
                 ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
@@ -687,6 +698,7 @@ function PublicQuoteView() {
         <ModalFooter>
           <button
             type="button"
+            aria-label="Cancel rejection"
             onClick={() => setShowRejectModal(false)}
             disabled={actionPending}
             className="flex-1 rounded-lg bg-white dark:bg-gray-700 px-4 py-2.5 text-sm font-semibold text-gray-900 dark:text-gray-100 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-500 disabled:opacity-50"

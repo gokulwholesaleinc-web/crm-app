@@ -62,8 +62,12 @@ describe('PublicProposalView', () => {
     await waitFor(() =>
       expect(screen.getByRole('heading', { level: 1, name: 'Test Proposal Title' })).toBeInTheDocument()
     );
-    expect(screen.getByText('PROP-001')).toBeInTheDocument();
-    expect(screen.getByText(/Prepared for Jane Doe/)).toBeInTheDocument();
+    // proposal_number appears multiple times (header + cover section + footer)
+    expect(screen.getAllByText('PROP-001').length).toBeGreaterThan(0);
+    // "Prepared for Jane Doe" is split across <p> + <span> — match by combined text content
+    expect(
+      screen.getByText((_, el) => el?.textContent?.replace(/\s+/g, ' ').trim().startsWith('Prepared for Jane Doe') ?? false)
+    ).toBeInTheDocument();
   });
 
   it('renders error state when GET fails', async () => {
@@ -74,13 +78,13 @@ describe('PublicProposalView', () => {
     );
   });
 
-  it('uses DEFAULT_BRANDING colors when proposal.branding is null', async () => {
+  it('uses DEFAULT_BRANDING when proposal.branding is null — header stays bg-white', async () => {
     mockGet.mockResolvedValue({ data: { ...baseProposal, branding: null } });
     renderAt();
     await waitFor(() => screen.getByRole('heading', { level: 1 }));
-    // Header uses primary_color — default is #6366f1
+    // Header is intentionally static bg-white (not branded) — confirm class present
     const header = document.querySelector('header');
-    expect(header).toHaveStyle({ backgroundColor: '#6366f1' });
+    expect(header).toHaveClass('bg-white');
   });
 
   it('uses provided branding colors when branding is present', async () => {
@@ -94,9 +98,12 @@ describe('PublicProposalView', () => {
     };
     mockGet.mockResolvedValue({ data: { ...baseProposal, branding } });
     renderAt();
-    await waitFor(() => screen.getByText('Custom Co'));
+    // 'Custom Co' renders both as the header company label and (if differing
+    // from proposal.company.name) as the "Prepared for ... · Custom Co" tail.
+    await waitFor(() => expect(screen.getAllByText('Custom Co').length).toBeGreaterThan(0));
+    // Header stays bg-white — branding accent is applied to avatar + inline-style accents
     const header = document.querySelector('header');
-    expect(header).toHaveStyle({ backgroundColor: '#ff0000' });
+    expect(header).toHaveClass('bg-white');
     expect(screen.getByText('Custom footer')).toBeInTheDocument();
   });
 
@@ -164,7 +171,10 @@ describe('PublicProposalView', () => {
 
   it('calls POST accept with signer payload and shows accepted confirmation', async () => {
     mockGet.mockResolvedValue({ data: baseProposal });
-    mockPost.mockResolvedValue({});
+    // Accept handler sets `proposal = response.data`, so the mock MUST
+    // return a populated `data` payload — otherwise the component renders
+    // its "Proposal not found" empty state and the assertions below fail.
+    mockPost.mockResolvedValue({ data: { ...baseProposal, status: 'accepted' } });
     renderAt();
     await waitFor(() => screen.getByLabelText('Full name'));
 
@@ -172,30 +182,34 @@ describe('PublicProposalView', () => {
     fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'jane@example.com' } });
     fireEvent.click(screen.getByRole('button', { name: 'Accept this proposal' }));
 
-    await waitFor(() => expect(screen.getByText('Proposal Accepted')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Proposal accepted')).toBeInTheDocument());
     expect(mockPost).toHaveBeenCalledWith('/api/proposals/public/abc123/accept', {
       signer_name: 'Jane Doe',
       signer_email: 'jane@example.com',
     });
-    expect(screen.getByText(/Thank you for accepting this proposal/)).toBeInTheDocument();
+    expect(screen.getByText(/will be in touch shortly/)).toBeInTheDocument();
   });
 
   it('calls POST reject and shows rejected confirmation', async () => {
     mockGet.mockResolvedValue({ data: baseProposal });
     mockPost.mockResolvedValue({});
     renderAt();
-    await waitFor(() => screen.getByRole('button', { name: 'Reject this proposal' }));
+    await waitFor(() => screen.getByRole('button', { name: 'Decline this proposal' }));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Reject this proposal' }));
+    // Fill email — required by handleReject gate
+    fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'jane@example.com' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Decline this proposal' }));
 
-    await waitFor(() => expect(screen.getByText('Proposal Rejected')).toBeInTheDocument());
-    expect(mockPost).toHaveBeenCalledWith('/api/proposals/public/abc123/reject');
+    await waitFor(() => expect(screen.getByText('Proposal declined')).toBeInTheDocument());
+    expect(mockPost).toHaveBeenCalledWith('/api/proposals/public/abc123/reject', {
+      signer_email: expect.any(String),
+    });
     expect(screen.getByText(/Thank you for your response/)).toBeInTheDocument();
   });
 
   it('hides signer form and action buttons after actionDone is set', async () => {
     mockGet.mockResolvedValue({ data: baseProposal });
-    mockPost.mockResolvedValue({});
+    mockPost.mockResolvedValue({ data: { ...baseProposal, status: 'accepted' } });
     renderAt();
     await waitFor(() => screen.getByLabelText('Full name'));
 
@@ -203,10 +217,10 @@ describe('PublicProposalView', () => {
     fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'jane@example.com' } });
     fireEvent.click(screen.getByRole('button', { name: 'Accept this proposal' }));
 
-    await waitFor(() => expect(screen.getByText('Proposal Accepted')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Proposal accepted')).toBeInTheDocument());
     expect(screen.queryByLabelText('Full name')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Accept this proposal' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Reject this proposal' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Decline this proposal' })).not.toBeInTheDocument();
   });
 
   it('disables action buttons while actionPending', async () => {
@@ -223,7 +237,7 @@ describe('PublicProposalView', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Accept this proposal' })).toBeDisabled()
     );
-    expect(screen.getByRole('button', { name: 'Reject this proposal' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Decline this proposal' })).toBeDisabled();
   });
 
   it('shows backend detail message when accept POST returns an error with detail', async () => {
