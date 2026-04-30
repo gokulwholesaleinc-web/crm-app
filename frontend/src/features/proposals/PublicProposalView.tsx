@@ -78,6 +78,15 @@ function PublicProposalView() {
     setLogoError(false);
   }, [proposal?.branding?.logo_url]);
 
+  const proposalTitle = proposal?.title;
+  const proposalBrandingCompanyName = proposal?.branding?.company_name;
+  useEffect(() => {
+    if (!proposalTitle) return;
+    const previous = document.title;
+    document.title = `${proposalTitle} — ${proposalBrandingCompanyName ?? 'Proposal'}`;
+    return () => { document.title = previous; };
+  }, [proposalTitle, proposalBrandingCompanyName]);
+
   useEffect(() => {
     if (!token) return;
 
@@ -172,7 +181,7 @@ function PublicProposalView() {
   if (loading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="animate-pulse text-center">
+        <div role="status" aria-label="Loading proposal…" className="animate-pulse text-center">
           <div className="h-7 w-40 bg-gray-200 rounded mx-auto mb-3" />
           <div className="h-3 w-24 bg-gray-200 rounded mx-auto" />
         </div>
@@ -231,7 +240,7 @@ function PublicProposalView() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900 antialiased">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 antialiased">
       {/* Letterhead — plain, light, business-document feel. Text label
           is dropped when a logo image is present to avoid the "logo
           wordmark + typed company name" duplication. */}
@@ -242,6 +251,7 @@ function PublicProposalView() {
               <img
                 src={branding.logo_url}
                 alt={companyDisplayName}
+                width={180}
                 height={30}
                 className="object-contain"
                 style={{ height: 30, width: 'auto', maxWidth: 180 }}
@@ -255,13 +265,13 @@ function PublicProposalView() {
                 >
                   {companyDisplayName[0]?.toUpperCase() || 'P'}
                 </div>
-                <span className="text-[15px] font-semibold text-gray-900 truncate">
+                <span className="text-[15px] font-semibold text-gray-900 dark:text-gray-100 truncate">
                   {companyDisplayName}
                 </span>
               </>
             )}
           </div>
-          <div className="flex items-center gap-3 text-xs text-gray-500">
+          <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
             <span className="tabular-nums">{proposal.proposal_number}</span>
             {statusPill && (
               <span
@@ -282,24 +292,24 @@ function PublicProposalView() {
       <main className="mx-auto max-w-3xl px-6 sm:px-10 py-10 sm:py-14">
         {/* Cover — standard business document style, left-aligned,
             restrained. */}
-        <section className="pb-8 border-b border-gray-200">
-          <p className="text-xs uppercase tracking-wider text-gray-500 mb-3">
-            Proposal <span className="text-gray-300 mx-1">·</span>
+        <section className="pb-8 border-b border-gray-200 dark:border-gray-700">
+          <p className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3">
+            Proposal <span className="text-gray-300 dark:text-gray-600 mx-1">·</span>
             <span className="tabular-nums">{proposal.proposal_number}</span>
           </p>
-          <h1 className="text-3xl sm:text-4xl font-semibold text-gray-900 leading-tight tracking-tight text-balance">
+          <h1 className="text-3xl sm:text-4xl font-semibold text-gray-900 dark:text-gray-100 leading-tight tracking-tight text-balance">
             {proposal.title}
           </h1>
           {proposal.contact && (
-            <p className="mt-3 text-[15px] text-gray-600">
-              Prepared for <span className="font-medium text-gray-900">{proposal.contact.full_name}</span>
+            <p className="mt-3 text-[15px] text-gray-600 dark:text-gray-300">
+              Prepared for <span className="font-medium text-gray-900 dark:text-gray-100">{proposal.contact.full_name}</span>
               {proposal.company && proposal.company.name !== companyDisplayName && (
-                <span className="text-gray-500"> · {proposal.company.name}</span>
+                <span className="text-gray-500 dark:text-gray-400"> · {proposal.company.name}</span>
               )}
             </p>
           )}
           {validUntilDate && (
-            <p className={`mt-2 text-sm ${isExpired ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
+            <p className={`mt-2 text-sm ${isExpired ? 'text-red-600 dark:text-red-400 font-medium' : 'text-gray-500 dark:text-gray-400'}`}>
               {isExpired ? 'Expired ' : 'Valid until '}
               <span className="tabular-nums">{validUntilDate}</span>
             </p>
@@ -309,7 +319,7 @@ function PublicProposalView() {
         {/* Cover letter — flowing prose, no box */}
         {proposal.cover_letter && (
           <section className="mt-8">
-            <p className="text-[15px] leading-[1.7] text-gray-700 whitespace-pre-wrap text-pretty break-words">
+            <p className="text-[15px] leading-[1.7] text-gray-700 dark:text-gray-300 whitespace-pre-wrap text-pretty break-words">
               {proposal.cover_letter}
             </p>
           </section>
@@ -340,19 +350,19 @@ function PublicProposalView() {
                 style={{ borderColor: `${accent}40`, backgroundColor: `${accent}0a` }}
               >
                 <div>
-                  <div className="text-xs uppercase tracking-wider text-gray-500 mb-1">
+                  <div className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
                     {proposal.payment_type === 'subscription' ? 'Recurring fee' : 'Total'}
                   </div>
                   <div
-                    className="text-3xl sm:text-4xl font-semibold text-gray-900 tabular-nums"
+                    className="text-3xl sm:text-4xl font-semibold text-gray-900 dark:text-gray-100 tabular-nums"
                     style={{ letterSpacing: '-0.01em' }}
                   >
                     {formattedAmount}
                   </div>
                 </div>
                 {cadence && (
-                  <div className="text-sm text-gray-600">
-                    billed <span className="font-medium text-gray-900">{cadence.toLowerCase()}</span>
+                  <div className="text-sm text-gray-600 dark:text-gray-300">
+                    billed <span className="font-medium text-gray-900 dark:text-gray-100">{cadence.toLowerCase()}</span>
                   </div>
                 )}
               </div>
@@ -434,7 +444,7 @@ function PublicProposalView() {
               <div>
                 <label
                   htmlFor="signer-name"
-                  className="block text-sm font-medium text-gray-700 mb-1"
+                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
                 >
                   Full name
                 </label>
@@ -445,14 +455,14 @@ function PublicProposalView() {
                   value={signerName}
                   onChange={(e) => setSignerName(e.target.value)}
                   disabled={actionPending}
-                  className="w-full rounded border border-gray-300 bg-white text-sm px-3 py-2 shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 disabled:opacity-50"
+                  className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 px-3 py-2 shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 disabled:opacity-50"
                   style={{ outlineColor: accent }}
                 />
               </div>
               <div>
                 <label
                   htmlFor="signer-email"
-                  className="block text-sm font-medium text-gray-700 mb-1"
+                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
                 >
                   Email address
                 </label>
@@ -465,7 +475,7 @@ function PublicProposalView() {
                   value={signerEmail}
                   onChange={(e) => setSignerEmail(e.target.value)}
                   disabled={actionPending}
-                  className="w-full rounded border border-gray-300 bg-white text-sm px-3 py-2 shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 disabled:opacity-50"
+                  className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 px-3 py-2 shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 disabled:opacity-50"
                   style={{ outlineColor: accent }}
                 />
               </div>
@@ -498,7 +508,7 @@ function PublicProposalView() {
                 aria-label="Decline this proposal"
                 onClick={handleReject}
                 disabled={actionPending}
-                className="inline-flex items-center justify-center gap-2 rounded px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 shadow-sm hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-400 disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-2 rounded px-5 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-400 disabled:opacity-50"
               >
                 <XMarkIcon className="h-4 w-4" aria-hidden="true" />
                 Decline
@@ -510,23 +520,25 @@ function PublicProposalView() {
         {/* Post-action confirmation */}
         {actionDone && (
           <section
+            role="status"
+            aria-live="polite"
             className={`mt-10 rounded border px-5 py-4 ${
               actionDone === 'accepted'
                 ? 'border-green-200 bg-green-50'
-                : 'border-gray-200 bg-gray-50'
+                : 'border-red-200 bg-red-50'
             }`}
           >
             <div className="flex items-center gap-2.5">
               {actionDone === 'accepted' ? (
                 <CheckIcon className="h-5 w-5 text-green-700" aria-hidden="true" />
               ) : (
-                <XMarkIcon className="h-5 w-5 text-gray-600" aria-hidden="true" />
+                <XMarkIcon className="h-5 w-5 text-red-600 dark:text-red-400" aria-hidden="true" />
               )}
               <div>
-                <p className={`font-semibold ${actionDone === 'accepted' ? 'text-green-900' : 'text-gray-900'}`}>
+                <p className={`font-semibold ${actionDone === 'accepted' ? 'text-green-900 dark:text-green-300' : 'text-red-900 dark:text-red-300'}`}>
                   {actionDone === 'accepted' ? 'Proposal accepted' : 'Proposal declined'}
                 </p>
-                <p className={`text-sm mt-0.5 ${actionDone === 'accepted' ? 'text-green-800' : 'text-gray-600'}`}>
+                <p className={`text-sm mt-0.5 ${actionDone === 'accepted' ? 'text-green-800 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
                   {actionDone === 'accepted'
                     ? proposal.stripe_payment_url
                       ? 'Thanks — please complete payment above to finalize this engagement.'
@@ -540,10 +552,10 @@ function PublicProposalView() {
       </main>
 
       {/* Fine-print legal footer — ESIGN disclosure always visible */}
-      <footer className="mt-16 bg-white border-t border-gray-200">
+      <footer className="mt-16 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
         <div className="mx-auto max-w-3xl px-6 sm:px-10 py-8 space-y-5">
-          <details className="text-sm">
-            <summary className="cursor-pointer text-sm font-medium text-gray-700 hover:text-gray-900 list-none flex items-center gap-2 select-none">
+          <details className="group text-sm">
+            <summary className="cursor-pointer text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 list-none flex items-center gap-2 select-none">
               <span aria-hidden="true" className="inline-block transition-transform group-open:rotate-90">
                 ▸
               </span>
