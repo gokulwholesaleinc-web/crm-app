@@ -102,6 +102,17 @@ export const resendProposalPaymentLink = async (
 };
 
 /**
+ * Re-run Stripe billing spawn for a proposal whose initial spawn failed.
+ * Refuses if the proposal already has any Stripe artifact.
+ */
+export const retryProposalBilling = async (proposalId: number): Promise<Proposal> => {
+  const response = await apiClient.post<Proposal>(
+    `${PROPOSALS_BASE}/${proposalId}/retry-billing`,
+  );
+  return response.data;
+};
+
+/**
  * Generate a proposal using AI
  */
 export const generateProposal = async (data: AIGenerateProposalRequest): Promise<Proposal> => {
@@ -196,6 +207,7 @@ export const proposalsApi = {
   accept: acceptProposal,
   reject: rejectProposal,
   resendPaymentLink: resendProposalPaymentLink,
+  retryBilling: retryProposalBilling,
   generate: generateProposal,
   listTemplates: listProposalTemplates,
   createTemplate: createProposalTemplate,

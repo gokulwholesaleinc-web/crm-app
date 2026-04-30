@@ -145,6 +145,18 @@ export function useResendProposalPaymentLink() {
   });
 }
 
+export function useRetryProposalBilling() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (proposalId: number) => proposalsApi.retryBilling(proposalId),
+    onSuccess: (_data, proposalId) => {
+      queryClient.invalidateQueries({ queryKey: proposalKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: proposalKeys.detail(proposalId) });
+    },
+  });
+}
+
 // AI Generation Hook
 
 /**

@@ -117,10 +117,7 @@ export function ProposalBillingCard({ proposal }: ProposalBillingCardProps) {
               {proposal.billing_error}
             </dd>
             <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-              Fix the Stripe configuration, then retry from the API:
-              <code className="ml-1 px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-900 text-gray-700 dark:text-gray-300">
-                POST /api/proposals/{proposal.id}/retry-billing
-              </code>
+              Fix the Stripe configuration, then click <span className="font-medium text-gray-700 dark:text-gray-300">Retry Billing</span> in the action bar above.
             </p>
           </div>
         )}

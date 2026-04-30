@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeftIcon,
+  ArrowPathIcon,
   PaperAirplaneIcon,
   CheckIcon,
   XMarkIcon,
@@ -18,6 +19,7 @@ import {
   useAcceptProposal,
   useRejectProposal,
   useResendProposalPaymentLink,
+  useRetryProposalBilling,
 } from '../../hooks/useProposals';
 import { ProposalBillingCard } from './ProposalBillingCard';
 import { ProposalAuditCard } from './ProposalAuditCard';
@@ -40,6 +42,7 @@ function ProposalDetailPage() {
   const acceptProposalMutation = useAcceptProposal();
   const rejectProposalMutation = useRejectProposal();
   const resendPaymentLinkMutation = useResendProposalPaymentLink();
+  const retryBillingMutation = useRetryProposalBilling();
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -118,6 +121,25 @@ function ProposalDetailPage() {
     }
   };
 
+  const handleRetryBilling = async () => {
+    try {
+      const updated = await retryBillingMutation.mutateAsync(proposal.id);
+      if (updated.stripe_payment_url) {
+        showSuccess('Billing spawned — payment link emailed to the customer');
+      } else if (updated.billing_error) {
+        showError(`Billing still failing: ${updated.billing_error}`);
+      } else {
+        showSuccess('Billing retried');
+      }
+    } catch (err) {
+      const detail =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+          : null;
+      showError(detail || 'Failed to retry billing');
+    }
+  };
+
   const handleDelete = async () => {
     try {
       await deleteProposalMutation.mutateAsync(proposal.id);
@@ -182,6 +204,14 @@ function ProposalDetailPage() {
   const canEdit = ['draft', 'sent', 'viewed'].includes(proposal.status ?? '');
   const canResendPaymentLink =
     proposal.status === 'awaiting_payment' && !proposal.paid_at && Boolean(proposal.stripe_invoice_id);
+  // Retry billing covers the case where accept landed (signature recorded)
+  // but the Stripe spawn failed. The backend refuses retry once any
+  // Stripe artifact is present, so the button only matters when none are.
+  const canRetryBilling =
+    ['accepted', 'awaiting_payment'].includes(proposal.status ?? '') &&
+    !proposal.stripe_invoice_id &&
+    !proposal.stripe_checkout_session_id &&
+    !proposal.stripe_payment_url;
 
   return (
     <div className="space-y-6">
@@ -257,6 +287,16 @@ function ProposalDetailPage() {
               disabled={resendPaymentLinkMutation.isPending}
             >
               {resendPaymentLinkMutation.isPending ? 'Resending...' : 'Resend Payment Link'}
+            </Button>
+          )}
+          {canRetryBilling && (
+            <Button
+              variant="secondary"
+              onClick={handleRetryBilling}
+              leftIcon={<ArrowPathIcon className="h-4 w-4" />}
+              disabled={retryBillingMutation.isPending}
+            >
+              {retryBillingMutation.isPending ? 'Retrying...' : 'Retry Billing'}
             </Button>
           )}
           <Button variant="danger" onClick={() => setShowDeleteConfirm(true)}>
