@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
@@ -85,6 +85,7 @@ function PublicProposalView() {
   const [signError, setSignError] = useState<string | null>(null);
   const [confirmingPayment, setConfirmingPayment] = useState(false);
   const [paymentTimedOut, setPaymentTimedOut] = useState(false);
+  const paySectionRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     setLogoError(false);
@@ -128,6 +129,14 @@ function PublicProposalView() {
 
     fetchProposal();
   }, [token]);
+
+  // After acceptance lands, scroll the Pay block into view so the customer
+  // doesn't have to hunt for the next step.
+  useEffect(() => {
+    if (actionDone === 'accepted' && proposal?.stripe_payment_url && paySectionRef.current) {
+      paySectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [actionDone, proposal?.stripe_payment_url]);
 
   // Stripe Checkout success_url returns the customer here with `?paid=1`.
   // The webhook usually flips status → 'paid' within a few seconds, but
@@ -500,8 +509,8 @@ function PublicProposalView() {
                 aria-hidden="true"
               />
               <div>
-                <p className="font-semibold text-gray-900">Confirming your payment…</p>
-                <p className="text-sm text-gray-700 mt-0.5">
+                <p className="font-semibold text-gray-900 dark:text-gray-100">Confirming your payment…</p>
+                <p className="text-sm text-gray-700 dark:text-gray-300 mt-0.5">
                   Stripe is finalizing the transaction. This usually takes a few
                   seconds.
                 </p>
@@ -539,7 +548,7 @@ function PublicProposalView() {
           proposal.status !== 'paid' &&
           !confirmingPayment &&
           !paymentTimedOut && (
-            <section className="mt-10 sm:mt-12">
+            <section className="mt-10 sm:mt-12" ref={paySectionRef}>
               <PlainSectionHeader title="Payment" accent={accent} />
               <p className="prose-body mb-5">
                 {proposal.payment_type === 'subscription'
@@ -711,7 +720,7 @@ function PublicProposalView() {
               </span>
               Electronic signature disclosure &amp; consent
             </summary>
-            <div className="mt-3 space-y-2 text-[13px] leading-relaxed text-gray-600 text-pretty">
+            <div className="mt-3 space-y-2 text-[13px] leading-relaxed text-gray-600 dark:text-gray-400 text-pretty">
               <p>
                 By typing your name and email and selecting <em>Accept &amp; Sign</em>, you agree
                 that this constitutes your legally binding electronic signature under the
@@ -732,26 +741,26 @@ function PublicProposalView() {
             </div>
           </details>
 
-          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 pt-4 border-t border-gray-200">
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
             <div>
-              <p className="text-sm font-semibold text-gray-900">{companyDisplayName}</p>
+              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{companyDisplayName}</p>
               {branding.footer_text && (
-                <p className="text-xs text-gray-500 leading-relaxed max-w-sm">
+                <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed max-w-sm">
                   {branding.footer_text}
                 </p>
               )}
-              <p className="text-xs text-gray-400 tabular-nums mt-1">
+              <p className="text-xs text-gray-400 dark:text-gray-500 tabular-nums mt-1">
                 {proposal.proposal_number}
               </p>
             </div>
 
-            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
               {branding.terms_of_service_url && (
                 <a
                   href={branding.terms_of_service_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="hover:text-gray-700"
+                  className="hover:text-gray-700 dark:hover:text-gray-200"
                 >
                   Terms of Service
                 </a>
@@ -761,7 +770,7 @@ function PublicProposalView() {
                   href={branding.privacy_policy_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="hover:text-gray-700"
+                  className="hover:text-gray-700 dark:hover:text-gray-200"
                 >
                   Privacy Policy
                 </a>
@@ -770,18 +779,18 @@ function PublicProposalView() {
           </div>
 
           {proposal.stripe_payment_url && (
-            <div className="pt-4 border-t border-gray-200 text-xs text-gray-500 leading-relaxed">
+            <div className="pt-4 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
               <p>
                 Payments processed securely by{' '}
-                <a href="https://stripe.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-700">
+                <a href="https://stripe.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-700 dark:hover:text-gray-200">
                   Stripe
                 </a>
                 . {companyDisplayName} never sees or stores your card details.{' '}
-                <a href="https://stripe.com/legal/consumer" target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-700">
+                <a href="https://stripe.com/legal/consumer" target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-700 dark:hover:text-gray-200">
                   Stripe Terms
                 </a>
                 {' · '}
-                <a href="https://stripe.com/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-700">
+                <a href="https://stripe.com/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-700 dark:hover:text-gray-200">
                   Stripe Privacy
                 </a>
               </p>
@@ -796,6 +805,9 @@ function PublicProposalView() {
           line-height: 1.7;
           color: rgb(55 65 81);
           max-width: 62ch;
+        }
+        .dark .prose-body {
+          color: rgb(209 213 219);
         }
         .prose-body p { margin: 0; }
         details > summary::-webkit-details-marker { display: none; }
@@ -821,7 +833,7 @@ function PlainSectionHeader({ title, accent }: PlainSectionHeaderProps) {
         style={{ backgroundColor: accent }}
         aria-hidden="true"
       />
-      <h2 className="text-xl font-semibold text-gray-900 tracking-tight">
+      <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 tracking-tight">
         {title}
       </h2>
     </div>
