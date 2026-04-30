@@ -375,7 +375,7 @@ export function IntegrationsSection() {
     metaDisconnectMutation.isPending;
 
   return (
-    <div id="integrations" className="scroll-mt-20">
+    <div>
       <Card>
         <CardHeader
           title="Integrations"
