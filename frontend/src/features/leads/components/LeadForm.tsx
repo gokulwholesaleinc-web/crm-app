@@ -126,6 +126,7 @@ export function LeadForm({
           <FormInput
             label="First Name"
             name="firstName"
+            autoComplete="given-name"
             register={register('firstName')}
             error={errors.firstName?.message}
           />
@@ -133,6 +134,7 @@ export function LeadForm({
           <FormInput
             label="Last Name"
             name="lastName"
+            autoComplete="family-name"
             register={register('lastName')}
             error={errors.lastName?.message}
           />
@@ -141,6 +143,9 @@ export function LeadForm({
             label="Email"
             name="email"
             type="email"
+            autoComplete="email"
+            inputMode="email"
+            spellCheck={false}
             register={register('email', {
               pattern: {
                 value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
@@ -154,6 +159,8 @@ export function LeadForm({
             label="Phone"
             name="phone"
             type="tel"
+            autoComplete="tel"
+            inputMode="tel"
             register={register('phone')}
           />
         </div>
@@ -168,6 +175,7 @@ export function LeadForm({
           <FormInput
             label="Company Name"
             name="company"
+            autoComplete="organization"
             register={register('company')}
             placeholder="Enter company name..."
           />
@@ -185,6 +193,7 @@ export function LeadForm({
           <FormInput
             label="Job Title"
             name="jobTitle"
+            autoComplete="organization-title"
             register={register('jobTitle')}
           />
         </div>

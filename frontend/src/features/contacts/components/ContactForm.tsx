@@ -70,6 +70,7 @@ export function ContactForm({
             label="First Name"
             name="firstName"
             required
+            autoComplete="given-name"
             register={register('firstName', {
               required: 'First name is required',
             })}
@@ -80,6 +81,7 @@ export function ContactForm({
             label="Last Name"
             name="lastName"
             required
+            autoComplete="family-name"
             register={register('lastName', {
               required: 'Last name is required',
             })}
@@ -91,6 +93,9 @@ export function ContactForm({
             name="email"
             type="email"
             required
+            autoComplete="email"
+            inputMode="email"
+            spellCheck={false}
             register={register('email', {
               required: 'Email is required',
               pattern: {
@@ -105,6 +110,8 @@ export function ContactForm({
             label="Phone"
             name="phone"
             type="tel"
+            autoComplete="tel"
+            inputMode="tel"
             register={register('phone')}
           />
         </div>
@@ -129,6 +136,7 @@ export function ContactForm({
           <FormInput
             label="Job Title"
             name="jobTitle"
+            autoComplete="organization-title"
             register={register('jobTitle')}
           />
 
@@ -149,6 +157,7 @@ export function ContactForm({
             <FormInput
               label="Street Address"
               name="address"
+              autoComplete="street-address"
               register={register('address')}
             />
           </div>
@@ -156,24 +165,28 @@ export function ContactForm({
           <FormInput
             label="City"
             name="city"
+            autoComplete="address-level2"
             register={register('city')}
           />
 
           <FormInput
             label="State / Province"
             name="state"
+            autoComplete="address-level1"
             register={register('state')}
           />
 
           <FormInput
             label="ZIP / Postal Code"
             name="zipCode"
+            autoComplete="postal-code"
             register={register('zipCode')}
           />
 
           <FormInput
             label="Country"
             name="country"
+            autoComplete="country-name"
             register={register('country')}
           />
         </div>
