@@ -6,7 +6,7 @@
  * viewport's midline wins.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { Card, CardHeader, CardBody } from '../../components/ui/Card';
@@ -58,17 +58,17 @@ function SettingsPage() {
   const { user, isLoading } = useAuthStore();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const { hash } = useLocation();
-  const [activeSection, setActiveSection] = useState<string>(NAV_ITEMS[0]?.id ?? 'profile');
+  // NAV_ITEMS is a non-empty `as const` literal, so [0] is statically
+  // guaranteed; the `!` silences `noUncheckedIndexedAccess` without a
+  // dead-branch fallback.
+  const [activeSection, setActiveSection] = useState<string>(NAV_ITEMS[0]!.id);
 
   // Refs per section, keyed by id. Used both for IntersectionObserver
   // tracking and for the deep-link scroll on hash change.
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
-  const setSectionRef = useMemo(
-    () => (id: string) => (el: HTMLElement | null) => {
-      sectionRefs.current[id] = el;
-    },
-    [],
-  );
+  const setSectionRef = (id: string) => (el: HTMLElement | null) => {
+    sectionRefs.current[id] = el;
+  };
 
   // Deep-link scroll: when ?#section is in the URL, scroll to it once
   // we've finished loading the user (so layout has settled).
@@ -351,12 +351,16 @@ function SettingsPage() {
             <LeadSourcesSection />
           </section>
 
-          {/* IntegrationsSection holds its own id="integrations" inside,
-              which is what existing /settings#integrations links target.
-              We attach the ref to a *wrapper without an id* so the
-              IntersectionObserver still tracks it without creating a
-              duplicate-id conflict. */}
-          <section ref={setSectionRef('integrations')} className="scroll-mt-6">
+          {/* `id="integrations"` lives on this wrapper (was previously
+              on a `<div>` inside IntegrationsSection — moved here so
+              the IntersectionObserver can track active state via
+              target.id while preserving legacy `/settings#integrations`
+              deep links). */}
+          <section
+            id="integrations"
+            ref={setSectionRef('integrations')}
+            className="scroll-mt-6"
+          >
             <IntegrationsSection />
           </section>
 
