@@ -1,12 +1,12 @@
 import { Link } from 'react-router-dom';
-
-const DATETIME_FMT = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-const DATE_FMT = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
 import { ArrowUpOnSquareIcon } from '@heroicons/react/24/outline';
 import { Modal } from '../../../../components/ui';
 import type { CalendarActivity } from '../../../../api/activities';
 import { GOOGLE_SYNC_ENTITY_TYPE } from './helpers';
 import clsx from 'clsx';
+
+const DATETIME_FMT = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+const DATE_FMT = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
 
 interface ActivityDetailModalProps {
   activity: CalendarActivity;

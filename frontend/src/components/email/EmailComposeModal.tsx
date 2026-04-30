@@ -105,6 +105,7 @@ export function EmailComposeModal({
     'mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 shadow-sm text-sm focus-visible:outline-none focus-visible:border-primary-500 focus-visible:ring-1 focus-visible:ring-primary-500';
 
   return (
+    <>
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
@@ -243,20 +244,23 @@ export function EmailComposeModal({
           </Button>
         </div>
       </form>
-
-      <ConfirmDialog
-        isOpen={showDiscardConfirm}
-        onClose={() => setShowDiscardConfirm(false)}
-        onConfirm={() => {
-          setShowDiscardConfirm(false);
-          onClose();
-        }}
-        title="Discard email draft?"
-        message="Your unsent changes will be lost."
-        confirmLabel="Discard"
-        cancelLabel="Keep editing"
-        variant="danger"
-      />
     </Modal>
+    {/* Sibling, not child — nesting ConfirmDialog inside <Modal> stacks two
+        focus traps on the same DOM subtree and Tab/Escape ordering goes
+        undefined. Pattern matches UserManagement / UserApprovalsPage. */}
+    <ConfirmDialog
+      isOpen={showDiscardConfirm}
+      onClose={() => setShowDiscardConfirm(false)}
+      onConfirm={() => {
+        setShowDiscardConfirm(false);
+        onClose();
+      }}
+      title="Discard email draft?"
+      message="Your unsent changes will be lost."
+      confirmLabel="Discard"
+      cancelLabel="Keep editing"
+      variant="danger"
+    />
+    </>
   );
 }

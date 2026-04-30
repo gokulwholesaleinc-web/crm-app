@@ -42,7 +42,11 @@ function looksLikeHtml(value: string): boolean {
 const EMAIL_HTML_PURIFY_CONFIG = {
   USE_PROFILES: { html: true },
   FORBID_TAGS: ['form', 'script', 'iframe', 'object', 'embed', 'base', 'meta', 'link', 'style'],
-  FORBID_ATTR: ['style', 'srcdoc', 'formaction', 'action', 'ping', 'target'],
+  // 'target' intentionally omitted: the module-scope afterSanitizeAttributes
+  // hook above unconditionally sets target="_blank" + rel="noopener
+  // noreferrer" on every anchor, so listing it as forbidden would only
+  // confuse the next reader — the hook always wins.
+  FORBID_ATTR: ['style', 'srcdoc', 'formaction', 'action', 'ping'],
   ALLOW_DATA_ATTR: false,
 };
 

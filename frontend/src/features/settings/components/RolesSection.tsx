@@ -57,9 +57,16 @@ export function RolesSection() {
 
   const selectedRole = roles?.find((r) => r.id === selectedRoleId);
   const activeAdmins = users?.filter((u) => u.is_active && u.role === 'admin') ?? [];
+  // Last-active-admin guard: only true when we know the new role is
+  // non-admin AND the selected user is the sole active admin. We
+  // require selectedRole to be loaded — if it's undefined the modal
+  // shouldn't have been openable to that role anyway, but staying
+  // conservative avoids a window where the button enables before
+  // /api/roles responds.
   const selectedUserIsOnlyAdmin =
-    selectedRole !== undefined &&
+    !!selectedRole &&
     selectedRole.name !== 'admin' &&
+    !!selectedUserId &&
     activeAdmins.length === 1 &&
     activeAdmins[0]?.id === selectedUserId;
 

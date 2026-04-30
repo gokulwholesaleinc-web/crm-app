@@ -41,8 +41,11 @@ const leadEntityHooks = createEntityHooks<
   queryKey: 'leads',
 });
 
-export function useLeads(filters?: LeadFilters) {
-  return leadEntityHooks.useList(filters);
+export function useLeads(
+  filters?: LeadFilters,
+  options?: Parameters<typeof leadEntityHooks.useList>[1]
+) {
+  return leadEntityHooks.useList(filters, options);
 }
 
 export function useLead(id: number | undefined) {

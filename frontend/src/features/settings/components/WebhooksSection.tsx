@@ -121,15 +121,18 @@ function WebhookForm({
         </label>
         {isEdit && !secretRotating ? (
           <div className="mt-1 flex items-center gap-2">
-            <input
+            {/* Non-interactive masked indicator. Was previously a real
+                <input type="password" value="placeholder">; password
+                managers were happily offering to save the literal string
+                "placeholder" as the secret. */}
+            <div
               id="webhook-secret"
-              type="password"
-              value="placeholder"
-              readOnly
-              placeholder="••••••••"
+              role="presentation"
               aria-label="Current webhook secret (hidden)"
-              className="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-transparent shadow-sm sm:text-sm"
-            />
+              className="block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400 shadow-sm sm:text-sm px-3 py-2 font-mono tracking-wider select-none"
+            >
+              ••••••••
+            </div>
             <Button
               type="button"
               variant="secondary"
