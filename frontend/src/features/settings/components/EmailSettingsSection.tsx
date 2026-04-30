@@ -11,6 +11,7 @@ import {
   useEmailSettings,
   useUpdateEmailSettings,
 } from '../../../hooks/useCampaigns';
+import { useUnsavedChangesWarning } from '../../../hooks/useUnsavedChangesWarning';
 import {
   EnvelopeIcon,
   FireIcon,
@@ -71,6 +72,8 @@ export function EmailSettingsSection() {
     }
   };
 
+  useUnsavedChangesWarning(isDirty);
+
   const markDirty = () => setIsDirty(true);
 
   if (isLoading) {
@@ -113,6 +116,7 @@ export function EmailSettingsSection() {
             <input
               id="daily-send-limit"
               type="number"
+              inputMode="numeric"
               min={1}
               max={10000}
               value={dailyLimit}
@@ -168,6 +172,7 @@ export function EmailSettingsSection() {
                 <input
                   id="warmup-target"
                   type="number"
+                  inputMode="numeric"
                   min={20}
                   max={10000}
                   value={warmupTarget}

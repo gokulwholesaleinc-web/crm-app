@@ -11,6 +11,7 @@ import { Card, CardHeader, CardBody } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { useTenant } from '../../../providers/TenantProvider';
 import { SwatchIcon } from '@heroicons/react/24/outline';
+import { useUnsavedChangesWarning } from '../../../hooks/useUnsavedChangesWarning';
 
 interface BrandingFormData {
   company_name: string;
@@ -37,6 +38,8 @@ export function BrandingSection() {
     favicon_url: '',
     footer_text: '',
   });
+
+  useUnsavedChangesWarning(isEditing);
 
   const startEditing = () => {
     setFormData({
@@ -441,24 +444,30 @@ export function BrandingSection() {
               <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
                 Preview
               </p>
-              <div className="flex items-center gap-3">
+              <div
+                className="flex items-center justify-between px-4 py-3 rounded-lg"
+                style={{ backgroundColor: formData.primary_color }}
+              >
+                <div className="flex items-center gap-3">
+                  {formData.logo_url && !logoPreviewError ? (
+                    <img
+                      src={formData.logo_url}
+                      alt="Logo"
+                      width={28}
+                      height={28}
+                      className="h-7 w-7 rounded object-contain bg-white/20"
+                      onError={() => setLogoPreviewError(true)}
+                    />
+                  ) : null}
+                  <span className="text-sm font-semibold text-white">
+                    {formData.company_name || 'Company Name'}
+                  </span>
+                </div>
                 <span
-                  className="inline-block h-8 w-8 rounded-full"
-                  style={{ backgroundColor: formData.primary_color }}
-                  aria-label="Primary color preview"
-                />
-                <span
-                  className="inline-block h-8 w-8 rounded-full"
-                  style={{ backgroundColor: formData.secondary_color }}
-                  aria-label="Secondary color preview"
-                />
-                <span
-                  className="inline-block h-8 w-8 rounded-full"
+                  className="inline-block px-3 py-1 rounded-full text-xs font-medium text-white"
                   style={{ backgroundColor: formData.accent_color }}
-                  aria-label="Accent color preview"
-                />
-                <span className="text-sm text-gray-700 dark:text-gray-300 ml-2">
-                  {formData.company_name || 'Company Name'}
+                >
+                  Proposal
                 </span>
               </div>
             </div>
@@ -468,7 +477,7 @@ export function BrandingSection() {
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => setIsEditing(false)}
+                onClick={() => { setIsEditing(false); setLogoPreviewError(false); setFaviconPreviewError(false); }}
               >
                 Cancel
               </Button>

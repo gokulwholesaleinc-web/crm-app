@@ -200,6 +200,23 @@ function DuplicatesPage() {
             {scanning ? 'Scanning...' : 'Scan for Duplicates'}
           </Button>
         </div>
+        {(() => {
+          const totals = {
+            contacts: contactsData?.total ?? 0,
+            companies: companiesData?.total ?? 0,
+            leads: leadsData?.total ?? 0,
+          };
+          const total = totals[selectedEntityType];
+          if (total > 100) {
+            return (
+              <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">
+                Scanning the first 100 of {total} {selectedEntityType}. Records past the
+                first page are not compared in this run.
+              </p>
+            );
+          }
+          return null;
+        })()}
       </div>
 
       {/* Results */}
@@ -261,6 +278,7 @@ function DuplicatesPage() {
                         View
                       </Button>
                       <Button
+                        variant="danger"
                         onClick={() =>
                           setMergeConfirm({
                             primaryId: group.source.id,

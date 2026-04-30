@@ -55,6 +55,15 @@ export function RolesSection() {
   const isAdmin = user?.is_superuser || myPermissions?.role === 'admin';
   const isLoading = rolesLoading || permsLoading;
 
+  const selectedRole = roles?.find((r) => r.id === selectedRoleId);
+  const activeAdmins = users?.filter((u) => u.is_active && u.role === 'admin') ?? [];
+  const selectedUserIsOnlyAdmin =
+    selectedRole !== undefined &&
+    selectedRole.name !== 'admin' &&
+    activeAdmins.length === 1 &&
+    activeAdmins[0]?.id === selectedUserId;
+
+
   const handleAssign = async () => {
     if (selectedUserId && selectedRoleId) {
       await assignMutation.mutateAsync({
@@ -94,8 +103,8 @@ export function RolesSection() {
           <div className="space-y-6">
             {/* Current User Role */}
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-indigo-100 flex items-center justify-center">
-                <ShieldCheckIcon className="h-5 w-5 text-indigo-600" />
+              <div className="h-10 w-10 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
+                <ShieldCheckIcon className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Your Role</p>
@@ -166,7 +175,7 @@ export function RolesSection() {
               onChange={(e) => setSelectedUserId(Number(e.target.value))}
             >
               <option value={0}>Select a user...</option>
-              {users?.map((u) => (
+              {users?.filter((u) => u.is_active).map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.full_name} ({u.email})
                 </option>
@@ -193,6 +202,11 @@ export function RolesSection() {
             </select>
           </div>
 
+          {selectedUserIsOnlyAdmin && (
+            <p className="text-sm text-amber-700 dark:text-amber-400">
+              Cannot demote the last active admin.
+            </p>
+          )}
           <ModalFooter>
             <Button
               type="button"
@@ -205,7 +219,7 @@ export function RolesSection() {
             <Button
               onClick={handleAssign}
               isLoading={assignMutation.isPending}
-              disabled={!selectedUserId || !selectedRoleId}
+              disabled={!selectedUserId || !selectedRoleId || selectedUserIsOnlyAdmin}
             >
               Assign Role
             </Button>
