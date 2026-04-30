@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { PlusIcon, SparklesIcon, DocumentDuplicateIcon } from '@heroicons/react/24/outline';
-import { Button, Modal, ConfirmDialog, StatusBadge, PaginationBar } from '../../components/ui';
+import { Button, EntityLink, Modal, ConfirmDialog, StatusBadge, PaginationBar } from '../../components/ui';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { ProposalForm } from './ProposalForm';
 import { AIProposalGenerator } from './AIProposalGenerator';
@@ -285,10 +285,20 @@ function ProposalsPage() {
                   </div>
                   <div className="mt-2 space-y-1 text-sm text-gray-500 dark:text-gray-400">
                     <p className="truncate">
-                      {proposal.contact?.full_name ?? '-'}
+                      {proposal.contact ? (
+                        <EntityLink type="contact" id={proposal.contact.id} variant="muted">
+                          {proposal.contact.full_name}
+                        </EntityLink>
+                      ) : (
+                        '-'
+                      )}
                     </p>
                     {proposal.company && (
-                      <p className="text-xs truncate">{proposal.company.name}</p>
+                      <p className="text-xs truncate">
+                        <EntityLink type="company" id={proposal.company.id} variant="muted">
+                          {proposal.company.name}
+                        </EntityLink>
+                      </p>
                     )}
                     <p className="text-xs text-gray-400 dark:text-gray-500">{formatDate(proposal.created_at)}</p>
                   </div>
@@ -349,9 +359,21 @@ function ProposalsPage() {
                         <p className="text-xs text-gray-500 dark:text-gray-400">{proposal.proposal_number}</p>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                        <div>{proposal.contact?.full_name ?? '-'}</div>
+                        <div>
+                          {proposal.contact ? (
+                            <EntityLink type="contact" id={proposal.contact.id} variant="muted">
+                              {proposal.contact.full_name}
+                            </EntityLink>
+                          ) : (
+                            '-'
+                          )}
+                        </div>
                         {proposal.company && (
-                          <div className="text-xs text-gray-400 dark:text-gray-500">{proposal.company.name}</div>
+                          <div className="text-xs text-gray-400 dark:text-gray-500">
+                            <EntityLink type="company" id={proposal.company.id} variant="muted">
+                              {proposal.company.name}
+                            </EntityLink>
+                          </div>
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">

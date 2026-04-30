@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { PlusIcon, CubeIcon } from '@heroicons/react/24/outline';
-import { Button, Modal, ConfirmDialog, StatusBadge, PaginationBar } from '../../components/ui';
+import { Button, EntityLink, Modal, ConfirmDialog, StatusBadge, PaginationBar } from '../../components/ui';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { QuoteForm } from './QuoteForm';
 import { BundleManager } from './BundleManager';
@@ -241,7 +241,10 @@ function QuotesPage() {
                   </div>
                   {quote.contact?.full_name && (
                     <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
-                      Contact: {quote.contact.full_name}
+                      Contact:{' '}
+                      <EntityLink type="contact" id={quote.contact.id} variant="muted">
+                        {quote.contact.full_name}
+                      </EntityLink>
                     </p>
                   )}
                   <div className="flex gap-4 pt-2 border-t border-gray-100 dark:border-gray-700">
@@ -304,9 +307,21 @@ function QuotesPage() {
                         <p className="text-xs text-gray-500 dark:text-gray-400">{quote.quote_number}</p>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                        <div>{quote.contact?.full_name ?? '-'}</div>
+                        <div>
+                          {quote.contact ? (
+                            <EntityLink type="contact" id={quote.contact.id} variant="muted">
+                              {quote.contact.full_name}
+                            </EntityLink>
+                          ) : (
+                            '-'
+                          )}
+                        </div>
                         {quote.company && (
-                          <div className="text-xs text-gray-400 dark:text-gray-500">{quote.company.name}</div>
+                          <div className="text-xs text-gray-400 dark:text-gray-500">
+                            <EntityLink type="company" id={quote.company.id} variant="muted">
+                              {quote.company.name}
+                            </EntityLink>
+                          </div>
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">

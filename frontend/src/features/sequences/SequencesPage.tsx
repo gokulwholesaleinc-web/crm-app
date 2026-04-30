@@ -9,6 +9,7 @@ import { Button } from '../../components/ui/Button';
 import { Spinner } from '../../components/ui/Spinner';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { SearchableSelect } from '../../components/ui/SearchableSelect';
+import { EntityLink } from '../../components/ui/EntityLink';
 import { useContacts } from '../../hooks/useContacts';
 import {
   useSequences,
@@ -166,7 +167,8 @@ function EnrollmentList({
         >
           <div>
             <p className="text-sm text-gray-900 dark:text-gray-100">
-              {contactName} — Step {e.current_step}
+              <EntityLink type="contact" id={e.contact_id}>{contactName}</EntityLink>
+              {' '}— Step {e.current_step}
             </p>
             <span
               className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${

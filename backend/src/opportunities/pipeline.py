@@ -71,7 +71,9 @@ class PipelineManager:
                         "currency": opp.currency,
                         "weighted_amount": opp.weighted_amount,
                         "expected_close_date": opp.expected_close_date.isoformat() if opp.expected_close_date else None,
+                        "contact_id": opp.contact.id if opp.contact else None,
                         "contact_name": opp.contact.full_name if opp.contact else None,
+                        "company_id": opp.company.id if opp.company else None,
                         "company_name": opp.company.name if opp.company else None,
                         "owner_id": opp.owner_id,
                     }

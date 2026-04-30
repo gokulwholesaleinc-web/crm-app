@@ -15,7 +15,7 @@ import {
 import {
   sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable';
-import { Button, Spinner, Modal } from '../../components/ui';
+import { Button, EntityLink, Spinner, Modal } from '../../components/ui';
 import { OpportunityForm, OpportunityFormData } from '../opportunities/components/OpportunityForm';
 const AIInsightsCard = lazy(() => import('../../components/ai').then(m => ({ default: m.AIInsightsCard })));
 const NextBestActionCard = lazy(() => import('../../components/ai').then(m => ({ default: m.NextBestActionCard })));
@@ -470,11 +470,15 @@ function PipelinePage() {
                       >
                         <td className="px-4 sm:px-6 py-4">
                           <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate max-w-[150px] sm:max-w-none">
-                            {opp.name}
+                            <EntityLink type="opportunity" id={opp.id}>
+                              {opp.name}
+                            </EntityLink>
                           </div>
                           {opp.company?.name && (
                             <div className="text-sm text-gray-500 dark:text-gray-400 truncate max-w-[150px] sm:max-w-none">
-                              {opp.company.name}
+                              <EntityLink type="company" id={opp.company.id} variant="muted">
+                                {opp.company.name}
+                              </EntityLink>
                             </div>
                           )}
                         </td>

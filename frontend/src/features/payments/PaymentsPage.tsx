@@ -1,13 +1,38 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { StatusBadge, Button, PaginationBar } from '../../components/ui';
+import { StatusBadge, Button, EntityLink, PaginationBar } from '../../components/ui';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { usePayments, useSubscriptions, useCancelSubscription } from '../../hooks/usePayments';
 import { SendInvoiceModal } from './components/SendInvoiceModal';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { showSuccess, showError } from '../../utils/toast';
-import type { Payment, SubscriptionItem } from '../../types';
+import type { Payment, StripeCustomerBrief, SubscriptionItem } from '../../types';
+
+function CustomerLink({
+  customer,
+  fallbackHref,
+}: {
+  customer: StripeCustomerBrief | null | undefined;
+  fallbackHref?: string;
+}) {
+  const label = customer?.name ?? customer?.email ?? '-';
+  if (customer?.contact_id) {
+    return <EntityLink type="contact" id={customer.contact_id} variant="muted">{label}</EntityLink>;
+  }
+  if (customer?.company_id) {
+    return <EntityLink type="company" id={customer.company_id} variant="muted">{label}</EntityLink>;
+  }
+  // No CRM target — keep the cell a tap target by linking to the surrounding fallback (e.g. payment detail).
+  if (fallbackHref) {
+    return (
+      <Link to={fallbackHref} className="text-gray-600 hover:text-primary-700 dark:text-gray-400 dark:hover:text-primary-300">
+        {label}
+      </Link>
+    );
+  }
+  return <>{label}</>;
+}
 
 const TABS = ['All Payments', 'Subscriptions'] as const;
 type Tab = (typeof TABS)[number];
@@ -192,17 +217,17 @@ function PaymentsPage() {
                 {payments.map((payment: Payment) => (
                   <div key={payment.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700">
                     <div className="flex items-start justify-between gap-2">
-                      <Link
-                        to={`/payments/${payment.id}`}
-                        className="flex-1 min-w-0"
-                      >
-                        <p className="text-sm font-medium text-primary-600 hover:text-primary-900 dark:hover:text-primary-300 truncate">
+                      <div className="flex-1 min-w-0">
+                        <Link
+                          to={`/payments/${payment.id}`}
+                          className="text-sm font-medium text-primary-600 hover:text-primary-900 dark:hover:text-primary-300 truncate block"
+                        >
                           Payment #{payment.id}
-                        </p>
+                        </Link>
                         <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                          {payment.customer?.name ?? payment.customer?.email ?? 'No customer'}
+                          <CustomerLink customer={payment.customer} fallbackHref={`/payments/${payment.id}`} />
                         </p>
-                      </Link>
+                      </div>
                       <StatusBadge status={payment.status} size="sm" showDot={false} className="flex-shrink-0" />
                     </div>
                     <div className="mt-2 flex items-center justify-between text-sm">
@@ -257,7 +282,7 @@ function PaymentsPage() {
                           </Link>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                          {payment.customer?.name ?? payment.customer?.email ?? '-'}
+                          <CustomerLink customer={payment.customer} />
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <StatusBadge status={payment.status} size="sm" showDot={false} />

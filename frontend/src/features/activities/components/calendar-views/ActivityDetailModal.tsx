@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { ArrowUpOnSquareIcon } from '@heroicons/react/24/outline';
-import { Modal } from '../../../../components/ui';
+import { EntityLink, Modal, normalizeEntityType } from '../../../../components/ui';
 import type { CalendarActivity } from '../../../../api/activities';
 import { GOOGLE_SYNC_ENTITY_TYPE } from './helpers';
 import clsx from 'clsx';
@@ -23,6 +23,11 @@ export function ActivityDetailModal({
   isPushing,
   onPush,
 }: ActivityDetailModalProps) {
+  const relatedEntityType =
+    activity.entity_type && activity.entity_type !== GOOGLE_SYNC_ENTITY_TYPE
+      ? normalizeEntityType(activity.entity_type)
+      : null;
+
   return (
     <Modal isOpen onClose={onClose} title={activity.subject} size="md">
       <div className="space-y-4 p-4">
@@ -61,6 +66,16 @@ export function ActivityDetailModal({
             <div>
               <span className="font-medium text-gray-500 dark:text-gray-400">Location</span>
               <p className="text-gray-900 dark:text-gray-100">{activity.meeting_location}</p>
+            </div>
+          )}
+          {relatedEntityType && (
+            <div className="col-span-2">
+              <span className="font-medium text-gray-500 dark:text-gray-400">Related</span>
+              <p className="text-gray-900 dark:text-gray-100">
+                <EntityLink type={relatedEntityType} id={activity.entity_id}>
+                  {activity.entity_type} #{activity.entity_id}
+                </EntityLink>
+              </p>
             </div>
           )}
         </div>

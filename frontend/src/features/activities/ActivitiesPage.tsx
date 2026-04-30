@@ -16,7 +16,7 @@ import {
   ClipboardDocumentCheckIcon,
   DocumentTextIcon,
 } from '@heroicons/react/24/outline';
-import { Button, Select, Spinner, Modal, ConfirmDialog } from '../../components/ui';
+import { Button, EntityLink, normalizeEntityType, Select, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { ActivityCard } from './components/ActivityCard';
 import { ActivityTimeline } from './components/ActivityTimeline';
 import { ActivityForm } from './components/ActivityForm';
@@ -384,6 +384,10 @@ export function ActivitiesPage() {
                     !activity.is_completed &&
                     activity.due_date &&
                     new Date(activity.due_date) < new Date();
+                  // Hide Google-sync activities (entity_type === 'users'); they have no CRM target.
+                  const showEntity = activity.entity_type && activity.entity_type !== 'users';
+                  const entityLinkType = showEntity ? normalizeEntityType(activity.entity_type) : null;
+                  const entityLabel = showEntity ? `${activity.entity_type} #${activity.entity_id}` : null;
                   return (
                     <div
                       key={activity.id}
@@ -415,9 +419,15 @@ export function ActivitiesPage() {
                           </div>
                           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
                             <span className="capitalize">{activity.activity_type}</span>
-                            {activity.entity_type && (
+                            {entityLabel && (
                               <span className="truncate">
-                                {activity.entity_type} #{activity.entity_id}
+                                {entityLinkType ? (
+                                  <EntityLink type={entityLinkType} id={activity.entity_id} variant="muted">
+                                    {entityLabel}
+                                  </EntityLink>
+                                ) : (
+                                  entityLabel
+                                )}
                               </span>
                             )}
                             {activity.due_date ? (

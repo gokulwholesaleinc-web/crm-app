@@ -1,11 +1,23 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeftIcon, DocumentArrowDownIcon, EnvelopeIcon } from '@heroicons/react/24/outline';
-import { StatusBadge } from '../../components/ui';
+import { EntityLink, StatusBadge } from '../../components/ui';
 import { usePayment } from '../../hooks/usePayments';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { apiClient } from '../../api/client';
+import type { StripeCustomerBrief } from '../../types';
+
+function CustomerName({ customer }: { customer: StripeCustomerBrief }) {
+  const label = customer.name ?? customer.email ?? customer.stripe_customer_id;
+  if (customer.contact_id) {
+    return <EntityLink type="contact" id={customer.contact_id}>{label}</EntityLink>;
+  }
+  if (customer.company_id) {
+    return <EntityLink type="company" id={customer.company_id}>{label}</EntityLink>;
+  }
+  return <>{label}</>;
+}
 
 function PaymentDetailPage() {
   const { id } = useParams();
@@ -202,7 +214,7 @@ function PaymentDetailPage() {
                 <div>
                   <dt className="text-xs text-gray-500 dark:text-gray-400">Customer</dt>
                   <dd className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                    {payment.customer.name ?? payment.customer.email ?? payment.customer.stripe_customer_id}
+                    <CustomerName customer={payment.customer} />
                   </dd>
                 </div>
               )}
