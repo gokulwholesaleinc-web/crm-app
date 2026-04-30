@@ -11,6 +11,7 @@ import type {
   LeadFilters,
   LeadSource,
   LeadSourceCreate,
+  LeadSourceUpdate,
   LeadConvertToContactRequest,
   LeadConvertToOpportunityRequest,
   LeadFullConversionRequest,
@@ -85,6 +86,27 @@ export const listLeadSources = async (activeOnly = true): Promise<LeadSource[]> 
 export const createLeadSource = async (sourceData: LeadSourceCreate): Promise<LeadSource> => {
   const response = await apiClient.post<LeadSource>(`${LEADS_BASE}/sources/`, sourceData);
   return response.data;
+};
+
+/**
+ * Update an existing lead source
+ */
+export const updateLeadSource = async (
+  sourceId: number,
+  sourceData: LeadSourceUpdate,
+): Promise<LeadSource> => {
+  const response = await apiClient.patch<LeadSource>(
+    `${LEADS_BASE}/sources/${sourceId}`,
+    sourceData,
+  );
+  return response.data;
+};
+
+/**
+ * Delete a lead source. Backend returns 409 if any leads reference it.
+ */
+export const deleteLeadSource = async (sourceId: number): Promise<void> => {
+  await apiClient.delete(`${LEADS_BASE}/sources/${sourceId}`);
 };
 
 // Lead Conversion
@@ -194,6 +216,8 @@ export const leadsApi = {
   // Sources
   listSources: listLeadSources,
   createSource: createLeadSource,
+  updateSource: updateLeadSource,
+  deleteSource: deleteLeadSource,
   // Conversion
   convertToContact,
   convertToOpportunity,

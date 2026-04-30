@@ -669,6 +669,93 @@ class TestLeadSources:
         assert data["name"] == "Trade Show"
         assert data["is_active"] is True
 
+    @pytest.mark.asyncio
+    async def test_update_source(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_lead_source: LeadSource,
+    ):
+        """Test updating a lead source — partial update changes only the
+        supplied fields."""
+        response = await client.patch(
+            f"/api/leads/sources/{test_lead_source.id}",
+            headers=auth_headers,
+            json={"description": "Updated description", "is_active": False},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["id"] == test_lead_source.id
+        # Untouched field preserved
+        assert data["name"] == test_lead_source.name
+        assert data["description"] == "Updated description"
+        assert data["is_active"] is False
+
+    @pytest.mark.asyncio
+    async def test_update_source_not_found(
+        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+    ):
+        """Test updating a non-existent source returns 404."""
+        response = await client.patch(
+            "/api/leads/sources/999999",
+            headers=auth_headers,
+            json={"name": "Renamed"},
+        )
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_delete_source_succeeds_when_no_leads_reference_it(
+        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+    ):
+        """Test deleting an unreferenced lead source succeeds."""
+        # Create a fresh source with no leads attached.
+        create_response = await client.post(
+            "/api/leads/sources/",
+            headers=auth_headers,
+            json={"name": "Cold Outreach", "is_active": True},
+        )
+        source_id = create_response.json()["id"]
+
+        delete_response = await client.delete(
+            f"/api/leads/sources/{source_id}", headers=auth_headers
+        )
+        assert delete_response.status_code == 204
+
+        # Confirm it's gone — list omits it.
+        list_response = await client.get(
+            "/api/leads/sources/?active_only=false", headers=auth_headers
+        )
+        assert all(s["id"] != source_id for s in list_response.json())
+
+    @pytest.mark.asyncio
+    async def test_delete_source_fails_with_409_when_leads_reference_it(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_lead: Lead,
+        test_lead_source: LeadSource,
+    ):
+        """test_lead is created with source_id=test_lead_source.id, so the
+        delete must 409."""
+        response = await client.delete(
+            f"/api/leads/sources/{test_lead_source.id}", headers=auth_headers
+        )
+        assert response.status_code == 409
+        assert "still reference" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_delete_source_not_found(
+        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+    ):
+        """Test deleting a non-existent source returns 404."""
+        response = await client.delete(
+            "/api/leads/sources/999999", headers=auth_headers
+        )
+        assert response.status_code == 404
+
 
 class TestLeadsUnauthorized:
     """Tests for unauthorized access to leads endpoints."""

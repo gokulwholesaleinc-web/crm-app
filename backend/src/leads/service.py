@@ -2,14 +2,14 @@
 
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from src.core.base_service import CRUDService, TaggableServiceMixin
 from src.core.constants import DEFAULT_PAGE_SIZE, ENTITY_TYPE_LEADS
 from src.core.filtering import apply_filters_to_query, build_token_search
 from src.leads.models import Lead, LeadSource
-from src.leads.schemas import LeadCreate, LeadSourceCreate, LeadUpdate
+from src.leads.schemas import LeadCreate, LeadSourceCreate, LeadSourceUpdate, LeadUpdate
 from src.leads.scoring import calculate_lead_score
 
 
@@ -128,3 +128,29 @@ class LeadService(
         await self.db.flush()
         await self.db.refresh(source)
         return source
+
+    async def update_source(
+        self, source_id: int, data: LeadSourceUpdate
+    ) -> LeadSource | None:
+        source = await self.get_source_by_id(source_id)
+        if source is None:
+            return None
+        for key, value in data.model_dump(exclude_unset=True).items():
+            setattr(source, key, value)
+        await self.db.flush()
+        await self.db.refresh(source)
+        return source
+
+    async def count_leads_by_source(self, source_id: int) -> int:
+        result = await self.db.execute(
+            select(func.count(Lead.id)).where(Lead.source_id == source_id)
+        )
+        return result.scalar_one()
+
+    async def delete_source(self, source: LeadSource) -> None:
+        # Caller is expected to have already loaded the source (e.g.
+        # via get_source_by_id) so we don't double-fetch here. The
+        # router's 404 path produces the not-found error before we
+        # land in this method.
+        await self.db.delete(source)
+        await self.db.flush()

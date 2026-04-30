@@ -56,6 +56,7 @@ from src.leads.schemas import (
     LeadResponse,
     LeadSourceCreate,
     LeadSourceResponse,
+    LeadSourceUpdate,
     LeadUpdate,
     MoveLeadRequest,
     SendCampaignRequest,
@@ -633,3 +634,47 @@ async def create_source(
     # Invalidate cache since we added a new source
     invalidate_lead_sources_cache()
     return source
+
+
+@router.patch("/sources/{source_id}", response_model=LeadSourceResponse)
+async def update_source(
+    source_id: int,
+    source_data: LeadSourceUpdate,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Update a lead source."""
+    service = LeadService(db)
+    source = await service.update_source(source_id, source_data)
+    if source is None:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND, detail="Lead source not found"
+        )
+    invalidate_lead_sources_cache()
+    return source
+
+
+@router.delete("/sources/{source_id}", status_code=HTTPStatus.NO_CONTENT)
+async def delete_source(
+    source_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Delete a lead source. Fails with 409 if any leads still reference it."""
+    service = LeadService(db)
+    source = await service.get_source_by_id(source_id)
+    if source is None:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND, detail="Lead source not found"
+        )
+    lead_count = await service.count_leads_by_source(source_id)
+    if lead_count > 0:
+        raise HTTPException(
+            status_code=HTTPStatus.CONFLICT,
+            detail=(
+                f"Cannot delete source '{source.name}': {lead_count} lead(s) still "
+                "reference it. Reassign or delete those leads first."
+            ),
+        )
+    await service.delete_source(source)
+    invalidate_lead_sources_cache()
