@@ -210,21 +210,15 @@ export function CampaignDetailPage() {
   // Client-side name resolution: only worth fetching if there's at least
   // one of each member type to look up. Stopgap until the backend joins
   // member name into /campaign-members.
-  const memberContactCount = useMemo(
-    () => (members ?? []).filter((m) => m.member_type === 'contact').length,
-    [members]
-  );
-  const memberLeadCount = useMemo(
-    () => (members ?? []).filter((m) => m.member_type === 'lead').length,
-    [members]
-  );
+  const hasContactMembers = (members ?? []).some((m) => m.member_type === 'contact');
+  const hasLeadMembers = (members ?? []).some((m) => m.member_type === 'lead');
   const { data: contactsData } = useContacts(
     { page_size: 1000 },
-    { enabled: memberContactCount > 0, staleTime: 5 * 60 * 1000 }
+    { enabled: hasContactMembers, staleTime: 5 * 60 * 1000 }
   );
   const { data: leadsData } = useLeads(
     { page_size: 1000 },
-    { enabled: memberLeadCount > 0, staleTime: 5 * 60 * 1000 }
+    { enabled: hasLeadMembers, staleTime: 5 * 60 * 1000 }
   );
 
   const contactById = useMemo(

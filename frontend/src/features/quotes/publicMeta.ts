@@ -3,7 +3,6 @@
 // generic app title) and a luminance-based text color picker so a tenant who
 // sets a pale primary_color doesn't get unreadable white-on-white text.
 
-const META_TAG_NAMES = ['og:title', 'og:description', 'og:type'] as const;
 const LINK_REL = 'canonical';
 
 interface PublicMeta {
@@ -83,7 +82,6 @@ export function setPublicPageMeta({ title, description, type = 'article', canoni
   return () => {
     for (const { restore } of previous) restore();
     for (const tag of created) tag.remove();
-    void META_TAG_NAMES;
   };
 }
 

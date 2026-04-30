@@ -70,7 +70,6 @@ export function RolesSection() {
     activeAdmins.length === 1 &&
     activeAdmins[0]?.id === selectedUserId;
 
-
   const handleAssign = async () => {
     if (selectedUserId && selectedRoleId) {
       await assignMutation.mutateAsync({
