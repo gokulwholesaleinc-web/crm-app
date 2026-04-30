@@ -16,6 +16,7 @@ import {
   useAssignmentStats,
 } from '../../../hooks/useAssignment';
 import { useUsers } from '../../../hooks/useAuth';
+import { useLeadSources } from '../../../hooks/useLeads';
 import type {
   AssignmentRule,
   AssignmentRuleCreate,
@@ -54,6 +55,7 @@ function RuleForm({
   const [isActive, setIsActive] = useState(rule?.is_active ?? true);
 
   const { data: allUsers } = useUsers();
+  const { data: leadSources } = useLeadSources();
 
   const availableUsers = allUsers?.filter((u) => !selectedUserIds.includes(u.id)) ?? [];
 
@@ -158,15 +160,21 @@ function RuleForm({
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label htmlFor="filter-source" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-            Filter: Source ID (optional)
+            Filter by Lead Source (optional)
           </label>
-          <input
+          <select
             id="filter-source"
-            type="number"
             value={filterSource}
             onChange={(e) => setFilterSource(e.target.value)}
             className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-          />
+          >
+            <option value="">Any source...</option>
+            {leadSources?.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
         </div>
         <div>
           <label htmlFor="filter-industry" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -207,24 +215,29 @@ function RuleForm({
 
 function RuleStats({ ruleId }: { ruleId: number }) {
   const { data: stats, isLoading } = useAssignmentStats(ruleId);
+  const { data: allUsers } = useUsers();
 
   if (isLoading) return <Spinner size="sm" />;
   if (!stats?.length) return <p className="text-sm text-gray-500">No stats available.</p>;
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-      {stats.map((s) => (
-        <div
-          key={s.user_id}
-          className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 text-center"
-        >
-          <p className="text-xs text-gray-500 dark:text-gray-400">User #{s.user_id}</p>
-          <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-            {s.active_leads_count}
-          </p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">active leads</p>
-        </div>
-      ))}
+      {stats.map((s) => {
+        const user = allUsers?.find((u) => u.id === s.user_id);
+        const displayName = user ? user.full_name : `User #${s.user_id}`;
+        return (
+          <div
+            key={s.user_id}
+            className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 text-center"
+          >
+            <p className="text-xs text-gray-500 dark:text-gray-400">{displayName}</p>
+            <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              {s.active_leads_count}
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">active leads</p>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -234,6 +247,7 @@ export function AssignmentRulesSection() {
   const createMutation = useCreateAssignmentRule();
   const updateMutation = useUpdateAssignmentRule();
   const deleteMutation = useDeleteAssignmentRule();
+  const { data: leadSources } = useLeadSources();
   const [showForm, setShowForm] = useState(false);
   const [editingRule, setEditingRule] = useState<AssignmentRule | null>(null);
   const [showStatsId, setShowStatsId] = useState<number | null>(null);
@@ -365,14 +379,21 @@ export function AssignmentRulesSection() {
                     </div>
                     {rule.filters && Object.keys(rule.filters).length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-1">
-                        {Object.entries(rule.filters).map(([key, value]) => (
-                          <span
-                            key={key}
-                            className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300"
-                          >
-                            {key}: {String(value)}
-                          </span>
-                        ))}
+                        {Object.entries(rule.filters).map(([key, value]) => {
+                          let displayValue = String(value);
+                          if (key === 'source_id') {
+                            const src = leadSources?.find((s) => s.id === Number(value));
+                            displayValue = src ? src.name : displayValue;
+                          }
+                          return (
+                            <span
+                              key={key}
+                              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300"
+                            >
+                              {key === 'source_id' ? 'source' : key}: {displayValue}
+                            </span>
+                          );
+                        })}
                       </div>
                     )}
                     {showStatsId === rule.id && (

@@ -134,18 +134,18 @@ export function AIPreferencesSection() {
           <div className="space-y-4">
             <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2">
               <div>
-                <label className="block text-xs sm:text-sm font-medium text-gray-500">
+                <label className="block text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">
                   Communication Style
                 </label>
-                <p className="mt-1 text-sm text-gray-900 capitalize">
+                <p className="mt-1 text-sm text-gray-900 dark:text-gray-100 capitalize">
                   {preferences?.preferred_communication_style || 'Professional'}
                 </p>
               </div>
               <div>
-                <label className="block text-xs sm:text-sm font-medium text-gray-500">
+                <label className="block text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">
                   Custom Instructions
                 </label>
-                <p className="mt-1 text-sm text-gray-900">
+                <p className="mt-1 text-sm text-gray-900 dark:text-gray-100">
                   {preferences?.custom_instructions || 'None set'}
                 </p>
               </div>
