@@ -182,7 +182,7 @@ function BillingTermsField({
             value={cadenceKey(value)}
             onChange={(e) => handleCadenceChange(e.target.value)}
             disabled={disabled}
-            className="w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm px-3 py-2 shadow-sm"
+            className="w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm px-3 py-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
           >
             {CADENCE_PRESETS.map((preset) => (
               <option key={preset.key} value={preset.key}>
@@ -212,7 +212,7 @@ function BillingTermsField({
               onChange={(e) => onChange({ ...value, amount: e.target.value })}
               disabled={disabled}
               placeholder="0.00"
-              className="w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm px-3 py-2 shadow-sm"
+              className="w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm px-3 py-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
             />
             {amountHelpText ? (
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{amountHelpText}</p>

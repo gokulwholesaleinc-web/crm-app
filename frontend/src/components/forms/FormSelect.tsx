@@ -1,4 +1,4 @@
-import { SelectHTMLAttributes } from 'react';
+import { SelectHTMLAttributes, useId } from 'react';
 import { UseFormRegisterReturn } from 'react-hook-form';
 import clsx from 'clsx';
 import type { SelectOption } from '../ui/Select';
@@ -8,6 +8,7 @@ export type { SelectOption };
 export interface FormSelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'name' | 'children'> {
   label: string;
   name: string;
+  id?: string;
   options: SelectOption[];
   error?: string;
   required?: boolean;
@@ -20,6 +21,7 @@ export interface FormSelectProps extends Omit<SelectHTMLAttributes<HTMLSelectEle
 export const FormSelect = ({
   label,
   name,
+  id,
   options,
   error,
   required = false,
@@ -31,7 +33,8 @@ export const FormSelect = ({
   ref,
   ...props
 }: FormSelectProps) => {
-  const selectId = name;
+  const generatedId = useId();
+  const selectId = id ?? generatedId;
   const hasError = Boolean(error);
 
   return (

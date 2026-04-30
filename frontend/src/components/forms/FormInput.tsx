@@ -1,10 +1,11 @@
-import { InputHTMLAttributes } from 'react';
+import { InputHTMLAttributes, useId } from 'react';
 import { UseFormRegisterReturn } from 'react-hook-form';
 import clsx from 'clsx';
 
 export interface FormInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'name'> {
   label: string;
   name: string;
+  id?: string;
   error?: string;
   required?: boolean;
   register?: UseFormRegisterReturn;
@@ -15,6 +16,7 @@ export interface FormInputProps extends Omit<InputHTMLAttributes<HTMLInputElemen
 export const FormInput = ({
   label,
   name,
+  id,
   type = 'text',
   placeholder,
   error,
@@ -26,7 +28,8 @@ export const FormInput = ({
   ref,
   ...props
 }: FormInputProps) => {
-  const inputId = name;
+  const generatedId = useId();
+  const inputId = id ?? generatedId;
   const hasError = Boolean(error);
 
   return (
