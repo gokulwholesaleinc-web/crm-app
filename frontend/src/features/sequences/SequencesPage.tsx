@@ -8,6 +8,8 @@ import { Card, CardHeader, CardBody } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Spinner } from '../../components/ui/Spinner';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
+import { SearchableSelect } from '../../components/ui/SearchableSelect';
+import { useContacts } from '../../hooks/useContacts';
 import {
   useSequences,
   useCreateSequence,
@@ -213,15 +215,24 @@ function EnrollModal({
   sequenceId: number;
   onClose: () => void;
 }) {
-  const [contactId, setContactId] = useState('');
+  const [contactId, setContactId] = useState<number | null>(null);
   const enrollMutation = useEnrollContact();
+  const { data: contactsData } = useContacts({ page_size: 200 });
+
+  const contactOptions = useMemo(
+    () =>
+      (contactsData?.items ?? []).map((c) => ({
+        value: c.id,
+        label: c.email ? `${c.full_name} — ${c.email}` : c.full_name,
+      })),
+    [contactsData]
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const id = parseInt(contactId, 10);
-    if (isNaN(id)) return;
+    if (contactId === null) return;
     enrollMutation.mutate(
-      { sequenceId, contactId: id },
+      { sequenceId, contactId },
       { onSuccess: () => onClose() }
     );
   };
@@ -229,28 +240,29 @@ function EnrollModal({
   return (
     <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800">
       <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">Enroll Contact</h4>
-      <form onSubmit={handleSubmit} className="flex gap-2">
+      <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-2 sm:items-end">
         <div className="flex-1">
-          <label htmlFor="enroll-contact-id" className="sr-only">
-            Contact ID
-          </label>
-          <input
-            id="enroll-contact-id"
-            type="number"
-            min="1"
+          <SearchableSelect
+            id="enroll-contact-picker"
+            label="Contact"
             value={contactId}
-            onChange={(e) => setContactId(e.target.value)}
-            placeholder="Contact ID"
-            required
-            className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+            onChange={setContactId}
+            options={contactOptions}
+            placeholder="Search contacts by name or email..."
           />
         </div>
-        <Button type="submit" size="sm" disabled={enrollMutation.isPending}>
-          {enrollMutation.isPending ? <Spinner size="sm" /> : 'Enroll'}
-        </Button>
-        <Button type="button" variant="secondary" size="sm" onClick={onClose}>
-          Cancel
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            type="submit"
+            size="sm"
+            disabled={contactId === null || enrollMutation.isPending}
+          >
+            {enrollMutation.isPending ? <Spinner size="sm" /> : 'Enroll'}
+          </Button>
+          <Button type="button" variant="secondary" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+        </div>
       </form>
     </div>
   );

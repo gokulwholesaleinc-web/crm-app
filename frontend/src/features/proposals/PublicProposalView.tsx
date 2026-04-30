@@ -4,6 +4,7 @@ import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import { sanitizeHexColor } from '../../utils/colorValidation';
 import { cadenceLabel, formatProposalMoney } from './billing';
+import { setPublicPageMeta } from '../quotes/publicMeta';
 
 // Bare axios instance for public (unauthenticated) proposal endpoints.
 // Deliberately does NOT attach the CRM Bearer token or X-Tenant-Slug
@@ -82,9 +83,20 @@ function PublicProposalView() {
   const proposalBrandingCompanyName = proposal?.branding?.company_name;
   useEffect(() => {
     if (!proposalTitle) return;
+    const company = proposalBrandingCompanyName ?? 'Proposal';
+    const title = `${proposalTitle} — ${company}`;
     const previous = document.title;
-    document.title = `${proposalTitle} — ${proposalBrandingCompanyName ?? 'Proposal'}`;
-    return () => { document.title = previous; };
+    document.title = title;
+    const restoreMeta = setPublicPageMeta({
+      title,
+      description: `Proposal from ${company}.`,
+      type: 'article',
+      canonicalUrl: window.location.href,
+    });
+    return () => {
+      document.title = previous;
+      restoreMeta();
+    };
   }, [proposalTitle, proposalBrandingCompanyName]);
 
   useEffect(() => {
@@ -551,8 +563,13 @@ function PublicProposalView() {
         )}
       </main>
 
-      {/* Fine-print legal footer — ESIGN disclosure always visible */}
-      <footer className="mt-16 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
+      {/* Fine-print legal footer — ESIGN disclosure always visible. Pads
+          with safe-area-inset-bottom so iPhone home indicator doesn't overlap
+          the disclosure text (requires viewport-fit=cover in index.html). */}
+      <footer
+        className="mt-16 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
         <div className="mx-auto max-w-3xl px-6 sm:px-10 py-8 space-y-5">
           <details className="group text-sm">
             <summary className="cursor-pointer text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 list-none flex items-center gap-2 select-none">

@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import { sanitizeHexColor } from '../../utils/colorValidation';
+import { setPublicPageMeta, pickReadableText } from './publicMeta';
 import { Modal, ModalFooter } from '../../components/ui/Modal';
 
 // Bare axios for public (unauthenticated) quote endpoints. Does NOT
@@ -109,9 +110,20 @@ function PublicQuoteView() {
   const quoteBrandingCompanyName = quote?.branding?.company_name;
   useEffect(() => {
     if (!quoteNumber) return;
+    const company = quoteBrandingCompanyName ?? 'Quote';
+    const title = `Quote ${quoteNumber} — ${company}`;
     const previous = document.title;
-    document.title = `Quote ${quoteNumber} — ${quoteBrandingCompanyName ?? 'Quote'}`;
-    return () => { document.title = previous; };
+    document.title = title;
+    const restoreMeta = setPublicPageMeta({
+      title,
+      description: `Quote ${quoteNumber} from ${company}.`,
+      type: 'article',
+      canonicalUrl: window.location.href,
+    });
+    return () => {
+      document.title = previous;
+      restoreMeta();
+    };
   }, [quoteNumber, quoteBrandingCompanyName]);
 
   useEffect(() => {
@@ -269,7 +281,9 @@ function PublicQuoteView() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Branded Top Bar */}
+      {/* Branded Top Bar — text color picked from primary_color luminance so a
+          tenant who configures #ffffff (or any pale color) doesn't end up with
+          unreadable white-on-white. */}
       <header
         className="sticky top-0 z-10 border-b border-gray-200 dark:border-gray-700"
         style={{ backgroundColor: branding.primary_color }}
@@ -291,16 +305,16 @@ function PublicQuoteView() {
                 className="h-9 w-9 rounded flex items-center justify-center flex-shrink-0"
                 style={{ backgroundColor: branding.secondary_color }}
               >
-                <span className="text-white font-bold text-lg">
+                <span className={`font-bold text-lg ${pickReadableText(branding.secondary_color) === 'white' ? 'text-white' : 'text-gray-900'}`}>
                   {companyDisplayName[0]?.toUpperCase() || 'Q'}
                 </span>
               </div>
             )}
-            <span className="text-lg font-semibold text-white truncate">
+            <span className={`text-lg font-semibold truncate ${pickReadableText(branding.primary_color) === 'white' ? 'text-white' : 'text-gray-900'}`}>
               {companyDisplayName}
             </span>
           </div>
-          <div className="flex items-center gap-2 text-sm text-white/80">
+          <div className={`flex items-center gap-2 text-sm ${pickReadableText(branding.primary_color) === 'white' ? 'text-white/80' : 'text-gray-700'}`}>
             <span>{quote.quote_number}</span>
             {quote.status === 'accepted' || actionDone === 'accepted' ? (
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
@@ -557,8 +571,13 @@ function PublicQuoteView() {
         )}
       </main>
 
-      {/* Branded Footer */}
-      <footer className="border-t border-gray-200 dark:border-gray-700 mt-12">
+      {/* Branded Footer — pads with safe-area-inset-bottom so iPhone home
+          indicator doesn't overlap the footer text. Requires viewport-fit=cover
+          on the <meta name=viewport> tag (set in index.html). */}
+      <footer
+        className="border-t border-gray-200 dark:border-gray-700 mt-12"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 text-center text-sm text-gray-400 dark:text-gray-500">
           {branding.footer_text ? (
             <p className="mb-1">{branding.footer_text}</p>
