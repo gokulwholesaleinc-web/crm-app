@@ -23,6 +23,11 @@ export function ActivityDetailModal({
   isPushing,
   onPush,
 }: ActivityDetailModalProps) {
+  const relatedEntityType =
+    activity.entity_type && activity.entity_type !== GOOGLE_SYNC_ENTITY_TYPE
+      ? normalizeEntityType(activity.entity_type)
+      : null;
+
   return (
     <Modal isOpen onClose={onClose} title={activity.subject} size="md">
       <div className="space-y-4 p-4">
@@ -63,21 +68,16 @@ export function ActivityDetailModal({
               <p className="text-gray-900 dark:text-gray-100">{activity.meeting_location}</p>
             </div>
           )}
-          {(() => {
-            if (activity.entity_type === GOOGLE_SYNC_ENTITY_TYPE) return null;
-            const t = normalizeEntityType(activity.entity_type);
-            if (!t) return null;
-            return (
-              <div className="col-span-2">
-                <span className="font-medium text-gray-500 dark:text-gray-400">Related</span>
-                <p className="text-gray-900 dark:text-gray-100">
-                  <EntityLink type={t} id={activity.entity_id}>
-                    {activity.entity_type} #{activity.entity_id}
-                  </EntityLink>
-                </p>
-              </div>
-            );
-          })()}
+          {relatedEntityType && (
+            <div className="col-span-2">
+              <span className="font-medium text-gray-500 dark:text-gray-400">Related</span>
+              <p className="text-gray-900 dark:text-gray-100">
+                <EntityLink type={relatedEntityType} id={activity.entity_id}>
+                  {activity.entity_type} #{activity.entity_id}
+                </EntityLink>
+              </p>
+            </div>
+          )}
         </div>
         {activity.description && (
           <div className="text-sm">

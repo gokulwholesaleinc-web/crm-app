@@ -1,26 +1,25 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { StatusBadge, Button, EntityLink, PaginationBar } from '../../components/ui';
-import type { StripeCustomerBrief } from '../../types';
-
-function CustomerLink({ customer, className }: { customer: StripeCustomerBrief | null | undefined; className?: string }) {
-  const label = customer?.name ?? customer?.email ?? '-';
-  if (!customer) return <span className={className}>{label}</span>;
-  if (customer.contact_id) {
-    return <EntityLink type="contact" id={customer.contact_id} variant="muted" className={className}>{label}</EntityLink>;
-  }
-  if (customer.company_id) {
-    return <EntityLink type="company" id={customer.company_id} variant="muted" className={className}>{label}</EntityLink>;
-  }
-  return <span className={className}>{label}</span>;
-}
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { usePayments, useSubscriptions, useCancelSubscription } from '../../hooks/usePayments';
 import { SendInvoiceModal } from './components/SendInvoiceModal';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { showSuccess, showError } from '../../utils/toast';
-import type { Payment, SubscriptionItem } from '../../types';
+import type { Payment, StripeCustomerBrief, SubscriptionItem } from '../../types';
+
+function CustomerLink({ customer }: { customer: StripeCustomerBrief | null | undefined }) {
+  const label = customer?.name ?? customer?.email ?? '-';
+  if (!customer) return <>{label}</>;
+  if (customer.contact_id) {
+    return <EntityLink type="contact" id={customer.contact_id} variant="muted">{label}</EntityLink>;
+  }
+  if (customer.company_id) {
+    return <EntityLink type="company" id={customer.company_id} variant="muted">{label}</EntityLink>;
+  }
+  return <>{label}</>;
+}
 
 const TABS = ['All Payments', 'Subscriptions'] as const;
 type Tab = (typeof TABS)[number];

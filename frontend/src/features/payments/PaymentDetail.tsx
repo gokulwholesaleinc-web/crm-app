@@ -6,6 +6,18 @@ import { usePayment } from '../../hooks/usePayments';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { apiClient } from '../../api/client';
+import type { StripeCustomerBrief } from '../../types';
+
+function CustomerName({ customer }: { customer: StripeCustomerBrief }) {
+  const label = customer.name ?? customer.email ?? customer.stripe_customer_id;
+  if (customer.contact_id) {
+    return <EntityLink type="contact" id={customer.contact_id}>{label}</EntityLink>;
+  }
+  if (customer.company_id) {
+    return <EntityLink type="company" id={customer.company_id}>{label}</EntityLink>;
+  }
+  return <>{label}</>;
+}
 
 function PaymentDetailPage() {
   const { id } = useParams();
@@ -198,23 +210,14 @@ function PaymentDetailPage() {
           <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700">
             <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-4">Related</h2>
             <dl className="space-y-3">
-              {payment.customer && (() => {
-                const label = payment.customer.name ?? payment.customer.email ?? payment.customer.stripe_customer_id;
-                const linkType = payment.customer.contact_id ? 'contact' : payment.customer.company_id ? 'company' : null;
-                const linkId = payment.customer.contact_id ?? payment.customer.company_id ?? null;
-                return (
-                  <div>
-                    <dt className="text-xs text-gray-500 dark:text-gray-400">Customer</dt>
-                    <dd className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                      {linkType && linkId ? (
-                        <EntityLink type={linkType} id={linkId}>{label}</EntityLink>
-                      ) : (
-                        label
-                      )}
-                    </dd>
-                  </div>
-                );
-              })()}
+              {payment.customer && (
+                <div>
+                  <dt className="text-xs text-gray-500 dark:text-gray-400">Customer</dt>
+                  <dd className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    <CustomerName customer={payment.customer} />
+                  </dd>
+                </div>
+              )}
               {payment.opportunity && (
                 <div>
                   <dt className="text-xs text-gray-500 dark:text-gray-400">Opportunity</dt>

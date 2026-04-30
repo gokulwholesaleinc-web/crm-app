@@ -384,6 +384,8 @@ export function ActivitiesPage() {
                     !activity.is_completed &&
                     activity.due_date &&
                     new Date(activity.due_date) < new Date();
+                  const entityLinkType = activity.entity_type ? normalizeEntityType(activity.entity_type) : null;
+                  const entityLabel = activity.entity_type ? `${activity.entity_type} #${activity.entity_id}` : null;
                   return (
                     <div
                       key={activity.id}
@@ -415,21 +417,17 @@ export function ActivitiesPage() {
                           </div>
                           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
                             <span className="capitalize">{activity.activity_type}</span>
-                            {activity.entity_type && (() => {
-                              const t = normalizeEntityType(activity.entity_type);
-                              const label = `${activity.entity_type} #${activity.entity_id}`;
-                              return (
-                                <span className="truncate">
-                                  {t ? (
-                                    <EntityLink type={t} id={activity.entity_id} variant="muted">
-                                      {label}
-                                    </EntityLink>
-                                  ) : (
-                                    label
-                                  )}
-                                </span>
-                              );
-                            })()}
+                            {entityLabel && (
+                              <span className="truncate">
+                                {entityLinkType ? (
+                                  <EntityLink type={entityLinkType} id={activity.entity_id} variant="muted">
+                                    {entityLabel}
+                                  </EntityLink>
+                                ) : (
+                                  entityLabel
+                                )}
+                              </span>
+                            )}
                             {activity.due_date ? (
                               <span className={clsx('flex items-center gap-1', isOverdue ? 'text-red-600 dark:text-red-400' : '')}>
                                 <CalendarIcon className="h-3 w-3 flex-shrink-0" aria-hidden="true" />
