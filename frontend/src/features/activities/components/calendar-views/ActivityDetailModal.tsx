@@ -1,4 +1,7 @@
 import { Link } from 'react-router-dom';
+
+const DATETIME_FMT = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+const DATE_FMT = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
 import { ArrowUpOnSquareIcon } from '@heroicons/react/24/outline';
 import { Modal } from '../../../../components/ui';
 import type { CalendarActivity } from '../../../../api/activities';
@@ -45,13 +48,13 @@ export function ActivityDetailModal({
           {activity.scheduled_at && (
             <div>
               <span className="font-medium text-gray-500 dark:text-gray-400">Scheduled</span>
-              <p className="text-gray-900 dark:text-gray-100">{new Date(activity.scheduled_at).toLocaleString()}</p>
+              <p className="text-gray-900 dark:text-gray-100">{DATETIME_FMT.format(new Date(activity.scheduled_at))}</p>
             </div>
           )}
           {activity.due_date && (
             <div>
               <span className="font-medium text-gray-500 dark:text-gray-400">Due Date</span>
-              <p className="text-gray-900 dark:text-gray-100">{new Date(activity.due_date).toLocaleDateString()}</p>
+              <p className="text-gray-900 dark:text-gray-100">{DATE_FMT.format(new Date(activity.due_date))}</p>
             </div>
           )}
           {activity.meeting_location && (

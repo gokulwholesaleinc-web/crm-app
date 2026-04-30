@@ -79,7 +79,22 @@ const INITIAL_DELETE_CONFIRM = { isOpen: false, activity: null } as const;
 
 export function ActivitiesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [viewMode, setViewMode] = useState<ViewMode>('list');
+
+  // Derive viewMode from URL — keeps back/forward nav working
+  const viewParam = searchParams.get('view');
+  const viewMode: ViewMode = viewParam === 'timeline' || viewParam === 'calendar' ? viewParam : 'list';
+
+  const setViewMode = (newView: ViewMode) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (newView === 'list') {
+        next.delete('view');
+      } else {
+        next.set('view', newView);
+      }
+      return next;
+    });
+  };
   const [showFilters, setShowFilters] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);

@@ -28,6 +28,7 @@ const activityIcons: Record<string, React.ComponentType<{ className?: string }>>
 };
 
 const timeFormatter = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
+const FULL_DATE_FMT = new Intl.DateTimeFormat(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
 const defaultColors = { bg: 'bg-gray-500', ring: 'ring-gray-100', text: 'text-gray-600' };
 
@@ -43,7 +44,7 @@ function formatDateHeader(dateString: string): string {
   const date = new Date(dateString);
   if (isToday(date)) return 'Today';
   if (isYesterday(date)) return 'Yesterday';
-  return format(date, 'EEEE, MMMM d, yyyy');
+  return FULL_DATE_FMT.format(date);
 }
 
 function formatTime(dateString: string): string {
