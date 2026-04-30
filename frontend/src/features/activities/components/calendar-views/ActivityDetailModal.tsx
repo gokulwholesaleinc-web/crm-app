@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { ArrowUpOnSquareIcon } from '@heroicons/react/24/outline';
-import { Modal } from '../../../../components/ui';
+import { EntityLink, Modal, normalizeEntityType } from '../../../../components/ui';
 import type { CalendarActivity } from '../../../../api/activities';
 import { GOOGLE_SYNC_ENTITY_TYPE } from './helpers';
 import clsx from 'clsx';
@@ -63,6 +63,21 @@ export function ActivityDetailModal({
               <p className="text-gray-900 dark:text-gray-100">{activity.meeting_location}</p>
             </div>
           )}
+          {(() => {
+            if (activity.entity_type === GOOGLE_SYNC_ENTITY_TYPE) return null;
+            const t = normalizeEntityType(activity.entity_type);
+            if (!t) return null;
+            return (
+              <div className="col-span-2">
+                <span className="font-medium text-gray-500 dark:text-gray-400">Related</span>
+                <p className="text-gray-900 dark:text-gray-100">
+                  <EntityLink type={t} id={activity.entity_id}>
+                    {activity.entity_type} #{activity.entity_id}
+                  </EntityLink>
+                </p>
+              </div>
+            );
+          })()}
         </div>
         {activity.description && (
           <div className="text-sm">

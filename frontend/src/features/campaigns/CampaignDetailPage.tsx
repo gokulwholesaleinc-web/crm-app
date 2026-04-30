@@ -15,7 +15,7 @@ import {
   CurrencyDollarIcon,
   TrashIcon,
 } from '@heroicons/react/24/outline';
-import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
+import { Button, EntityLink, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { CampaignForm } from './components/CampaignForm';
 import { AddMembersModal } from './components/AddMembersModal';
 import { CampaignAnalyticsSection } from './components/CampaignAnalytics';
@@ -93,11 +93,14 @@ function MemberRow({
       ? contactById.get(member.member_id)
       : leadById.get(member.member_id);
   const displayName = resolved?.full_name ?? (member.member_type === 'contact' ? `Contact #${member.member_id}` : `Lead #${member.member_id}`);
+  const memberLinkType = member.member_type === 'contact' ? 'contact' : 'lead';
 
   return (
     <tr className="hover:bg-gray-50 dark:hover:bg-gray-700">
       <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">
-        <span>{displayName}</span>
+        <EntityLink type={memberLinkType} id={member.member_id} variant="primary">
+          {displayName}
+        </EntityLink>
         {resolved?.email && <span className="block text-xs text-gray-500 dark:text-gray-400">{resolved.email}</span>}
       </td>
       <td className="px-4 py-3">
@@ -144,13 +147,16 @@ function MemberCard({
       ? contactById.get(member.member_id)
       : leadById.get(member.member_id);
   const displayName = resolved?.full_name ?? (member.member_type === 'contact' ? `Contact #${member.member_id}` : `Lead #${member.member_id}`);
+  const memberLinkType = member.member_type === 'contact' ? 'contact' : 'lead';
 
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           <p className="font-medium text-gray-900 dark:text-gray-100 truncate">
-            {displayName}
+            <EntityLink type={memberLinkType} id={member.member_id}>
+              {displayName}
+            </EntityLink>
           </p>
           {resolved?.email && <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{resolved.email}</p>}
           <span
