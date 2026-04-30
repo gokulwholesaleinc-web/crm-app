@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import { sanitizeHexColor } from '../../utils/colorValidation';
@@ -63,8 +63,17 @@ const DEFAULT_BRANDING: ProposalBranding = {
   terms_of_service_url: null,
 };
 
+// Poll cadence for the post-Stripe `?paid=1` return state. Stripe's
+// webhook normally arrives within a few seconds of checkout success;
+// we cap polling at ~30s and fall back to a "processing" message if the
+// webhook is slow.
+const PAID_POLL_INTERVAL_MS = 3000;
+const PAID_POLL_TIMEOUT_MS = 30000;
+
 function PublicProposalView() {
   const { token } = useParams<{ token: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const paidFlag = searchParams.get('paid') === '1';
   const [proposal, setProposal] = useState<PublicProposal | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -74,6 +83,8 @@ function PublicProposalView() {
   const [signerName, setSignerName] = useState('');
   const [signerEmail, setSignerEmail] = useState('');
   const [signError, setSignError] = useState<string | null>(null);
+  const [confirmingPayment, setConfirmingPayment] = useState(false);
+  const [paymentTimedOut, setPaymentTimedOut] = useState(false);
 
   useEffect(() => {
     setLogoError(false);
@@ -117,6 +128,75 @@ function PublicProposalView() {
 
     fetchProposal();
   }, [token]);
+
+  // Stripe Checkout success_url returns the customer here with `?paid=1`.
+  // The webhook usually flips status → 'paid' within a few seconds, but
+  // there's a race window. While the proposal is still pre-paid, show a
+  // "confirming…" state and poll the public endpoint until either the
+  // status flips or we time out (then we fall back to a generic
+  // "processing" notice). The query param is stripped from the URL after
+  // handling so a refresh doesn't restart the poll.
+  useEffect(() => {
+    if (!proposal || !paidFlag || !token) return;
+
+    const stripPaidParam = () => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete('paid');
+          return next;
+        },
+        { replace: true },
+      );
+    };
+
+    if (proposal.status === 'paid') {
+      stripPaidParam();
+      return;
+    }
+
+    setConfirmingPayment(true);
+    setPaymentTimedOut(false);
+
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const startedAt = Date.now();
+
+    const tick = async () => {
+      try {
+        const response = await publicClient.get<PublicProposal>(
+          `/api/proposals/public/${token}`,
+        );
+        if (cancelled) return;
+        if (response.data.status === 'paid') {
+          setProposal(response.data);
+          setConfirmingPayment(false);
+          stripPaidParam();
+          return;
+        }
+      } catch {
+        // Transient network error — retry on next tick.
+      }
+      if (cancelled) return;
+      if (Date.now() - startedAt >= PAID_POLL_TIMEOUT_MS) {
+        setConfirmingPayment(false);
+        setPaymentTimedOut(true);
+        stripPaidParam();
+        return;
+      }
+      timeoutId = setTimeout(tick, PAID_POLL_INTERVAL_MS);
+    };
+
+    timeoutId = setTimeout(tick, PAID_POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      if (timeoutId !== null) clearTimeout(timeoutId);
+    };
+    // setSearchParams is stable from react-router; intentionally excluded
+    // to keep the poll from restarting when its identity changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [proposal, paidFlag, token]);
 
   // Hook must run unconditionally (rules-of-hooks) so it sits before
   // the loading/error early returns below and guards against a null
@@ -404,29 +484,82 @@ function PublicProposalView() {
             </section>
           )}
 
-        {/* Payment CTA */}
-        {proposal.stripe_payment_url && proposal.status !== 'paid' && (
-          <section className="mt-10 sm:mt-12">
-            <PlainSectionHeader title="Payment" accent={accent} />
-            <p className="prose-body mb-5">
-              {proposal.payment_type === 'subscription'
-                ? `Set up your payment method with ${companyDisplayName} via Stripe to activate your subscription. The first billing period will be charged upon checkout completion.`
-                : `An invoice has been issued. Complete payment securely via Stripe to confirm this engagement.`}
-            </p>
-            <a
-              href={proposal.stripe_payment_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 transition-opacity"
-              style={{ backgroundColor: accent, outlineColor: accent }}
-            >
-              {proposal.payment_type === 'subscription'
-                ? 'Complete payment setup'
-                : 'Pay invoice on Stripe'}
-              <span aria-hidden="true">→</span>
-            </a>
+        {/* Confirming payment — shown after Stripe Checkout success_url
+            redirect while we wait for the webhook to flip status → paid */}
+        {confirmingPayment && proposal.status !== 'paid' && (
+          <section
+            className="mt-10 sm:mt-12 rounded border px-5 py-4"
+            style={{ borderColor: `${accent}40`, backgroundColor: `${accent}0a` }}
+            role="status"
+            aria-live="polite"
+          >
+            <div className="flex items-center gap-3">
+              <span
+                className="inline-block h-4 w-4 rounded-full border-2 border-t-transparent animate-spin"
+                style={{ borderColor: accent, borderTopColor: 'transparent' }}
+                aria-hidden="true"
+              />
+              <div>
+                <p className="font-semibold text-gray-900">Confirming your payment…</p>
+                <p className="text-sm text-gray-700 mt-0.5">
+                  Stripe is finalizing the transaction. This usually takes a few
+                  seconds.
+                </p>
+              </div>
+            </div>
           </section>
         )}
+
+        {/* Timed-out — webhook didn't arrive within the poll window. Tell
+            the customer their payment is still being processed and
+            they'll get an email when it lands. */}
+        {paymentTimedOut && proposal.status !== 'paid' && (
+          <section
+            className="mt-10 sm:mt-12 rounded border border-amber-200 bg-amber-50 px-5 py-4"
+            role="status"
+            aria-live="polite"
+          >
+            <div className="flex items-start gap-2.5">
+              <CheckIcon className="h-5 w-5 text-amber-700 flex-shrink-0 mt-0.5" aria-hidden="true" />
+              <div>
+                <p className="font-semibold text-amber-900">Payment is processing</p>
+                <p className="text-sm text-amber-800 mt-0.5">
+                  Thanks — Stripe has received your payment. We'll email a
+                  receipt to {proposal.contact?.full_name ? 'you' : 'the address you used at checkout'} once
+                  it's finalized. You can safely close this page.
+                </p>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* Payment CTA — hidden while we're confirming a fresh return so
+            the customer can't accidentally click pay twice. */}
+        {proposal.stripe_payment_url &&
+          proposal.status !== 'paid' &&
+          !confirmingPayment &&
+          !paymentTimedOut && (
+            <section className="mt-10 sm:mt-12">
+              <PlainSectionHeader title="Payment" accent={accent} />
+              <p className="prose-body mb-5">
+                {proposal.payment_type === 'subscription'
+                  ? `Set up your payment method with ${companyDisplayName} via Stripe to activate your subscription. The first billing period will be charged upon checkout completion.`
+                  : `An invoice has been issued. Complete payment securely via Stripe to confirm this engagement.`}
+              </p>
+              <a
+                href={proposal.stripe_payment_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 transition-opacity"
+                style={{ backgroundColor: accent, outlineColor: accent }}
+              >
+                {proposal.payment_type === 'subscription'
+                  ? 'Complete payment setup'
+                  : 'Pay invoice on Stripe'}
+                <span aria-hidden="true">→</span>
+              </a>
+            </section>
+          )}
 
         {proposal.status === 'paid' && (
           <section className="mt-10 sm:mt-12 rounded border border-green-200 bg-green-50 px-5 py-4">
