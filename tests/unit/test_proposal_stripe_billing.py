@@ -688,6 +688,34 @@ class TestRetryBilling:
             with pytest.raises(ValueError, match="already has a Stripe artifact"):
                 await service.retry_billing(billing_proposal)
 
+    @pytest.mark.asyncio
+    async def test_retry_after_billing_error_spawns_invoice(
+        self,
+        db_session: AsyncSession,
+        billing_proposal: Proposal,
+    ):
+        """The intended happy path: accept hit a Stripe outage, billing_error
+        is set, no Stripe artifact landed. Retry should create the invoice
+        and clear the error."""
+        billing_proposal.status = "accepted"
+        billing_proposal.billing_error = "Stripe is currently unavailable"
+        billing_proposal.stripe_invoice_id = None
+        billing_proposal.stripe_checkout_session_id = None
+        billing_proposal.stripe_payment_url = None
+        await db_session.commit()
+
+        registry = _InvoiceRegistry()
+        stub = _make_stripe_stub(registry)
+        with patch("src.payments.service._get_stripe", return_value=stub):
+            service = ProposalService(db_session)
+            updated = await service.retry_billing(billing_proposal)
+
+        assert updated.status == "awaiting_payment"
+        assert updated.stripe_invoice_id is not None
+        assert updated.stripe_payment_url is not None
+        assert updated.billing_error is None
+        assert len(registry.created) == 1
+
 
 class TestIdempotencyKeysAreDeterministic:
     """A uuid-randomized idempotency key defeats Stripe's dedup. Same logical
