@@ -14,6 +14,7 @@ import { Modal, ModalFooter } from '../../../components/ui/Modal';
 import { FormInput } from '../../../components/forms';
 import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 import type {
+  ApiError,
   LeadSource,
   LeadSourceCreate,
   LeadSourceUpdate,
@@ -279,8 +280,9 @@ export function LeadSourcesSection() {
             {deleteMutation.isError && (
               <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-3">
                 <p className="text-sm text-red-800 dark:text-red-300">
-                  {(deleteMutation.error as Error)?.message?.includes('409')
-                    ? `Cannot delete: leads still reference this source. Reassign or delete those leads first.`
+                  {(deleteMutation.error as unknown as ApiError)?.status_code === 409
+                    ? ((deleteMutation.error as unknown as ApiError).detail ||
+                       'Cannot delete: leads still reference this source. Reassign or delete those leads first.')
                     : 'Failed to delete source. Please try again.'}
                 </p>
               </div>

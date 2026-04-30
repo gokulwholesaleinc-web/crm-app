@@ -145,12 +145,12 @@ class LeadService(
         result = await self.db.execute(
             select(func.count(Lead.id)).where(Lead.source_id == source_id)
         )
-        return int(result.scalar() or 0)
+        return result.scalar_one()
 
-    async def delete_source(self, source_id: int) -> bool:
-        source = await self.get_source_by_id(source_id)
-        if source is None:
-            return False
+    async def delete_source(self, source: LeadSource) -> None:
+        # Caller is expected to have already loaded the source (e.g.
+        # via get_source_by_id) so we don't double-fetch here. The
+        # router's 404 path produces the not-found error before we
+        # land in this method.
         await self.db.delete(source)
         await self.db.flush()
-        return True

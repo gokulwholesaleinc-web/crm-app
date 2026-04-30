@@ -676,5 +676,5 @@ async def delete_source(
                 "reference it. Reassign or delete those leads first."
             ),
         )
-    await service.delete_source(source_id)
+    await service.delete_source(source)
     invalidate_lead_sources_cache()
