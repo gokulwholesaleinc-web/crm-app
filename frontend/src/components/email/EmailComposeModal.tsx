@@ -65,22 +65,19 @@ function readFileAsBase64(file: File): Promise<string> {
  * recipient's mail client even if they're reading in plain text.
  */
 function buildQuotedReply(replyTo: ThreadEmailItem): string {
-  const sender =
-    replyTo.direction === 'outbound'
-      ? replyTo.to_email
-      : replyTo.from_email ?? 'sender';
-  let when: string;
-  try {
-    when = new Intl.DateTimeFormat('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    }).format(new Date(replyTo.timestamp));
-  } catch {
-    when = replyTo.timestamp;
-  }
+  // The header attributes the QUOTED message to its author, not the
+  // current reply target. For outbound rows the original sender is
+  // the CRM user (`from_email`); for inbound rows it's the customer.
+  // Earlier this branch flipped to `to_email` on outbound and
+  // attributed the user's own copy to the customer.
+  const sender = replyTo.from_email ?? 'sender';
+  const when = new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(replyTo.timestamp));
   // Prefer plain body. body_html falls back through a strip — we're
   // displaying inside a <textarea>, so anything not stripped becomes
   // visible markup noise. In practice CRM-sent emails have body set.

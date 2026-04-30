@@ -1,5 +1,7 @@
 """Email request/response schemas."""
 
+import base64
+import binascii
 from datetime import date, datetime
 from typing import Any
 
@@ -64,13 +66,11 @@ class SendEmailRequest(BaseModel):
         # Base64 is ~4/3 the size of the raw bytes; check the *decoded*
         # size against the limit so we don't reject borderline payloads
         # for their wire bloat alone.
-        import base64
-
         running_total = 0
         for att in self.attachments:
             try:
                 raw = base64.b64decode(att.content_b64, validate=True)
-            except Exception as exc:  # noqa: BLE001 — re-raised as ValueError below
+            except binascii.Error as exc:
                 raise ValueError(
                     f"attachment '{att.filename}' is not valid base64"
                 ) from exc
