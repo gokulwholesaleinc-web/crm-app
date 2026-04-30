@@ -13,6 +13,7 @@ import type {
   LeadUpdate,
   LeadFilters,
   LeadSourceCreate,
+  LeadSourceUpdate,
   LeadConvertToContactRequest,
   LeadConvertToOpportunityRequest,
   LeadFullConversionRequest,
@@ -126,6 +127,32 @@ export function useCreateLeadSource() {
 
   return useMutation({
     mutationFn: (data: LeadSourceCreate) => leadsApi.createSource(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: leadSourceKeys.all });
+    },
+  });
+}
+
+export function useUpdateLeadSource() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: LeadSourceUpdate }) =>
+      leadsApi.updateSource(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: leadSourceKeys.all });
+      // Lead detail/list views render the source name — refresh them too
+      // so a rename propagates without a full reload.
+      queryClient.invalidateQueries({ queryKey: leadKeys.lists() });
+    },
+  });
+}
+
+export function useDeleteLeadSource() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: number) => leadsApi.deleteSource(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: leadSourceKeys.all });
     },

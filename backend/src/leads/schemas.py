@@ -17,6 +17,12 @@ class LeadSourceCreate(LeadSourceBase):
     pass
 
 
+class LeadSourceUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    is_active: bool | None = None
+
+
 class LeadSourceResponse(LeadSourceBase):
     id: int
 

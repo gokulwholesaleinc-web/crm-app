@@ -18,6 +18,12 @@ export interface LeadSourceCreate {
   is_active?: boolean;
 }
 
+export interface LeadSourceUpdate {
+  name?: string;
+  description?: string | null;
+  is_active?: boolean;
+}
+
 export interface LeadBase {
   first_name?: string | null;
   last_name?: string | null;
