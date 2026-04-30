@@ -789,6 +789,38 @@ class TestKanbanView:
         assert opp["company_id"] == test_company.id
         assert opp["company_name"] == test_company.name
 
+    @pytest.mark.asyncio
+    async def test_kanban_owner_scope_excludes_other_users_for_sales_rep(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        sales_rep_auth_headers: dict,
+        test_pipeline_stage: PipelineStage,
+        test_contact: Contact,
+        test_company: Company,
+    ):
+        """A sales rep's kanban must not include other users' opps even with the new id fields."""
+        # Admin creates a deal not assigned to the sales rep.
+        admin_create = await client.post(
+            "/api/opportunities",
+            headers=auth_headers,
+            json={
+                "name": "Admin-Only Deal",
+                "pipeline_stage_id": test_pipeline_stage.id,
+                "contact_id": test_contact.id,
+                "company_id": test_company.id,
+            },
+        )
+        assert admin_create.status_code == 201
+
+        rep_response = await client.get("/api/opportunities/kanban", headers=sales_rep_auth_headers)
+        assert rep_response.status_code == 200
+        rep_data = rep_response.json()
+
+        all_names = [o["name"] for stage in rep_data["stages"] for o in stage["opportunities"]]
+        assert "Admin-Only Deal" not in all_names
+
 
 class TestWeightedAmount:
     """Tests for weighted amount calculation."""

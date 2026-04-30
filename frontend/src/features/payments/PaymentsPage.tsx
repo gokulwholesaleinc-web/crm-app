@@ -9,14 +9,27 @@ import { usePageTitle } from '../../hooks/usePageTitle';
 import { showSuccess, showError } from '../../utils/toast';
 import type { Payment, StripeCustomerBrief, SubscriptionItem } from '../../types';
 
-function CustomerLink({ customer }: { customer: StripeCustomerBrief | null | undefined }) {
+function CustomerLink({
+  customer,
+  fallbackHref,
+}: {
+  customer: StripeCustomerBrief | null | undefined;
+  fallbackHref?: string;
+}) {
   const label = customer?.name ?? customer?.email ?? '-';
-  if (!customer) return <>{label}</>;
-  if (customer.contact_id) {
+  if (customer?.contact_id) {
     return <EntityLink type="contact" id={customer.contact_id} variant="muted">{label}</EntityLink>;
   }
-  if (customer.company_id) {
+  if (customer?.company_id) {
     return <EntityLink type="company" id={customer.company_id} variant="muted">{label}</EntityLink>;
+  }
+  // No CRM target — keep the cell a tap target by linking to the surrounding fallback (e.g. payment detail).
+  if (fallbackHref) {
+    return (
+      <Link to={fallbackHref} className="text-gray-600 hover:text-primary-700 dark:text-gray-400 dark:hover:text-primary-300">
+        {label}
+      </Link>
+    );
   }
   return <>{label}</>;
 }
@@ -212,7 +225,7 @@ function PaymentsPage() {
                           Payment #{payment.id}
                         </Link>
                         <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                          <CustomerLink customer={payment.customer} />
+                          <CustomerLink customer={payment.customer} fallbackHref={`/payments/${payment.id}`} />
                         </p>
                       </div>
                       <StatusBadge status={payment.status} size="sm" showDot={false} className="flex-shrink-0" />

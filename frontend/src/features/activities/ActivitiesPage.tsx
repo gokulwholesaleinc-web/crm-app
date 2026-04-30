@@ -384,8 +384,10 @@ export function ActivitiesPage() {
                     !activity.is_completed &&
                     activity.due_date &&
                     new Date(activity.due_date) < new Date();
-                  const entityLinkType = activity.entity_type ? normalizeEntityType(activity.entity_type) : null;
-                  const entityLabel = activity.entity_type ? `${activity.entity_type} #${activity.entity_id}` : null;
+                  // Hide Google-sync activities (entity_type === 'users'); they have no CRM target.
+                  const showEntity = activity.entity_type && activity.entity_type !== 'users';
+                  const entityLinkType = showEntity ? normalizeEntityType(activity.entity_type) : null;
+                  const entityLabel = showEntity ? `${activity.entity_type} #${activity.entity_id}` : null;
                   return (
                     <div
                       key={activity.id}
