@@ -209,6 +209,11 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
   const taxAmount = afterDiscount * (formData.taxRate / 100);
   const total = afterDiscount + taxAmount;
 
+  const fmt = useMemo(
+    () => new Intl.NumberFormat(undefined, { style: 'currency', currency: formData.currency || 'USD' }),
+    [formData.currency]
+  );
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -462,7 +467,7 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
                   />
                 </div>
                 <div className="flex items-center w-20 text-sm font-medium text-gray-700 dark:text-gray-300" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                  {calculateItemTotal(item).toFixed(2)}
+                  {fmt.format(calculateItemTotal(item))}
                 </div>
                 <button
                   type="button"
@@ -530,23 +535,23 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
       <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 space-y-1 text-sm" style={{ fontVariantNumeric: 'tabular-nums' }}>
         <div className="flex justify-between text-gray-600 dark:text-gray-400">
           <span>Subtotal</span>
-          <span>{subtotal.toFixed(2)}</span>
+          <span>{fmt.format(subtotal)}</span>
         </div>
         {discountAmount > 0 && (
           <div className="flex justify-between text-gray-600 dark:text-gray-400">
             <span>Discount</span>
-            <span>-{discountAmount.toFixed(2)}</span>
+            <span>-{fmt.format(discountAmount)}</span>
           </div>
         )}
         {taxAmount > 0 && (
           <div className="flex justify-between text-gray-600 dark:text-gray-400">
             <span>Tax ({formData.taxRate}%)</span>
-            <span>{taxAmount.toFixed(2)}</span>
+            <span>{fmt.format(taxAmount)}</span>
           </div>
         )}
         <div className="flex justify-between font-medium text-gray-900 dark:text-gray-100 pt-1 border-t border-gray-200 dark:border-gray-700">
           <span>Total</span>
-          <span>{total.toFixed(2)}</span>
+          <span>{fmt.format(total)}</span>
         </div>
       </div>
 
@@ -585,8 +590,8 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
         <Button type="button" variant="secondary" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" disabled={isLoading || !formData.title.trim()}>
-          {isLoading ? 'Creating...' : 'Create Quote'}
+        <Button type="submit" disabled={!formData.title.trim()} isLoading={isLoading}>
+          Create Quote
         </Button>
       </div>
     </form>
