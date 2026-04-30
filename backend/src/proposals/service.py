@@ -390,12 +390,21 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         proposal.billing_error = None
         await self.db.flush()
 
+    # Minimum gap between back-to-back resends of the same proposal's
+    # payment link. The row lock protects against simultaneous clicks
+    # from racing inside Stripe; this protects the customer's inbox
+    # from rapid sequential clicks (admin retries, double-submit on a
+    # mobile button, etc.).
+    RESEND_COOLDOWN_SECONDS = 60
+
     async def resend_payment_link(self, proposal: Proposal) -> dict:
         """Re-emit the existing Stripe Invoice. Never creates a new one.
 
         Acquires SELECT FOR UPDATE on the proposal row so two concurrent
         clicks can't both call Invoice.send_invoice and double-email the
-        customer.
+        customer. Also enforces a 60s cooldown via ``invoice_sent_at``
+        so rapid sequential clicks don't flood the customer's inbox —
+        the field is bumped on every successful resend.
         """
         from src.payments.service import _get_stripe
 
@@ -413,6 +422,13 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             raise ValueError(
                 f"Cannot resend payment link for proposal in '{proposal.status}' status",
             )
+        if proposal.invoice_sent_at is not None:
+            elapsed = (datetime.now(UTC) - proposal.invoice_sent_at).total_seconds()
+            if elapsed < self.RESEND_COOLDOWN_SECONDS:
+                wait = int(self.RESEND_COOLDOWN_SECONDS - elapsed)
+                raise ValueError(
+                    f"Payment link was sent recently; please wait {wait}s before resending.",
+                )
 
         stripe = _get_stripe()
         if not stripe:
@@ -451,6 +467,11 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             except Exception as exc:
                 raise ValueError(f"Stripe rejected resend: {exc}") from exc
 
+            # Bump the timestamp so the next resend starts the cooldown
+            # from now rather than the original spawn.
+            proposal.invoice_sent_at = datetime.now(UTC)
+            await self.db.flush()
+
             return {
                 "action": "resent",
                 "stripe_invoice_id": proposal.stripe_invoice_id,
@@ -471,17 +492,25 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         """Re-run billing spawn for a proposal that previously failed.
 
         Caller must already have authorization on the proposal
-        (enforced at the router). Idempotent: if the proposal already
-        has a ``stripe_payment_url`` or is past 'awaiting_payment',
-        refuses so we don't create a duplicate charge.
+        (enforced at the router). Refuses if the proposal already has
+        ANY Stripe artifact (invoice id, checkout session id, or
+        payment url) — checking only payment_url left a hole where a
+        partial spawn that set invoice_id but failed before the
+        hosted_invoice_url fetch would let a retry create a second
+        invoice. Use Resend Payment Link to recover from those cases.
         """
         if proposal.status not in ("accepted", "awaiting_payment"):
             raise ValueError(
                 "Only accepted/awaiting_payment proposals can be retried",
             )
-        if proposal.stripe_payment_url:
+        if (
+            proposal.stripe_invoice_id
+            or proposal.stripe_checkout_session_id
+            or proposal.stripe_payment_url
+        ):
             raise ValueError(
-                "Proposal already has a payment link; cannot retry",
+                "Proposal already has a Stripe artifact; cannot retry. "
+                "Use Resend Payment Link to recover the existing invoice.",
             )
         # _maybe_spawn_billing mutates `proposal` in-place and flushes,
         # so we can return the same instance — no refresh required.
