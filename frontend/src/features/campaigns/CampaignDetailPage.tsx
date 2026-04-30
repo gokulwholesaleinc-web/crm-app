@@ -5,6 +5,8 @@
 import { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
+import { useContacts } from '../../hooks/useContacts';
+import { useLeads } from '../../hooks/useLeads';
 import {
   ArrowLeftIcon,
   PlusIcon,
@@ -77,16 +79,26 @@ function StatCard({
 function MemberRow({
   member,
   onRemove,
+  contactById,
+  leadById,
 }: {
   member: CampaignMember;
   onRemove: () => void;
+  contactById: Map<number, { full_name: string; email?: string | null }>;
+  leadById: Map<number, { full_name: string; email?: string | null }>;
 }) {
   const statusStyle = memberStatusColors[member.status] ?? defaultMemberStatusColor;
+  const resolved =
+    member.member_type === 'contact'
+      ? contactById.get(member.member_id)
+      : leadById.get(member.member_id);
+  const displayName = resolved?.full_name ?? (member.member_type === 'contact' ? `Contact #${member.member_id}` : `Lead #${member.member_id}`);
 
   return (
     <tr className="hover:bg-gray-50 dark:hover:bg-gray-700">
       <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">
-        {member.member_type === 'contact' ? 'Contact' : 'Lead'} #{member.member_id}
+        <span>{displayName}</span>
+        {resolved?.email && <span className="block text-xs text-gray-500 dark:text-gray-400">{resolved.email}</span>}
       </td>
       <td className="px-4 py-3">
         <span
@@ -118,19 +130,29 @@ function MemberRow({
 function MemberCard({
   member,
   onRemove,
+  contactById,
+  leadById,
 }: {
   member: CampaignMember;
   onRemove: () => void;
+  contactById: Map<number, { full_name: string; email?: string | null }>;
+  leadById: Map<number, { full_name: string; email?: string | null }>;
 }) {
   const statusStyle = memberStatusColors[member.status] ?? defaultMemberStatusColor;
+  const resolved =
+    member.member_type === 'contact'
+      ? contactById.get(member.member_id)
+      : leadById.get(member.member_id);
+  const displayName = resolved?.full_name ?? (member.member_type === 'contact' ? `Contact #${member.member_id}` : `Lead #${member.member_id}`);
 
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           <p className="font-medium text-gray-900 dark:text-gray-100 truncate">
-            {member.member_type === 'contact' ? 'Contact' : 'Lead'} #{member.member_id}
+            {displayName}
           </p>
+          {resolved?.email && <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{resolved.email}</p>}
           <span
             className={clsx(
               'inline-block text-xs font-medium px-2 py-0.5 rounded-full mt-1',
@@ -184,6 +206,19 @@ export function CampaignDetailPage() {
   const { data: campaign, isLoading: isLoadingCampaign } = useCampaign(campaignId);
   const { data: stats, isLoading: isLoadingStats } = useCampaignStats(campaignId);
   const { data: members, isLoading: isLoadingMembers } = useCampaignMembers(campaignId);
+
+  // Fetch contacts and leads for name resolution
+  const { data: contactsData } = useContacts({ page_size: 1000 });
+  const { data: leadsData } = useLeads({ page_size: 1000 });
+
+  const contactById = useMemo(
+    () => new Map((contactsData?.items ?? []).map((c) => [c.id, c] as const)),
+    [contactsData]
+  );
+  const leadById = useMemo(
+    () => new Map((leadsData?.items ?? []).map((l) => [l.id, l] as const)),
+    [leadsData]
+  );
 
   // Mutations
   const updateCampaign = useUpdateCampaign();
@@ -507,6 +542,8 @@ export function CampaignDetailPage() {
                   key={member.id}
                   member={member}
                   onRemove={() => handleRemoveMemberClick(member.id)}
+                  contactById={contactById}
+                  leadById={leadById}
                 />
               ))}
             </div>
@@ -539,6 +576,8 @@ export function CampaignDetailPage() {
                       key={member.id}
                       member={member}
                       onRemove={() => handleRemoveMemberClick(member.id)}
+                      contactById={contactById}
+                      leadById={leadById}
                     />
                   ))}
                 </tbody>
