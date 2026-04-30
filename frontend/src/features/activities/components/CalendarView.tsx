@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import { getCalendarActivities } from '../../../api/activities';
@@ -22,11 +23,38 @@ import { AgendaView } from './calendar-views/AgendaView';
 import { ActivityDetailModal } from './calendar-views/ActivityDetailModal';
 
 function CalendarView() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedActivity, setSelectedActivity] = useState<CalendarActivity | null>(null);
-  const [activityTypeFilter, setActivityTypeFilter] = useState<string>('all');
-  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
+
+  // Filter state stored in URL for shareable/bookmarkable links
+  const activityTypeFilter = (searchParams.get('cal_type') as string) ?? 'all';
+  const sourceFilter = (searchParams.get('cal_source') as SourceFilter) ?? 'all';
+
+  const setActivityTypeFilter = (value: string) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (value === 'all') {
+        next.delete('cal_type');
+      } else {
+        next.set('cal_type', value);
+      }
+      return next;
+    });
+  };
+
+  const setSourceFilter = (value: SourceFilter) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (value === 'all') {
+        next.delete('cal_source');
+      } else {
+        next.set('cal_source', value);
+      }
+      return next;
+    });
+  };
 
   const { connected } = useGoogleCalendarSync();
   const { push: pushToCalendar, isPushing } = usePushToGoogleCalendar({
@@ -209,8 +237,12 @@ function CalendarView() {
           {(activityTypeFilter !== 'all' || sourceFilter !== 'all') && (
             <button
               onClick={() => {
-                setActivityTypeFilter('all');
-                setSourceFilter('all');
+                setSearchParams((prev) => {
+                  const next = new URLSearchParams(prev);
+                  next.delete('cal_type');
+                  next.delete('cal_source');
+                  return next;
+                });
               }}
               className="text-xs text-primary-600 dark:text-primary-400 hover:underline"
             >
@@ -248,6 +280,10 @@ function CalendarView() {
                 today={today}
                 activitiesByDate={activitiesByDate}
                 onSelectActivity={setSelectedActivity}
+                onShowMore={(d) => {
+                  setCurrentDate(d);
+                  setViewMode('day');
+                }}
               />
             )}
             {viewMode === 'week' && (

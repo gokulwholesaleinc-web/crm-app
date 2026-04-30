@@ -12,9 +12,10 @@ interface MonthViewProps {
   today: string;
   activitiesByDate: Record<string, CalendarActivity[]>;
   onSelectActivity: (activity: CalendarActivity) => void;
+  onShowMore?: (date: Date) => void;
 }
 
-export function MonthView({ currentDate, today, activitiesByDate, onSelectActivity }: MonthViewProps) {
+export function MonthView({ currentDate, today, activitiesByDate, onSelectActivity, onShowMore }: MonthViewProps) {
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
   const days = getMonthDays(year, month);
@@ -74,7 +75,14 @@ export function MonthView({ currentDate, today, activitiesByDate, onSelectActivi
                 </button>
               ))}
               {dayActivities.length > 3 && (
-                <span className="text-xs text-gray-500 dark:text-gray-400 pl-1">+{dayActivities.length - 3} more</span>
+                <button
+                  type="button"
+                  onClick={() => onShowMore?.(day)}
+                  className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded pl-1"
+                  aria-label={`Show all events for ${day.toLocaleDateString()}`}
+                >
+                  +{dayActivities.length - 3} more
+                </button>
               )}
             </div>
           </div>
