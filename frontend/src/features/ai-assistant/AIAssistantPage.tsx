@@ -15,6 +15,7 @@ import {
   PhoneIcon,
 } from '@heroicons/react/24/outline';
 import { showError } from '../../utils/toast';
+import { safeStorage } from '../../utils/safeStorage';
 import { Button } from '../../components/ui/Button';
 import { Spinner } from '../../components/ui/Spinner';
 import { ChatMessage } from './components/ChatMessage';
@@ -74,22 +75,14 @@ export function AIAssistantPage() {
   const [activeTab, setActiveTab] = useState<'chat' | 'recommendations' | 'summary' | 'memory'>('chat');
 
   const [autoScroll, setAutoScroll] = useState<boolean>(() => {
-    try {
-      const stored = localStorage.getItem(AUTO_SCROLL_KEY);
-      return stored === null ? true : stored === 'true';
-    } catch {
-      return true;
-    }
+    const stored = safeStorage.get(AUTO_SCROLL_KEY);
+    return stored === null ? true : stored === 'true';
   });
 
   function toggleAutoScroll() {
     setAutoScroll((prev) => {
       const next = !prev;
-      try {
-        localStorage.setItem(AUTO_SCROLL_KEY, String(next));
-      } catch {
-        // localStorage unavailable (private mode / quota); preference is in-memory only
-      }
+      safeStorage.set(AUTO_SCROLL_KEY, String(next));
       return next;
     });
   }

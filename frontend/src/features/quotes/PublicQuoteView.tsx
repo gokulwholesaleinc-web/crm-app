@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import { sanitizeHexColor } from '../../utils/colorValidation';
+import { formatCurrency, formatDate } from '../../utils/formatters';
 import { setPublicPageMeta, pickReadableText } from './publicMeta';
 import { Modal, ModalFooter } from '../../components/ui/Modal';
 
@@ -62,23 +63,6 @@ const DEFAULT_BRANDING: QuoteBranding = {
   accent_color: '#22c55e',
   footer_text: null,
 };
-
-function formatCurrency(value: number, currency: string): string {
-  return new Intl.NumberFormat(undefined, {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
-}
-
-function formatDate(dateStr: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  }).format(new Date(dateStr));
-}
 
 function PublicQuoteView() {
   // URL parameter is now the unguessable Quote.public_token, not the
@@ -276,7 +260,7 @@ function PublicQuoteView() {
     !actionDone;
 
   const formattedValidUntil = quote.valid_until
-    ? formatDate(quote.valid_until)
+    ? formatDate(quote.valid_until, 'long')
     : null;
 
   const onPrimary = pickReadableText(branding.primary_color);

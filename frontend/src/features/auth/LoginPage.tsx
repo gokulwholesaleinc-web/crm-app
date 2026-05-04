@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTenant } from '../../providers/TenantProvider';
+import { safeStorage } from '../../utils/safeStorage';
 import GoogleSignInButton from './GoogleSignInButton';
 
 function LoginPage() {
@@ -12,11 +13,7 @@ function LoginPage() {
   }, [tenant?.logo_url]);
 
   useEffect(() => {
-    try {
-      localStorage.removeItem('crm-remember:v1');
-    } catch {
-      // storage blocked — nothing to clean up anyway
-    }
+    safeStorage.remove('crm-remember:v1');
   }, []);
 
   return (

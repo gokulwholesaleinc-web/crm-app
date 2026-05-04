@@ -15,6 +15,7 @@ import {
 } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
+import { safeStorage } from '../utils/safeStorage';
 
 // --- Types ---
 
@@ -167,24 +168,15 @@ interface TenantProviderProps {
 export function TenantProvider({ children }: TenantProviderProps) {
   // Use React state so updates to the slug trigger a re-render and
   // propagate to all consumers (BrandingSection, Sidebar, etc.).
-  const [slugState, setSlugState] = useState<string | null>(() => {
-    try {
-      return localStorage.getItem(TENANT_SLUG_KEY) || 'default';
-    } catch {
-      return 'default';
-    }
-  });
+  const [slugState, setSlugState] = useState<string | null>(
+    () => safeStorage.get(TENANT_SLUG_KEY) || 'default',
+  );
 
   const queryClient = useQueryClient();
 
-  const [cachedConfig] = useState<TenantConfig | undefined>(() => {
-    try {
-      const cached = localStorage.getItem(TENANT_CONFIG_KEY);
-      return cached ? JSON.parse(cached) as TenantConfig : undefined;
-    } catch {
-      return undefined;
-    }
-  });
+  const [cachedConfig] = useState<TenantConfig | undefined>(
+    () => safeStorage.getJson<TenantConfig>(TENANT_CONFIG_KEY) ?? undefined,
+  );
 
   const { data: tenant, isLoading } = useQuery({
     queryKey: ['tenant', 'config', slugState],
@@ -203,11 +195,7 @@ export function TenantProvider({ children }: TenantProviderProps) {
 
   useEffect(() => {
     if (tenant) {
-      try {
-        localStorage.setItem(TENANT_CONFIG_KEY, JSON.stringify(tenant));
-      } catch {
-        // localStorage not available
-      }
+      safeStorage.setJson(TENANT_CONFIG_KEY, tenant);
     }
   }, [tenant]);
 
@@ -231,15 +219,11 @@ export function TenantProvider({ children }: TenantProviderProps) {
 
   const setTenantSlug = useCallback(
     (slug: string | null) => {
-      try {
-        if (slug) {
-          localStorage.setItem(TENANT_SLUG_KEY, slug);
-        } else {
-          localStorage.removeItem(TENANT_SLUG_KEY);
-          applyBrandingToDOM(null);
-        }
-      } catch {
-        // localStorage not available
+      if (slug) {
+        safeStorage.set(TENANT_SLUG_KEY, slug);
+      } else {
+        safeStorage.remove(TENANT_SLUG_KEY);
+        applyBrandingToDOM(null);
       }
       // Update React state so the provider (and all consumers) re-render
       setSlugState(slug);
@@ -279,11 +263,7 @@ export function useTenant() {
 
 // eslint-disable-next-line react-refresh/only-export-components
 export function setTenantSlugOnLogin(slug: string) {
-  try {
-    localStorage.setItem(TENANT_SLUG_KEY, slug);
-  } catch {
-    // localStorage not available
-  }
+  safeStorage.set(TENANT_SLUG_KEY, slug);
   // Notify the TenantProvider so it updates React state immediately
   window.dispatchEvent(
     new CustomEvent('tenant-slug-changed', { detail: { slug } })
@@ -292,11 +272,7 @@ export function setTenantSlugOnLogin(slug: string) {
 
 // eslint-disable-next-line react-refresh/only-export-components
 export function clearTenantSlugOnLogout() {
-  try {
-    localStorage.removeItem(TENANT_SLUG_KEY);
-  } catch {
-    // localStorage not available
-  }
+  safeStorage.remove(TENANT_SLUG_KEY);
   window.dispatchEvent(
     new CustomEvent('tenant-slug-changed', { detail: { slug: null } })
   );

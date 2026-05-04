@@ -25,6 +25,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { useTenant } from '../../providers/TenantProvider';
 import { useAuthStore } from '../../store/authStore';
+import { safeStorage } from '../../utils/safeStorage';
 import {
   DEFAULT_MAIN_NAVIGATION,
   DEFAULT_SECONDARY_NAVIGATION,
@@ -252,12 +253,8 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
   const handleResetOrder = useCallback(() => {
     setMainNav([...DEFAULT_MAIN_NAVIGATION]);
     setSecondaryNav([...DEFAULT_SECONDARY_NAVIGATION]);
-    try {
-      localStorage.removeItem(STORAGE_KEY_MAIN);
-      localStorage.removeItem(STORAGE_KEY_SECONDARY);
-    } catch {
-      // localStorage unavailable
-    }
+    safeStorage.remove(STORAGE_KEY_MAIN);
+    safeStorage.remove(STORAGE_KEY_SECONDARY);
   }, []);
 
   const mainIds = mainNav.map(item => item.id);

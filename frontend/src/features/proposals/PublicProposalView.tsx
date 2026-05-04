@@ -3,6 +3,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import { sanitizeHexColor } from '../../utils/colorValidation';
+import { formatDate } from '../../utils/formatters';
 import { cadenceLabel, formatProposalMoney } from './billing';
 import { setPublicPageMeta } from '../quotes/publicMeta';
 
@@ -323,8 +324,7 @@ function PublicProposalView() {
     !actionDone;
 
   const validUntilDate = proposal.valid_until
-    ? new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
-        .format(new Date(proposal.valid_until))
+    ? formatDate(proposal.valid_until, 'long')
     : null;
 
   const formattedAmount = formatProposalMoney(proposal.amount, proposal.currency);
