@@ -128,6 +128,244 @@ export const SECTIONS: Section[] = [
     ),
   },
   {
+    id: 'tutorials',
+    title: 'Tutorials (Step-by-Step)',
+    icon: AcademicCapIcon,
+    searchText:
+      'tutorials walkthrough how to send docusign esign electronic signature contract create invoice charge customer view billings per customer email thread chain inbound reply campaign send mass email',
+    body: (
+      <div className="space-y-6">
+        <p className="text-sm text-gray-700 dark:text-gray-300">
+          Six common tasks people ask about, click-by-click. Each tutorial is anchorable —
+          copy the &ldquo;Direct link&rdquo; line to share a specific walkthrough.
+        </p>
+
+        <article id="tutorial-esign" className="scroll-mt-4 border-t border-gray-200 dark:border-gray-700 pt-4">
+          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-2">
+            1. Send a contract for e-signature
+          </h3>
+          <p className="text-sm text-gray-700 dark:text-gray-300 mb-3">
+            <strong>The CRM has its own e-signature built in</strong> — you don&rsquo;t need a
+            separate DocuSign / HelloSign / Adobe Sign account. Quotes and Proposals both
+            include a public-link signing flow that captures the signer&rsquo;s name, email,
+            IP, and timestamp.
+          </p>
+          <ol className="space-y-2.5">
+            <Step n={1}>
+              Open <strong>Quotes</strong> (or <strong>Proposals</strong>) in the sidebar and
+              click <em>New Quote</em> / <em>New Proposal</em>.
+            </Step>
+            <Step n={2}>
+              Fill in the line items (Quote) or sections (Proposal), pick the contact and
+              company, then save. The status starts as <Badge variant="gray">draft</Badge>.
+            </Step>
+            <Step n={3}>
+              Click <em>Send</em> — status flips to <Badge variant="blue">sent</Badge> and a
+              public share link is generated.
+            </Step>
+            <Step n={4}>
+              Copy the public link from the detail page (or use the &ldquo;Email link&rdquo;
+              shortcut) and send it to the client. The URL looks like
+              {' '}<code>/quotes/public/&#123;token&#125;</code> or
+              {' '}<code>/proposals/public/&#123;token&#125;</code>.
+            </Step>
+            <Step n={5}>
+              The client opens the link, reviews, types their name + email, signs (draws on
+              a canvas), and clicks <em>Accept</em>. Status flips to{' '}
+              <Badge variant="green">accepted</Badge>; the signature, IP, and timestamp are
+              stored on the record.
+            </Step>
+            <Step n={6}>
+              For Proposals, accepting can auto-spawn a Stripe invoice or checkout — see
+              tutorial 2 below.
+            </Step>
+          </ol>
+          <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+            Direct link: <code>/help#tutorial-esign</code>
+          </p>
+        </article>
+
+        <article id="tutorial-create-invoice" className="scroll-mt-4 border-t border-gray-200 dark:border-gray-700 pt-4">
+          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-2">
+            2. Create and send an invoice
+          </h3>
+          <p className="text-sm text-gray-700 dark:text-gray-300 mb-3">
+            Two ways to do this. The fast way is the <em>Send Invoice</em> button. The
+            no-touch way is to let an accepted Proposal spawn the invoice automatically.
+          </p>
+          <ol className="space-y-2.5">
+            <Step n={1}>
+              Open <strong>Payments</strong> in the sidebar.
+            </Step>
+            <Step n={2}>
+              Click <em>Send Invoice</em> at the top right. A modal opens.
+            </Step>
+            <Step n={3}>
+              Pick the customer from the dropdown. Don&rsquo;t see them? Open the contact
+              first and click <em>Sync to Stripe</em> (or use the &ldquo;Sync customer&rdquo;
+              quick action) — that creates the StripeCustomer record this dropdown reads.
+            </Step>
+            <Step n={4}>
+              Fill in the amount, description, and how many days until the invoice is due.
+              Click <em>Send Invoice</em>.
+            </Step>
+            <Step n={5}>
+              Stripe emails the customer a hosted-invoice link (no login required for them).
+              You can track the invoice on the Payments page — status moves from{' '}
+              <Badge variant="blue">pending</Badge> to{' '}
+              <Badge variant="green">succeeded</Badge> when paid, or{' '}
+              <Badge variant="red">failed</Badge> if it expires or is voided.
+            </Step>
+          </ol>
+          <Tip>
+            For repeat work, use <strong>Proposals</strong> instead. When the client accepts
+            a proposal with a price, the CRM auto-creates the matching Stripe invoice or
+            checkout session — no manual step.
+          </Tip>
+          <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+            Direct link: <code>/help#tutorial-create-invoice</code>
+          </p>
+        </article>
+
+        <article id="tutorial-charge-customer" className="scroll-mt-4 border-t border-gray-200 dark:border-gray-700 pt-4">
+          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-2">
+            3. Charge a customer (one-time or recurring)
+          </h3>
+          <ol className="space-y-2.5">
+            <Step n={1}>
+              <strong>One-time charge:</strong> follow tutorial 2 — Send Invoice creates a
+              one-shot Stripe invoice the customer pays via card or ACH.
+            </Step>
+            <Step n={2}>
+              <strong>Recurring (subscription):</strong> create a <em>Quote</em> with{' '}
+              <em>Payment type = Subscription</em> and a recurring interval (monthly,
+              quarterly, or yearly).
+            </Step>
+            <Step n={3}>
+              Send the quote (tutorial 1). When the client accepts, the CRM creates a Stripe
+              Checkout session in subscription mode — they enter their card on Stripe&rsquo;s
+              hosted page and the subscription begins.
+            </Step>
+            <Step n={4}>
+              Recurring charges show up on the Payments page under the{' '}
+              <em>Subscriptions</em> tab, and on the customer&rsquo;s contact / company
+              detail page under the new <em>Payments</em> tab (tutorial 4).
+            </Step>
+          </ol>
+          <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+            Direct link: <code>/help#tutorial-charge-customer</code>
+          </p>
+        </article>
+
+        <article id="tutorial-view-billings" className="scroll-mt-4 border-t border-gray-200 dark:border-gray-700 pt-4">
+          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-2">
+            4. View all billings for a specific customer
+          </h3>
+          <ol className="space-y-2.5">
+            <Step n={1}>
+              Open <strong>Contacts</strong> (or <strong>Companies</strong>) and click the
+              record you care about.
+            </Step>
+            <Step n={2}>
+              Click the <strong>Payments</strong> tab on the detail page.
+            </Step>
+            <Step n={3}>
+              You&rsquo;ll see two stacked lists: every Stripe payment for this customer
+              (one-time charges, invoices) and every active subscription. Click any row to
+              jump to the full payment detail page.
+            </Step>
+            <Step n={4}>
+              The <em>Details</em> tab also shows a <em>Payment Summary</em> card with the
+              rollups (total paid, on-time rate, last payment date).
+            </Step>
+          </ol>
+          <Tip>
+            For a global view across all customers, the main <strong>Payments</strong> page
+            still has search-by-name and status filters.
+          </Tip>
+          <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+            Direct link: <code>/help#tutorial-view-billings</code>
+          </p>
+        </article>
+
+        <article id="tutorial-email-thread" className="scroll-mt-4 border-t border-gray-200 dark:border-gray-700 pt-4">
+          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-2">
+            5. Read email chains from customers (and reply)
+          </h3>
+          <p className="text-sm text-gray-700 dark:text-gray-300 mb-3">
+            Inbound and outbound emails are auto-threaded by Gmail&rsquo;s thread ID and
+            attached to the matching contact, so you see one conversation per thread instead
+            of a flat dump.
+          </p>
+          <ol className="space-y-2.5">
+            <Step n={1}>
+              Open the contact in <strong>Contacts</strong>.
+            </Step>
+            <Step n={2}>
+              Click the <strong>Emails</strong> tab on their detail page.
+            </Step>
+            <Step n={3}>
+              Each thread shows newest message at the top with previous replies stacked
+              below. Inline attachments appear with their filenames; click to download.
+            </Step>
+            <Step n={4}>
+              Click <em>Reply</em> on any message to open the compose modal — your reply is
+              quoted automatically and stays in the same thread on the customer&rsquo;s side.
+            </Step>
+            <Step n={5}>
+              <strong>First-time setup:</strong> if you don&rsquo;t see emails, go to{' '}
+              <strong>Settings</strong> → <em>Email</em> and connect your Gmail account
+              (OAuth, takes ~30 seconds). The CRM polls Gmail every 90 seconds and links new
+              messages to the right contact by sender / recipient address or thread ID.
+            </Step>
+          </ol>
+          <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+            Direct link: <code>/help#tutorial-email-thread</code>
+          </p>
+        </article>
+
+        <article id="tutorial-email-campaign" className="scroll-mt-4 border-t border-gray-200 dark:border-gray-700 pt-4">
+          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-2">
+            6. Send an email campaign
+          </h3>
+          <ol className="space-y-2.5">
+            <Step n={1}>
+              Go to <strong>Campaigns</strong> in the sidebar and click <em>New Campaign</em>.
+            </Step>
+            <Step n={2}>
+              Pick <em>Type = Email</em>, give it a name, and save.
+            </Step>
+            <Step n={3}>
+              On the campaign detail page, click <em>Add Members</em> — pick contacts or
+              leads to enroll. You can also bulk-add from the Contacts or Leads list page
+              (multi-select → <em>Add to campaign</em>).
+            </Step>
+            <Step n={4}>
+              Click <em>Add Step</em> to build the sequence. Each step is one email
+              template with a delay in days from enrollment (e.g. Day 0, Day 3, Day 7).
+              Reorder by drag-and-drop.
+            </Step>
+            <Step n={5}>
+              When ready, click <strong>Send Campaign</strong>. The system enrolls every
+              member and starts walking each one through the steps as their delays mature.
+            </Step>
+            <Step n={6}>
+              Track results on the same page: sent count, opens, clicks, replies, ROI, and
+              the per-member status.
+            </Step>
+          </ol>
+          <Tip>
+            Want a multi-channel drip with tasks, waits, and conditional steps? Use{' '}
+            <strong>Sequences</strong> instead — the help section below covers it.
+          </Tip>
+          <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+            Direct link: <code>/help#tutorial-email-campaign</code>
+          </p>
+        </article>
+      </div>
+    ),
+  },
+  {
     id: 'core-flow',
     title: 'The Core Flow (Read This First)',
     icon: ArrowRightIcon,
@@ -173,8 +411,8 @@ export const SECTIONS: Section[] = [
           </Step>
           <Step n={6}>
             <strong>The client accepts or rejects.</strong> Public quote/proposal pages capture the
-            decision (and an e-signature for quotes — name, email, IP, signed-at). The status flips to
-            <em> accepted</em> or <em>rejected</em>.
+            decision and an e-signature (name, email, IP, signed-at, drawn signature) — the
+            built-in DocuSign-equivalent. Status flips to <em>accepted</em> or <em>rejected</em>.
           </Step>
           <Step n={7}>
             <strong>You collect Payment.</strong> The Payments tab tracks Stripe payment intents,
@@ -270,9 +508,11 @@ export const SECTIONS: Section[] = [
         </ul>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Detail page tabs</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          Open any contact and you'll see tabs for: <em>Details, Activities, Notes, Emails,
-          Contracts, Quotes, Proposals, Documents, Attachments, History, Sharing</em>. Each is a
-          self-contained view of just the records that belong to this contact.
+          Open any contact and you&rsquo;ll see tabs for: <em>Details, Activities, Notes, Emails,
+          Contracts, Quotes, Proposals, Payments, Documents, Attachments, History, Sharing</em>.
+          Each is a self-contained view of just the records that belong to this contact —
+          including the <strong>Payments</strong> tab, which lists every Stripe charge and
+          subscription tied to this customer.
         </p>
       </div>
     ),
@@ -446,15 +686,17 @@ export const SECTIONS: Section[] = [
           <Badge variant="red">rejected</Badge> /{' '}
           <Badge variant="gray">expired</Badge>
         </p>
-        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Public link &amp; e-signature</h4>
+        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Public link &amp; e-signature (DocuSign-equivalent)</h4>
         <ul className="space-y-1.5">
           <Bullet>
             Every quote has a public URL at <code>/quotes/public/&#123;quote_number&#125;</code>{' '}
             that you can send to the client without requiring them to log in.
           </Bullet>
           <Bullet>
-            On the public page, the client can view, accept (with their name, email, and IP captured
-            as an e-signature) or reject with a reason. Status updates flow back into the CRM.
+            On the public page, the client can view, draw their signature, and accept (with name,
+            email, IP, and timestamp captured) — or reject with a reason. Status updates flow back
+            into the CRM. <strong>You don&rsquo;t need DocuSign / HelloSign</strong> — this is the
+            built-in equivalent. See the <em>Tutorials</em> section for the full walkthrough.
           </Bullet>
         </ul>
       </div>
@@ -492,18 +734,25 @@ export const SECTIONS: Section[] = [
             The <em>AI Proposal Generator</em> can draft a full proposal from a short brief.
           </Bullet>
         </ul>
-        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Sharing &amp; tracking</h4>
+        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Sharing, e-signature &amp; tracking</h4>
         <ul className="space-y-1.5">
           <Bullet>
             Public URL pattern: <code>/proposals/public/&#123;proposal_number&#125;</code>.
+            Send this to the client; they don&rsquo;t need an account.
+          </Bullet>
+          <Bullet>
+            The public page lets the client draw a signature and accept (or reject with a
+            reason) — same DocuSign-equivalent flow used by Quotes. Name, email, IP, and
+            timestamp are captured on the proposal record.
           </Bullet>
           <Bullet>
             Each view is logged with timestamp and IP, so you can see view count and last-viewed
             time on the proposal record.
           </Bullet>
           <Bullet>
-            Status flow: <em>draft → sent → viewed → accepted / rejected</em>. Proposals can also
-            link to a Quote (optional <code>quote_id</code>).
+            Status flow: <em>draft → sent → viewed → accepted / rejected</em>. Accepting a
+            proposal with a price auto-spawns a Stripe invoice or checkout — see{' '}
+            <em>Tutorials</em> #2 and #3.
           </Bullet>
         </ul>
       </div>
@@ -549,7 +798,13 @@ export const SECTIONS: Section[] = [
         <p className="text-sm text-gray-700 dark:text-gray-300">
           Use the <em>Send Invoice</em> button to create a Stripe invoice for a customer. It opens
           a modal where you pick the customer, amount, and items, then sends the Stripe-hosted
-          invoice link to the contact's email.
+          invoice link to the contact&rsquo;s email. Step-by-step in <em>Tutorials</em> #2.
+        </p>
+        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Per-customer view</h4>
+        <p className="text-sm text-gray-700 dark:text-gray-300">
+          To see every payment + subscription for one contact or company, open the contact /
+          company detail page and click the <strong>Payments</strong> tab — see{' '}
+          <em>Tutorials</em> #4. The global Payments page is for searching across all customers.
         </p>
       </div>
     ),
