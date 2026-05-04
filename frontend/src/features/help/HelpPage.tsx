@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
@@ -15,6 +15,24 @@ function HelpPage() {
       s => s.title.toLowerCase().includes(q) || s.searchText.toLowerCase().includes(q)
     );
   }, [query]);
+
+  // Honor URL hashes like #tutorial-send-invoice so shared deep links land
+  // on the right walkthrough. The browser's native hash-scroll fires before
+  // React mounts the article elements, so we re-scroll on mount and on
+  // hashchange.
+  useEffect(() => {
+    const scrollToHash = () => {
+      const hash = window.location.hash.slice(1);
+      if (!hash) return;
+      const el = document.getElementById(hash);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    };
+    scrollToHash();
+    window.addEventListener('hashchange', scrollToHash);
+    return () => window.removeEventListener('hashchange', scrollToHash);
+  }, []);
 
   const handleSelect = (id: string) => {
     setActiveId(id);
