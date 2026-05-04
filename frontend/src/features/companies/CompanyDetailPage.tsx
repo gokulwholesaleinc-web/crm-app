@@ -24,8 +24,9 @@ import type { CompanyUpdate } from '../../types';
 const ContractsList = lazy(() => import('../../components/shared/ContractsList'));
 const MetaTab = lazy(() => import('./components/MetaTab'));
 const ExpensesTab = lazy(() => import('./components/ExpensesTab'));
+const EntityPaymentsTab = lazy(() => import('../../components/shared/EntityPaymentsTab'));
 
-type TabType = 'overview' | 'opportunities' | 'contracts' | 'quotes' | 'proposals' | 'activities' | 'notes' | 'attachments' | 'history' | 'sharing' | 'meta' | 'expenses';
+type TabType = 'overview' | 'opportunities' | 'contracts' | 'quotes' | 'proposals' | 'payments' | 'activities' | 'notes' | 'attachments' | 'history' | 'sharing' | 'meta' | 'expenses';
 
 const TABS: { id: TabType; name: string }[] = [
   { id: 'overview', name: 'Overview' },
@@ -33,6 +34,7 @@ const TABS: { id: TabType; name: string }[] = [
   { id: 'contracts', name: 'Contracts' },
   { id: 'quotes', name: 'Quotes' },
   { id: 'proposals', name: 'Proposals' },
+  { id: 'payments', name: 'Payments' },
   { id: 'activities', name: 'Activities' },
   { id: 'notes', name: 'Notes' },
   { id: 'attachments', name: 'Attachments' },
@@ -202,6 +204,12 @@ export function CompanyDetailPage() {
 
       {activeTab === 'proposals' && (
         <ProposalsTab proposals={companyProposals} />
+      )}
+
+      {activeTab === 'payments' && companyId && (
+        <Suspense fallback={<SuspenseFallback />}>
+          <EntityPaymentsTab entityType="company" entityId={companyId} />
+        </Suspense>
       )}
 
       {activeTab === 'activities' && companyId && (

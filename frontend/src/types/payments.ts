@@ -62,6 +62,12 @@ export interface PaymentFilters {
   page_size?: number;
   status?: string;
   customer_id?: number;
+  /** Filter by the CRM contact the StripeCustomer maps to. Used by the
+   *  Payments tab on contact detail pages. */
+  contact_id?: number;
+  /** Filter by the CRM company the StripeCustomer maps to. Used by the
+   *  Payments tab on company detail pages. */
+  company_id?: number;
   opportunity_id?: number;
   owner_id?: number;
   search?: string;

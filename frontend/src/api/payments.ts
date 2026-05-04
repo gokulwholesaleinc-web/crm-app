@@ -93,10 +93,19 @@ export const createProduct = async (data: ProductCreate): Promise<ProductItem> =
   return response.data;
 };
 
+export interface SubscriptionListParams {
+  page?: number;
+  page_size?: number;
+  status?: string;
+  customer_id?: number;
+  contact_id?: number;
+  company_id?: number;
+}
+
 /**
  * List subscriptions
  */
-export const listSubscriptions = async (params: { page?: number; page_size?: number; status?: string; customer_id?: number } = {}): Promise<SubscriptionListResponse> => {
+export const listSubscriptions = async (params: SubscriptionListParams = {}): Promise<SubscriptionListResponse> => {
   const response = await apiClient.get<SubscriptionListResponse>(`${PAYMENTS_BASE}/subscriptions`, { params });
   return response.data;
 };

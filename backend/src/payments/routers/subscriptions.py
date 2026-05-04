@@ -33,8 +33,15 @@ async def list_subscriptions(
     page_size: int = Query(20, ge=1, le=100),
     status: str | None = None,
     customer_id: int | None = None,
+    contact_id: int | None = None,
+    company_id: int | None = None,
 ):
-    """List subscriptions."""
+    """List subscriptions.
+
+    ``contact_id`` / ``company_id`` filter by the CRM record linked to the
+    Stripe customer — the Payments tab on contact/company detail pages
+    pairs this with the payments list to show recurring billing too.
+    """
     effective_owner_id = None
     if not data_scope.can_see_all():
         effective_owner_id = data_scope.owner_id
@@ -45,6 +52,8 @@ async def list_subscriptions(
         page_size=page_size,
         status=status,
         customer_id=customer_id,
+        contact_id=contact_id,
+        company_id=company_id,
         owner_id=effective_owner_id,
     )
 

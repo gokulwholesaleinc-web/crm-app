@@ -114,11 +114,18 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         page_size: int = DEFAULT_PAGE_SIZE,
         status: str | None = None,
         customer_id: int | None = None,
+        contact_id: int | None = None,
+        company_id: int | None = None,
         owner_id: int | None = None,
         shared_entity_ids: list[int] | None = None,
         search: str | None = None,
     ) -> tuple[list[Payment], int]:
-        """Get paginated list of payments with filters."""
+        """Get paginated list of payments with filters.
+
+        ``contact_id`` and ``company_id`` filter by the CRM relationship on
+        StripeCustomer — the contact/company detail page uses these to show
+        every payment, invoice, and checkout session for that record.
+        """
         query = (
             select(Payment)
             .options(
@@ -134,6 +141,19 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         if customer_id:
             query = query.where(Payment.customer_id == customer_id)
 
+        # The contact/company/search filters all need StripeCustomer columns;
+        # join once so we don't end up with duplicated joins or ambiguous aliases.
+        needs_customer_join = (
+            contact_id is not None or company_id is not None or bool(search)
+        )
+        if needs_customer_join:
+            query = query.join(Payment.customer, isouter=True)
+
+        if contact_id is not None:
+            query = query.where(StripeCustomer.contact_id == contact_id)
+        if company_id is not None:
+            query = query.where(StripeCustomer.company_id == company_id)
+
         if owner_id:
             if shared_entity_ids:
                 query = query.where(
@@ -144,7 +164,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
 
         if search:
             search_term = f"%{search}%"
-            query = query.join(Payment.customer, isouter=True).where(
+            query = query.where(
                 or_(
                     StripeCustomer.name.ilike(search_term),
                     StripeCustomer.email.ilike(search_term),
@@ -1012,9 +1032,16 @@ class SubscriptionService:
         page_size: int = DEFAULT_PAGE_SIZE,
         status: str | None = None,
         customer_id: int | None = None,
+        contact_id: int | None = None,
+        company_id: int | None = None,
         owner_id: int | None = None,
     ) -> tuple[list[Subscription], int]:
-        """Get paginated list of subscriptions."""
+        """Get paginated list of subscriptions.
+
+        ``contact_id`` and ``company_id`` filter by the CRM relationship on
+        StripeCustomer so the contact/company detail page can show all
+        recurring billing for that record alongside one-time payments.
+        """
         query = select(Subscription).options(
             selectinload(Subscription.customer),
             selectinload(Subscription.price),
@@ -1025,6 +1052,13 @@ class SubscriptionService:
 
         if customer_id:
             query = query.where(Subscription.customer_id == customer_id)
+
+        if contact_id is not None or company_id is not None:
+            query = query.join(Subscription.customer)
+            if contact_id is not None:
+                query = query.where(StripeCustomer.contact_id == contact_id)
+            if company_id is not None:
+                query = query.where(StripeCustomer.company_id == company_id)
 
         if owner_id:
             query = query.where(Subscription.owner_id == owner_id)
