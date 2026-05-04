@@ -1,3 +1,4 @@
+import { safeStorage } from '../../utils/safeStorage';
 import {
   HomeIcon,
   UserGroupIcon,
@@ -63,26 +64,15 @@ export const STORAGE_KEY_SECONDARY = 'crm-sidebar-secondary-order:v1';
 export const ADMIN_ONLY_IDS = new Set(['admin', 'approvals']);
 
 export function readStoredOrder(key: string): string[] | null {
-  try {
-    const stored = localStorage.getItem(key);
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed) && parsed.every((id: unknown) => typeof id === 'string')) {
-        return parsed;
-      }
-    }
-  } catch {
-    // localStorage unavailable or corrupted data
+  const parsed = safeStorage.getJson<unknown>(key);
+  if (Array.isArray(parsed) && parsed.every((id: unknown) => typeof id === 'string')) {
+    return parsed as string[];
   }
   return null;
 }
 
 export function writeStoredOrder(key: string, ids: string[]): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(ids));
-  } catch {
-    // localStorage unavailable or full
-  }
+  safeStorage.setJson(key, ids);
 }
 
 export function applyOrder(items: NavItem[], storedIds: string[] | null): NavItem[] {

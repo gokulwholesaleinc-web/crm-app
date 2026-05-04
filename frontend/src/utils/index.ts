@@ -31,3 +31,6 @@ export {
   truncateText,
   toTitleCase,
 } from './formatters';
+
+// Storage utilities
+export { safeStorage } from './safeStorage';

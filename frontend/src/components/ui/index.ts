@@ -51,8 +51,10 @@ export { SearchableSelect } from './SearchableSelect';
 export type { SearchableSelectProps, SearchableSelectOption } from './SearchableSelect';
 
 // EntityLink
-export { EntityLink, normalizeEntityType } from './EntityLink';
-export type { EntityLinkProps, EntityLinkVariant, EntityType } from './EntityLink';
+export { EntityLink } from './EntityLink';
+export type { EntityLinkProps, EntityLinkVariant } from './EntityLink';
+export { normalizeEntityType } from './EntityLink.utils';
+export type { EntityType } from './EntityLink.utils';
 
 // Skeleton
 export {
