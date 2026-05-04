@@ -151,12 +151,8 @@ class CRUDService(BaseService[ModelType], Generic[ModelType, CreateSchemaType, U
         await self.db.flush()
         await self.db.refresh(instance)
 
-        tag_ids = getattr(data, 'tag_ids', None)
-        update_tags = getattr(self, 'update_tags', None)
-        if tag_ids and update_tags:
-            await update_tags(instance.id, tag_ids)
-            await self.db.refresh(instance)
-
+        # On create, an empty tag list means "no tags to apply" — skip.
+        await self._apply_tags(instance, getattr(data, 'tag_ids', None), allow_empty=False)
         return instance
 
     async def update(
@@ -177,13 +173,24 @@ class CRUDService(BaseService[ModelType], Generic[ModelType, CreateSchemaType, U
         await self.db.flush()
         await self.db.refresh(instance)
 
-        tag_ids = getattr(data, 'tag_ids', None)
-        update_tags = getattr(self, 'update_tags', None)
-        if tag_ids is not None and update_tags:
-            await update_tags(instance.id, tag_ids)
-            await self.db.refresh(instance)
-
+        # On update, an empty tag list means "clear all tags" — must run.
+        await self._apply_tags(instance, getattr(data, 'tag_ids', None), allow_empty=True)
         return instance
+
+    async def _apply_tags(
+        self,
+        instance: ModelType,
+        tag_ids: list[int] | None,
+        *,
+        allow_empty: bool,
+    ) -> None:
+        update_tags = getattr(self, 'update_tags', None)
+        if update_tags is None or tag_ids is None:
+            return
+        if not allow_empty and not tag_ids:
+            return
+        await update_tags(instance.id, tag_ids)
+        await self.db.refresh(instance)
 
     async def delete(self, instance: ModelType) -> None:
         """Delete a record, clearing tags if TaggableServiceMixin is present."""

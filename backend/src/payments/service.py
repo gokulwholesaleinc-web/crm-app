@@ -426,11 +426,6 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         await self.db.refresh(customer)
         return customer
 
-    # Stripe recommends 5-minute tolerance between payload timestamp and now
-    # to defend against captured-payload replays. Our own constant so tests
-    # can override it if needed.
-    WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 300
-
     async def process_webhook(self, payload: bytes, sig_header: str) -> dict:
         """Process a Stripe webhook event.
 
