@@ -23,10 +23,17 @@ async def list_payments(
     page_size: int = Query(20, ge=1, le=100),
     status: str | None = None,
     customer_id: int | None = None,
+    contact_id: int | None = None,
+    company_id: int | None = None,
     owner_id: int | None = None,
     search: str | None = None,
 ):
-    """List payments with pagination and filters."""
+    """List payments with pagination and filters.
+
+    ``contact_id`` / ``company_id`` show every payment for the CRM
+    contact/company they map to via StripeCustomer — used by the Payments
+    tab on the contact and company detail pages.
+    """
     effective_owner_id = owner_id if data_scope.can_see_all() else data_scope.owner_id
 
     service = PaymentService(db)
@@ -36,6 +43,8 @@ async def list_payments(
         page_size=page_size,
         status=status,
         customer_id=customer_id,
+        contact_id=contact_id,
+        company_id=company_id,
         owner_id=effective_owner_id,
         shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_PAYMENTS),
         search=search,

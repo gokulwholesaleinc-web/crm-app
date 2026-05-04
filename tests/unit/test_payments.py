@@ -776,3 +776,164 @@ class TestPaymentsUnauthorized:
         """Should return 401 when listing subscriptions without authentication."""
         response = await client.get("/api/payments/subscriptions")
         assert response.status_code == 401
+
+
+class TestPaymentsByEntity:
+    """Filtering payments by the CRM contact/company they're for.
+
+    Powers the Payments tab on the contact and company detail pages — the
+    'view billings per customer' surface — by joining through StripeCustomer
+    instead of the StripeCustomer.id (customer_id) the existing filter took.
+    """
+
+    @pytest.mark.asyncio
+    async def test_filter_payments_by_contact_id_returns_only_that_contacts_payments(
+        self,
+        client: AsyncClient,
+        db_session,
+        test_user,
+        test_contact,
+        test_company,
+        rep_a_payment,
+        sales_rep_a,
+    ):
+        """contact_id filter scopes payments to a single CRM contact."""
+        # Second contact + StripeCustomer + payment that should NOT match
+        from src.contacts.models import Contact
+        other_contact = Contact(
+            first_name="Other",
+            last_name="Person",
+            email="other@example.com",
+            company_id=test_company.id,
+            status="active",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(other_contact)
+        await db_session.commit()
+        await db_session.refresh(other_contact)
+
+        other_customer = StripeCustomer(
+            stripe_customer_id="cus_other",
+            email="other@example.com",
+            name="Other",
+            contact_id=other_contact.id,
+        )
+        db_session.add(other_customer)
+        await db_session.commit()
+        await db_session.refresh(other_customer)
+
+        unrelated_payment = Payment(
+            stripe_payment_intent_id="pi_unrelated",
+            amount=42.00,
+            currency="USD",
+            status="succeeded",
+            customer_id=other_customer.id,
+            owner_id=sales_rep_a.id,
+            created_by_id=sales_rep_a.id,
+        )
+        db_session.add(unrelated_payment)
+        await db_session.commit()
+
+        response = await client.get(
+            f"/api/payments?contact_id={test_contact.id}",
+            headers=_token(sales_rep_a),
+        )
+        assert response.status_code == 200
+        data = response.json()
+        ids = [item["id"] for item in data["items"]]
+        assert rep_a_payment.id in ids
+        assert unrelated_payment.id not in ids
+
+    @pytest.mark.asyncio
+    async def test_filter_payments_by_company_id_returns_only_that_companys_payments(
+        self,
+        client: AsyncClient,
+        db_session,
+        test_user,
+        test_company,
+        sales_rep_a,
+    ):
+        """company_id filter scopes payments to a single CRM company."""
+        company_customer = StripeCustomer(
+            stripe_customer_id="cus_company",
+            email="billing@testcompany.com",
+            name="Test Company Inc",
+            company_id=test_company.id,
+        )
+        db_session.add(company_customer)
+        await db_session.commit()
+        await db_session.refresh(company_customer)
+
+        company_payment = Payment(
+            stripe_payment_intent_id="pi_company",
+            amount=500.00,
+            currency="USD",
+            status="succeeded",
+            customer_id=company_customer.id,
+            owner_id=sales_rep_a.id,
+            created_by_id=sales_rep_a.id,
+        )
+        db_session.add(company_payment)
+        await db_session.commit()
+        await db_session.refresh(company_payment)
+
+        response = await client.get(
+            f"/api/payments?company_id={test_company.id}",
+            headers=_token(sales_rep_a),
+        )
+        assert response.status_code == 200
+        data = response.json()
+        ids = [item["id"] for item in data["items"]]
+        assert company_payment.id in ids
+
+    @pytest.mark.asyncio
+    async def test_filter_subscriptions_by_contact_id(
+        self,
+        client: AsyncClient,
+        db_session,
+        test_user,
+        test_contact,
+        test_stripe_customer,
+        sales_rep_a,
+    ):
+        """contact_id filter on /subscriptions returns the contact's subs only."""
+        sub = Subscription(
+            stripe_subscription_id="sub_test_1",
+            status="active",
+            customer_id=test_stripe_customer.id,
+            owner_id=sales_rep_a.id,
+            created_by_id=sales_rep_a.id,
+        )
+        db_session.add(sub)
+        await db_session.commit()
+        await db_session.refresh(sub)
+
+        response = await client.get(
+            f"/api/payments/subscriptions?contact_id={test_contact.id}",
+            headers=_token(sales_rep_a),
+        )
+        assert response.status_code == 200
+        data = response.json()
+        ids = [item["id"] for item in data["items"]]
+        assert sub.id in ids
+
+    @pytest.mark.asyncio
+    async def test_payments_search_still_works_after_join_refactor(
+        self,
+        client: AsyncClient,
+        rep_a_payment,
+        sales_rep_a,
+        test_stripe_customer,
+    ):
+        """The pre-existing ?search= filter still finds payments by customer
+        name after the contact_id/company_id join refactor — guards against
+        the join-deduplication regression."""
+        response = await client.get(
+            f"/api/payments?search={test_stripe_customer.name}",
+            headers=_token(sales_rep_a),
+        )
+        assert response.status_code == 200
+        data = response.json()
+        ids = [item["id"] for item in data["items"]]
+        assert rep_a_payment.id in ids

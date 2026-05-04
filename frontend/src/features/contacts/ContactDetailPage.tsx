@@ -22,6 +22,7 @@ import type { ThreadEmailItem } from '../../types/email';
 const ContractsList = lazy(() => import('../../components/shared/ContractsList'));
 const PaymentSummary = lazy(() => import('../../components/shared/PaymentSummary'));
 const DocumentsTab = lazy(() => import('../../components/shared/DocumentsTab'));
+const EntityPaymentsTab = lazy(() => import('../../components/shared/EntityPaymentsTab'));
 const SendInvoiceModal = lazy(() =>
   import('../payments/components/SendInvoiceModal').then(m => ({ default: m.SendInvoiceModal }))
 );
@@ -29,7 +30,7 @@ const OnboardingLinkGenerator = lazy(() =>
   import('../payments/components/OnboardingLinkGenerator').then(m => ({ default: m.OnboardingLinkGenerator }))
 );
 
-type TabType = 'details' | 'activities' | 'notes' | 'emails' | 'contracts' | 'quotes' | 'proposals' | 'documents' | 'attachments' | 'history' | 'sharing';
+type TabType = 'details' | 'activities' | 'notes' | 'emails' | 'contracts' | 'quotes' | 'proposals' | 'payments' | 'documents' | 'attachments' | 'history' | 'sharing';
 
 const TABS: { id: TabType; name: string }[] = [
   { id: 'details', name: 'Details' },
@@ -39,6 +40,7 @@ const TABS: { id: TabType; name: string }[] = [
   { id: 'contracts', name: 'Contracts' },
   { id: 'quotes', name: 'Quotes' },
   { id: 'proposals', name: 'Proposals' },
+  { id: 'payments', name: 'Payments' },
   { id: 'documents', name: 'Documents' },
   { id: 'attachments', name: 'Attachments' },
   { id: 'history', name: 'History' },
@@ -389,6 +391,12 @@ function ContactDetailPage() {
             </div>
           )}
         </div>
+      )}
+
+      {activeTab === 'payments' && contactId && (
+        <Suspense fallback={<SuspenseFallback />}>
+          <EntityPaymentsTab entityType="contact" entityId={contactId} />
+        </Suspense>
       )}
 
       {activeTab === 'documents' && contactId && (

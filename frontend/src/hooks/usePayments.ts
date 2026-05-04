@@ -6,6 +6,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createEntityHooks, createQueryKeys } from './useEntityCRUD';
 import { paymentsApi } from '../api/payments';
+import type { SubscriptionListParams } from '../api/payments';
 import { useAuthQuery } from './useAuthQuery';
 import type {
   Payment,
@@ -142,7 +143,7 @@ export function useCreateProduct() {
 /**
  * Hook to list subscriptions
  */
-export function useSubscriptions(params?: { page?: number; page_size?: number; status?: string; customer_id?: number }) {
+export function useSubscriptions(params?: SubscriptionListParams) {
   return useAuthQuery({
     queryKey: [subscriptionQueryKey, 'list', params],
     queryFn: () => paymentsApi.listSubscriptions(params),
