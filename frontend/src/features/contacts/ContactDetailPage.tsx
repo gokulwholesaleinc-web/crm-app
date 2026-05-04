@@ -1,6 +1,6 @@
 import { useState, lazy, Suspense } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
+import { Button, HelpLink, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { TabBar, ActivitiesTab, CommonTabContent, SuspenseFallback } from '../../components/shared/DetailPageShell';
 import { EmailComposeModal, EmailThread } from '../../components/email';
 import { ContactForm } from './components/ContactForm';
@@ -279,9 +279,12 @@ function ContactDetailPage() {
           <div className="px-4 py-5 sm:p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Email Thread</h3>
-              <Button variant="primary" onClick={() => { setReplyToEmail(null); setShowEmailCompose(true); }}>
-                Compose Email
-              </Button>
+              <div className="flex items-center gap-3">
+                <HelpLink anchor="tutorial-email-thread" label="How email threads work" />
+                <Button variant="primary" onClick={() => { setReplyToEmail(null); setShowEmailCompose(true); }}>
+                  Compose Email
+                </Button>
+              </div>
             </div>
             <EmailThread
               entityType="contacts"

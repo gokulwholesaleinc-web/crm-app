@@ -10,7 +10,7 @@ import {
   EyeIcon,
   ClipboardDocumentIcon,
 } from '@heroicons/react/24/outline';
-import { Button, Modal, ConfirmDialog, StatusBadge } from '../../components/ui';
+import { Button, HelpLink, Modal, ConfirmDialog, StatusBadge } from '../../components/ui';
 import {
   useProposal,
   useUpdateProposal,
@@ -241,7 +241,8 @@ function ProposalDetailPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <HelpLink anchor="tutorial-esign" label="How clients sign and accept" />
           {canEdit && (
             <Button variant="secondary" onClick={openEditModal} leftIcon={<PencilIcon className="h-4 w-4" />}>
               Edit

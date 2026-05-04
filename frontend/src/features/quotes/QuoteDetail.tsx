@@ -11,7 +11,7 @@ import {
   CubeIcon,
   ArrowDownTrayIcon,
 } from '@heroicons/react/24/outline';
-import { Button, Modal, ConfirmDialog, StatusBadge } from '../../components/ui';
+import { Button, HelpLink, Modal, ConfirmDialog, StatusBadge } from '../../components/ui';
 import {
   useQuote,
   useUpdateQuote,
@@ -230,7 +230,8 @@ function QuoteDetailPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <HelpLink anchor="tutorial-esign" label="How clients sign and accept" />
           <Button
             variant="secondary"
             onClick={handleDownloadPDF}

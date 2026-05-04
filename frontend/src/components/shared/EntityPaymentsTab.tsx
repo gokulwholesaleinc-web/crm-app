@@ -8,7 +8,7 @@
  */
 
 import { Link } from 'react-router-dom';
-import { Spinner, StatusBadge } from '../ui';
+import { HelpLink, Spinner, StatusBadge } from '../ui';
 import { usePayments, useSubscriptions } from '../../hooks/usePayments';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { PaymentForLink } from '../../features/payments/PaymentsPage';
@@ -47,12 +47,15 @@ export function EntityPaymentsTab({ entityType, entityId }: Props) {
           <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">
             Payments
           </h3>
-          <Link
-            to="/payments"
-            className="text-sm text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300"
-          >
-            Send invoice →
-          </Link>
+          <div className="flex items-center gap-3">
+            <HelpLink anchor="tutorial-view-billings" label="How the Payments tab works" />
+            <Link
+              to="/payments"
+              className="text-sm text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300"
+            >
+              Send invoice →
+            </Link>
+          </div>
         </div>
         {paymentsLoading ? (
           <div className="flex items-center justify-center py-8">
