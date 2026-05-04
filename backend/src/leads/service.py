@@ -73,27 +73,15 @@ class LeadService(
     async def create(self, data: LeadCreate, user_id: int) -> Lead:
         """Create a new lead with auto-scoring."""
         lead = await super().create(data, user_id)
-
-        # Calculate and set lead score
-        source_name = None
-        if lead.source_id:
-            source = await self.get_source_by_id(lead.source_id)
-            source_name = source.name if source else None
-
-        score, score_factors = calculate_lead_score(lead, source_name)
-        lead.score = score
-        lead.score_factors = score_factors
-
-        await self.db.flush()
-        await self.db.refresh(lead)
-        return lead
+        return await self._recalculate_score(lead)
 
     async def update(self, lead: Lead, data: LeadUpdate, user_id: int) -> Lead:
         """Update a lead and recalculate score."""
         lead = await super().update(lead, data, user_id)
+        return await self._recalculate_score(lead)
 
-        # Recalculate score
-        source_name = None
+    async def _recalculate_score(self, lead: Lead) -> Lead:
+        source_name: str | None = None
         if lead.source_id:
             source = await self.get_source_by_id(lead.source_id)
             source_name = source.name if source else None
