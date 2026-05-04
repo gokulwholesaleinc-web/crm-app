@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { StatusBadge, Button, EntityLink, PaginationBar } from '../../components/ui';
+import { StatusBadge, Button, EntityLink, HelpLink, PaginationBar } from '../../components/ui';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { usePayments, useSubscriptions, useCancelSubscription } from '../../hooks/usePayments';
 import { SendInvoiceModal } from './components/SendInvoiceModal';
@@ -131,9 +131,12 @@ function PaymentsPage() {
             Track and manage Stripe payments
           </p>
         </div>
-        <Button variant="primary" onClick={() => setShowInvoiceModal(true)}>
-          Send Invoice
-        </Button>
+        <div className="flex items-center gap-3">
+          <HelpLink anchor="tutorial-create-invoice" label="How to send an invoice" text="How to send an invoice" />
+          <Button variant="primary" onClick={() => setShowInvoiceModal(true)}>
+            Send Invoice
+          </Button>
+        </div>
       </div>
 
       {/* Tabs */}

@@ -15,7 +15,7 @@ import {
   CurrencyDollarIcon,
   TrashIcon,
 } from '@heroicons/react/24/outline';
-import { Button, EntityLink, Spinner, Modal, ConfirmDialog } from '../../components/ui';
+import { Button, EntityLink, HelpLink, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { CampaignForm } from './components/CampaignForm';
 import { AddMembersModal } from './components/AddMembersModal';
 import { CampaignAnalyticsSection } from './components/CampaignAnalytics';
@@ -389,7 +389,10 @@ export function CampaignDetailPage() {
             <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-1">{campaign.description}</p>
           )}
         </div>
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          {campaign.campaign_type === 'email' && (
+            <HelpLink anchor="tutorial-email-campaign" label="How email campaigns work" />
+          )}
           {campaign.campaign_type === 'email' && !campaign.is_executing && campaign.status !== 'completed' && (
             <Button
               onClick={handleExecute}

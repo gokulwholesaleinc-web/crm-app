@@ -56,6 +56,9 @@ export type { EntityLinkProps, EntityLinkVariant } from './EntityLink';
 export { normalizeEntityType } from './EntityLink.utils';
 export type { EntityType } from './EntityLink.utils';
 
+// HelpLink
+export { HelpLink } from './HelpLink';
+
 // Skeleton
 export {
   Skeleton,
