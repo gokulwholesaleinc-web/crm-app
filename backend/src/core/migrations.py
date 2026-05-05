@@ -103,6 +103,8 @@ async def _run_production_migrations():
                 # Stripe invoice tracking
                 "ALTER TABLE payments ADD COLUMN IF NOT EXISTS stripe_invoice_id VARCHAR(255)",
                 "CREATE UNIQUE INDEX IF NOT EXISTS ix_payments_stripe_invoice_id ON payments(stripe_invoice_id) WHERE stripe_invoice_id IS NOT NULL",
+                # Stripe hosted-payment URL (re-share if customer email got lost)
+                "ALTER TABLE payments ADD COLUMN IF NOT EXISTS stripe_payment_url TEXT",
                 # Email logging: new columns on email_queue
                 "ALTER TABLE email_queue ADD COLUMN IF NOT EXISTS from_email VARCHAR(255)",
                 "ALTER TABLE email_queue ADD COLUMN IF NOT EXISTS cc TEXT",

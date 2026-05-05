@@ -43,6 +43,11 @@ export interface Payment extends PaymentBase {
   id: number;
   stripe_payment_intent_id: string | null;
   stripe_checkout_session_id: string | null;
+  stripe_invoice_id: string | null;
+  /** Customer-facing Stripe URL (hosted_invoice_url for invoices,
+   * Checkout Session URL for subscriptions). Null until Stripe returns
+   * one. Used to re-share if the customer didn't get the email. */
+  stripe_payment_url: string | null;
   description: string | null;
   receipt_url: string | null;
   refund_amount: number | null;

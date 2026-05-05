@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.mixins.auditable import AuditableMixin, TimestampMixin
@@ -141,6 +141,11 @@ class Payment(Base, AuditableMixin):
     )  # pending, sent, succeeded, failed, refunded
     payment_method: Mapped[str | None] = mapped_column(String(50))
     receipt_url: Mapped[str | None] = mapped_column(String(500))
+    # Stripe-hosted URL the customer pays at — `hosted_invoice_url` for
+    # invoices, Checkout Session URL for subscriptions. Persisted so the
+    # CRM can re-share the link if the customer says they didn't get the
+    # Stripe email (test mode, spam folder, wrong email on file).
+    stripe_payment_url: Mapped[str | None] = mapped_column(Text)
 
     # Owner
     owner_id: Mapped[int | None] = mapped_column(

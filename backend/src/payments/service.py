@@ -727,8 +727,10 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             payment_method_types=payment_method_types,
         )
 
+        invoice_url = getattr(invoice, "hosted_invoice_url", None)
         payment = Payment(
             stripe_invoice_id=invoice.id,
+            stripe_payment_url=invoice_url,
             amount=amount,
             currency=currency.upper(),
             status="pending",
@@ -745,7 +747,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             "invoice_id": invoice.id,
             "payment_id": payment.id,
             "status": "pending",
-            "invoice_url": getattr(invoice, "hosted_invoice_url", None),
+            "invoice_url": invoice_url,
         }
 
     async def create_invoice_for_proposal(
@@ -804,8 +806,10 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             metadata={"proposal_id": str(proposal_id)},
         )
 
+        invoice_url = getattr(invoice, "hosted_invoice_url", None)
         payment = Payment(
             stripe_invoice_id=invoice.id,
+            stripe_payment_url=invoice_url,
             amount=amount,
             currency=currency.upper(),
             status="pending",
@@ -819,7 +823,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
 
         return {
             "stripe_invoice_id": invoice.id,
-            "stripe_payment_url": getattr(invoice, "hosted_invoice_url", None),
+            "stripe_payment_url": invoice_url,
             "payment_id": payment.id,
         }
 
@@ -888,6 +892,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
 
         payment = Payment(
             stripe_checkout_session_id=session.id,
+            stripe_payment_url=session.url,
             amount=amount,
             currency=currency.upper(),
             status="pending",
