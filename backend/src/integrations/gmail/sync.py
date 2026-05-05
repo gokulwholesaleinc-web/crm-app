@@ -5,12 +5,19 @@ import logging
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.integrations.gmail.client import GmailAuthError, GmailClient
 from src.integrations.gmail.models import GmailBackfillState, GmailConnection, GmailSyncState
 
-_BACKFILL_SEMAPHORE = asyncio.Semaphore(10)  # max concurrent get_message calls
+# Backfill loop is deliberately sequential (per-message awaits in a for-
+# loop) so we don't bombard Gmail's per-account rate limits. Removed a
+# module-level Semaphore that was process-wide and shared across users —
+# under the sequential loop it never throttled anything, but if anyone
+# ever switches to asyncio.gather() it would silently serialize across
+# tenants. If concurrency comes back, instantiate the Semaphore inside
+# `backfill()` so the limit is per-invocation.
 
 logger = logging.getLogger(__name__)
 
@@ -116,16 +123,26 @@ class GmailSyncWorker:
                 await db.commit()
 
                 async def _fetch_one(msg_id: str) -> None:
-                    async with _BACKFILL_SEMAPHORE:
-                        try:
-                            await _process_message(msg_id, connection, client, db)
-                        except GmailAuthError:
-                            raise
-                        except Exception as exc:
-                            logger.warning(
-                                "[gmail_backfill] user_id=%s message_id=%s error: %s",
-                                connection.user_id, msg_id, exc,
-                            )
+                    try:
+                        await _process_message(msg_id, connection, client, db)
+                    except GmailAuthError:
+                        raise
+                    except IntegrityError as exc:
+                        # A racing forward-sync (or rerun) already wrote
+                        # this message under the unique constraint on
+                        # InboundEmail.resend_email_id ('gmail:<id>').
+                        # Treat as idempotent: rollback the failed insert
+                        # and move on so progress count stays accurate.
+                        await db.rollback()
+                        logger.debug(
+                            "[gmail_backfill] user_id=%s message_id=%s already stored (race), skipping",
+                            connection.user_id, msg_id,
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "[gmail_backfill] user_id=%s message_id=%s error: %s",
+                            connection.user_id, msg_id, exc,
+                        )
 
                 for i, msg_id in enumerate(msg_ids):
                     await _fetch_one(msg_id)

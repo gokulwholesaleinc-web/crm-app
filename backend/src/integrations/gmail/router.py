@@ -272,21 +272,47 @@ async def gmail_backfill(
             detail="Backfill already in progress",
         )
 
+    # Atomically claim the slot here, before launching the task — otherwise
+    # two concurrent POSTs both see status != 'running' and spawn duplicate
+    # workers, racing through _process_message on the same message ids.
+    state.status = "running"
+    await db.commit()
+
     days = max(1, min(body.days, 3650))
 
     import src.database as db_module
+    import logging
+    logger = logging.getLogger(__name__)
 
-    async def _run():
-        async with db_module.async_session_maker() as fresh_db:
-            from sqlalchemy import select as _select
-            result = await fresh_db.execute(
-                _select(type(conn)).where(type(conn).user_id == current_user.id)
-            )
-            fresh_conn = result.scalar_one()
-            try:
+    async def _run() -> None:
+        try:
+            async with db_module.async_session_maker() as fresh_db:
+                from sqlalchemy import select as _select
+                result = await fresh_db.execute(
+                    _select(type(conn)).where(type(conn).user_id == current_user.id)
+                )
+                fresh_conn = result.scalar_one()
                 await GmailSyncWorker.backfill(fresh_conn, fresh_db, days=days)
+        except Exception as exc:
+            # backfill() persists in-flight failures itself. This catch
+            # covers session-open errors / NoResultFound / etc. so the
+            # state row doesn't get stuck on 'running' forever.
+            logger.exception("[gmail_backfill] outer task failed for user_id=%s: %s",
+                             current_user.id, exc)
+            try:
+                async with db_module.async_session_maker() as failure_db:
+                    from sqlalchemy import select as _sel
+                    s = (await failure_db.execute(
+                        _sel(GmailBackfillState).where(
+                            GmailBackfillState.user_id == current_user.id
+                        )
+                    )).scalar_one_or_none()
+                    if s is not None:
+                        s.status = "failed"
+                        s.error = str(exc)[:500]
+                        await failure_db.commit()
             except Exception:
-                pass  # backfill already persists failure state
+                logger.exception("[gmail_backfill] could not record failure state")
 
     asyncio.create_task(_run())
 
