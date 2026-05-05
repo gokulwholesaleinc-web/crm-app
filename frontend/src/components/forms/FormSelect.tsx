@@ -1,4 +1,4 @@
-import { SelectHTMLAttributes, useId } from 'react';
+import { SelectHTMLAttributes, forwardRef, useId } from 'react';
 import { UseFormRegisterReturn } from 'react-hook-form';
 import clsx from 'clsx';
 import type { SelectOption } from '../ui/Select';
@@ -15,24 +15,27 @@ export interface FormSelectProps extends Omit<SelectHTMLAttributes<HTMLSelectEle
   register?: UseFormRegisterReturn;
   helperText?: string;
   placeholder?: string;
-  ref?: React.Ref<HTMLSelectElement>;
 }
 
-export const FormSelect = ({
-  label,
-  name,
-  id,
-  options,
-  error,
-  required = false,
-  register,
-  helperText,
-  placeholder,
-  className,
-  disabled,
+// React 18: forwardRef is required so refs spread via {...register()} reach
+// the DOM. Remove when migrating to React 19.
+export const FormSelect = forwardRef<HTMLSelectElement, FormSelectProps>(function FormSelect(
+  {
+    label,
+    name,
+    id,
+    options,
+    error,
+    required = false,
+    register,
+    helperText,
+    placeholder,
+    className,
+    disabled,
+    ...props
+  },
   ref,
-  ...props
-}: FormSelectProps) => {
+) {
   const generatedId = useId();
   const selectId = id ?? generatedId;
   const hasError = Boolean(error);
@@ -99,4 +102,4 @@ export const FormSelect = ({
       )}
     </div>
   );
-};
+});
