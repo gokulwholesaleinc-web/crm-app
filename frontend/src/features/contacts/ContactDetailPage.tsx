@@ -1,4 +1,4 @@
-import { useState, lazy, Suspense } from 'react';
+import { useState, useRef, lazy, Suspense } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Button, HelpLink, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { TabBar, ActivitiesTab, CommonTabContent, SuspenseFallback } from '../../components/shared/DetailPageShell';
@@ -12,6 +12,7 @@ import {
 } from './components/contactFormHelpers';
 import { NextBestActionCard } from '../../components/ai';
 import { useContact, useDeleteContact, useUpdateContact } from '../../hooks/useContacts';
+import { useContactAliases, useAddAlias, useDeleteAlias } from '../../hooks/useContactAliases';
 import { showSuccess, showError } from '../../utils/toast';
 import { useQuotes } from '../../hooks/useQuotes';
 import { useProposals } from '../../hooks/useProposals';
@@ -58,12 +59,18 @@ function ContactDetailPage() {
   const [showEmailCompose, setShowEmailCompose] = useState(false);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [replyToEmail, setReplyToEmail] = useState<ThreadEmailItem | null>(null);
+  const [aliasInput, setAliasInput] = useState('');
+  const [aliasError, setAliasError] = useState<string | null>(null);
+  const aliasInputRef = useRef<HTMLInputElement>(null);
 
   const { data: contact, isLoading, error } = useContact(contactId);
   const { data: gmailStatus } = useGmailStatus();
   const gmailNeedsReconnect = gmailStatus?.state === 'needs_reconnect';
   const deleteContactMutation = useDeleteContact();
   const updateContactMutation = useUpdateContact();
+  const { data: aliases = [] } = useContactAliases(contactId);
+  const addAliasMutation = useAddAlias(contactId ?? 0);
+  const deleteAliasMutation = useDeleteAlias(contactId ?? 0);
 
   const { data: quotesData } = useQuotes(
     activeTab === 'quotes' && contactId ? { contact_id: contactId } : undefined
@@ -82,6 +89,20 @@ function ContactDetailPage() {
       showSuccess('Contact updated successfully');
     } catch {
       showError('Failed to update contact');
+    }
+  };
+
+  const handleAddAlias = async () => {
+    const trimmed = aliasInput.trim().toLowerCase();
+    if (!trimmed) return;
+    setAliasError(null);
+    try {
+      await addAliasMutation.mutateAsync({ email: trimmed });
+      setAliasInput('');
+      aliasInputRef.current?.focus();
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      setAliasError(status === 409 ? 'That address is already in use' : 'Failed to add alias');
     }
   };
 
@@ -208,6 +229,60 @@ function ContactDetailPage() {
                     <a href={`mailto:${contact.email}`} className="text-primary-600 hover:text-primary-500">
                       {contact.email}
                     </a>
+                  </dd>
+                </div>
+                <div className="sm:col-span-2">
+                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Email aliases</dt>
+                  <dd className="mt-2">
+                    {aliases.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {aliases.map((alias) => (
+                          <span
+                            key={alias.id}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                          >
+                            {alias.label && (
+                              <span className="font-medium text-gray-500 dark:text-gray-400">{alias.label} &middot;</span>
+                            )}
+                            <span>{alias.email}</span>
+                            <button
+                              type="button"
+                              aria-label={`Remove alias ${alias.email}`}
+                              onClick={() => deleteAliasMutation.mutate(alias.id)}
+                              className="ml-0.5 text-gray-400 hover:text-red-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-400 rounded"
+                            >
+                              <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+                              </svg>
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <input
+                        ref={aliasInputRef}
+                        type="email"
+                        value={aliasInput}
+                        onChange={(e) => { setAliasInput(e.target.value); setAliasError(null); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddAlias(); } }}
+                        placeholder="alias@example.com..."
+                        spellCheck={false}
+                        autoComplete="off"
+                        className="flex-1 min-w-0 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-2.5 py-1 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddAlias}
+                        disabled={addAliasMutation.isPending || !aliasInput.trim()}
+                        className="shrink-0 rounded-md bg-primary-600 px-3 py-1 text-sm font-medium text-white hover:bg-primary-500 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                      >
+                        {addAliasMutation.isPending ? 'Adding...' : 'Add'}
+                      </button>
+                    </div>
+                    {aliasError && (
+                      <p role="alert" aria-live="polite" className="mt-1 text-xs text-red-600 dark:text-red-400">{aliasError}</p>
+                    )}
                   </dd>
                 </div>
                 <div>
