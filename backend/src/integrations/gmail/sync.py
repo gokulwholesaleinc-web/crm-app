@@ -431,6 +431,12 @@ async def _resolve_contact_by_addresses(
     Used by the inbound + sent ingestion path so a CRM contact in CC or
     position 2+ of the To: header still links the row to that contact
     instead of leaving entity_id NULL.
+
+    Priority is determined by the caller-supplied `addresses` order (from >
+    to-list > cc-list > bcc-list). We fetch all matching contacts in one query
+    then pick the one whose email appears earliest in that list — SQL IN() with
+    LIMIT(1) has no ordering guarantee so we cannot rely on the DB to respect
+    the priority ordering.
     """
     from src.contacts.models import Contact
 
@@ -439,9 +445,16 @@ async def _resolve_contact_by_addresses(
         return None, None
 
     result = await db.execute(
-        select(Contact).where(func.lower(Contact.email).in_(cleaned)).limit(1)
+        select(Contact).where(func.lower(Contact.email).in_(cleaned))
     )
-    contact = result.scalar_one_or_none()
-    if contact:
-        return "contacts", contact.id
+    contacts = result.scalars().all()
+    if not contacts:
+        return None, None
+
+    # Build a lookup by lowercased email so we can respect the caller's priority.
+    by_email = {(c.email or "").strip().lower(): c for c in contacts}
+    for addr in cleaned:
+        contact = by_email.get(addr)
+        if contact is not None:
+            return "contacts", contact.id
     return None, None

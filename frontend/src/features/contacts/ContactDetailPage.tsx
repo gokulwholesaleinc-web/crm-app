@@ -48,11 +48,7 @@ const TABS: { id: TabType; name: string }[] = [
   { id: 'sharing', name: 'Sharing' },
 ];
 
-const TAB_IDS: ReadonlySet<TabType> = new Set([
-  'details', 'activities', 'notes', 'emails', 'contracts',
-  'quotes', 'proposals', 'payments', 'documents', 'attachments',
-  'history', 'sharing',
-]);
+const TAB_IDS: ReadonlySet<TabType> = new Set(TABS.map((t) => t.id));
 
 function ContactDetailPage() {
   const { id } = useParams<{ id: string }>();

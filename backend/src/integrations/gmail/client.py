@@ -3,6 +3,7 @@
 import base64
 import logging
 from datetime import UTC, datetime, timedelta
+from email.utils import getaddresses, parsedate_to_datetime
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -234,7 +235,6 @@ def _decode_body(part: dict) -> str | None:
 def _parse_date(date_str: str) -> datetime | None:
     if not date_str:
         return None
-    from email.utils import parsedate_to_datetime
     try:
         return parsedate_to_datetime(date_str)
     except Exception:
@@ -261,7 +261,6 @@ def _parse_address_list(addr_str: str) -> list[str]:
     """
     if not addr_str:
         return []
-    from email.utils import getaddresses
     out: list[str] = []
     for _name, addr in getaddresses([addr_str]):
         clean = (addr or "").strip()

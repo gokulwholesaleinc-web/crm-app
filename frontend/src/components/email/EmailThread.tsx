@@ -352,15 +352,21 @@ export function EmailThread({ entityType, entityId, onReply, onCompose, highligh
   const [searchOpen, setSearchOpen] = useState(false);
   const { data, isLoading } = useEmailThread(entityType, entityId, page);
   const prevPageRef = useRef(page);
+  // Track which target we have already scrolled to so the effect doesn't
+  // fire again every time accumulated.length grows (e.g. user loads older
+  // pages). Reset when the target changes so a new deep-link still scrolls.
+  const scrolledTargetRef = useRef<string | null>(null);
 
   // After ThreadCard auto-expands, scroll the target bubble into view.
   // requestAnimationFrame waits for the expanded panel to mount.
   useEffect(() => {
     if (!highlightTarget || accumulated.length === 0) return;
+    if (scrolledTargetRef.current === highlightTarget) return;
     const raf = requestAnimationFrame(() => {
       const el = document.querySelector(`[data-message-key="${CSS.escape(highlightTarget)}"]`);
       if (el instanceof HTMLElement) {
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        scrolledTargetRef.current = highlightTarget;
       }
     });
     return () => cancelAnimationFrame(raf);
