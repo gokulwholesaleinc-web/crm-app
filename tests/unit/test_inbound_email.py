@@ -241,13 +241,13 @@ class TestEnhancedEmailSending:
                 "to_email": "recipient@example.com",
                 "subject": "Custom From Test",
                 "body": "<p>Test with custom from</p>",
-                "from_email": "custom@resend.dev",
+                "from_email": "custom@example.com",
             },
         )
 
         assert response.status_code == 201
         data = response.json()
-        assert data["from_email"] == "custom@resend.dev"
+        assert data["from_email"] == "custom@example.com"
 
     @pytest.mark.asyncio
     async def test_send_email_without_cc_bcc(
