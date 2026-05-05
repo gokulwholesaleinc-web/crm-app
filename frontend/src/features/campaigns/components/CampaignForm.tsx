@@ -31,6 +31,7 @@ interface FormValues {
   target_audience: string;
   expected_revenue: string;
   expected_response: string;
+  send_via: 'gmail' | 'mailchimp';
 }
 
 const campaignTypeOptions = [
@@ -40,6 +41,11 @@ const campaignTypeOptions = [
   { value: 'ads', label: 'Advertising' },
   { value: 'social', label: 'Social Media' },
   { value: 'other', label: 'Other' },
+];
+
+const sendViaOptions = [
+  { value: 'gmail', label: 'Gmail (your connected mailbox)' },
+  { value: 'mailchimp', label: 'Mailchimp (default audience)' },
 ];
 
 const statusOptions = [
@@ -103,6 +109,7 @@ export function CampaignForm({
       target_audience: campaign?.target_audience || '',
       expected_revenue: campaign?.expected_revenue?.toString() || '',
       expected_response: campaign?.expected_response?.toString() || '',
+      send_via: campaign?.send_via || 'gmail',
     },
   });
 
@@ -125,6 +132,7 @@ export function CampaignForm({
         target_audience: campaign.target_audience || '',
         expected_revenue: campaign.expected_revenue?.toString() || '',
         expected_response: campaign.expected_response?.toString() || '',
+        send_via: campaign.send_via || 'gmail',
       });
     }
   }, [campaign, reset]);
@@ -142,6 +150,7 @@ export function CampaignForm({
       target_audience: data.target_audience || undefined,
       expected_revenue: data.expected_revenue ? parseFloat(data.expected_revenue) : undefined,
       expected_response: data.expected_response ? parseInt(data.expected_response, 10) : undefined,
+      send_via: data.send_via,
     };
 
     await onSubmit(formattedData);
@@ -191,10 +200,23 @@ export function CampaignForm({
       </div>
 
       {selectedType === 'email' && (
-        <div className="rounded-md bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-3 text-sm text-blue-800 dark:text-blue-200">
-          <p className="font-medium mb-0.5">After creating this campaign:</p>
-          <p>Scroll to <strong>Campaign Sequence</strong> on the detail page to attach an email template and set the send schedule. Then click <strong>Add Members</strong> to load your recipient list.</p>
-        </div>
+        <>
+          <Controller
+            name="send_via"
+            control={control}
+            render={({ field }) => (
+              <Select {...field} label="Send through" options={sendViaOptions} />
+            )}
+          />
+          <FieldHint>
+            Gmail sends each email from your connected mailbox; Mailchimp delegates to the
+            default audience configured in Settings → Integrations.
+          </FieldHint>
+          <div className="rounded-md bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-3 text-sm text-blue-800 dark:text-blue-200">
+            <p className="font-medium mb-0.5">After creating this campaign:</p>
+            <p>Scroll to <strong>Campaign Sequence</strong> on the detail page to attach an email template and set the send schedule. Then click <strong>Add Members</strong> to load your recipient list.</p>
+          </div>
+        </>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

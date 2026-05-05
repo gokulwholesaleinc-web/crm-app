@@ -140,3 +140,77 @@ export const syncInstagram = async (companyId: number, pageId: string): Promise<
   const response = await apiClient.post(`/api/meta/companies/${companyId}/sync-instagram`, { page_id: pageId });
   return response.data;
 };
+
+// ---------------------------------------------------------------------------
+// Mailchimp
+// ---------------------------------------------------------------------------
+
+export interface MailchimpStatus {
+  connected: boolean;
+  server_prefix: string | null;
+  account_email: string | null;
+  account_login_id: string | null;
+  default_audience_id: string | null;
+  default_audience_name: string | null;
+  connected_at: string | null;
+}
+
+export interface MailchimpAudience {
+  id: string;
+  name: string;
+  member_count: number;
+}
+
+export interface MailchimpStats {
+  campaign_id: number;
+  mailchimp_campaign_id: string;
+  emails_sent: number;
+  opens: number;
+  unique_opens: number;
+  open_rate: number;
+  clicks: number;
+  unique_clicks: number;
+  click_rate: number;
+  bounces: number;
+  unsubscribes: number;
+}
+
+export const getMailchimpStatus = async (): Promise<MailchimpStatus> => {
+  const response = await apiClient.get<MailchimpStatus>('/api/integrations/mailchimp/status');
+  return response.data;
+};
+
+export const connectMailchimp = async (apiKey: string): Promise<MailchimpStatus> => {
+  const response = await apiClient.post<MailchimpStatus>(
+    '/api/integrations/mailchimp/connect',
+    { api_key: apiKey },
+  );
+  return response.data;
+};
+
+export const disconnectMailchimp = async (): Promise<{ disconnected: boolean }> => {
+  const response = await apiClient.delete<{ disconnected: boolean }>(
+    '/api/integrations/mailchimp/disconnect',
+  );
+  return response.data;
+};
+
+export const listMailchimpAudiences = async (): Promise<MailchimpAudience[]> => {
+  const response = await apiClient.get<MailchimpAudience[]>('/api/integrations/mailchimp/audiences');
+  return response.data;
+};
+
+export const setMailchimpAudience = async (audienceId: string): Promise<MailchimpStatus> => {
+  const response = await apiClient.post<MailchimpStatus>(
+    '/api/integrations/mailchimp/audiences/select',
+    { audience_id: audienceId },
+  );
+  return response.data;
+};
+
+export const syncMailchimpCampaignStats = async (campaignId: number): Promise<MailchimpStats> => {
+  const response = await apiClient.post<MailchimpStats>(
+    `/api/integrations/mailchimp/campaigns/${campaignId}/sync-stats`,
+  );
+  return response.data;
+};

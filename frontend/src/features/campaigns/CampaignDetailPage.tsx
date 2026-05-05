@@ -9,12 +9,16 @@ import { useContacts } from '../../hooks/useContacts';
 import { useLeads } from '../../hooks/useLeads';
 import {
   ArrowLeftIcon,
+  ArrowPathIcon,
   PlusIcon,
   UsersIcon,
   ChartBarIcon,
   CurrencyDollarIcon,
   TrashIcon,
 } from '@heroicons/react/24/outline';
+import { useMutation } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
+import { syncMailchimpCampaignStats, type MailchimpStats } from '../../api/integrations';
 import { Button, EntityLink, HelpLink, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { CampaignForm } from './components/CampaignForm';
 import { AddMembersModal } from './components/AddMembersModal';
@@ -72,6 +76,83 @@ function StatCard({
           {subValue && <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{subValue}</p>}
         </div>
       </div>
+    </div>
+  );
+}
+
+function MailchimpStatsPanel({
+  campaignId,
+  mailchimpCampaignId,
+}: {
+  campaignId: number;
+  mailchimpCampaignId: string | null;
+}) {
+  const [stats, setStats] = useState<MailchimpStats | null>(null);
+
+  const syncMutation = useMutation({
+    mutationFn: () => syncMailchimpCampaignStats(campaignId),
+    onSuccess: (data) => {
+      setStats(data);
+      toast.success(`Synced ${data.emails_sent} sends from Mailchimp`);
+    },
+    onError: () => toast.error('Could not pull stats from Mailchimp'),
+  });
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">
+            Mailchimp delivery
+          </h3>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            {mailchimpCampaignId
+              ? `Mailchimp campaign id: ${mailchimpCampaignId}`
+              : 'This campaign has not been sent through Mailchimp yet.'}
+          </p>
+        </div>
+        <Button
+          variant="secondary"
+          size="sm"
+          leftIcon={<ArrowPathIcon className="h-4 w-4" />}
+          onClick={() => syncMutation.mutate()}
+          disabled={syncMutation.isPending || !mailchimpCampaignId}
+        >
+          Sync stats
+        </Button>
+      </div>
+      {stats && (
+        <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+          <div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Sent</p>
+            <p className="font-medium">{stats.emails_sent.toLocaleString()}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Opens</p>
+            <p className="font-medium">
+              {stats.unique_opens.toLocaleString()}{' '}
+              <span className="text-xs text-gray-500">
+                ({(stats.open_rate * 100).toFixed(1)}%)
+              </span>
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Clicks</p>
+            <p className="font-medium">
+              {stats.unique_clicks.toLocaleString()}{' '}
+              <span className="text-xs text-gray-500">
+                ({(stats.click_rate * 100).toFixed(1)}%)
+              </span>
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Bounces / Unsub</p>
+            <p className="font-medium">
+              {stats.bounces.toLocaleString()} / {stats.unsubscribes.toLocaleString()}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -494,6 +575,11 @@ export function CampaignDetailPage() {
           </p>
         </div>
       </div>
+
+      {/* Mailchimp send summary */}
+      {campaign.send_via === 'mailchimp' && (
+        <MailchimpStatsPanel campaignId={campaign.id} mailchimpCampaignId={campaign.mailchimp_campaign_id ?? null} />
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">

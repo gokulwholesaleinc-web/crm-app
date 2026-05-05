@@ -4,6 +4,8 @@
 
 import type { PaginatedResponse } from './common';
 
+export type CampaignSendVia = 'gmail' | 'mailchimp';
+
 export interface CampaignBase {
   name: string;
   description?: string | null;
@@ -18,6 +20,7 @@ export interface CampaignBase {
   expected_revenue?: number | null;
   expected_response?: number | null;
   owner_id?: number | null;
+  send_via?: CampaignSendVia;
 }
 
 export interface CampaignCreate extends CampaignBase {}
@@ -39,6 +42,7 @@ export interface Campaign extends CampaignBase {
   conversion_rate?: number | null;
   roi?: number | null;
   is_executing: boolean;
+  mailchimp_campaign_id?: string | null;
   created_at: string;
   updated_at: string;
 }
