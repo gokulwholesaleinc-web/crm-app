@@ -1,15 +1,12 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { SECTIONS } from './helpContent';
 
-const WelcomeModal = lazy(() => import('../onboarding/WelcomeModal').then(m => ({ default: m.WelcomeModal })));
-
 function HelpPage() {
   const [query, setQuery] = useState('');
   const [activeId, setActiveId] = useState<string>('getting-started');
-  const [welcomeOpen, setWelcomeOpen] = useState(false);
 
   const filteredSections = useMemo(() => {
     if (!query.trim()) return SECTIONS;
@@ -48,20 +45,11 @@ function HelpPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Help &amp; User Guide</h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            A walkthrough of every tab and how the pieces fit together.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setWelcomeOpen(true)}
-          className="self-start text-sm text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300"
-        >
-          Show welcome again →
-        </button>
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Help &amp; User Guide</h1>
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+          A walkthrough of every tab and how the pieces fit together.
+        </p>
       </div>
 
       {/* Search */}
@@ -149,12 +137,6 @@ function HelpPage() {
           )}
         </main>
       </div>
-
-      {welcomeOpen && (
-        <Suspense fallback={null}>
-          <WelcomeModal isOpen={welcomeOpen} onClose={() => setWelcomeOpen(false)} />
-        </Suspense>
-      )}
     </div>
   );
 }
