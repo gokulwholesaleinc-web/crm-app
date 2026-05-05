@@ -51,7 +51,12 @@ export const pushToCalendar = async (activityId: number): Promise<{ google_event
 
 // Gmail
 
+export type GmailConnectionState = 'connected' | 'needs_reconnect' | 'disconnected';
+
 export interface GmailStatus {
+  /** New canonical UI signal. Branch on this; `connected` is kept for
+   * backwards compatibility with older clients. */
+  state: GmailConnectionState;
   connected: boolean;
   email: string | null;
   last_synced_at: string | null;

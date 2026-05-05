@@ -158,14 +158,33 @@ async def gmail_status(
     conn = await service.get_by_user(current_user.id)
     sync_state = await service.get_sync_state(current_user.id)
 
-    if not conn or not conn.is_active:
-        return GmailStatusResponse(connected=False)
+    # Decide the state. A revoked connection paired with an auth-related
+    # last_error means Google invalidated us and the user needs to
+    # re-OAuth. A revoked connection with no error means manual disconnect.
+    if not conn:
+        return GmailStatusResponse(state="disconnected", connected=False)
+
+    last_error = sync_state.last_error if sync_state else None
+    if not conn.is_active:
+        state_str = (
+            "needs_reconnect"
+            if last_error and "GmailAuthError" in last_error
+            else "disconnected"
+        )
+        return GmailStatusResponse(
+            state=state_str,
+            connected=False,
+            email=conn.email,
+            last_synced_at=sync_state.last_synced_at if sync_state else None,
+            last_error=last_error,
+        )
 
     return GmailStatusResponse(
+        state="connected",
         connected=True,
         email=conn.email,
         last_synced_at=sync_state.last_synced_at if sync_state else None,
-        last_error=sync_state.last_error if sync_state else None,
+        last_error=last_error,
     )
 
 

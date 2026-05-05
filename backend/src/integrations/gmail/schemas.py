@@ -1,8 +1,11 @@
 """Gmail integration schemas."""
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
+
+GmailConnectionState = Literal["connected", "needs_reconnect", "disconnected"]
 
 
 class GmailConnectionResponse(BaseModel):
@@ -33,6 +36,16 @@ class GmailSendRequest(BaseModel):
 class GmailStatusResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
+    # `state` is the load-bearing field for the UI:
+    #   connected       — happy path
+    #   needs_reconnect — was connected, Google revoked our refresh token
+    #                     (typical for Testing-mode apps every ~7 days);
+    #                     UI should show a Reconnect prompt and disable
+    #                     compose/sync until the user re-OAuths.
+    #   disconnected    — never connected, or user manually disconnected.
+    # `connected` is kept for backwards compat with older clients but new
+    # UI should branch on `state`.
+    state: GmailConnectionState
     connected: bool
     email: str | None = None
     last_synced_at: datetime | None = None

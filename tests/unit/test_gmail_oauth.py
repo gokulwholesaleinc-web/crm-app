@@ -359,6 +359,7 @@ class TestGmailStatus:
             resp = await client.get("/api/integrations/gmail/status", headers=_auth_header(test_user))
             assert resp.status_code == 200
             body = resp.json()
+            assert body["state"] == "connected"
             assert body["connected"] is True
             assert body["email"] == "connected@gmail.com"
         finally:

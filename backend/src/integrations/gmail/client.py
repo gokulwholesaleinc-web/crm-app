@@ -57,8 +57,21 @@ class GmailClient:
                 "client_secret": _get_client_secret(),
             },
         )
-        if resp.status_code == 401:
-            raise GmailAuthError("Refresh token rejected by Google")
+        # Google returns 400 with body `{"error": "invalid_grant"}` when a
+        # refresh token has been revoked or expired (Testing-mode apps lose
+        # refresh tokens after 7 days). Older code only caught 401, so the
+        # 400 fell through to raise_for_status() and the connection got
+        # stuck in "Connected" state with a stale `last_error`. Treat both
+        # as auth failures so sync_account marks the connection revoked
+        # and the UI prompts for reconnect.
+        if resp.status_code in (400, 401):
+            try:
+                err = resp.json().get("error", "")
+            except ValueError:
+                err = ""
+            raise GmailAuthError(
+                f"Refresh token rejected by Google ({resp.status_code} {err})"
+            )
         resp.raise_for_status()
         data = resp.json()
         self._conn.access_token = data["access_token"]

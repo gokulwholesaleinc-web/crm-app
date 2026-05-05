@@ -226,6 +226,7 @@ function GmailCard({ onRequestDisconnect }: { onRequestDisconnect: () => void })
   });
 
   const connected = status?.connected ?? false;
+  const needsReconnect = status?.state === 'needs_reconnect';
 
   const connectMutation = useMutation({
     mutationFn: getGmailAuthUrl,
@@ -262,19 +263,33 @@ function GmailCard({ onRequestDisconnect }: { onRequestDisconnect: () => void })
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Gmail</p>
-          <ConnectionBadge connected={connected} />
+          {needsReconnect ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200">
+              Reconnect required
+            </span>
+          ) : (
+            <ConnectionBadge connected={connected} />
+          )}
         </div>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-          {connected
-            ? `${status?.email ?? ''} · Emails sent via Gmail appear in your Sent folder`
-            : 'Send and receive emails through your Gmail account'}
-        </p>
-        {connected && status?.last_synced_at && (
+        {needsReconnect ? (
+          <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+            Google revoked our access — this typically happens automatically every 7 days for
+            unverified apps. Click <strong>Reconnect</strong> to restore email sync. Outgoing email
+            and contact thread sync are paused until you do.
+          </p>
+        ) : (
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            {connected
+              ? `${status?.email ?? ''} · Emails sent via Gmail appear in your Sent folder`
+              : 'Send and receive emails through your Gmail account'}
+          </p>
+        )}
+        {status?.last_synced_at && (
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
             Last synced: {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(status.last_synced_at))}
           </p>
         )}
-        {connected && status?.last_error && (
+        {connected && status?.last_error && !needsReconnect && (
           <p className="text-xs text-red-500 mt-0.5">{status.last_error}</p>
         )}
       </div>
@@ -308,9 +323,9 @@ function GmailCard({ onRequestDisconnect }: { onRequestDisconnect: () => void })
             leftIcon={<LinkIcon className="h-4 w-4" />}
             onClick={() => connectMutation.mutate()}
             disabled={connectMutation.isPending}
-            aria-label="Connect Gmail"
+            aria-label={needsReconnect ? 'Reconnect Gmail' : 'Connect Gmail'}
           >
-            Connect
+            {needsReconnect ? 'Reconnect' : 'Connect'}
           </Button>
         )}
       </div>

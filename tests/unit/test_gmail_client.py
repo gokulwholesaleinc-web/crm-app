@@ -350,3 +350,27 @@ class TestRefreshIfNeeded:
 
         with pytest.raises(GmailAuthError):
             await client.get_profile()
+
+    @pytest.mark.asyncio
+    async def test_raises_auth_error_when_refresh_returns_400_invalid_grant(self, monkeypatch):
+        """Regression: Google returns 400 + invalid_grant when a refresh
+        token is revoked or expired (Testing-mode apps after ~7 days).
+        Older code only caught 401 and the connection got stuck in a
+        "Connected but stale" state. The refresh handler must convert
+        any 400/401 from the token endpoint into GmailAuthError."""
+        import src.integrations.gmail.client as client_mod
+        monkeypatch.setattr(client_mod, "_get_client_id", lambda: "cid")
+        monkeypatch.setattr(client_mod, "_get_client_secret", lambda: "csecret")
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(400, json={"error": "invalid_grant"})
+
+        conn = _make_conn(
+            token_expiry=datetime.now(timezone.utc) - timedelta(seconds=10)
+        )
+        db = AsyncMock(spec=AsyncSession)
+        http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        client = GmailClient(conn, db, http=http)
+
+        with pytest.raises(GmailAuthError):
+            await client.get_profile()
