@@ -126,31 +126,45 @@ async def _resolve_reply_context(
     thread metadata. EmailQueue targets additionally require the sender
     match, since EmailQueue rows are per-user.
     """
-    if reply_to_email_id is not None and entity_type and entity_id:
-        filters = [
-            EmailQueue.id == reply_to_email_id,
-            EmailQueue.entity_type == entity_type,
-            EmailQueue.entity_id == entity_id,
-        ]
-        if sent_by_id is not None:
-            filters.append(EmailQueue.sent_by_id == sent_by_id)
-        row = await db.execute(
-            select(EmailQueue.thread_id, EmailQueue.message_id).where(*filters)
-        )
-        hit = row.first()
-        if hit is not None:
-            return hit.thread_id, hit.message_id
-    if reply_to_inbound_id is not None and entity_type and entity_id:
-        row = await db.execute(
-            select(InboundEmail.thread_id, InboundEmail.message_id).where(
-                InboundEmail.id == reply_to_inbound_id,
-                InboundEmail.entity_type == entity_type,
-                InboundEmail.entity_id == entity_id,
+    if reply_to_email_id is not None:
+        if not (entity_type and entity_id):
+            logger.warning(
+                "reply_to_email_id=%s supplied but entity_type/entity_id missing "
+                "-- reply context dropped silently",
+                reply_to_email_id,
             )
-        )
-        hit = row.first()
-        if hit is not None:
-            return hit.thread_id, hit.message_id
+        else:
+            filters = [
+                EmailQueue.id == reply_to_email_id,
+                EmailQueue.entity_type == entity_type,
+                EmailQueue.entity_id == entity_id,
+            ]
+            if sent_by_id is not None:
+                filters.append(EmailQueue.sent_by_id == sent_by_id)
+            row = await db.execute(
+                select(EmailQueue.thread_id, EmailQueue.message_id).where(*filters)
+            )
+            hit = row.first()
+            if hit is not None:
+                return hit.thread_id, hit.message_id
+    if reply_to_inbound_id is not None:
+        if not (entity_type and entity_id):
+            logger.warning(
+                "reply_to_inbound_id=%s supplied but entity_type/entity_id missing "
+                "-- reply context dropped silently",
+                reply_to_inbound_id,
+            )
+        else:
+            row = await db.execute(
+                select(InboundEmail.thread_id, InboundEmail.message_id).where(
+                    InboundEmail.id == reply_to_inbound_id,
+                    InboundEmail.entity_type == entity_type,
+                    InboundEmail.entity_id == entity_id,
+                )
+            )
+            hit = row.first()
+            if hit is not None:
+                return hit.thread_id, hit.message_id
     return None, None
 
 
