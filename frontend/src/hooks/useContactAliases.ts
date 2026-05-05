@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
+import { showError } from '../utils/toast';
 
 export interface ContactEmailAlias {
   id: number;
@@ -55,6 +56,9 @@ export function useDeleteAlias(contactId: number) {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: aliasKeys(contactId) });
+    },
+    onError: () => {
+      showError('Failed to remove alias');
     },
   });
 }

@@ -15,7 +15,12 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.integrations.gmail.client import GmailAuthError, GmailClient
+from src.integrations.gmail.client import (
+    GmailAuthError,
+    GmailClient,
+    _first_address,
+    _parse_address_list,
+)
 from src.integrations.gmail.models import GmailConnection, GmailSyncState
 
 
@@ -374,3 +379,39 @@ class TestRefreshIfNeeded:
 
         with pytest.raises(GmailAuthError):
             await client.get_profile()
+
+
+# ---------------------------------------------------------------------------
+# Address-list parsing
+# ---------------------------------------------------------------------------
+
+class TestParseAddressList:
+    def test_empty_returns_empty_list(self):
+        assert _parse_address_list("") == []
+        assert _parse_address_list("   ") == []
+
+    def test_single_bare_email(self):
+        assert _parse_address_list("a@b.com") == ["a@b.com"]
+
+    def test_single_with_display_name(self):
+        assert _parse_address_list("Alice <a@b.com>") == ["a@b.com"]
+
+    def test_multiple_comma_separated(self):
+        result = _parse_address_list("a@b.com, c@d.com, e@f.com")
+        assert result == ["a@b.com", "c@d.com", "e@f.com"]
+
+    def test_quoted_display_name_with_comma(self):
+        """A quoted display name containing a comma must NOT be split."""
+        result = _parse_address_list('"Doe, Jane" <j@x.com>, bob@y.com')
+        assert result == ["j@x.com", "bob@y.com"]
+
+    def test_drops_malformed_entries(self):
+        """Entries without an @ should be silently dropped."""
+        result = _parse_address_list("garbage, valid@x.com, also-bad")
+        assert result == ["valid@x.com"]
+
+    def test_first_address_extracts_first(self):
+        """_first_address must keep returning the leading email even after refactor."""
+        assert _first_address("a@b.com, c@d.com") == "a@b.com"
+        assert _first_address('"Doe, Jane" <j@x.com>, bob@y.com') == "j@x.com"
+        assert _first_address("") == ""

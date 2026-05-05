@@ -261,11 +261,19 @@ async def list_aliases(
     contact_id: int,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
-    """List all email aliases for a contact."""
+    """List all email aliases for a contact.
+
+    Uses the same access check as GET /{contact_id} so share recipients can
+    read aliases on contacts that have been shared with them.
+    """
     service = ContactService(db)
     contact = await get_entity_or_404(service, contact_id, EntityNames.CONTACT)
-    check_ownership(contact, current_user, EntityNames.CONTACT)
+    check_record_access_or_shared(
+        contact, current_user, data_scope.role_name,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_CONTACTS),
+    )
 
     result = await db.execute(
         select(ContactEmailAlias)
@@ -300,9 +308,16 @@ async def add_alias(
     try:
         await db.commit()
         await db.refresh(alias)
-    except IntegrityError:
+    except IntegrityError as exc:
         await db.rollback()
-        raise HTTPException(status_code=409, detail="Email address already exists as an alias")
+        # Narrow to unique-constraint violations (SQLSTATE 23505). Other
+        # IntegrityErrors (e.g. unexpected FK failures) should surface as 500
+        # so the caller isn't misled by a 409.
+        orig = getattr(exc, "orig", None)
+        pgcode = getattr(orig, "sqlstate", None) or getattr(orig, "pgcode", None)
+        if pgcode == "23505":
+            raise HTTPException(status_code=409, detail="Email address already exists as an alias")
+        raise
     return alias
 
 

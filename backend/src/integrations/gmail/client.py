@@ -3,6 +3,7 @@
 import base64
 import logging
 from datetime import UTC, datetime, timedelta
+from email.utils import getaddresses, parsedate_to_datetime
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -175,6 +176,8 @@ def _parse_message(data: dict) -> dict:
     parsed_date = _parse_date(date_str)
 
     to_header = headers.get("to", "")
+    cc_header = headers.get("cc", "")
+    bcc_header = headers.get("bcc", "")
     to_email = _first_address(to_header)
 
     return {
@@ -184,7 +187,11 @@ def _parse_message(data: dict) -> dict:
         "subject": headers.get("subject", ""),
         "from": _first_address(headers.get("from", "")),
         "to": to_email,
-        "cc": headers.get("cc", ""),
+        "to_list": _parse_address_list(to_header),
+        "cc": cc_header,
+        "cc_list": _parse_address_list(cc_header),
+        "bcc": bcc_header,
+        "bcc_list": _parse_address_list(bcc_header),
         "message_id": headers.get("message-id", ""),
         "in_reply_to": headers.get("in-reply-to", ""),
         "references": headers.get("references", ""),
@@ -228,7 +235,6 @@ def _decode_body(part: dict) -> str | None:
 def _parse_date(date_str: str) -> datetime | None:
     if not date_str:
         return None
-    from email.utils import parsedate_to_datetime
     try:
         return parsedate_to_datetime(date_str)
     except Exception:
@@ -239,10 +245,28 @@ def _first_address(addr_str: str) -> str:
     """Extract first email address from a comma-separated address header."""
     if not addr_str:
         return ""
-    first = addr_str.split(",")[0].strip()
-    if "<" in first and ">" in first:
-        return first[first.index("<") + 1 : first.index(">")].strip()
-    return first.strip()
+    addrs = _parse_address_list(addr_str)
+    return addrs[0] if addrs else ""
+
+
+def _parse_address_list(addr_str: str) -> list[str]:
+    """Parse a multi-recipient header into a list of bare email addresses.
+
+    Uses Python's email.utils.getaddresses, which handles quoted display
+    names containing commas and angle-bracket delimiters that the naive
+    split-on-comma approach gets wrong (e.g. ``"Doe, Jane" <j@x.com>``).
+    Empty or malformed entries are dropped; the returned list preserves
+    header order so callers that care about position (e.g. To[0] for
+    the from_email column on sent rows) still get deterministic output.
+    """
+    if not addr_str:
+        return []
+    out: list[str] = []
+    for _name, addr in getaddresses([addr_str]):
+        clean = (addr or "").strip()
+        if clean and "@" in clean:
+            out.append(clean)
+    return out
 
 
 def _parse_address_list(addr_str: str | None) -> list[str]:

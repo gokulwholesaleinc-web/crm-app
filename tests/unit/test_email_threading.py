@@ -1,10 +1,11 @@
 """Unit tests for reply-threading helpers and inbound contact matching.
 
-Covers the fixes in fix/email-thread-continuity:
+Covers:
 - `_resolve_reply_context` returns the exact email's thread/message IDs when
   the caller passes a reply target.
-- `_find_thread_context` picks the most recent row on the entity, ignores
-  rows without a Message-ID, and works across outbound + inbound.
+- A fresh compose (no `reply_to_*` set) returns `(None, None)` so the new
+  message starts its own Gmail thread instead of silently inheriting the
+  newest unrelated message on the contact.
 - `_store_inbound` matches contacts case-insensitively.
 """
 
@@ -24,7 +25,7 @@ from src.companies.models import Company
 from src.contacts.models import Contact
 from src.database import Base
 from src.email.models import EmailQueue, InboundEmail
-from src.email.service import _find_thread_context, _resolve_reply_context
+from src.email.service import _resolve_reply_context
 from src.integrations.gmail.models import GmailConnection
 from src.integrations.gmail.sync import _store_inbound
 
@@ -209,12 +210,12 @@ class TestResolveReplyContext:
         ) == (None, None)
 
     @pytest.mark.asyncio
-    async def test_outbound_targeting_other_senders_row_falls_back_to_own_thread(
+    async def test_outbound_targeting_other_senders_row_returns_none(
         self, db, contact, user
     ):
-        # Two users have separate threads on the same contact. If user B tries
-        # to "reply" targeting user A's EmailQueue row, scoping must not return
-        # user A's thread — the fallback should pick B's own most-recent thread.
+        # User B targets user A's EmailQueue row. Scoping rejects the
+        # direct hit (sender mismatch), and there's no implicit fallback
+        # any more — fresh compose must NOT inherit a peer's thread.
         other_user_row = EmailQueue(
             to_email="x@y.com",
             subject="other",
@@ -244,17 +245,65 @@ class TestResolveReplyContext:
         db.add_all([other_user_row, own_row])
         await db.commit()
 
-        thread, message = await _resolve_reply_context(
+        assert await _resolve_reply_context(
             db,
             reply_to_email_id=other_user_row.id,
             reply_to_inbound_id=None,
             entity_type="contacts",
             entity_id=contact.id,
             sent_by_id=user.id + 9999,
-        )
-        # Scoping rejected the direct hit; fallback returned user B's thread.
-        assert thread == "thread-b"
-        assert message == "<user-b@gmail>"
+        ) == (None, None)
+
+    @pytest.mark.asyncio
+    async def test_fresh_compose_does_not_inherit_prior_thread(
+        self, db, contact, user
+    ):
+        """A compose with no `reply_to_*` must NOT thread on the newest
+        prior message. Gmail breaks the thread on the recipient side
+        when the subject changes (`Final test with attachment` doesn't
+        belong on a `Signed copy — test` thread), so the only effect of
+        an implicit fallback was that the CRM thread view stitched
+        unrelated messages into one fat card.
+        """
+        # Pre-populate every kind of prior message — outbound, inbound,
+        # different subjects, recent timestamps. None should leak into
+        # a fresh compose's reply context.
+        db.add_all([
+            EmailQueue(
+                to_email="x@y.com",
+                subject="Signed copy — test",
+                body="b",
+                sent_by_id=user.id,
+                entity_type="contacts",
+                entity_id=contact.id,
+                message_id="<old-out@gmail>",
+                thread_id="thread-stale-out",
+                created_at=datetime.now(UTC) - timedelta(minutes=5),
+                status="sent",
+                attempts=1,
+            ),
+            InboundEmail(
+                resend_email_id="rid-old-in",
+                from_email="them@example.com",
+                to_email="us@example.com",
+                subject="Re: Proposal",
+                message_id="<old-in@gmail>",
+                thread_id="thread-stale-in",
+                received_at=datetime.now(UTC) - timedelta(minutes=2),
+                entity_type="contacts",
+                entity_id=contact.id,
+            ),
+        ])
+        await db.commit()
+
+        assert await _resolve_reply_context(
+            db,
+            reply_to_email_id=None,
+            reply_to_inbound_id=None,
+            entity_type="contacts",
+            entity_id=contact.id,
+            sent_by_id=user.id,
+        ) == (None, None)
 
     @pytest.mark.asyncio
     async def test_inbound_rejected_when_entity_mismatches(self, db, contact):
@@ -279,106 +328,6 @@ class TestResolveReplyContext:
             entity_type="contacts",
             entity_id=contact.id + 5000,
         ) == (None, None)
-
-
-# ---------------------------------------------------------------------------
-# _find_thread_context
-# ---------------------------------------------------------------------------
-
-class TestFindThreadContext:
-    @pytest.mark.asyncio
-    async def test_skips_rows_with_no_message_id(self, db, contact, user):
-        # Row with NULL message_id must be ignored even if it's the newest.
-        db.add_all([
-            EmailQueue(
-                to_email="contact@example.com",
-                subject="older",
-                body="b",
-                sent_by_id=user.id,
-                entity_type="contacts",
-                entity_id=contact.id,
-                message_id="<m-old@gmail>",
-                thread_id="thread-old",
-                created_at=datetime.now(UTC) - timedelta(days=2),
-                status="sent",
-                attempts=1,
-            ),
-            EmailQueue(
-                to_email="contact@example.com",
-                subject="newer-but-no-id",
-                body="b",
-                sent_by_id=user.id,
-                entity_type="contacts",
-                entity_id=contact.id,
-                message_id=None,
-                thread_id=None,
-                created_at=datetime.now(UTC),
-                status="sent",
-                attempts=1,
-            ),
-        ])
-        await db.commit()
-
-        thread, message = await _find_thread_context(db, "contacts", contact.id)
-        assert thread == "thread-old"
-        assert message == "<m-old@gmail>"
-
-    @pytest.mark.asyncio
-    async def test_picks_newest_across_inbound_and_outbound(self, db, contact, user):
-        now = datetime.now(UTC)
-        db.add(EmailQueue(
-            to_email="x@y.com",
-            subject="outbound",
-            body="b",
-            sent_by_id=user.id,
-            entity_type="contacts",
-            entity_id=contact.id,
-            message_id="<out@gmail>",
-            thread_id="thread-out",
-            created_at=now - timedelta(hours=1),
-            status="sent",
-            attempts=1,
-        ))
-        db.add(InboundEmail(
-            resend_email_id="rid-2",
-            from_email="them@example.com",
-            to_email="us@example.com",
-            subject="inbound",
-            message_id="<in@gmail>",
-            thread_id="thread-in",
-            received_at=now,
-            entity_type="contacts",
-            entity_id=contact.id,
-        ))
-        await db.commit()
-
-        thread, message = await _find_thread_context(db, "contacts", contact.id)
-        assert thread == "thread-in"
-        assert message == "<in@gmail>"
-
-    @pytest.mark.asyncio
-    async def test_returns_none_without_entity(self, db):
-        assert await _find_thread_context(db, None, None) == (None, None)
-        assert await _find_thread_context(db, "contacts", None) == (None, None)
-
-    @pytest.mark.asyncio
-    async def test_ignores_other_entities(self, db, contact, user):
-        db.add(EmailQueue(
-            to_email="x@y.com",
-            subject="other",
-            body="b",
-            sent_by_id=user.id,
-            entity_type="contacts",
-            entity_id=contact.id + 1000,  # different contact
-            message_id="<other@gmail>",
-            thread_id="thread-other",
-            created_at=datetime.now(UTC),
-            status="sent",
-            attempts=1,
-        ))
-        await db.commit()
-
-        assert await _find_thread_context(db, "contacts", contact.id) == (None, None)
 
 
 # ---------------------------------------------------------------------------
