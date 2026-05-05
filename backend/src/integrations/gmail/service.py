@@ -111,5 +111,12 @@ class GmailConnectionService:
         conn.access_token = ""
         conn.refresh_token = None
         conn.updated_at = datetime.now(UTC)
-        await self.db.flush()
+        # Clear any prior auth-error breadcrumb so the status endpoint
+        # reports `disconnected` instead of `needs_reconnect` after a
+        # manual disconnect. The `GmailAuthError:` prefix in last_error
+        # is the load-bearing discriminator between the two states.
+        sync_state = await self.get_sync_state(user_id)
+        if sync_state is not None:
+            sync_state.last_error = None
+            await self.db.flush()
         return conn

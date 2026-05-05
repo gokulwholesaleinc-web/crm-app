@@ -1,4 +1,4 @@
-import { InputHTMLAttributes, useId } from 'react';
+import { InputHTMLAttributes, forwardRef, useId } from 'react';
 import clsx from 'clsx';
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
@@ -7,21 +7,30 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   helperText?: string;
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
-  ref?: React.Ref<HTMLInputElement>;
 }
 
-export const Input = ({
-  label,
-  error,
-  helperText,
-  leftIcon,
-  rightIcon,
-  className,
-  id,
-  disabled,
+// `forwardRef` is required on React 18: a ref spread via
+// `{...register('field')}` from react-hook-form is intercepted by React
+// at the JSX level and never reaches a function component's props. Older
+// versions of this file destructured `ref` from props, which silently
+// dropped the ref — react-hook-form then couldn't read the field's value
+// and every <Input> + register pair reported "field is required" no
+// matter what the user typed. Keep this as forwardRef until the codebase
+// migrates to React 19 (where ref-as-prop becomes the supported path).
+export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
+  {
+    label,
+    error,
+    helperText,
+    leftIcon,
+    rightIcon,
+    className,
+    id,
+    disabled,
+    ...props
+  },
   ref,
-  ...props
-}: InputProps) => {
+) {
   const generatedId = useId();
   const inputId = id ?? generatedId;
   const hasError = Boolean(error);
@@ -87,4 +96,4 @@ export const Input = ({
       )}
     </div>
   );
-};
+});
