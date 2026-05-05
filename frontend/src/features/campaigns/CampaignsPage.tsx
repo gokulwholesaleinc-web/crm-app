@@ -43,12 +43,12 @@ const typeLabels: Record<string, string> = {
   other: 'Other',
 };
 
-type SetupStatus = 'needs setup' | 'ready' | 'active' | 'completed';
+type SetupStatus = 'needs setup' | 'active' | 'completed';
 
 function getSetupStatus(campaign: Campaign): SetupStatus {
   if (campaign.status === 'completed') return 'completed';
   if (campaign.is_executing || campaign.status === 'active') return 'active';
-  if (campaign.num_sent > 0 || campaign.num_responses > 0) return 'active';
+  if ((campaign.num_sent ?? 0) > 0 || (campaign.num_responses ?? 0) > 0) return 'active';
   return 'needs setup';
 }
 
@@ -57,11 +57,6 @@ const setupStatusStyles: Record<SetupStatus, { bg: string; text: string; dot: st
     bg: 'bg-amber-50 dark:bg-amber-900/20',
     text: 'text-amber-700 dark:text-amber-400',
     dot: 'bg-amber-400',
-  },
-  ready: {
-    bg: 'bg-green-50 dark:bg-green-900/20',
-    text: 'text-green-700 dark:text-green-400',
-    dot: 'bg-green-400',
   },
   active: {
     bg: 'bg-blue-50 dark:bg-blue-900/20',

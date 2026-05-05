@@ -14,7 +14,6 @@ import {
   ChartBarIcon,
   CurrencyDollarIcon,
   TrashIcon,
-  CheckCircleIcon,
 } from '@heroicons/react/24/outline';
 import { Button, EntityLink, HelpLink, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { CampaignForm } from './components/CampaignForm';
@@ -419,18 +418,13 @@ export function CampaignDetailPage() {
           <h2 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-3">
             Get this campaign live in 3 steps
           </h2>
-          <ol className="space-y-3">
-            <li className="flex items-start gap-3">
-              <CheckCircleIcon className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" aria-hidden="true" />
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-blue-900 dark:text-blue-100 line-through opacity-60">
-                  Create the campaign
-                </p>
-              </div>
-            </li>
+          {/* <ul> rather than <ol>: ordinals are rendered visually inline,
+              so a real <ol> would make screen readers announce the index
+              twice (the implicit list counter + our visible digit). */}
+          <ul className="space-y-3">
             <li className="flex items-start gap-3">
               <div className="h-5 w-5 rounded-full border-2 border-blue-400 dark:border-blue-500 flex-shrink-0 mt-0.5 flex items-center justify-center">
-                <span className="text-xs font-bold text-blue-600 dark:text-blue-300">2</span>
+                <span className="text-xs font-bold text-blue-600 dark:text-blue-300">1</span>
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-medium text-blue-900 dark:text-blue-100">Add a sequence step</p>
@@ -448,7 +442,7 @@ export function CampaignDetailPage() {
             </li>
             <li className="flex items-start gap-3">
               <div className="h-5 w-5 rounded-full border-2 border-blue-400 dark:border-blue-500 flex-shrink-0 mt-0.5 flex items-center justify-center">
-                <span className="text-xs font-bold text-blue-600 dark:text-blue-300">3</span>
+                <span className="text-xs font-bold text-blue-600 dark:text-blue-300">2</span>
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-medium text-blue-900 dark:text-blue-100">Add members</p>
@@ -466,7 +460,7 @@ export function CampaignDetailPage() {
             </li>
             <li className="flex items-start gap-3">
               <div className="h-5 w-5 rounded-full border-2 border-blue-400 dark:border-blue-500 flex-shrink-0 mt-0.5 flex items-center justify-center">
-                <span className="text-xs font-bold text-blue-600 dark:text-blue-300">4</span>
+                <span className="text-xs font-bold text-blue-600 dark:text-blue-300">3</span>
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-medium text-blue-900 dark:text-blue-100">Activate</p>
@@ -475,7 +469,7 @@ export function CampaignDetailPage() {
                 </p>
               </div>
             </li>
-          </ol>
+          </ul>
         </div>
       )}
 
