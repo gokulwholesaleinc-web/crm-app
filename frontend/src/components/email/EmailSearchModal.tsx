@@ -92,7 +92,11 @@ export function EmailSearchModal({ isOpen, onClose, entityType, entityId }: Emai
 
   const handleResultClick = (item: EmailSearchResult) => {
     if (item.entity_type && item.entity_id != null) {
-      navigate(`/${item.entity_type}/${item.entity_id}`);
+      // `kind:id` deep-link so the entity page opens the Emails tab
+      // and scrolls to the matched message instead of dumping the user
+      // on the default Details tab.
+      const target = `${item.kind}:${item.id}`;
+      navigate(`/${item.entity_type}/${item.entity_id}?tab=emails&email=${encodeURIComponent(target)}`);
       onClose();
     }
   };

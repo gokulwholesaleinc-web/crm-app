@@ -114,19 +114,26 @@ def _gmail_message(
     subject: str = "Test Subject",
     body: str = "Hello",
     date: str = "Mon, 14 Apr 2025 10:00:00 +0000",
+    cc: str | None = None,
+    bcc: str | None = None,
 ) -> dict:
+    headers = [
+        {"name": "Subject", "value": subject},
+        {"name": "From", "value": from_},
+        {"name": "To", "value": to},
+        {"name": "Message-ID", "value": f"<{msg_id}@gmail.example.com>"},
+        {"name": "Date", "value": date},
+    ]
+    if cc:
+        headers.append({"name": "Cc", "value": cc})
+    if bcc:
+        headers.append({"name": "Bcc", "value": bcc})
     return {
         "id": msg_id,
         "threadId": thread_id,
         "payload": {
             "mimeType": "multipart/alternative",
-            "headers": [
-                {"name": "Subject", "value": subject},
-                {"name": "From", "value": from_},
-                {"name": "To", "value": to},
-                {"name": "Message-ID", "value": f"<{msg_id}@gmail.example.com>"},
-                {"name": "Date", "value": date},
-            ],
+            "headers": headers,
             "parts": [
                 {"mimeType": "text/plain", "body": {"data": _b64(body)}},
             ],
@@ -708,3 +715,291 @@ class TestSyncThreadFallback:
         )).scalar_one()
         assert row.entity_type is None
         assert row.entity_id is None
+
+
+class TestSyncAliasMatch:
+    """Inbound mail arrives from an alias address (not the primary email).
+    The sync worker must still link the InboundEmail to the right contact."""
+
+    @pytest.mark.asyncio
+    async def test_inbound_links_via_alias_when_primary_not_in_headers(
+        self, connection, db, test_user
+    ):
+        from src.contacts.models import ContactEmailAlias
+
+        # Contact whose primary email will NOT appear in the message headers.
+        contact = Contact(
+            email="alice@primary.com",
+            first_name="Alice",
+            last_name="Smith",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db.add(contact)
+        await db.commit()
+        await db.refresh(contact)
+
+        # Add an alias — this is the address that will appear in From:.
+        alias = ContactEmailAlias(
+            contact_id=contact.id,
+            email="alice.work@corp.com",
+            label="Work",
+        )
+        db.add(alias)
+
+        state = GmailSyncState(
+            user_id=connection.user_id,
+            last_history_id="900",
+            failure_count=0,
+        )
+        db.add(state)
+        await db.commit()
+
+        msg = _gmail_message(
+            msg_id="alias001",
+            thread_id="t-alias",
+            from_="alice.work@corp.com",  # alias address, not primary
+            to=connection.email,
+            subject="Via alias",
+        )
+        history = {
+            "history": [{"id": "901", "messagesAdded": [{"message": {"id": "alias001"}}]}]
+        }
+        routes = {
+            "users/me/history": history,
+            "users/me/messages/alias001": msg,
+        }
+        http = _make_http_client(routes)
+
+        with patch("src.integrations.gmail.client.httpx.AsyncClient", return_value=http):
+            from src.integrations.gmail.client import GmailClient as _GC
+            orig_init = _GC.__init__
+
+            def patched_init(self, conn, db_, http=None):
+                orig_init(self, conn, db_, http=http)
+
+            with patch.object(_GC, "__init__", patched_init):
+                await GmailSyncWorker.sync_account(connection, db)
+
+        rows = (await db.execute(select(InboundEmail))).scalars().all()
+        assert len(rows) == 1
+        assert rows[0].entity_type == "contacts"
+        assert rows[0].entity_id == contact.id
+
+
+class TestSyncMultiRecipient:
+    """Coverage for the multi-recipient parsing fix.
+
+    Pre-fix, `_store_inbound`/`_store_sent` only matched against the
+    single from_email or To[0] address; CRM contacts in CC or in
+    position 2+ of the To: header were silently dropped to entity_id=NULL.
+    """
+
+    @pytest.mark.asyncio
+    async def test_inbound_links_when_contact_in_cc_position(
+        self, connection, db, test_user
+    ):
+        contact = Contact(
+            email="cc-only@client.com",
+            first_name="CC",
+            last_name="Only",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db.add(contact)
+        state = GmailSyncState(
+            user_id=connection.user_id, last_history_id="950", failure_count=0,
+        )
+        db.add(state)
+        await db.commit()
+        await db.refresh(contact)
+
+        msg = _gmail_message(
+            msg_id="cc-msg",
+            thread_id="t-cc",
+            from_="someone@external.com",
+            to=connection.email,
+            cc="someone-else@elsewhere.com, CC Only <cc-only@client.com>",
+            subject="Loop you in",
+        )
+        history = {
+            "history": [{"id": "951", "messagesAdded": [{"message": {"id": "cc-msg"}}]}]
+        }
+        routes = {
+            "users/me/history": history,
+            "users/me/messages/cc-msg": msg,
+        }
+        http = _make_http_client(routes)
+
+        with patch("src.integrations.gmail.client.httpx.AsyncClient", return_value=http):
+            from src.integrations.gmail.client import GmailClient as _GC
+            orig_init = _GC.__init__
+
+            def patched_init(self, conn, db_, http=None):
+                orig_init(self, conn, db_, http=http)
+
+            with patch.object(_GC, "__init__", patched_init):
+                await GmailSyncWorker.sync_account(connection, db)
+
+        row = (await db.execute(
+            select(InboundEmail).where(InboundEmail.message_id == "<cc-msg@gmail.example.com>")
+        )).scalar_one()
+        assert row.entity_type == "contacts"
+        assert row.entity_id == contact.id
+        assert "cc-only@client.com" in (row.cc or "")
+
+    @pytest.mark.asyncio
+    async def test_sent_links_when_contact_is_third_to_recipient(
+        self, connection, db, test_user
+    ):
+        contact = Contact(
+            email="third@client.com",
+            first_name="Third",
+            last_name="Recipient",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db.add(contact)
+        state = GmailSyncState(
+            user_id=connection.user_id, last_history_id="950", failure_count=0,
+        )
+        db.add(state)
+        await db.commit()
+        await db.refresh(contact)
+
+        msg = _gmail_message(
+            msg_id="multi-to",
+            thread_id="t-multi",
+            from_=connection.email,
+            to="first@noisy.com, second@noisy.com, Third <third@client.com>",
+            subject="Group blast",
+        )
+        history = {
+            "history": [{"id": "951", "messagesAdded": [{"message": {"id": "multi-to"}}]}]
+        }
+        routes = {
+            "users/me/history": history,
+            "users/me/messages/multi-to": msg,
+        }
+        http = _make_http_client(routes)
+
+        with patch("src.integrations.gmail.client.httpx.AsyncClient", return_value=http):
+            from src.integrations.gmail.client import GmailClient as _GC
+            orig_init = _GC.__init__
+
+            def patched_init(self, conn, db_, http=None):
+                orig_init(self, conn, db_, http=http)
+
+            with patch.object(_GC, "__init__", patched_init):
+                await GmailSyncWorker.sync_account(connection, db)
+
+        row = (await db.execute(
+            select(EmailQueue).where(EmailQueue.message_id == "<multi-to@gmail.example.com>")
+        )).scalar_one()
+        assert row.entity_type == "contacts"
+        assert row.entity_id == contact.id
+
+    @pytest.mark.asyncio
+    async def test_inbound_links_via_bcc_when_contact_only_in_to(
+        self, connection, db, test_user
+    ):
+        """Contact in TO of an inbound where receiver is BCC'd still matches."""
+        contact = Contact(
+            email="vip@client.com",
+            first_name="VIP",
+            last_name="Client",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db.add(contact)
+        state = GmailSyncState(
+            user_id=connection.user_id, last_history_id="970", failure_count=0,
+        )
+        db.add(state)
+        await db.commit()
+        await db.refresh(contact)
+
+        msg = _gmail_message(
+            msg_id="bcc-msg",
+            thread_id="t-bcc",
+            from_="vendor@thirdparty.com",
+            to="vip@client.com",
+            bcc=connection.email,
+            subject="Quote",
+        )
+        history = {
+            "history": [{"id": "971", "messagesAdded": [{"message": {"id": "bcc-msg"}}]}]
+        }
+        routes = {
+            "users/me/history": history,
+            "users/me/messages/bcc-msg": msg,
+        }
+        http = _make_http_client(routes)
+
+        with patch("src.integrations.gmail.client.httpx.AsyncClient", return_value=http):
+            from src.integrations.gmail.client import GmailClient as _GC
+            orig_init = _GC.__init__
+
+            def patched_init(self, conn, db_, http=None):
+                orig_init(self, conn, db_, http=http)
+
+            with patch.object(_GC, "__init__", patched_init):
+                await GmailSyncWorker.sync_account(connection, db)
+
+        row = (await db.execute(
+            select(InboundEmail).where(InboundEmail.message_id == "<bcc-msg@gmail.example.com>")
+        )).scalar_one()
+        assert row.entity_type == "contacts"
+        assert row.entity_id == contact.id
+
+    @pytest.mark.asyncio
+    async def test_quoted_display_name_with_comma_does_not_split(
+        self, connection, db, test_user
+    ):
+        """``"Doe, Jane" <j@x.com>`` must not be parsed as two addresses."""
+        contact = Contact(
+            email="j@x.com",
+            first_name="Jane",
+            last_name="Doe",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db.add(contact)
+        state = GmailSyncState(
+            user_id=connection.user_id, last_history_id="990", failure_count=0,
+        )
+        db.add(state)
+        await db.commit()
+        await db.refresh(contact)
+
+        msg = _gmail_message(
+            msg_id="quoted-name",
+            thread_id="t-quoted",
+            from_=connection.email,
+            to='"Doe, Jane" <j@x.com>',
+            subject="Hi Jane",
+        )
+        history = {
+            "history": [{"id": "991", "messagesAdded": [{"message": {"id": "quoted-name"}}]}]
+        }
+        routes = {
+            "users/me/history": history,
+            "users/me/messages/quoted-name": msg,
+        }
+        http = _make_http_client(routes)
+
+        with patch("src.integrations.gmail.client.httpx.AsyncClient", return_value=http):
+            from src.integrations.gmail.client import GmailClient as _GC
+            orig_init = _GC.__init__
+
+            def patched_init(self, conn, db_, http=None):
+                orig_init(self, conn, db_, http=http)
+
+            with patch.object(_GC, "__init__", patched_init):
+                await GmailSyncWorker.sync_account(connection, db)
+
+        row = (await db.execute(
+            select(EmailQueue).where(EmailQueue.message_id == "<quoted-name@gmail.example.com>")
+        )).scalar_one()
+        assert row.entity_type == "contacts"
+        assert row.entity_id == contact.id
