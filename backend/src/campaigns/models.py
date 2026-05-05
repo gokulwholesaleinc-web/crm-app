@@ -59,11 +59,12 @@ class Campaign(Base, AuditableMixin):
     next_step_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_executing: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    # Send routing — "resend" (default) sends via the in-house Resend
-    # transactional path; "mailchimp" delegates to a connected Mailchimp
-    # audience for tenants that prefer to keep their existing marketing
-    # platform for mass-email campaigns.
-    send_via: Mapped[str] = mapped_column(String(20), default="resend", nullable=False)
+    # Send routing — "gmail" (default) queues the email through the
+    # campaign owner's connected Gmail account, the same path used for
+    # all transactional CRM mail; "mailchimp" delegates to a connected
+    # Mailchimp audience for tenants that prefer to keep their existing
+    # marketing platform for mass-email campaigns.
+    send_via: Mapped[str] = mapped_column(String(20), default="gmail", nullable=False)
     mailchimp_campaign_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # Owner

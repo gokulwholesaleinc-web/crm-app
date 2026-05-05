@@ -66,9 +66,12 @@ class EmailQueue(Base):
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
 
-    # Provider routing + threading (populated when sent_via='gmail')
+    # Provider that delivered the email — historically also used "resend"
+    # before the in-house Resend integration was retired. New rows are
+    # always tagged "gmail" by the dispatcher; legacy rows keep their
+    # original value for activity-history accuracy.
     sent_via: Mapped[str] = mapped_column(
-        String(20), default="resend", server_default="resend", nullable=False
+        String(20), default="gmail", server_default="gmail", nullable=False
     )
     message_id: Mapped[str | None] = mapped_column(String(500), nullable=True)
     thread_id: Mapped[str | None] = mapped_column(String(255), nullable=True)

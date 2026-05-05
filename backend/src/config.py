@@ -21,9 +21,11 @@ class Settings(BaseSettings):
 
     DATABASE_SSL_VERIFY: bool = False
 
-    RESEND_API_KEY: str = ""
-    RESEND_WEBHOOK_SECRET: str = ""
-    EMAIL_FROM: str = "onboarding@resend.dev"
+    # Display-only default for the From header in queue history when an
+    # email row didn't store its sender address. Outbound mail itself is
+    # sent via the user's connected Gmail account (see email/service.py
+    # _try_gmail_send) — there is no transactional provider fallback.
+    EMAIL_FROM: str = "no-reply@example.com"
 
     STRIPE_SECRET_KEY: str = ""
     STRIPE_PUBLISHABLE_KEY: str = ""

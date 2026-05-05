@@ -16,7 +16,7 @@ depends_on = None
 def upgrade() -> None:
     op.execute(
         "ALTER TABLE campaigns "
-        "ADD COLUMN IF NOT EXISTS send_via VARCHAR(20) NOT NULL DEFAULT 'resend'"
+        "ADD COLUMN IF NOT EXISTS send_via VARCHAR(20) NOT NULL DEFAULT 'gmail'"
     )
     op.execute(
         "ALTER TABLE campaigns "
