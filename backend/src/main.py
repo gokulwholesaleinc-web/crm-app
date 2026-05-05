@@ -92,6 +92,13 @@ async def _init_database():
             else:
                 print("Default roles already exist")
 
+        if (settings.MAILCHIMP_API_KEY or "").strip():
+            from src.integrations.mailchimp.seed import seed_mailchimp_from_env
+            async with async_session_maker() as session:
+                seeded_count = await seed_mailchimp_from_env(session)
+                if seeded_count:
+                    print(f"Seeded Mailchimp connection for {seeded_count} tenant(s)")
+
         print("Database initialized successfully")
 
         if getattr(settings, 'SEED_ON_STARTUP', False):

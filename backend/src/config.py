@@ -44,6 +44,14 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
 
+    # Mailchimp boot-time seed — when set, the startup hook in
+    # main.py::_init_database creates a per-tenant MailchimpConnection
+    # for any active tenant that doesn't already have one. The UI
+    # Connect form remains the source of truth for ad-hoc updates and
+    # for tenants whose key differs from the env value.
+    MAILCHIMP_API_KEY: str = ""
+    MAILCHIMP_DEFAULT_AUDIENCE_ID: str = ""
+
     SEED_ON_STARTUP: bool = False
 
     @property
