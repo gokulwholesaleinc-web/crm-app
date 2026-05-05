@@ -4,6 +4,7 @@
 
 import { useEffect } from 'react';
 import { useForm, Controller } from 'react-hook-form';
+import { InformationCircleIcon } from '@heroicons/react/24/outline';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
 import { Select } from '../../../components/ui/Select';
@@ -55,6 +56,15 @@ const currencyOptions = [
   { value: 'INR', label: 'INR' },
 ];
 
+function FieldHint({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 flex items-start gap-1">
+      <InformationCircleIcon className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" aria-hidden="true" />
+      <span>{children}</span>
+    </p>
+  );
+}
+
 function formatDateLocal(date: string | null | undefined): string {
   if (!date) return '';
   try {
@@ -78,6 +88,7 @@ export function CampaignForm({
     handleSubmit,
     control,
     reset,
+    watch,
     formState: { errors, isDirty },
   } = useForm<FormValues>({
     defaultValues: {
@@ -96,6 +107,8 @@ export function CampaignForm({
   });
 
   useUnsavedChangesWarning(isDirty);
+
+  const selectedType = watch('campaign_type');
 
   // Reset form when campaign prop changes
   useEffect(() => {
@@ -152,19 +165,21 @@ export function CampaignForm({
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Controller
-          name="campaign_type"
-          control={control}
-          rules={{ required: 'Campaign type is required' }}
-          render={({ field }) => (
-            <Select
-              {...field}
-              label="Campaign Type"
-              options={campaignTypeOptions}
-              error={errors.campaign_type?.message}
-            />
-          )}
-        />
+        <div>
+          <Controller
+            name="campaign_type"
+            control={control}
+            rules={{ required: 'Campaign type is required' }}
+            render={({ field }) => (
+              <Select
+                {...field}
+                label="Campaign Type"
+                options={campaignTypeOptions}
+                error={errors.campaign_type?.message}
+              />
+            )}
+          />
+        </div>
 
         <Controller
           name="status"
@@ -174,6 +189,13 @@ export function CampaignForm({
           )}
         />
       </div>
+
+      {selectedType === 'email' && (
+        <div className="rounded-md bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-3 text-sm text-blue-800 dark:text-blue-200">
+          <p className="font-medium mb-0.5">After creating this campaign:</p>
+          <p>Scroll to <strong>Campaign Sequence</strong> on the detail page to attach an email template and set the send schedule. Then click <strong>Add Members</strong> to load your recipient list.</p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Input
@@ -210,29 +232,44 @@ export function CampaignForm({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-          <Input
-            {...register('expected_revenue')}
-            type="number"
-            step="0.01"
-            label="Expected Revenue"
-            placeholder="0.00"
-          />
-          <Input
-            {...register('expected_response')}
-            type="number"
-            label="Expected Responses"
-            placeholder="0"
-          />
+          <div>
+            <Input
+              {...register('expected_revenue')}
+              type="number"
+              step="0.01"
+              label="Expected Revenue"
+              placeholder="0.00"
+            />
+            <FieldHint>
+              If this campaign converts at your historical rate, what dollar value do you expect to close?
+            </FieldHint>
+          </div>
+          <div>
+            <Input
+              {...register('expected_response')}
+              type="number"
+              label="Expected Responses (target audience size)"
+              placeholder="0"
+            />
+            <FieldHint>
+              How many people are on the target list. This is a goal, not a hard cap.
+            </FieldHint>
+          </div>
         </div>
       </div>
 
-      <FormTextarea
-        label="Target Audience"
-        name="target_audience"
-        rows={2}
-        placeholder="Describe the target audience for this campaign"
-        register={register('target_audience')}
-      />
+      <div>
+        <FormTextarea
+          label="Target Audience"
+          name="target_audience"
+          rows={2}
+          placeholder="e.g. CFOs at Chicago manufacturing companies, 50-250 employees..."
+          register={register('target_audience')}
+        />
+        <FieldHint>
+          One-line description of who you're sending this to (e.g. "CFOs at Chicago manufacturing companies, 50-250 employees").
+        </FieldHint>
+      </div>
 
       <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-4 border-t">
         <Button type="button" variant="secondary" onClick={onCancel} className="w-full sm:w-auto">
