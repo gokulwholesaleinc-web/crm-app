@@ -1,13 +1,17 @@
-"""Email service layer - handles sending, tracking, and queue management."""
+"""Email service layer - handles sending, tracking, and queue management.
 
-import asyncio
-import base64
+All outbound mail is sent via the user's connected Gmail account
+(:func:`_try_gmail_send`). There is intentionally no transactional
+fallback provider — if a sender has no Gmail connection the send is
+marked failed and surfaced in the queue, rather than being silently
+delivered from a generic "from" address.
+"""
+
 import html
 import logging
 import re
 from datetime import UTC, datetime, timedelta
 
-import resend  # pyright: ignore[reportMissingImports]
 from sqlalchemy import and_, func, literal, or_, select, union_all
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -202,37 +206,8 @@ async def _create_email_activity(
 MAX_RETRIES = 5
 
 
-def send_email(
-    to_email: str,
-    subject: str,
-    body: str,
-    from_email: str | None = None,
-    cc: str | None = None,
-    bcc: str | None = None,
-    attachments: list[EmailAttachment] | None = None,
-) -> None:
-    """Send an email via Resend. Raises on failure."""
-    resend.api_key = settings.RESEND_API_KEY
-    payload = {
-        "from": from_email or settings.EMAIL_FROM,
-        "to": [to_email],
-        "subject": subject,
-        "html": body,
-    }
-    if cc:
-        payload["cc"] = [addr.strip() for addr in cc.split(",")]
-    if bcc:
-        payload["bcc"] = [addr.strip() for addr in bcc.split(",")]
-    if attachments:
-        payload["attachments"] = [
-            {
-                "filename": att["filename"],
-                "content": base64.b64encode(att["content"]).decode("ascii"),
-                "content_type": att["content_type"],
-            }
-            for att in attachments
-        ]
-    resend.Emails.send(payload)
+class GmailNotConnectedError(RuntimeError):
+    """Raised when an outbound send has no connected Gmail account to send from."""
 
 
 def render_template(
@@ -352,41 +327,33 @@ class EmailService:
         reply_to_inbound_id: int | None = None,
         attachments: list[EmailAttachment] | None = None,
     ) -> None:
-        """Attempt to send via Gmail if connected, fall back to Resend.
+        """Send the email via the sender's connected Gmail account.
 
-        Attachments are passed through to the provider in-memory only;
-        they are *not* persisted on the EmailQueue row, so if this send
-        hits the retry path, the retry will go out without the
-        attachment. That's acceptable for the current use case (quote /
-        proposal PDFs are re-derivable from the entity) but worth noting
-        before reusing this for attachments that can't be regenerated.
+        Attachments are passed through to Gmail in-memory only; they
+        are *not* persisted on the EmailQueue row, so if this send hits
+        the retry path, the retry goes out without the attachment.
+        That's acceptable for the current use case (quote / proposal
+        PDFs are re-derivable from the entity) but worth noting before
+        reusing this for attachments that can't be regenerated.
+
+        There is no transactional fallback: if Gmail is unavailable for
+        the sender, the email is marked failed via the standard retry
+        machinery so the queue UI can surface it to staff.
         """
         email.attempts += 1
         try:
-            sent_via_gmail = False
-            try:
-                sent_via_gmail = await _try_gmail_send(
-                    email,
-                    self.db,
-                    reply_to_email_id=reply_to_email_id,
-                    reply_to_inbound_id=reply_to_inbound_id,
-                    attachments=attachments,
-                )
-            except Exception as gmail_exc:
-                logger.info("Gmail send failed for email %s, falling back to Resend: %s", email.id, gmail_exc)
-
+            sent_via_gmail = await _try_gmail_send(
+                email,
+                self.db,
+                reply_to_email_id=reply_to_email_id,
+                reply_to_inbound_id=reply_to_inbound_id,
+                attachments=attachments,
+            )
             if not sent_via_gmail:
-                if reply_to_email_id is not None or reply_to_inbound_id is not None:
-                    logger.warning(
-                        "Email %s is a reply but Gmail send skipped/failed — Resend fallback will not preserve thread headers",
-                        email.id,
-                    )
-                await asyncio.to_thread(
-                    send_email, email.to_email, email.subject, email.body,
-                    email.from_email, email.cc, email.bcc,
-                    attachments,
+                raise GmailNotConnectedError(
+                    f"Email {email.id}: sender has no active Gmail "
+                    "connection — connect Gmail in Settings to send mail"
                 )
-                email.sent_via = "resend"
 
             email.status = "sent"
             email.sent_at = datetime.now(UTC)

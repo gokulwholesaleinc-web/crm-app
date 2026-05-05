@@ -22,8 +22,10 @@ import {
   syncGmail,
   backfillGmail,
   getBackfillStatus,
+  disconnectMailchimp,
 } from '../../../api/integrations';
 import type { MetaConnectionStatus, GmailStatus, GmailBackfillStatus } from '../../../api/integrations';
+import { MailchimpCard } from './MailchimpCard';
 import {
   CalendarDaysIcon,
   ArrowPathIcon,
@@ -392,18 +394,21 @@ function GmailCard({ onRequestDisconnect }: { onRequestDisconnect: () => void })
   );
 }
 
-type DisconnectingIntegration = 'gmail' | 'calendar' | 'meta' | null;
+type DisconnectingIntegration = 'gmail' | 'calendar' | 'meta' | 'mailchimp' | null;
 
 const DISCONNECT_MESSAGES: Record<Exclude<DisconnectingIntegration, null>, string> = {
   gmail: 'The CRM will stop sending emails on your behalf and inbound sync will pause.',
   calendar: 'Activities will no longer sync to/from Google Calendar.',
   meta: 'LinkedIn campaigns will stop syncing audiences.',
+  mailchimp:
+    'Existing Mailchimp campaigns keep running on Mailchimp’s side, but the CRM will no longer be able to send new campaigns through this audience or sync stats back.',
 };
 
 const DISCONNECT_TITLES: Record<Exclude<DisconnectingIntegration, null>, string> = {
   gmail: 'Disconnect Gmail?',
   calendar: 'Disconnect Google Calendar?',
   meta: 'Disconnect Meta?',
+  mailchimp: 'Disconnect Mailchimp?',
 };
 
 export function IntegrationsSection() {
@@ -437,16 +442,27 @@ export function IntegrationsSection() {
     },
   });
 
+  const mailchimpDisconnectMutation = useMutation({
+    mutationFn: disconnectMailchimp,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['integrations', 'mailchimp'] });
+      toast.success('Mailchimp disconnected');
+      setDisconnectingIntegration(null);
+    },
+  });
+
   const handleConfirmDisconnect = () => {
     if (disconnectingIntegration === 'gmail') gmailDisconnectMutation.mutate();
     else if (disconnectingIntegration === 'calendar') calendarDisconnectMutation.mutate();
     else if (disconnectingIntegration === 'meta') metaDisconnectMutation.mutate();
+    else if (disconnectingIntegration === 'mailchimp') mailchimpDisconnectMutation.mutate();
   };
 
   const isDisconnecting =
     gmailDisconnectMutation.isPending ||
     calendarDisconnectMutation.isPending ||
-    metaDisconnectMutation.isPending;
+    metaDisconnectMutation.isPending ||
+    mailchimpDisconnectMutation.isPending;
 
   return (
     <div>
@@ -460,6 +476,7 @@ export function IntegrationsSection() {
             <GmailCard onRequestDisconnect={() => setDisconnectingIntegration('gmail')} />
             <GoogleCalendarCard onRequestDisconnect={() => setDisconnectingIntegration('calendar')} />
             <MetaCard onRequestDisconnect={() => setDisconnectingIntegration('meta')} />
+            <MailchimpCard onRequestDisconnect={() => setDisconnectingIntegration('mailchimp')} />
           </div>
         </CardBody>
       </Card>

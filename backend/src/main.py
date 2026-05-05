@@ -45,6 +45,7 @@ from src.filters.router import router as filters_router
 from src.import_export.router import router as import_export_router
 from src.integrations.gmail.router import router as gmail_router
 from src.integrations.google_calendar.router import router as google_calendar_router
+from src.integrations.mailchimp.router import router as mailchimp_router
 from src.leads.router import router as leads_router
 from src.meta.router import router as meta_router
 from src.notes.router import router as notes_router
@@ -182,6 +183,7 @@ app.include_router(meta_router)
 app.include_router(expenses_router)
 app.include_router(google_calendar_router)
 app.include_router(gmail_router)
+app.include_router(mailchimp_router)
 app.include_router(settings_router)
 
 

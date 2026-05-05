@@ -2,11 +2,9 @@
 
 import base64
 import logging
-from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import RedirectResponse, Response
-from svix.webhooks import Webhook, WebhookVerificationError
 
 from src.core.constants import EntityNames, HTTPStatus
 from src.core.router_utils import (
@@ -134,78 +132,6 @@ async def send_campaign_email(
             detail=str(exc),
         ) from exc
     return {"sent": len(emails), "items": [EmailQueueResponse.model_validate(e) for e in emails]}
-
-
-@router.post("/inbound-webhook", status_code=200)
-async def inbound_webhook(request: Request, db: DBSession):
-    """Receive inbound email webhook from Resend.
-
-    Verifies svix signature, stores the email, and auto-matches to contact.
-    """
-    from src.config import settings as app_settings
-
-    body = await request.body()
-    headers = request.headers
-
-    # Verify svix signature — require webhook secret to be configured
-    if not app_settings.RESEND_WEBHOOK_SECRET:
-        raise HTTPException(status_code=503, detail="Webhook secret not configured")
-
-    try:
-        wh = Webhook(app_settings.RESEND_WEBHOOK_SECRET)
-        wh.verify(body, {
-            "svix-id": headers.get("svix-id", ""),
-            "svix-timestamp": headers.get("svix-timestamp", ""),
-            "svix-signature": headers.get("svix-signature", ""),
-        })
-    except WebhookVerificationError as e:
-        logger.warning("Webhook signature verification failed: %s", e)
-        raise HTTPException(status_code=400, detail="Invalid webhook signature") from e
-
-    payload = await request.json()
-    event_type = payload.get("type", "")
-
-    if event_type != "email.received":
-        return {"status": "ignored", "type": event_type}
-
-    data = payload.get("data", {})
-    email_id = data.get("email_id") or data.get("id", "")
-
-    # Fetch full email body from Resend API if email_id is available
-    body_html = data.get("html")
-    body_text = data.get("text")
-    if email_id and not body_html and app_settings.RESEND_API_KEY:
-        try:
-            import resend  # pyright: ignore[reportMissingImports]
-            resend.api_key = app_settings.RESEND_API_KEY
-            full_email = resend.Emails.get(email_id)
-            body_html = getattr(full_email, "html", None) or body_html
-            body_text = getattr(full_email, "text", None) or body_text
-        except Exception as e:
-            logger.warning("Failed to fetch full email from Resend: %s", e)
-
-    from_email = data.get("from", "")
-    to_raw = data.get("to", "")
-    to_email = to_raw[0] if isinstance(to_raw, list) else to_raw
-    cc_list = data.get("cc", [])
-    cc = ", ".join(cc_list) if cc_list else None
-
-    service = EmailService(db)
-    inbound = await service.store_inbound_email(
-        resend_email_id=email_id or f"webhook-{datetime.now(UTC).timestamp()}",
-        from_email=from_email,
-        to_email=to_email,
-        subject=data.get("subject", "(no subject)"),
-        received_at=datetime.now(UTC),
-        cc=cc,
-        body_text=body_text,
-        body_html=body_html,
-        message_id=data.get("message_id"),
-        in_reply_to=data.get("in_reply_to"),
-        attachments=data.get("attachments"),
-    )
-
-    return {"status": "processed", "inbound_email_id": inbound.id}
 
 
 @router.get("/thread", response_model=ThreadResponse)

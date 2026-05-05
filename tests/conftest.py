@@ -65,6 +65,7 @@ from src.meta.models import CompanyMetaData, MetaCredential, MetaLeadCapture
 from src.expenses.models import Expense
 from src.integrations.google_calendar.models import GoogleCalendarCredential, CalendarSyncEvent
 from src.integrations.gmail.models import GmailConnection, GmailSyncState
+from src.integrations.mailchimp.models import MailchimpConnection
 from src.webhooks.stripe_events import WebhookEvent
 from src.reports.delivery import ReportDeliveryService
 
