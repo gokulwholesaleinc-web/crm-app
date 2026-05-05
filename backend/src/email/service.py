@@ -65,7 +65,7 @@ async def _try_gmail_send(
         return False
 
     from src.integrations.gmail.client import GmailClient
-    from src.integrations.gmail.sender import build_rfc822
+    from src.integrations.gmail.sender import build_rfc822, make_rfc_message_id
 
     prior_thread_id, prior_message_id = await _resolve_reply_context(
         db,
@@ -78,6 +78,15 @@ async def _try_gmail_send(
 
     from_name = await _resolve_from_name(db, email.sent_by_id, conn.email)
 
+    # Pre-generate the RFC Message-ID so we can persist the SAME value the
+    # message envelope carries. Gmail's sync worker dedups outbound rows by
+    # exact match on the RFC header (sync.py::_is_duplicate). Storing
+    # Gmail's internal numeric id on EmailQueue.message_id was the bug —
+    # when sync polled history for the user's own mailbox it re-ingested
+    # every outbound CRM send as a brand-new EmailQueue row because the
+    # format mismatched, producing duplicate "Sent" cards on the contact.
+    rfc_message_id = make_rfc_message_id(conn.email)
+
     raw = build_rfc822(
         to=email.to_email,
         subject=email.subject,
@@ -88,14 +97,15 @@ async def _try_gmail_send(
         in_reply_to=prior_message_id,
         references=prior_message_id,
         attachments=attachments,
+        message_id=rfc_message_id,
     )
 
     async with GmailClient(conn, db) as client:
         result = await client.send_message(raw, thread_id=prior_thread_id)
 
+    email.message_id = rfc_message_id
     # Store None, not "", when Gmail omits a field. Empty strings slip past
     # `thread_id IS NOT NULL` filters and poison future thread-context lookups.
-    email.message_id = result.get("id") or None
     email.thread_id = result.get("threadId") or None
     email.sent_via = "gmail"
     return True
