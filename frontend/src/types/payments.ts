@@ -161,12 +161,14 @@ export interface CreateAndSendInvoiceResponse {
   invoice_url?: string;
 }
 
+import type { RecurringInterval } from './proposals';
+
 export interface CreateSubscriptionCheckoutRequest {
   customer_id: number;
   amount: number;
   description: string;
   currency?: string;
-  interval: 'month' | 'year';
+  interval: RecurringInterval;
   interval_count: number;
   success_url: string;
   cancel_url: string;

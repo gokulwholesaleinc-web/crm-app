@@ -300,10 +300,6 @@ class CreateOnboardingLinkResponse(BaseModel):
     url: str
 
 
-# Standalone subscription Checkout (not tied to a Proposal). Used by the
-# Send Invoice modal when the admin picks payment_type='subscription':
-# Stripe collects payment method + charges first period; webhook fills in
-# the resulting subscription id on the Payment row.
 class CreateSubscriptionCheckoutRequest(BaseModel):
     customer_id: int
     amount: Decimal

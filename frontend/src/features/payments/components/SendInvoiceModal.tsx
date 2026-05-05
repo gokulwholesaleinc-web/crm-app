@@ -8,6 +8,7 @@ import {
 } from '../../../hooks/usePayments';
 import { showSuccess, showError } from '../../../utils/toast';
 import type { StripeCustomer } from '../../../types';
+import type { PaymentType, RecurringInterval } from '../../../types/proposals';
 
 interface SendInvoiceModalProps {
   isOpen: boolean;
@@ -24,14 +25,51 @@ const DUE_DAY_OPTIONS = [
   { value: 60, label: '60 days' },
 ];
 
-type PaymentType = 'one_time' | 'subscription';
-type Interval = 'month' | 'year';
-
-const INTERVAL_PRESETS: Array<{ label: string; interval: Interval; count: number }> = [
+const INTERVAL_PRESETS: Array<{ label: string; interval: RecurringInterval; count: number }> = [
   { label: 'Monthly', interval: 'month', count: 1 },
   { label: 'Quarterly', interval: 'month', count: 3 },
+  { label: 'Bi-yearly', interval: 'month', count: 6 },
   { label: 'Yearly', interval: 'year', count: 1 },
 ];
+
+const PAYMENT_TYPE_OPTIONS: Array<{ value: PaymentType; title: string; subtitle: string }> = [
+  { value: 'one_time', title: 'One-time', subtitle: 'Single invoice, paid once' },
+  { value: 'subscription', title: 'Subscription', subtitle: 'Recurring on a schedule' },
+];
+
+interface RadioCardProps {
+  name: string;
+  value: string;
+  checked: boolean;
+  title: string;
+  subtitle: string;
+  onChange: () => void;
+}
+
+function RadioCard({ name, value, checked, title, subtitle, onChange }: RadioCardProps) {
+  return (
+    <label
+      className={`flex items-start gap-2 cursor-pointer rounded-md border p-3 ${
+        checked
+          ? 'border-primary-500 ring-1 ring-primary-500 bg-primary-50 dark:bg-primary-900/20'
+          : 'border-gray-300 dark:border-gray-600'
+      }`}
+    >
+      <input
+        type="radio"
+        name={name}
+        value={value}
+        checked={checked}
+        onChange={onChange}
+        className="mt-0.5 text-primary-600 focus-visible:ring-primary-500"
+      />
+      <div>
+        <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">{title}</span>
+        <span className="block text-xs text-gray-500 dark:text-gray-400">{subtitle}</span>
+      </div>
+    </label>
+  );
+}
 
 export function SendInvoiceModal({
   isOpen,
@@ -118,8 +156,6 @@ export function SendInvoiceModal({
           due_days: dueDays,
           payment_method_types: paymentMethodTypes,
         });
-        // Stripe emails the customer; copy URL so the admin can also share manually
-        // (avoids the "did anything happen?" confusion).
         await copyToClipboardWithFeedback(result.invoice_url ?? '', recipientEmail, 'Invoice');
         resetForm();
         onClose();
@@ -129,7 +165,6 @@ export function SendInvoiceModal({
       return;
     }
 
-    // Subscription path
     const preset = INTERVAL_PRESETS[intervalPreset];
     try {
       const result = await subscriptionMutation.mutateAsync({
@@ -139,9 +174,6 @@ export function SendInvoiceModal({
         currency: 'USD',
         interval: preset.interval,
         interval_count: preset.count,
-        // Public-page success/cancel URLs. Webhook also handles the
-        // post-checkout state; these are just where Stripe redirects the
-        // customer's browser.
         success_url: `${window.location.origin}/payments?subscription=success`,
         cancel_url: `${window.location.origin}/payments?subscription=cancelled`,
       });
@@ -156,52 +188,22 @@ export function SendInvoiceModal({
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Send Invoice" size="lg">
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Payment Type — one-time invoice vs recurring subscription. */}
         <fieldset>
           <legend className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Payment Type
           </legend>
           <div className="grid grid-cols-2 gap-2">
-            <label
-              className={`flex items-start gap-2 cursor-pointer rounded-md border p-3 ${
-                paymentType === 'one_time'
-                  ? 'border-primary-500 ring-1 ring-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                  : 'border-gray-300 dark:border-gray-600'
-              }`}
-            >
-              <input
-                type="radio"
+            {PAYMENT_TYPE_OPTIONS.map((opt) => (
+              <RadioCard
+                key={opt.value}
                 name="payment-type"
-                value="one_time"
-                checked={paymentType === 'one_time'}
-                onChange={() => setPaymentType('one_time')}
-                className="mt-0.5 text-primary-600 focus-visible:ring-primary-500"
+                value={opt.value}
+                checked={paymentType === opt.value}
+                title={opt.title}
+                subtitle={opt.subtitle}
+                onChange={() => setPaymentType(opt.value)}
               />
-              <div>
-                <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">One-time</span>
-                <span className="block text-xs text-gray-500 dark:text-gray-400">Single invoice, paid once</span>
-              </div>
-            </label>
-            <label
-              className={`flex items-start gap-2 cursor-pointer rounded-md border p-3 ${
-                paymentType === 'subscription'
-                  ? 'border-primary-500 ring-1 ring-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                  : 'border-gray-300 dark:border-gray-600'
-              }`}
-            >
-              <input
-                type="radio"
-                name="payment-type"
-                value="subscription"
-                checked={paymentType === 'subscription'}
-                onChange={() => setPaymentType('subscription')}
-                className="mt-0.5 text-primary-600 focus-visible:ring-primary-500"
-              />
-              <div>
-                <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">Subscription</span>
-                <span className="block text-xs text-gray-500 dark:text-gray-400">Recurring on a schedule</span>
-              </div>
-            </label>
+            ))}
           </div>
         </fieldset>
 

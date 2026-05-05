@@ -86,10 +86,10 @@ class EmailSettings(Base):
     __tablename__ = "email_settings"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    daily_send_limit: Mapped[int] = mapped_column(Integer, default=200, nullable=False)
+    daily_send_limit: Mapped[int] = mapped_column(Integer, default=1000, nullable=False)
     warmup_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     warmup_start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    warmup_target_daily: Mapped[int] = mapped_column(Integer, default=200, nullable=False)
+    warmup_target_daily: Mapped[int] = mapped_column(Integer, default=1000, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

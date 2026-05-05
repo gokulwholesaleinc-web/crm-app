@@ -178,13 +178,7 @@ class ProposalResponse(ProposalBase):
     company: CompanyBrief | None = None
     opportunity: OpportunityBrief | None = None
     quote: QuoteBrief | None = None
-    # Authorship: created_by is the user who clicked "Create" (immutable);
-    # owner is the user the proposal is currently assigned to (mutable).
-    # Surfaced so the admin list + detail views can show "Created by … /
-    # Owned by …" — Giancarlo flagged this as missing on PR-2026-0009.
-    # The SQLAlchemy relationships are named `created_by_user` / `owner`;
-    # AliasChoices lets ORM-mode pull from those while the JSON output
-    # uses the cleaner `created_by` / `owner` names.
+    # ORM attr is `created_by_user`; JSON name is `created_by`.
     created_by: UserBrief | None = Field(
         default=None,
         validation_alias=AliasChoices("created_by", "created_by_user"),

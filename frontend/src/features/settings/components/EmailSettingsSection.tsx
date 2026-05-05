@@ -36,10 +36,10 @@ export function EmailSettingsSection() {
   const { data: settings, isLoading } = useEmailSettings();
   const updateSettings = useUpdateEmailSettings();
 
-  const [dailyLimit, setDailyLimit] = useState(200);
+  const [dailyLimit, setDailyLimit] = useState(1000);
   const [warmupEnabled, setWarmupEnabled] = useState(false);
   const [warmupStartDate, setWarmupStartDate] = useState('');
-  const [warmupTarget, setWarmupTarget] = useState(200);
+  const [warmupTarget, setWarmupTarget] = useState(1000);
   const [isDirty, setIsDirty] = useState(false);
 
   useEffect(() => {
@@ -93,7 +93,7 @@ export function EmailSettingsSection() {
     <Card>
       <CardHeader
         title="Email Settings"
-        description="Configure daily send limits and email warmup"
+        description="Configure daily send goal and email warmup"
         action={
           <Button
             size="sm"
@@ -111,7 +111,7 @@ export function EmailSettingsSection() {
           <div>
             <label htmlFor="daily-send-limit" className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               <EnvelopeIcon className="h-4 w-4 text-gray-400" aria-hidden="true" />
-              Daily Send Limit
+              Daily Send Goal
             </label>
             <input
               id="daily-send-limit"
@@ -124,7 +124,8 @@ export function EmailSettingsSection() {
               className="block w-40 rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
             />
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Maximum number of emails to send per day
+              The number of emails you're aiming to send per day. Sender reputation
+              suffers if you blow past this — keep it as a soft ceiling.
             </p>
           </div>
 
@@ -167,7 +168,7 @@ export function EmailSettingsSection() {
 
               <div>
                 <label htmlFor="warmup-target" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Target Daily Limit
+                  Target Daily Goal
                 </label>
                 <input
                   id="warmup-target"
@@ -180,7 +181,7 @@ export function EmailSettingsSection() {
                   className="block w-40 rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
                 />
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  The daily send limit after warmup completes
+                  The daily send goal after warmup completes
                 </p>
               </div>
 

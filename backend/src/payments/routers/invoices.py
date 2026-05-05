@@ -68,9 +68,7 @@ async def create_and_send_subscription(
     current_user: CurrentUser,
     db: DBSession,
 ):
-    """Create a subscription Checkout Session for the standalone Send
-    Invoice → Subscription flow. Returns the Checkout URL — Stripe sends
-    the customer the email; the admin can also copy/share the URL."""
+    """Create a subscription Checkout Session for an existing Stripe customer."""
     if request_data.amount <= 0:
         raise HTTPException(
             status_code=HTTPStatus.BAD_REQUEST,

@@ -1,5 +1,6 @@
 """Payment service layer."""
 
+import hashlib
 import logging
 import uuid
 from collections.abc import Sequence
@@ -835,22 +836,12 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         success_url: str,
         cancel_url: str,
     ) -> dict:
-        """Create a subscription Checkout Session for an existing
-        StripeCustomer (the standalone "Send Invoice → Subscription" path
-        from the admin modal — not tied to a proposal).
-
-        Inline price_data so we don't pre-create a Product/Price for every
-        send. Stripe collects the payment method and charges the first
-        period when the client completes the link; the resulting
-        subscription id arrives via ``checkout.session.completed`` webhook,
-        which fills it onto the Payment row matched by checkout session id.
+        """Create a subscription Checkout Session for an existing StripeCustomer.
 
         Returns ``{checkout_session_id, checkout_url, payment_id}``.
         """
         if amount <= 0:
             raise ValueError("amount must be > 0")
-        if interval not in ("month", "year"):
-            raise ValueError("interval must be 'month' or 'year'")
         if interval_count < 1:
             raise ValueError("interval_count must be >= 1")
 
@@ -864,9 +855,15 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
                 "Stripe customer was not created — check Stripe connectivity",
             )
 
-        # Idempotency: random uuid suffix because the same customer +
-        # amount may legitimately repeat (e.g. retainer #1, retainer #2).
-        # Webhook reconciles by stripe_checkout_session_id.
+        # Stable key over the logical request shape so a network retry
+        # (drop, double-click, page reload) collapses to one Session
+        # instead of creating a duplicate + orphan Payment row.
+        idem_payload = (
+            f"{customer_id}|{user_id}|{int(_to_cents(amount))}|{currency.lower()}"
+            f"|{interval}|{interval_count}|{description}"
+        )
+        idempotency_key = f"sub_chk_{hashlib.sha256(idem_payload.encode()).hexdigest()[:24]}"
+
         session = stripe.checkout.Session.create(
             mode="subscription",
             customer=customer.stripe_customer_id,
@@ -886,7 +883,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
                     },
                 },
             ],
-            idempotency_key=f"sub_chk_{customer_id}_{uuid.uuid4().hex[:12]}",
+            idempotency_key=idempotency_key,
         )
 
         payment = Payment(
