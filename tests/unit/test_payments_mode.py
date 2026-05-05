@@ -57,7 +57,8 @@ async def test_stripe_mode_test_key(client: AsyncClient, plain_user: User, monke
     assert resp.status_code == 200
     data = resp.json()
     assert data["mode"] == "test"
-    assert data["publishable_hint"] == "pk_test_xyz"
+    # `publishable_hint` is the env-prefix only, not the full key.
+    assert data["publishable_hint"] == "pk_test_"
 
 
 @pytest.mark.asyncio
@@ -71,7 +72,7 @@ async def test_stripe_mode_live_key(client: AsyncClient, plain_user: User, monke
     assert resp.status_code == 200
     data = resp.json()
     assert data["mode"] == "live"
-    assert data["publishable_hint"] == "pk_live_abc"
+    assert data["publishable_hint"] == "pk_live_"
 
 
 @pytest.mark.asyncio
