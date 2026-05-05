@@ -11,14 +11,14 @@ visible at the DB layer.
 Partial (WHERE col IS NOT NULL) so the column can stay nullable for
 non-checkout payments (e.g. plain invoices, payment intents).
 
-Revision ID: 013_payment_checkout_session_unique
+Revision ID: 013_payment_checkout_unique
 Revises: 012_payment_stripe_payment_url
 Create Date: 2026-05-05
 """
 
 from alembic import op
 
-revision = "013_payment_checkout_session_unique"
+revision = "013_payment_checkout_unique"
 down_revision = "012_payment_stripe_payment_url"
 branch_labels = None
 depends_on = None
