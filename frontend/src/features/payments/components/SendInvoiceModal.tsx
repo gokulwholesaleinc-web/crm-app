@@ -165,7 +165,10 @@ export function SendInvoiceModal({
       return;
     }
 
-    const preset = INTERVAL_PRESETS[intervalPreset];
+    // Out-of-range intervalPreset shouldn't happen — the <select> only
+    // emits valid indexes — but tsc with noUncheckedIndexedAccess sees
+    // the array access as possibly-undefined, so default explicitly.
+    const preset = INTERVAL_PRESETS[intervalPreset] ?? { interval: 'month' as const, count: 1 };
     try {
       const result = await subscriptionMutation.mutateAsync({
         customer_id: customerId as number,
