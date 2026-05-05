@@ -7,6 +7,7 @@ import { formatCurrency, formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { apiClient } from '../../api/client';
 import type { StripeCustomerBrief } from '../../types';
+import { StripeTestModeBanner } from '../../components/banners/StripeTestModeBanner';
 
 function CustomerName({ customer }: { customer: StripeCustomerBrief }) {
   const label = customer.name ?? customer.email ?? customer.stripe_customer_id;
@@ -119,6 +120,8 @@ function PaymentDetailPage() {
           </button>
         </div>
       </div>
+
+      <StripeTestModeBanner />
 
       {/* Receipt status message */}
       {receiptStatus && (

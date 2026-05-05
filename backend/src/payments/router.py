@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from src.core.constants import ENTITY_TYPE_PAYMENTS
 from src.core.data_scope import DataScope, get_data_scope
 from src.core.router_utils import CurrentUser, DBSession, calculate_pages
-from src.payments.routers import customers, invoices, payments, products, subscriptions
+from src.payments.routers import customers, diagnostics, invoices, payments, products, subscriptions
 from src.payments.schemas import PaymentListResponse, PaymentResponse
 from src.payments.service import PaymentService
 
@@ -62,6 +62,7 @@ async def list_payments(
 
 
 router.include_router(customers.router)
+router.include_router(diagnostics.router)
 router.include_router(invoices.router)
 router.include_router(products.router)
 router.include_router(subscriptions.router)

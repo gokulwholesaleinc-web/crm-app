@@ -7,6 +7,7 @@ import { SendInvoiceModal } from './components/SendInvoiceModal';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { showSuccess, showError } from '../../utils/toast';
+import { StripeTestModeBanner } from '../../components/banners/StripeTestModeBanner';
 import type { Payment, StripeCustomerBrief, SubscriptionItem } from '../../types';
 
 function CustomerLink({
@@ -123,6 +124,7 @@ function PaymentsPage() {
 
   return (
     <div className="space-y-6">
+      <StripeTestModeBanner />
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
