@@ -3,7 +3,9 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from src.ai.embedding_hooks import (
     build_contact_embedding_content,
@@ -16,8 +18,11 @@ from src.audit.utils import (
     audit_entity_update,
     snapshot_entity,
 )
+from src.contacts.models import ContactEmailAlias
 from src.contacts.schemas import (
     ContactCreate,
+    ContactEmailAliasCreate,
+    ContactEmailAliasResponse,
     ContactListResponse,
     ContactResponse,
     ContactUpdate,
@@ -245,3 +250,83 @@ async def delete_contact(
     await delete_entity_embedding(db, "contact", contact.id)
 
     await service.soft_delete(contact)
+
+
+# ---------------------------------------------------------------------------
+# Email alias endpoints
+# ---------------------------------------------------------------------------
+
+@router.get("/{contact_id}/aliases", response_model=list[ContactEmailAliasResponse])
+async def list_aliases(
+    contact_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """List all email aliases for a contact."""
+    service = ContactService(db)
+    contact = await get_entity_or_404(service, contact_id, EntityNames.CONTACT)
+    check_ownership(contact, current_user, EntityNames.CONTACT)
+
+    result = await db.execute(
+        select(ContactEmailAlias)
+        .where(ContactEmailAlias.contact_id == contact_id)
+        .order_by(ContactEmailAlias.created_at)
+    )
+    return result.scalars().all()
+
+
+@router.post(
+    "/{contact_id}/aliases",
+    response_model=ContactEmailAliasResponse,
+    status_code=201,
+)
+async def add_alias(
+    contact_id: int,
+    body: ContactEmailAliasCreate,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Add an email alias to a contact. 409 if the address is already claimed."""
+    service = ContactService(db)
+    contact = await get_entity_or_404(service, contact_id, EntityNames.CONTACT)
+    check_ownership(contact, current_user, EntityNames.CONTACT)
+
+    alias = ContactEmailAlias(
+        contact_id=contact_id,
+        email=body.email,
+        label=body.label,
+    )
+    db.add(alias)
+    try:
+        await db.commit()
+        await db.refresh(alias)
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Email address already exists as an alias")
+    return alias
+
+
+@router.delete("/{contact_id}/aliases/{alias_id}", status_code=204)
+async def delete_alias(
+    contact_id: int,
+    alias_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Remove an email alias from a contact."""
+    service = ContactService(db)
+    contact = await get_entity_or_404(service, contact_id, EntityNames.CONTACT)
+    check_ownership(contact, current_user, EntityNames.CONTACT)
+
+    result = await db.execute(
+        select(ContactEmailAlias).where(
+            ContactEmailAlias.id == alias_id,
+            ContactEmailAlias.contact_id == contact_id,
+        )
+    )
+    alias = result.scalar_one_or_none()
+    if alias is None:
+        raise HTTPException(status_code=404, detail="Alias not found")
+
+    await db.delete(alias)
+    await db.commit()

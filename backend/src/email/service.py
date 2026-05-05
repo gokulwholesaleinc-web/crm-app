@@ -708,18 +708,14 @@ class EmailService:
         )
 
         # Skip empty from_email: matching "" would attach inbound mail to any
-        # contact whose email column happens to be blank.
-        contact: Contact | None = None
+        # contact whose email column happens to be blank. Use alias-aware
+        # lookup so alternate addresses also link to the right contact.
         if from_email:
-            result = await self.db.execute(
-                select(Contact).where(
-                    func.lower(Contact.email) == from_email.lower()
-                )
-            )
-            contact = result.scalar_one_or_none()
-        if contact:
-            inbound.entity_type = "contacts"
-            inbound.entity_id = contact.id
+            from src.contacts.alias_match import find_contact_id_by_any_email
+            entity_type, entity_id = await find_contact_id_by_any_email([from_email], self.db)
+            if entity_id is not None:
+                inbound.entity_type = entity_type
+                inbound.entity_id = entity_id
 
         self.db.add(inbound)
         try:
@@ -735,20 +731,26 @@ class EmailService:
             return result.scalar_one()
 
         # Log as activity on matched contact
-        if contact:
+        if inbound.entity_type == "contacts" and inbound.entity_id is not None:
             from src.activities.models import Activity
-            activity = Activity(
-                activity_type="email",
-                subject=f"Inbound email: {subject}",
-                description=body_text[:500] if body_text else None,
-                entity_type="contacts",
-                entity_id=contact.id,
-                email_to=to_email,
-                is_completed=True,
-                owner_id=contact.owner_id,
+            from src.contacts.models import Contact
+            contact_result = await self.db.execute(
+                select(Contact).where(Contact.id == inbound.entity_id)
             )
-            self.db.add(activity)
-            await self.db.flush()
+            matched_contact = contact_result.scalar_one_or_none()
+            if matched_contact is not None:
+                activity = Activity(
+                    activity_type="email",
+                    subject=f"Inbound email: {subject}",
+                    description=body_text[:500] if body_text else None,
+                    entity_type="contacts",
+                    entity_id=matched_contact.id,
+                    email_to=to_email,
+                    is_completed=True,
+                    owner_id=matched_contact.owner_id,
+                )
+                self.db.add(activity)
+                await self.db.flush()
 
         return inbound
 
