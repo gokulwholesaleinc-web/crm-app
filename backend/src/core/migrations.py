@@ -254,6 +254,22 @@ async def _run_production_migrations():
             except asyncpg.PostgresError as exc:
                 logger.warning("Failed to update pipeline_stages pipeline_type: %s", exc)
 
+            # Gmail backfill state
+            try:
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS gmail_backfill_state (
+                        user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+                        status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                        processed_count INTEGER NOT NULL DEFAULT 0,
+                        total_count INTEGER NOT NULL DEFAULT 0,
+                        started_at TIMESTAMPTZ,
+                        finished_at TIMESTAMPTZ,
+                        error TEXT
+                    )
+                """)
+            except asyncpg.PostgresError as exc:
+                logger.warning("Failed to create gmail_backfill_state table: %s", exc)
+
             print("Production migrations completed successfully")
         finally:
             await conn.close()

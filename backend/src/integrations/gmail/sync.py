@@ -1,13 +1,16 @@
 """Gmail history sync worker — polls Gmail API and writes EmailQueue / InboundEmail rows."""
 
+import asyncio
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.integrations.gmail.client import GmailAuthError, GmailClient
-from src.integrations.gmail.models import GmailConnection, GmailSyncState
+from src.integrations.gmail.models import GmailBackfillState, GmailConnection, GmailSyncState
+
+_BACKFILL_SEMAPHORE = asyncio.Semaphore(10)  # max concurrent get_message calls
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +83,84 @@ class GmailSyncWorker:
             raise
 
     @staticmethod
+    async def backfill(connection: GmailConnection, db: AsyncSession, days: int = 365) -> None:
+        """Backfill historical Gmail messages for a connection.
+
+        Walks messages.list since (now - days), calls _process_message for each
+        so thread-linking, contact matching, and entity resolution behave
+        identically to the forward-going sync. Idempotent: skips messages
+        whose gmail_message_id is already stored (checked via _is_duplicate on
+        the RFC Message-ID header after fetching the full message).
+
+        Throttled to at most 10 concurrent get_message calls. A small sleep
+        between pages avoids bursting the Gmail API quota.
+        """
+        days = min(days, 3650)
+        start_date = datetime.now(UTC) - timedelta(days=days)
+
+        state = await _get_or_create_backfill_state(connection.user_id, db)
+        state.status = "running"
+        state.started_at = datetime.now(UTC)
+        state.finished_at = None
+        state.error = None
+        state.processed_count = 0
+        state.total_count = 0
+        db.add(state)
+        await db.commit()
+
+        try:
+            async with GmailClient(connection, db) as client:
+                msg_ids = await client.list_messages_since(start_date)
+                state.total_count = len(msg_ids)
+                db.add(state)
+                await db.commit()
+
+                async def _fetch_one(msg_id: str) -> None:
+                    async with _BACKFILL_SEMAPHORE:
+                        try:
+                            await _process_message(msg_id, connection, client, db)
+                        except GmailAuthError:
+                            raise
+                        except Exception as exc:
+                            logger.warning(
+                                "[gmail_backfill] user_id=%s message_id=%s error: %s",
+                                connection.user_id, msg_id, exc,
+                            )
+
+                for i, msg_id in enumerate(msg_ids):
+                    await _fetch_one(msg_id)
+                    state.processed_count = i + 1
+                    # Flush progress to DB every 50 messages so the UI stays live.
+                    if (i + 1) % 50 == 0:
+                        db.add(state)
+                        await db.commit()
+                    # Yield to event loop briefly between pages of 500
+                    if (i + 1) % 500 == 0:
+                        await asyncio.sleep(0.1)
+
+            state.status = "complete"
+            state.finished_at = datetime.now(UTC)
+            db.add(state)
+            await db.commit()
+
+        except GmailAuthError as exc:
+            state.status = "failed"
+            state.error = f"GmailAuthError: {exc}"
+            state.finished_at = datetime.now(UTC)
+            connection.revoked_at = datetime.now(UTC)
+            db.add(state)
+            db.add(connection)
+            await db.commit()
+            raise
+        except Exception as exc:
+            state.status = "failed"
+            state.error = str(exc)[:500]
+            state.finished_at = datetime.now(UTC)
+            db.add(state)
+            await db.commit()
+            raise
+
+    @staticmethod
     async def sync_all_active() -> None:
         """Iterate all non-revoked GmailConnections and sync each."""
         import src.database as db_module
@@ -103,6 +184,20 @@ class GmailSyncWorker:
 # ------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------
+
+async def _get_or_create_backfill_state(
+    user_id: int, db: AsyncSession
+) -> GmailBackfillState:
+    result = await db.execute(
+        select(GmailBackfillState).where(GmailBackfillState.user_id == user_id)
+    )
+    state = result.scalar_one_or_none()
+    if state is None:
+        state = GmailBackfillState(user_id=user_id)
+        db.add(state)
+        await db.flush()
+    return state
+
 
 async def _get_or_create_state(
     connection: GmailConnection, db: AsyncSession

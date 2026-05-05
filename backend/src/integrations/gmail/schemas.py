@@ -33,6 +33,19 @@ class GmailSendRequest(BaseModel):
     sent_via: str | None = None
 
 
+class GmailBackfillRequest(BaseModel):
+    days: int = 365
+
+
+class GmailBackfillStatusResponse(BaseModel):
+    status: str
+    processed_count: int
+    total_count: int
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    error: str | None = None
+
+
 class GmailStatusResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

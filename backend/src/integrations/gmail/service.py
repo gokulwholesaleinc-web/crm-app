@@ -72,6 +72,42 @@ class GmailConnectionService:
 
         return conn
 
+    async def schedule_backfill_if_needed(self, connection: GmailConnection) -> None:
+        """Fire-and-forget backfill on first connect or after reconnect.
+
+        Skips if a backfill is already running or has completed successfully
+        so a simple re-sync doesn't blow away progress.
+        """
+        import asyncio
+
+        from sqlalchemy import select as _select
+
+        from src.integrations.gmail.models import GmailBackfillState
+        from src.integrations.gmail.sync import GmailSyncWorker
+
+        result = await self.db.execute(
+            _select(GmailBackfillState).where(GmailBackfillState.user_id == connection.user_id)
+        )
+        state = result.scalar_one_or_none()
+        if state is not None and state.status in ("running", "complete"):
+            return
+
+        import src.database as db_module
+
+        async def _run():
+            async with db_module.async_session_maker() as fresh_db:
+                from sqlalchemy import select as _sel
+                result2 = await fresh_db.execute(
+                    _sel(GmailConnection).where(GmailConnection.user_id == connection.user_id)
+                )
+                fresh_conn = result2.scalar_one()
+                try:
+                    await GmailSyncWorker.backfill(fresh_conn, fresh_db)
+                except Exception:
+                    pass
+
+        asyncio.create_task(_run())
+
     async def seed_sync_cursor(self, connection: GmailConnection) -> None:
         """Seed last_history_id with the account's current historyId.
 

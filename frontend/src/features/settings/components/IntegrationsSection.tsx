@@ -20,8 +20,10 @@ import {
   getGmailAuthUrl,
   disconnectGmail,
   syncGmail,
+  backfillGmail,
+  getBackfillStatus,
 } from '../../../api/integrations';
-import type { MetaConnectionStatus, GmailStatus } from '../../../api/integrations';
+import type { MetaConnectionStatus, GmailStatus, GmailBackfillStatus } from '../../../api/integrations';
 import {
   CalendarDaysIcon,
   ArrowPathIcon,
@@ -228,6 +230,22 @@ function GmailCard({ onRequestDisconnect }: { onRequestDisconnect: () => void })
   const connected = status?.connected ?? false;
   const needsReconnect = status?.state === 'needs_reconnect';
 
+  const { data: backfill, isLoading: isBackfillLoading } = useQuery<GmailBackfillStatus>({
+    queryKey: ['integrations', 'gmail', 'backfill-status'],
+    queryFn: getBackfillStatus,
+    enabled: connected,
+    refetchInterval: (query) => {
+      const s = query.state.data?.status;
+      return s === 'running' || s === 'pending' ? 3000 : false;
+    },
+  });
+
+  const showBackfillProgress =
+    connected &&
+    backfill != null &&
+    backfill.status !== 'none' &&
+    !(backfill.status === 'complete' && backfill.processed_count > 0 && backfill.total_count > 0 && backfill.processed_count >= backfill.total_count);
+
   const connectMutation = useMutation({
     mutationFn: getGmailAuthUrl,
     onSuccess: (data) => {
@@ -246,6 +264,17 @@ function GmailCard({ onRequestDisconnect }: { onRequestDisconnect: () => void })
     },
     onError: () => {
       toast.error('Gmail sync failed');
+    },
+  });
+
+  const backfillMutation = useMutation({
+    mutationFn: () => backfillGmail(365),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['integrations', 'gmail', 'backfill-status'] });
+      toast.success('Backfill started');
+    },
+    onError: () => {
+      toast.error('Failed to start backfill');
     },
   });
 
@@ -292,6 +321,25 @@ function GmailCard({ onRequestDisconnect }: { onRequestDisconnect: () => void })
         {connected && status?.last_error && !needsReconnect && (
           <p className="text-xs text-red-500 mt-0.5">{status.last_error}</p>
         )}
+        {connected && !isBackfillLoading && showBackfillProgress && backfill != null && (
+          <div className="mt-1.5 flex items-center gap-2">
+            {backfill.status === 'running' || backfill.status === 'pending' ? (
+              <>
+                <Spinner size="sm" />
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  Backfilling history&hellip;{' '}
+                  {backfill.total_count > 0
+                    ? `${backfill.processed_count} of ${backfill.total_count} emails`
+                    : `${backfill.processed_count} emails`}
+                </span>
+              </>
+            ) : backfill.status === 'failed' ? (
+              <span className="text-xs text-red-500">
+                Backfill failed{backfill.error ? `: ${backfill.error}` : ''}
+              </span>
+            ) : null}
+          </div>
+        )}
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
         {connected ? (
@@ -306,6 +354,17 @@ function GmailCard({ onRequestDisconnect }: { onRequestDisconnect: () => void })
             >
               Sync
             </Button>
+            {(!backfill || backfill.status === 'none' || backfill.status === 'failed' || backfill.status === 'complete') && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => backfillMutation.mutate()}
+                disabled={backfillMutation.isPending || backfill?.status === 'running'}
+                aria-label="Backfill Gmail history"
+              >
+                Backfill
+              </Button>
+            )}
             <Button
               variant="danger"
               size="sm"

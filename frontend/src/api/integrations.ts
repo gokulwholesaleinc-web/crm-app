@@ -87,6 +87,25 @@ export const syncGmail = async (): Promise<unknown> => {
   return response.data;
 };
 
+export interface GmailBackfillStatus {
+  status: 'none' | 'pending' | 'running' | 'complete' | 'failed';
+  processed_count: number;
+  total_count: number;
+  started_at: string | null;
+  finished_at: string | null;
+  error: string | null;
+}
+
+export const backfillGmail = async (days = 365): Promise<GmailBackfillStatus> => {
+  const response = await apiClient.post<GmailBackfillStatus>('/api/integrations/gmail/backfill', { days });
+  return response.data;
+};
+
+export const getBackfillStatus = async (): Promise<GmailBackfillStatus> => {
+  const response = await apiClient.get<GmailBackfillStatus>('/api/integrations/gmail/backfill/status');
+  return response.data;
+};
+
 // Meta (Facebook/Instagram)
 
 export interface MetaConnectionStatus {
