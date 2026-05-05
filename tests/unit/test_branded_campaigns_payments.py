@@ -425,6 +425,90 @@ class TestPaymentReceiptEmail:
         assert result.scalar_one_or_none() is None
 
 
+class TestPaymentInvoiceResend:
+    """Test the staff "Resend Invoice" path (mirrors Resend Receipt)."""
+
+    @pytest.mark.asyncio
+    async def test_send_payment_invoice_creates_email_with_pdf(
+        self,
+        db_session: AsyncSession,
+        test_user: User,
+    ):
+        """send_payment_invoice queues a branded invoice email + PDF attachment."""
+        customer = StripeCustomer(
+            stripe_customer_id="cus_invresend_test",
+            email="customer-resend@example.com",
+            name="Resend Customer",
+        )
+        db_session.add(customer)
+        await db_session.flush()
+
+        payment = Payment(
+            stripe_payment_intent_id="pi_invresend_test",
+            amount=423.50,
+            currency="USD",
+            status="succeeded",
+            payment_method="card",
+            customer_id=customer.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(payment)
+        await db_session.commit()
+        await db_session.refresh(payment)
+
+        service = PaymentService(db_session)
+        await service.send_payment_invoice(payment.id)
+
+        from src.email.models import EmailQueue
+        result = await db_session.execute(
+            select(EmailQueue).where(
+                EmailQueue.entity_type == "payments",
+                EmailQueue.entity_id == payment.id,
+            )
+        )
+        email = result.scalar_one_or_none()
+        assert email is not None
+        assert email.to_email == "customer-resend@example.com"
+        # Branded invoice email subject; numbers and customer name in body.
+        assert "Invoice" in email.subject
+        assert "423" in email.body
+        assert "Resend Customer" in email.body
+
+    @pytest.mark.asyncio
+    async def test_send_payment_invoice_raises_when_no_customer_email(
+        self,
+        db_session: AsyncSession,
+        test_user: User,
+    ):
+        """Without a customer email the service should raise ValueError so
+        the endpoint can return 400 (rather than silently succeeding)."""
+        customer = StripeCustomer(
+            stripe_customer_id="cus_invresend_noemail",
+            email=None,
+            name="No Email",
+        )
+        db_session.add(customer)
+        await db_session.flush()
+
+        payment = Payment(
+            stripe_payment_intent_id="pi_invresend_noemail",
+            amount=99.00,
+            currency="USD",
+            status="succeeded",
+            customer_id=customer.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(payment)
+        await db_session.commit()
+        await db_session.refresh(payment)
+
+        service = PaymentService(db_session)
+        with pytest.raises(ValueError):
+            await service.send_payment_invoice(payment.id)
+
+
 class TestInvoicePDF:
     """Test invoice PDF (HTML) generation."""
 

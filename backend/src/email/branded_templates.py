@@ -482,6 +482,72 @@ def render_payment_receipt_email(branding: dict, payment_data: dict) -> tuple[st
 
 
 # ---------------------------------------------------------------------------
+# Payment invoice email (re-send)
+# ---------------------------------------------------------------------------
+
+def render_payment_invoice_email(branding: dict, payment_data: dict) -> tuple[str, str]:
+    """Returns (subject, html_body) for an invoice resend.
+
+    Used when staff click "Resend Invoice" because the customer reports
+    not receiving the original. Body references the attached PDF and
+    repeats the headline numbers so the email is useful even before the
+    attachment is opened.
+
+    Expected payment_data keys: invoice_number, client_name, amount,
+    currency, due_date (optional), payment_url (optional).
+    """
+    company = escape(branding.get("company_name", "CRM"))
+    invoice_no = escape(str(payment_data.get("invoice_number", "")))
+    client = escape(str(payment_data.get("client_name", "")))
+    amount = escape(str(payment_data.get("amount", "0.00")))
+    currency = escape(str(payment_data.get("currency", "USD")))
+    due_date = escape(str(payment_data.get("due_date", "")))
+    accent = escape(branding.get("accent_color", "#22c55e"))
+    pay_url = _safe_url(payment_data.get("payment_url", ""))
+
+    pay_button = ""
+    if pay_url:
+        pay_button = (
+            f'<p style="margin:24px 0;text-align:center;">'
+            f'<a href="{escape(pay_url)}" '
+            f'style="background-color:{accent};color:#ffffff;text-decoration:none;'
+            f'padding:12px 24px;border-radius:6px;font-weight:600;display:inline-block;">'
+            f'Pay invoice</a></p>'
+        )
+
+    body_html = f"""\
+<p>Dear {client},</p>
+<p>Please find your invoice attached. The headline details are repeated below for your records.</p>
+<div style="background-color:#f9fafb;border-left:4px solid {accent};border-radius:4px;padding:16px;margin:16px 0;">
+  <p style="margin:0;font-size:13px;color:#6b7280;">Amount due</p>
+  <p style="margin:4px 0 0;font-size:24px;font-weight:700;color:#111827;">{currency} {amount}</p>
+</div>
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:16px 0;font-size:14px;">
+<tr><td style="padding:4px 0;color:#6b7280;">Invoice #</td><td style="padding:4px 0;text-align:right;">{invoice_no}</td></tr>"""
+
+    if due_date:
+        body_html += (
+            f'<tr><td style="padding:4px 0;color:#6b7280;">Due date</td>'
+            f'<td style="padding:4px 0;text-align:right;">{due_date}</td></tr>'
+        )
+
+    body_html += "</table>" + pay_button
+    body_html += (
+        '<p style="font-size:13px;color:#6b7280;">If you have any questions, '
+        'just reply to this email.</p>'
+    )
+
+    subject = f"Invoice #{invoice_no} from {company}"
+    html = render_branded_email(
+        branding=branding,
+        subject=subject,
+        headline=f"Invoice #{invoice_no}",
+        body_html=body_html,
+    )
+    return subject, html
+
+
+# ---------------------------------------------------------------------------
 # Campaign wrapper
 # ---------------------------------------------------------------------------
 

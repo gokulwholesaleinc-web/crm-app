@@ -31,6 +31,8 @@ function PaymentDetailPage() {
 
   const [sendingReceipt, setSendingReceipt] = useState(false);
   const [receiptStatus, setReceiptStatus] = useState<string | null>(null);
+  const [sendingInvoice, setSendingInvoice] = useState(false);
+  const [invoiceStatus, setInvoiceStatus] = useState<string | null>(null);
   // Track the revoke timer so navigating away cancels it instead of
   // firing on a detached component (and gives us a chance to revoke
   // earlier if the user fires another download).
@@ -87,6 +89,21 @@ function PaymentDetailPage() {
       setReceiptStatus('Failed to send receipt email');
     } finally {
       setSendingReceipt(false);
+    }
+  };
+
+  const handleResendInvoice = async () => {
+    if (!payment) return;
+    setSendingInvoice(true);
+    setInvoiceStatus(null);
+    try {
+      await apiClient.post(`/api/payments/${payment.id}/send-invoice`);
+      setInvoiceStatus('Invoice email sent successfully');
+    } catch (err) {
+      const detail = (err as AxiosError<{ detail?: string }> | undefined)?.response?.data?.detail;
+      setInvoiceStatus(detail || 'Failed to send invoice email');
+    } finally {
+      setSendingInvoice(false);
     }
   };
 
@@ -151,6 +168,16 @@ function PaymentDetailPage() {
           </button>
           <button
             type="button"
+            onClick={handleResendInvoice}
+            disabled={sendingInvoice}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label="Resend invoice email"
+          >
+            <EnvelopeIcon className="h-4 w-4" aria-hidden="true" />
+            {sendingInvoice ? 'Sending...' : 'Resend Invoice'}
+          </button>
+          <button
+            type="button"
             onClick={handleResendReceipt}
             disabled={sendingReceipt}
             className="inline-flex items-center gap-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -164,7 +191,20 @@ function PaymentDetailPage() {
 
       <StripeTestModeBanner />
 
-      {/* Receipt status message */}
+      {/* Receipt + invoice status messages */}
+      {invoiceStatus && (
+        <div
+          className={`rounded-lg p-3 text-sm ${
+            invoiceStatus.includes('success')
+              ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800'
+              : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'
+          }`}
+          role="status"
+          aria-live="polite"
+        >
+          {invoiceStatus}
+        </div>
+      )}
       {receiptStatus && (
         <div
           className={`rounded-lg p-3 text-sm ${
