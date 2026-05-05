@@ -210,6 +210,43 @@ class TestEmailSearch:
         assert data["total"] == 0
 
     @pytest.mark.asyncio
+    async def test_search_scoping_user_a_cannot_see_user_b_inbound(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_user: User,
+        auth_headers: dict,
+    ):
+        """Inbound emails are scoped to the user's connected Gmail address.
+        User A (no Gmail OR a different Gmail) must not see InboundEmail
+        rows whose to_email matches user B's Gmail address."""
+        from src.integrations.gmail.models import GmailConnection
+        user_b = await _make_user(db_session, "userb_inbound@example.com")
+        userb_gmail = "userb_inbound_gmail@gmail.com"
+        db_session.add(GmailConnection(
+            user_id=user_b.id,
+            email=userb_gmail,
+            access_token="t",
+            refresh_token="r",
+            scopes="openid email profile gmail.send gmail.readonly",
+        ))
+        await _make_inbound_email(
+            db_session,
+            from_email="someone@external.com",
+            to_email=userb_gmail,
+            subject="InboundScopingProbeXYZ",
+            body_text="User B inbound content",
+        )
+        await db_session.commit()
+        resp = await client.get(
+            "/api/email/search",
+            params={"q": "InboundScopingProbeXYZ"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["total"] == 0
+
+    @pytest.mark.asyncio
     async def test_search_entity_filter_narrows_results(
         self,
         client: AsyncClient,

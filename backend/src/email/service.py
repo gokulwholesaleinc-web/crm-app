@@ -776,16 +776,20 @@ class EmailService:
         )
         user_gmail = gmail_result.scalar_one_or_none()
 
-        pat = f"%{q}%"
+        # Escape LIKE metacharacters so a user typing `%` matches literally
+        # instead of "every row I have access to". Keep `\` first so we
+        # don't double-escape our own escapes.
+        escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pat = f"%{escaped}%"
         sent_filters = [
             EmailQueue.sent_by_id == user_id,
             or_(
-                EmailQueue.subject.ilike(pat),
-                EmailQueue.body.ilike(pat),
-                EmailQueue.from_email.ilike(pat),
-                EmailQueue.to_email.ilike(pat),
-                EmailQueue.cc.ilike(pat),
-                EmailQueue.bcc.ilike(pat),
+                EmailQueue.subject.ilike(pat, escape="\\"),
+                EmailQueue.body.ilike(pat, escape="\\"),
+                EmailQueue.from_email.ilike(pat, escape="\\"),
+                EmailQueue.to_email.ilike(pat, escape="\\"),
+                EmailQueue.cc.ilike(pat, escape="\\"),
+                EmailQueue.bcc.ilike(pat, escape="\\"),
             ),
         ]
         if entity_type:
@@ -811,13 +815,13 @@ class EmailService:
 
         recv_filters = [
             or_(
-                InboundEmail.subject.ilike(pat),
-                InboundEmail.body_text.ilike(pat),
-                InboundEmail.body_html.ilike(pat),
-                InboundEmail.from_email.ilike(pat),
-                InboundEmail.to_email.ilike(pat),
-                InboundEmail.cc.ilike(pat),
-                InboundEmail.bcc.ilike(pat),
+                InboundEmail.subject.ilike(pat, escape="\\"),
+                InboundEmail.body_text.ilike(pat, escape="\\"),
+                InboundEmail.body_html.ilike(pat, escape="\\"),
+                InboundEmail.from_email.ilike(pat, escape="\\"),
+                InboundEmail.to_email.ilike(pat, escape="\\"),
+                InboundEmail.cc.ilike(pat, escape="\\"),
+                InboundEmail.bcc.ilike(pat, escape="\\"),
             ),
         ]
         if user_gmail:
@@ -855,7 +859,11 @@ class EmailService:
         offset = (page - 1) * page_size
         data_q = (
             select(combined)
-            .order_by(combined.c.sent_at.desc())
+            # Tiebreakers on (kind, id) prevent UNION ALL pagination from
+            # shuffling rows that share a sent_at timestamp (common for
+            # batch-queued emails) — without these, page 1 and page 2 can
+            # return overlapping or skipped rows.
+            .order_by(combined.c.sent_at.desc(), combined.c.kind.desc(), combined.c.id.desc())
             .offset(offset)
             .limit(page_size)
         )
