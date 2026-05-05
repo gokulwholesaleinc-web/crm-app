@@ -332,11 +332,9 @@ async def _store_sent(
     from src.email.models import EmailQueue
 
     to_addr = msg["to"]
+    recipients = _collect_recipients(msg)
 
-    entity_type: str | None = None
-    entity_id: int | None = None
-    if to_addr:
-        entity_type, entity_id = await _resolve_contact_by_addresses([to_addr], db)
+    entity_type, entity_id = await _resolve_contact_by_addresses(recipients, db)
 
     if entity_id is None:
         entity_type, entity_id = await _resolve_entity_from_thread(
@@ -348,6 +346,8 @@ async def _store_sent(
         sent_at=received_at,
         from_email=connection.email,
         to_email=to_addr,
+        cc=_join_recipients(msg.get("cc_list") or []) or msg.get("cc") or None,
+        bcc=_join_recipients(msg.get("bcc_list") or []) or msg.get("bcc") or None,
         subject=msg["subject"] or "",
         body=msg["body_text"] or msg["body_html"] or "",
         message_id=msg["message_id"],
@@ -371,11 +371,9 @@ async def _store_inbound(
     from src.email.models import InboundEmail
 
     from_addr = msg["from"]
+    recipients = _collect_recipients(msg)
 
-    entity_type: str | None = None
-    entity_id: int | None = None
-    if from_addr:
-        entity_type, entity_id = await _resolve_contact_by_addresses([from_addr], db)
+    entity_type, entity_id = await _resolve_contact_by_addresses(recipients, db)
 
     if entity_id is None:
         entity_type, entity_id = await _resolve_entity_from_thread(
@@ -388,6 +386,7 @@ async def _store_inbound(
         from_email=from_addr,
         to_email=msg["to"],
         cc=msg.get("cc") or None,
+        bcc=msg.get("bcc") or None,
         subject=msg["subject"] or "",
         body_text=msg["body_text"],
         body_html=msg["body_html"],
@@ -400,3 +399,51 @@ async def _store_inbound(
     )
     db.add(row)
     await db.flush()
+
+
+def _collect_recipients(msg: dict) -> list[str]:
+    """Aggregate every address on a parsed Gmail message for contact match.
+
+    Includes from + every entry of To/CC/BCC. We dedupe case-insensitively
+    while preserving order so the first match wins (matters when two
+    different contacts both appear on the same thread — the sender's
+    contact takes precedence).
+    """
+    seen: set[str] = set()
+    out: list[str] = []
+    candidates: list[str] = []
+    if msg.get("from"):
+        candidates.append(msg["from"])
+    candidates.extend(msg.get("to_list") or [])
+    candidates.extend(msg.get("cc_list") or [])
+    candidates.extend(msg.get("bcc_list") or [])
+    for addr in candidates:
+        key = (addr or "").strip().lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(key)
+    return out
+
+
+def _join_recipients(addrs: list[str]) -> str:
+    """Comma-join a list of addresses for the cc/bcc text columns."""
+    return ", ".join(a for a in addrs if a)
+
+
+async def _resolve_contact_by_addresses(
+    addresses: list[str], db: AsyncSession
+) -> tuple[str | None, int | None]:
+    """Return ('contacts', id) for the first contact matching any of `addresses`.
+
+    Used by the inbound + sent ingestion path so a CRM contact in CC or
+    position 2+ of the To: header still links the row to that contact
+    instead of leaving entity_id NULL.
+
+    Delegates to `find_contact_id_by_any_email` which checks both the primary
+    email column AND `contact_email_aliases`, preserves caller-supplied
+    priority ordering (from > to-list > cc-list > bcc-list), and skips
+    soft-deleted contacts.
+    """
+    from src.contacts.alias_match import find_contact_id_by_any_email
+    return await find_contact_id_by_any_email(addresses, db)

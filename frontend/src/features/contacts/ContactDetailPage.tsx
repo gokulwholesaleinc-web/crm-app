@@ -1,5 +1,5 @@
 import { useState, useRef, lazy, Suspense } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Button, HelpLink, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { TabBar, ActivitiesTab, CommonTabContent, SuspenseFallback } from '../../components/shared/DetailPageShell';
 import { EmailComposeModal, EmailThread, GmailReconnectBanner } from '../../components/email';
@@ -49,11 +49,24 @@ const TABS: { id: TabType; name: string }[] = [
   { id: 'sharing', name: 'Sharing' },
 ];
 
+const TAB_IDS: ReadonlySet<TabType> = new Set(TABS.map((t) => t.id));
+
 function ContactDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const contactId = id ? parseInt(id, 10) : undefined;
-  const [activeTab, setActiveTab] = useState<TabType>('details');
+  // Honor `?tab=` so deep links from the email search modal land on
+  // the right tab; `?email=` carries the kind:id deep-link target the
+  // EmailThread will scroll to.
+  const initialTab = (() => {
+    const requested = searchParams.get('tab');
+    return requested && TAB_IDS.has(requested as TabType)
+      ? (requested as TabType)
+      : 'details';
+  })();
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
+  const targetEmail = searchParams.get('email');
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEmailCompose, setShowEmailCompose] = useState(false);
@@ -375,6 +388,7 @@ function ContactDetailPage() {
               entityId={contactId}
               onReply={(email) => { setReplyToEmail(email); setShowEmailCompose(true); }}
               onCompose={() => { setReplyToEmail(null); setShowEmailCompose(true); }}
+              highlightTarget={targetEmail}
             />
           </div>
         </div>

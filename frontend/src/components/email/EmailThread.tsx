@@ -20,6 +20,10 @@ interface EmailThreadProps {
   entityId: number;
   onReply?: (email: ThreadEmailItem) => void;
   onCompose?: () => void;
+  /** "kind:id" deep-link target from email search. When set, the thread
+   * auto-expands the matching card, scrolls the bubble into view, and
+   * paints a yellow ring around it so the user sees what they came for. */
+  highlightTarget?: string | null;
 }
 
 const STATUS_BADGE: Record<string, { variant: BadgeVariant; label: string }> = {
@@ -126,9 +130,11 @@ function groupByThread(items: ThreadEmailItem[]): EmailGroup[] {
 function EmailBubble({
   email,
   onReply,
+  isHighlighted,
 }: {
   email: ThreadEmailItem;
   onReply?: (email: ThreadEmailItem) => void;
+  isHighlighted?: boolean;
 }) {
   const isOutbound = email.direction === 'outbound';
   const status = isOutbound ? (email.status || 'pending') : 'received';
@@ -138,10 +144,16 @@ function EmailBubble({
   const renderableHtml = email.body_html || (looksLikeHtml(bodyContent) ? bodyContent : null);
   // click_count may not yet exist on older records; safe-access via cast
   const clickCount = (email as ThreadEmailItem & { click_count?: number | null }).click_count;
+  // `kind:id` matches the EmailSearchModal deep-link format so the
+  // parent can scroll to this exact bubble after navigation.
+  const messageKey = `${isOutbound ? 'sent' : 'received'}:${email.id}`;
 
   return (
     <div
-      className={`flex ${isOutbound ? 'justify-end' : 'justify-start'}`}
+      data-message-key={messageKey}
+      className={`flex ${isOutbound ? 'justify-end' : 'justify-start'} ${
+        isHighlighted ? 'ring-2 ring-yellow-400 ring-offset-2 dark:ring-offset-gray-800 rounded-lg' : ''
+      }`}
     >
       <div
         className={`max-w-[85%] sm:max-w-[70%] rounded-lg p-3 sm:p-4 ${
@@ -227,12 +239,19 @@ function ThreadCard({
   group,
   defaultExpanded,
   onReply,
+  highlightTarget,
 }: {
   group: EmailGroup;
   defaultExpanded: boolean;
   onReply?: (email: ThreadEmailItem) => void;
+  highlightTarget?: string | null;
 }) {
-  const [expanded, setExpanded] = useState(defaultExpanded);
+  // Auto-expand if this card holds the deep-link target so the user
+  // doesn't have to manually click open after the search redirect.
+  const containsTarget = !!highlightTarget && group.messages.some(
+    (m) => `${m.direction === 'outbound' ? 'sent' : 'received'}:${m.id}` === highlightTarget,
+  );
+  const [expanded, setExpanded] = useState(defaultExpanded || containsTarget);
   const isMultiMessage = group.messages.length > 1;
   const displayedParticipants = group.participants.slice(0, 2).join(', ');
   const extraParticipants =
@@ -304,13 +323,17 @@ function ThreadCard({
       </div>
       {expanded && (
         <div id={panelId} className="px-3 sm:px-4 py-3 space-y-3">
-          {group.messages.map((email) => (
-            <EmailBubble
-              key={`${email.direction}-${email.id}`}
-              email={email}
-              onReply={onReply}
-            />
-          ))}
+          {group.messages.map((email) => {
+            const messageKey = `${email.direction === 'outbound' ? 'sent' : 'received'}:${email.id}`;
+            return (
+              <EmailBubble
+                key={`${email.direction}-${email.id}`}
+                email={email}
+                onReply={onReply}
+                isHighlighted={highlightTarget === messageKey}
+              />
+            );
+          })}
         </div>
       )}
     </section>
@@ -323,12 +346,31 @@ const MAGNIFIER_ICON = (
   </svg>
 );
 
-export function EmailThread({ entityType, entityId, onReply, onCompose }: EmailThreadProps) {
+export function EmailThread({ entityType, entityId, onReply, onCompose, highlightTarget }: EmailThreadProps) {
   const [page, setPage] = useState(1);
   const [accumulated, setAccumulated] = useState<ThreadEmailItem[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
   const { data, isLoading } = useEmailThread(entityType, entityId, page);
   const prevPageRef = useRef(page);
+  // Track which target we have already scrolled to so the effect doesn't
+  // fire again every time accumulated.length grows (e.g. user loads older
+  // pages). Reset when the target changes so a new deep-link still scrolls.
+  const scrolledTargetRef = useRef<string | null>(null);
+
+  // After ThreadCard auto-expands, scroll the target bubble into view.
+  // requestAnimationFrame waits for the expanded panel to mount.
+  useEffect(() => {
+    if (!highlightTarget || accumulated.length === 0) return;
+    if (scrolledTargetRef.current === highlightTarget) return;
+    const raf = requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-message-key="${CSS.escape(highlightTarget)}"]`);
+      if (el instanceof HTMLElement) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        scrolledTargetRef.current = highlightTarget;
+      }
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [highlightTarget, accumulated.length]);
 
   // Append new page data to accumulated list when data arrives
   useEffect(() => {
@@ -435,6 +477,7 @@ export function EmailThread({ entityType, entityId, onReply, onCompose }: EmailT
           group={group}
           defaultExpanded={index === 0}
           onReply={onReply}
+          highlightTarget={highlightTarget}
         />
       ))}
     </div>
