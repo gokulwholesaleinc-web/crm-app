@@ -822,6 +822,92 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             "payment_id": payment.id,
         }
 
+    async def create_and_send_subscription_checkout(
+        self,
+        *,
+        customer_id: int,
+        amount: Decimal,
+        description: str,
+        user_id: int,
+        currency: str,
+        interval: str,
+        interval_count: int,
+        success_url: str,
+        cancel_url: str,
+    ) -> dict:
+        """Create a subscription Checkout Session for an existing
+        StripeCustomer (the standalone "Send Invoice → Subscription" path
+        from the admin modal — not tied to a proposal).
+
+        Inline price_data so we don't pre-create a Product/Price for every
+        send. Stripe collects the payment method and charges the first
+        period when the client completes the link; the resulting
+        subscription id arrives via ``checkout.session.completed`` webhook,
+        which fills it onto the Payment row matched by checkout session id.
+
+        Returns ``{checkout_session_id, checkout_url, payment_id}``.
+        """
+        if amount <= 0:
+            raise ValueError("amount must be > 0")
+        if interval not in ("month", "year"):
+            raise ValueError("interval must be 'month' or 'year'")
+        if interval_count < 1:
+            raise ValueError("interval_count must be >= 1")
+
+        stripe = _get_stripe()
+        if not stripe:
+            raise ValueError("Stripe is not configured")
+
+        customer = await self.sync_customer_from_id(customer_id)
+        if not customer.stripe_customer_id:
+            raise ValueError(
+                "Stripe customer was not created — check Stripe connectivity",
+            )
+
+        # Idempotency: random uuid suffix because the same customer +
+        # amount may legitimately repeat (e.g. retainer #1, retainer #2).
+        # Webhook reconciles by stripe_checkout_session_id.
+        session = stripe.checkout.Session.create(
+            mode="subscription",
+            customer=customer.stripe_customer_id,
+            success_url=success_url,
+            cancel_url=cancel_url,
+            line_items=[
+                {
+                    "quantity": 1,
+                    "price_data": {
+                        "currency": currency.lower(),
+                        "unit_amount": _to_cents(amount),
+                        "recurring": {
+                            "interval": interval,
+                            "interval_count": interval_count,
+                        },
+                        "product_data": {"name": description},
+                    },
+                },
+            ],
+            idempotency_key=f"sub_chk_{customer_id}_{uuid.uuid4().hex[:12]}",
+        )
+
+        payment = Payment(
+            stripe_checkout_session_id=session.id,
+            amount=amount,
+            currency=currency.upper(),
+            status="pending",
+            customer_id=customer_id,
+            owner_id=user_id,
+            created_by_id=user_id,
+        )
+        self.db.add(payment)
+        await self.db.flush()
+        await self.db.refresh(payment)
+
+        return {
+            "checkout_session_id": session.id,
+            "checkout_url": session.url,
+            "payment_id": payment.id,
+        }
+
     async def create_subscription_checkout_for_proposal(
         self,
         *,

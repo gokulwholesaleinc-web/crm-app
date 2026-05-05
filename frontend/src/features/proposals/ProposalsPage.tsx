@@ -300,7 +300,10 @@ function ProposalsPage() {
                         </EntityLink>
                       </p>
                     )}
-                    <p className="text-xs text-gray-400 dark:text-gray-500">{formatDate(proposal.created_at)}</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500">
+                      {formatDate(proposal.created_at)}
+                      {proposal.created_by?.full_name && ` · by ${proposal.created_by.full_name}`}
+                    </p>
                   </div>
                   <div className="flex gap-4 pt-2 mt-2 border-t border-gray-100 dark:border-gray-700">
                     <Link
@@ -337,6 +340,9 @@ function ProposalsPage() {
                     </th>
                     <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" style={{ fontVariantNumeric: 'tabular-nums' }}>
                       Views
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Created by
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Created
@@ -381,6 +387,9 @@ function ProposalsPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500 dark:text-gray-400" style={{ fontVariantNumeric: 'tabular-nums' }}>
                         {proposal.view_count}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        {proposal.created_by?.full_name ?? '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {formatDate(proposal.created_at)}

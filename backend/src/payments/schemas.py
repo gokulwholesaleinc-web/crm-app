@@ -298,3 +298,29 @@ class CreateOnboardingLinkRequest(BaseModel):
 
 class CreateOnboardingLinkResponse(BaseModel):
     url: str
+
+
+# Standalone subscription Checkout (not tied to a Proposal). Used by the
+# Send Invoice modal when the admin picks payment_type='subscription':
+# Stripe collects payment method + charges first period; webhook fills in
+# the resulting subscription id on the Payment row.
+class CreateSubscriptionCheckoutRequest(BaseModel):
+    customer_id: int
+    amount: Decimal
+    currency: str = "USD"
+    description: str = "Subscription"
+    interval: Literal["month", "year"]
+    interval_count: int = Field(default=1, ge=1, le=12)
+    success_url: str
+    cancel_url: str
+
+    @field_validator("success_url", "cancel_url")
+    @classmethod
+    def validate_urls(cls, v: str) -> str:
+        return _validate_url(v)
+
+
+class CreateSubscriptionCheckoutResponse(BaseModel):
+    checkout_session_id: str
+    checkout_url: str
+    payment_id: int

@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
 PaymentType = Literal["one_time", "subscription"]
 RecurringInterval = Literal["month", "year"]
@@ -132,7 +132,7 @@ class ProposalRejectRequest(BaseModel):
     reason: str | None = None
 
 
-from src.core.schemas import CompanyBrief, ContactBrief, OpportunityBrief, QuoteBrief  # noqa: E402
+from src.core.schemas import CompanyBrief, ContactBrief, OpportunityBrief, QuoteBrief, UserBrief  # noqa: E402
 
 
 class ProposalViewResponse(BaseModel):
@@ -178,6 +178,18 @@ class ProposalResponse(ProposalBase):
     company: CompanyBrief | None = None
     opportunity: OpportunityBrief | None = None
     quote: QuoteBrief | None = None
+    # Authorship: created_by is the user who clicked "Create" (immutable);
+    # owner is the user the proposal is currently assigned to (mutable).
+    # Surfaced so the admin list + detail views can show "Created by … /
+    # Owned by …" — Giancarlo flagged this as missing on PR-2026-0009.
+    # The SQLAlchemy relationships are named `created_by_user` / `owner`;
+    # AliasChoices lets ORM-mode pull from those while the JSON output
+    # uses the cleaner `created_by` / `owner` names.
+    created_by: UserBrief | None = Field(
+        default=None,
+        validation_alias=AliasChoices("created_by", "created_by_user"),
+    )
+    owner: UserBrief | None = None
     # Per-view audit trail: every public-link GET appends a row with
     # IP + user-agent + timestamp. Surfaced on the detail response so
     # the CRM can show "viewed 12 times from 3 IPs" + the raw log for

@@ -10,6 +10,7 @@ from src.core.mixins.auditable import AuditableMixin
 from src.database import Base
 
 if TYPE_CHECKING:
+    from src.auth.models import User
     from src.companies.models import Company
     from src.contacts.models import Contact
     from src.opportunities.models import Opportunity
@@ -163,6 +164,21 @@ class Proposal(Base, AuditableMixin):
         back_populates="proposal",
         cascade="all, delete-orphan",
         lazy="selectin",
+    )
+    # User links: rendered in the admin UI as "Created by" / "Owner".
+    # Both FKs are SET NULL on user delete, so the relationships are optional.
+    # `created_by_id` comes from AuditableMixin, so we identify it by string
+    # to avoid referencing the declared_attr before it's resolved on the
+    # mapped class.
+    created_by_user: Mapped[Optional["User"]] = relationship(
+        "User",
+        foreign_keys="Proposal.created_by_id",
+        lazy="joined",
+    )
+    owner: Mapped[Optional["User"]] = relationship(
+        "User",
+        foreign_keys=[owner_id],
+        lazy="joined",
     )
 
 

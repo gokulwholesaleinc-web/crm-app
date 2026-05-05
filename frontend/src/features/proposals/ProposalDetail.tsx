@@ -373,6 +373,18 @@ function ProposalDetailPage() {
                 <dt className="text-xs text-gray-500 dark:text-gray-400">Created</dt>
                 <dd className="text-sm font-medium text-gray-900 dark:text-gray-100">{formatDate(proposal.created_at)}</dd>
               </div>
+              {proposal.created_by && (
+                <div>
+                  <dt className="text-xs text-gray-500 dark:text-gray-400">Created by</dt>
+                  <dd className="text-sm font-medium text-gray-900 dark:text-gray-100">{proposal.created_by.full_name}</dd>
+                </div>
+              )}
+              {proposal.owner && proposal.owner.id !== proposal.created_by?.id && (
+                <div>
+                  <dt className="text-xs text-gray-500 dark:text-gray-400">Owner</dt>
+                  <dd className="text-sm font-medium text-gray-900 dark:text-gray-100">{proposal.owner.full_name}</dd>
+                </div>
+              )}
               {proposal.sent_at && (
                 <div>
                   <dt className="text-xs text-gray-500 dark:text-gray-400">Sent</dt>

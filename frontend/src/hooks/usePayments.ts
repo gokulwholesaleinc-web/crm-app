@@ -18,6 +18,7 @@ import type {
   CreatePaymentIntentRequest,
   SyncCustomerRequest,
   CreateAndSendInvoiceRequest,
+  CreateSubscriptionCheckoutRequest,
   CreateOnboardingLinkRequest,
 } from '../types';
 
@@ -174,6 +175,20 @@ export function useCreateAndSendInvoice() {
 
   return useMutation({
     mutationFn: (data: CreateAndSendInvoiceRequest) => paymentsApi.createAndSendInvoice(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: paymentKeys.lists() });
+    },
+  });
+}
+
+/**
+ * Hook to create a subscription Checkout Session (recurring billing).
+ */
+export function useCreateAndSendSubscription() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: CreateSubscriptionCheckoutRequest) => paymentsApi.createAndSendSubscription(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: paymentKeys.lists() });
     },

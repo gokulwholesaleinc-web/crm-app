@@ -250,6 +250,31 @@ class TestProposalsCreate:
 
         assert response.status_code == 422
 
+    @pytest.mark.asyncio
+    async def test_create_response_includes_created_by_brief(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        test_user,
+    ):
+        """The create response should embed created_by + owner UserBriefs so
+        the admin list can show 'Created by …' without a second round-trip.
+        Regression: PR-2026-0009 was created via admin and the detail view
+        had no creator field at all."""
+        response = await client.post(
+            "/api/proposals",
+            headers=auth_headers,
+            json={"title": "Created-by visibility check", "status": "draft"},
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["created_by"] is not None
+        assert data["created_by"]["id"] == test_user.id
+        assert data["created_by"]["full_name"] == test_user.full_name
+        # owner defaults to the creator on create
+        assert data["owner"] is not None
+        assert data["owner"]["id"] == test_user.id
+
 
 class TestAutoNumbering:
     """Tests for proposal auto-numbering."""

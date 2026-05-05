@@ -21,6 +21,8 @@ import type {
   CreatePaymentIntentResponse,
   CreateAndSendInvoiceRequest,
   CreateAndSendInvoiceResponse,
+  CreateSubscriptionCheckoutRequest,
+  CreateSubscriptionCheckoutResponse,
   CreateOnboardingLinkRequest,
   CreateOnboardingLinkResponse,
 } from '../types';
@@ -127,6 +129,21 @@ export const createAndSendInvoice = async (data: CreateAndSendInvoiceRequest): P
 };
 
 /**
+ * Create a subscription Checkout Session (recurring billing). Stripe
+ * emails the customer the link; the response also returns the URL so the
+ * UI can copy it to the clipboard.
+ */
+export const createAndSendSubscription = async (
+  data: CreateSubscriptionCheckoutRequest,
+): Promise<CreateSubscriptionCheckoutResponse> => {
+  const response = await apiClient.post<CreateSubscriptionCheckoutResponse>(
+    `${PAYMENTS_BASE}/subscriptions/create-and-send`,
+    data,
+  );
+  return response.data;
+};
+
+/**
  * Create a Stripe onboarding link for a customer
  */
 export const createOnboardingLink = async (data: CreateOnboardingLinkRequest): Promise<CreateOnboardingLinkResponse> => {
@@ -146,6 +163,7 @@ export const paymentsApi = {
   listSubscriptions,
   cancelSubscription,
   createAndSendInvoice,
+  createAndSendSubscription,
   createOnboardingLink,
 };
 
