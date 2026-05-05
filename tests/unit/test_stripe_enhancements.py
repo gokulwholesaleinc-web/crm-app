@@ -239,6 +239,98 @@ class TestCreateAndSendInvoice:
 
 
 # =========================================================================
+# Subscription Checkout Endpoint Tests (Send Invoice → Subscription path)
+# =========================================================================
+
+class TestCreateAndSendSubscription:
+    """The /api/payments/subscriptions/create-and-send endpoint backs the
+    Send Invoice modal's 'Subscription' radio. Stripe is unconfigured in
+    tests, so we cover validation + auth + customer access; the happy
+    path through Stripe is exercised by service-level tests that stub
+    _get_stripe()."""
+
+    SUB_BODY = {
+        "amount": 199.00,
+        "description": "Monthly retainer",
+        "interval": "month",
+        "interval_count": 1,
+        "success_url": "http://localhost/success",
+        "cancel_url": "http://localhost/cancel",
+    }
+
+    @pytest.mark.asyncio
+    async def test_subscription_requires_auth(self, client: AsyncClient):
+        """Should return 401 without authentication."""
+        response = await client.post(
+            "/api/payments/subscriptions/create-and-send",
+            json={"customer_id": 1, **self.SUB_BODY},
+        )
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_subscription_rejects_zero_amount(
+        self, client: AsyncClient, test_user, stripe_customer,
+    ):
+        """Should return 400 for zero amount."""
+        response = await client.post(
+            "/api/payments/subscriptions/create-and-send",
+            json={**self.SUB_BODY, "customer_id": stripe_customer.id, "amount": 0},
+            headers=_token(test_user),
+        )
+        assert response.status_code == 400
+        assert "Amount must be greater than 0" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_subscription_rejects_invalid_interval(
+        self, client: AsyncClient, test_user, stripe_customer,
+    ):
+        """Pydantic Literal['month','year'] rejects 'week' at the schema layer."""
+        response = await client.post(
+            "/api/payments/subscriptions/create-and-send",
+            json={**self.SUB_BODY, "customer_id": stripe_customer.id, "interval": "week"},
+            headers=_token(test_user),
+        )
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_subscription_rejects_zero_interval_count(
+        self, client: AsyncClient, test_user, stripe_customer,
+    ):
+        """Pydantic ge=1 rejects interval_count=0 at the schema layer."""
+        response = await client.post(
+            "/api/payments/subscriptions/create-and-send",
+            json={**self.SUB_BODY, "customer_id": stripe_customer.id, "interval_count": 0},
+            headers=_token(test_user),
+        )
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_subscription_unknown_customer_returns_404(
+        self, client: AsyncClient, test_user,
+    ):
+        """Customer ownership pre-check should 404 for missing customers."""
+        response = await client.post(
+            "/api/payments/subscriptions/create-and-send",
+            json={**self.SUB_BODY, "customer_id": 99999},
+            headers=_token(test_user),
+        )
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_subscription_without_stripe_returns_400(
+        self, client: AsyncClient, test_user, stripe_customer,
+    ):
+        """Without STRIPE_SECRET_KEY, subscription checkout should surface a descriptive error."""
+        response = await client.post(
+            "/api/payments/subscriptions/create-and-send",
+            json={**self.SUB_BODY, "customer_id": stripe_customer.id},
+            headers=_token(test_user),
+        )
+        assert response.status_code == 400
+        assert "Stripe is not configured" in response.json()["detail"]
+
+
+# =========================================================================
 # Onboarding Link Endpoint Tests
 # =========================================================================
 

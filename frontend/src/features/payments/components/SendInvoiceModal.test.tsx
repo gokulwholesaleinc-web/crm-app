@@ -4,6 +4,7 @@ import { SendInvoiceModal } from './SendInvoiceModal';
 
 const invoiceMutateAsync = vi.fn();
 const syncMutateAsync = vi.fn();
+const subscriptionMutateAsync = vi.fn();
 
 vi.mock('../../../hooks/usePayments', () => ({
   useStripeCustomers: () => ({
@@ -23,7 +24,16 @@ vi.mock('../../../hooks/usePayments', () => ({
     mutateAsync: invoiceMutateAsync,
     isPending: false,
   }),
+  useCreateAndSendSubscription: () => ({
+    mutateAsync: subscriptionMutateAsync,
+    isPending: false,
+  }),
 }));
+
+// Stub navigator.clipboard for the copy-to-clipboard feedback path.
+Object.assign(navigator, {
+  clipboard: { writeText: vi.fn(() => Promise.resolve()) },
+});
 
 vi.mock('../../../utils/toast', () => ({
   showSuccess: vi.fn(),
@@ -112,8 +122,8 @@ describe('SendInvoiceModal', () => {
     expect(invoiceMutateAsync).not.toHaveBeenCalled();
   });
 
-  it('calls window.open with invoice_url on successful submit', async () => {
-    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+  it('copies invoice_url to clipboard on successful one-time submit', async () => {
+    const writeSpy = vi.spyOn(navigator.clipboard, 'writeText');
     invoiceMutateAsync.mockResolvedValueOnce({ invoice_url: 'https://invoice.stripe.com/i/test123' });
 
     renderModal();
@@ -125,10 +135,47 @@ describe('SendInvoiceModal', () => {
     fireEvent.submit(screen.getByLabelText('Amount ($)').closest('form')!);
 
     await waitFor(() => {
-      expect(openSpy).toHaveBeenCalledWith('https://invoice.stripe.com/i/test123', '_blank', 'noopener,noreferrer');
+      expect(writeSpy).toHaveBeenCalledWith('https://invoice.stripe.com/i/test123');
     });
+  });
 
-    openSpy.mockRestore();
+  it('subscription path posts to subscription endpoint with selected interval preset', async () => {
+    subscriptionMutateAsync.mockResolvedValueOnce({
+      checkout_session_id: 'cs_test_123',
+      checkout_url: 'https://checkout.stripe.com/c/cs_test_123',
+      payment_id: 7,
+    });
+    const onClose = vi.fn();
+
+    renderModal({ onClose });
+
+    // Switch to subscription
+    fireEvent.click(screen.getByRole('radio', { name: /subscription/i }));
+
+    fireEvent.change(screen.getByLabelText('Customer'), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText('Amount ($)'), { target: { value: '199' } });
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Monthly retainer' } });
+
+    // Pick "Quarterly" (index 1: month + count 3)
+    fireEvent.change(screen.getByLabelText('Billing schedule'), { target: { value: '1' } });
+
+    // Submit button label flips on subscription mode
+    fireEvent.click(screen.getByRole('button', { name: /send subscription link/i }));
+
+    await waitFor(() => {
+      expect(subscriptionMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          customer_id: 1,
+          amount: 199,
+          description: 'Monthly retainer',
+          interval: 'month',
+          interval_count: 3,
+        }),
+      );
+      expect(onClose).toHaveBeenCalledOnce();
+    });
+    // The one-time path should not have been called.
+    expect(invoiceMutateAsync).not.toHaveBeenCalled();
   });
 
   it('calls showError and does not close when mutation rejects', async () => {

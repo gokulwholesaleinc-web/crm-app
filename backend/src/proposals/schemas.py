@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
 PaymentType = Literal["one_time", "subscription"]
 RecurringInterval = Literal["month", "year"]
@@ -132,7 +132,7 @@ class ProposalRejectRequest(BaseModel):
     reason: str | None = None
 
 
-from src.core.schemas import CompanyBrief, ContactBrief, OpportunityBrief, QuoteBrief  # noqa: E402
+from src.core.schemas import CompanyBrief, ContactBrief, OpportunityBrief, QuoteBrief, UserBrief  # noqa: E402
 
 
 class ProposalViewResponse(BaseModel):
@@ -178,6 +178,12 @@ class ProposalResponse(ProposalBase):
     company: CompanyBrief | None = None
     opportunity: OpportunityBrief | None = None
     quote: QuoteBrief | None = None
+    # ORM attr is `created_by_user`; JSON name is `created_by`.
+    created_by: UserBrief | None = Field(
+        default=None,
+        validation_alias=AliasChoices("created_by", "created_by_user"),
+    )
+    owner: UserBrief | None = None
     # Per-view audit trail: every public-link GET appends a row with
     # IP + user-agent + timestamp. Surfaced on the detail response so
     # the CRM can show "viewed 12 times from 3 IPs" + the raw log for

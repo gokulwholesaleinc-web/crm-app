@@ -298,3 +298,25 @@ class CreateOnboardingLinkRequest(BaseModel):
 
 class CreateOnboardingLinkResponse(BaseModel):
     url: str
+
+
+class CreateSubscriptionCheckoutRequest(BaseModel):
+    customer_id: int
+    amount: Decimal
+    currency: str = "USD"
+    description: str = "Subscription"
+    interval: Literal["month", "year"]
+    interval_count: int = Field(default=1, ge=1, le=12)
+    success_url: str
+    cancel_url: str
+
+    @field_validator("success_url", "cancel_url")
+    @classmethod
+    def validate_urls(cls, v: str) -> str:
+        return _validate_url(v)
+
+
+class CreateSubscriptionCheckoutResponse(BaseModel):
+    checkout_session_id: str
+    checkout_url: str
+    payment_id: int

@@ -125,6 +125,8 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             selectinload(Proposal.company),
             selectinload(Proposal.quote),
             selectinload(Proposal.views),
+            selectinload(Proposal.created_by_user),
+            selectinload(Proposal.owner),
         ]
 
     async def _generate_proposal_number(self) -> str:
@@ -161,6 +163,8 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 selectinload(Proposal.contact),
                 selectinload(Proposal.company),
                 selectinload(Proposal.quote),
+                selectinload(Proposal.created_by_user),
+                selectinload(Proposal.owner),
             )
         )
 

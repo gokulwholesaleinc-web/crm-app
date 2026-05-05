@@ -1,5 +1,6 @@
 """Payment service layer."""
 
+import hashlib
 import logging
 import uuid
 from collections.abc import Sequence
@@ -819,6 +820,88 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         return {
             "stripe_invoice_id": invoice.id,
             "stripe_payment_url": getattr(invoice, "hosted_invoice_url", None),
+            "payment_id": payment.id,
+        }
+
+    async def create_and_send_subscription_checkout(
+        self,
+        *,
+        customer_id: int,
+        amount: Decimal,
+        description: str,
+        user_id: int,
+        currency: str,
+        interval: str,
+        interval_count: int,
+        success_url: str,
+        cancel_url: str,
+    ) -> dict:
+        """Create a subscription Checkout Session for an existing StripeCustomer.
+
+        Returns ``{checkout_session_id, checkout_url, payment_id}``.
+        """
+        if amount <= 0:
+            raise ValueError("amount must be > 0")
+        if interval_count < 1:
+            raise ValueError("interval_count must be >= 1")
+
+        stripe = _get_stripe()
+        if not stripe:
+            raise ValueError("Stripe is not configured")
+
+        customer = await self.sync_customer_from_id(customer_id)
+        if not customer.stripe_customer_id:
+            raise ValueError(
+                "Stripe customer was not created — check Stripe connectivity",
+            )
+
+        # Stable key over the logical request shape so a network retry
+        # (drop, double-click, page reload) collapses to one Session
+        # instead of creating a duplicate + orphan Payment row.
+        idem_payload = (
+            f"{customer_id}|{user_id}|{int(_to_cents(amount))}|{currency.lower()}"
+            f"|{interval}|{interval_count}|{description}"
+        )
+        idempotency_key = f"sub_chk_{hashlib.sha256(idem_payload.encode()).hexdigest()[:24]}"
+
+        session = stripe.checkout.Session.create(
+            mode="subscription",
+            customer=customer.stripe_customer_id,
+            success_url=success_url,
+            cancel_url=cancel_url,
+            line_items=[
+                {
+                    "quantity": 1,
+                    "price_data": {
+                        "currency": currency.lower(),
+                        "unit_amount": _to_cents(amount),
+                        "recurring": {
+                            "interval": interval,
+                            "interval_count": interval_count,
+                        },
+                        "product_data": {"name": description},
+                    },
+                },
+            ],
+            idempotency_key=idempotency_key,
+        )
+
+        payment = Payment(
+            stripe_checkout_session_id=session.id,
+            amount=amount,
+            currency=currency.upper(),
+            status="pending",
+            customer_id=customer_id,
+            owner_id=user_id,
+            created_by_id=user_id,
+        )
+        self.db.add(payment)
+        await self.db.flush()
+        await self.db.refresh(payment)
+
+        return {
+            "checkout_session_id": session.id,
+            "checkout_url": session.url,
             "payment_id": payment.id,
         }
 

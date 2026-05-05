@@ -61,7 +61,7 @@ export function VolumeStats() {
               {data.sent_today}
             </span>
             <span className="text-sm text-gray-500 dark:text-gray-400">
-              of {data.daily_limit} daily limit
+              of {data.daily_limit} daily goal
             </span>
           </div>
           <div
@@ -78,7 +78,7 @@ export function VolumeStats() {
             />
           </div>
           <p className={clsx('mt-2 text-sm font-medium', color.text)}>
-            {data.remaining_today} emails remaining today
+            {data.remaining_today} emails left to hit today's goal
           </p>
         </div>
 
@@ -101,7 +101,7 @@ export function VolumeStats() {
                 Day {data.warmup_day}
               </p>
               <p className="text-xs text-orange-600 dark:text-orange-400">
-                Limit: {data.warmup_current_limit}/day
+                Today: {data.warmup_current_limit}/day
               </p>
             </>
           ) : (

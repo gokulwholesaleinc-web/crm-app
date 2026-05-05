@@ -161,6 +161,25 @@ export interface CreateAndSendInvoiceResponse {
   invoice_url?: string;
 }
 
+import type { RecurringInterval } from './proposals';
+
+export interface CreateSubscriptionCheckoutRequest {
+  customer_id: number;
+  amount: number;
+  description: string;
+  currency?: string;
+  interval: RecurringInterval;
+  interval_count: number;
+  success_url: string;
+  cancel_url: string;
+}
+
+export interface CreateSubscriptionCheckoutResponse {
+  checkout_session_id: string;
+  checkout_url: string;
+  payment_id: number;
+}
+
 export interface CreateOnboardingLinkRequest {
   contact_id?: number;
   company_id?: number;

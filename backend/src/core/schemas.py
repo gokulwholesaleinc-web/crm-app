@@ -19,6 +19,17 @@ class TagBrief(BaseModel):
         from_attributes = True
 
 
+class UserBrief(BaseModel):
+    """Brief user representation for embedding in entity responses
+    (created_by, owner, etc.)."""
+    id: int
+    full_name: str
+    email: str | None = None
+
+    class Config:
+        from_attributes = True
+
+
 class ContactBrief(BaseModel):
     """Brief contact representation for related entity responses."""
     id: int
