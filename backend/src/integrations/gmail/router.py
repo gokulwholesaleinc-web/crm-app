@@ -7,6 +7,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
+from src.auth.dependencies import get_current_superuser
 from src.config import settings
 from src.core.constants import HTTPStatus
 from src.core.router_utils import CurrentUser, DBSession
@@ -17,6 +18,8 @@ from src.integrations.gmail.schemas import (
     GmailBackfillStatusResponse,
     GmailCallbackRequest,
     GmailConnectionResponse,
+    GmailRelinkRequest,
+    GmailRelinkResponse,
     GmailStatusResponse,
 )
 from src.integrations.gmail.service import GmailConnectionService
@@ -255,7 +258,6 @@ async def gmail_backfill(
 
     from src.integrations.gmail.models import GmailBackfillState
     from src.integrations.gmail.sync import GmailSyncWorker, _get_or_create_backfill_state
-    from sqlalchemy import select
 
     service = GmailConnectionService(db)
     conn = await service.get_by_user(current_user.id)
@@ -280,8 +282,10 @@ async def gmail_backfill(
 
     days = max(1, min(body.days, 3650))
 
-    import src.database as db_module
     import logging
+
+    import src.database as db_module
+
     logger = logging.getLogger(__name__)
 
     async def _run() -> None:
@@ -353,6 +357,135 @@ async def gmail_backfill_status(
         started_at=state.started_at,
         finished_at=state.finished_at,
         error=state.error,
+    )
+
+
+@router.post("/relink", response_model=GmailRelinkResponse)
+async def gmail_relink(
+    body: GmailRelinkRequest,
+    db: DBSession,
+    _admin: Annotated[object, Depends(get_current_superuser)],
+) -> GmailRelinkResponse:
+    """Admin-only: backfill entity_type/entity_id on unlinked email rows.
+
+    Walks email_queue (sent_via='gmail') and inbound_emails rows where
+    entity_id IS NULL, attempts to match each row's addresses to a contact
+    via find_contact_id_by_any_email, and writes the link when found.
+    Safe to re-run: never overwrites a non-NULL entity_id.
+    """
+    from sqlalchemy import and_, select
+
+    from src.contacts.alias_match import find_contact_id_by_any_email
+    from src.email.models import EmailQueue, InboundEmail
+    from src.integrations.gmail.client import _parse_address_list
+    from src.integrations.gmail.models import GmailConnection
+
+    limit = max(1, min(body.limit, 50_000))
+    BATCH = 500
+
+    scanned = 0
+    linked = 0
+    skipped = 0
+
+    async def _process_rows(rows: list, dry_run: bool) -> tuple[int, int]:
+        lnk = skp = 0
+        for row in rows:
+            # NOTE: find_contact_id_by_any_email issues one DB query per row
+            # (N+1). Acceptable for an infrequent admin backfill; a future
+            # improvement could batch-resolve addresses in one query per batch.
+            addresses: list[str] = []
+            addresses.extend(_parse_address_list(row.from_email))
+            addresses.extend(_parse_address_list(row.to_email))
+            addresses.extend(_parse_address_list(row.cc))
+            addresses.extend(_parse_address_list(row.bcc))
+            entity_type, entity_id = await find_contact_id_by_any_email(addresses, db)
+            if entity_id is not None:
+                if not dry_run:
+                    row.entity_type = entity_type
+                    row.entity_id = entity_id
+                    db.add(row)
+                lnk += 1
+            else:
+                skp += 1
+        return lnk, skp
+
+    # --- email_queue rows ---
+    # Use keyset pagination (WHERE id > last_seen_id) rather than OFFSET so
+    # that rows committed in previous batches (entity_id now non-NULL) don't
+    # shift the result window and cause skips.
+    eq_filters = [
+        EmailQueue.entity_id.is_(None),
+        EmailQueue.sent_via == "gmail",
+    ]
+    if body.user_id is not None:
+        eq_filters.append(EmailQueue.sent_by_id == body.user_id)
+
+    last_eq_id = 0
+    while True:
+        q = (
+            select(EmailQueue)
+            .where(and_(EmailQueue.id > last_eq_id, *eq_filters))
+            .order_by(EmailQueue.id)
+            .limit(min(BATCH, limit - scanned))
+        )
+        rows = (await db.execute(q)).scalars().all()
+        if not rows:
+            break
+
+        scanned += len(rows)
+        lnk, skp = await _process_rows(rows, body.dry_run)
+        linked += lnk
+        skipped += skp
+
+        if not body.dry_run:
+            await db.commit()
+
+        last_eq_id = rows[-1].id
+        if scanned >= limit or len(rows) < BATCH:
+            break
+
+    # --- inbound_emails rows ---
+    ib_filters = [InboundEmail.entity_id.is_(None)]
+    if body.user_id is not None:
+        # Scope to the mailbox(es) owned by this user's GmailConnection.
+        conn_emails = (await db.execute(
+            select(GmailConnection.email).where(GmailConnection.user_id == body.user_id)
+        )).scalars().all()
+        if not conn_emails:
+            return GmailRelinkResponse(
+                scanned=scanned, linked=linked, skipped=skipped, dry_run=body.dry_run
+            )
+        ib_filters.append(InboundEmail.to_email.in_(conn_emails))
+
+    last_ib_id = 0
+    while scanned < limit:
+        q = (
+            select(InboundEmail)
+            .where(and_(InboundEmail.id > last_ib_id, *ib_filters))
+            .order_by(InboundEmail.id)
+            .limit(min(BATCH, limit - scanned))
+        )
+        rows = (await db.execute(q)).scalars().all()
+        if not rows:
+            break
+
+        scanned += len(rows)
+        lnk, skp = await _process_rows(rows, body.dry_run)
+        linked += lnk
+        skipped += skp
+
+        if not body.dry_run:
+            await db.commit()
+
+        last_ib_id = rows[-1].id
+        if scanned >= limit or len(rows) < BATCH:
+            break
+
+    return GmailRelinkResponse(
+        scanned=scanned,
+        linked=linked,
+        skipped=skipped,
+        dry_run=body.dry_run,
     )
 
 
