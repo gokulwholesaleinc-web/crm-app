@@ -110,16 +110,21 @@ async def _resolve_reply_context(
     entity_id: int | None = None,
     sent_by_id: int | None = None,
 ) -> tuple[str | None, str | None]:
-    """Resolve thread/message-id to use for In-Reply-To / threadId on a send.
+    """Resolve thread/message-id for In-Reply-To / threadId on a send.
 
-    Prefers the exact email the user clicked Reply on (only one of the two IDs
-    is used per send). Falls back to the newest message-bearing row on the
-    entity so replies still thread when no explicit target was supplied.
+    Returns the targeted reply context only when the caller passed an
+    explicit `reply_to_email_id` or `reply_to_inbound_id`. A fresh
+    compose (both IDs None) MUST return (None, None) — otherwise it
+    silently inherits the newest prior message on the contact, which
+    forces the new mail onto a stale Gmail thread the user never asked
+    to continue. (Gmail's UI breaks the thread on the recipient side
+    when the subject differs, so the only visible effect is that the
+    CRM thread view stitches unrelated messages into one fat card.)
 
-    Reply targets are scoped to the outgoing email's entity so a caller can't
-    pass an id from another contact/tenant and exfiltrate its thread metadata.
-    EmailQueue targets additionally require the sender match, since EmailQueue
-    rows are per-user.
+    Reply targets are scoped to the outgoing email's entity so a caller
+    can't pass an id from another contact/tenant and exfiltrate its
+    thread metadata. EmailQueue targets additionally require the sender
+    match, since EmailQueue rows are per-user.
     """
     if reply_to_email_id is not None and entity_type and entity_id:
         filters = [
@@ -146,62 +151,7 @@ async def _resolve_reply_context(
         hit = row.first()
         if hit is not None:
             return hit.thread_id, hit.message_id
-    return await _find_thread_context(db, entity_type, entity_id)
-
-
-async def _find_thread_context(
-    db: AsyncSession,
-    entity_type: str | None,
-    entity_id: int | None,
-) -> tuple[str | None, str | None]:
-    """Best-effort thread context for a reply when no specific target was given.
-
-    Returns the most recent message on the entity — inbound or outbound — that
-    still has a Message-ID. The Gmail threadId may be None (e.g. older rows
-    from before the Gmail integration, or Resend-only sends); callers should
-    still use the message_id for In-Reply-To/References so non-Gmail clients
-    thread correctly.
-    """
-    if not entity_type or not entity_id:
-        return None, None
-
-    outbound = await db.execute(
-        select(
-            EmailQueue.thread_id,
-            EmailQueue.message_id,
-            EmailQueue.created_at.label("ts"),
-        )
-        .where(
-            EmailQueue.entity_type == entity_type,
-            EmailQueue.entity_id == entity_id,
-            EmailQueue.message_id.isnot(None),
-        )
-        .order_by(EmailQueue.created_at.desc())
-        .limit(1)
-    )
-    out_row = outbound.first()
-
-    inbound = await db.execute(
-        select(
-            InboundEmail.thread_id,
-            InboundEmail.message_id,
-            InboundEmail.received_at.label("ts"),
-        )
-        .where(
-            InboundEmail.entity_type == entity_type,
-            InboundEmail.entity_id == entity_id,
-            InboundEmail.message_id.isnot(None),
-        )
-        .order_by(InboundEmail.received_at.desc())
-        .limit(1)
-    )
-    in_row = inbound.first()
-
-    candidates = [r for r in (out_row, in_row) if r is not None]
-    if not candidates:
-        return None, None
-    newest = max(candidates, key=lambda r: r.ts)
-    return newest.thread_id, newest.message_id
+    return None, None
 
 
 async def _create_email_activity(
