@@ -31,9 +31,24 @@ function PaymentDetailPage() {
   const [sendingReceipt, setSendingReceipt] = useState(false);
   const [receiptStatus, setReceiptStatus] = useState<string | null>(null);
 
-  const handleDownloadInvoice = () => {
+  const handleDownloadInvoice = async () => {
     if (!payment) return;
-    window.open(`/api/payments/${payment.id}/invoice`, '_blank');
+    // window.open() can't carry the Authorization header so the new tab
+    // would always 401 against the auth-protected endpoint. Fetch via
+    // the apiClient (which injects the Bearer), turn the response into
+    // a blob, and open it in a new tab via an object URL.
+    try {
+      const response = await apiClient.get(`/api/payments/${payment.id}/invoice`, {
+        responseType: 'blob',
+      });
+      const blob = response.data as Blob;
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      // Give the new tab a moment to attach to the URL before we revoke.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      showError('Failed to load invoice. Try refreshing the page and signing in again.');
+    }
   };
 
   const handleCopyPaymentUrl = async () => {
