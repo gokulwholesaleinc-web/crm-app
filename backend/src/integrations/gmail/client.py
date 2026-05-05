@@ -269,28 +269,6 @@ def _parse_address_list(addr_str: str) -> list[str]:
     return out
 
 
-def _parse_address_list(addr_str: str | None) -> list[str]:
-    """Return all email addresses from a comma-separated address header.
-
-    Handles both bare addresses (foo@bar.com) and display-name form
-    (Display Name <foo@bar.com>). Returns an empty list for None/empty input.
-    """
-    if not addr_str:
-        return []
-    results: list[str] = []
-    for raw in addr_str.split(","):
-        part = raw.strip()
-        if not part:
-            continue
-        if "<" in part and ">" in part:
-            addr = part[part.index("<") + 1 : part.index(">")].strip()
-        else:
-            addr = part
-        if addr:
-            results.append(addr)
-    return results
-
-
 def _get_client_id() -> str:
     from src.config import settings
     return getattr(settings, "GOOGLE_CLIENT_ID", "")
