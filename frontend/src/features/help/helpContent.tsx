@@ -170,14 +170,16 @@ export const SECTIONS: Section[] = [
               {' '}<code>/proposals/public/&#123;token&#125;</code>.
             </Step>
             <Step n={5}>
-              The client opens the link, reviews, types their name + email, signs (draws on
-              a canvas), and clicks <em>Accept</em>. Status flips to{' '}
-              <Badge variant="green">accepted</Badge>; the signature, IP, and timestamp are
-              stored on the record.
+              The client opens the link, reviews, types their full name + email, and
+              clicks <em>Accept</em>. Status flips to{' '}
+              <Badge variant="green">accepted</Badge>; their name, email, IP, and
+              timestamp are stored on the record as the e-signature.
             </Step>
             <Step n={6}>
-              For Proposals, accepting can auto-spawn a Stripe invoice or checkout — see
-              tutorial 2 below.
+              For <strong>Proposals</strong> with a price, accepting auto-spawns a
+              Stripe invoice (one-time) or Checkout session (subscription) — see
+              tutorial 2. <strong>Quotes</strong> don&rsquo;t auto-bill on accept; you
+              create the charge yourself from Payments after acceptance.
             </Step>
           </ol>
           <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
@@ -237,14 +239,21 @@ export const SECTIONS: Section[] = [
               one-shot Stripe invoice the customer pays via card or ACH.
             </Step>
             <Step n={2}>
-              <strong>Recurring (subscription):</strong> create a <em>Quote</em> with{' '}
-              <em>Payment type = Subscription</em> and a recurring interval (monthly,
-              quarterly, or yearly).
+              <strong>Recurring (subscription) — Proposal route (auto-spawn):</strong>{' '}
+              build a <em>Proposal</em> with a pricing block whose payment type is{' '}
+              <em>Subscription</em> + interval (monthly / quarterly / yearly), send it,
+              and when the client accepts via the public link the CRM auto-creates a
+              Stripe Checkout session in subscription mode and emails them the link.
+              They enter their card on Stripe&rsquo;s hosted page and the subscription
+              begins.
             </Step>
             <Step n={3}>
-              Send the quote (tutorial 1). When the client accepts, the CRM creates a Stripe
-              Checkout session in subscription mode — they enter their card on Stripe&rsquo;s
-              hosted page and the subscription begins.
+              <strong>Recurring — Quote route (manual):</strong> a Quote with{' '}
+              <em>Payment type = Subscription</em> records the recurrence on the
+              Quote, but accepting via the public link only stores the e-signature
+              (it does not auto-bill). After acceptance, open Payments and create the
+              checkout yourself, passing the Quote — the CRM will create a
+              subscription-mode session because the linked Quote is marked recurring.
             </Step>
             <Step n={4}>
               Recurring charges show up on the Payments page under the{' '}
@@ -314,9 +323,10 @@ export const SECTIONS: Section[] = [
             </Step>
             <Step n={5}>
               <strong>First-time setup:</strong> if you don&rsquo;t see emails, go to{' '}
-              <strong>Settings</strong> → <em>Email</em> and connect your Gmail account
-              (OAuth, takes ~30 seconds). The CRM polls Gmail every 90 seconds and links new
-              messages to the right contact by sender / recipient address or thread ID.
+              <strong>Settings</strong> → <em>Integrations</em> and click{' '}
+              <em>Connect Gmail</em> (OAuth, takes ~30 seconds). The CRM polls Gmail
+              every 90 seconds and links new messages to the right contact by sender /
+              recipient address or thread ID.
             </Step>
           </ol>
           <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
@@ -410,9 +420,9 @@ export const SECTIONS: Section[] = [
             share URL you send to the client.
           </Step>
           <Step n={6}>
-            <strong>The client accepts or rejects.</strong> Public quote/proposal pages capture the
-            decision and an e-signature (name, email, IP, signed-at, drawn signature) — the
-            built-in DocuSign-equivalent. Status flips to <em>accepted</em> or <em>rejected</em>.
+            <strong>The client accepts or rejects.</strong> Public quote/proposal pages capture
+            the decision and an e-signature (name, email, IP, signed-at) — the built-in
+            DocuSign-equivalent. Status flips to <em>accepted</em> or <em>rejected</em>.
           </Step>
           <Step n={7}>
             <strong>You collect Payment.</strong> The Payments tab tracks Stripe payment intents,
@@ -693,10 +703,11 @@ export const SECTIONS: Section[] = [
             that you can send to the client without requiring them to log in.
           </Bullet>
           <Bullet>
-            On the public page, the client can view, draw their signature, and accept (with name,
-            email, IP, and timestamp captured) — or reject with a reason. Status updates flow back
-            into the CRM. <strong>You don&rsquo;t need DocuSign / HelloSign</strong> — this is the
-            built-in equivalent. See the <em>Tutorials</em> section for the full walkthrough.
+            On the public page, the client types their name + email and clicks Accept (or
+            rejects with a reason). Name, email, IP, and timestamp are captured as the
+            e-signature. Status updates flow back into the CRM.{' '}
+            <strong>You don&rsquo;t need DocuSign / HelloSign</strong> — this is the built-in
+            equivalent. See the <em>Tutorials</em> section for the full walkthrough.
           </Bullet>
         </ul>
       </div>
@@ -741,9 +752,9 @@ export const SECTIONS: Section[] = [
             Send this to the client; they don&rsquo;t need an account.
           </Bullet>
           <Bullet>
-            The public page lets the client draw a signature and accept (or reject with a
-            reason) — same DocuSign-equivalent flow used by Quotes. Name, email, IP, and
-            timestamp are captured on the proposal record.
+            The public page lets the client type their name + email and accept (or
+            reject with a reason) — same DocuSign-equivalent flow used by Quotes. Name,
+            email, IP, and timestamp are captured on the proposal record.
           </Bullet>
           <Bullet>
             Each view is logged with timestamp and IP, so you can see view count and last-viewed
