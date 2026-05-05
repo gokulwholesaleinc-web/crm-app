@@ -2,7 +2,7 @@
  * Campaign detail page with members and stats
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { useContacts } from '../../hooks/useContacts';
@@ -14,6 +14,7 @@ import {
   ChartBarIcon,
   CurrencyDollarIcon,
   TrashIcon,
+  CheckCircleIcon,
 } from '@heroicons/react/24/outline';
 import { Button, EntityLink, HelpLink, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { CampaignForm } from './components/CampaignForm';
@@ -203,6 +204,7 @@ export function CampaignDetailPage() {
   const [showEditForm, setShowEditForm] = useState(false);
   const [showAddMembersModal, setShowAddMembersModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const stepBuilderRef = useRef<HTMLDivElement>(null);
   const [removeMemberConfirm, setRemoveMemberConfirm] = useState<{ isOpen: boolean; memberId: number | null }>({
     isOpen: false,
     memberId: null,
@@ -411,6 +413,72 @@ export function CampaignDetailPage() {
         </div>
       </div>
 
+      {/* Setup wizard card — only for new email campaigns with no steps and no members */}
+      {campaign.campaign_type === 'email' && steps.length === 0 && (!members || members.length === 0) && (
+        <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-4 sm:p-5">
+          <h2 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-3">
+            Get this campaign live in 3 steps
+          </h2>
+          <ol className="space-y-3">
+            <li className="flex items-start gap-3">
+              <CheckCircleIcon className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" aria-hidden="true" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-blue-900 dark:text-blue-100 line-through opacity-60">
+                  Create the campaign
+                </p>
+              </div>
+            </li>
+            <li className="flex items-start gap-3">
+              <div className="h-5 w-5 rounded-full border-2 border-blue-400 dark:border-blue-500 flex-shrink-0 mt-0.5 flex items-center justify-center">
+                <span className="text-xs font-bold text-blue-600 dark:text-blue-300">2</span>
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-blue-900 dark:text-blue-100">Add a sequence step</p>
+                <p className="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
+                  Pick an email template and set the send delay.{' '}
+                  <button
+                    type="button"
+                    onClick={() => stepBuilderRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                    className="underline hover:no-underline font-medium"
+                  >
+                    Go to Campaign Sequence
+                  </button>
+                </p>
+              </div>
+            </li>
+            <li className="flex items-start gap-3">
+              <div className="h-5 w-5 rounded-full border-2 border-blue-400 dark:border-blue-500 flex-shrink-0 mt-0.5 flex items-center justify-center">
+                <span className="text-xs font-bold text-blue-600 dark:text-blue-300">3</span>
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-blue-900 dark:text-blue-100">Add members</p>
+                <p className="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
+                  Load your recipient list.{' '}
+                  <button
+                    type="button"
+                    onClick={() => setShowAddMembersModal(true)}
+                    className="underline hover:no-underline font-medium"
+                  >
+                    Add Members
+                  </button>
+                </p>
+              </div>
+            </li>
+            <li className="flex items-start gap-3">
+              <div className="h-5 w-5 rounded-full border-2 border-blue-400 dark:border-blue-500 flex-shrink-0 mt-0.5 flex items-center justify-center">
+                <span className="text-xs font-bold text-blue-600 dark:text-blue-300">4</span>
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-blue-900 dark:text-blue-100">Activate</p>
+                <p className="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
+                  Click <strong>Send Campaign</strong> above when you're ready to go.
+                </p>
+              </div>
+            </li>
+          </ol>
+        </div>
+      )}
+
       {/* Campaign Details */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-3 sm:p-4">
@@ -510,7 +578,7 @@ export function CampaignDetailPage() {
 
       {/* Campaign Steps */}
       {campaign.campaign_type === 'email' && campaignId && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
+        <div ref={stepBuilderRef} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
           <CampaignStepBuilder
             steps={steps}
             templates={templates}

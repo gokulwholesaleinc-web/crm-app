@@ -43,6 +43,38 @@ const typeLabels: Record<string, string> = {
   other: 'Other',
 };
 
+type SetupStatus = 'needs setup' | 'ready' | 'active' | 'completed';
+
+function getSetupStatus(campaign: Campaign): SetupStatus {
+  if (campaign.status === 'completed') return 'completed';
+  if (campaign.is_executing || campaign.status === 'active') return 'active';
+  if (campaign.num_sent > 0 || campaign.num_responses > 0) return 'active';
+  return 'needs setup';
+}
+
+const setupStatusStyles: Record<SetupStatus, { bg: string; text: string; dot: string }> = {
+  'needs setup': {
+    bg: 'bg-amber-50 dark:bg-amber-900/20',
+    text: 'text-amber-700 dark:text-amber-400',
+    dot: 'bg-amber-400',
+  },
+  ready: {
+    bg: 'bg-green-50 dark:bg-green-900/20',
+    text: 'text-green-700 dark:text-green-400',
+    dot: 'bg-green-400',
+  },
+  active: {
+    bg: 'bg-blue-50 dark:bg-blue-900/20',
+    text: 'text-blue-700 dark:text-blue-400',
+    dot: 'bg-blue-400',
+  },
+  completed: {
+    bg: 'bg-gray-50 dark:bg-gray-700/50',
+    text: 'text-gray-600 dark:text-gray-400',
+    dot: 'bg-gray-400',
+  },
+};
+
 const statusOptions = [
   { value: '', label: 'All Status' },
   { value: 'planned', label: 'Planned' },
@@ -73,6 +105,8 @@ function CampaignCard({
   onDelete: () => void;
 }) {
   const statusStyle = getStatusColor(campaign.status, 'campaign');
+  const setupStatus = getSetupStatus(campaign);
+  const setupStyle = setupStatusStyles[setupStatus];
 
   return (
     <div
@@ -84,7 +118,7 @@ function CampaignCard({
     >
       <div className="flex items-start justify-between">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
             <span
               className={clsx(
                 'text-xs font-medium px-2 py-0.5 rounded-full',
@@ -96,6 +130,16 @@ function CampaignCard({
             </span>
             <span className="text-xs text-gray-500 dark:text-gray-400">
               {typeLabels[campaign.campaign_type] || campaign.campaign_type}
+            </span>
+            <span
+              className={clsx(
+                'text-xs font-medium px-2 py-0.5 rounded-full flex items-center gap-1',
+                setupStyle.bg,
+                setupStyle.text
+              )}
+            >
+              <span className={clsx('inline-block h-1.5 w-1.5 rounded-full flex-shrink-0', setupStyle.dot)} aria-hidden="true" />
+              {setupStatus}
             </span>
           </div>
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">{campaign.name}</h3>
