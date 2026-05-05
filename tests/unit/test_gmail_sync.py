@@ -717,6 +717,76 @@ class TestSyncThreadFallback:
         assert row.entity_id is None
 
 
+class TestSyncAliasMatch:
+    """Inbound mail arrives from an alias address (not the primary email).
+    The sync worker must still link the InboundEmail to the right contact."""
+
+    @pytest.mark.asyncio
+    async def test_inbound_links_via_alias_when_primary_not_in_headers(
+        self, connection, db, test_user
+    ):
+        from src.contacts.models import ContactEmailAlias
+
+        # Contact whose primary email will NOT appear in the message headers.
+        contact = Contact(
+            email="alice@primary.com",
+            first_name="Alice",
+            last_name="Smith",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db.add(contact)
+        await db.commit()
+        await db.refresh(contact)
+
+        # Add an alias — this is the address that will appear in From:.
+        alias = ContactEmailAlias(
+            contact_id=contact.id,
+            email="alice.work@corp.com",
+            label="Work",
+        )
+        db.add(alias)
+
+        state = GmailSyncState(
+            user_id=connection.user_id,
+            last_history_id="900",
+            failure_count=0,
+        )
+        db.add(state)
+        await db.commit()
+
+        msg = _gmail_message(
+            msg_id="alias001",
+            thread_id="t-alias",
+            from_="alice.work@corp.com",  # alias address, not primary
+            to=connection.email,
+            subject="Via alias",
+        )
+        history = {
+            "history": [{"id": "901", "messagesAdded": [{"message": {"id": "alias001"}}]}]
+        }
+        routes = {
+            "users/me/history": history,
+            "users/me/messages/alias001": msg,
+        }
+        http = _make_http_client(routes)
+
+        with patch("src.integrations.gmail.client.httpx.AsyncClient", return_value=http):
+            from src.integrations.gmail.client import GmailClient as _GC
+            orig_init = _GC.__init__
+
+            def patched_init(self, conn, db_, http=None):
+                orig_init(self, conn, db_, http=http)
+
+            with patch.object(_GC, "__init__", patched_init):
+                await GmailSyncWorker.sync_account(connection, db)
+
+        rows = (await db.execute(select(InboundEmail))).scalars().all()
+        assert len(rows) == 1
+        assert rows[0].entity_type == "contacts"
+        assert rows[0].entity_id == contact.id
+
+
 class TestSyncMultiRecipient:
     """Coverage for the multi-recipient parsing fix.
 
@@ -738,7 +808,7 @@ class TestSyncMultiRecipient:
         )
         db.add(contact)
         state = GmailSyncState(
-            user_id=connection.user_id, last_history_id="900", failure_count=0,
+            user_id=connection.user_id, last_history_id="950", failure_count=0,
         )
         db.add(state)
         await db.commit()
@@ -753,7 +823,7 @@ class TestSyncMultiRecipient:
             subject="Loop you in",
         )
         history = {
-            "history": [{"id": "901", "messagesAdded": [{"message": {"id": "cc-msg"}}]}]
+            "history": [{"id": "951", "messagesAdded": [{"message": {"id": "cc-msg"}}]}]
         }
         routes = {
             "users/me/history": history,

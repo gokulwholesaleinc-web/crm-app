@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
 
 from src.core.schemas import TagBrief
 
@@ -83,3 +83,23 @@ class ContactListResponse(BaseModel):
     page: int
     page_size: int
     pages: int
+
+
+class ContactEmailAliasCreate(BaseModel):
+    email: EmailStr
+    label: str | None = None
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalise_email(cls, v: str) -> str:
+        return v.strip().lower()
+
+
+class ContactEmailAliasResponse(BaseModel):
+    id: int
+    contact_id: int
+    email: str
+    label: str | None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

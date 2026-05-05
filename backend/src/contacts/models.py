@@ -1,6 +1,6 @@
 """Contact model for CRM contacts."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
@@ -8,6 +8,35 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.mixins.auditable import AuditableMixin
 from src.database import Base
+
+
+class ContactEmailAlias(Base):
+    """Alternate email addresses for a contact.
+
+    A contact may be reached at multiple addresses (personal vs. work, name
+    change, etc.). Each alias row lets Gmail sync and Resend webhooks attach
+    incoming mail to the right contact even when the message arrives at a
+    non-primary address.
+
+    The UNIQUE index on LOWER(email) is enforced at the DB level; the router
+    returns 409 on IntegrityError so callers get a clear signal.
+    """
+    __tablename__ = "contact_email_aliases"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    contact_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("contacts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    label: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
 
 if TYPE_CHECKING:
     from src.companies.models import Company

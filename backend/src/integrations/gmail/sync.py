@@ -4,7 +4,7 @@ import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -314,6 +314,14 @@ async def _resolve_entity_from_thread(
     return None, None
 
 
+async def _resolve_contact_by_addresses(
+    addresses: list[str], db: AsyncSession
+) -> tuple[str | None, int | None]:
+    """Alias-aware contact lookup across primary email and contact_email_aliases."""
+    from src.contacts.alias_match import find_contact_id_by_any_email
+    return await find_contact_id_by_any_email(addresses, db)
+
+
 async def _store_sent(
     msg: dict,
     connection: GmailConnection,
@@ -432,29 +440,10 @@ async def _resolve_contact_by_addresses(
     position 2+ of the To: header still links the row to that contact
     instead of leaving entity_id NULL.
 
-    Priority is determined by the caller-supplied `addresses` order (from >
-    to-list > cc-list > bcc-list). We fetch all matching contacts in one query
-    then pick the one whose email appears earliest in that list — SQL IN() with
-    LIMIT(1) has no ordering guarantee so we cannot rely on the DB to respect
-    the priority ordering.
+    Delegates to `find_contact_id_by_any_email` which checks both the primary
+    email column AND `contact_email_aliases`, preserves caller-supplied
+    priority ordering (from > to-list > cc-list > bcc-list), and skips
+    soft-deleted contacts.
     """
-    from src.contacts.models import Contact
-
-    cleaned = [a.strip().lower() for a in addresses if a and a.strip()]
-    if not cleaned:
-        return None, None
-
-    result = await db.execute(
-        select(Contact).where(func.lower(Contact.email).in_(cleaned))
-    )
-    contacts = result.scalars().all()
-    if not contacts:
-        return None, None
-
-    # Build a lookup by lowercased email so we can respect the caller's priority.
-    by_email = {(c.email or "").strip().lower(): c for c in contacts}
-    for addr in cleaned:
-        contact = by_email.get(addr)
-        if contact is not None:
-            return "contacts", contact.id
-    return None, None
+    from src.contacts.alias_match import find_contact_id_by_any_email
+    return await find_contact_id_by_any_email(addresses, db)
