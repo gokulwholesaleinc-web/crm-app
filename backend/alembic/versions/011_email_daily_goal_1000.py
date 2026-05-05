@@ -9,14 +9,14 @@ Updates rows that still hold the prior default (200) so existing
 tenants pick up the new ceiling. Tenants who already customized
 their value (anything other than 200) are left alone.
 
-Revision ID: 011_email_daily_goal_default_1000
+Revision ID: 011_email_daily_goal_1000
 Revises: 010_proposal_billing_error
 Create Date: 2026-05-05
 """
 
 from alembic import op
 
-revision = "011_email_daily_goal_default_1000"
+revision = "011_email_daily_goal_1000"
 down_revision = "010_proposal_billing_error"
 branch_labels = None
 depends_on = None
