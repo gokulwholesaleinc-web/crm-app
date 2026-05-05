@@ -537,6 +537,76 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         from src.payments.pdf import generate_invoice_pdf as _gen
         return await _gen(self.db, payment_id)
 
+    async def send_payment_invoice(self, payment_id: int) -> None:
+        """Email the invoice to the customer with the rendered PDF attached.
+
+        Used by the staff "Resend Invoice" button when the customer reports
+        not receiving the original. Reuses the same PDF generator as the
+        download endpoint plus a dedicated branded email template.
+        """
+        from src.email.branded_templates import (
+            TenantBrandingHelper,
+            render_payment_invoice_email,
+        )
+        from src.email.service import EmailService
+        from src.email.types import EmailAttachment
+
+        result = await self.db.execute(
+            select(Payment)
+            .options(
+                selectinload(Payment.customer),
+                selectinload(Payment.quote),
+            )
+            .where(Payment.id == payment_id)
+        )
+        payment = result.scalar_one_or_none()
+        if not payment:
+            raise ValueError(f"Payment {payment_id} not found")
+
+        to_email = payment.customer.email if payment.customer else None
+        if not to_email:
+            raise ValueError("Customer has no email on file")
+
+        client_name = (payment.customer.name if payment.customer else None) or "Customer"
+
+        branding = TenantBrandingHelper.get_default_branding()
+        if payment.owner_id:
+            branding = await TenantBrandingHelper.get_branding_for_user(
+                self.db, payment.owner_id
+            )
+
+        invoice_data = {
+            "invoice_number": str(payment.id),
+            "client_name": client_name,
+            "amount": str(payment.amount),
+            "currency": payment.currency,
+            "due_date": payment.created_at.strftime("%Y-%m-%d") if payment.created_at else "",
+            "payment_url": payment.stripe_payment_url or "",
+        }
+
+        subject, html_body = render_payment_invoice_email(branding, invoice_data)
+
+        # generate_invoice_pdf today returns HTML bytes (the WeasyPrint
+        # fallback path); attach with the appropriate content-type so
+        # mail clients render or download as expected.
+        pdf_bytes = await self.generate_invoice_pdf(payment_id)
+        attachment: EmailAttachment = {
+            "filename": f"invoice-{payment_id}.html",
+            "content": pdf_bytes,
+            "content_type": "text/html",
+        }
+
+        email_service = EmailService(self.db)
+        await email_service.queue_email(
+            to_email=to_email,
+            subject=subject,
+            body=html_body,
+            sent_by_id=payment.owner_id,
+            entity_type="payments",
+            entity_id=payment.id,
+            attachments=[attachment],
+        )
+
     async def _handle_checkout_completed(self, session_obj: dict) -> None:
         """Handle checkout.session.completed event. Delegates to WebhookProcessor."""
         processor = WebhookProcessor(self.db)

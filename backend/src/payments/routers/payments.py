@@ -214,6 +214,37 @@ async def send_receipt(
     return {"message": "Receipt email sent", "payment_id": payment_id}
 
 
+@router.post("/{payment_id}/send-invoice")
+async def send_invoice(
+    payment_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
+):
+    """Resend the invoice email (with the rendered PDF attached)."""
+    service = PaymentService(db)
+    payment = await get_entity_or_404(service, payment_id, EntityNames.PAYMENT)
+    check_record_access_or_shared(
+        payment, current_user, data_scope.role_name,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_PAYMENTS),
+    )
+
+    try:
+        await service.send_payment_invoice(payment_id)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail=str(e),
+        ) from e
+    except Exception as e:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail=f"Failed to send invoice: {str(e)}",
+        ) from e
+
+    return {"message": "Invoice email sent", "payment_id": payment_id}
+
+
 @router.get("/{payment_id}", response_model=PaymentResponse)
 async def get_payment(
     payment_id: int,
