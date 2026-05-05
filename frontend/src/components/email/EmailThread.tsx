@@ -3,6 +3,7 @@ import DOMPurify from 'dompurify';
 import { Spinner, Badge, Button } from '../ui';
 import { useEmailThread } from '../../hooks/useEmail';
 import type { ThreadEmailItem } from '../../types/email';
+import { EmailSearchModal } from './EmailSearchModal';
 import type { BadgeVariant } from '../ui/Badge';
 
 // Force all sanitized anchors to open safely in a new tab.
@@ -316,9 +317,16 @@ function ThreadCard({
   );
 }
 
+const MAGNIFIER_ICON = (
+  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+  </svg>
+);
+
 export function EmailThread({ entityType, entityId, onReply, onCompose }: EmailThreadProps) {
   const [page, setPage] = useState(1);
   const [accumulated, setAccumulated] = useState<ThreadEmailItem[]>([]);
+  const [searchOpen, setSearchOpen] = useState(false);
   const { data, isLoading } = useEmailThread(entityType, entityId, page);
   const prevPageRef = useRef(page);
 
@@ -353,25 +361,58 @@ export function EmailThread({ entityType, entityId, onReply, onCompose }: EmailT
   if (accumulated.length === 0 && page === 1) {
     return (
       <div className="text-center py-8">
+        <EmailSearchModal
+          isOpen={searchOpen}
+          onClose={() => setSearchOpen(false)}
+          entityType={entityType}
+          entityId={entityId}
+        />
         <svg className="mx-auto h-12 w-12 text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
         </svg>
         <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">No emails yet.</p>
-        {onCompose && (
-          <Button
-            variant="primary"
-            onClick={onCompose}
-            className="mt-3"
+        <div className="mt-3 flex items-center justify-center gap-2">
+          {onCompose && (
+            <Button variant="primary" onClick={onCompose}>
+              Send First Email
+            </Button>
+          )}
+          <button
+            type="button"
+            onClick={() => setSearchOpen(true)}
+            className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+            aria-label="Search emails"
           >
-            Send First Email
-          </Button>
-        )}
+            {MAGNIFIER_ICON}
+            Search
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-3">
+      <EmailSearchModal
+        isOpen={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        entityType={entityType}
+        entityId={entityId}
+      />
+
+      {/* Thread header actions */}
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => setSearchOpen(true)}
+          className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+          aria-label="Search emails"
+        >
+          {MAGNIFIER_ICON}
+          Search
+        </button>
+      </div>
+
       {/* Load older emails */}
       {totalPages > 1 && page < totalPages && (
         <div className="text-center">

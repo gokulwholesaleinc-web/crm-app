@@ -67,6 +67,27 @@ export interface SendCampaignEmailPayload {
   campaign_id: number;
 }
 
+export interface EmailSearchResult {
+  id: number;
+  kind: 'sent' | 'received';
+  subject: string;
+  snippet: string;
+  from_email: string | null;
+  to_email: string;
+  sent_at: string | null;
+  thread_id: string | null;
+  entity_type: string | null;
+  entity_id: number | null;
+}
+
+export interface EmailSearchResponse {
+  items: EmailSearchResult[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+}
+
 export const emailApi = {
   send: (data: SendEmailPayload) =>
     apiClient.post<EmailQueueItem>('/api/email/send', data).then((r) => r.data),
@@ -85,4 +106,13 @@ export const emailApi = {
 
   thread: (params: { entity_type: string; entity_id: number; page?: number; page_size?: number }) =>
     apiClient.get<ThreadResponse>('/api/email/thread', { params }).then((r) => r.data),
+
+  search: (params: {
+    q: string;
+    page?: number;
+    page_size?: number;
+    entity_type?: string;
+    entity_id?: number;
+  }) =>
+    apiClient.get<EmailSearchResponse>('/api/email/search', { params }).then((r) => r.data),
 };
