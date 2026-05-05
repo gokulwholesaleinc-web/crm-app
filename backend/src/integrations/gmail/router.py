@@ -13,6 +13,8 @@ from src.core.router_utils import CurrentUser, DBSession
 from src.integrations.gmail import oauth as gmail_oauth
 from src.integrations.gmail.schemas import (
     GmailAuthorizeResponse,
+    GmailBackfillRequest,
+    GmailBackfillStatusResponse,
     GmailCallbackRequest,
     GmailConnectionResponse,
     GmailStatusResponse,
@@ -135,6 +137,16 @@ async def gmail_callback(
             current_user.id, exc,
         )
     await db.commit()
+
+    # Kick off historical backfill in the background — returns immediately.
+    try:
+        await service.schedule_backfill_if_needed(conn)
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning(
+            "Failed to schedule Gmail backfill for user_id=%s: %s",
+            current_user.id, exc,
+        )
     await db.refresh(conn)
 
     sync_state = await service.get_sync_state(current_user.id)
@@ -226,6 +238,122 @@ async def gmail_sync(
 
     await GmailSyncWorker.sync_account(conn, db)
     return {"synced": True}
+
+
+@router.post("/backfill", response_model=GmailBackfillStatusResponse)
+async def gmail_backfill(
+    current_user: CurrentUser,
+    db: DBSession,
+    body: GmailBackfillRequest = GmailBackfillRequest(),
+):
+    """Manually trigger a Gmail historical backfill for the current user.
+
+    Launches the backfill as a background asyncio task so the HTTP response
+    returns immediately. The UI polls GET /backfill/status for progress.
+    """
+    import asyncio
+
+    from src.integrations.gmail.models import GmailBackfillState
+    from src.integrations.gmail.sync import GmailSyncWorker, _get_or_create_backfill_state
+    from sqlalchemy import select
+
+    service = GmailConnectionService(db)
+    conn = await service.get_by_user(current_user.id)
+    if not conn or conn.revoked_at is not None:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail="No active Gmail connection",
+        )
+
+    state = await _get_or_create_backfill_state(current_user.id, db)
+    if state.status == "running":
+        raise HTTPException(
+            status_code=HTTPStatus.TOO_MANY_REQUESTS,
+            detail="Backfill already in progress",
+        )
+
+    # Atomically claim the slot here, before launching the task — otherwise
+    # two concurrent POSTs both see status != 'running' and spawn duplicate
+    # workers, racing through _process_message on the same message ids.
+    state.status = "running"
+    await db.commit()
+
+    days = max(1, min(body.days, 3650))
+
+    import src.database as db_module
+    import logging
+    logger = logging.getLogger(__name__)
+
+    async def _run() -> None:
+        try:
+            async with db_module.async_session_maker() as fresh_db:
+                from sqlalchemy import select as _select
+                result = await fresh_db.execute(
+                    _select(type(conn)).where(type(conn).user_id == current_user.id)
+                )
+                fresh_conn = result.scalar_one()
+                await GmailSyncWorker.backfill(fresh_conn, fresh_db, days=days)
+        except Exception as exc:
+            # backfill() persists in-flight failures itself. This catch
+            # covers session-open errors / NoResultFound / etc. so the
+            # state row doesn't get stuck on 'running' forever.
+            logger.exception("[gmail_backfill] outer task failed for user_id=%s: %s",
+                             current_user.id, exc)
+            try:
+                async with db_module.async_session_maker() as failure_db:
+                    from sqlalchemy import select as _sel
+                    s = (await failure_db.execute(
+                        _sel(GmailBackfillState).where(
+                            GmailBackfillState.user_id == current_user.id
+                        )
+                    )).scalar_one_or_none()
+                    if s is not None:
+                        s.status = "failed"
+                        s.error = str(exc)[:500]
+                        await failure_db.commit()
+            except Exception:
+                logger.exception("[gmail_backfill] could not record failure state")
+
+    asyncio.create_task(_run())
+
+    return GmailBackfillStatusResponse(
+        status="running",
+        processed_count=0,
+        total_count=0,
+        started_at=None,
+        finished_at=None,
+        error=None,
+    )
+
+
+@router.get("/backfill/status", response_model=GmailBackfillStatusResponse)
+async def gmail_backfill_status(
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Return the current backfill progress for the authenticated user."""
+    from sqlalchemy import select
+
+    from src.integrations.gmail.models import GmailBackfillState
+
+    result = await db.execute(
+        select(GmailBackfillState).where(GmailBackfillState.user_id == current_user.id)
+    )
+    state = result.scalar_one_or_none()
+    if state is None:
+        return GmailBackfillStatusResponse(
+            status="none",
+            processed_count=0,
+            total_count=0,
+        )
+    return GmailBackfillStatusResponse(
+        status=state.status,
+        processed_count=state.processed_count,
+        total_count=state.total_count,
+        started_at=state.started_at,
+        finished_at=state.finished_at,
+        error=state.error,
+    )
 
 
 @router.post("/disconnect")

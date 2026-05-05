@@ -15,6 +15,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from src.database import Base
 
+BackfillStatus = str  # "pending" | "running" | "complete" | "failed"
+
 
 class GmailConnection(Base):
     """Per-user Gmail OAuth credentials for send + history polling."""
@@ -64,6 +66,24 @@ class GmailConnection(Base):
     @property
     def scope_list(self) -> list[str]:
         return [s for s in (self.scopes or "").split() if s]
+
+
+class GmailBackfillState(Base):
+    """Tracks progress of a Gmail historical backfill job per user."""
+
+    __tablename__ = "gmail_backfill_state"
+
+    user_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    processed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class GmailSyncState(Base):

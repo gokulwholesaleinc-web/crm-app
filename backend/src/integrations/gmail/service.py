@@ -1,5 +1,6 @@
 """Gmail connection service."""
 
+import logging
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -7,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.integrations.gmail import oauth as gmail_oauth
 from src.integrations.gmail.models import GmailConnection, GmailSyncState
+
+logger = logging.getLogger(__name__)
 
 
 class GmailConnectionService:
@@ -71,6 +74,73 @@ class GmailConnectionService:
             await self.db.flush()
 
         return conn
+
+    async def schedule_backfill_if_needed(self, connection: GmailConnection) -> None:
+        """Fire-and-forget backfill on first connect or after reconnect.
+
+        Atomically claims the slot by upserting status='running' and
+        committing BEFORE spawning the task. A second concurrent call
+        observes 'running' and returns without launching a duplicate.
+        """
+        import asyncio
+
+        from sqlalchemy import select as _select
+
+        from src.integrations.gmail.models import GmailBackfillState
+        from src.integrations.gmail.sync import GmailSyncWorker
+
+        result = await self.db.execute(
+            _select(GmailBackfillState).where(GmailBackfillState.user_id == connection.user_id)
+        )
+        state = result.scalar_one_or_none()
+        if state is not None and state.status in ("running", "complete"):
+            return
+
+        # Claim the slot atomically before scheduling. If another caller
+        # has already reached this point, this insert/update is the source
+        # of truth — anyone else will see status='running' on their read.
+        if state is None:
+            state = GmailBackfillState(user_id=connection.user_id, status="running")
+            self.db.add(state)
+        else:
+            state.status = "running"
+        await self.db.commit()
+
+        import src.database as db_module
+
+        async def _run() -> None:
+            try:
+                async with db_module.async_session_maker() as fresh_db:
+                    from sqlalchemy import select as _sel
+                    result2 = await fresh_db.execute(
+                        _sel(GmailConnection).where(GmailConnection.user_id == connection.user_id)
+                    )
+                    fresh_conn = result2.scalar_one()
+                    await GmailSyncWorker.backfill(fresh_conn, fresh_db)
+            except Exception as exc:
+                # Don't let a session-open / NoResultFound / etc. silently
+                # leave status='running' forever. backfill() updates the
+                # state itself for in-flight failures; this catch covers
+                # the outer setup. Use a separate session because the
+                # original may already be unusable.
+                logger.exception("[gmail_backfill] outer task failed for user_id=%s: %s",
+                                 connection.user_id, exc)
+                try:
+                    async with db_module.async_session_maker() as failure_db:
+                        from sqlalchemy import select as _sel
+                        s = (await failure_db.execute(
+                            _sel(GmailBackfillState).where(
+                                GmailBackfillState.user_id == connection.user_id
+                            )
+                        )).scalar_one_or_none()
+                        if s is not None:
+                            s.status = "failed"
+                            s.error = str(exc)[:500]
+                            await failure_db.commit()
+                except Exception:
+                    logger.exception("[gmail_backfill] could not record failure state")
+
+        asyncio.create_task(_run())
 
     async def seed_sync_cursor(self, connection: GmailConnection) -> None:
         """Seed last_history_id with the account's current historyId.

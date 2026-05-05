@@ -139,6 +139,31 @@ class GmailClient:
         """Return the authenticated user's Gmail profile (includes historyId)."""
         return await self._get("users/me/profile")
 
+    async def list_messages_since(self, start_date: "datetime") -> list[str]:
+        """Return all Gmail message IDs after start_date via messages.list pagination.
+
+        Uses the Gmail search query `after:YYYY/MM/DD` so only messages from
+        start_date onward are included. Returns raw message IDs (not full messages).
+        """
+        q = f"after:{start_date.strftime('%Y/%m/%d')}"
+        ids: list[str] = []
+        page_token: str | None = None
+
+        while True:
+            params: dict = {"q": q, "maxResults": 500}
+            if page_token:
+                params["pageToken"] = page_token
+
+            data = await self._get("users/me/messages", **params)
+            for m in data.get("messages", []):
+                if m.get("id"):
+                    ids.append(m["id"])
+            page_token = data.get("nextPageToken")
+            if not page_token:
+                break
+
+        return ids
+
 
 
 def _parse_message(data: dict) -> dict:
