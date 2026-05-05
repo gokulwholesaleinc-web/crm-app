@@ -110,7 +110,7 @@ class Payment(Base, AuditableMixin):
         String(255), unique=True, index=True
     )
     stripe_checkout_session_id: Mapped[str | None] = mapped_column(
-        String(255), index=True
+        String(255), unique=True, index=True
     )
     stripe_invoice_id: Mapped[str | None] = mapped_column(
         String(255), unique=True, index=True, nullable=True

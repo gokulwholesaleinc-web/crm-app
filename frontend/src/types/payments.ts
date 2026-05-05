@@ -3,6 +3,7 @@
  */
 
 import type { PaginatedResponse } from './common';
+import type { RecurringInterval } from './proposals';
 
 export interface StripeCustomerBrief {
   id: number;
@@ -165,8 +166,6 @@ export interface CreateAndSendInvoiceResponse {
   status: string;
   invoice_url?: string;
 }
-
-import type { RecurringInterval } from './proposals';
 
 export interface CreateSubscriptionCheckoutRequest {
   customer_id: number;

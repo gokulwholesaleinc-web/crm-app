@@ -860,11 +860,12 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             )
 
         # Stable key over the logical request shape so a network retry
-        # (drop, double-click, page reload) collapses to one Session
-        # instead of creating a duplicate + orphan Payment row.
+        # collapses to one Session. Includes success_url + cancel_url so
+        # changing the redirect target spawns a fresh Session instead of
+        # silently returning the cached one with the old URLs.
         idem_payload = (
             f"{customer_id}|{user_id}|{int(_to_cents(amount))}|{currency.lower()}"
-            f"|{interval}|{interval_count}|{description}"
+            f"|{interval}|{interval_count}|{description}|{success_url}|{cancel_url}"
         )
         idempotency_key = f"sub_chk_{hashlib.sha256(idem_payload.encode()).hexdigest()[:24]}"
 
