@@ -727,8 +727,10 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             payment_method_types=payment_method_types,
         )
 
+        invoice_url = getattr(invoice, "hosted_invoice_url", None)
         payment = Payment(
             stripe_invoice_id=invoice.id,
+            stripe_payment_url=invoice_url,
             amount=amount,
             currency=currency.upper(),
             status="pending",
@@ -745,7 +747,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             "invoice_id": invoice.id,
             "payment_id": payment.id,
             "status": "pending",
-            "invoice_url": getattr(invoice, "hosted_invoice_url", None),
+            "invoice_url": invoice_url,
         }
 
     async def create_invoice_for_proposal(
@@ -804,8 +806,10 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             metadata={"proposal_id": str(proposal_id)},
         )
 
+        invoice_url = getattr(invoice, "hosted_invoice_url", None)
         payment = Payment(
             stripe_invoice_id=invoice.id,
+            stripe_payment_url=invoice_url,
             amount=amount,
             currency=currency.upper(),
             status="pending",
@@ -819,7 +823,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
 
         return {
             "stripe_invoice_id": invoice.id,
-            "stripe_payment_url": getattr(invoice, "hosted_invoice_url", None),
+            "stripe_payment_url": invoice_url,
             "payment_id": payment.id,
         }
 
@@ -856,11 +860,12 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             )
 
         # Stable key over the logical request shape so a network retry
-        # (drop, double-click, page reload) collapses to one Session
-        # instead of creating a duplicate + orphan Payment row.
+        # collapses to one Session. Includes success_url + cancel_url so
+        # changing the redirect target spawns a fresh Session instead of
+        # silently returning the cached one with the old URLs.
         idem_payload = (
             f"{customer_id}|{user_id}|{int(_to_cents(amount))}|{currency.lower()}"
-            f"|{interval}|{interval_count}|{description}"
+            f"|{interval}|{interval_count}|{description}|{success_url}|{cancel_url}"
         )
         idempotency_key = f"sub_chk_{hashlib.sha256(idem_payload.encode()).hexdigest()[:24]}"
 
@@ -888,6 +893,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
 
         payment = Payment(
             stripe_checkout_session_id=session.id,
+            stripe_payment_url=session.url,
             amount=amount,
             currency=currency.upper(),
             status="pending",

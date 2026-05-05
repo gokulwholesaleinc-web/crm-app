@@ -38,6 +38,16 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Reverse the row updates too — leaving rows at 1000 with a DEFAULT
+    # of 200 would put the table in a permanently inconsistent state.
+    # Symmetric with upgrade(): only flips rows that still hold the
+    # post-upgrade value.
+    op.execute(
+        "UPDATE email_settings SET daily_send_limit = 200 WHERE daily_send_limit = 1000"
+    )
+    op.execute(
+        "UPDATE email_settings SET warmup_target_daily = 200 WHERE warmup_target_daily = 1000"
+    )
     op.execute(
         "ALTER TABLE email_settings ALTER COLUMN daily_send_limit SET DEFAULT 200"
     )

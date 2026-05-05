@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeftIcon, DocumentArrowDownIcon, EnvelopeIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, DocumentArrowDownIcon, EnvelopeIcon, ClipboardDocumentIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
 import { EntityLink, StatusBadge } from '../../components/ui';
 import { usePayment } from '../../hooks/usePayments';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { apiClient } from '../../api/client';
+import { showSuccess, showError } from '../../utils/toast';
 import type { StripeCustomerBrief } from '../../types';
 import { StripeTestModeBanner } from '../../components/banners/StripeTestModeBanner';
 
@@ -33,6 +34,16 @@ function PaymentDetailPage() {
   const handleDownloadInvoice = () => {
     if (!payment) return;
     window.open(`/api/payments/${payment.id}/invoice`, '_blank');
+  };
+
+  const handleCopyPaymentUrl = async () => {
+    if (!payment?.stripe_payment_url) return;
+    try {
+      await navigator.clipboard.writeText(payment.stripe_payment_url);
+      showSuccess('Customer payment link copied to clipboard');
+    } catch {
+      showError('Failed to copy link');
+    }
   };
 
   const handleResendReceipt = async () => {
@@ -135,6 +146,44 @@ function PaymentDetailPage() {
           aria-live="polite"
         >
           {receiptStatus}
+        </div>
+      )}
+
+      {payment.stripe_payment_url && payment.status !== 'succeeded' && (
+        <div className="rounded-lg border border-primary-200 dark:border-primary-800 bg-primary-50 dark:bg-primary-900/10 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                Customer payment link
+              </h3>
+              <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
+                Stripe emailed this to the customer when the invoice was sent. Use this if they
+                say it never arrived (spam folder, wrong address, test mode).
+              </p>
+              <p className="mt-2 text-xs font-mono break-all text-gray-700 dark:text-gray-300">
+                {payment.stripe_payment_url}
+              </p>
+            </div>
+            <div className="flex gap-2 flex-shrink-0">
+              <button
+                type="button"
+                onClick={handleCopyPaymentUrl}
+                className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+              >
+                <ClipboardDocumentIcon className="h-4 w-4" aria-hidden="true" />
+                Copy
+              </button>
+              <a
+                href={payment.stripe_payment_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-md border border-transparent bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+              >
+                <ArrowTopRightOnSquareIcon className="h-4 w-4" aria-hidden="true" />
+                Preview
+              </a>
+            </div>
+          </div>
         </div>
       )}
 

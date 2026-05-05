@@ -103,6 +103,11 @@ async def _run_production_migrations():
                 # Stripe invoice tracking
                 "ALTER TABLE payments ADD COLUMN IF NOT EXISTS stripe_invoice_id VARCHAR(255)",
                 "CREATE UNIQUE INDEX IF NOT EXISTS ix_payments_stripe_invoice_id ON payments(stripe_invoice_id) WHERE stripe_invoice_id IS NOT NULL",
+                # Stripe hosted-payment URL (re-share if customer email got lost)
+                "ALTER TABLE payments ADD COLUMN IF NOT EXISTS stripe_payment_url TEXT",
+                # Subscription dedup: stable idempotency key + unique index
+                # blocks duplicate Payment rows when a retry races db.flush
+                "CREATE UNIQUE INDEX IF NOT EXISTS ix_payments_stripe_checkout_session_id_unique ON payments(stripe_checkout_session_id) WHERE stripe_checkout_session_id IS NOT NULL",
                 # Email logging: new columns on email_queue
                 "ALTER TABLE email_queue ADD COLUMN IF NOT EXISTS from_email VARCHAR(255)",
                 "ALTER TABLE email_queue ADD COLUMN IF NOT EXISTS cc TEXT",

@@ -172,6 +172,7 @@ class PaymentResponse(PaymentBase):
     stripe_payment_intent_id: str | None = None
     stripe_checkout_session_id: str | None = None
     stripe_invoice_id: str | None = None
+    stripe_payment_url: str | None = None
     created_at: datetime
     updated_at: datetime
     customer: CustomerBrief | None = None
