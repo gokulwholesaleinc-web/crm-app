@@ -390,9 +390,11 @@ async def gmail_relink(
     async def _process_rows(rows: list, dry_run: bool) -> tuple[int, int]:
         lnk = skp = 0
         for row in rows:
+            # NOTE: find_contact_id_by_any_email issues one DB query per row
+            # (N+1). Acceptable for an infrequent admin backfill; a future
+            # improvement could batch-resolve addresses in one query per batch.
             addresses: list[str] = []
-            if row.from_email:
-                addresses.append(row.from_email)
+            addresses.extend(_parse_address_list(row.from_email))
             addresses.extend(_parse_address_list(row.to_email))
             addresses.extend(_parse_address_list(row.cc))
             addresses.extend(_parse_address_list(row.bcc))
@@ -408,6 +410,9 @@ async def gmail_relink(
         return lnk, skp
 
     # --- email_queue rows ---
+    # Use keyset pagination (WHERE id > last_seen_id) rather than OFFSET so
+    # that rows committed in previous batches (entity_id now non-NULL) don't
+    # shift the result window and cause skips.
     eq_filters = [
         EmailQueue.entity_id.is_(None),
         EmailQueue.sent_via == "gmail",
@@ -415,14 +420,13 @@ async def gmail_relink(
     if body.user_id is not None:
         eq_filters.append(EmailQueue.sent_by_id == body.user_id)
 
-    offset = 0
+    last_eq_id = 0
     while True:
         q = (
             select(EmailQueue)
-            .where(and_(*eq_filters))
+            .where(and_(EmailQueue.id > last_eq_id, *eq_filters))
             .order_by(EmailQueue.id)
             .limit(min(BATCH, limit - scanned))
-            .offset(offset)
         )
         rows = (await db.execute(q)).scalars().all()
         if not rows:
@@ -436,7 +440,7 @@ async def gmail_relink(
         if not body.dry_run:
             await db.commit()
 
-        offset += len(rows)
+        last_eq_id = rows[-1].id
         if scanned >= limit or len(rows) < BATCH:
             break
 
@@ -453,14 +457,13 @@ async def gmail_relink(
             )
         ib_filters.append(InboundEmail.to_email.in_(conn_emails))
 
-    offset = 0
+    last_ib_id = 0
     while scanned < limit:
         q = (
             select(InboundEmail)
-            .where(and_(*ib_filters))
+            .where(and_(InboundEmail.id > last_ib_id, *ib_filters))
             .order_by(InboundEmail.id)
             .limit(min(BATCH, limit - scanned))
-            .offset(offset)
         )
         rows = (await db.execute(q)).scalars().all()
         if not rows:
@@ -474,7 +477,7 @@ async def gmail_relink(
         if not body.dry_run:
             await db.commit()
 
-        offset += len(rows)
+        last_ib_id = rows[-1].id
         if scanned >= limit or len(rows) < BATCH:
             break
 
