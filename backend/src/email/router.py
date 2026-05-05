@@ -19,6 +19,8 @@ from src.core.router_utils import (
 from src.email.schemas import (
     EmailListResponse,
     EmailQueueResponse,
+    EmailSearchResponse,
+    EmailSearchResult,
     SendCampaignEmailRequest,
     SendEmailRequest,
     SendTemplateEmailRequest,
@@ -240,6 +242,35 @@ async def get_volume_stats(
     """Get email volume statistics (sent today, daily limit, warmup info)."""
     throttle = EmailThrottleService(db)
     return await throttle.get_volume_stats()
+
+
+@router.get("/search", response_model=EmailSearchResponse)
+async def search_emails(
+    current_user: CurrentUser,
+    db: DBSession,
+    q: str = Query(..., min_length=1, max_length=200, description="Search query"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=50),
+    entity_type: str | None = Query(None),
+    entity_id: int | None = Query(None),
+):
+    """Search emails by keyword across subject, body, and addresses."""
+    service = EmailService(db)
+    items, total = await service.search_emails(
+        q=q,
+        user_id=current_user.id,
+        page=page,
+        page_size=page_size,
+        entity_type=entity_type,
+        entity_id=entity_id,
+    )
+    return EmailSearchResponse(
+        items=[EmailSearchResult(**item) for item in items],
+        total=total,
+        page=page,
+        page_size=page_size,
+        pages=calculate_pages(total, page_size),
+    )
 
 
 @router.get("", response_model=EmailListResponse)

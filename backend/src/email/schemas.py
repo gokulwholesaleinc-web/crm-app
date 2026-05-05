@@ -214,3 +214,26 @@ class ThreadResponse(BaseModel):
     page: int
     page_size: int
     pages: int
+
+
+class EmailSearchResult(BaseModel):
+    """A single result from the email search endpoint."""
+    id: int
+    kind: str  # 'sent' | 'received'
+    subject: str
+    snippet: str
+    from_email: str | None
+    to_email: str
+    sent_at: datetime | None
+    thread_id: str | None
+    entity_type: str | None
+    entity_id: int | None
+
+
+class EmailSearchResponse(BaseModel):
+    """Paginated email search results."""
+    items: list[EmailSearchResult]
+    total: int
+    page: int
+    page_size: int
+    pages: int

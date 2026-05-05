@@ -8,7 +8,7 @@ import re
 from datetime import UTC, datetime, timedelta
 
 import resend  # pyright: ignore[reportMissingImports]
-from sqlalchemy import and_, func, literal, select, union_all
+from sqlalchemy import and_, func, literal, or_, select, union_all
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -751,6 +751,142 @@ class EmailService:
             await self.db.flush()
 
         return inbound
+
+    async def search_emails(
+        self,
+        q: str,
+        user_id: int,
+        page: int = 1,
+        page_size: int = 25,
+        entity_type: str | None = None,
+        entity_id: int | None = None,
+    ) -> tuple[list[dict], int]:
+        """Search emails by keyword across subject, body, from, to, cc, bcc.
+
+        Scoped to the requesting user: email_queue rows by sent_by_id, inbound_email
+        rows by the to_email matching the user's connected Gmail address.
+        """
+        from src.integrations.gmail.models import GmailConnection
+
+        gmail_result = await self.db.execute(
+            select(GmailConnection.email).where(
+                GmailConnection.user_id == user_id,
+                GmailConnection.revoked_at.is_(None),
+            )
+        )
+        user_gmail = gmail_result.scalar_one_or_none()
+
+        pat = f"%{q}%"
+        sent_filters = [
+            EmailQueue.sent_by_id == user_id,
+            or_(
+                EmailQueue.subject.ilike(pat),
+                EmailQueue.body.ilike(pat),
+                EmailQueue.from_email.ilike(pat),
+                EmailQueue.to_email.ilike(pat),
+                EmailQueue.cc.ilike(pat),
+                EmailQueue.bcc.ilike(pat),
+            ),
+        ]
+        if entity_type:
+            sent_filters.append(EmailQueue.entity_type == entity_type)
+        if entity_id is not None:
+            sent_filters.append(EmailQueue.entity_id == entity_id)
+
+        outbound_q = (
+            select(
+                EmailQueue.id.label("id"),
+                literal("sent").label("kind"),
+                EmailQueue.subject.label("subject"),
+                EmailQueue.body.label("body"),
+                func.coalesce(EmailQueue.from_email, literal(settings.EMAIL_FROM)).label("from_email"),
+                EmailQueue.to_email.label("to_email"),
+                func.coalesce(EmailQueue.sent_at, EmailQueue.created_at).label("sent_at"),
+                EmailQueue.thread_id.label("thread_id"),
+                EmailQueue.entity_type.label("entity_type"),
+                EmailQueue.entity_id.label("entity_id"),
+            )
+            .where(*sent_filters)
+        )
+
+        recv_filters = [
+            or_(
+                InboundEmail.subject.ilike(pat),
+                InboundEmail.body_text.ilike(pat),
+                InboundEmail.body_html.ilike(pat),
+                InboundEmail.from_email.ilike(pat),
+                InboundEmail.to_email.ilike(pat),
+                InboundEmail.cc.ilike(pat),
+                InboundEmail.bcc.ilike(pat),
+            ),
+        ]
+        if user_gmail:
+            recv_filters.append(
+                func.lower(InboundEmail.to_email) == user_gmail.lower()
+            )
+        else:
+            # No Gmail connection — no inbound results can be scoped to this user
+            recv_filters.append(literal(False))
+        if entity_type:
+            recv_filters.append(InboundEmail.entity_type == entity_type)
+        if entity_id is not None:
+            recv_filters.append(InboundEmail.entity_id == entity_id)
+
+        inbound_q = (
+            select(
+                InboundEmail.id.label("id"),
+                literal("received").label("kind"),
+                InboundEmail.subject.label("subject"),
+                InboundEmail.body_text.label("body"),
+                InboundEmail.from_email.label("from_email"),
+                InboundEmail.to_email.label("to_email"),
+                InboundEmail.received_at.label("sent_at"),
+                InboundEmail.thread_id.label("thread_id"),
+                InboundEmail.entity_type.label("entity_type"),
+                InboundEmail.entity_id.label("entity_id"),
+            )
+            .where(*recv_filters)
+        )
+
+        combined = union_all(outbound_q, inbound_q).subquery()
+        count_q = select(func.count()).select_from(combined)
+        total = (await self.db.execute(count_q)).scalar() or 0
+
+        offset = (page - 1) * page_size
+        data_q = (
+            select(combined)
+            .order_by(combined.c.sent_at.desc())
+            .offset(offset)
+            .limit(page_size)
+        )
+        rows = (await self.db.execute(data_q)).mappings().all()
+
+        def _snippet(body: str | None, pattern: str) -> str:
+            if not body:
+                return ""
+            low = body.lower()
+            pos = low.find(pattern.lower())
+            if pos >= 0:
+                start = max(0, pos - 60)
+                return body[start : start + 200]
+            return body[:200]
+
+        items = [
+            {
+                "id": row["id"],
+                "kind": row["kind"],
+                "subject": row["subject"],
+                "snippet": _snippet(row["body"], q),
+                "from_email": row["from_email"],
+                "to_email": row["to_email"],
+                "sent_at": row["sent_at"],
+                "thread_id": row["thread_id"],
+                "entity_type": row["entity_type"],
+                "entity_id": row["entity_id"],
+            }
+            for row in rows
+        ]
+        return items, total
 
     async def get_thread(
         self,
