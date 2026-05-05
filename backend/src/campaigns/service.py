@@ -127,6 +127,19 @@ class CampaignService(CRUDService[Campaign, CampaignCreate, CampaignUpdate]):
             next_step = steps[campaign.current_step]
             campaign.next_step_at = datetime.now(UTC) + timedelta(days=next_step.delay_days)
 
+    async def _resolve_owner_tenant_id(self, owner_id: int | None) -> int | None:
+        """Resolve the tenant id for the campaign owner.
+
+        Mailchimp credentials are tenant-scoped, so a campaign without
+        a known owner tenant cannot use the Mailchimp branch.
+        """
+        if owner_id is None:
+            return None
+        from src.whitelabel.service import TenantUserService
+
+        primary = await TenantUserService(self.db).get_primary_tenant(owner_id)
+        return primary.tenant_id if primary else None
+
     async def _execute_campaign_step(self, campaign: Campaign) -> dict:
         """Execute the current step for a campaign and schedule the next one."""
         from src.email.service import EmailService
@@ -141,15 +154,36 @@ class CampaignService(CRUDService[Campaign, CampaignCreate, CampaignUpdate]):
 
         step = steps[campaign.current_step]
 
-        email_service = EmailService(self.db)
-        sent_emails = await email_service.send_campaign_emails(
-            campaign_id=campaign.id,
-            template_id=step.template_id,
-            sent_by_id=campaign.owner_id,
-        )
+        if campaign.send_via == "mailchimp":
+            from src.integrations.mailchimp.service import (
+                MailchimpNotConnected,
+                MailchimpService,
+            )
 
-        campaign.num_sent = (campaign.num_sent or 0) + len(sent_emails)
-        await self._update_member_statuses(campaign.id, sent_emails)
+            tenant_id = await self._resolve_owner_tenant_id(campaign.owner_id)
+            if tenant_id is None:
+                raise MailchimpNotConnected(
+                    "Cannot send via Mailchimp: campaign owner is not "
+                    "associated with a tenant"
+                )
+            mc_service = MailchimpService(self.db)
+            mc_summary = await mc_service.send_campaign_step(
+                campaign=campaign,
+                template_id=step.template_id,
+                sent_by_id=campaign.owner_id,
+                tenant_id=tenant_id,
+            )
+            emails_sent = mc_summary["emails_sent"]
+        else:
+            email_service = EmailService(self.db)
+            sent_emails = await email_service.send_campaign_emails(
+                campaign_id=campaign.id,
+                template_id=step.template_id,
+                sent_by_id=campaign.owner_id,
+            )
+            campaign.num_sent = (campaign.num_sent or 0) + len(sent_emails)
+            await self._update_member_statuses(campaign.id, sent_emails)
+            emails_sent = len(sent_emails)
 
         campaign.current_step += 1
         self._advance_to_next_step(campaign, steps)
@@ -160,8 +194,9 @@ class CampaignService(CRUDService[Campaign, CampaignCreate, CampaignUpdate]):
         return {
             "campaign_id": campaign.id,
             "step_executed": campaign.current_step - 1,
-            "emails_sent": len(sent_emails),
+            "emails_sent": emails_sent,
             "status": campaign.status,
+            "send_via": campaign.send_via,
         }
 
     async def _notify_campaign_completed(self, campaign: Campaign) -> None:

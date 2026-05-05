@@ -20,6 +20,7 @@ class CampaignBase(BaseModel):
     expected_revenue: float | None = None
     expected_response: int | None = None
     owner_id: int | None = None
+    send_via: Literal["resend", "mailchimp"] = "resend"
 
 
 class CampaignCreate(CampaignBase):
@@ -44,6 +45,7 @@ class CampaignUpdate(BaseModel):
     num_responses: int | None = None
     num_converted: int | None = None
     owner_id: int | None = None
+    send_via: Literal["resend", "mailchimp"] | None = None
 
 
 class CampaignResponse(CampaignBase):
@@ -55,6 +57,7 @@ class CampaignResponse(CampaignBase):
     current_step: int = 0
     next_step_at: datetime | None = None
     is_executing: bool = False
+    mailchimp_campaign_id: str | None = None
     response_rate: float | None = None
     conversion_rate: float | None = None
     roi: float | None = None
