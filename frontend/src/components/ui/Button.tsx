@@ -1,4 +1,4 @@
-import { ButtonHTMLAttributes } from 'react';
+import { ButtonHTMLAttributes, forwardRef } from 'react';
 import clsx from 'clsx';
 import { Spinner } from './Spinner';
 
@@ -12,7 +12,6 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
   fullWidth?: boolean;
-  ref?: React.Ref<HTMLButtonElement>;
 }
 
 const variantStyles: Record<ButtonVariant, string> = {
@@ -38,20 +37,24 @@ const iconSizeStyles: Record<ButtonSize, string> = {
   lg: 'h-5 w-5',
 };
 
-export const Button = ({
-  type = 'button',
-  variant = 'primary',
-  size = 'md',
-  isLoading = false,
-  leftIcon,
-  rightIcon,
-  fullWidth = false,
-  disabled,
-  className,
-  children,
+// React 18: forwardRef is required so refs spread via {...register()} reach
+// the DOM. Remove when migrating to React 19.
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
+  {
+    type = 'button',
+    variant = 'primary',
+    size = 'md',
+    isLoading = false,
+    leftIcon,
+    rightIcon,
+    fullWidth = false,
+    disabled,
+    className,
+    children,
+    ...props
+  },
   ref,
-  ...props
-}: ButtonProps) => {
+) {
   const isDisabled = disabled || isLoading;
 
   return (
@@ -92,4 +95,4 @@ export const Button = ({
       )}
     </button>
   );
-};
+});

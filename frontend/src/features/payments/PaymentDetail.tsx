@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { AxiosError } from 'axios';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeftIcon, DocumentArrowDownIcon, EnvelopeIcon, ClipboardDocumentIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
 import { EntityLink, StatusBadge } from '../../components/ui';
@@ -30,13 +31,19 @@ function PaymentDetailPage() {
 
   const [sendingReceipt, setSendingReceipt] = useState(false);
   const [receiptStatus, setReceiptStatus] = useState<string | null>(null);
+  // Track the revoke timer so navigating away cancels it instead of
+  // firing on a detached component (and gives us a chance to revoke
+  // earlier if the user fires another download).
+  const revokeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (revokeTimerRef.current) clearTimeout(revokeTimerRef.current);
+  }, []);
 
   const handleDownloadInvoice = async () => {
     if (!payment) return;
-    // window.open() can't carry the Authorization header so the new tab
-    // would always 401 against the auth-protected endpoint. Fetch via
-    // the apiClient (which injects the Bearer), turn the response into
-    // a blob, and open it in a new tab via an object URL.
+    // window.open() can't carry the Authorization header — the new tab
+    // makes a plain GET, which the auth-protected endpoint rejects with
+    // 401. Fetch via apiClient, then open the resulting blob URL.
     try {
       const response = await apiClient.get(`/api/payments/${payment.id}/invoice`, {
         responseType: 'blob',
@@ -44,10 +51,18 @@ function PaymentDetailPage() {
       const blob = response.data as Blob;
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank', 'noopener,noreferrer');
-      // Give the new tab a moment to attach to the URL before we revoke.
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    } catch {
-      showError('Failed to load invoice. Try refreshing the page and signing in again.');
+      if (revokeTimerRef.current) clearTimeout(revokeTimerRef.current);
+      revokeTimerRef.current = setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (err) {
+      const status = (err as AxiosError | undefined)?.response?.status;
+      console.error('[PaymentDetail] download invoice failed', err);
+      if (status === 401 || status === 403) {
+        showError('Session expired. Please sign in again.');
+      } else if (status && status >= 500) {
+        showError('Invoice generation failed on the server. Try again in a moment.');
+      } else {
+        showError('Failed to load invoice. Check your connection and try again.');
+      }
     }
   };
 

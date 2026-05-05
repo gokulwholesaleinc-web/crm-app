@@ -1,4 +1,4 @@
-import { SelectHTMLAttributes, useId } from 'react';
+import { SelectHTMLAttributes, forwardRef, useId } from 'react';
 import clsx from 'clsx';
 import { ChevronDownIcon } from '@heroicons/react/20/solid';
 
@@ -14,21 +14,24 @@ export interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement
   helperText?: string;
   options: SelectOption[];
   placeholder?: string;
-  ref?: React.Ref<HTMLSelectElement>;
 }
 
-export const Select = ({
-  label,
-  error,
-  helperText,
-  options,
-  placeholder,
-  className,
-  id,
-  disabled,
+// React 18: forwardRef is required so refs spread via {...register()} reach
+// the DOM. Remove when migrating to React 19.
+export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
+  {
+    label,
+    error,
+    helperText,
+    options,
+    placeholder,
+    className,
+    id,
+    disabled,
+    ...props
+  },
   ref,
-  ...props
-}: SelectProps) => {
+) {
   const generatedId = useId();
   const selectId = id ?? generatedId;
   const hasError = Boolean(error);
@@ -100,4 +103,4 @@ export const Select = ({
       )}
     </div>
   );
-};
+});
