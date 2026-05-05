@@ -23,6 +23,7 @@ export function GmailReconnectBanner() {
 
   return (
     <div
+      id="gmail-reconnect-banner"
       role="alert"
       aria-live="polite"
       className="mb-4 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-3 sm:p-4"
@@ -39,7 +40,7 @@ export function GmailReconnectBanner() {
             reconnect.{lastSynced && <> Last successful sync: <strong>{lastSynced}</strong>.</>}
           </p>
           <Link
-            to="/settings?section=integrations"
+            to="/settings#integrations"
             className="mt-2 inline-flex items-center gap-1 font-medium text-amber-900 dark:text-amber-100 underline hover:no-underline"
           >
             Go to Settings → Integrations to reconnect

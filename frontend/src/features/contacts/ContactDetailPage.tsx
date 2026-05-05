@@ -289,7 +289,7 @@ function ContactDetailPage() {
                   variant="primary"
                   onClick={() => { setReplyToEmail(null); setShowEmailCompose(true); }}
                   disabled={gmailNeedsReconnect}
-                  title={gmailNeedsReconnect ? 'Reconnect Gmail in Settings to send' : undefined}
+                  aria-describedby={gmailNeedsReconnect ? 'gmail-reconnect-banner' : undefined}
                 >
                   Compose Email
                 </Button>
