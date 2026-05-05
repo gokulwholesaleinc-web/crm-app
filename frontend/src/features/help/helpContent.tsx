@@ -153,7 +153,7 @@ export const SECTIONS: Section[] = [
           <ol className="space-y-2.5">
             <Step n={1}>
               Open <strong>Quotes</strong> (or <strong>Proposals</strong>) in the sidebar and
-              click <em>New Quote</em> / <em>New Proposal</em>.
+              click <em>Create Quote</em> / <em>Create Proposal</em>.
             </Step>
             <Step n={2}>
               Fill in the line items (Quote) or sections (Proposal), pick the contact and
@@ -699,8 +699,10 @@ export const SECTIONS: Section[] = [
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Public link &amp; e-signature (DocuSign-equivalent)</h4>
         <ul className="space-y-1.5">
           <Bullet>
-            Every quote has a public URL at <code>/quotes/public/&#123;quote_number&#125;</code>{' '}
-            that you can send to the client without requiring them to log in.
+            Every quote has a public URL at <code>/quotes/public/&#123;public_token&#125;</code>{' '}
+            — the token is an unguessable 32-byte string the CRM generates per
+            quote (not the sequential quote number) so the link is safe to share
+            without requiring the client to log in.
           </Bullet>
           <Bullet>
             On the public page, the client types their name + email and clicks Accept (or
@@ -748,8 +750,9 @@ export const SECTIONS: Section[] = [
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Sharing, e-signature &amp; tracking</h4>
         <ul className="space-y-1.5">
           <Bullet>
-            Public URL pattern: <code>/proposals/public/&#123;proposal_number&#125;</code>.
-            Send this to the client; they don&rsquo;t need an account.
+            Public URL pattern: <code>/proposals/public/&#123;public_token&#125;</code>.
+            Same unguessable-token scheme as quotes (not the sequential proposal
+            number). Send the link to the client; they don&rsquo;t need an account.
           </Bullet>
           <Bullet>
             The public page lets the client type their name + email and accept (or
@@ -1069,7 +1072,8 @@ export const SECTIONS: Section[] = [
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Import</h4>
         <ol className="space-y-3">
           <Step n={1}>
-            Upload a CSV (max 10MB). The importer auto-detects columns using 100+ aliases — for
+            Upload a CSV (max 10MB). The importer auto-detects columns from a
+            curated alias list (~50 mappings + a few special-case header sets) — for
             example "firstname", "first_name", "First Name", and "fname" all map to the same field.
             Common Monday.com and LinkedIn Sales Navigator exports work out of the box.
           </Step>
