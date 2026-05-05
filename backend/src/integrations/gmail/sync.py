@@ -60,10 +60,16 @@ class GmailSyncWorker:
             db.add(state)
             await db.commit()
 
-        except GmailAuthError:
+        except GmailAuthError as exc:
+            # Google revoked / invalidated the credential. Flip the
+            # connection to revoked so (a) the scheduler stops retrying it
+            # forever and (b) the Settings + Emails-tab UI can surface a
+            # "Reconnect Gmail" prompt instead of pretending all is well.
             state.failure_count += 1
-            state.last_error = "GmailAuthError: access revoked or token invalid"
+            state.last_error = f"GmailAuthError: {exc}"
+            connection.revoked_at = datetime.now(UTC)
             db.add(state)
+            db.add(connection)
             await db.commit()
             raise
         except Exception as exc:

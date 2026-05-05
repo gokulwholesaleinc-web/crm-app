@@ -2,7 +2,8 @@ import { useState, lazy, Suspense } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Button, HelpLink, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { TabBar, ActivitiesTab, CommonTabContent, SuspenseFallback } from '../../components/shared/DetailPageShell';
-import { EmailComposeModal, EmailThread } from '../../components/email';
+import { EmailComposeModal, EmailThread, GmailReconnectBanner } from '../../components/email';
+import { useGmailStatus } from '../../hooks/useGmailStatus';
 import { ContactForm } from './components/ContactForm';
 import {
   contactFormDataToUpdate,
@@ -59,6 +60,8 @@ function ContactDetailPage() {
   const [replyToEmail, setReplyToEmail] = useState<ThreadEmailItem | null>(null);
 
   const { data: contact, isLoading, error } = useContact(contactId);
+  const { data: gmailStatus } = useGmailStatus();
+  const gmailNeedsReconnect = gmailStatus?.state === 'needs_reconnect';
   const deleteContactMutation = useDeleteContact();
   const updateContactMutation = useUpdateContact();
 
@@ -277,11 +280,17 @@ function ContactDetailPage() {
       {activeTab === 'emails' && contactId && (
         <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
           <div className="px-4 py-5 sm:p-6">
+            <GmailReconnectBanner />
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Email Thread</h3>
               <div className="flex items-center gap-3">
                 <HelpLink anchor="tutorial-email-thread" label="How email threads work" />
-                <Button variant="primary" onClick={() => { setReplyToEmail(null); setShowEmailCompose(true); }}>
+                <Button
+                  variant="primary"
+                  onClick={() => { setReplyToEmail(null); setShowEmailCompose(true); }}
+                  disabled={gmailNeedsReconnect}
+                  title={gmailNeedsReconnect ? 'Reconnect Gmail in Settings to send' : undefined}
+                >
                   Compose Email
                 </Button>
               </div>
