@@ -261,6 +261,24 @@ class MailchimpService:
             or "no-reply@example.com"
         )
 
+        # Idempotency guard — if a previous tick already kicked off the
+        # Mailchimp send for this step but our outer transaction rolled
+        # back before persisting num_sent, the row will still carry the
+        # external campaign id. Don't re-fire the send in that case;
+        # callers should use sync_stats to true-up the local counters.
+        if campaign.mailchimp_campaign_id:
+            logger.warning(
+                "mailchimp send_campaign_step short-circuit: campaign %s "
+                "already has mailchimp_campaign_id=%s — refusing to re-send",
+                campaign.id,
+                campaign.mailchimp_campaign_id,
+            )
+            return {
+                "mailchimp_campaign_id": campaign.mailchimp_campaign_id,
+                "emails_sent": 0,
+                "skipped": "already_sent",
+            }
+
         members = await self._resolve_member_emails(campaign.id)
         async with await self._client(conn) as mc:
             for email, first_name, last_name in members:
@@ -276,16 +294,23 @@ class MailchimpService:
                         merge_fields=merge or None,
                     )
                 except MailchimpError as exc:
-                    # 400 with title="Member In Compliance State" means the
-                    # subscriber previously unsubscribed or bounced. We log
-                    # and skip — re-subscribing someone via the API is a
-                    # Mailchimp ToS violation.
-                    logger.warning(
-                        "mailchimp upsert skipped email=%s status=%s body=%s",
-                        email,
-                        exc.status_code,
-                        exc.body,
-                    )
+                    # Mailchimp returns 400 with title="Member In
+                    # Compliance State" for previously-unsubscribed or
+                    # hard-bounced addresses. That's expected and we
+                    # skip. Auth, quota, and unknown-shape failures
+                    # mean the bulk send won't reach the right audience
+                    # — re-raise so the worker marks the step failed
+                    # instead of silently mailing a stale snapshot.
+                    if exc.status_code == 400 and isinstance(exc.body, dict) and (
+                        "compliance" in str(exc.body.get("title", "")).lower()
+                    ):
+                        logger.warning(
+                            "mailchimp upsert skipped (compliance) email=%s body=%s",
+                            email,
+                            exc.body,
+                        )
+                        continue
+                    raise
 
             created = await mc.create_regular_campaign(
                 list_id=conn.default_audience_id,
@@ -296,9 +321,17 @@ class MailchimpService:
             )
             mc_campaign_id = created["id"]
             await mc.set_campaign_content(mc_campaign_id, html=wrapped)
+
+            # Persist + flush BEFORE actually sending. If the
+            # transaction commits but the send call later raises, we'd
+            # rather replay sync_stats than have Mailchimp deliver the
+            # email twice on the next worker tick. The flush makes the
+            # idempotency guard above effective for retries.
+            campaign.mailchimp_campaign_id = mc_campaign_id
+            await self.db.flush()
+
             await mc.send_campaign(mc_campaign_id)
 
-        campaign.mailchimp_campaign_id = mc_campaign_id
         campaign.num_sent = (campaign.num_sent or 0) + len(members)
 
         now = datetime.now(UTC)

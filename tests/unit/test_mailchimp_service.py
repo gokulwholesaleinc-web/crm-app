@@ -272,6 +272,117 @@ class TestSendCampaignStep:
         assert "POST /3.0/campaigns/mc-camp-1/actions/send" in seen_paths
 
     @pytest.mark.asyncio
+    async def test_send_campaign_step_short_circuits_when_already_sent(
+        self, db_session: AsyncSession, test_user: User
+    ):
+        """If a prior tick already kicked off the Mailchimp send, the
+        re-entry must NOT re-fire create+send — re-sending a Mailchimp
+        regular campaign would mail the entire audience a second time.
+        """
+        tenant = await _make_tenant(db_session, slug="idem")
+        db_session.add(TenantUser(
+            tenant_id=tenant.id, user_id=test_user.id, is_primary=True,
+        ))
+        db_session.add(MailchimpConnection(
+            tenant_id=tenant.id,
+            api_key="key-us19",
+            server_prefix="us19",
+            default_audience_id="list-1",
+            connected_by_id=test_user.id,
+        ))
+        template = EmailTemplate(
+            name="x", subject_template="S", body_template="B"
+        )
+        db_session.add(template)
+        await db_session.flush()
+        campaign = Campaign(
+            name="Replay",
+            campaign_type="email",
+            send_via="mailchimp",
+            owner_id=test_user.id,
+            mailchimp_campaign_id="already-fired",
+        )
+        db_session.add(campaign)
+        await db_session.commit()
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            raise AssertionError(
+                f"transport hit unexpectedly: {request.method} {request.url.path}"
+            )
+
+        transport = httpx.MockTransport(handler)
+        service = MailchimpService(
+            db_session, client_factory=_factory(transport)
+        )
+        summary = await service.send_campaign_step(
+            campaign=campaign,
+            template_id=template.id,
+            sent_by_id=test_user.id,
+            tenant_id=tenant.id,
+        )
+        assert summary["skipped"] == "already_sent"
+        assert summary["emails_sent"] == 0
+        assert summary["mailchimp_campaign_id"] == "already-fired"
+
+    @pytest.mark.asyncio
+    async def test_send_campaign_step_reraises_auth_errors_during_upsert(
+        self, db_session: AsyncSession, test_user: User
+    ):
+        """A 401 on member upsert means the API key is invalid — we must
+        NOT then proceed to create+send, which would mail a stale
+        audience snapshot. Compliance-state 400s remain skipped."""
+        from src.integrations.mailchimp.client import MailchimpError
+
+        tenant = await _make_tenant(db_session, slug="autherr")
+        db_session.add(TenantUser(
+            tenant_id=tenant.id, user_id=test_user.id, is_primary=True,
+        ))
+        db_session.add(MailchimpConnection(
+            tenant_id=tenant.id,
+            api_key="key-us19",
+            server_prefix="us19",
+            default_audience_id="list-1",
+            connected_by_id=test_user.id,
+        ))
+        contact = Contact(
+            first_name="A", last_name="B", email="ab@example.com",
+            owner_id=test_user.id,
+        )
+        db_session.add(contact)
+        template = EmailTemplate(
+            name="x", subject_template="S", body_template="B"
+        )
+        db_session.add(template)
+        await db_session.flush()
+        campaign = Campaign(
+            name="C", campaign_type="email",
+            send_via="mailchimp", owner_id=test_user.id,
+        )
+        db_session.add(campaign)
+        await db_session.flush()
+        db_session.add(CampaignMember(
+            campaign_id=campaign.id, member_type="contact", member_id=contact.id,
+        ))
+        await db_session.commit()
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path.startswith("/3.0/lists/list-1/members/"):
+                return httpx.Response(401, json={"detail": "API key not found"})
+            raise AssertionError(
+                f"send was attempted after auth failure: {request.url.path}"
+            )
+
+        transport = httpx.MockTransport(handler)
+        service = MailchimpService(db_session, client_factory=_factory(transport))
+        with pytest.raises(MailchimpError):
+            await service.send_campaign_step(
+                campaign=campaign,
+                template_id=template.id,
+                sent_by_id=test_user.id,
+                tenant_id=tenant.id,
+            )
+
+    @pytest.mark.asyncio
     async def test_send_campaign_step_requires_default_audience(
         self, db_session: AsyncSession, test_user: User
     ):

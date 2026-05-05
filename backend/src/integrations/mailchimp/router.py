@@ -156,10 +156,25 @@ async def sync_campaign_stats(
 
     from src.campaigns.models import Campaign
 
+    from src.whitelabel.service import TenantUserService
+
     tenant_id = await _user_tenant_id(db, current_user.id)
     result = await db.execute(select(Campaign).where(Campaign.id == campaign_id))
     campaign = result.scalar_one_or_none()
     if campaign is None:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND, detail="Campaign not found"
+        )
+    # Ownership check — the campaign owner must belong to the caller's
+    # tenant. Without this, /sync-stats/{id} accepts any campaign id and
+    # leaks the (otherwise unguessable) mailchimp_campaign_id back to
+    # the caller; Mailchimp itself rejects the report fetch on a foreign
+    # account, but we shouldn't rely on that as the only barrier.
+    owner_tenant: int | None = None
+    if campaign.owner_id is not None:
+        primary = await TenantUserService(db).get_primary_tenant(campaign.owner_id)
+        owner_tenant = primary.tenant_id if primary else None
+    if owner_tenant != tenant_id:
         raise HTTPException(
             status_code=HTTPStatus.NOT_FOUND, detail="Campaign not found"
         )
@@ -178,7 +193,7 @@ async def sync_campaign_stats(
         ) from exc
     except MailchimpError as exc:
         raise HTTPException(
-            status_code=HTTPStatus.BAD_GATEWAY, detail=str(exc)
+            status_code=502, detail=str(exc)
         ) from exc
     await db.commit()
     return MailchimpStatsResponse(**stats)
