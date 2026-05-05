@@ -46,6 +46,19 @@ class GmailBackfillStatusResponse(BaseModel):
     error: str | None = None
 
 
+class GmailRelinkRequest(BaseModel):
+    user_id: int | None = None
+    dry_run: bool = False
+    limit: int = 5000
+
+
+class GmailRelinkResponse(BaseModel):
+    scanned: int
+    linked: int
+    skipped: int
+    dry_run: bool
+
+
 class GmailStatusResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
