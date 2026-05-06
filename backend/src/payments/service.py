@@ -235,15 +235,21 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         # Check if quote is subscription type
         is_subscription = False
         recurring_interval = None
+        # Inherit the linked opportunity from the quote so reporting + the
+        # opportunity-side payment ledger don't lose the relationship just
+        # because checkout was kicked off from the quote view.
+        opportunity_id = None
         if quote_id:
             from src.quotes.models import Quote
             quote_result = await self.db.execute(
                 select(Quote).where(Quote.id == quote_id)
             )
             quote = quote_result.scalar_one_or_none()
-            if quote and quote.payment_type == "subscription":
-                is_subscription = True
-                recurring_interval = quote.recurring_interval
+            if quote:
+                opportunity_id = quote.opportunity_id
+                if quote.payment_type == "subscription":
+                    is_subscription = True
+                    recurring_interval = quote.recurring_interval
 
         # Get tenant branding for company name in checkout description
         company_name = "CRM"
@@ -301,6 +307,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             status="pending",
             customer_id=customer_id,
             quote_id=quote_id,
+            opportunity_id=opportunity_id,
             owner_id=user_id,
             created_by_id=user_id,
         )
@@ -804,6 +811,18 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             payment_method_types=payment_method_types,
         )
 
+        # Inherit the quote's opportunity so this Payment shows on the
+        # opportunity ledger — symmetric with create_checkout_session.
+        opportunity_id = None
+        if quote_id:
+            from src.quotes.models import Quote
+            quote_result = await self.db.execute(
+                select(Quote).where(Quote.id == quote_id)
+            )
+            quote = quote_result.scalar_one_or_none()
+            if quote:
+                opportunity_id = quote.opportunity_id
+
         invoice_url = getattr(invoice, "hosted_invoice_url", None)
         payment = Payment(
             stripe_invoice_id=invoice.id,
@@ -813,6 +832,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             status="pending",
             customer_id=customer_id,
             quote_id=quote_id,
+            opportunity_id=opportunity_id,
             owner_id=user_id,
             created_by_id=user_id,
         )
