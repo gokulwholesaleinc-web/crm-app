@@ -59,6 +59,7 @@ async def list_proposals(
     contact_id: int | None = None,
     company_id: int | None = None,
     opportunity_id: int | None = None,
+    quote_id: int | None = None,
     owner_id: int | None = None,
 ):
     """List proposals with pagination and filters."""
@@ -74,6 +75,7 @@ async def list_proposals(
         contact_id=contact_id,
         company_id=company_id,
         opportunity_id=opportunity_id,
+        quote_id=quote_id,
         owner_id=effective_owner_id,
         shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_PROPOSALS),
     )

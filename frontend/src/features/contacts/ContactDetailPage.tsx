@@ -204,6 +204,13 @@ function ContactDetailPage() {
           <Button variant="secondary" onClick={() => setShowInvoiceModal(true)} className="flex-1 sm:flex-none">
             Send Invoice
           </Button>
+          <Button
+            variant="secondary"
+            onClick={() => navigate(`/proposals?action=new&contact_id=${contactId}${contact.company_id ? `&company_id=${contact.company_id}` : ''}`)}
+            className="flex-1 sm:flex-none"
+          >
+            Create Proposal
+          </Button>
           <Button variant="secondary" onClick={() => setShowEditForm(true)} className="flex-1 sm:flex-none">
             Edit
           </Button>

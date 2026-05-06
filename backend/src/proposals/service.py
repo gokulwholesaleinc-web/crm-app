@@ -152,6 +152,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         contact_id: int | None = None,
         company_id: int | None = None,
         opportunity_id: int | None = None,
+        quote_id: int | None = None,
         owner_id: int | None = None,
         shared_entity_ids: list[int] | None = None,
     ) -> tuple[list[Proposal], int]:
@@ -184,6 +185,9 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
 
         if opportunity_id:
             query = query.where(Proposal.opportunity_id == opportunity_id)
+
+        if quote_id:
+            query = query.where(Proposal.quote_id == quote_id)
 
         if owner_id:
             if shared_entity_ids:
