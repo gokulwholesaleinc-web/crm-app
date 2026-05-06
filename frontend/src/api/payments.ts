@@ -99,6 +99,7 @@ export interface SubscriptionListParams {
   page?: number;
   page_size?: number;
   status?: string;
+  status_in?: string[];
   customer_id?: number;
   contact_id?: number;
   company_id?: number;
@@ -108,7 +109,21 @@ export interface SubscriptionListParams {
  * List subscriptions
  */
 export const listSubscriptions = async (params: SubscriptionListParams = {}): Promise<SubscriptionListResponse> => {
-  const response = await apiClient.get<SubscriptionListResponse>(`${PAYMENTS_BASE}/subscriptions`, { params });
+  // FastAPI's Query(list[str]) reads repeated keys (?status_in=a&status_in=b),
+  // not Axios' default `status_in[]=` bracket form. Build URLSearchParams
+  // manually so the array gets serialized in the shape FastAPI expects.
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null) continue;
+    if (Array.isArray(value)) {
+      for (const v of value) search.append(key, String(v));
+    } else {
+      search.append(key, String(value));
+    }
+  }
+  const response = await apiClient.get<SubscriptionListResponse>(
+    `${PAYMENTS_BASE}/subscriptions?${search.toString()}`
+  );
   return response.data;
 };
 

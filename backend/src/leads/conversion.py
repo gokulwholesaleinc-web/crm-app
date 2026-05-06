@@ -104,7 +104,14 @@ class LeadConverter:
         return contact, created_company
 
     async def _relink_tags(self, lead_id: int, contact_id: int) -> int:
-        """Copy entity_tags rows from lead → contact, skipping duplicates."""
+        """Copy entity_tags rows from lead → contact, skipping duplicates.
+
+        Single-tenant only: lead_id / contact_id are caller-supplied so a
+        cross-tenant call would silently rewire a lead's tags onto a
+        contact in a different tenant. Mirrors the comments in
+        ``payments/webhook_processor.py`` where a similar tenant_id
+        filter is the explicit follow-up if a second tenant onboards.
+        """
         existing = await self.db.execute(
             select(EntityTag.tag_id).where(
                 EntityTag.entity_type == "contacts",
