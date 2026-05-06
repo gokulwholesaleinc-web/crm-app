@@ -13,6 +13,7 @@ from src.audit.utils import (
     snapshot_entity,
 )
 from src.core.constants import ENTITY_TYPE_QUOTES, EntityNames, HTTPStatus
+from src.core.client_ip import get_client_ip
 from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
 from src.core.http_errors import value_error_as_400
 from src.core.rate_limit import limiter
@@ -113,7 +114,7 @@ async def create_quote(
     with value_error_as_400():
         quote = await service.create(quote_data, current_user.id)
 
-    ip_address = request.client.host if request.client else None
+    ip_address = get_client_ip(request)
     await audit_entity_create(db, "quote", quote.id, current_user.id, ip_address)
 
     return QuoteResponse.model_validate(quote)
@@ -251,7 +252,7 @@ async def accept_quote_public(
     if not quote or not _hmac.compare_digest(quote.public_token or "", token):
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Quote not found")
 
-    signer_ip = request.client.host if request.client else None
+    signer_ip = get_client_ip(request)
     signer_user_agent = request.headers.get("user-agent")
     try:
         quote = await service.accept_quote_public(
@@ -288,7 +289,7 @@ async def reject_quote_public(
     if not quote or not _hmac.compare_digest(quote.public_token or "", token):
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Quote not found")
 
-    signer_ip = request.client.host if request.client else None
+    signer_ip = get_client_ip(request)
     signer_user_agent = request.headers.get("user-agent")
     try:
         quote = await service.reject_quote_public(
@@ -348,7 +349,7 @@ async def update_quote(
     updated_quote = await service.update(quote, quote_data, current_user.id)
 
     new_data = snapshot_entity(updated_quote, update_fields)
-    ip_address = request.client.host if request.client else None
+    ip_address = get_client_ip(request)
     await audit_entity_update(db, "quote", updated_quote.id, current_user.id, old_data, new_data, ip_address)
 
     return QuoteResponse.model_validate(updated_quote)
@@ -366,7 +367,7 @@ async def delete_quote(
     quote = await get_entity_or_404(service, quote_id, EntityNames.QUOTE)
     check_ownership(quote, current_user, EntityNames.QUOTE)
 
-    ip_address = request.client.host if request.client else None
+    ip_address = get_client_ip(request)
     await audit_entity_delete(db, "quote", quote.id, current_user.id, ip_address)
 
     await service.delete(quote)

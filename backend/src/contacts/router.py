@@ -30,6 +30,7 @@ from src.contacts.schemas import (
 )
 from src.contacts.service import ContactService
 from src.core.constants import ENTITY_TYPE_CONTACTS, EntityNames, HTTPStatus
+from src.core.client_ip import get_client_ip
 from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
 from src.core.router_utils import (
     CurrentUser,
@@ -127,7 +128,7 @@ async def create_contact(
     except Exception as e:
         logger.warning("Failed to prepare embedding: %s", e)
 
-    ip_address = request.client.host if request.client else None
+    ip_address = get_client_ip(request)
     await audit_entity_create(db, "contact", contact.id, current_user.id, ip_address)
 
     await emit(CONTACT_CREATED, {
@@ -207,7 +208,7 @@ async def update_contact(
         logger.warning("Failed to prepare embedding: %s", e)
 
     new_data = snapshot_entity(updated_contact, update_fields)
-    ip_address = request.client.host if request.client else None
+    ip_address = get_client_ip(request)
     await audit_entity_update(db, "contact", updated_contact.id, current_user.id, old_data, new_data, ip_address)
 
     await emit(CONTACT_UPDATED, {
@@ -242,7 +243,7 @@ async def delete_contact(
     contact = await get_entity_or_404(service, contact_id, EntityNames.CONTACT)
     check_ownership(contact, current_user, EntityNames.CONTACT)
 
-    ip_address = request.client.host if request.client else None
+    ip_address = get_client_ip(request)
     await audit_entity_delete(db, "contact", contact.id, current_user.id, ip_address)
 
     # Remove the semantic-search embedding so archived contacts no longer

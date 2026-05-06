@@ -18,6 +18,7 @@ from src.contracts.schemas import (
 )
 from src.contracts.service import ContractService
 from src.core.constants import HTTPStatus
+from src.core.client_ip import get_client_ip
 from src.core.router_utils import (
     CurrentUser,
     DBSession,
@@ -80,7 +81,7 @@ async def create_contract(
     service = ContractService(db)
     contract = await service.create(contract_data, current_user.id)
 
-    ip_address = request.client.host if request.client else None
+    ip_address = get_client_ip(request)
     await audit_entity_create(db, "contract", contract.id, current_user.id, ip_address)
 
     return ContractResponse.model_validate(contract)
@@ -117,7 +118,7 @@ async def update_contract(
     updated_contract = await service.update(contract, contract_data, current_user.id)
 
     new_data = snapshot_entity(updated_contract, update_fields)
-    ip_address = request.client.host if request.client else None
+    ip_address = get_client_ip(request)
     await audit_entity_update(db, "contract", updated_contract.id, current_user.id, old_data, new_data, ip_address)
 
     return ContractResponse.model_validate(updated_contract)
@@ -135,7 +136,7 @@ async def delete_contract(
     contract = await get_entity_or_404(service, contract_id, ENTITY_NAME)
     check_ownership(contract, current_user, ENTITY_NAME)
 
-    ip_address = request.client.host if request.client else None
+    ip_address = get_client_ip(request)
     await audit_entity_delete(db, "contract", contract.id, current_user.id, ip_address)
 
     await service.delete(contract)

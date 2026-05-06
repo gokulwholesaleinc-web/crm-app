@@ -13,6 +13,7 @@ from src.audit.utils import (
     snapshot_entity,
 )
 from src.core.constants import ENTITY_TYPE_PROPOSALS, EntityNames, HTTPStatus
+from src.core.client_ip import get_client_ip
 from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
 from src.core.http_errors import value_error_as_400
 from src.core.rate_limit import limiter
@@ -101,7 +102,7 @@ async def create_proposal(
     with value_error_as_400():
         proposal = await service.create(proposal_data, current_user.id)
 
-    ip_address = request.client.host if request.client else None
+    ip_address = get_client_ip(request)
     await audit_entity_create(db, "proposal", proposal.id, current_user.id, ip_address)
 
     return ProposalResponse.model_validate(proposal)
@@ -274,7 +275,7 @@ async def create_proposal_from_template(
     with value_error_as_400():
         proposal = await service.create(proposal_data, current_user.id)
 
-    ip_address = request.client.host if request.client else None
+    ip_address = get_client_ip(request)
     await audit_entity_create(db, "proposal", proposal.id, current_user.id, ip_address)
 
     return ProposalResponse.model_validate(proposal)
@@ -314,7 +315,7 @@ async def get_public_proposal(
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Proposal not found")
 
     # Record the view
-    ip_address = request.client.host if request.client else None
+    ip_address = get_client_ip(request)
     user_agent = request.headers.get("user-agent")
     await service.record_view(proposal.id, ip_address, user_agent)
 
@@ -358,7 +359,7 @@ async def accept_proposal_public(
     if not proposal or not _hmac.compare_digest(proposal.public_token or "", token):
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Proposal not found")
 
-    signer_ip = request.client.host if request.client else None
+    signer_ip = get_client_ip(request)
     signer_user_agent = request.headers.get("user-agent")
     with value_error_as_400():
         proposal = await service.accept_proposal_public(
@@ -405,7 +406,7 @@ async def reject_proposal_public(
     if not proposal or not _hmac.compare_digest(proposal.public_token or "", token):
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Proposal not found")
 
-    signer_ip = request.client.host if request.client else None
+    signer_ip = get_client_ip(request)
     signer_user_agent = request.headers.get("user-agent")
     with value_error_as_400():
         proposal = await service.reject_proposal_public(
@@ -468,7 +469,7 @@ async def update_proposal(
         updated_proposal = await service.update(proposal, proposal_data, current_user.id)
 
     new_data = snapshot_entity(updated_proposal, update_fields)
-    ip_address = request.client.host if request.client else None
+    ip_address = get_client_ip(request)
     await audit_entity_update(db, "proposal", updated_proposal.id, current_user.id, old_data, new_data, ip_address)
 
     return ProposalResponse.model_validate(updated_proposal)
@@ -486,7 +487,7 @@ async def delete_proposal(
     proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
     check_ownership(proposal, current_user, EntityNames.PROPOSAL)
 
-    ip_address = request.client.host if request.client else None
+    ip_address = get_client_ip(request)
     await audit_entity_delete(db, "proposal", proposal.id, current_user.id, ip_address)
 
     await service.delete(proposal)
@@ -552,7 +553,7 @@ async def resend_proposal_payment_link(
     before = {"status": proposal.status, "stripe_invoice_id": proposal.stripe_invoice_id}
     with value_error_as_400():
         result = await service.resend_payment_link(proposal)
-    ip_address = request.client.host if request.client else None
+    ip_address = get_client_ip(request)
     await audit_entity_update(
         db, "proposal", proposal.id, current_user.id,
         before,

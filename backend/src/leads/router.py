@@ -26,6 +26,7 @@ from src.core.cache import (
     invalidate_lead_sources_cache,
 )
 from src.core.constants import ENTITY_TYPE_LEADS, EntityNames, ErrorMessages, HTTPStatus
+from src.core.client_ip import get_client_ip
 from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
 from src.core.http_errors import value_error_as_400
 from src.core.permissions import require_permission
@@ -147,7 +148,7 @@ async def create_lead(
     except Exception as e:
         logger.warning("Failed to store embedding: %s", e)
 
-    ip_address = request.client.host if request.client else None
+    ip_address = get_client_ip(request)
     await audit_entity_create(db, "lead", lead.id, current_user.id, ip_address)
 
     await emit(LEAD_CREATED, {
@@ -506,7 +507,7 @@ async def update_lead(
         logger.warning("Failed to store embedding: %s", e)
 
     new_data = snapshot_entity(updated_lead, update_fields)
-    ip_address = request.client.host if request.client else None
+    ip_address = get_client_ip(request)
     await audit_entity_update(db, "lead", updated_lead.id, current_user.id, old_data, new_data, ip_address)
 
     await emit(LEAD_UPDATED, {
@@ -534,7 +535,7 @@ async def delete_lead(
     lead = await get_entity_or_404(service, lead_id, EntityNames.LEAD)
     check_ownership(lead, current_user, EntityNames.LEAD)
 
-    ip_address = request.client.host if request.client else None
+    ip_address = get_client_ip(request)
     await audit_entity_delete(db, "lead", lead.id, current_user.id, ip_address)
 
     # Delete embedding before deleting entity

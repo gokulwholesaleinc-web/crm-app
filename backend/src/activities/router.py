@@ -24,6 +24,7 @@ from src.audit.utils import (
     snapshot_entity,
 )
 from src.core.constants import ENTITY_TYPE_ACTIVITIES, ENTITY_TYPE_USERS, EntityNames, HTTPStatus
+from src.core.client_ip import get_client_ip
 from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
 from src.core.router_utils import (
     CurrentUser,
@@ -193,7 +194,7 @@ async def create_activity(
     service = ActivityService(db)
     activity = await service.create(activity_data, current_user.id)
 
-    ip_address = request.client.host if request.client else None
+    ip_address = get_client_ip(request)
     await audit_entity_create(db, "activity", activity.id, current_user.id, ip_address)
 
     await emit(ACTIVITY_CREATED, {
@@ -363,7 +364,7 @@ async def update_activity(
     updated_activity = await service.update(activity, activity_data, current_user.id)
 
     new_data = snapshot_entity(updated_activity, update_fields)
-    ip_address = request.client.host if request.client else None
+    ip_address = get_client_ip(request)
     await audit_entity_update(db, "activity", updated_activity.id, current_user.id, old_data, new_data, ip_address)
 
     return ActivityResponse.model_validate(updated_activity)
@@ -395,7 +396,7 @@ async def delete_activity(
     activity = await get_entity_or_404(service, activity_id, EntityNames.ACTIVITY)
     check_ownership(activity, current_user, EntityNames.ACTIVITY)
 
-    ip_address = request.client.host if request.client else None
+    ip_address = get_client_ip(request)
     await audit_entity_delete(db, "activity", activity.id, current_user.id, ip_address)
 
     await service.delete(activity)
