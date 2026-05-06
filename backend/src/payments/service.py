@@ -994,6 +994,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         interval_count: int,
         success_url: str,
         cancel_url: str,
+        idempotency_key: str | None = None,
     ) -> dict:
         """Create a Stripe Checkout Session (mode=subscription) for an accepted
         subscription proposal.
@@ -1051,7 +1052,9 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             metadata={"proposal_id": str(proposal_id)},
             subscription_data={"metadata": {"proposal_id": str(proposal_id)}},
             # Deterministic key — same reasoning as create_invoice_for_proposal.
-            idempotency_key=f"proposal_sub_{proposal_id}_v1",
+            # Callers regenerating an expired session must pass a distinct key
+            # so Stripe doesn't return the (still-cached) original.
+            idempotency_key=idempotency_key or f"proposal_sub_{proposal_id}_v1",
         )
 
         return {
