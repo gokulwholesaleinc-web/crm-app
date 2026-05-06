@@ -389,6 +389,15 @@ async def gmail_relink(
     entity_id IS NULL, attempts to match each row's addresses to a contact
     via find_contact_id_by_any_email, and writes the link when found.
     Safe to re-run: never overwrites a non-NULL entity_id.
+
+    Address derivation prefers ``participant_emails`` (lowercased,
+    deduped, populated at write-time by the autofill listener) and only
+    falls back to parsing the from/to/cc/bcc text columns for legacy
+    rows that pre-date that column. Connection self-addresses (every
+    GmailConnection's primary + send-as aliases) are removed before
+    contact lookup so a CC'd alias of any CRM user can't capture mail
+    onto that user's own self-contact — same pollution PR #202 fixed
+    in the live sync path.
     """
     from sqlalchemy import and_, select
 
@@ -404,17 +413,45 @@ async def gmail_relink(
     linked = 0
     skipped = 0
 
+    # Build the global self-address exclusion set once. Includes every
+    # active connection's primary email plus its send-as aliases.
+    conn_rows = (await db.execute(
+        select(GmailConnection.email, GmailConnection.aliases)
+        .where(GmailConnection.revoked_at.is_(None))
+    )).all()
+    self_addresses: set[str] = set()
+    for email, aliases in conn_rows:
+        if email:
+            self_addresses.add(email.lower())
+        for a in aliases or []:
+            if a:
+                self_addresses.add(a.lower())
+
+    def _addresses_for(row) -> list[str]:
+        # Use the cached, GIN-indexed participant list when present —
+        # already lowercased + deduped at write time. Fall back to
+        # parsing the human-readable address columns for legacy rows
+        # that pre-date the participant_emails autofill.
+        participants = list(getattr(row, "participant_emails", None) or [])
+        if not participants:
+            participants.extend(_parse_address_list(getattr(row, "from_email", "") or ""))
+            participants.extend(_parse_address_list(getattr(row, "to_email", "") or ""))
+            participants.extend(_parse_address_list(getattr(row, "cc", "") or ""))
+            participants.extend(_parse_address_list(getattr(row, "bcc", "") or ""))
+        if self_addresses:
+            participants = [a for a in participants if a.lower() not in self_addresses]
+        return participants
+
     async def _process_rows(rows: list, dry_run: bool) -> tuple[int, int]:
         lnk = skp = 0
         for row in rows:
             # NOTE: find_contact_id_by_any_email issues one DB query per row
             # (N+1). Acceptable for an infrequent admin backfill; a future
             # improvement could batch-resolve addresses in one query per batch.
-            addresses: list[str] = []
-            addresses.extend(_parse_address_list(row.from_email))
-            addresses.extend(_parse_address_list(row.to_email))
-            addresses.extend(_parse_address_list(row.cc))
-            addresses.extend(_parse_address_list(row.bcc))
+            addresses = _addresses_for(row)
+            if not addresses:
+                skp += 1
+                continue
             entity_type, entity_id = await find_contact_id_by_any_email(addresses, db)
             if entity_id is not None:
                 if not dry_run:

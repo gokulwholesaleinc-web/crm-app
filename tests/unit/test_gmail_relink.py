@@ -307,3 +307,127 @@ class TestRelinkEmailQueue:
         # …but no DB write made.
         await db.refresh(row)
         assert row.entity_id is None
+
+
+class TestRelinkSelfAddressExclusion:
+    @pytest.mark.asyncio
+    async def test_self_address_in_participants_does_not_link_to_self_card(
+        self, db: AsyncSession, admin_user: User
+    ):
+        """A row whose participant list contains a GmailConnection's primary
+        or alias must not link to a contact card that owns that address —
+        same pollution PR #202 fixed for the live sync path. The matcher
+        sees only the third-party addresses, so the row stays unlinked
+        when no other participant matches.
+        """
+        from src.integrations.gmail.models import GmailConnection
+        from src.email.models import InboundEmail
+
+        # Connection-owner's mailbox
+        conn = GmailConnection(
+            user_id=admin_user.id,
+            email="accounting@linkcreativeco.com",
+            aliases=["giancarlo@linkcreativeco.com"],
+            access_token="t",
+            refresh_token="t",
+            token_expiry=None,
+            scopes="",
+        )
+        db.add(conn)
+
+        # A self-contact for the connection-owner exists (the pollution
+        # case): if relink doesn't exclude self-addresses, it would link
+        # the inbound row to THIS contact instead of leaving it unlinked.
+        self_contact = Contact(
+            email="accounting@linkcreativeco.com",
+            first_name="Giancarlo",
+            last_name="Self",
+            owner_id=admin_user.id,
+            created_by_id=admin_user.id,
+        )
+        db.add(self_contact)
+        await db.commit()
+        await db.refresh(conn)
+        await db.refresh(self_contact)
+
+        # Inbound row: from a third party (no contact card for them) to
+        # the connection's address. participant_emails is auto-populated
+        # by the model listener.
+        row = InboundEmail(
+            resend_email_id="gmail:abc123",
+            from_email="stranger@example.com",
+            to_email="accounting@linkcreativeco.com",
+            subject="hi",
+            received_at=__import__("datetime").datetime(2026, 5, 1, tzinfo=__import__("datetime").timezone.utc),
+        )
+        db.add(row)
+        await db.commit()
+        await db.refresh(row)
+
+        app = _make_app(db, admin_user)
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.post("/api/integrations/gmail/relink", json={})
+
+        assert resp.status_code == 200
+        await db.refresh(row)
+        # Self-address excluded; no contact for stranger@; row stays NULL.
+        assert row.entity_id is None
+        assert row.entity_type is None
+
+    @pytest.mark.asyncio
+    async def test_self_address_excluded_but_third_party_still_links(
+        self, db: AsyncSession, admin_user: User
+    ):
+        """Counterpart: the self-exclude must NOT mask a real contact
+        match. An inbound CC'd to the connection's alias AND to a real
+        contact should still link to the real contact.
+        """
+        from src.integrations.gmail.models import GmailConnection
+        from src.email.models import InboundEmail
+
+        conn = GmailConnection(
+            user_id=admin_user.id,
+            email="accounting@linkcreativeco.com",
+            aliases=["giancarlo@linkcreativeco.com"],
+            access_token="t",
+            refresh_token="t",
+            token_expiry=None,
+            scopes="",
+        )
+        db.add(conn)
+
+        target = Contact(
+            email="customer@example.com",
+            first_name="Real",
+            last_name="Customer",
+            owner_id=admin_user.id,
+            created_by_id=admin_user.id,
+        )
+        db.add(target)
+        await db.commit()
+        await db.refresh(target)
+
+        row = InboundEmail(
+            resend_email_id="gmail:def456",
+            from_email="customer@example.com",
+            to_email="accounting@linkcreativeco.com",
+            cc="giancarlo@linkcreativeco.com",
+            subject="thread",
+            received_at=__import__("datetime").datetime(2026, 5, 1, tzinfo=__import__("datetime").timezone.utc),
+        )
+        db.add(row)
+        await db.commit()
+        await db.refresh(row)
+
+        app = _make_app(db, admin_user)
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.post("/api/integrations/gmail/relink", json={})
+
+        assert resp.status_code == 200
+        await db.refresh(row)
+        assert row.entity_type == "contacts"
+        assert row.entity_id == target.id
