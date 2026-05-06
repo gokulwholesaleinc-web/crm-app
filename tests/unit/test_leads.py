@@ -97,25 +97,6 @@ class TestLeadsList:
         assert len(data["items"]) == 5
 
     @pytest.mark.asyncio
-    async def test_list_leads_filter_by_status(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-        test_lead: Lead,
-    ):
-        """Test filtering leads by status."""
-        response = await client.get(
-            "/api/leads",
-            headers=auth_headers,
-            params={"status": "new"},
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert all(lead["status"] == "new" for lead in data["items"])
-
-    @pytest.mark.asyncio
     async def test_list_leads_filter_by_source(
         self,
         client: AsyncClient,

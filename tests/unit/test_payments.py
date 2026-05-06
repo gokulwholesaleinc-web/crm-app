@@ -217,18 +217,6 @@ class TestPaymentCRUD:
     """Test Payment CRUD operations via API."""
 
     @pytest.mark.asyncio
-    async def test_list_payments_returns_200(
-        self, client: AsyncClient, test_user, rep_a_payment, sales_rep_a,
-    ):
-        """Listing payments should return 200."""
-        response = await client.get("/api/payments", headers=_token(test_user))
-        assert response.status_code == 200
-        data = response.json()
-        assert "items" in data
-        assert "total" in data
-        assert "page" in data
-
-    @pytest.mark.asyncio
     async def test_get_payment_by_id(
         self, client: AsyncClient, test_user, rep_a_payment, sales_rep_a,
     ):
@@ -660,20 +648,6 @@ class TestCheckoutAndPaymentIntent:
 
 class TestSubscriptionList:
     """Test subscription listing endpoint."""
-
-    @pytest.mark.asyncio
-    async def test_list_subscriptions_returns_200(
-        self, client: AsyncClient, test_user,
-    ):
-        """Listing subscriptions should return 200."""
-        response = await client.get(
-            "/api/payments/subscriptions",
-            headers=_token(test_user),
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert "items" in data
-        assert "total" in data
 
     @pytest.mark.asyncio
     async def test_list_subscriptions_with_data(

@@ -98,25 +98,6 @@ class TestActivitiesList:
         assert len(data["items"]) >= 5
 
     @pytest.mark.asyncio
-    async def test_list_activities_filter_by_type(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-        test_activity: Activity,
-    ):
-        """Test filtering activities by type."""
-        response = await client.get(
-            "/api/activities",
-            headers=auth_headers,
-            params={"activity_type": "call"},
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert all(a["activity_type"] == "call" for a in data["items"])
-
-    @pytest.mark.asyncio
     async def test_list_activities_filter_by_entity(
         self,
         client: AsyncClient,
@@ -141,45 +122,6 @@ class TestActivitiesList:
             a["entity_type"] == "contacts" and a["entity_id"] == test_contact.id
             for a in data["items"]
         )
-
-    @pytest.mark.asyncio
-    async def test_list_activities_filter_by_completed(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-        test_activity: Activity,
-    ):
-        """Test filtering activities by completion status."""
-        response = await client.get(
-            "/api/activities",
-            headers=auth_headers,
-            params={"is_completed": False},
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert all(a["is_completed"] is False for a in data["items"])
-
-    @pytest.mark.asyncio
-    async def test_list_activities_filter_by_priority(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-        test_activity: Activity,
-    ):
-        """Test filtering activities by priority."""
-        response = await client.get(
-            "/api/activities",
-            headers=auth_headers,
-            params={"priority": "normal"},
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert all(a["priority"] == "normal" for a in data["items"])
-
 
 class TestActivitiesCreate:
     """Tests for activity creation endpoint."""

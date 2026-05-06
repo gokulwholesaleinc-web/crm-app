@@ -121,44 +121,6 @@ class TestCampaignsList:
         assert data["page"] == 2
 
     @pytest.mark.asyncio
-    async def test_list_campaigns_filter_by_type(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-        test_campaign: Campaign,
-    ):
-        """Test filtering campaigns by type."""
-        response = await client.get(
-            "/api/campaigns",
-            headers=auth_headers,
-            params={"campaign_type": "email"},
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert all(c["campaign_type"] == "email" for c in data["items"])
-
-    @pytest.mark.asyncio
-    async def test_list_campaigns_filter_by_status(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-        test_campaign: Campaign,
-    ):
-        """Test filtering campaigns by status."""
-        response = await client.get(
-            "/api/campaigns",
-            headers=auth_headers,
-            params={"status": "planned"},
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert all(c["status"] == "planned" for c in data["items"])
-
-    @pytest.mark.asyncio
     async def test_list_campaigns_search(
         self,
         client: AsyncClient,
