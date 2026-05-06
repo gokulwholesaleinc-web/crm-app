@@ -14,7 +14,6 @@ from src.core.constants import (
     ENTITY_TYPE_USERS,
 )
 from src.core.filtering import apply_filters_to_query
-from src.opportunities.models import Opportunity
 
 
 class ActivityService(CRUDService[Activity, ActivityCreate, ActivityUpdate]):
@@ -113,6 +112,12 @@ class ActivityService(CRUDService[Activity, ActivityCreate, ActivityUpdate]):
             and activity_data.get("entity_id")
             and not activity_data.get("contact_id")
         ):
+            # Local import — eager `from src.opportunities.models import
+            # Opportunity` triggers a circular import at module load
+            # because ai/action_tools.py imports ActivityService and
+            # opportunities/router.py transitively imports ai/.
+            from src.opportunities.models import Opportunity
+
             opp = await self.db.get(Opportunity, activity_data["entity_id"])
             if opp is not None and opp.contact_id is not None:
                 activity_data["contact_id"] = opp.contact_id
