@@ -175,6 +175,10 @@ class TestBackfillSinglePage:
     @pytest.mark.asyncio
     async def test_single_page_creates_inbound_emails(self, connection, db, test_user):
         """Backfill with one page of results should persist all messages."""
+        # Backfill drops messages without a contact link, so seed a contact
+        # whose email matches the inbound sender.
+        db.add(Contact(email="sender@client.com", first_name="Sender", last_name="Client", owner_id=test_user.id))
+        await db.commit()
         msg = _gmail_message(
             "bf001", "t1", "sender@client.com", connection.email, body="Hi there"
         )
@@ -192,6 +196,7 @@ class TestBackfillSinglePage:
         rows = (await db.execute(select(InboundEmail))).scalars().all()
         assert len(rows) == 1
         assert rows[0].from_email == "sender@client.com"
+        assert rows[0].entity_type == "contacts"
 
     @pytest.mark.asyncio
     async def test_backfill_state_set_complete(self, connection, db, test_user):
@@ -222,6 +227,11 @@ class TestBackfillPagination:
     async def test_multi_page_processes_all_messages(self, connection, db, test_user):
         """list_messages_since should follow nextPageToken until exhausted."""
         seen_params: list[dict] = []
+
+        # Seed contacts so the contact-link gate doesn't drop these.
+        db.add(Contact(email="a@client.com", first_name="A", last_name="Client", owner_id=test_user.id))
+        db.add(Contact(email="b@client.com", first_name="B", last_name="Client", owner_id=test_user.id))
+        await db.commit()
 
         msg_a = _gmail_message("pa1", "ta", "a@client.com", connection.email)
         msg_b = _gmail_message("pb1", "tb", "b@client.com", connection.email)
@@ -266,6 +276,8 @@ class TestBackfillIdempotency:
     @pytest.mark.asyncio
     async def test_rerun_does_not_duplicate_rows(self, connection, db, test_user):
         """Running backfill twice should not create duplicate email rows."""
+        db.add(Contact(email="c@client.com", first_name="C", last_name="Client", owner_id=test_user.id))
+        await db.commit()
         msg = _gmail_message("idem1", "t_idem", "c@client.com", connection.email)
         routes = {
             "users/me/messages": {"messages": [{"id": "idem1"}]},
