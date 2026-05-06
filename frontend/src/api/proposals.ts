@@ -14,6 +14,7 @@ import type {
   ProposalTemplateUpdate,
   CreateFromTemplateRequest,
   AIGenerateProposalRequest,
+  ProposalAttachment,
 } from '../types';
 
 const PROPOSALS_BASE = '/api/proposals';
@@ -198,6 +199,66 @@ export const downloadProposalPDF = async (proposalId: number): Promise<Blob> => 
   return response.data;
 };
 
+/**
+ * List attachments for a proposal (staff side).
+ */
+export const listProposalAttachments = async (
+  proposalId: number,
+): Promise<ProposalAttachment[]> => {
+  const response = await apiClient.get<ProposalAttachment[]>(
+    `${PROPOSALS_BASE}/${proposalId}/attachments`,
+  );
+  return response.data;
+};
+
+/**
+ * Upload a PDF attachment for a proposal (staff side).
+ */
+export const uploadProposalAttachment = async (
+  proposalId: number,
+  file: File,
+): Promise<ProposalAttachment> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await apiClient.post<ProposalAttachment>(
+    `${PROPOSALS_BASE}/${proposalId}/attachments`,
+    formData,
+    { headers: { 'Content-Type': 'multipart/form-data' } },
+  );
+  return response.data;
+};
+
+/**
+ * Delete a proposal attachment (staff side; refused once proposal is signed).
+ */
+export const deleteProposalAttachment = async (
+  proposalId: number,
+  attachmentId: number,
+): Promise<void> => {
+  await apiClient.delete(
+    `${PROPOSALS_BASE}/${proposalId}/attachments/${attachmentId}`,
+  );
+};
+
+/**
+ * URL for the public download endpoint that 302-redirects to a presigned R2
+ * URL. Hitting it records the view as a side effect, which is why the public
+ * page opens it in a new tab rather than fetching it as JSON.
+ *
+ * Reads VITE_API_URL directly instead of going through `apiClient.defaults`
+ * so the public proposal page (which imports this helper) doesn't pull the
+ * authenticated axios instance — that instance attaches the staff Bearer
+ * token and would 401-evict the staff session if a customer's link
+ * happened to be opened in the same browser.
+ */
+export const publicProposalAttachmentDownloadUrl = (
+  token: string,
+  attachmentId: number,
+): string => {
+  const baseUrl = import.meta.env.VITE_API_URL || '';
+  return `${baseUrl}${PROPOSALS_BASE}/public/${token}/attachments/${attachmentId}/download`;
+};
+
 export const proposalsApi = {
   list: listProposals,
   get: getProposal,
@@ -218,5 +279,9 @@ export const proposalsApi = {
   deleteTemplate: deleteProposalTemplate,
   createFromTemplate: createFromTemplate,
   downloadPDF: downloadProposalPDF,
+  listAttachments: listProposalAttachments,
+  uploadAttachment: uploadProposalAttachment,
+  deleteAttachment: deleteProposalAttachment,
+  publicAttachmentDownloadUrl: publicProposalAttachmentDownloadUrl,
 };
 
