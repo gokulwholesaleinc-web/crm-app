@@ -2,10 +2,45 @@
 
 from datetime import date, datetime
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    event,
+    func,
+)
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.types import TypeDecorator
 
 from src.database import Base
+
+
+class _ParticipantEmails(TypeDecorator):
+    """TEXT[] on Postgres, JSON-array on SQLite (the pytest default).
+
+    Production runs on Postgres where ``ARRAY(Text)`` plus a GIN index gives
+    O(log n) ``&&`` overlap lookups. The unit-test suite runs against
+    in-memory SQLite, which can't compile ARRAY at all — so the column
+    degrades to JSON there. Visibility queries that use ``.overlap()`` only
+    fire on Postgres (see ``email/service.py::_*_visibility_clause``); the
+    SQLite path falls back to composer-only / ``literal(False)`` so the
+    column type never has to support array operators outside Postgres.
+    """
+
+    impl = JSON
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(ARRAY(Text))
+        return dialect.type_descriptor(JSON())
 
 
 class EmailQueue(Base):
@@ -76,11 +111,19 @@ class EmailQueue(Base):
     message_id: Mapped[str | None] = mapped_column(String(500), nullable=True)
     thread_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
+    # Lowercased + deduped bare addresses pulled from From/To/CC/BCC at write
+    # time. Used to scope visibility per-user via overlap with the viewer's
+    # gmail_connections.email set.
+    participant_emails: Mapped[list[str]] = mapped_column(
+        _ParticipantEmails(), nullable=False, server_default="{}", default=list
+    )
+
     __table_args__ = (
         Index("ix_email_queue_entity", "entity_type", "entity_id"),
         Index("ix_email_queue_status", "status"),
         Index("ix_email_queue_sent_by", "sent_by_id"),
         Index("ix_email_queue_thread_id", "thread_id"),
+        Index("ix_email_queue_participants", "participant_emails", postgresql_using="gin"),
     )
 
 
@@ -134,8 +177,38 @@ class InboundEmail(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
+    # Lowercased + deduped bare addresses pulled from From/To/CC/BCC at
+    # ingest time. See EmailQueue.participant_emails.
+    participant_emails: Mapped[list[str]] = mapped_column(
+        _ParticipantEmails(), nullable=False, server_default="{}", default=list
+    )
+
     __table_args__ = (
         Index("ix_inbound_emails_entity", "entity_type", "entity_id"),
         Index("ix_inbound_emails_from", "from_email"),
         Index("ix_inbound_emails_thread_id", "thread_id"),
+        Index("ix_inbound_emails_participants", "participant_emails", postgresql_using="gin"),
     )
+
+
+def _autofill_participants(_mapper, _conn, target) -> None:
+    """Populate participant_emails from From/To/CC/BCC if caller didn't set it.
+
+    Acts as a safety net: any InboundEmail/EmailQueue inserted without an
+    explicit participant set (tests, ad-hoc admin scripts, future code paths
+    we haven't audited) still gets a usable address index. Helpers that pass
+    a precomputed list win because we only fill when the column is empty.
+    """
+    if target.participant_emails:
+        return
+    from src.email.participants import collect_participants
+
+    from_email = getattr(target, "from_email", None)
+    to_email = getattr(target, "to_email", None)
+    cc = getattr(target, "cc", None)
+    bcc = getattr(target, "bcc", None)
+    target.participant_emails = collect_participants(from_email, to_email, cc, bcc)
+
+
+event.listen(InboundEmail, "before_insert", _autofill_participants)
+event.listen(EmailQueue, "before_insert", _autofill_participants)

@@ -20,9 +20,46 @@ from src.config import settings
 from src.core.constants import DEFAULT_PAGE_SIZE
 from src.email.branded_templates import TenantBrandingHelper, render_branded_email
 from src.email.models import EmailQueue, InboundEmail
+from src.email.participants import collect_participants, get_user_connection_emails
 from src.email.types import EmailAttachment
 
 logger = logging.getLogger(__name__)
+
+
+def _outbound_visibility_clause(
+    viewer_user_id: int, viewer_emails: list[str], dialect_name: str = "postgresql"
+):
+    """Visibility predicate for EmailQueue: composer OR participant overlap.
+
+    When the viewer has no Gmail connection, only their own composes are
+    visible. On dialects without ARRAY support (the SQLite test path) we
+    skip the overlap branch and degrade to composer-only — strictly more
+    restrictive, so the tests stay correct even though the production
+    Postgres path sees more rows.
+    """
+    if viewer_emails and dialect_name == "postgresql":
+        return or_(
+            EmailQueue.sent_by_id == viewer_user_id,
+            EmailQueue.participant_emails.overlap(viewer_emails),
+        )
+    return EmailQueue.sent_by_id == viewer_user_id
+
+
+def _inbound_visibility_clause(viewer_emails: list[str], dialect_name: str = "postgresql"):
+    """Visibility predicate for InboundEmail: participant overlap only.
+
+    Falls back to ``literal(False)`` when the viewer has no Gmail connection
+    or the dialect doesn't support ARRAY overlap (SQLite tests). Inbound
+    mail has no per-row composer to bypass with.
+    """
+    if viewer_emails and dialect_name == "postgresql":
+        return InboundEmail.participant_emails.overlap(viewer_emails)
+    return literal(False)
+
+
+def _dialect_name(db: AsyncSession) -> str:
+    bind = db.get_bind()
+    return bind.dialect.name
 
 
 async def _resolve_from_name(db: AsyncSession, user_id: int, fallback_email: str) -> str:
@@ -296,6 +333,7 @@ class EmailService:
             campaign_id=campaign_id,
             status="pending",
             attempts=0,
+            participant_emails=collect_participants(from_email, to_email, cc, bcc),
         )
         self.db.add(email)
         await self.db.flush()
@@ -384,8 +422,15 @@ class EmailService:
         entity_id: int | None = None,
         status: str | None = None,
         sent_by_id: int | None = None,
+        viewer_user_id: int | None = None,
     ) -> tuple[list[EmailQueue], int]:
-        """Get paginated list of emails with optional filters."""
+        """Get paginated list of emails with optional filters.
+
+        ``viewer_user_id`` enables participant-based privacy: rows are only
+        returned if the viewer composed them (sent_by_id) or if any of the
+        viewer's connected Gmail addresses appears in participant_emails.
+        Pass ``None`` only for legacy/admin callers that need no scoping.
+        """
         filters = []
         if entity_type:
             filters.append(EmailQueue.entity_type == entity_type)
@@ -395,6 +440,13 @@ class EmailService:
             filters.append(EmailQueue.status == status)
         if sent_by_id is not None:
             filters.append(EmailQueue.sent_by_id == sent_by_id)
+        if viewer_user_id is not None:
+            viewer_emails = await get_user_connection_emails(self.db, viewer_user_id)
+            filters.append(
+                _outbound_visibility_clause(
+                    viewer_user_id, viewer_emails, _dialect_name(self.db)
+                )
+            )
 
         count_query = select(func.count()).select_from(EmailQueue)
         query = select(EmailQueue).order_by(EmailQueue.created_at.desc())
@@ -646,6 +698,7 @@ class EmailService:
             in_reply_to=in_reply_to,
             attachments=attachments,
             received_at=received_at,
+            participant_emails=collect_participants(from_email, to_email, cc, bcc),
         )
 
         # Skip empty from_email: matching "" would attach inbound mail to any
@@ -698,7 +751,7 @@ class EmailService:
     async def search_emails(
         self,
         q: str,
-        user_id: int,
+        user_id: int | None,
         page: int = 1,
         page_size: int = 25,
         entity_type: str | None = None,
@@ -706,26 +759,31 @@ class EmailService:
     ) -> tuple[list[dict], int]:
         """Search emails by keyword across subject, body, from, to, cc, bcc.
 
-        Scoped to the requesting user: email_queue rows by sent_by_id, inbound_email
-        rows by the to_email matching the user's connected Gmail address.
+        Scoped to the requesting user via participant overlap: outbound rows
+        match if the user composed them or appears in the participant set;
+        inbound rows match if the user is on the From/To/CC/BCC of the
+        original message. Pass ``user_id=None`` to bypass scoping (admin /
+        audit usage).
         """
-        from src.integrations.gmail.models import GmailConnection
-
-        gmail_result = await self.db.execute(
-            select(GmailConnection.email).where(
-                GmailConnection.user_id == user_id,
-                GmailConnection.revoked_at.is_(None),
-            )
+        user_emails = (
+            await get_user_connection_emails(self.db, user_id)
+            if user_id is not None
+            else []
         )
-        user_gmail = gmail_result.scalar_one_or_none()
 
         # Escape LIKE metacharacters so a user typing `%` matches literally
         # instead of "every row I have access to". Keep `\` first so we
         # don't double-escape our own escapes.
         escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         pat = f"%{escaped}%"
+        dialect = _dialect_name(self.db)
+        outbound_visibility = (
+            literal(True)  # admin: no scoping
+            if user_id is None
+            else _outbound_visibility_clause(user_id, user_emails, dialect)
+        )
         sent_filters = [
-            EmailQueue.sent_by_id == user_id,
+            outbound_visibility,
             or_(
                 EmailQueue.subject.ilike(pat, escape="\\"),
                 EmailQueue.body.ilike(pat, escape="\\"),
@@ -767,13 +825,10 @@ class EmailService:
                 InboundEmail.bcc.ilike(pat, escape="\\"),
             ),
         ]
-        if user_gmail:
-            recv_filters.append(
-                func.lower(InboundEmail.to_email) == user_gmail.lower()
-            )
-        else:
-            # No Gmail connection — no inbound results can be scoped to this user
-            recv_filters.append(literal(False))
+        # Admins (user_id=None) skip inbound scoping entirely; everyone else
+        # is bounded by participant overlap (or no rows when unconnected).
+        if user_id is not None:
+            recv_filters.append(_inbound_visibility_clause(user_emails, dialect))
         if entity_type:
             recv_filters.append(InboundEmail.entity_type == entity_type)
         if entity_id is not None:
@@ -845,11 +900,36 @@ class EmailService:
         entity_id: int,
         page: int = 1,
         page_size: int = 50,
+        viewer_user_id: int | None = None,
     ) -> tuple[list[dict], int]:
         """Get unified email thread (inbound + outbound) for an entity.
 
         Uses SQL UNION ALL with ORDER BY + LIMIT/OFFSET at the database level.
+        Scoped to the viewer via participant overlap: a row appears only if
+        the viewer is on the From/To/CC/BCC, or (outbound only) is the
+        composer (sent_by_id). Pass viewer_user_id=None for legacy/admin
+        callers needing unfiltered results.
         """
+        viewer_emails = (
+            await get_user_connection_emails(self.db, viewer_user_id)
+            if viewer_user_id is not None
+            else []
+        )
+        outbound_filters = [
+            EmailQueue.entity_type == entity_type,
+            EmailQueue.entity_id == entity_id,
+        ]
+        inbound_filters = [
+            InboundEmail.entity_type == entity_type,
+            InboundEmail.entity_id == entity_id,
+        ]
+        if viewer_user_id is not None:
+            dialect = _dialect_name(self.db)
+            outbound_filters.append(
+                _outbound_visibility_clause(viewer_user_id, viewer_emails, dialect)
+            )
+            inbound_filters.append(_inbound_visibility_clause(viewer_emails, dialect))
+
         outbound_q = (
             select(
                 EmailQueue.id.label("id"),
@@ -866,10 +946,7 @@ class EmailService:
                 literal(None).label("attachments"),
                 EmailQueue.thread_id.label("thread_id"),
             )
-            .where(
-                EmailQueue.entity_type == entity_type,
-                EmailQueue.entity_id == entity_id,
-            )
+            .where(*outbound_filters)
         )
 
         inbound_q = (
@@ -888,10 +965,7 @@ class EmailService:
                 literal(None).label("attachments"),
                 InboundEmail.thread_id.label("thread_id"),
             )
-            .where(
-                InboundEmail.entity_type == entity_type,
-                InboundEmail.entity_id == entity_id,
-            )
+            .where(*inbound_filters)
         )
 
         combined = union_all(outbound_q, inbound_q).subquery()

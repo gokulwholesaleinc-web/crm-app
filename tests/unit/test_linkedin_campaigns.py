@@ -286,11 +286,11 @@ class TestEmailThrottle:
 
     @pytest.mark.asyncio
     async def test_default_daily_limit(self, db_session: AsyncSession):
-        """Default daily limit should be 200."""
+        """Default daily limit should be 1000 (raised from 200 in PR #46-era)."""
         from src.email.throttle import EmailThrottleService
         throttle = EmailThrottleService(db_session)
         limit = await throttle.get_effective_daily_limit()
-        assert limit == 200
+        assert limit == 1000
 
     @pytest.mark.asyncio
     async def test_can_send_when_under_limit(self, db_session: AsyncSession):
@@ -382,7 +382,7 @@ class TestEmailThrottle:
         assert "warmup_enabled" in stats
         assert "remaining_today" in stats
         assert stats["sent_today"] == 0
-        assert stats["remaining_today"] == 200
+        assert stats["remaining_today"] == 1000
 
     @pytest.mark.asyncio
     async def test_update_settings(self, db_session: AsyncSession):
@@ -453,7 +453,7 @@ class TestEmailSettingsEndpoints:
         response = await client.get("/api/settings/email", headers=manager_auth_headers)
         assert response.status_code == 200
         data = response.json()
-        assert data["daily_send_limit"] == 200
+        assert data["daily_send_limit"] == 1000
         assert data["warmup_enabled"] is False
 
     @pytest.mark.asyncio

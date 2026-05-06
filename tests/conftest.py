@@ -70,7 +70,11 @@ from src.webhooks.stripe_events import WebhookEvent
 from src.reports.delivery import ReportDeliveryService
 
 
-# Test database URL - using SQLite in-memory for tests
+# Test database URL - using SQLite in-memory for tests. The participant_emails
+# column has a TypeDecorator that maps to JSON on SQLite and ARRAY on Postgres
+# so the schema compiles on both; visibility queries that use `.overlap()`
+# fall back to composer-only on SQLite via dialect detection in
+# email/service.py, so we don't need the test DB to support array operators.
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 

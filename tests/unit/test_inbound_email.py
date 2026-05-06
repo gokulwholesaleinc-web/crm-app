@@ -17,6 +17,14 @@ from src.contacts.models import Contact
 from src.email.models import EmailQueue, InboundEmail
 
 
+async def _make_admin(db_session: AsyncSession, user: User) -> None:
+    """Promote the test viewer to admin so the participant filter bypass
+    fires; the SQLite test path otherwise degrades to composer-only and
+    inbound rows that aren't anchored to ``sent_by_id`` would be hidden."""
+    user.is_superuser = True
+    db_session.add(user)
+    await db_session.commit()
+
 
 class TestEmailThread:
     """Tests for the email thread endpoint."""
@@ -31,7 +39,8 @@ class TestEmailThread:
         test_contact: Contact,
     ):
         """Should return both inbound and outbound emails in chronological order."""
-        # Create outbound email
+        await _make_admin(db_session, test_user)
+
         outbound = EmailQueue(
             to_email=test_contact.email,
             subject="Outbound test",
@@ -43,7 +52,6 @@ class TestEmailThread:
         )
         db_session.add(outbound)
 
-        # Create inbound email
         inbound = InboundEmail(
             resend_email_id="thread-test-001",
             from_email=test_contact.email,
@@ -146,6 +154,7 @@ class TestEmailThread:
         The EmailThread UI groups bubbles by this field; if it's missing,
         every message renders as a standalone thread.
         """
+        await _make_admin(db_session, test_user)
         outbound = EmailQueue(
             to_email=test_contact.email,
             subject="Initial",

@@ -1,5 +1,6 @@
 """Gmail integration routes."""
 
+import asyncio
 import hmac as _hmac
 import secrets
 from datetime import UTC
@@ -25,6 +26,12 @@ from src.integrations.gmail.schemas import (
 from src.integrations.gmail.service import GmailConnectionService
 
 router = APIRouter(prefix="/api/integrations/gmail", tags=["gmail"])
+
+# Hold strong references to in-flight backfill tasks. Without this, Python is
+# allowed to GC the asyncio task created by `asyncio.create_task(_run())`
+# before it executes — which previously stranded users in status='running'
+# with started_at=NULL forever.
+_BACKFILL_TASKS: set[asyncio.Task] = set()
 
 GMAIL_OAUTH_STATE_COOKIE = "crm_gmail_oauth_state"
 GMAIL_OAUTH_STATE_TTL_SECONDS = 600  # 10 minutes
@@ -254,8 +261,6 @@ async def gmail_backfill(
     Launches the backfill as a background asyncio task so the HTTP response
     returns immediately. The UI polls GET /backfill/status for progress.
     """
-    import asyncio
-
     from src.integrations.gmail.models import GmailBackfillState
     from src.integrations.gmail.sync import GmailSyncWorker, _get_or_create_backfill_state
 
@@ -318,7 +323,9 @@ async def gmail_backfill(
             except Exception:
                 logger.exception("[gmail_backfill] could not record failure state")
 
-    asyncio.create_task(_run())
+    task = asyncio.create_task(_run())
+    _BACKFILL_TASKS.add(task)
+    task.add_done_callback(_BACKFILL_TASKS.discard)
 
     return GmailBackfillStatusResponse(
         status="running",

@@ -155,7 +155,6 @@ async def sync_campaign_stats(
     from sqlalchemy import select
 
     from src.campaigns.models import Campaign
-
     from src.whitelabel.service import TenantUserService
 
     tenant_id = await _user_tenant_id(db, current_user.id)
