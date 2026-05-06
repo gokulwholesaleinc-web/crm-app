@@ -6,13 +6,14 @@ import { useState } from 'react';
 import { Modal, Button, Spinner } from '../../../components/ui';
 import { Input } from '../../../components/ui/Input';
 import { Select } from '../../../components/ui/Select';
+import { ScrollableListPicker } from '../../../components/shared/ScrollableListPicker';
 import {
   useCampaigns,
   useCreateCampaign,
   useAddCampaignMembers,
 } from '../../../hooks/useCampaigns';
 import { showSuccess, showError } from '../../../utils/toast';
-import type { CampaignCreate } from '../../../types';
+import type { Campaign, CampaignCreate } from '../../../types';
 
 interface AddToCampaignModalProps {
   isOpen: boolean;
@@ -38,7 +39,7 @@ export function AddToCampaignModal({
   onSuccess,
 }: AddToCampaignModalProps) {
   const [mode, setMode] = useState<Mode>('select');
-  const [selectedCampaignId, setSelectedCampaignId] = useState<number | null>(null);
+  const [selectedCampaignIds, setSelectedCampaignIds] = useState<Array<string | number>>([]);
   const [newName, setNewName] = useState('');
   const [newType, setNewType] = useState('email');
 
@@ -48,6 +49,7 @@ export function AddToCampaignModal({
 
   const campaigns = campaignsData?.items ?? [];
   const isSubmitting = createCampaign.isPending || addMembers.isPending;
+  const selectedCampaignId = selectedCampaignIds.length > 0 ? (selectedCampaignIds[0] as number) : null;
 
   const handleSubmit = async () => {
     try {
@@ -82,7 +84,7 @@ export function AddToCampaignModal({
 
   const handleClose = () => {
     setMode('select');
-    setSelectedCampaignId(null);
+    setSelectedCampaignIds([]);
     setNewName('');
     setNewType('email');
     onClose();
@@ -138,24 +140,24 @@ export function AddToCampaignModal({
                 No campaigns found. Create a new one instead.
               </p>
             ) : (
-              <div>
-                <label htmlFor="select-campaign" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Select Campaign
-                </label>
-                <select
-                  id="select-campaign"
-                  value={selectedCampaignId ?? ''}
-                  onChange={(e) => setSelectedCampaignId(e.target.value ? Number(e.target.value) : null)}
-                  className="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
-                >
-                  <option value="">-- Select a campaign --</option>
-                  {campaigns.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} ({c.status})
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <ScrollableListPicker<Campaign>
+                items={campaigns}
+                selectedIds={selectedCampaignIds}
+                onSelectionChange={setSelectedCampaignIds}
+                getItemId={(c) => c.id}
+                renderItem={(c, _isSelected) => (
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-gray-900 truncate">{c.name}</p>
+                    <p className="text-xs text-gray-500 truncate">{c.status}</p>
+                  </div>
+                )}
+                searchPlaceholder="Search campaigns..."
+                filterFn={(c, q) => c.name.toLowerCase().includes(q.toLowerCase())}
+                emptyMessage="No campaigns found."
+                multiSelect={false}
+                showSelectAll={false}
+                maxHeight="max-h-[30vh]"
+              />
             )}
           </div>
         )}
