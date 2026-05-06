@@ -1220,6 +1220,7 @@ class SubscriptionService:
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
         status: str | None = None,
+        status_in: list[str] | None = None,
         customer_id: int | None = None,
         contact_id: int | None = None,
         company_id: int | None = None,
@@ -1230,13 +1231,20 @@ class SubscriptionService:
         ``contact_id`` and ``company_id`` filter by the CRM relationship on
         StripeCustomer so the contact/company detail page can show all
         recurring billing for that record alongside one-time payments.
+
+        ``status_in`` allows filtering by multiple Stripe statuses at once
+        — used by the contact "Subscriber" badge to count active, trialing,
+        and past_due as ongoing recurring billing. ``status`` (singular)
+        still works for callers that only need one value.
         """
         query = select(Subscription).options(
             selectinload(Subscription.customer),
             selectinload(Subscription.price),
         )
 
-        if status:
+        if status_in:
+            query = query.where(Subscription.status.in_(status_in))
+        elif status:
             query = query.where(Subscription.status == status)
 
         if customer_id:

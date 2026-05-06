@@ -333,10 +333,22 @@ class WebhookProcessor:
         )
         await self._set_payment_status(payment, "refunded", guard_statuses=())
         # Cascade the refund into the linked proposal so the CRM doesn't
-        # show "paid" forever after Stripe gave the money back. Ties off
-        # the lifecycle so dashboards/reports can react.
+        # show "paid" forever after Stripe gave the money back. Wrap the
+        # cascade in its own try-block: a deterministically broken
+        # lookup (e.g. proposal model schema drift) shouldn't bubble a
+        # 500 to Stripe, because Stripe will retry the same event
+        # forever and the *Payment* row already updated to refunded
+        # above. Logging keeps the issue visible without burning retries.
         if payment is not None:
-            await self._mark_proposal_awaiting_after_refund(payment, charge_obj)
+            try:
+                await self._mark_proposal_awaiting_after_refund(payment, charge_obj)
+            except (OSError, RuntimeError, ValueError, KeyError, AttributeError):
+                logger.exception(
+                    "cascade.refund.failed event_id=%s charge_id=%s payment_id=%s",
+                    charge_obj.get("id"),
+                    charge_obj.get("id"),
+                    payment.id,
+                )
 
     async def _mark_proposal_awaiting_after_refund(
         self, payment: Payment, charge_obj: dict
@@ -379,16 +391,24 @@ class WebhookProcessor:
             proposal.paid_at = None
 
         charge_id = charge_obj.get("id") or "unknown_charge"
+        # Pull the most recent refund id off the charge so partial refunds
+        # — which arrive as new events with the same charge id but a
+        # different refund id — each leave their own audit row instead of
+        # silently dedup'ing on charge_id+date.
+        refunds = (charge_obj.get("refunds") or {}).get("data") or []
+        refund_id = (refunds[-1].get("id") if refunds else None) or "unknown_refund"
         refund_iso = datetime.now(UTC).date().isoformat()
         comment_body = (
-            f"Refunded on {refund_iso} via Stripe charge.refunded ({charge_id})"
+            f"Refunded on {refund_iso} via Stripe charge.refunded "
+            f"(charge {charge_id}, refund {refund_id})"
         )
 
-        # Skip duplicate comment if this exact charge already has one —
-        # Stripe may resend charge.refunded on partial refunds; the dedup
-        # in process_webhook handles same event_id, but a partial refund
-        # arrives as a *new* event with the same charge id, so we filter
-        # locally too.
+        # Skip duplicate comment if this specific refund event already has
+        # one. Stripe re-delivers webhooks (the global event_id dedup in
+        # process_webhook handles that), but partial refunds are *separate*
+        # events — same charge id, different refund id. Keying the dedup on
+        # the refund id lets two partial refunds on the same day each
+        # write their own audit row.
         existing = await self.db.execute(
             select(Comment).where(
                 Comment.entity_type == "proposals",
@@ -545,8 +565,18 @@ class WebhookProcessor:
             if payment.status != "succeeded":
                 payment.status = "succeeded"
                 await self.db.flush()
-            # Fall through to also mark any linked proposal paid.
-            await self._mark_proposal_paid_from_invoice(invoice_id)
+            # Fall through to also mark any linked proposal paid. Same
+            # rationale as the charge.refunded cascade: a broken proposal
+            # cascade must not 500 the webhook (Stripe retries forever
+            # and Payment.status already moved). Log + continue.
+            try:
+                await self._mark_proposal_paid_from_invoice(invoice_id)
+            except (OSError, RuntimeError, ValueError, KeyError, AttributeError):
+                logger.exception(
+                    "cascade.invoice_paid.failed invoice_id=%s payment_id=%s",
+                    invoice_id,
+                    payment.id,
+                )
             return
 
         # ------------------------------------------------------------------
@@ -757,6 +787,13 @@ class WebhookProcessor:
         stage, or no Won stage is configured. Picks the lowest-`order`
         Won stage so deployments with multiple "Closed Won" variants
         land on the canonical entry stage.
+
+        Tenant scope: PipelineStage is single-tenant today, mirroring the
+        invoice/session lookups in this module. If a second tenant ever
+        onboards with their own pipeline, add a tenant_id filter here so
+        a paid-in-tenant-A event can't flip a tenant-B opportunity to
+        Won. See ``_mark_proposal_paid_from_invoice`` for the matching
+        comment on the proposal-side lookup.
         """
         if not opportunity_id:
             return
@@ -781,13 +818,16 @@ class WebhookProcessor:
             if current_stage is not None and current_stage.is_won:
                 return
 
+        # NULLS LAST so a Won stage with order=NULL doesn't beat a stage
+        # with order=10 by chance of pg sort order — that would land us
+        # on a non-canonical Won variant.
         won_result = await self.db.execute(
             select(PipelineStage)
             .where(
                 PipelineStage.pipeline_type == "opportunity",
                 PipelineStage.is_won.is_(True),
             )
-            .order_by(PipelineStage.order)
+            .order_by(PipelineStage.order.asc().nulls_last(), PipelineStage.id.asc())
             .limit(1)
         )
         won_stage = won_result.scalar_one_or_none()
