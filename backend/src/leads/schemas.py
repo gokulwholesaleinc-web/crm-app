@@ -188,6 +188,7 @@ class KanbanLead(BaseModel):
     company_name: str | None = None
     score: int
     owner_id: int | None = None
+    owner_name: str | None = None
 
 
 class KanbanLeadStage(BaseModel):

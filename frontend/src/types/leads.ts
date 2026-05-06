@@ -126,6 +126,7 @@ export interface KanbanLead {
   company_name?: string | null;
   score: number;
   owner_id?: number | null;
+  owner_name?: string | null;
 }
 
 export interface KanbanLeadStage {

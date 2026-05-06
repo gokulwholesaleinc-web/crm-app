@@ -277,6 +277,11 @@ class TestLeadKanban:
         assert stages_map["New"]["leads"][0]["full_name"] == "Alice New"
         assert stages_map["Discovery"]["count"] == 1
         assert stages_map["Discovery"]["leads"][0]["full_name"] == "Bob Discovery"
+        # owner_name is hydrated from User.full_name in one batched query;
+        # the frontend admin badge depends on it being present.
+        assert stages_map["New"]["leads"][0]["owner_id"] == test_user.id
+        assert stages_map["New"]["leads"][0]["owner_name"] == test_user.full_name
+        assert stages_map["Discovery"]["leads"][0]["owner_name"] == test_user.full_name
 
     @pytest.mark.asyncio
     async def test_kanban_empty_stages(

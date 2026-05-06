@@ -267,19 +267,37 @@ async def get_lead_kanban(
             message="No lead pipeline stages configured. Run the seed script or contact admin.",
         )
 
+    # Pull every visible lead in one query, then group by stage in Python.
+    # Lets us build the owner-id → full_name map from a single follow-up
+    # User query instead of N (one per stage) or doing the .map() inside
+    # each loop iteration.
+    leads_query = select(Lead).where(
+        Lead.pipeline_stage_id.in_([s.id for s in stages])
+    )
+    if resolved_owner_id:
+        leads_query = leads_query.where(Lead.owner_id == resolved_owner_id)
+    leads_query = leads_query.order_by(Lead.score.desc())
+    leads_result = await db.execute(leads_query)
+    all_leads = list(leads_result.scalars().all())
+
+    owner_ids = {lead.owner_id for lead in all_leads if lead.owner_id is not None}
+    if owner_ids:
+        owners_result = await db.execute(
+            select(User.id, User.full_name).where(User.id.in_(owner_ids))
+        )
+        owner_name_by_id: dict[int, str] = {
+            row.id: row.full_name for row in owners_result.all()
+        }
+    else:
+        owner_name_by_id = {}
+
+    leads_by_stage: dict[int, list[Lead]] = {s.id: [] for s in stages}
+    for lead in all_leads:
+        leads_by_stage[lead.pipeline_stage_id].append(lead)
+
     kanban_stages = []
     for stage in stages:
-        leads_query = (
-            select(Lead)
-            .where(Lead.pipeline_stage_id == stage.id)
-        )
-        if resolved_owner_id:
-            leads_query = leads_query.where(Lead.owner_id == resolved_owner_id)
-        leads_query = leads_query.order_by(Lead.score.desc())
-
-        leads_result = await db.execute(leads_query)
-        leads = leads_result.scalars().all()
-
+        leads = leads_by_stage[stage.id]
         kanban_leads = [
             KanbanLead(
                 id=lead.id,
@@ -290,6 +308,7 @@ async def get_lead_kanban(
                 company_name=lead.company_name,
                 score=lead.score,
                 owner_id=lead.owner_id,
+                owner_name=owner_name_by_id.get(lead.owner_id) if lead.owner_id else None,
             )
             for lead in leads
         ]

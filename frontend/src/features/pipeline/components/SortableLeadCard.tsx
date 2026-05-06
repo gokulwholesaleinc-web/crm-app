@@ -2,6 +2,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { KanbanLead } from '../../../types';
 import { encodeLeadDragId } from '../utils/dragIds';
+import { useAuthStore } from '../../../store/authStore';
 
 export function SortableLeadCard({
   lead,
@@ -21,6 +22,10 @@ export function SortableLeadCard({
     transition,
     opacity: isDragging ? 0.5 : 1,
   };
+  // Admin/manager need to see who owns each lead at a glance — sales_reps
+  // already see only their own pipeline so the pill would be redundant.
+  const role = useAuthStore((s) => s.user?.role);
+  const showOwner = (role === 'admin' || role === 'manager') && !!lead.owner_name;
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
       <button
@@ -38,10 +43,18 @@ export function SortableLeadCard({
           {lead.email && (
             <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{lead.email}</p>
           )}
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             <span className="inline-flex items-center rounded-full bg-blue-100 dark:bg-blue-800 px-2 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-300">
               Score: {lead.score}
             </span>
+            {showOwner && (
+              <span
+                className="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-300 max-w-[10rem] truncate"
+                title={`Owner: ${lead.owner_name}`}
+              >
+                @{lead.owner_name}
+              </span>
+            )}
           </div>
         </div>
       </button>
