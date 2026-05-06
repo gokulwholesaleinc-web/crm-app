@@ -1062,3 +1062,74 @@ class TestProposalsUnauthorized:
             json={"opportunity_id": 1},
         )
         assert response.status_code == 401
+
+
+class TestClosedLostGuard:
+    """Creating a proposal against a Closed-Lost opportunity must 400."""
+
+    @pytest.mark.asyncio
+    async def test_create_proposal_blocked_when_opportunity_lost(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        lost_stage = PipelineStage(
+            name="Closed-Lost",
+            description="Deal lost",
+            order=99,
+            color="#ef4444",
+            probability=0,
+            is_won=False,
+            is_lost=True,
+            is_active=True,
+        )
+        db_session.add(lost_stage)
+        await db_session.commit()
+        await db_session.refresh(lost_stage)
+
+        opp = Opportunity(
+            name="Dead deal",
+            pipeline_stage_id=lost_stage.id,
+            amount=1000.0,
+            currency="USD",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(opp)
+        await db_session.commit()
+        await db_session.refresh(opp)
+
+        response = await client.post(
+            "/api/proposals",
+            headers=auth_headers,
+            json={
+                "title": "Reanimated proposal",
+                "status": "draft",
+                "opportunity_id": opp.id,
+            },
+        )
+        assert response.status_code == 400
+        assert "Closed-Lost" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_create_proposal_allowed_for_active_opportunity(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_opportunity,
+    ):
+        """Sanity check: an active stage opportunity still creates fine."""
+        response = await client.post(
+            "/api/proposals",
+            headers=auth_headers,
+            json={
+                "title": "Active proposal",
+                "status": "draft",
+                "opportunity_id": test_opportunity.id,
+            },
+        )
+        assert response.status_code == 201
+        assert response.json()["opportunity_id"] == test_opportunity.id

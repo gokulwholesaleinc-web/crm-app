@@ -85,6 +85,30 @@ def _resolve_billing(proposal: Proposal) -> dict | None:
     }
 
 
+async def _assert_opportunity_not_lost(db, opportunity_id: int, entity_label: str) -> None:
+    """Block creation of an entity attached to a Closed-Lost opportunity.
+
+    The user must move the opportunity back to an active stage before
+    spawning a new proposal/quote/payment against it — otherwise we
+    silently accumulate billable artifacts on a deal everyone treats as
+    dead.
+    """
+    from src.opportunities.models import Opportunity, PipelineStage
+
+    result = await db.execute(
+        select(PipelineStage.is_lost)
+        .join(Opportunity, Opportunity.pipeline_stage_id == PipelineStage.id)
+        .where(Opportunity.id == opportunity_id)
+    )
+    is_lost = result.scalar_one_or_none()
+    if is_lost is True:
+        raise ValueError(
+            f"Cannot create {entity_label} for an opportunity in a "
+            f"Closed-Lost stage. Move the opportunity back to an active "
+            f"stage first."
+        )
+
+
 def _designated_email_for(proposal: Proposal) -> str:
     """Lowercased email authorized to sign this proposal.
 
@@ -224,6 +248,9 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
 
     async def create(self, data: ProposalCreate, user_id: int) -> Proposal:
         """Create a new proposal with auto-generated number + public token."""
+        if data.opportunity_id is not None:
+            await _assert_opportunity_not_lost(self.db, data.opportunity_id, "proposal")
+
         proposal_number = await self._generate_proposal_number()
 
         proposal_data = data.model_dump()
