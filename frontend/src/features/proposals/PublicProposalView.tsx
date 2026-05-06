@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, startTransition } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
@@ -6,6 +6,8 @@ import { sanitizeHexColor } from '../../utils/colorValidation';
 import { formatDate } from '../../utils/formatters';
 import { cadenceLabel, formatProposalMoney } from './billing';
 import { setPublicPageMeta } from '../quotes/publicMeta';
+import { ProposalAttachmentsSection } from './ProposalAttachmentsSection';
+import type { ProposalAttachmentPublic } from '../../types';
 
 // Bare axios instance for public (unauthenticated) proposal endpoints.
 // Deliberately does NOT attach the CRM Bearer token or X-Tenant-Slug
@@ -51,6 +53,7 @@ interface PublicProposal {
   company: { id: number; name: string } | null;
   contact: { id: number; full_name: string } | null;
   branding: ProposalBranding | null;
+  attachments?: ProposalAttachmentPublic[];
 }
 
 const DEFAULT_BRANDING: ProposalBranding = {
@@ -86,6 +89,14 @@ function PublicProposalView() {
   const [signError, setSignError] = useState<string | null>(null);
   const [confirmingPayment, setConfirmingPayment] = useState(false);
   const [paymentTimedOut, setPaymentTimedOut] = useState(false);
+  // Tracks which attachment IDs the customer has opened on this device.
+  // Seeded from the public response (server-side `viewed` flag) the first
+  // time we see the proposal so a returning customer doesn't have to
+  // re-open every PDF. Subsequent opens are added optimistically inside
+  // a transition — the next polled refetch may also flip `viewed`, but
+  // local state is the source of truth for the gate.
+  const [viewedIds, setViewedIds] = useState<Set<number>>(() => new Set());
+  const seededViewedIdsRef = useRef(false);
   const paySectionRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -112,24 +123,38 @@ function PublicProposalView() {
     };
   }, [proposalTitle, proposalBrandingCompanyName]);
 
-  useEffect(() => {
+  const fetchProposal = useCallback(async () => {
     if (!token) return;
-
-    const fetchProposal = async () => {
-      try {
-        const response = await publicClient.get<PublicProposal>(
-          `/api/proposals/public/${token}`
-        );
-        setProposal(response.data);
-      } catch {
-        setError('Proposal not found or no longer available.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchProposal();
+    try {
+      const response = await publicClient.get<PublicProposal>(
+        `/api/proposals/public/${token}`
+      );
+      setProposal(response.data);
+    } catch {
+      setError('Proposal not found or no longer available.');
+    } finally {
+      setLoading(false);
+    }
   }, [token]);
+
+  useEffect(() => {
+    fetchProposal();
+  }, [fetchProposal]);
+
+  // One-shot seed of viewedIds from the server-side `viewed` flag the
+  // first time the proposal lands. Guarded by a ref so the periodic poll
+  // (which replaces `proposal` with a fresh response) never overwrites
+  // the customer's locally-clicked attachments.
+  useEffect(() => {
+    if (!proposal || seededViewedIdsRef.current) return;
+    seededViewedIdsRef.current = true;
+    const initial = (proposal.attachments ?? [])
+      .filter((a) => a.viewed)
+      .map((a) => a.id);
+    if (initial.length > 0) {
+      setViewedIds(new Set(initial));
+    }
+  }, [proposal]);
 
   // After acceptance lands, scroll the Pay block into view so the customer
   // doesn't have to hunt for the next step.
@@ -318,10 +343,38 @@ function PublicProposalView() {
     proposal.valid_until &&
     new Date(proposal.valid_until) < new Date();
 
+  const attachments = proposal.attachments ?? [];
+  const allAttachmentsViewed =
+    attachments.length === 0 || attachments.every((a) => viewedIds.has(a.id));
+
+  const handleAttachmentViewed = (id: number) => {
+    // startTransition so flipping the gate doesn't block the click
+    // handler, and so the larger Sign-form re-render is treated as
+    // non-urgent (the new tab opening is the urgent feedback).
+    startTransition(() => {
+      setViewedIds((curr) => {
+        if (curr.has(id)) return curr;
+        const next = new Set(curr);
+        next.add(id);
+        return next;
+      });
+    });
+  };
+
   const canRespond =
     (proposal.status === 'sent' || proposal.status === 'viewed') &&
     !isExpired &&
-    !actionDone;
+    !actionDone &&
+    allAttachmentsViewed;
+
+  // Polite notice the customer sees while the gate is still closed —
+  // only meaningful in sent/viewed status (anything else hides the
+  // sign form anyway, so the message would be misleading).
+  const showAttachmentGateNotice =
+    !allAttachmentsViewed &&
+    !actionDone &&
+    (proposal.status === 'sent' || proposal.status === 'viewed') &&
+    !isExpired;
 
   const validUntilDate = proposal.valid_until
     ? formatDate(proposal.valid_until, 'long')
@@ -436,6 +489,17 @@ function PublicProposalView() {
             </div>
           </section>
         ))}
+
+        {token && (
+          <ProposalAttachmentsSection
+            attachments={attachments}
+            token={token}
+            accent={accent}
+            viewedIds={viewedIds}
+            onViewed={handleAttachmentViewed}
+            onReconcile={fetchProposal}
+          />
+        )}
 
         {/* Pricing — highlighted block, business-standard */}
         {hasPricingBlock && (
@@ -584,6 +648,22 @@ function PublicProposalView() {
           </section>
         )}
 
+        {/* Sign gate notice — visible while attachments still need to be
+            opened. The Accept/Decline form below is fully suppressed
+            until the gate clears (canRespond folds in
+            allAttachmentsViewed). */}
+        {showAttachmentGateNotice && (
+          <section
+            className="mt-10 sm:mt-12 rounded border border-amber-200 bg-amber-50 px-5 py-4"
+            role="status"
+            aria-live="polite"
+          >
+            <p className="text-sm text-amber-900">
+              You must open and read all attached documents before you can sign this proposal.
+            </p>
+          </section>
+        )}
+
         {/* Accept / Decline form — standard business form layout */}
         {canRespond && (
           <section className="mt-10 sm:mt-12">
@@ -722,8 +802,9 @@ function PublicProposalView() {
             </summary>
             <div className="mt-3 space-y-2 text-[13px] leading-relaxed text-gray-600 dark:text-gray-400 text-pretty">
               <p>
-                By typing your name and email and selecting <em>Accept &amp; Sign</em>, you agree
-                that this constitutes your legally binding electronic signature under the
+                By typing your name and email and selecting <em>Accept &amp; Sign</em>, you confirm
+                that you have read all attached documents and the proposal above, and you
+                agree that this constitutes your legally binding electronic signature under the
                 US ESIGN Act (15 USC §7001) and applicable state UETA statutes, with the
                 same legal effect as a handwritten signature.
               </p>
