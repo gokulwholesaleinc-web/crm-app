@@ -23,6 +23,7 @@ from src.core.cache import (
     cached_fetch,
     invalidate_pipeline_stages_cache,
 )
+from src.core.client_ip import get_client_ip
 from src.core.constants import ENTITY_TYPE_OPPORTUNITIES, EntityNames, HTTPStatus
 from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
 from src.core.router_utils import (
@@ -332,7 +333,7 @@ async def create_opportunity(
     except Exception as e:
         logger.warning("Failed to store embedding: %s", e)
 
-    ip_address = request.client.host if request.client else None
+    ip_address = get_client_ip(request)
     await audit_entity_create(db, "opportunity", opportunity.id, current_user.id, ip_address)
 
     await emit(OPPORTUNITY_CREATED, {
@@ -398,7 +399,7 @@ async def update_opportunity(
         logger.warning("Failed to store embedding: %s", e)
 
     new_data = snapshot_entity(updated_opp, update_fields)
-    ip_address = request.client.host if request.client else None
+    ip_address = get_client_ip(request)
     await audit_entity_update(db, "opportunity", updated_opp.id, current_user.id, old_data, new_data, ip_address)
 
     await emit(OPPORTUNITY_UPDATED, {
@@ -440,7 +441,7 @@ async def delete_opportunity(
     )
     check_ownership(opportunity, current_user, EntityNames.OPPORTUNITY)
 
-    ip_address = request.client.host if request.client else None
+    ip_address = get_client_ip(request)
     await audit_entity_delete(db, "opportunity", opportunity.id, current_user.id, ip_address)
 
     # Delete embedding before deleting entity

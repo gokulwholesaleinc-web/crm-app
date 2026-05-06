@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.payments.exceptions import NoRecipientEmailError
@@ -331,6 +332,80 @@ class WebhookProcessor:
             Payment.stripe_payment_intent_id, charge_obj, obj_key="payment_intent"
         )
         await self._set_payment_status(payment, "refunded", guard_statuses=())
+        # Cascade the refund into the linked proposal so the CRM doesn't
+        # show "paid" forever after Stripe gave the money back. Ties off
+        # the lifecycle so dashboards/reports can react.
+        if payment is not None:
+            await self._mark_proposal_awaiting_after_refund(payment, charge_obj)
+
+    async def _mark_proposal_awaiting_after_refund(
+        self, payment: Payment, charge_obj: dict
+    ) -> None:
+        """Flip the Payment's linked Proposal back to ``awaiting_payment``
+        and append an audit comment recording the refund.
+
+        Looks the proposal up via whichever Stripe id the original
+        proposal-billing flow stamped on it (invoice or checkout session).
+        Preserves ``accepted_at``/``signed_at`` etc. so the e-sign trail
+        is untouched — only the payment-status side moves.
+        """
+        from src.comments.models import Comment
+        from src.proposals.models import Proposal
+
+        proposal: Proposal | None = None
+        if payment.stripe_invoice_id:
+            result = await self.db.execute(
+                select(Proposal).where(
+                    Proposal.stripe_invoice_id == payment.stripe_invoice_id
+                )
+            )
+            proposal = result.scalar_one_or_none()
+        if proposal is None and payment.stripe_checkout_session_id:
+            result = await self.db.execute(
+                select(Proposal).where(
+                    Proposal.stripe_checkout_session_id
+                    == payment.stripe_checkout_session_id
+                )
+            )
+            proposal = result.scalar_one_or_none()
+        if proposal is None:
+            return
+
+        # Idempotency: if the proposal is already back in awaiting_payment
+        # we still want the comment trail to record this specific refund
+        # event, but only once per charge id.
+        if proposal.status == "paid":
+            proposal.status = "awaiting_payment"
+            proposal.paid_at = None
+
+        charge_id = charge_obj.get("id") or "unknown_charge"
+        refund_iso = datetime.now(UTC).date().isoformat()
+        comment_body = (
+            f"Refunded on {refund_iso} via Stripe charge.refunded ({charge_id})"
+        )
+
+        # Skip duplicate comment if this exact charge already has one —
+        # Stripe may resend charge.refunded on partial refunds; the dedup
+        # in process_webhook handles same event_id, but a partial refund
+        # arrives as a *new* event with the same charge id, so we filter
+        # locally too.
+        existing = await self.db.execute(
+            select(Comment).where(
+                Comment.entity_type == "proposals",
+                Comment.entity_id == proposal.id,
+                Comment.content == comment_body,
+            )
+        )
+        if existing.scalar_one_or_none() is None:
+            self.db.add(
+                Comment(
+                    entity_type="proposals",
+                    entity_id=proposal.id,
+                    content=comment_body,
+                    is_internal=True,
+                )
+            )
+        await self.db.flush()
 
     async def _handle_subscription_created(self, sub_obj: dict) -> None:
         """Handle customer.subscription.created — insert local Subscription
@@ -523,12 +598,34 @@ class WebhookProcessor:
         )
         currency = (invoice_obj.get("currency") or "usd").upper()
 
+        # Trace the renewal back to the proposal/quote/opportunity that
+        # spawned the subscription so MRR reports can attribute renewal
+        # revenue to the original deal. Payment has no `proposal_id`
+        # column today, so we rely on the proposal's quote_id /
+        # opportunity_id passthrough — same fields the first-cycle
+        # checkout payment carries.
+        quote_id = None
+        opportunity_id = None
+        if stripe_subscription_id:
+            from src.proposals.models import Proposal
+            proposal_result = await self.db.execute(
+                select(Proposal).where(
+                    Proposal.stripe_subscription_id == stripe_subscription_id
+                )
+            )
+            source_proposal = proposal_result.scalar_one_or_none()
+            if source_proposal is not None:
+                quote_id = source_proposal.quote_id
+                opportunity_id = source_proposal.opportunity_id
+
         renewal_payment = Payment(
             stripe_invoice_id=invoice_id,
             amount=amount_dollars,
             currency=currency,
             status="succeeded",
             customer_id=customer_row.id if customer_row else None,
+            quote_id=quote_id,
+            opportunity_id=opportunity_id,
             owner_id=owner_id,
             created_by_id=owner_id,
         )
@@ -536,8 +633,14 @@ class WebhookProcessor:
             async with self.db.begin_nested():
                 self.db.add(renewal_payment)
                 await self.db.flush()
-        except Exception as exc:
-            logger.warning(
+        except IntegrityError as exc:
+            # Concurrent webhook delivery raced us to the unique constraint
+            # on Payment.stripe_invoice_id — the other handler already
+            # recorded this renewal, so silently no-op. This is the
+            # ONLY swallowable case here; any other DB error must
+            # propagate so Stripe retries instead of silently losing a
+            # paid renewal that breaks MRR/ARR reporting.
+            logger.info(
                 "invoice.paid renewal insert race for %s: %s", invoice_id, exc
             )
 
@@ -645,6 +748,54 @@ class WebhookProcessor:
         proposal.status = "paid"
         proposal.paid_at = datetime.now(UTC)
         await self.db.flush()
+        await self._move_opportunity_to_won(proposal.opportunity_id)
+
+    async def _move_opportunity_to_won(self, opportunity_id: int | None) -> None:
+        """Advance the linked opportunity to its first Won pipeline stage.
+
+        Skips silently if no opportunity, the opp is already on a Won
+        stage, or no Won stage is configured. Picks the lowest-`order`
+        Won stage so deployments with multiple "Closed Won" variants
+        land on the canonical entry stage.
+        """
+        if not opportunity_id:
+            return
+        from src.opportunities.models import Opportunity, PipelineStage
+
+        opp_result = await self.db.execute(
+            select(Opportunity).where(Opportunity.id == opportunity_id)
+        )
+        opportunity = opp_result.scalar_one_or_none()
+        if opportunity is None:
+            return
+
+        # Already won? Don't overwrite — admins may have hand-picked a
+        # specific Won stage variant we shouldn't reset.
+        if opportunity.pipeline_stage_id is not None:
+            current_stage_result = await self.db.execute(
+                select(PipelineStage).where(
+                    PipelineStage.id == opportunity.pipeline_stage_id
+                )
+            )
+            current_stage = current_stage_result.scalar_one_or_none()
+            if current_stage is not None and current_stage.is_won:
+                return
+
+        won_result = await self.db.execute(
+            select(PipelineStage)
+            .where(
+                PipelineStage.pipeline_type == "opportunity",
+                PipelineStage.is_won.is_(True),
+            )
+            .order_by(PipelineStage.order)
+            .limit(1)
+        )
+        won_stage = won_result.scalar_one_or_none()
+        if won_stage is None:
+            return
+
+        opportunity.pipeline_stage_id = won_stage.id
+        await self.db.flush()
 
     async def _mark_proposal_paid_from_session(self, session_obj: dict) -> None:
         metadata = session_obj.get("metadata") or {}
@@ -673,7 +824,11 @@ class WebhookProcessor:
         if subscription_id and not proposal.stripe_subscription_id:
             proposal.stripe_subscription_id = subscription_id
 
+        flipped_to_paid = False
         if session_obj.get("payment_status") == "paid" and proposal.status != "paid":
             proposal.status = "paid"
             proposal.paid_at = datetime.now(UTC)
+            flipped_to_paid = True
         await self.db.flush()
+        if flipped_to_paid:
+            await self._move_opportunity_to_won(proposal.opportunity_id)

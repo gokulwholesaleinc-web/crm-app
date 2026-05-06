@@ -14,6 +14,7 @@ import hashlib
 import hmac
 import json
 import time
+from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -759,3 +760,415 @@ class TestHandleSubscriptionUpdated:
             "status": "canceled",
             "cancel_at_period_end": True,
         })
+
+
+# ---------------------------------------------------------------------------
+# Cascade: invoice.paid → opportunity moved to a Won pipeline stage
+# ---------------------------------------------------------------------------
+
+
+class TestInvoicePaidCascadesToOpportunity:
+    """invoice.paid on a proposal-linked invoice flips the linked
+    opportunity to the lowest-order Won pipeline stage."""
+
+    @pytest.mark.asyncio
+    async def test_invoice_paid_moves_opportunity_to_won_stage(
+        self,
+        db_session: AsyncSession,
+        payment_service: PaymentService,
+        test_user: User,
+    ):
+        import secrets
+
+        from src.opportunities.models import Opportunity, PipelineStage
+        from src.proposals.models import Proposal
+
+        open_stage = PipelineStage(
+            name="Discovery", order=1, probability=10,
+            is_won=False, is_lost=False, is_active=True,
+            pipeline_type="opportunity",
+        )
+        won_stage = PipelineStage(
+            name="Closed Won", order=99, probability=100,
+            is_won=True, is_lost=False, is_active=True,
+            pipeline_type="opportunity",
+        )
+        db_session.add_all([open_stage, won_stage])
+        await db_session.flush()
+
+        opp = Opportunity(
+            name="Cascade target",
+            pipeline_stage_id=open_stage.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(opp)
+        await db_session.flush()
+
+        invoice_id = "in_cascade_won_001"
+        proposal = Proposal(
+            proposal_number="PR-2026-CASC-001",
+            public_token=secrets.token_urlsafe(32),
+            title="Cascade",
+            status="awaiting_payment",
+            opportunity_id=opp.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+            amount=Decimal("250.00"),
+            currency="USD",
+            payment_type="one_time",
+            stripe_invoice_id=invoice_id,
+        )
+        existing_payment = Payment(
+            stripe_invoice_id=invoice_id,
+            amount=Decimal("250.00"),
+            currency="USD",
+            status="pending",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add_all([proposal, existing_payment])
+        await db_session.commit()
+
+        await payment_service._handle_invoice_paid({
+            "id": invoice_id,
+            "amount_paid": 25000,
+            "currency": "usd",
+        })
+
+        await db_session.refresh(opp)
+        await db_session.refresh(proposal)
+        assert proposal.status == "paid"
+        assert opp.pipeline_stage_id == won_stage.id
+
+    @pytest.mark.asyncio
+    async def test_already_won_opportunity_not_overwritten(
+        self,
+        db_session: AsyncSession,
+        payment_service: PaymentService,
+        test_user: User,
+    ):
+        """Hand-picked Won variant must not be reset to the canonical Won."""
+        import secrets
+
+        from src.opportunities.models import Opportunity, PipelineStage
+        from src.proposals.models import Proposal
+
+        canonical_won = PipelineStage(
+            name="Closed Won", order=10, probability=100,
+            is_won=True, is_active=True, pipeline_type="opportunity",
+        )
+        custom_won = PipelineStage(
+            name="Closed Won — Renewal", order=20, probability=100,
+            is_won=True, is_active=True, pipeline_type="opportunity",
+        )
+        db_session.add_all([canonical_won, custom_won])
+        await db_session.flush()
+
+        opp = Opportunity(
+            name="Already won",
+            pipeline_stage_id=custom_won.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(opp)
+        await db_session.flush()
+
+        invoice_id = "in_cascade_won_002"
+        proposal = Proposal(
+            proposal_number="PR-2026-CASC-002",
+            public_token=secrets.token_urlsafe(32),
+            title="Already won",
+            status="awaiting_payment",
+            opportunity_id=opp.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+            amount=Decimal("100.00"),
+            currency="USD",
+            payment_type="one_time",
+            stripe_invoice_id=invoice_id,
+        )
+        existing_payment = Payment(
+            stripe_invoice_id=invoice_id,
+            amount=Decimal("100.00"),
+            currency="USD",
+            status="pending",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add_all([proposal, existing_payment])
+        await db_session.commit()
+
+        await payment_service._handle_invoice_paid({
+            "id": invoice_id,
+            "amount_paid": 10000,
+            "currency": "usd",
+        })
+
+        await db_session.refresh(opp)
+        assert opp.pipeline_stage_id == custom_won.id
+
+
+# ---------------------------------------------------------------------------
+# Cascade: charge.refunded → proposal back to awaiting_payment + comment
+# ---------------------------------------------------------------------------
+
+
+class TestChargeRefundedCascadesToProposal:
+    @pytest.mark.asyncio
+    async def test_charge_refunded_flips_proposal_back_to_awaiting_payment(
+        self,
+        db_session: AsyncSession,
+        payment_service: PaymentService,
+        test_user: User,
+    ):
+        import secrets
+
+        from src.comments.models import Comment
+        from src.proposals.models import Proposal
+
+        invoice_id = "in_refund_001"
+        intent_id = "pi_refund_001"
+        accepted_at = datetime(2026, 4, 1, 12, 0, tzinfo=UTC)
+        proposal = Proposal(
+            proposal_number="PR-2026-REF-001",
+            public_token=secrets.token_urlsafe(32),
+            title="Refund target",
+            status="paid",
+            paid_at=datetime(2026, 4, 5, tzinfo=UTC),
+            accepted_at=accepted_at,
+            signed_at=accepted_at,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+            amount=Decimal("500.00"),
+            currency="USD",
+            payment_type="one_time",
+            stripe_invoice_id=invoice_id,
+        )
+        payment = Payment(
+            stripe_invoice_id=invoice_id,
+            stripe_payment_intent_id=intent_id,
+            amount=Decimal("500.00"),
+            currency="USD",
+            status="succeeded",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add_all([proposal, payment])
+        await db_session.commit()
+        await db_session.refresh(proposal)
+        await db_session.refresh(payment)
+
+        await payment_service._handle_charge_refunded({
+            "id": "ch_refund_xyz",
+            "payment_intent": intent_id,
+        })
+
+        await db_session.refresh(proposal)
+        await db_session.refresh(payment)
+        assert payment.status == "refunded"
+        assert proposal.status == "awaiting_payment"
+        # E-sign trail must survive the cascade.
+        assert _as_utc(proposal.accepted_at) == accepted_at
+        assert proposal.paid_at is None
+
+        comment_result = await db_session.execute(
+            select(Comment).where(
+                Comment.entity_type == "proposals",
+                Comment.entity_id == proposal.id,
+            )
+        )
+        comments = comment_result.scalars().all()
+        assert len(comments) == 1
+        assert "Refunded on" in comments[0].content
+        assert "ch_refund_xyz" in comments[0].content
+
+
+# ---------------------------------------------------------------------------
+# Cascade: subscription renewal Payment links to the original proposal/quote
+# ---------------------------------------------------------------------------
+
+
+class TestSubscriptionRenewalLinkage:
+    @pytest.mark.asyncio
+    async def test_subscription_renewal_payment_links_to_original_proposal(
+        self,
+        db_session: AsyncSession,
+        payment_service: PaymentService,
+        test_user: User,
+    ):
+        """invoice.paid for a Stripe-driven renewal carries the original
+        proposal's quote_id + opportunity_id onto the new Payment row so
+        renewal MRR rolls up to the source deal.
+        """
+        import secrets
+
+        from src.opportunities.models import Opportunity, PipelineStage
+        from src.proposals.models import Proposal
+        from src.quotes.models import Quote
+
+        stage = PipelineStage(
+            name="Active", order=1, probability=80,
+            is_won=False, is_active=True, pipeline_type="opportunity",
+        )
+        db_session.add(stage)
+        await db_session.flush()
+
+        opp = Opportunity(
+            name="Annual renewal",
+            pipeline_stage_id=stage.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(opp)
+        await db_session.flush()
+
+        quote = Quote(
+            quote_number="Q-2026-RENEW-1",
+            title="Renewal quote",
+            status="accepted",
+            opportunity_id=opp.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(quote)
+        await db_session.flush()
+
+        customer = StripeCustomer(
+            stripe_customer_id="cus_renew_link_01",
+            email="renew-link@example.com",
+            name="Renew Link",
+        )
+        db_session.add(customer)
+        await db_session.flush()
+
+        sub = Subscription(
+            stripe_subscription_id="sub_renew_link_01",
+            customer_id=customer.id,
+            status="active",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        proposal = Proposal(
+            proposal_number="PR-2026-RENEW-1",
+            public_token=secrets.token_urlsafe(32),
+            title="Renewal proposal",
+            status="paid",
+            paid_at=datetime.now(UTC),
+            opportunity_id=opp.id,
+            quote_id=quote.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+            amount=Decimal("199.00"),
+            currency="USD",
+            payment_type="subscription",
+            recurring_interval="month",
+            recurring_interval_count=1,
+            stripe_subscription_id="sub_renew_link_01",
+        )
+        db_session.add_all([sub, proposal])
+        await db_session.commit()
+
+        await payment_service._handle_invoice_paid({
+            "id": "in_renewal_link_001",
+            "subscription": "sub_renew_link_01",
+            "customer": "cus_renew_link_01",
+            "amount_paid": 19900,
+            "currency": "usd",
+        })
+
+        result = await db_session.execute(
+            select(Payment).where(
+                Payment.stripe_invoice_id == "in_renewal_link_001"
+            )
+        )
+        renewal = result.scalar_one_or_none()
+        assert renewal is not None
+        assert renewal.status == "succeeded"
+        assert renewal.quote_id == quote.id
+        assert renewal.opportunity_id == opp.id
+
+
+# ---------------------------------------------------------------------------
+# Cascade: create_checkout_session inherits opportunity_id from the quote
+# ---------------------------------------------------------------------------
+
+
+class TestCheckoutFromQuoteOpportunityCascade:
+    @pytest.mark.asyncio
+    async def test_checkout_from_quote_carries_opportunity_id(
+        self,
+        db_session: AsyncSession,
+        payment_service: PaymentService,
+        test_user: User,
+    ):
+        """Stripe Checkout kicked off from a quote → resulting Payment row
+        carries `opportunity_id` from the quote so the opportunity ledger
+        keeps the link.
+        """
+        from types import SimpleNamespace
+
+        from src.opportunities.models import Opportunity, PipelineStage
+        from src.quotes.models import Quote
+
+        stage = PipelineStage(
+            name="Negotiation", order=3, probability=70,
+            is_won=False, is_active=True, pipeline_type="opportunity",
+        )
+        db_session.add(stage)
+        await db_session.flush()
+
+        opp = Opportunity(
+            name="Quote-driven deal",
+            pipeline_stage_id=stage.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(opp)
+        await db_session.flush()
+
+        quote = Quote(
+            quote_number="Q-2026-CHK-1",
+            title="Q1",
+            status="sent",
+            opportunity_id=opp.id,
+            payment_type="one_time",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(quote)
+        await db_session.commit()
+        await db_session.refresh(quote)
+
+        # Minimal Stripe stub — checkout.Session.create is the only call.
+        class _FakeSession:
+            @staticmethod
+            def create(**kwargs):
+                return SimpleNamespace(
+                    id="cs_quote_opp_link_1",
+                    url="https://checkout.stripe.test/quote-opp",
+                )
+
+        fake_stripe = SimpleNamespace(
+            checkout=SimpleNamespace(Session=_FakeSession)
+        )
+
+        with patch("src.payments.service._get_stripe", return_value=fake_stripe):
+            await payment_service.create_checkout_session(
+                amount=Decimal("150.00"),
+                currency="USD",
+                success_url="http://localhost/success",
+                cancel_url="http://localhost/cancel",
+                user_id=test_user.id,
+                quote_id=quote.id,
+            )
+
+        result = await db_session.execute(
+            select(Payment).where(
+                Payment.stripe_checkout_session_id == "cs_quote_opp_link_1"
+            )
+        )
+        payment = result.scalar_one_or_none()
+        assert payment is not None
+        assert payment.quote_id == quote.id
+        assert payment.opportunity_id == opp.id

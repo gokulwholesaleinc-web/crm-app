@@ -21,6 +21,7 @@ class ActivityBase(BaseModel):
 class ActivityCreate(ActivityBase):
     entity_type: str | None = None
     entity_id: int | None = None
+    contact_id: int | None = None
 
     # Call-specific
     call_duration_minutes: int | None = None
@@ -65,6 +66,7 @@ class ActivityResponse(ActivityBase):
     completed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
+    contact_id: int | None = None
     # Call-specific
     call_duration_minutes: int | None = None
     call_outcome: str | None = None

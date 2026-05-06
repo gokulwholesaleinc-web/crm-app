@@ -14,6 +14,7 @@ from src.auth.models import User
 from src.activities.models import Activity
 from src.contacts.models import Contact
 from src.leads.models import Lead
+from src.opportunities.models import Opportunity
 
 
 class TestActivitiesList:
@@ -1239,3 +1240,102 @@ class TestPersonalCalendarPrivacy:
             for item in date_items
         ]
         assert calendar_mirror.id not in all_ids
+
+
+class TestActivityContactPropagation:
+    """Activities created against an opportunity copy the opportunity's
+    contact_id onto the row so the contact's Activities tab can surface
+    opportunity-driven rows without each caller writing two records."""
+
+    @pytest.mark.asyncio
+    async def test_activity_on_opportunity_carries_contact_id(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_opportunity: Opportunity,
+        test_contact: Contact,
+    ):
+        response = await client.post(
+            "/api/activities",
+            headers=auth_headers,
+            json={
+                "activity_type": "call",
+                "subject": "Discovery call on the deal",
+                "entity_type": "opportunities",
+                "entity_id": test_opportunity.id,
+                "priority": "high",
+            },
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["entity_type"] == "opportunities"
+        assert data["entity_id"] == test_opportunity.id
+        # The opportunity fixture is bound to test_contact — the service
+        # should mirror that onto the new activity.
+        assert data["contact_id"] == test_contact.id
+
+        # Verify the row was actually persisted with the FK populated.
+        result = await db_session.execute(
+            select(Activity).where(Activity.id == data["id"])
+        )
+        stored = result.scalar_one()
+        assert stored.contact_id == test_contact.id
+
+    @pytest.mark.asyncio
+    async def test_activity_on_opportunity_without_contact_stays_null(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_opportunity: Opportunity,
+    ):
+        """An opportunity with no contact must not crash — contact_id stays null."""
+        test_opportunity.contact_id = None
+        await db_session.commit()
+
+        response = await client.post(
+            "/api/activities",
+            headers=auth_headers,
+            json={
+                "activity_type": "task",
+                "subject": "Internal prep",
+                "entity_type": "opportunities",
+                "entity_id": test_opportunity.id,
+                "priority": "normal",
+            },
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["contact_id"] is None
+
+    @pytest.mark.asyncio
+    async def test_activity_on_contact_does_not_overwrite_explicit_contact_id(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_contact: Contact,
+    ):
+        """Creating against entity_type='contacts' shouldn't auto-populate
+        contact_id from an opportunity lookup — it's only the
+        opportunities path that mirrors."""
+        response = await client.post(
+            "/api/activities",
+            headers=auth_headers,
+            json={
+                "activity_type": "note",
+                "subject": "Random contact note",
+                "entity_type": "contacts",
+                "entity_id": test_contact.id,
+                "priority": "normal",
+            },
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        # Caller didn't pass contact_id and entity_type isn't opportunities,
+        # so contact_id stays null even though entity_id matches a contact.
+        assert data["contact_id"] is None
