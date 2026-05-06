@@ -11,6 +11,9 @@ import {
   useSensor,
   useSensors,
   closestCenter,
+  pointerWithin,
+  rectIntersection,
+  type CollisionDetection,
 } from '@dnd-kit/core';
 import {
   sortableKeyboardCoordinates,
@@ -42,7 +45,14 @@ import type {
   OpportunityCreate,
   OpportunityUpdate,
 } from '../../types';
-import { encodeLeadDragId, encodeOppDragId, parseLeadDragId, parseOppDragId } from './utils/dragIds';
+import {
+  encodeLeadColumnId,
+  encodeLeadDragId,
+  encodeOppColumnId,
+  encodeOppDragId,
+  parseLeadDragId,
+  parseOppDragId,
+} from './utils/dragIds';
 import { LeadDragOverlay } from './components/SortableLeadCard';
 import { OppDragOverlay } from './components/SortableOppCard';
 import { LeadStageColumn } from './components/LeadStageColumn';
@@ -91,20 +101,39 @@ function PipelinePage() {
   const leadById = new Map(leadStages.flatMap((s) => s.leads.map((l) => [l.id, l])));
   const oppById = new Map(oppStages.flatMap((s) => s.opportunities.map((o) => [o.id, o])));
 
-  // Stage lookup maps keyed by drag ID — used in handleDragEnd
-  const leadStageByDragId = new Map<string, number>(
-    leadStages.flatMap((s) => s.leads.map((l) => [encodeLeadDragId(l.id, s.stage_id), s.stage_id]))
-  );
-  const oppStageByDragId = new Map<string, number>(
-    oppStages.flatMap((s) =>
-      s.opportunities.map((o) => [encodeOppDragId(o.id, s.stage_id), s.stage_id])
-    )
-  );
+  // Stage lookup maps keyed by drag ID — used in handleDragEnd.
+  // Includes both per-card IDs (for landing on a card) and per-column IDs
+  // (for landing on column body / empty space).
+  const leadStageByDragId = new Map<string, number>([
+    ...leadStages.flatMap((s): [string, number][] =>
+      s.leads.map((l) => [encodeLeadDragId(l.id, s.stage_id), s.stage_id] as [string, number])
+    ),
+    ...leadStages.map((s): [string, number] => [encodeLeadColumnId(s.stage_id), s.stage_id]),
+  ]);
+  const oppStageByDragId = new Map<string, number>([
+    ...oppStages.flatMap((s): [string, number][] =>
+      s.opportunities.map(
+        (o) => [encodeOppDragId(o.id, s.stage_id), s.stage_id] as [string, number]
+      )
+    ),
+    ...oppStages.map((s): [string, number] => [encodeOppColumnId(s.stage_id), s.stage_id]),
+  ]);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
+
+  // Forgiving collision detection: pointer-within takes priority (any droppable
+  // under the cursor wins), then rectangle intersection, then closest-center as
+  // a last resort. This is what makes "good enough" drops actually land.
+  const collisionDetection: CollisionDetection = (args) => {
+    const pointerHits = pointerWithin(args);
+    if (pointerHits.length > 0) return pointerHits;
+    const rectHits = rectIntersection(args);
+    if (rectHits.length > 0) return rectHits;
+    return closestCenter(args);
+  };
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveDragId(String(event.active.id));
@@ -209,12 +238,16 @@ function PipelinePage() {
       })()
     : null;
 
+  const isDraggingLead = activeLead !== null;
+
   const activeOpp = activeDragId
     ? (() => {
         const info = parseOppDragId(activeDragId);
         return info ? (oppById.get(info.oppId) ?? null) : null;
       })()
     : null;
+
+  const isDraggingOpp = activeOpp !== null;
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -321,7 +354,7 @@ function PipelinePage() {
         ) : (
           <DndContext
             sensors={sensors}
-            collisionDetection={closestCenter}
+            collisionDetection={collisionDetection}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
           >
@@ -331,7 +364,11 @@ function PipelinePage() {
                   <>
                     <div className="flex flex-col md:flex-row gap-3">
                       {leadStages.map((stage) => (
-                        <LeadStageColumn key={`lead-${stage.stage_id}`} stage={stage} />
+                        <LeadStageColumn
+                          key={`lead-${stage.stage_id}`}
+                          stage={stage}
+                          isDragging={isDraggingLead}
+                        />
                       ))}
                     </div>
 
@@ -364,7 +401,11 @@ function PipelinePage() {
                 {oppStages.length > 0 && (
                   <div className="flex flex-col md:flex-row gap-3">
                     {oppStages.map((stage) => (
-                      <OpportunityStageColumn key={`opp-${stage.stage_id}`} stage={stage} />
+                      <OpportunityStageColumn
+                        key={`opp-${stage.stage_id}`}
+                        stage={stage}
+                        isDragging={isDraggingOpp}
+                      />
                     ))}
                   </div>
                 )}
