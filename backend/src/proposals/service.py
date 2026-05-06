@@ -11,6 +11,7 @@ from html import escape
 
 import httpx
 from sqlalchemy import func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from src.attachments.models import Attachment
@@ -136,17 +137,37 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         ]
 
     async def _generate_proposal_number(self) -> str:
-        """Generate auto-incrementing proposal number: PR-{year}-{seq}."""
+        """Generate auto-incrementing proposal number: PR-{year}-{seq}.
+
+        Uses the largest existing suffix + 1, not COUNT(*), so a deleted
+        proposal in the middle of the sequence doesn't cause the next
+        creator to collide on a still-present number. Concurrent creates
+        can still race; the create() caller retries on IntegrityError.
+        """
         year = datetime.now(UTC).year
         prefix = f"PR-{year}-"
 
         result = await self.db.execute(
-            select(func.count(Proposal.id)).where(
-                Proposal.proposal_number.like(f"{prefix}%")
-            )
+            select(Proposal.proposal_number)
+            .where(Proposal.proposal_number.like(f"{prefix}%"))
+            .order_by(Proposal.proposal_number.desc())
+            .limit(1)
         )
-        count = result.scalar() or 0
-        seq = count + 1
+        last = result.scalar_one_or_none()
+        if last is None:
+            seq = 1
+        else:
+            try:
+                seq = int(last.removeprefix(prefix)) + 1
+            except ValueError:
+                # Suffix isn't numeric (legacy / hand-edited row). Fall
+                # back to count to keep moving instead of 500-ing.
+                count_result = await self.db.execute(
+                    select(func.count(Proposal.id)).where(
+                        Proposal.proposal_number.like(f"{prefix}%")
+                    )
+                )
+                seq = (count_result.scalar() or 0) + 1
         return f"{prefix}{seq:04d}"
 
     async def get_list(
@@ -236,14 +257,18 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         return await super().update(instance, data, user_id)
 
     async def create(self, data: ProposalCreate, user_id: int) -> Proposal:
-        """Create a new proposal with auto-generated number + public token."""
+        """Create a new proposal with auto-generated number + public token.
+
+        proposal_number is generated outside any DB lock, so two concurrent
+        creates can land on the same suffix and one of them hits the
+        ``ix_proposals_proposal_number`` unique violation. We retry a small
+        number of times — each iteration recomputes max-suffix+1 against
+        the now-committed competing row.
+        """
         if data.opportunity_id is not None:
             await assert_opportunity_active(self.db, data.opportunity_id, "proposal")
 
-        proposal_number = await self._generate_proposal_number()
-
         proposal_data = data.model_dump()
-        proposal_data["proposal_number"] = proposal_number
         proposal_data["public_token"] = secrets.token_urlsafe(32)
         proposal_data["created_by_id"] = user_id
         # Default ownership to the creating user when the form didn't
@@ -256,12 +281,29 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         if proposal_data.get("owner_id") is None:
             proposal_data["owner_id"] = user_id
 
-        proposal = Proposal(**proposal_data)
-        self.db.add(proposal)
-        await self.db.flush()
-        await self.db.refresh(proposal)
+        last_error: IntegrityError | None = None
+        for _ in range(5):
+            proposal_data["proposal_number"] = await self._generate_proposal_number()
+            proposal = Proposal(**proposal_data)
+            try:
+                # Savepoint isolates the INSERT so a unique-violation on
+                # proposal_number rolls back just this attempt, not the
+                # outer request transaction (which will also commit the
+                # audit row written by the router).
+                async with self.db.begin_nested():
+                    self.db.add(proposal)
+                    await self.db.flush()
+            except IntegrityError as exc:
+                if "ix_proposals_proposal_number" not in str(exc.orig):
+                    raise
+                last_error = exc
+                continue
+            await self.db.refresh(proposal)
+            return proposal
 
-        return proposal
+        raise last_error or RuntimeError(
+            "Could not generate a unique proposal_number after 5 attempts",
+        )
 
     async def accept_proposal_public(
         self,

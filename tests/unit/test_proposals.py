@@ -363,6 +363,50 @@ class TestAutoNumbering:
         seq2 = int(number2.split("-")[-1])
         assert seq2 > seq1
 
+    @pytest.mark.asyncio
+    async def test_create_succeeds_when_lower_seq_was_deleted(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """Regression: count(*)+1 collided when a middle row was deleted.
+
+        Seed three proposals (PR-{year}-0001..0003), delete the middle
+        one, then create a new one. Old generator returned 0003 →
+        unique-key collision → 500. New generator returns 0004
+        (max suffix + 1).
+        """
+        from datetime import datetime as _dt, UTC as _UTC
+        year = _dt.now(_UTC).year
+        for seq in (1, 2, 3):
+            db_session.add(
+                Proposal(
+                    proposal_number=f"PR-{year}-{seq:04d}",
+                    public_token=secrets.token_urlsafe(32),
+                    title=f"Pre-existing {seq}",
+                    status="draft",
+                    owner_id=test_user.id,
+                    created_by_id=test_user.id,
+                )
+            )
+        await db_session.commit()
+        result = await db_session.execute(
+            select(Proposal).where(Proposal.proposal_number == f"PR-{year}-0002")
+        )
+        await db_session.delete(result.scalar_one())
+        await db_session.commit()
+
+        response = await client.post(
+            "/api/proposals",
+            headers=auth_headers,
+            json={"title": "Post-deletion creation", "status": "draft"},
+        )
+        assert response.status_code == 201, response.text
+        new_number = response.json()["proposal_number"]
+        assert new_number == f"PR-{year}-0004"
+
 
 class TestProposalsGetById:
     """Tests for get proposal by ID endpoint."""

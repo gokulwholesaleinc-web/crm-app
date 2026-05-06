@@ -6,6 +6,14 @@ export function encodeOppDragId(oppId: number, stageId: number): string {
   return `opp:${oppId}:${stageId}`;
 }
 
+export function encodeLeadColumnId(stageId: number): string {
+  return `lead-col:${stageId}`;
+}
+
+export function encodeOppColumnId(stageId: number): string {
+  return `opp-col:${stageId}`;
+}
+
 export function parseLeadDragId(id: string): { leadId: number; stageId: number } | null {
   const m = id.match(/^lead:(\d+):(\d+)$/);
   if (!m) return null;
