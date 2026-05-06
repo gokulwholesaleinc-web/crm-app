@@ -198,10 +198,22 @@ function ContactDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-3 w-full sm:w-auto">
-          <Button variant="primary" onClick={() => setShowEmailCompose(true)} className="flex-1 sm:flex-none">
+          <Button
+            variant="primary"
+            onClick={() => setShowEmailCompose(true)}
+            disabled={!contact.email}
+            title={contact.email ? undefined : 'Add an email address to this contact before sending'}
+            className="flex-1 sm:flex-none"
+          >
             Send Email
           </Button>
-          <Button variant="secondary" onClick={() => setShowInvoiceModal(true)} className="flex-1 sm:flex-none">
+          <Button
+            variant="secondary"
+            onClick={() => setShowInvoiceModal(true)}
+            disabled={!contact.email}
+            title={contact.email ? undefined : 'Add an email address to this contact before sending'}
+            className="flex-1 sm:flex-none"
+          >
             Send Invoice
           </Button>
           <Button variant="secondary" onClick={() => setShowEditForm(true)} className="flex-1 sm:flex-none">
@@ -376,7 +388,12 @@ function ContactDetailPage() {
                 <Button
                   variant="primary"
                   onClick={() => { setReplyToEmail(null); setShowEmailCompose(true); }}
-                  disabled={gmailNeedsReconnect}
+                  disabled={gmailNeedsReconnect || !contact.email}
+                  title={
+                    !contact.email
+                      ? 'Add an email address to this contact before composing'
+                      : undefined
+                  }
                   aria-describedby={gmailNeedsReconnect ? 'gmail-reconnect-banner' : undefined}
                 >
                   Compose Email

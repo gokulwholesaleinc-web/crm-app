@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 from src.config import settings
 from src.core.base_service import CRUDService
 from src.core.constants import DEFAULT_PAGE_SIZE
+from src.payments.exceptions import NoRecipientEmailError
 from src.payments.models import (
     Payment,
     Product,
@@ -473,7 +474,14 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         )
 
     async def send_payment_receipt(self, payment_id: int) -> None:
-        """Send branded receipt email after successful payment."""
+        """Send branded receipt email after successful payment.
+
+        Raises ``ValueError`` when the payment has no customer or the
+        customer has no email on file — webhook callers catch and log
+        (matching the pattern already in `_handle_payment_succeeded`),
+        and the staff "Resend Receipt" router surfaces the message via
+        a 400 so the user knows why the email didn't go out.
+        """
         from src.email.branded_templates import (
             TenantBrandingHelper,
             render_payment_receipt_email,
@@ -490,16 +498,15 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         )
         payment = result.scalar_one_or_none()
         if not payment:
-            return
+            raise ValueError(f"Payment {payment_id} not found")
 
-        # Determine recipient email
-        to_email = None
-        client_name = "Customer"
-        if payment.customer:
-            to_email = payment.customer.email
-            client_name = payment.customer.name or client_name
+        to_email = payment.customer.email if payment.customer else None
         if not to_email:
-            return
+            raise NoRecipientEmailError(
+                "Customer has no email on file — add an email address "
+                "and try again",
+            )
+        client_name = (payment.customer.name if payment.customer else None) or "Customer"
 
         # Get tenant branding
         branding = TenantBrandingHelper.get_default_branding()

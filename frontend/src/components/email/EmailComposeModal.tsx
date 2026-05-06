@@ -55,6 +55,36 @@ function readFileAsBase64(file: File): Promise<string> {
   });
 }
 
+type SendEmailErrorShape = {
+  detail?: string | Array<{ msg?: string; loc?: string[] }>;
+} | null | undefined;
+
+/**
+ * Pull a user-actionable error string out of either:
+ *   - the local "queued but not sent" state we set after the 201 path, or
+ *   - the mutation's HTTP error (FastAPI 4xx/5xx with `detail` string or list).
+ *
+ * Returns `null` when neither source has anything to show.
+ */
+function deriveSendErrorMessage(
+  statusError: string | null,
+  mutationError: SendEmailErrorShape,
+): string | null {
+  if (statusError) return statusError;
+  if (!mutationError) return null;
+  const { detail } = mutationError;
+  if (typeof detail === 'string' && detail.trim()) return detail;
+  // FastAPI 422 returns detail as a list of field errors. Show the first
+  // user-actionable message rather than the generic "validation error".
+  const first = Array.isArray(detail) ? detail[0] : undefined;
+  if (first) {
+    const where = first.loc?.[first.loc.length - 1];
+    const msg = first.msg || 'invalid value';
+    return where ? `${where}: ${msg}` : msg;
+  }
+  return 'Failed to send email. Check your inputs and try again.';
+}
+
 /**
  * Build the Gmail-style quote block we prefill on Reply.
  *
@@ -128,6 +158,10 @@ export function EmailComposeModal({
   const [quotedText, setQuotedText] = useState('');
   const [showQuoted, setShowQuoted] = useState(false);
   const [attachments, setAttachments] = useState<StagedAttachment[]>([]);
+  // `sendStatusError` covers the post-201 non-sent status path: the API
+  // returned 201 but the queue row is in retry/failed state, which the
+  // mutation's `error` channel doesn't see (it only surfaces HTTP errors).
+  const [sendStatusError, setSendStatusError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sendEmailMutation = useSendEmail();
 
@@ -150,10 +184,25 @@ export function EmailComposeModal({
     }
   };
 
+  // Clear the inline send-error banner whenever the modal is closed.
+  // Parents (Contact/Lead detail) keep this component permanently mounted
+  // and only flip `isOpen`, so without this the banner from a previous
+  // failed attempt would still show on the next reopen with the same
+  // `replyTo`. The reply-target effect below covers the open path.
+  useEffect(() => {
+    if (!isOpen) {
+      setSendStatusError(null);
+      sendEmailMutation.reset();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
   // Pre-fill on mount and whenever the reply target changes.
   // Intentionally excludes `defaultTo` from deps so a parent re-render with
   // a new default recipient doesn't wipe in-progress edits mid-compose.
   useEffect(() => {
+    setSendStatusError(null);
+    sendEmailMutation.reset();
     if (replyTo) {
       const replyRecipient =
         replyTo.direction === 'outbound' ? replyTo.to_email : replyTo.from_email;
@@ -225,6 +274,7 @@ export function EmailComposeModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSendStatusError(null);
     if (overLimit) {
       showError(
         `Attachments total ${formatBytes(totalAttachmentBytes)} — over the 25 MB limit.`
@@ -249,7 +299,7 @@ export function EmailComposeModal({
     }));
 
     try {
-      await sendEmailMutation.mutateAsync({
+      const queued = await sendEmailMutation.mutateAsync({
         to_email: to,
         subject,
         body: finalBody,
@@ -262,6 +312,19 @@ export function EmailComposeModal({
         reply_to_inbound_id: replyToInboundId,
         attachments: apiAttachments.length > 0 ? apiAttachments : undefined,
       });
+      // The endpoint returns 201 even when Gmail rejected the send and the
+      // row is in retry/failed state. Show the row's error so the user
+      // can see "Gmail not connected" or "401 invalid_grant" instead of
+      // assuming the message went out.
+      if (queued.status && queued.status !== 'sent') {
+        setSendStatusError(
+          queued.error
+            ? `Email queued but not delivered: ${queued.error}`
+            : `Email is in '${queued.status}' state — check the email log to retry.`,
+        );
+        return;
+      }
+      setSendStatusError(null);
       setTo(defaultTo);
       setSubject('');
       setBody('');
@@ -273,9 +336,16 @@ export function EmailComposeModal({
       setAttachments([]);
       onClose();
     } catch {
-      // Error handled by mutation
+      // Error stays on mutation.error and renders inline below the form;
+      // see the conditional banner. Modal remains open so the user can fix
+      // and retry without losing their draft.
     }
   };
+
+  const sendErrorMessage = deriveSendErrorMessage(
+    sendStatusError,
+    sendEmailMutation.error as SendEmailErrorShape,
+  );
 
   const inputClass =
     'mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 shadow-sm text-sm focus-visible:outline-none focus-visible:border-primary-500 focus-visible:ring-1 focus-visible:ring-primary-500';
@@ -507,6 +577,15 @@ export function EmailComposeModal({
           )}
         </div>
 
+        {sendErrorMessage && (
+          <div
+            role="alert"
+            aria-live="polite"
+            className="rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/30 px-3 py-2 text-sm text-red-700 dark:text-red-200"
+          >
+            {sendErrorMessage}
+          </div>
+        )}
         <div className="flex justify-end gap-3 pt-2">
           <Button type="button" variant="secondary" onClick={handleClose}>
             Cancel

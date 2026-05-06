@@ -15,6 +15,7 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.payments.exceptions import NoRecipientEmailError
 from src.payments.models import (
     Payment,
     Price,
@@ -282,6 +283,9 @@ class WebhookProcessor:
                 # Send branded receipt email only when fully paid
                 try:
                     await self._send_payment_receipt(payment.id)
+                except NoRecipientEmailError as exc:
+                    # Documented intentional skip — log at info, don't 5xx.
+                    logger.info("Receipt skipped for payment %s: %s", payment.id, exc)
                 except (OSError, RuntimeError) as exc:
                     logger.warning("Failed to send receipt for payment %s: %s", payment.id, exc)
 
@@ -311,6 +315,8 @@ class WebhookProcessor:
             # Send branded receipt email
             try:
                 await self._send_payment_receipt(payment.id)
+            except NoRecipientEmailError as exc:
+                logger.info("Receipt skipped for payment %s: %s", payment.id, exc)
             except (OSError, RuntimeError) as exc:
                 logger.warning("Failed to send receipt for payment %s: %s", payment.id, exc)
 
@@ -582,6 +588,8 @@ class WebhookProcessor:
 
             try:
                 await self._send_payment_receipt(payment.id)
+            except NoRecipientEmailError as exc:
+                logger.info("Receipt skipped for payment %s: %s", payment.id, exc)
             except (OSError, RuntimeError) as exc:
                 logger.warning("Failed to send receipt for payment %s: %s", payment.id, exc)
 

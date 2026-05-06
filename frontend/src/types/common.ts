@@ -37,6 +37,15 @@ export interface ContactBrief {
   full_name: string;
 }
 
+/**
+ * Variant used by authenticated entity-detail surfaces that drive
+ * Send-button gating client-side. Never use for public-token responses;
+ * see backend `core.schemas.ContactBriefWithEmail`.
+ */
+export interface ContactBriefWithEmail extends ContactBrief {
+  email?: string | null;
+}
+
 export interface Note {
   id: number;
   content: string;

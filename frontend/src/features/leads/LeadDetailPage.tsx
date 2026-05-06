@@ -171,7 +171,13 @@ function LeadDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2 sm:gap-3">
-          <Button variant="primary" onClick={() => setShowEmailCompose(true)} className="flex-1 sm:flex-none">
+          <Button
+            variant="primary"
+            onClick={() => setShowEmailCompose(true)}
+            disabled={!lead.email}
+            title={lead.email ? undefined : 'Add an email address to this lead before sending'}
+            className="flex-1 sm:flex-none"
+          >
             Send Email
           </Button>
           <AIInsightsCard entityType="lead" entityId={lead.id} entityName={lead.full_name || 'Lead'} />
