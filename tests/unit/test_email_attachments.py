@@ -118,7 +118,12 @@ class TestGmailSendWithAttachment:
 
         assert ok is True
         assert email.sent_via == "gmail"
-        assert email.message_id == "gmail-msg-id"
+        # Since PR #197, message_id is the locally-generated RFC value that
+        # the message envelope actually carries, not Gmail's internal numeric
+        # id, so sync dedup can match exactly. Just assert it's a non-empty
+        # RFC-shaped string ending in the sender's domain.
+        assert email.message_id and email.message_id.startswith("<")
+        assert "@midwestsystemsolutions.com>" in email.message_id
         assert email.thread_id == "gmail-thread-id"
 
         raw_bytes = mock_send.await_args.args[0]
