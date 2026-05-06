@@ -8,12 +8,12 @@ from sqlalchemy import select
 
 from src.core.constants import ENTITY_TYPE_PAYMENTS, EntityNames, HTTPStatus
 from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
+from src.core.opportunity_guards import assert_opportunity_active
 from src.core.router_utils import (
     CurrentUser,
     DBSession,
     get_entity_or_404,
 )
-from src.core.opportunity_guards import assert_opportunity_active
 from src.events.service import PAYMENT_RECEIVED, emit
 from src.payments._router_helpers import (
     _verify_opportunity_access,
