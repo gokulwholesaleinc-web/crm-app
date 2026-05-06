@@ -14,6 +14,7 @@ import hashlib
 import hmac
 import json
 import time
+from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -759,3 +760,88 @@ class TestHandleSubscriptionUpdated:
             "status": "canceled",
             "cancel_at_period_end": True,
         })
+
+
+# ---------------------------------------------------------------------------
+# Cascade: create_checkout_session inherits opportunity_id from the quote
+# ---------------------------------------------------------------------------
+
+
+class TestCheckoutFromQuoteOpportunityCascade:
+    @pytest.mark.asyncio
+    async def test_checkout_from_quote_carries_opportunity_id(
+        self,
+        db_session: AsyncSession,
+        payment_service: PaymentService,
+        test_user: User,
+    ):
+        """Stripe Checkout kicked off from a quote → resulting Payment row
+        carries `opportunity_id` from the quote so the opportunity ledger
+        keeps the link.
+        """
+        from types import SimpleNamespace
+
+        from src.opportunities.models import Opportunity, PipelineStage
+        from src.quotes.models import Quote
+
+        stage = PipelineStage(
+            name="Negotiation", order=3, probability=70,
+            is_won=False, is_active=True, pipeline_type="opportunity",
+        )
+        db_session.add(stage)
+        await db_session.flush()
+
+        opp = Opportunity(
+            name="Quote-driven deal",
+            pipeline_stage_id=stage.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(opp)
+        await db_session.flush()
+
+        quote = Quote(
+            quote_number="Q-2026-CHK-1",
+            title="Q1",
+            status="sent",
+            opportunity_id=opp.id,
+            payment_type="one_time",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(quote)
+        await db_session.commit()
+        await db_session.refresh(quote)
+
+        # Minimal Stripe stub — checkout.Session.create is the only call.
+        class _FakeSession:
+            @staticmethod
+            def create(**kwargs):
+                return SimpleNamespace(
+                    id="cs_quote_opp_link_1",
+                    url="https://checkout.stripe.test/quote-opp",
+                )
+
+        fake_stripe = SimpleNamespace(
+            checkout=SimpleNamespace(Session=_FakeSession)
+        )
+
+        with patch("src.payments.service._get_stripe", return_value=fake_stripe):
+            await payment_service.create_checkout_session(
+                amount=Decimal("150.00"),
+                currency="USD",
+                success_url="http://localhost/success",
+                cancel_url="http://localhost/cancel",
+                user_id=test_user.id,
+                quote_id=quote.id,
+            )
+
+        result = await db_session.execute(
+            select(Payment).where(
+                Payment.stripe_checkout_session_id == "cs_quote_opp_link_1"
+            )
+        )
+        payment = result.scalar_one_or_none()
+        assert payment is not None
+        assert payment.quote_id == quote.id
+        assert payment.opportunity_id == opp.id
