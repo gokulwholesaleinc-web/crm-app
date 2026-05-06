@@ -1,5 +1,4 @@
-import { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useState } from 'react';
 import {
   useLeadSources,
   useCreateLeadSource,
@@ -12,6 +11,7 @@ import { Button } from '../../../components/ui/Button';
 import { Badge } from '../../../components/ui/Badge';
 import { Modal, ModalFooter } from '../../../components/ui/Modal';
 import { FormInput } from '../../../components/forms';
+import { FormModal } from '../../../components/shared/FormModal';
 import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 import type {
   ApiError,
@@ -26,116 +26,7 @@ interface SourceFormData {
   is_active: boolean;
 }
 
-interface SourceModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  title: string;
-  initialData?: SourceFormData;
-  onSubmit: (data: SourceFormData) => Promise<void>;
-  isPending: boolean;
-  isError: boolean;
-}
-
-const DEFAULTS: SourceFormData = { name: '', description: '', is_active: true };
-
-function SourceModal({
-  isOpen,
-  onClose,
-  title,
-  initialData,
-  onSubmit,
-  isPending,
-  isError,
-}: SourceModalProps) {
-  const [success, setSuccess] = useState(false);
-
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    reset,
-    watch,
-    setValue,
-  } = useForm<SourceFormData>({ defaultValues: initialData || DEFAULTS });
-
-  const isActive = watch('is_active');
-
-  useEffect(() => {
-    if (isOpen) {
-      reset(initialData || DEFAULTS);
-      setSuccess(false);
-    }
-  }, [isOpen, initialData, reset]);
-
-  const handleFormSubmit = async (data: SourceFormData) => {
-    try {
-      await onSubmit(data);
-      setSuccess(true);
-      setTimeout(() => {
-        onClose();
-        setSuccess(false);
-      }, 800);
-    } catch {
-      // error surfaced by parent via isError
-    }
-  };
-
-  return (
-    <Modal isOpen={isOpen} onClose={onClose} title={title} size="md">
-      <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
-        {isError && (
-          <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-3">
-            <p className="text-sm text-red-800 dark:text-red-300">
-              Failed to save lead source. Please try again.
-            </p>
-          </div>
-        )}
-        {success && (
-          <div className="rounded-md bg-green-50 dark:bg-green-900/20 p-3">
-            <p className="text-sm text-green-800 dark:text-green-300">
-              Lead source saved successfully!
-            </p>
-          </div>
-        )}
-
-        <FormInput
-          label="Source Name"
-          name="name"
-          required
-          register={register('name', { required: 'Source name is required' })}
-          error={errors.name?.message}
-          placeholder="e.g., Website, Referral, Trade Show"
-        />
-
-        <FormInput
-          label="Description"
-          name="description"
-          register={register('description')}
-          placeholder="Optional description"
-        />
-
-        <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-          <input
-            type="checkbox"
-            className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-            checked={isActive}
-            onChange={(e) => setValue('is_active', e.target.checked)}
-          />
-          Active — show this source when assigning leads
-        </label>
-
-        <ModalFooter>
-          <Button type="button" variant="secondary" onClick={onClose} disabled={isPending}>
-            Cancel
-          </Button>
-          <Button type="submit" isLoading={isPending} disabled={success}>
-            Save
-          </Button>
-        </ModalFooter>
-      </form>
-    </Modal>
-  );
-}
+const SOURCE_DEFAULTS: SourceFormData = { name: '', description: '', is_active: true };
 
 export function LeadSourcesSection() {
   // active_only=false so admins can see and re-activate disabled sources here.
@@ -221,10 +112,11 @@ export function LeadSourcesSection() {
       </CardBody>
 
       {/* Add Source Modal */}
-      <SourceModal
+      <FormModal<SourceFormData>
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         title="Add Lead Source"
+        defaultValues={SOURCE_DEFAULTS}
         onSubmit={async (data) => {
           const payload: LeadSourceCreate = {
             name: data.name,
@@ -235,15 +127,47 @@ export function LeadSourcesSection() {
         }}
         isPending={createMutation.isPending}
         isError={createMutation.isError}
-      />
+        errorMessage="Failed to save lead source. Please try again."
+      >
+        {({ register, formState: { errors }, watch, setValue }) => {
+          const isActive = watch('is_active');
+          return (
+            <>
+              <FormInput
+                label="Source Name"
+                name="name"
+                required
+                register={register('name', { required: 'Source name is required' })}
+                error={errors.name?.message}
+                placeholder="e.g., Website, Referral, Trade Show"
+              />
+              <FormInput
+                label="Description"
+                name="description"
+                register={register('description')}
+                placeholder="Optional description"
+              />
+              <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                <input
+                  type="checkbox"
+                  className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  checked={isActive}
+                  onChange={(e) => setValue('is_active', e.target.checked)}
+                />
+                Active — show this source when assigning leads
+              </label>
+            </>
+          );
+        }}
+      </FormModal>
 
       {/* Edit Source Modal */}
       {editingSource && (
-        <SourceModal
+        <FormModal<SourceFormData>
           isOpen={!!editingSource}
           onClose={() => setEditingSource(null)}
           title="Edit Lead Source"
-          initialData={{
+          defaultValues={{
             name: editingSource.name,
             description: editingSource.description || '',
             is_active: editingSource.is_active,
@@ -258,7 +182,39 @@ export function LeadSourcesSection() {
           }}
           isPending={updateMutation.isPending}
           isError={updateMutation.isError}
-        />
+          errorMessage="Failed to save lead source. Please try again."
+        >
+          {({ register, formState: { errors }, watch, setValue }) => {
+            const isActive = watch('is_active');
+            return (
+              <>
+                <FormInput
+                  label="Source Name"
+                  name="name"
+                  required
+                  register={register('name', { required: 'Source name is required' })}
+                  error={errors.name?.message}
+                  placeholder="e.g., Website, Referral, Trade Show"
+                />
+                <FormInput
+                  label="Description"
+                  name="description"
+                  register={register('description')}
+                  placeholder="Optional description"
+                />
+                <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                  <input
+                    type="checkbox"
+                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                    checked={isActive}
+                    onChange={(e) => setValue('is_active', e.target.checked)}
+                  />
+                  Active — show this source when assigning leads
+                </label>
+              </>
+            );
+          }}
+        </FormModal>
       )}
 
       {/* Delete Confirmation Modal */}
