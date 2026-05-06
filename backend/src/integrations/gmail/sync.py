@@ -127,7 +127,7 @@ class GmailSyncWorker:
                         await _process_message(msg_id, connection, client, db)
                     except GmailAuthError:
                         raise
-                    except IntegrityError as exc:
+                    except IntegrityError:
                         # A racing forward-sync (or rerun) already wrote
                         # this message under the unique constraint on
                         # InboundEmail.resend_email_id ('gmail:<id>').
@@ -312,14 +312,6 @@ async def _resolve_entity_from_thread(
         return row.entity_type, row.entity_id
 
     return None, None
-
-
-async def _resolve_contact_by_addresses(
-    addresses: list[str], db: AsyncSession
-) -> tuple[str | None, int | None]:
-    """Alias-aware contact lookup across primary email and contact_email_aliases."""
-    from src.contacts.alias_match import find_contact_id_by_any_email
-    return await find_contact_id_by_any_email(addresses, db)
 
 
 async def _store_sent(
