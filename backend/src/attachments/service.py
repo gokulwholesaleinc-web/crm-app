@@ -25,6 +25,14 @@ ALLOWED_EXTENSIONS = {
     "txt",
 }
 
+# Per-entity-type narrowing of ALLOWED_EXTENSIONS. Defense in depth so a
+# future caller invoking upload_file directly (script, new route, AI tool)
+# can't bypass the route-level PDF guard and silently land a non-PDF on a
+# proposal whose public-link recipient is supposed to read legal docs.
+PER_ENTITY_ALLOWED_EXTENSIONS: dict[str, set[str]] = {
+    "proposals": {"pdf"},
+}
+
 UPLOAD_DIR = Path(__file__).parent.parent.parent / "uploads"
 
 
@@ -52,6 +60,12 @@ class AttachmentService:
         if ext not in ALLOWED_EXTENSIONS:
             raise ValueError(
                 f"File type '.{ext}' not allowed. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
+            )
+        per_entity = PER_ENTITY_ALLOWED_EXTENSIONS.get(entity_type)
+        if per_entity is not None and ext not in per_entity:
+            raise ValueError(
+                f"File type '.{ext}' not allowed on {entity_type}. "
+                f"Allowed: {', '.join(sorted(per_entity))}"
             )
 
         content = await file.read()

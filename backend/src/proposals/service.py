@@ -1,5 +1,6 @@
 """Proposal service layer."""
 
+import hashlib
 import logging
 import os
 import re
@@ -8,12 +9,9 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from html import escape
 
+import httpx
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import selectinload
-
-import hashlib
-
-import httpx
 
 from src.attachments.models import Attachment
 from src.attachments.service import AttachmentService
@@ -1454,7 +1452,11 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                         content=content,
                         content_type=att.mime_type or "application/octet-stream",
                     ))
-                except Exception as exc:
+                except (httpx.HTTPError, OSError) as exc:
+                    # Narrow catch — programming errors (AttributeError /
+                    # TypeError) should crash loudly in tests, not silently
+                    # degrade the email body. exc_info=True so the 2am
+                    # debug session has a frame, not a one-liner.
                     key_for_hash = att.file_path or att.filename or ""
                     digest = hashlib.sha256(
                         key_for_hash.encode("utf-8")
@@ -1462,6 +1464,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                     logger.warning(
                         "Failed to attach proposal attachment %s (proposal=%s): %s",
                         att.id, proposal.id, exc,
+                        exc_info=True,
                     )
                     missing.append(f"{att.original_filename} (ref {digest})")
 

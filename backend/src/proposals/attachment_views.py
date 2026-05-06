@@ -24,6 +24,7 @@ from sqlalchemy import (
     func,
     select,
 )
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -79,28 +80,28 @@ async def record_attachment_view(
 ) -> None:
     """Idempotently record a public-link view for ``attachment_id``.
 
-    Repeated downloads from the same token reuse the existing row — the
-    UNIQUE(attachment_id, token_hash) constraint ensures we never double-
-    count a single viewer toward the read-before-sign gate.
+    Two concurrent downloads under the same token both pass a naive
+    check-then-insert: the second flush raises IntegrityError on the
+    UNIQUE(attachment_id, token_hash) constraint, the outer transaction
+    rolls back, and the customer sees a 500 + a still-locked sign gate.
+    Wrap the insert in a SAVEPOINT so the conflict path is contained
+    and the outer txn (any prior reads) survives.
     """
     token_hash = _hash_token(token)
-    existing = await db.execute(
-        select(ProposalAttachmentView).where(
-            ProposalAttachmentView.attachment_id == attachment_id,
-            ProposalAttachmentView.token_hash == token_hash,
-        )
-    )
-    if existing.scalar_one_or_none() is not None:
-        return
-
     view = ProposalAttachmentView(
         attachment_id=attachment_id,
         token_hash=token_hash,
         ip_address=ip_address,
         user_agent=user_agent,
     )
-    db.add(view)
-    await db.flush()
+    try:
+        async with db.begin_nested():
+            db.add(view)
+    except IntegrityError:
+        # Concurrent download under the same token already recorded the
+        # view — the SAVEPOINT rollback leaves the outer txn clean and
+        # this call is a no-op, which is the documented contract.
+        pass
 
 
 async def get_unviewed_attachment_ids(

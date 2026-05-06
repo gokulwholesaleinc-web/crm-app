@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, startTransition } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, startTransition } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
@@ -123,24 +123,23 @@ function PublicProposalView() {
     };
   }, [proposalTitle, proposalBrandingCompanyName]);
 
-  useEffect(() => {
+  const fetchProposal = useCallback(async () => {
     if (!token) return;
-
-    const fetchProposal = async () => {
-      try {
-        const response = await publicClient.get<PublicProposal>(
-          `/api/proposals/public/${token}`
-        );
-        setProposal(response.data);
-      } catch {
-        setError('Proposal not found or no longer available.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchProposal();
+    try {
+      const response = await publicClient.get<PublicProposal>(
+        `/api/proposals/public/${token}`
+      );
+      setProposal(response.data);
+    } catch {
+      setError('Proposal not found or no longer available.');
+    } finally {
+      setLoading(false);
+    }
   }, [token]);
+
+  useEffect(() => {
+    fetchProposal();
+  }, [fetchProposal]);
 
   // One-shot seed of viewedIds from the server-side `viewed` flag the
   // first time the proposal lands. Guarded by a ref so the periodic poll
@@ -498,6 +497,7 @@ function PublicProposalView() {
             accent={accent}
             viewedIds={viewedIds}
             onViewed={handleAttachmentViewed}
+            onReconcile={fetchProposal}
           />
         )}
 

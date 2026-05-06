@@ -16,6 +16,9 @@ interface ProposalAttachmentsSectionProps {
   accent: string;
   viewedIds: Set<number>;
   onViewed: (id: number) => void;
+  /** Re-fetch the proposal so the server's authoritative `viewed` flags
+   * reconcile any optimistic flips that didn't actually record. */
+  onReconcile?: () => void;
 }
 
 function formatFileSize(bytes: number): string {
@@ -30,15 +33,23 @@ export function ProposalAttachmentsSection({
   accent,
   viewedIds,
   onViewed,
+  onReconcile,
 }: ProposalAttachmentsSectionProps) {
   if (attachments.length === 0) return null;
 
   const handleOpen = (id: number) => {
     const url = buildDownloadUrl(token, id);
     window.open(url, '_blank', 'noopener,noreferrer');
-    // Optimistically mark viewed; backend records the view as a side
-    // effect of the download endpoint hit.
+    // Optimistically mark viewed for instant UX feedback; the server
+    // records the view as a side effect of the download endpoint hit.
+    // If the download actually 5xx'd / rate-limited / failed, the
+    // server's `viewed` flag stays false — schedule a reconcile so the
+    // gate doesn't claim "all viewed" while the server still sees an
+    // unread doc and rejects sign with a confusing 400.
     onViewed(id);
+    if (onReconcile) {
+      setTimeout(onReconcile, 3000);
+    }
   };
 
   return (
