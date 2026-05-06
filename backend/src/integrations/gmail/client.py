@@ -140,6 +140,38 @@ class GmailClient:
         """Return the authenticated user's Gmail profile (includes historyId)."""
         return await self._get("users/me/profile")
 
+    async def list_send_as(self) -> list[str]:
+        """Return verified send-as addresses (lowercased).
+
+        Returns [] only on a 403 — non-Workspace accounts can lack the
+        capability even with gmail.readonly granted. Auth + transient
+        errors propagate so callers don't clobber last-known-good aliases
+        with [] when Gmail blips.
+        """
+        try:
+            data = await self._get("users/me/settings/sendAs")
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 403:
+                logger.info(
+                    "[gmail.list_send_as] 403 for user_id=%s — account lacks sendAs capability",
+                    self._conn.user_id,
+                )
+                return []
+            raise
+
+        out: list[str] = []
+        seen: set[str] = set()
+        for entry in data.get("sendAs") or []:
+            status = entry.get("verificationStatus")
+            is_primary = bool(entry.get("isPrimary"))
+            if status != "accepted" and not (status is None and is_primary):
+                continue
+            addr = (entry.get("sendAsEmail") or "").strip().lower()
+            if addr and addr not in seen:
+                seen.add(addr)
+                out.append(addr)
+        return out
+
     async def list_messages_since(self, start_date: "datetime") -> list[str]:
         """Return all Gmail message IDs after start_date via messages.list pagination.
 

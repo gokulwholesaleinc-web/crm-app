@@ -461,3 +461,235 @@ class TestBackfillAuthError:
 
         await db.refresh(connection)
         assert connection.revoked_at is not None
+
+
+# ---------------------------------------------------------------------------
+# Tests: send-as alias handling
+# ---------------------------------------------------------------------------
+
+class TestBackfillSendAsAliases:
+    """Cover the giancarlo@/accounting@ case: connection.email is the primary
+    Gmail address, but the user sends as a verified alias. Outbound from the
+    alias must classify as sent and the alias must self-exclude from contact
+    matching."""
+
+    @pytest.mark.asyncio
+    async def test_outbound_from_alias_classified_as_sent(
+        self, connection, db, test_user
+    ):
+        """Message From=alias must land in EmailQueue (sent), not InboundEmail."""
+        connection.aliases = [connection.email.lower(), "alias@example.com"]
+        db.add(connection)
+        # Recipient must be a known contact for backfill's contact-link gate.
+        db.add(Contact(
+            email="customer@biz.com",
+            first_name="C", last_name="ust",
+            owner_id=test_user.id,
+        ))
+        await db.commit()
+
+        msg = _gmail_message(
+            "alias_send_1", "t_alias_send",
+            from_="alias@example.com",
+            to="customer@biz.com",
+            subject="From the alias",
+        )
+        routes = {
+            "users/me/messages": {"messages": [{"id": "alias_send_1"}]},
+            "users/me/messages/alias_send_1": msg,
+        }
+        http = _make_http_client(routes)
+
+        with _patch_gmail_client(http):
+            await GmailSyncWorker.backfill(connection, db, days=10)
+
+        sent_rows = (await db.execute(select(EmailQueue))).scalars().all()
+        assert len(sent_rows) == 1
+        assert sent_rows[0].status == "sent"
+        # Persist the actual sending address (the alias) — relink + UI
+        # depend on this being the address Gmail's Sent folder shows.
+        assert sent_rows[0].from_email == "alias@example.com"
+
+        ib_rows = (await db.execute(select(InboundEmail))).scalars().all()
+        assert ib_rows == [], "Outbound-from-alias must not become an inbound row"
+
+    @pytest.mark.asyncio
+    async def test_alias_excluded_from_contact_match(
+        self, connection, db, test_user
+    ):
+        """An alias appearing in CC must not link the message to a contact whose
+        email happens to equal the alias — the matcher self-excludes the full
+        alias set, not just the primary."""
+        connection.aliases = [connection.email.lower(), "alias@example.com"]
+        # Self-card mirroring Giancarlo's bug: a contact exists at the alias
+        # address (created automatically or by mistake). Without self-exclude
+        # the matcher would link inbound mail to this contact.
+        self_card = Contact(
+            email="alias@example.com",
+            first_name="Self", last_name="Card",
+            owner_id=test_user.id,
+        )
+        real_contact = Contact(
+            email="third@example.com",
+            first_name="Real", last_name="Sender",
+            owner_id=test_user.id,
+        )
+        db.add_all([self_card, real_contact])
+        await db.commit()
+        await db.refresh(self_card)
+        await db.refresh(real_contact)
+
+        # Inbound: real third-party sends to the primary, CC's the user's alias.
+        msg = {
+            "id": "self_exclude_1",
+            "threadId": "t_self_exclude",
+            "payload": {
+                "mimeType": "multipart/alternative",
+                "headers": [
+                    {"name": "Subject", "value": "to alias"},
+                    {"name": "From", "value": "third@example.com"},
+                    {"name": "To", "value": connection.email},
+                    {"name": "Cc", "value": "alias@example.com"},
+                    {"name": "Message-ID", "value": "<self_exclude_1@gmail.example.com>"},
+                    {"name": "Date", "value": "Mon, 14 Apr 2025 10:00:00 +0000"},
+                ],
+                "parts": [
+                    {"mimeType": "text/plain", "body": {"data": _b64("body")}},
+                ],
+            },
+        }
+        routes = {
+            "users/me/messages": {"messages": [{"id": "self_exclude_1"}]},
+            "users/me/messages/self_exclude_1": msg,
+        }
+        http = _make_http_client(routes)
+
+        with _patch_gmail_client(http):
+            await GmailSyncWorker.backfill(connection, db, days=10)
+
+        ib = (await db.execute(select(InboundEmail))).scalar_one()
+        assert ib.entity_type == "contacts"
+        assert ib.entity_id == real_contact.id
+        assert ib.entity_id != self_card.id, (
+            "Alias must self-exclude — the matcher must not link to the alias contact"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Tests: list_send_as
+# ---------------------------------------------------------------------------
+
+class TestGmailClientListSendAs:
+    @pytest.mark.asyncio
+    async def test_returns_only_accepted_aliases(self, connection, db):
+        """Only verificationStatus=='accepted', or unset on isPrimary=True, is returned."""
+        from src.integrations.gmail.client import GmailClient
+
+        routes = {
+            "users/me/settings/sendAs": {
+                "sendAs": [
+                    {"sendAsEmail": "primary@example.com", "isPrimary": True},
+                    {"sendAsEmail": "alias@example.com", "verificationStatus": "accepted"},
+                    {"sendAsEmail": "pending@example.com", "verificationStatus": "pending"},
+                    # Non-primary entry with missing verificationStatus must NOT
+                    # be accepted — that path is reserved for the primary.
+                    {"sendAsEmail": "missing-status@example.com"},
+                ]
+            },
+        }
+        http = _make_http_client(routes)
+
+        async with GmailClient(connection, db, http=http) as client:
+            aliases = await client.list_send_as()
+
+        assert "primary@example.com" in aliases
+        assert "alias@example.com" in aliases
+        assert "pending@example.com" not in aliases
+        assert "missing-status@example.com" not in aliases
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_on_403(self, connection, db):
+        """Non-Workspace accounts can 403 the endpoint — degrade gracefully."""
+        from src.integrations.gmail.client import GmailClient
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(403, json={"error": "forbidden"})
+
+        http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+        async with GmailClient(connection, db, http=http) as client:
+            aliases = await client.list_send_as()
+
+        assert aliases == []
+
+    @pytest.mark.asyncio
+    async def test_5xx_raises(self, connection, db):
+        """Transient 5xx must propagate — returning [] would let refresh_aliases
+        clobber a previously-good list."""
+        from src.integrations.gmail.client import GmailClient
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(503, json={"error": "service unavailable"})
+
+        http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+        async with GmailClient(connection, db, http=http) as client:
+            with pytest.raises(httpx.HTTPStatusError):
+                await client.list_send_as()
+
+
+# ---------------------------------------------------------------------------
+# Tests: refresh_aliases clobber prevention
+# ---------------------------------------------------------------------------
+
+class TestRefreshAliasesClobberPrevention:
+    @pytest.mark.asyncio
+    async def test_empty_response_does_not_overwrite_populated_row(
+        self, connection, db
+    ):
+        """If the API succeeds but returns [] while the row already has aliases,
+        keep last-known-good. A 403 hitting an account that was working
+        yesterday must not regress its alias set."""
+        from src.integrations.gmail.service import GmailConnectionService
+
+        connection.aliases = [connection.email.lower(), "alias@example.com"]
+        db.add(connection)
+        await db.commit()
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(403, json={"error": "forbidden"})
+
+        http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+        with _patch_gmail_client(http):
+            service = GmailConnectionService(db)
+            result = await service.refresh_aliases(connection)
+
+        await db.refresh(connection)
+        assert "alias@example.com" in connection.aliases
+        assert "alias@example.com" in result
+
+    @pytest.mark.asyncio
+    async def test_empty_response_on_empty_row_persists_empty(
+        self, connection, db
+    ):
+        """First-time pull returning [] (e.g. account genuinely has no
+        aliases AND none were stored before) writes []. Otherwise the row
+        would never get populated."""
+        from src.integrations.gmail.service import GmailConnectionService
+
+        # Default fixture leaves aliases unpopulated.
+        assert not connection.aliases
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(403, json={"error": "forbidden"})
+
+        http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+        with _patch_gmail_client(http):
+            service = GmailConnectionService(db)
+            result = await service.refresh_aliases(connection)
+
+        assert result == []
+        await db.refresh(connection)
+        assert list(connection.aliases or []) == []
