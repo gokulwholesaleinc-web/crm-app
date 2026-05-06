@@ -763,6 +763,153 @@ class TestHandleSubscriptionUpdated:
 
 
 # ---------------------------------------------------------------------------
+# Cascade: invoice.paid → opportunity moved to a Won pipeline stage
+# ---------------------------------------------------------------------------
+
+
+class TestInvoicePaidCascadesToOpportunity:
+    """invoice.paid on a proposal-linked invoice flips the linked
+    opportunity to the lowest-order Won pipeline stage."""
+
+    @pytest.mark.asyncio
+    async def test_invoice_paid_moves_opportunity_to_won_stage(
+        self,
+        db_session: AsyncSession,
+        payment_service: PaymentService,
+        test_user: User,
+    ):
+        import secrets
+
+        from src.opportunities.models import Opportunity, PipelineStage
+        from src.proposals.models import Proposal
+
+        open_stage = PipelineStage(
+            name="Discovery", order=1, probability=10,
+            is_won=False, is_lost=False, is_active=True,
+            pipeline_type="opportunity",
+        )
+        won_stage = PipelineStage(
+            name="Closed Won", order=99, probability=100,
+            is_won=True, is_lost=False, is_active=True,
+            pipeline_type="opportunity",
+        )
+        db_session.add_all([open_stage, won_stage])
+        await db_session.flush()
+
+        opp = Opportunity(
+            name="Cascade target",
+            pipeline_stage_id=open_stage.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(opp)
+        await db_session.flush()
+
+        invoice_id = "in_cascade_won_001"
+        proposal = Proposal(
+            proposal_number="PR-2026-CASC-001",
+            public_token=secrets.token_urlsafe(32),
+            title="Cascade",
+            status="awaiting_payment",
+            opportunity_id=opp.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+            amount=Decimal("250.00"),
+            currency="USD",
+            payment_type="one_time",
+            stripe_invoice_id=invoice_id,
+        )
+        existing_payment = Payment(
+            stripe_invoice_id=invoice_id,
+            amount=Decimal("250.00"),
+            currency="USD",
+            status="pending",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add_all([proposal, existing_payment])
+        await db_session.commit()
+
+        await payment_service._handle_invoice_paid({
+            "id": invoice_id,
+            "amount_paid": 25000,
+            "currency": "usd",
+        })
+
+        await db_session.refresh(opp)
+        await db_session.refresh(proposal)
+        assert proposal.status == "paid"
+        assert opp.pipeline_stage_id == won_stage.id
+
+    @pytest.mark.asyncio
+    async def test_already_won_opportunity_not_overwritten(
+        self,
+        db_session: AsyncSession,
+        payment_service: PaymentService,
+        test_user: User,
+    ):
+        """Hand-picked Won variant must not be reset to the canonical Won."""
+        import secrets
+
+        from src.opportunities.models import Opportunity, PipelineStage
+        from src.proposals.models import Proposal
+
+        canonical_won = PipelineStage(
+            name="Closed Won", order=10, probability=100,
+            is_won=True, is_active=True, pipeline_type="opportunity",
+        )
+        custom_won = PipelineStage(
+            name="Closed Won — Renewal", order=20, probability=100,
+            is_won=True, is_active=True, pipeline_type="opportunity",
+        )
+        db_session.add_all([canonical_won, custom_won])
+        await db_session.flush()
+
+        opp = Opportunity(
+            name="Already won",
+            pipeline_stage_id=custom_won.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(opp)
+        await db_session.flush()
+
+        invoice_id = "in_cascade_won_002"
+        proposal = Proposal(
+            proposal_number="PR-2026-CASC-002",
+            public_token=secrets.token_urlsafe(32),
+            title="Already won",
+            status="awaiting_payment",
+            opportunity_id=opp.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+            amount=Decimal("100.00"),
+            currency="USD",
+            payment_type="one_time",
+            stripe_invoice_id=invoice_id,
+        )
+        existing_payment = Payment(
+            stripe_invoice_id=invoice_id,
+            amount=Decimal("100.00"),
+            currency="USD",
+            status="pending",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add_all([proposal, existing_payment])
+        await db_session.commit()
+
+        await payment_service._handle_invoice_paid({
+            "id": invoice_id,
+            "amount_paid": 10000,
+            "currency": "usd",
+        })
+
+        await db_session.refresh(opp)
+        assert opp.pipeline_stage_id == custom_won.id
+
+
+# ---------------------------------------------------------------------------
 # Cascade: create_checkout_session inherits opportunity_id from the quote
 # ---------------------------------------------------------------------------
 
