@@ -39,7 +39,7 @@ import {
   formatPercentage,
   getStatusBadgeClasses,
 } from '../../utils';
-import { showError } from '../../utils/toast';
+import { showError, showInfo } from '../../utils/toast';
 import type {
   Opportunity,
   OpportunityCreate,
@@ -152,6 +152,17 @@ function PipelinePage() {
       const targetStageId = leadStageByDragId.get(overId) ?? null;
       if (targetStageId !== null && targetStageId !== leadInfo.stageId) {
         moveLead.mutate({ leadId: leadInfo.leadId, newStageId: targetStageId });
+        return;
+      }
+      // Lead dropped on the opportunity side of the board. Don't silently
+      // do nothing — point the user at the explicit Convert flow so they
+      // can pick a contact/company and confirm. Direct lead→opp drag
+      // would skip those decisions.
+      const droppedOnOppColumn = oppStageByDragId.has(overId);
+      if (droppedOnOppColumn) {
+        showInfo(
+          'To turn a lead into an opportunity, open the lead and click Convert. Dragging into the opportunity pipeline isn’t supported.',
+        );
       }
       return;
     }
