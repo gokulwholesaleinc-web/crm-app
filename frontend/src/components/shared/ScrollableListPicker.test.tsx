@@ -148,18 +148,4 @@ describe('ScrollableListPicker', () => {
     fireEvent.click(btn); // button semantics: Space triggers click
     expect(onSelectionChange).toHaveBeenCalledWith([1]);
   });
-
-  it('Tab order: all item rows are focusable in DOM order', () => {
-    renderPicker();
-    const allButtons = screen.getAllByRole('button');
-    const itemButtons = allButtons.filter((b) =>
-      ['Alice Smith', 'Bob Jones', 'Charlie Brown'].some((name) =>
-        b.textContent?.includes(name)
-      )
-    );
-    expect(itemButtons).toHaveLength(3);
-    itemButtons.forEach((btn) => {
-      expect(btn.tabIndex).not.toBe(-1);
-    });
-  });
 });

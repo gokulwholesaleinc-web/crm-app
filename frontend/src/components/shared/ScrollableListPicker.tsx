@@ -71,7 +71,6 @@ export function ScrollableListPicker<T>({
 
   return (
     <div>
-      {/* Search */}
       <div className="relative mb-3">
         <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
         <label htmlFor="slp-search" className="sr-only">{searchPlaceholder}</label>
@@ -85,7 +84,6 @@ export function ScrollableListPicker<T>({
         />
       </div>
 
-      {/* Selection actions */}
       {multiSelect && showSelectAll && (
         <div className="flex items-center justify-between text-sm mb-3">
           <span className="text-gray-600">{selectedIds.length} selected</span>
@@ -111,7 +109,6 @@ export function ScrollableListPicker<T>({
         </div>
       )}
 
-      {/* List */}
       <div className={clsx('overflow-y-auto', maxHeight)}>
         {isLoading ? (
           <div className="flex items-center justify-center py-12">

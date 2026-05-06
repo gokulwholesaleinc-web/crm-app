@@ -174,7 +174,6 @@ function ContactDetailPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center space-x-4">
           <Link
@@ -257,13 +256,10 @@ function ContactDetailPage() {
         </div>
       </div>
 
-      {/* AI Suggestions */}
       <NextBestActionCard entityType="contact" entityId={contact.id} />
 
-      {/* Tabs */}
       <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
 
-      {/* Tab Content */}
       {activeTab === 'details' && contactId && (
         <>
           <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="h-20 bg-gray-200 dark:bg-gray-700 rounded" /></div>}>
@@ -561,7 +557,6 @@ function ContactDetailPage() {
         />
       )}
 
-      {/* Email Compose Modal */}
       <EmailComposeModal
         isOpen={showEmailCompose}
         onClose={() => { setShowEmailCompose(false); setReplyToEmail(null); }}
@@ -571,7 +566,6 @@ function ContactDetailPage() {
         replyTo={replyToEmail}
       />
 
-      {/* Edit Form Modal */}
       <Modal isOpen={showEditForm} onClose={() => setShowEditForm(false)} title="Edit Contact" size="lg">
         <ContactForm
           initialData={getInitialFormData()}
@@ -582,7 +576,6 @@ function ContactDetailPage() {
         />
       </Modal>
 
-      {/* Delete Confirmation Dialog */}
       <ConfirmDialog
         isOpen={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
@@ -595,7 +588,6 @@ function ContactDetailPage() {
         isLoading={deleteContactMutation.isPending}
       />
 
-      {/* Send Invoice Modal */}
       <Suspense fallback={null}>
         <SendInvoiceModal
           isOpen={showInvoiceModal}

@@ -71,11 +71,9 @@ export function SendInvoiceModal({
   const [amount, setAmount] = useState(defaultAmount?.toString() ?? '');
   const [description, setDescription] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | ''>('');
-  // one_time-specific
   const [dueDays, setDueDays] = useState(30);
   const [paymentMethodCard, setPaymentMethodCard] = useState(true);
   const [paymentMethodAch, setPaymentMethodAch] = useState(false);
-  // subscription-specific
   const [intervalPreset, setIntervalPreset] = useState<number>(0);
 
   const { data: customersData, isLoading: loadingCustomers } = useStripeCustomers({ page_size: 100 });

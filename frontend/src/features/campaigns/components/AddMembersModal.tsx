@@ -1,7 +1,3 @@
-/**
- * Modal for adding contacts or leads to a campaign
- */
-
 import { useState, useMemo } from 'react';
 import clsx from 'clsx';
 import { Button } from '../../../components/ui/Button';
@@ -102,7 +98,6 @@ export function AddMembersModal({
 
   return (
     <Modal isOpen onClose={onClose} title="Add Campaign Members" size="xl" fullScreenOnMobile>
-      {/* Member Type Tabs */}
       <div className="flex space-x-2 sm:space-x-4 mb-4">
         <button
           type="button"
@@ -130,7 +125,6 @@ export function AddMembersModal({
         </button>
       </div>
 
-      {/* Truncation banners */}
       {memberType === 'contact' && contactsData?.total != null && contactsData.total > availableContacts.length && (
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
           Showing {availableContacts.length} of {contactsData.total} contacts. Use search to narrow down.

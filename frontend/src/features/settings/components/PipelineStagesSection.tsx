@@ -123,7 +123,6 @@ export function PipelineStagesSection() {
         )}
       </CardBody>
 
-      {/* Add Stage Modal */}
       <FormModal<StageFormData>
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
@@ -232,9 +231,8 @@ export function PipelineStagesSection() {
         }}
       </FormModal>
 
-      {/* Delete Confirmation Modal */}
       {deletingStage && (
-        <Modal isOpen={!!deletingStage} onClose={() => setDeletingStage(null)} title="Delete Pipeline Stage" size="sm">
+        <Modal isOpen={true} onClose={() => setDeletingStage(null)} title="Delete Pipeline Stage" size="sm">
           <div className="space-y-4">
             <p className="text-sm text-gray-700 dark:text-gray-300">
               Are you sure you want to delete <strong>{deletingStage.name}</strong>? This cannot be undone.
@@ -272,10 +270,9 @@ export function PipelineStagesSection() {
         </Modal>
       )}
 
-      {/* Edit Stage Modal */}
       {editingStage && (
         <FormModal<StageFormData>
-          isOpen={!!editingStage}
+          isOpen={true}
           onClose={() => setEditingStage(null)}
           title="Edit Pipeline Stage"
           defaultValues={{

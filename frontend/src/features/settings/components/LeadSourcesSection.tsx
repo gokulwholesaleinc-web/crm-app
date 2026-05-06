@@ -111,7 +111,6 @@ export function LeadSourcesSection() {
         )}
       </CardBody>
 
-      {/* Add Source Modal */}
       <FormModal<SourceFormData>
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
@@ -161,10 +160,9 @@ export function LeadSourcesSection() {
         }}
       </FormModal>
 
-      {/* Edit Source Modal */}
       {editingSource && (
         <FormModal<SourceFormData>
-          isOpen={!!editingSource}
+          isOpen={true}
           onClose={() => setEditingSource(null)}
           title="Edit Lead Source"
           defaultValues={{
@@ -217,10 +215,9 @@ export function LeadSourcesSection() {
         </FormModal>
       )}
 
-      {/* Delete Confirmation Modal */}
       {deletingSource && (
         <Modal
-          isOpen={!!deletingSource}
+          isOpen={true}
           onClose={() => {
             setDeletingSource(null);
             deleteMutation.reset();

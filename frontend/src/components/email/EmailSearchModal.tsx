@@ -104,7 +104,6 @@ export function EmailSearchModal({ isOpen, onClose, entityType, entityId }: Emai
       showCloseButton={false}
       closeOnOverlayClick={true}
     >
-      {/* Search input */}
       <div className="-mx-4 -mt-4 sm:-mx-6 sm:-mt-6 flex items-center gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
         {SEARCH_ICON}
         <input
@@ -130,7 +129,6 @@ export function EmailSearchModal({ isOpen, onClose, entityType, entityId }: Emai
         </button>
       </div>
 
-      {/* Scope toggle */}
       {hasEntityFilter && (
         <div className="-mx-4 sm:-mx-6 px-4 py-2 border-b border-gray-100 dark:border-gray-700 flex items-center gap-2">
           <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-gray-600 dark:text-gray-400">
@@ -150,7 +148,6 @@ export function EmailSearchModal({ isOpen, onClose, entityType, entityId }: Emai
         </div>
       )}
 
-      {/* Results */}
       <div className="-mx-4 sm:-mx-6 max-h-[60vh] overflow-y-auto">
         {error && (
           <p className="px-4 py-3 text-sm text-red-600 dark:text-red-400">{error}</p>

@@ -1,7 +1,3 @@
-/**
- * Modal for adding selected leads to an existing or new campaign.
- */
-
 import { useState } from 'react';
 import { Modal, Button, Spinner } from '../../../components/ui';
 import { Input } from '../../../components/ui/Input';
@@ -101,7 +97,6 @@ export function AddToCampaignModal({
           Add {selectedLeadIds.length} selected lead{selectedLeadIds.length !== 1 ? 's' : ''} to a campaign.
         </p>
 
-        {/* Mode toggle */}
         <div className="flex rounded-md border border-gray-300 dark:border-gray-600 overflow-hidden">
           <button
             type="button"

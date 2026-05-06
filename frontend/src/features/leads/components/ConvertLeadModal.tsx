@@ -114,7 +114,6 @@ export function ConvertLeadModal({
 
         <form onSubmit={handleSubmit(onSubmit)} className="mt-6 space-y-4 flex-1 flex flex-col">
           <div className="flex-1 space-y-4 overflow-y-auto">
-            {/* Create Contact Option */}
             <div className="flex items-start">
               <div className="flex items-center h-5">
                 <input
@@ -137,7 +136,6 @@ export function ConvertLeadModal({
               </div>
             </div>
 
-            {/* Create Opportunity Option */}
             <div className="flex items-start">
               <div className="flex items-center h-5">
                 <input
@@ -160,7 +158,6 @@ export function ConvertLeadModal({
               </div>
             </div>
 
-            {/* Opportunity Details (conditional) */}
             {createOpportunity && (
               <div className="ml-4 sm:ml-7 space-y-4 border-l-2 border-gray-200 pl-4">
                 <div>
@@ -244,7 +241,6 @@ export function ConvertLeadModal({
             )}
           </div>
 
-          {/* Form Actions */}
           <div className="mt-5 pt-4 border-t border-gray-200 sm:border-t-0 sm:pt-0 sm:mt-6 flex flex-col-reverse sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense gap-3">
             <Button
               type="submit"
