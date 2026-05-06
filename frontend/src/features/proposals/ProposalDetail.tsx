@@ -1,10 +1,14 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeftIcon,
   ArrowPathIcon,
+  ArrowUpTrayIcon,
+  DocumentTextIcon,
   PaperAirplaneIcon,
   CheckIcon,
+  TrashIcon,
   XMarkIcon,
   PencilIcon,
   EyeIcon,
@@ -23,10 +27,15 @@ import {
 } from '../../hooks/useProposals';
 import { ProposalBillingCard } from './ProposalBillingCard';
 import { ProposalAuditCard } from './ProposalAuditCard';
+import {
+  listProposalAttachments,
+  uploadProposalAttachment,
+  deleteProposalAttachment,
+} from '../../api/proposals';
 import { formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { showSuccess, showError } from '../../utils/toast';
-import type { ProposalUpdate } from '../../types';
+import type { ProposalUpdate, ProposalAttachment } from '../../types';
 
 function ProposalDetailPage() {
   const { id } = useParams();
@@ -357,6 +366,14 @@ function ProposalDetailPage() {
               <p className="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap">{proposal.content}</p>
             </div>
           )}
+
+          {/* Attachments — PDFs that ride along on the public link.
+              Locked once the customer signs so the audit trail stays
+              honest about what they were shown. */}
+          <ProposalAttachmentsCard
+            proposalId={proposal.id}
+            isLocked={Boolean(proposal.signed_at)}
+          />
         </div>
 
         {/* Sidebar */}
@@ -572,6 +589,222 @@ function ProposalDetailPage() {
         cancelLabel="Cancel"
         variant="danger"
         isLoading={deleteProposalMutation.isPending}
+      />
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------
+// ProposalAttachmentsCard
+// -----------------------------------------------------------------
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+interface ProposalAttachmentsCardProps {
+  proposalId: number;
+  isLocked: boolean;
+}
+
+function ProposalAttachmentsCard({ proposalId, isLocked }: ProposalAttachmentsCardProps) {
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<ProposalAttachment | null>(null);
+
+  const queryKey = ['proposals', proposalId, 'attachments'] as const;
+
+  const { data: attachments, isLoading, error } = useQuery({
+    queryKey,
+    queryFn: () => listProposalAttachments(proposalId),
+  });
+
+  const uploadMutation = useMutation({
+    mutationFn: (file: File) => uploadProposalAttachment(proposalId, file),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey });
+      showSuccess('Attachment uploaded');
+    },
+    onError: (err) => {
+      const detail =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+          : null;
+      showError(detail || 'Failed to upload attachment');
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (attachmentId: number) =>
+      deleteProposalAttachment(proposalId, attachmentId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey });
+      showSuccess('Attachment deleted');
+    },
+    onError: (err) => {
+      const detail =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+          : null;
+      showError(detail || 'Failed to delete attachment');
+    },
+  });
+
+  const handleFiles = (files: FileList | null) => {
+    if (!files || files.length === 0 || isLocked) return;
+    Array.from(files).forEach((file) => {
+      uploadMutation.mutate(file);
+    });
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (isLocked) return;
+    handleFiles(e.dataTransfer.files);
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (isLocked) return;
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleConfirmDelete = () => {
+    if (!pendingDelete) return;
+    deleteMutation.mutate(pendingDelete.id);
+    setPendingDelete(null);
+  };
+
+  return (
+    <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400">Attachments</h2>
+        {isLocked && (
+          <span className="text-xs text-gray-500 dark:text-gray-400">
+            Locked — proposal signed
+          </span>
+        )}
+      </div>
+
+      {!isLocked && (
+        <div
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          className={`mb-4 rounded border-2 border-dashed px-4 py-6 text-center transition-colors ${
+            isDragging
+              ? 'border-primary-500 bg-primary-50 dark:bg-primary-950/30'
+              : 'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900'
+          }`}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,application/pdf"
+            multiple
+            className="sr-only"
+            onChange={(e) => {
+              handleFiles(e.target.files);
+              // Reset so re-selecting the same file fires onChange.
+              if (e.target) e.target.value = '';
+            }}
+          />
+          <ArrowUpTrayIcon
+            className="mx-auto h-6 w-6 text-gray-400 dark:text-gray-500"
+            aria-hidden="true"
+          />
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+            Drop a PDF here, or
+          </p>
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploadMutation.isPending}
+            className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 disabled:opacity-50"
+          >
+            {uploadMutation.isPending ? 'Uploading…' : 'Choose file'}
+          </button>
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">PDF only</p>
+        </div>
+      )}
+
+      {isLoading && (
+        <p className="text-sm text-gray-500 dark:text-gray-400">Loading attachments…</p>
+      )}
+
+      {error && !isLoading && (
+        <p className="text-sm text-red-600 dark:text-red-400">
+          Failed to load attachments.
+        </p>
+      )}
+
+      {!isLoading && !error && attachments && attachments.length === 0 && (
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          No attachments yet.
+        </p>
+      )}
+
+      {!isLoading && attachments && attachments.length > 0 && (
+        <ul className="divide-y divide-gray-200 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded">
+          {attachments.map((attachment) => (
+            <li
+              key={attachment.id}
+              className="flex items-center justify-between gap-3 px-3 py-2"
+            >
+              <div className="flex min-w-0 items-center gap-3">
+                <DocumentTextIcon
+                  className="h-5 w-5 flex-shrink-0 text-gray-400 dark:text-gray-500"
+                  aria-hidden="true"
+                />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                    {attachment.original_filename}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 tabular-nums">
+                    {formatFileSize(attachment.file_size)}
+                    {attachment.created_at && (
+                      <> · {formatDate(attachment.created_at)}</>
+                    )}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                aria-label={`Delete ${attachment.original_filename}`}
+                onClick={() => setPendingDelete(attachment)}
+                disabled={isLocked || deleteMutation.isPending}
+                className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 rounded disabled:opacity-30 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-500"
+              >
+                <TrashIcon className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <ConfirmDialog
+        isOpen={pendingDelete !== null}
+        onClose={() => setPendingDelete(null)}
+        onConfirm={handleConfirmDelete}
+        title="Delete attachment"
+        message={
+          pendingDelete
+            ? `Delete "${pendingDelete.original_filename}"? Customers with the public link will no longer see it.`
+            : ''
+        }
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+        isLoading={deleteMutation.isPending}
       />
     </div>
   );

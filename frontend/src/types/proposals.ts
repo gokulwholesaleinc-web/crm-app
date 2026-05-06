@@ -162,3 +162,18 @@ export interface CreateFromTemplateRequest {
 export interface AIGenerateProposalRequest {
   opportunity_id: number;
 }
+
+export interface ProposalAttachment {
+  id: number;
+  original_filename: string;
+  file_size: number;
+  content_type?: string | null;
+  created_at?: string | null;
+}
+
+export interface ProposalAttachmentPublic {
+  id: number;
+  original_filename: string;
+  file_size: number;
+  viewed: boolean;
+}
