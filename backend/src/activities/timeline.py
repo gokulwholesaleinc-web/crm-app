@@ -147,10 +147,16 @@ class ActivityTimeline:
         entity_type: str,
         entity_id: int,
         limit: int = 50,
+        viewer_user_id: int | None = None,
     ) -> list[dict[str, Any]]:
         """Get a unified timeline combining activities, emails, and sequence events for an entity.
 
         Returns all event types sorted by timestamp (most recent first).
+
+        ``viewer_user_id`` enables the same participant-based scoping the
+        ``/api/email/thread`` endpoint uses: emails are only included if
+        the viewer composed them or is on the participant set. Pass
+        ``None`` for admin / unscoped reads.
         """
         events: list[dict[str, Any]] = []
 
@@ -173,11 +179,24 @@ class ActivityTimeline:
                 "metadata": {"activity_type": a.activity_type, "is_completed": a.is_completed, "priority": a.priority},
             })
 
-        # 2. Emails sent to this entity
+        # 2. Emails sent to this entity (scoped by participant overlap so
+        # non-admin viewers don't see threads ingested via teammates'
+        # Gmail connections — same invariant as /api/email/thread).
         from src.email.models import EmailQueue
+        email_filters = [
+            EmailQueue.entity_type == entity_type,
+            EmailQueue.entity_id == entity_id,
+        ]
+        if viewer_user_id is not None:
+            from src.email.participants import get_user_connection_emails
+            from src.email.service import _outbound_visibility_clause
+            viewer_emails = await get_user_connection_emails(self.db, viewer_user_id)
+            email_filters.append(
+                _outbound_visibility_clause(viewer_user_id, viewer_emails)
+            )
         email_result = await self.db.execute(
             select(EmailQueue)
-            .where(EmailQueue.entity_type == entity_type, EmailQueue.entity_id == entity_id)
+            .where(*email_filters)
             .order_by(EmailQueue.created_at.desc())
             .limit(limit)
         )

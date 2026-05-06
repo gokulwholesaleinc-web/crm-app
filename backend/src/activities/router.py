@@ -322,6 +322,7 @@ async def get_unified_timeline(
         entity_type=entity_type,
         entity_id=entity_id,
         limit=limit,
+        viewer_user_id=None if current_user.is_superuser else current_user.id,
     )
     return UnifiedTimelineResponse(items=[UnifiedTimelineEvent(**item) for item in items])
 

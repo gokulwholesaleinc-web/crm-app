@@ -56,6 +56,17 @@ class SendEmailRequest(BaseModel):
     attachments: list[InlineAttachment] | None = None
 
     @model_validator(mode="after")
+    def _validate_reply_target_exclusive(self) -> "SendEmailRequest":
+        # Mutex: a reply targets exactly one prior message. With both set,
+        # the participant gate could authorize the inbound thread while
+        # _resolve_reply_context silently threads off the email row.
+        if self.reply_to_email_id is not None and self.reply_to_inbound_id is not None:
+            raise ValueError(
+                "reply_to_email_id and reply_to_inbound_id are mutually exclusive"
+            )
+        return self
+
+    @model_validator(mode="after")
     def _validate_attachments(self) -> "SendEmailRequest":
         if not self.attachments:
             return self
