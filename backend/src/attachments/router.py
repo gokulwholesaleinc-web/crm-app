@@ -28,7 +28,7 @@ async def upload_file(
     category: str | None = Form(None),
 ):
     """Upload a file attachment for an entity."""
-    valid_entity_types = {"contacts", "companies", "leads", "opportunities", "expenses"}
+    valid_entity_types = {"contacts", "companies", "leads", "opportunities", "expenses", "proposals"}
     if entity_type not in valid_entity_types:
         raise_bad_request(f"Invalid entity_type. Must be one of: {', '.join(sorted(valid_entity_types))}")
 
