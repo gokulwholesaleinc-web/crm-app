@@ -8,12 +8,6 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
-# Hold strong references to in-flight backfill tasks. Without this, Python is
-# allowed to GC the asyncio task created by `asyncio.create_task(_run())`
-# before it executes — which previously stranded users in status='running'
-# with started_at=NULL forever.
-_BACKFILL_TASKS: set[asyncio.Task] = set()
-
 from src.auth.dependencies import get_current_superuser
 from src.config import settings
 from src.core.constants import HTTPStatus
@@ -32,6 +26,12 @@ from src.integrations.gmail.schemas import (
 from src.integrations.gmail.service import GmailConnectionService
 
 router = APIRouter(prefix="/api/integrations/gmail", tags=["gmail"])
+
+# Hold strong references to in-flight backfill tasks. Without this, Python is
+# allowed to GC the asyncio task created by `asyncio.create_task(_run())`
+# before it executes — which previously stranded users in status='running'
+# with started_at=NULL forever.
+_BACKFILL_TASKS: set[asyncio.Task] = set()
 
 GMAIL_OAUTH_STATE_COOKIE = "crm_gmail_oauth_state"
 GMAIL_OAUTH_STATE_TTL_SECONDS = 600  # 10 minutes

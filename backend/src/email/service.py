@@ -26,6 +26,31 @@ from src.email.types import EmailAttachment
 logger = logging.getLogger(__name__)
 
 
+def _outbound_visibility_clause(viewer_user_id: int, viewer_emails: list[str]):
+    """Visibility predicate for EmailQueue: composer OR participant overlap.
+
+    When the viewer has no Gmail connection, only their own composes are
+    visible — outbound mail they didn't send and aren't on can never match.
+    """
+    if viewer_emails:
+        return or_(
+            EmailQueue.sent_by_id == viewer_user_id,
+            EmailQueue.participant_emails.overlap(viewer_emails),
+        )
+    return EmailQueue.sent_by_id == viewer_user_id
+
+
+def _inbound_visibility_clause(viewer_emails: list[str]):
+    """Visibility predicate for InboundEmail: participant overlap only.
+
+    Falls back to ``literal(False)`` when the viewer has no Gmail
+    connection, since inbound mail has no per-row composer to bypass with.
+    """
+    if viewer_emails:
+        return InboundEmail.participant_emails.overlap(viewer_emails)
+    return literal(False)
+
+
 async def _resolve_from_name(db: AsyncSession, user_id: int, fallback_email: str) -> str:
     """Prefer the sender's real name over the Gmail local-part.
 
@@ -406,14 +431,7 @@ class EmailService:
             filters.append(EmailQueue.sent_by_id == sent_by_id)
         if viewer_user_id is not None:
             viewer_emails = await get_user_connection_emails(self.db, viewer_user_id)
-            participant_clause = (
-                EmailQueue.participant_emails.overlap(viewer_emails)
-                if viewer_emails
-                else literal(False)
-            )
-            filters.append(
-                or_(EmailQueue.sent_by_id == viewer_user_id, participant_clause)
-            )
+            filters.append(_outbound_visibility_clause(viewer_user_id, viewer_emails))
 
         count_query = select(func.count()).select_from(EmailQueue)
         query = select(EmailQueue).order_by(EmailQueue.created_at.desc())
@@ -743,15 +761,11 @@ class EmailService:
         # don't double-escape our own escapes.
         escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         pat = f"%{escaped}%"
-        if user_id is None:
-            outbound_visibility = literal(True)  # admin: no scoping
-        elif user_emails:
-            outbound_visibility = or_(
-                EmailQueue.sent_by_id == user_id,
-                EmailQueue.participant_emails.overlap(user_emails),
-            )
-        else:
-            outbound_visibility = EmailQueue.sent_by_id == user_id
+        outbound_visibility = (
+            literal(True)  # admin: no scoping
+            if user_id is None
+            else _outbound_visibility_clause(user_id, user_emails)
+        )
         sent_filters = [
             outbound_visibility,
             or_(
@@ -795,13 +809,10 @@ class EmailService:
                 InboundEmail.bcc.ilike(pat, escape="\\"),
             ),
         ]
-        if user_id is None:
-            pass  # admin: no inbound scoping
-        elif user_emails:
-            recv_filters.append(InboundEmail.participant_emails.overlap(user_emails))
-        else:
-            # No Gmail connection — no inbound results can be scoped to this user
-            recv_filters.append(literal(False))
+        # Admins (user_id=None) skip inbound scoping entirely; everyone else
+        # is bounded by participant overlap (or no rows when unconnected).
+        if user_id is not None:
+            recv_filters.append(_inbound_visibility_clause(user_emails))
         if entity_type:
             recv_filters.append(InboundEmail.entity_type == entity_type)
         if entity_id is not None:
@@ -897,20 +908,8 @@ class EmailService:
             InboundEmail.entity_id == entity_id,
         ]
         if viewer_user_id is not None:
-            outbound_visibility = (
-                or_(
-                    EmailQueue.sent_by_id == viewer_user_id,
-                    EmailQueue.participant_emails.overlap(viewer_emails),
-                )
-                if viewer_emails
-                else (EmailQueue.sent_by_id == viewer_user_id)
-            )
-            outbound_filters.append(outbound_visibility)
-            inbound_filters.append(
-                InboundEmail.participant_emails.overlap(viewer_emails)
-                if viewer_emails
-                else literal(False)
-            )
+            outbound_filters.append(_outbound_visibility_clause(viewer_user_id, viewer_emails))
+            inbound_filters.append(_inbound_visibility_clause(viewer_emails))
 
         outbound_q = (
             select(

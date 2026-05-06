@@ -5,6 +5,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import RedirectResponse, Response
+from sqlalchemy import select
 
 from src.core.constants import EntityNames, HTTPStatus
 from src.core.router_utils import (
@@ -14,6 +15,8 @@ from src.core.router_utils import (
     check_ownership,
     get_entity_or_404,
 )
+from src.email.models import EmailQueue, InboundEmail
+from src.email.participants import get_user_connection_emails
 from src.email.schemas import (
     EmailListResponse,
     EmailQueueResponse,
@@ -72,40 +75,33 @@ async def send_email(
     # so the recipient sees the actual sender, not the original thread
     # owner.
     if (data.reply_to_inbound_id is not None or data.reply_to_email_id is not None) and not current_user.is_superuser:
-        from src.email.participants import get_user_connection_emails
         viewer_emails = set(await get_user_connection_emails(db, current_user.id))
 
-        async def _assert_participant(participants: list[str] | None, fallback_sent_by: int | None) -> None:
-            if fallback_sent_by == current_user.id:
-                return
-            if viewer_emails and viewer_emails.intersection(participants or []):
-                return
+        if data.reply_to_inbound_id is not None:
+            # Inbound rows have no composer to bypass with — only participant overlap.
+            stmt = select(InboundEmail.participant_emails).where(
+                InboundEmail.id == data.reply_to_inbound_id
+            )
+            row = (await db.execute(stmt)).one_or_none()
+            participants, composer_id = (row[0], None) if row else (None, None)
+        else:
+            stmt = select(EmailQueue.participant_emails, EmailQueue.sent_by_id).where(
+                EmailQueue.id == data.reply_to_email_id
+            )
+            row = (await db.execute(stmt)).one_or_none()
+            participants, composer_id = (row[0], row[1]) if row else (None, None)
+
+        if row is None:
+            raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Source thread not found")
+        # Allow if the viewer composed the original outbound row, or shares
+        # a Gmail address with the thread's participant set.
+        is_composer = composer_id == current_user.id
+        is_participant = bool(viewer_emails and viewer_emails.intersection(participants or []))
+        if not (is_composer or is_participant):
             raise HTTPException(
                 status_code=HTTPStatus.FORBIDDEN,
                 detail="You can only reply to threads you are a participant of",
             )
-
-        if data.reply_to_inbound_id is not None:
-            from sqlalchemy import select as _select
-
-            from src.email.models import InboundEmail
-            row = (await db.execute(
-                _select(InboundEmail.participant_emails).where(InboundEmail.id == data.reply_to_inbound_id)
-            )).one_or_none()
-            if row is None:
-                raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Source thread not found")
-            await _assert_participant(row[0], None)
-
-        if data.reply_to_email_id is not None:
-            from sqlalchemy import select as _select
-
-            from src.email.models import EmailQueue
-            row = (await db.execute(
-                _select(EmailQueue.participant_emails, EmailQueue.sent_by_id).where(EmailQueue.id == data.reply_to_email_id)
-            )).one_or_none()
-            if row is None:
-                raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Source thread not found")
-            await _assert_participant(row[0], row[1])
 
     email = await service.queue_email(
         to_email=data.to_email,
@@ -331,7 +327,6 @@ async def get_email(
             detail=f"Email with ID {email_id} not found",
         )
     if not current_user.is_superuser and email.sent_by_id != current_user.id:
-        from src.email.participants import get_user_connection_emails
         viewer_emails = set(await get_user_connection_emails(db, current_user.id))
         if not viewer_emails.intersection(email.participant_emails or []):
             raise HTTPException(
