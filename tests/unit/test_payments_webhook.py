@@ -910,6 +910,81 @@ class TestInvoicePaidCascadesToOpportunity:
 
 
 # ---------------------------------------------------------------------------
+# Cascade: charge.refunded → proposal back to awaiting_payment + comment
+# ---------------------------------------------------------------------------
+
+
+class TestChargeRefundedCascadesToProposal:
+    @pytest.mark.asyncio
+    async def test_charge_refunded_flips_proposal_back_to_awaiting_payment(
+        self,
+        db_session: AsyncSession,
+        payment_service: PaymentService,
+        test_user: User,
+    ):
+        import secrets
+
+        from src.comments.models import Comment
+        from src.proposals.models import Proposal
+
+        invoice_id = "in_refund_001"
+        intent_id = "pi_refund_001"
+        accepted_at = datetime(2026, 4, 1, 12, 0, tzinfo=UTC)
+        proposal = Proposal(
+            proposal_number="PR-2026-REF-001",
+            public_token=secrets.token_urlsafe(32),
+            title="Refund target",
+            status="paid",
+            paid_at=datetime(2026, 4, 5, tzinfo=UTC),
+            accepted_at=accepted_at,
+            signed_at=accepted_at,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+            amount=Decimal("500.00"),
+            currency="USD",
+            payment_type="one_time",
+            stripe_invoice_id=invoice_id,
+        )
+        payment = Payment(
+            stripe_invoice_id=invoice_id,
+            stripe_payment_intent_id=intent_id,
+            amount=Decimal("500.00"),
+            currency="USD",
+            status="succeeded",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add_all([proposal, payment])
+        await db_session.commit()
+        await db_session.refresh(proposal)
+        await db_session.refresh(payment)
+
+        await payment_service._handle_charge_refunded({
+            "id": "ch_refund_xyz",
+            "payment_intent": intent_id,
+        })
+
+        await db_session.refresh(proposal)
+        await db_session.refresh(payment)
+        assert payment.status == "refunded"
+        assert proposal.status == "awaiting_payment"
+        # E-sign trail must survive the cascade.
+        assert _as_utc(proposal.accepted_at) == accepted_at
+        assert proposal.paid_at is None
+
+        comment_result = await db_session.execute(
+            select(Comment).where(
+                Comment.entity_type == "proposals",
+                Comment.entity_id == proposal.id,
+            )
+        )
+        comments = comment_result.scalars().all()
+        assert len(comments) == 1
+        assert "Refunded on" in comments[0].content
+        assert "ch_refund_xyz" in comments[0].content
+
+
+# ---------------------------------------------------------------------------
 # Cascade: create_checkout_session inherits opportunity_id from the quote
 # ---------------------------------------------------------------------------
 

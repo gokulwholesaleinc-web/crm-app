@@ -331,6 +331,80 @@ class WebhookProcessor:
             Payment.stripe_payment_intent_id, charge_obj, obj_key="payment_intent"
         )
         await self._set_payment_status(payment, "refunded", guard_statuses=())
+        # Cascade the refund into the linked proposal so the CRM doesn't
+        # show "paid" forever after Stripe gave the money back. Ties off
+        # the lifecycle so dashboards/reports can react.
+        if payment is not None:
+            await self._mark_proposal_awaiting_after_refund(payment, charge_obj)
+
+    async def _mark_proposal_awaiting_after_refund(
+        self, payment: Payment, charge_obj: dict
+    ) -> None:
+        """Flip the Payment's linked Proposal back to ``awaiting_payment``
+        and append an audit comment recording the refund.
+
+        Looks the proposal up via whichever Stripe id the original
+        proposal-billing flow stamped on it (invoice or checkout session).
+        Preserves ``accepted_at``/``signed_at`` etc. so the e-sign trail
+        is untouched — only the payment-status side moves.
+        """
+        from src.comments.models import Comment
+        from src.proposals.models import Proposal
+
+        proposal: Proposal | None = None
+        if payment.stripe_invoice_id:
+            result = await self.db.execute(
+                select(Proposal).where(
+                    Proposal.stripe_invoice_id == payment.stripe_invoice_id
+                )
+            )
+            proposal = result.scalar_one_or_none()
+        if proposal is None and payment.stripe_checkout_session_id:
+            result = await self.db.execute(
+                select(Proposal).where(
+                    Proposal.stripe_checkout_session_id
+                    == payment.stripe_checkout_session_id
+                )
+            )
+            proposal = result.scalar_one_or_none()
+        if proposal is None:
+            return
+
+        # Idempotency: if the proposal is already back in awaiting_payment
+        # we still want the comment trail to record this specific refund
+        # event, but only once per charge id.
+        if proposal.status == "paid":
+            proposal.status = "awaiting_payment"
+            proposal.paid_at = None
+
+        charge_id = charge_obj.get("id") or "unknown_charge"
+        refund_iso = datetime.now(UTC).date().isoformat()
+        comment_body = (
+            f"Refunded on {refund_iso} via Stripe charge.refunded ({charge_id})"
+        )
+
+        # Skip duplicate comment if this exact charge already has one —
+        # Stripe may resend charge.refunded on partial refunds; the dedup
+        # in process_webhook handles same event_id, but a partial refund
+        # arrives as a *new* event with the same charge id, so we filter
+        # locally too.
+        existing = await self.db.execute(
+            select(Comment).where(
+                Comment.entity_type == "proposals",
+                Comment.entity_id == proposal.id,
+                Comment.content == comment_body,
+            )
+        )
+        if existing.scalar_one_or_none() is None:
+            self.db.add(
+                Comment(
+                    entity_type="proposals",
+                    entity_id=proposal.id,
+                    content=comment_body,
+                    is_internal=True,
+                )
+            )
+        await self.db.flush()
 
     async def _handle_subscription_created(self, sub_obj: dict) -> None:
         """Handle customer.subscription.created — insert local Subscription
