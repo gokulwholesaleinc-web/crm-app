@@ -5,9 +5,8 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.models import User
+from src.auth.security import create_access_token, get_password_hash
 from src.email.models import EmailQueue, InboundEmail
-from src.auth.utils import get_password_hash
-from src.auth.jwt import create_access_token
 
 
 async def _make_user(db: AsyncSession, email: str) -> User:

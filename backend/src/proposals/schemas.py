@@ -132,7 +132,13 @@ class ProposalRejectRequest(BaseModel):
     reason: str | None = None
 
 
-from src.core.schemas import CompanyBrief, ContactBrief, OpportunityBrief, QuoteBrief, UserBrief  # noqa: E402
+from src.core.schemas import (  # noqa: E402
+    CompanyBrief,
+    ContactBrief,
+    OpportunityBrief,
+    QuoteBrief,
+    UserBrief,
+)
 
 
 class ProposalViewResponse(BaseModel):
