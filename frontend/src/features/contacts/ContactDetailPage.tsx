@@ -16,6 +16,7 @@ import { useContactAliases, useAddAlias, useDeleteAlias } from '../../hooks/useC
 import { showSuccess, showError } from '../../utils/toast';
 import { useQuotes } from '../../hooks/useQuotes';
 import { useProposals } from '../../hooks/useProposals';
+import { useSubscriptions } from '../../hooks/usePayments';
 import { formatDate, formatPhoneNumber, formatCurrency } from '../../utils/formatters';
 import { StatusBadge } from '../../components/ui';
 import type { Quote, Proposal } from '../../types';
@@ -91,8 +92,16 @@ function ContactDetailPage() {
   const { data: proposalsData } = useProposals(
     activeTab === 'proposals' && contactId ? { contact_id: contactId } : undefined
   );
+  // Header badge — surface that this contact has a recurring billing
+  // arrangement so Giancarlo doesn't have to dig into the Payments tab
+  // to see it. Only fetch once we have a contactId; status='active'
+  // filter narrows to subs Stripe is currently charging on.
+  const { data: subscriptionsData } = useSubscriptions(
+    contactId ? { contact_id: contactId, status: 'active', page_size: 1 } : undefined
+  );
   const quotes = quotesData?.items ?? [];
   const proposals = proposalsData?.items ?? [];
+  const hasActiveSubscription = (subscriptionsData?.total ?? 0) > 0;
 
   const handleEditSubmit = async (data: ContactFormData) => {
     if (!contactId) return;
@@ -178,9 +187,20 @@ function ContactDetailPage() {
             </svg>
           </Link>
           <div className="min-w-0">
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">
-              {contact.first_name} {contact.last_name}
-            </h1>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">
+                {contact.first_name} {contact.last_name}
+              </h1>
+              {hasActiveSubscription && (
+                <span
+                  className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300"
+                  title="This contact has at least one active Stripe subscription"
+                >
+                  <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  Subscriber
+                </span>
+              )}
+            </div>
             {(contact.job_title || contact.company?.name) && (
               <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
                 {contact.job_title}
