@@ -31,6 +31,7 @@ from src.core.router_utils import (
 )
 from src.events.service import PROPOSAL_ACCEPTED, PROPOSAL_SENT, emit
 from src.proposals.attachment_views import (
+    ProposalAttachmentView,
     _hash_token,
     record_attachment_view,
 )
@@ -438,7 +439,6 @@ async def list_public_proposal_attachments(
     if not items:
         return []
 
-    from src.proposals.attachment_views import ProposalAttachmentView
     token_hash = _hash_token(token)
     viewed_rows = await db.execute(
         select(ProposalAttachmentView.attachment_id)
@@ -565,7 +565,6 @@ async def get_public_proposal(
     att_service = AttachmentService(db)
     items, _total = await att_service.list_attachments("proposals", proposal.id)
     if items:
-        from src.proposals.attachment_views import ProposalAttachmentView
         token_hash = _hash_token(token)
         viewed_rows = await db.execute(
             select(ProposalAttachmentView.attachment_id)

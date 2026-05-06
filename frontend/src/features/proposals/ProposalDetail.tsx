@@ -632,11 +632,7 @@ function ProposalAttachmentsCard({ proposalId, isLocked }: ProposalAttachmentsCa
       showSuccess('Attachment uploaded');
     },
     onError: (err) => {
-      const detail =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-          : null;
-      showError(detail || 'Failed to upload attachment');
+      showError(extractApiErrorDetail(err) ?? 'Failed to upload attachment');
     },
   });
 
@@ -648,11 +644,7 @@ function ProposalAttachmentsCard({ proposalId, isLocked }: ProposalAttachmentsCa
       showSuccess('Attachment deleted');
     },
     onError: (err) => {
-      const detail =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-          : null;
-      showError(detail || 'Failed to delete attachment');
+      showError(extractApiErrorDetail(err) ?? 'Failed to delete attachment');
     },
   });
 
