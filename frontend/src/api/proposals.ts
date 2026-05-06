@@ -242,12 +242,18 @@ export const deleteProposalAttachment = async (
  * URL for the public download endpoint that 302-redirects to a presigned R2
  * URL. Hitting it records the view as a side effect, which is why the public
  * page opens it in a new tab rather than fetching it as JSON.
+ *
+ * Reads VITE_API_URL directly instead of going through `apiClient.defaults`
+ * so the public proposal page (which imports this helper) doesn't pull the
+ * authenticated axios instance — that instance attaches the staff Bearer
+ * token and would 401-evict the staff session if a customer's link
+ * happened to be opened in the same browser.
  */
 export const publicProposalAttachmentDownloadUrl = (
   token: string,
   attachmentId: number,
 ): string => {
-  const baseUrl = apiClient.defaults.baseURL || '';
+  const baseUrl = import.meta.env.VITE_API_URL || '';
   return `${baseUrl}${PROPOSALS_BASE}/public/${token}/attachments/${attachmentId}/download`;
 };
 

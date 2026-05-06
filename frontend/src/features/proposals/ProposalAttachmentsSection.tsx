@@ -1,6 +1,14 @@
 import { DocumentTextIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
 import type { ProposalAttachmentPublic } from '../../types';
-import { publicProposalAttachmentDownloadUrl } from '../../api/proposals';
+
+// URL is built inline (rather than importing the helper from api/proposals)
+// so this component doesn't pull the authenticated axios instance into the
+// public proposal bundle — the public page deliberately uses a bare axios
+// to avoid evicting a staff Bearer session.
+function buildDownloadUrl(token: string, attachmentId: number): string {
+  const baseUrl = import.meta.env.VITE_API_URL || '';
+  return `${baseUrl}/api/proposals/public/${token}/attachments/${attachmentId}/download`;
+}
 
 interface ProposalAttachmentsSectionProps {
   attachments: ProposalAttachmentPublic[];
@@ -26,7 +34,7 @@ export function ProposalAttachmentsSection({
   if (attachments.length === 0) return null;
 
   const handleOpen = (id: number) => {
-    const url = publicProposalAttachmentDownloadUrl(token, id);
+    const url = buildDownloadUrl(token, id);
     window.open(url, '_blank', 'noopener,noreferrer');
     // Optimistically mark viewed; backend records the view as a side
     // effect of the download endpoint hit.
