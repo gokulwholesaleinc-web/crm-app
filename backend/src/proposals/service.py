@@ -19,6 +19,7 @@ from src.config import settings
 from src.core.base_service import BaseService, CRUDService, StatusTransitionMixin
 from src.core.constants import DEFAULT_PAGE_SIZE
 from src.core.filtering import build_token_search
+from src.core.opportunity_guards import assert_opportunity_active
 from src.core.url_safety import UnsafeUrlError, validate_public_url
 from src.email.branded_templates import TenantBrandingHelper, render_proposal_email
 from src.email.pdf_render import pdf_logo_allowed_hosts, render_html_to_pdf
@@ -225,10 +226,20 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             raise ValueError(
                 "Proposal has been signed and is locked — clone it to make changes",
             )
+        # Mirror the create-path Closed-Lost guard: a PATCH that retargets
+        # the proposal at a Closed-Lost opportunity would otherwise
+        # silently bypass the create check.
+        update_fields = data.model_dump(exclude_unset=True)
+        new_opp = update_fields.get("opportunity_id")
+        if new_opp is not None and new_opp != instance.opportunity_id:
+            await assert_opportunity_active(self.db, new_opp, "proposal")
         return await super().update(instance, data, user_id)
 
     async def create(self, data: ProposalCreate, user_id: int) -> Proposal:
         """Create a new proposal with auto-generated number + public token."""
+        if data.opportunity_id is not None:
+            await assert_opportunity_active(self.db, data.opportunity_id, "proposal")
+
         proposal_number = await self._generate_proposal_number()
 
         proposal_data = data.model_dump()

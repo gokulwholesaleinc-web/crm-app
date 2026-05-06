@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 from src.core.base_service import BaseService, CRUDService, StatusTransitionMixin
 from src.core.constants import DEFAULT_PAGE_SIZE
 from src.core.filtering import build_token_search
+from src.core.opportunity_guards import assert_opportunity_active
 from src.email.branded_templates import TenantBrandingHelper, render_quote_email
 from src.email.pdf_render import render_html_to_pdf
 from src.email.pdf_service import BrandedPDFGenerator
@@ -169,6 +170,9 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
 
     async def create(self, data: QuoteCreate, user_id: int) -> Quote:
         """Create a new quote with optional line items."""
+        if data.opportunity_id is not None:
+            await assert_opportunity_active(self.db, data.opportunity_id, "quote")
+
         quote_number = await self._generate_quote_number()
 
         # Extract line items before creating quote
@@ -211,6 +215,14 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
         return quote
 
     async def update(self, instance: Quote, data: QuoteUpdate, user_id: int) -> Quote:
+        # Mirror the create-path Closed-Lost guard: a PATCH that retargets
+        # the quote at a Closed-Lost opportunity would otherwise silently
+        # bypass the create check.
+        update_fields = data.model_dump(exclude_unset=True)
+        new_opp = update_fields.get("opportunity_id")
+        if new_opp is not None and new_opp != instance.opportunity_id:
+            await assert_opportunity_active(self.db, new_opp, "quote")
+
         quote = await super().update(instance, data, user_id)
 
         # Recalculate totals if relevant fields changed

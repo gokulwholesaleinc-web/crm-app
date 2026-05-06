@@ -26,6 +26,7 @@ from src.companies.schemas import (
 )
 from src.companies.service import CompanyService
 from src.contacts.models import Contact
+from src.core.client_ip import get_client_ip
 from src.core.constants import ENTITY_TYPE_COMPANIES, EntityNames, HTTPStatus
 from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
 from src.core.router_utils import (
@@ -125,7 +126,7 @@ async def create_company(
     except Exception as e:
         logger.warning("Failed to store embedding: %s", e)
 
-    ip_address = request.client.host if request.client else None
+    ip_address = get_client_ip(request)
     await audit_entity_create(db, "company", company.id, current_user.id, ip_address)
 
     await emit(COMPANY_CREATED, {
@@ -186,7 +187,7 @@ async def update_company(
         logger.warning("Failed to store embedding: %s", e)
 
     new_data = snapshot_entity(updated_company, update_fields)
-    ip_address = request.client.host if request.client else None
+    ip_address = get_client_ip(request)
     await audit_entity_update(db, "company", updated_company.id, current_user.id, old_data, new_data, ip_address)
 
     await emit(COMPANY_UPDATED, {
@@ -223,7 +224,7 @@ async def delete_company(
             detail=f"Cannot delete company with {contact_count} contacts. Reassign or delete the contacts first.",
         )
 
-    ip_address = request.client.host if request.client else None
+    ip_address = get_client_ip(request)
     await audit_entity_delete(db, "company", company.id, current_user.id, ip_address)
 
     # Delete embedding before deleting entity

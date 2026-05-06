@@ -6,6 +6,7 @@ import {
   useCreateAndSendInvoice,
   useCreateAndSendSubscription,
 } from '../../../hooks/usePayments';
+import { useStripeMode } from '../../../hooks/useStripeMode';
 import { showSuccess, showError } from '../../../utils/toast';
 import type { StripeCustomer } from '../../../types';
 import type { PaymentType, RecurringInterval } from '../../../types/proposals';
@@ -91,9 +92,15 @@ export function SendInvoiceModal({
   const syncMutation = useSyncCustomer();
   const invoiceMutation = useCreateAndSendInvoice();
   const subscriptionMutation = useCreateAndSendSubscription();
+  const { mode: stripeMode } = useStripeMode();
 
   const customers = customersData?.items ?? [];
   const isSubmitting = invoiceMutation.isPending || subscriptionMutation.isPending;
+  // Block the whole flow when Stripe isn't configured — every action in
+  // here either creates a Stripe customer, an invoice, or a subscription
+  // checkout, and all of those will 500 with a backend-side ValueError
+  // ("Stripe is not configured ...") if STRIPE_SECRET_KEY is unset.
+  const stripeDisabled = stripeMode === 'unconfigured';
 
   const handleSyncAndSelect = async () => {
     if (!contactId) return;
@@ -191,6 +198,20 @@ export function SendInvoiceModal({
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Send Invoice" size="lg">
       <form onSubmit={handleSubmit} className="space-y-4">
+        {stripeDisabled && (
+          <div
+            role="alert"
+            aria-live="polite"
+            className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200"
+          >
+            <p className="font-medium">Stripe is not configured.</p>
+            <p className="mt-1 text-xs">
+              Invoices cannot be sent until an admin sets the
+              {' '}<code className="font-mono">STRIPE_SECRET_KEY</code>{' '}
+              environment variable.
+            </p>
+          </div>
+        )}
         <fieldset>
           <legend className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Payment Type
@@ -237,6 +258,8 @@ export function SendInvoiceModal({
                 size="sm"
                 onClick={handleSyncAndSelect}
                 isLoading={syncMutation.isPending}
+                disabled={stripeDisabled}
+                title={stripeDisabled ? 'Stripe is not configured' : undefined}
                 aria-label="Sync current contact to Stripe"
               >
                 {loadingCustomers ? 'Loading...' : 'Sync Contact'}
@@ -364,7 +387,8 @@ export function SendInvoiceModal({
           <Button
             type="submit"
             isLoading={isSubmitting}
-            disabled={!selectedCustomerId || !amount || !description || isSubmitting}
+            disabled={!selectedCustomerId || !amount || !description || isSubmitting || stripeDisabled}
+            title={stripeDisabled ? 'Stripe is not configured' : undefined}
           >
             {paymentType === 'one_time' ? 'Send Invoice' : 'Send Subscription Link'}
           </Button>

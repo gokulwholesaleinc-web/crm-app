@@ -8,7 +8,11 @@ from sqlalchemy import func, or_, select
 from src.activities.models import Activity, ActivityType
 from src.activities.schemas import ActivityCreate, ActivityUpdate
 from src.core.base_service import CRUDService
-from src.core.constants import DEFAULT_PAGE_SIZE, ENTITY_TYPE_USERS
+from src.core.constants import (
+    DEFAULT_PAGE_SIZE,
+    ENTITY_TYPE_OPPORTUNITIES,
+    ENTITY_TYPE_USERS,
+)
 from src.core.filtering import apply_filters_to_query
 
 
@@ -99,6 +103,24 @@ class ActivityService(CRUDService[Activity, ActivityCreate, ActivityUpdate]):
             activity_data["entity_id"] = user_id
         if not activity_data.get("owner_id"):
             activity_data["owner_id"] = user_id
+
+        # Propagate contact_id from the linked opportunity so the contact's
+        # Activities tab can surface opportunity-driven rows. Only auto-fill
+        # if the caller didn't already supply one.
+        if (
+            activity_data.get("entity_type") == ENTITY_TYPE_OPPORTUNITIES
+            and activity_data.get("entity_id")
+            and not activity_data.get("contact_id")
+        ):
+            # Local import — eager `from src.opportunities.models import
+            # Opportunity` triggers a circular import at module load
+            # because ai/action_tools.py imports ActivityService and
+            # opportunities/router.py transitively imports ai/.
+            from src.opportunities.models import Opportunity
+
+            opp = await self.db.get(Opportunity, activity_data["entity_id"])
+            if opp is not None and opp.contact_id is not None:
+                activity_data["contact_id"] = opp.contact_id
 
         activity = Activity(**activity_data, created_by_id=user_id)
         self.db.add(activity)

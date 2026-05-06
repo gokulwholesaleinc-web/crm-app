@@ -7,12 +7,18 @@ Conversion flows:
 3. Lead → Contact + Opportunity (both at once)
 """
 
+import logging
 
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.activities.models import Activity
 from src.companies.models import Company
 from src.contacts.models import Contact
+from src.core.models import EntityTag, Note
 from src.leads.models import Lead, LeadStatus
+
+logger = logging.getLogger(__name__)
 
 
 class LeadConverter:
@@ -73,11 +79,18 @@ class LeadConverter:
             postal_code=lead.postal_code,
             country=lead.country,
             description=lead.description,
+            sales_code=lead.sales_code,
             owner_id=lead.owner_id or user_id,
             created_by_id=user_id,
         )
         self.db.add(contact)
         await self.db.flush()
+
+        # Cascade lead-attached records onto the new contact so nothing is
+        # silently orphaned post-conversion.
+        await self._relink_tags(lead.id, contact.id)
+        await self._relink_activities(lead.id, contact.id)
+        await self._relink_notes(lead.id, contact.id)
 
         # Update lead with conversion info
         lead.converted_contact_id = contact.id
@@ -89,6 +102,75 @@ class LeadConverter:
             await self.db.refresh(created_company)
 
         return contact, created_company
+
+    async def _relink_tags(self, lead_id: int, contact_id: int) -> int:
+        """Copy entity_tags rows from lead → contact, skipping duplicates."""
+        existing = await self.db.execute(
+            select(EntityTag.tag_id).where(
+                EntityTag.entity_type == "contacts",
+                EntityTag.entity_id == contact_id,
+            )
+        )
+        existing_tag_ids = {row[0] for row in existing.all()}
+
+        result = await self.db.execute(
+            select(EntityTag.tag_id).where(
+                EntityTag.entity_type == "leads",
+                EntityTag.entity_id == lead_id,
+            )
+        )
+        lead_tag_ids = {row[0] for row in result.all()}
+
+        new_tag_ids = lead_tag_ids - existing_tag_ids
+        for tag_id in new_tag_ids:
+            self.db.add(
+                EntityTag(
+                    tag_id=tag_id,
+                    entity_type="contacts",
+                    entity_id=contact_id,
+                )
+            )
+        if new_tag_ids:
+            await self.db.flush()
+        logger.debug(
+            "re-linked %d tags from lead %d → contact %d",
+            len(new_tag_ids), lead_id, contact_id,
+        )
+        return len(new_tag_ids)
+
+    async def _relink_activities(self, lead_id: int, contact_id: int) -> int:
+        """Move activities from lead → contact (UPDATE, not duplicate)."""
+        result = await self.db.execute(
+            update(Activity)
+            .where(
+                Activity.entity_type == "leads",
+                Activity.entity_id == lead_id,
+            )
+            .values(entity_type="contacts", entity_id=contact_id)
+        )
+        count = result.rowcount or 0
+        logger.debug(
+            "re-linked %d activities from lead %d → contact %d",
+            count, lead_id, contact_id,
+        )
+        return count
+
+    async def _relink_notes(self, lead_id: int, contact_id: int) -> int:
+        """Move notes from lead → contact (UPDATE, not duplicate)."""
+        result = await self.db.execute(
+            update(Note)
+            .where(
+                Note.entity_type == "leads",
+                Note.entity_id == lead_id,
+            )
+            .values(entity_type="contacts", entity_id=contact_id)
+        )
+        count = result.rowcount or 0
+        logger.debug(
+            "re-linked %d notes from lead %d → contact %d",
+            count, lead_id, contact_id,
+        )
+        return count
 
     async def convert_to_opportunity(
         self,

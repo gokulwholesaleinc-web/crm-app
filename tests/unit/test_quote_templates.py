@@ -297,14 +297,17 @@ class TestSendQuoteEmail:
         assert response.status_code == 400
 
     @pytest.mark.asyncio
-    async def test_send_quote_without_contact_still_marks_sent(
+    async def test_send_quote_without_contact_returns_400(
         self,
         client: AsyncClient,
         db_session: AsyncSession,
         auth_headers: dict,
         test_user: User,
     ):
-        """Test that sending a quote without contact still marks as sent (no email)."""
+        """A quote with no contact attached must reject the send. PR #205
+        (email guardrails) replaced the previous silent skip — without a
+        contact + email there's nothing to send to, and flipping status
+        to 'sent' was a lie."""
         quote = Quote(
             quote_number="QT-2026-NOCON-001",
             title="No Contact Quote",
@@ -322,10 +325,8 @@ class TestSendQuoteEmail:
             headers=auth_headers,
         )
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "sent"
-        assert data["sent_at"] is not None
+        assert response.status_code == 400
+        assert "no contact" in response.json()["detail"].lower()
 
 
 # =============================================================================

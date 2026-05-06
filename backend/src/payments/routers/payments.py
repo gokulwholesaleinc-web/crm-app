@@ -13,6 +13,7 @@ from src.core.router_utils import (
     DBSession,
     get_entity_or_404,
 )
+from src.core.opportunity_guards import assert_opportunity_active
 from src.events.service import PAYMENT_RECEIVED, emit
 from src.payments._router_helpers import (
     _verify_opportunity_access,
@@ -46,9 +47,14 @@ async def create_checkout(
     if request_data.customer_id is not None:
         await _verify_stripe_customer_access(db, request_data.customer_id, current_user)
 
-    # Determine amount from quote if quote_id is provided
+    # Determine amount + opportunity link from quote if quote_id is provided.
+    # The service already inherits quote.opportunity_id onto the Payment row,
+    # so we have to gate on the source quote's opportunity here too — without
+    # this guard, a Closed-Lost opportunity could still spawn a Stripe
+    # Checkout Session via the quote-driven path.
     amount = request_data.amount
-    if request_data.quote_id and not amount:
+    quote_opportunity_id: int | None = None
+    if request_data.quote_id:
         from src.quotes.models import Quote
         result = await db.execute(select(Quote).where(Quote.id == request_data.quote_id))
         quote = result.scalar_one_or_none()
@@ -57,7 +63,9 @@ async def create_checkout(
                 status_code=HTTPStatus.NOT_FOUND,
                 detail="Quote not found",
             )
-        amount = quote.total
+        if not amount:
+            amount = quote.total
+        quote_opportunity_id = quote.opportunity_id
 
     if not amount or amount <= 0:
         raise HTTPException(
@@ -66,6 +74,8 @@ async def create_checkout(
         )
 
     try:
+        if quote_opportunity_id is not None:
+            await assert_opportunity_active(db, quote_opportunity_id, "payment")
         result = await service.create_checkout_session(
             amount=amount,
             currency=request_data.currency,
@@ -104,6 +114,8 @@ async def create_payment_intent(
     service = PaymentService(db)
 
     try:
+        if request_data.opportunity_id is not None:
+            await assert_opportunity_active(db, request_data.opportunity_id, "payment")
         result = await service.create_payment_intent(
             amount=request_data.amount,
             currency=request_data.currency,
