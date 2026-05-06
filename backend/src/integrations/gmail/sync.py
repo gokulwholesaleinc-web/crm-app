@@ -127,7 +127,7 @@ class GmailSyncWorker:
                         await _process_message(msg_id, connection, client, db)
                     except GmailAuthError:
                         raise
-                    except IntegrityError as exc:
+                    except IntegrityError:
                         # A racing forward-sync (or rerun) already wrote
                         # this message under the unique constraint on
                         # InboundEmail.resend_email_id ('gmail:<id>').
@@ -214,9 +214,6 @@ async def _get_or_create_backfill_state(
         db.add(state)
         await db.flush()
     return state
-    if reaped:
-        logger.warning("[gmail_backfill] reaped %d abandoned 'running' rows", reaped)
-    return reaped
 
 
 async def _get_or_create_state(

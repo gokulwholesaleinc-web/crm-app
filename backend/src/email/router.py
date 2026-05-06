@@ -64,12 +64,14 @@ async def send_email(
 
     service = EmailService(db)
 
-    # Reply-gating: forbid composing a reply to a thread the user isn't a
-    # participant of. Without this an admin could reply to a colleague's
-    # private inbound mail from the colleague's CRM record. The reply itself
-    # still goes out from the replier's own Gmail connection — that's the
-    # right thing once we've verified they were on the original thread.
-    if data.reply_to_inbound_id is not None or data.reply_to_email_id is not None:
+    # Reply-gating: non-admins can only reply to threads they're a
+    # participant of (defaults to closing the cross-mailbox identity-bleed
+    # bug where one user's Gmail connection sends into another user's
+    # private thread). Admins bypass since they have full audit visibility
+    # by policy — the reply still sends from the admin's own connection,
+    # so the recipient sees the actual sender, not the original thread
+    # owner.
+    if (data.reply_to_inbound_id is not None or data.reply_to_email_id is not None) and not current_user.is_superuser:
         from src.email.participants import get_user_connection_emails
         viewer_emails = set(await get_user_connection_emails(db, current_user.id))
 
@@ -84,8 +86,9 @@ async def send_email(
             )
 
         if data.reply_to_inbound_id is not None:
-            from src.email.models import InboundEmail
             from sqlalchemy import select as _select
+
+            from src.email.models import InboundEmail
             row = (await db.execute(
                 _select(InboundEmail.participant_emails).where(InboundEmail.id == data.reply_to_inbound_id)
             )).one_or_none()
@@ -94,8 +97,9 @@ async def send_email(
             await _assert_participant(row[0], None)
 
         if data.reply_to_email_id is not None:
-            from src.email.models import EmailQueue
             from sqlalchemy import select as _select
+
+            from src.email.models import EmailQueue
             row = (await db.execute(
                 _select(EmailQueue.participant_emails, EmailQueue.sent_by_id).where(EmailQueue.id == data.reply_to_email_id)
             )).one_or_none()
@@ -183,14 +187,21 @@ async def get_email_thread(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
 ):
-    """Get unified email thread (inbound + outbound) for an entity."""
+    """Get unified email thread (inbound + outbound) for an entity.
+
+    Admins see every email on the entity (per Link Creative policy: staff
+    use work-domain Gmail, so admins inherit the same audit reach as a
+    Google Workspace admin). Non-admins only see threads they're a
+    participant of via their connected Gmail address.
+    """
     service = EmailService(db)
+    viewer_id = None if current_user.is_superuser else current_user.id
     items, total = await service.get_thread(
         entity_type=entity_type,
         entity_id=entity_id,
         page=page,
         page_size=page_size,
-        viewer_user_id=current_user.id,
+        viewer_user_id=viewer_id,
     )
     return ThreadResponse(
         items=[ThreadEmailItem(**item) for item in items],
@@ -221,11 +232,12 @@ async def search_emails(
     entity_type: str | None = Query(None),
     entity_id: int | None = Query(None),
 ):
-    """Search emails by keyword across subject, body, and addresses."""
+    """Search emails by keyword. Admins search across every row; non-admins
+    are scoped to their participated threads."""
     service = EmailService(db)
     items, total = await service.search_emails(
         q=q,
-        user_id=current_user.id,
+        user_id=None if current_user.is_superuser else current_user.id,
         page=page,
         page_size=page_size,
         entity_type=entity_type,
@@ -250,15 +262,17 @@ async def list_emails(
     entity_id: int | None = None,
     status: str | None = None,
 ):
-    """List sent emails with optional filters."""
+    """List sent emails with optional filters. Admins see every row;
+    non-admins are scoped to threads they participated in."""
     service = EmailService(db)
+    viewer_id = None if current_user.is_superuser else current_user.id
     items, total = await service.get_list(
         page=page,
         page_size=page_size,
         entity_type=entity_type,
         entity_id=entity_id,
         status=status,
-        viewer_user_id=current_user.id,
+        viewer_user_id=viewer_id,
     )
     return EmailListResponse(
         items=[EmailQueueResponse.model_validate(e) for e in items],
@@ -308,7 +322,7 @@ async def get_email(
     current_user: CurrentUser,
     db: DBSession,
 ):
-    """Get email details by ID."""
+    """Get email details by ID. Admins bypass participant-overlap checks."""
     service = EmailService(db)
     email = await service.get_by_id(email_id)
     if not email:
@@ -316,9 +330,7 @@ async def get_email(
             status_code=HTTPStatus.NOT_FOUND,
             detail=f"Email with ID {email_id} not found",
         )
-    # Participant-based privacy: composer always sees their row; otherwise
-    # the viewer must be one of the recorded participants.
-    if email.sent_by_id != current_user.id:
+    if not current_user.is_superuser and email.sent_by_id != current_user.id:
         from src.email.participants import get_user_connection_emails
         viewer_emails = set(await get_user_connection_emails(db, current_user.id))
         if not viewer_emails.intersection(email.participant_emails or []):

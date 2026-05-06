@@ -718,7 +718,7 @@ class EmailService:
     async def search_emails(
         self,
         q: str,
-        user_id: int,
+        user_id: int | None,
         page: int = 1,
         page_size: int = 25,
         entity_type: str | None = None,
@@ -729,23 +729,29 @@ class EmailService:
         Scoped to the requesting user via participant overlap: outbound rows
         match if the user composed them or appears in the participant set;
         inbound rows match if the user is on the From/To/CC/BCC of the
-        original message.
+        original message. Pass ``user_id=None`` to bypass scoping (admin /
+        audit usage).
         """
-        user_emails = await get_user_connection_emails(self.db, user_id)
+        user_emails = (
+            await get_user_connection_emails(self.db, user_id)
+            if user_id is not None
+            else []
+        )
 
         # Escape LIKE metacharacters so a user typing `%` matches literally
         # instead of "every row I have access to". Keep `\` first so we
         # don't double-escape our own escapes.
         escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         pat = f"%{escaped}%"
-        outbound_visibility = (
-            or_(
+        if user_id is None:
+            outbound_visibility = literal(True)  # admin: no scoping
+        elif user_emails:
+            outbound_visibility = or_(
                 EmailQueue.sent_by_id == user_id,
                 EmailQueue.participant_emails.overlap(user_emails),
             )
-            if user_emails
-            else (EmailQueue.sent_by_id == user_id)
-        )
+        else:
+            outbound_visibility = EmailQueue.sent_by_id == user_id
         sent_filters = [
             outbound_visibility,
             or_(
@@ -789,7 +795,9 @@ class EmailService:
                 InboundEmail.bcc.ilike(pat, escape="\\"),
             ),
         ]
-        if user_emails:
+        if user_id is None:
+            pass  # admin: no inbound scoping
+        elif user_emails:
             recv_filters.append(InboundEmail.participant_emails.overlap(user_emails))
         else:
             # No Gmail connection — no inbound results can be scoped to this user
