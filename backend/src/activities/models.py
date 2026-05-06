@@ -40,6 +40,16 @@ class Activity(Base, AuditableMixin):
     entity_type: Mapped[str] = mapped_column(String(50), nullable=False)  # contacts, leads, opportunities, companies
     entity_id: Mapped[int] = mapped_column(Integer, nullable=False)
 
+    # Cross-reference contact: when entity_type='opportunities', the
+    # service copies Opportunity.contact_id here so the contact's
+    # Activities tab can surface opportunity-driven rows without
+    # double-writing.
+    contact_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("contacts.id", ondelete="SET NULL"),
+        index=True,
+    )
+
     # Scheduling
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     due_date: Mapped[date | None] = mapped_column(Date)

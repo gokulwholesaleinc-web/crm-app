@@ -188,13 +188,18 @@ function ProposalDetailPage() {
   };
 
   const isDraft = proposal.status === 'draft';
+  const proposalRecipient =
+    proposal.designated_signer_email || proposal.contact?.email || '';
   // Show Send whenever the proposal hasn't moved past the client's
   // inbox — so the CRM user can resend if the first attempt got
   // stuck (bad Gmail token, Resend sandbox rejection, etc.). The
-  // backend /send endpoint re-queues on every call.
-  const canSend = ['draft', 'sent', 'viewed'].includes(proposal.status ?? '');
-  const proposalRecipient =
-    proposal.designated_signer_email || proposal.contact?.email || '';
+  // backend /send endpoint re-queues on every call. We also require
+  // a recipient (designated signer or linked contact email) — without
+  // one the backend would just 400, mirroring PR #205's pattern of
+  // surfacing the gap up front instead of through a generic toast.
+  const canSendStatus = ['draft', 'sent', 'viewed'].includes(proposal.status ?? '');
+  const canSend = canSendStatus && Boolean(proposalRecipient);
+  const showSendButton = canSendStatus;
   const sendLabel = isDraft ? 'Send' : 'Resend';
   const canAcceptReject = proposal.status === 'sent' || proposal.status === 'viewed';
   const canEdit = ['draft', 'sent', 'viewed'].includes(proposal.status ?? '');
@@ -249,13 +254,13 @@ function ProposalDetailPage() {
           <Button variant="secondary" onClick={handleCopyPublicLink} leftIcon={<ClipboardDocumentIcon className="h-4 w-4" />}>
             Copy Link
           </Button>
-          {canSend && (
+          {showSendButton && (
             <Button
               onClick={handleSend}
               leftIcon={<PaperAirplaneIcon className="h-4 w-4" />}
-              disabled={sendProposalMutation.isPending || !proposalRecipient}
+              disabled={sendProposalMutation.isPending || !canSend}
               title={
-                proposalRecipient
+                canSend
                   ? undefined
                   : 'Set a designated signer email or attach a contact with an email before sending'
               }
