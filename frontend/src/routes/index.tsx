@@ -3,7 +3,7 @@
  */
 
 import { lazy } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
 
 import { PrivateRoute } from './PrivateRoute';
 import { ErrorBoundary } from '../components/ErrorBoundary';
@@ -27,6 +27,17 @@ const CompanyDetailPage = lazy(() => import('../features/companies/CompanyDetail
 // Leads
 const LeadsPage = lazy(() => import('../features/leads/LeadsPage'));
 const LeadDetailPage = lazy(() => import('../features/leads/LeadDetailPage'));
+
+// Old `?view=kanban` bookmarks redirect to the unified pipeline board.
+// Done at the route level so LeadsPage's hooks (and the /api/leads
+// fetch they trigger) never run on the redirect path.
+function LeadsPageOrPipelineRedirect() {
+  const [searchParams] = useSearchParams();
+  if (searchParams.get('view') === 'kanban') {
+    return <Navigate to="/pipeline" replace />;
+  }
+  return <LeadsPage />;
+}
 
 // Opportunities (list redirects to Pipeline; detail page remains)
 const OpportunityDetailPage = lazy(() => import('../features/opportunities/OpportunityDetailPage'));
@@ -158,7 +169,7 @@ function AppRoutes() {
         element={
           <PrivateRoute>
             <ErrorBoundary>
-              <LeadsPage />
+              <LeadsPageOrPipelineRedirect />
             </ErrorBoundary>
           </PrivateRoute>
         }

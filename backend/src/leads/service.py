@@ -1,5 +1,6 @@
 """Lead service layer."""
 
+import logging
 from typing import Any
 
 from sqlalchemy import func, select
@@ -11,6 +12,18 @@ from src.core.filtering import apply_filters_to_query, build_token_search
 from src.leads.models import Lead, LeadSource
 from src.leads.schemas import LeadCreate, LeadSourceCreate, LeadSourceUpdate, LeadUpdate
 from src.leads.scoring import calculate_lead_score
+from src.opportunities.models import PipelineStage
+
+logger = logging.getLogger(__name__)
+
+
+class LeadValidationError(ValueError):
+    """Domain-specific validation error for the lead service.
+
+    Subclassed so the router can surface the message as a 400 without
+    swallowing unrelated `ValueError`s from filter parsing, numeric
+    coercion, or third-party libraries.
+    """
 
 
 class LeadService(
@@ -71,14 +84,68 @@ class LeadService(
         return await self.paginate_query(query, page, page_size, order_by=Lead.score.desc())
 
     async def create(self, data: LeadCreate, user_id: int) -> Lead:
-        """Create a new lead with auto-scoring."""
+        """Create a new lead with auto-scoring.
+
+        Auto-assigns the first active lead-typed pipeline stage when none
+        was provided so the new row shows up on the unified `/pipeline`
+        kanban instead of being invisible (every column reading "0").
+        Refuses status='converted' on this path too — same reasoning as
+        update; manual setting bypasses the Convert flow's contact +
+        opportunity creation.
+        """
+        if data.status == "converted":
+            raise LeadValidationError(
+                "Cannot create a lead with status='converted' — use the "
+                "Convert action on a qualified lead so the contact and "
+                "opportunity are created.",
+            )
         lead = await super().create(data, user_id)
+        if lead.pipeline_stage_id is None:
+            stage_id = await self._first_lead_stage_id()
+            if stage_id is not None:
+                lead.pipeline_stage_id = stage_id
+                await self.db.flush()
+            else:
+                logger.warning(
+                    "Lead %s created without a pipeline_stage_id — no "
+                    "active 'lead' PipelineStage seeded. Run "
+                    "POST /api/leads/backfill-pipeline-stages once seeds "
+                    "exist to backfill this row.",
+                    lead.id,
+                )
         return await self._recalculate_score(lead)
 
     async def update(self, lead: Lead, data: LeadUpdate, user_id: int) -> Lead:
-        """Update a lead and recalculate score."""
+        """Update a lead and recalculate score.
+
+        Refuses to flip ``status`` to ``'converted'`` directly. The only
+        legitimate way to land in that state is through the Convert flow
+        (`/leads/{id}/convert`), which actually creates the Contact +
+        Opportunity and stamps `converted_contact_id`. Letting the edit
+        form set it manually leaves an orphan-converted row that hides
+        the Convert button while creating no downstream records.
+        """
+        update_data = data.model_dump(exclude_unset=True)
+        if (
+            update_data.get("status") == "converted"
+            and lead.converted_contact_id is None
+        ):
+            raise LeadValidationError(
+                "Use the Convert action — setting status to 'converted' "
+                "directly skips creating the contact and opportunity.",
+            )
         lead = await super().update(lead, data, user_id)
         return await self._recalculate_score(lead)
+
+    async def _first_lead_stage_id(self) -> int | None:
+        result = await self.db.execute(
+            select(PipelineStage.id)
+            .where(PipelineStage.pipeline_type == "lead")
+            .where(PipelineStage.is_active.is_(True))
+            .order_by(PipelineStage.order)
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
 
     async def _recalculate_score(self, lead: Lead) -> Lead:
         source_name: str | None = None

@@ -31,12 +31,14 @@ export interface LeadFormProps {
   submitLabel?: string;
 }
 
+// `converted` is intentionally absent — the only legitimate way to land
+// in that state is through the Convert flow on the lead detail page,
+// which creates the Contact + Opportunity. Picking it here would 400.
 const leadStatuses = [
   { value: 'new', label: 'New' },
   { value: 'contacted', label: 'Contacted' },
   { value: 'qualified', label: 'Qualified' },
   { value: 'unqualified', label: 'Unqualified' },
-  { value: 'converted', label: 'Converted' },
   { value: 'lost', label: 'Lost' },
 ];
 

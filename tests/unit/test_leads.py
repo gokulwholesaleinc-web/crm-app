@@ -217,6 +217,77 @@ class TestLeadsCreate:
         assert data["status"] == "new"  # Default
 
     @pytest.mark.asyncio
+    async def test_create_lead_auto_assigns_first_lead_stage(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+    ):
+        """A new lead with no pipeline_stage_id falls onto the first active
+        lead-typed stage so it appears on the unified pipeline kanban
+        instead of being invisible."""
+        # Seed a couple of lead-typed stages; service should pick the
+        # lowest-`order` one.
+        early = PipelineStage(
+            name="Discovery", order=1, pipeline_type="lead", is_active=True
+        )
+        later = PipelineStage(
+            name="Negotiation", order=3, pipeline_type="lead", is_active=True
+        )
+        db_session.add_all([early, later])
+        await db_session.commit()
+        await db_session.refresh(early)
+
+        response = await client.post(
+            "/api/leads",
+            headers=auth_headers,
+            json={"first_name": "Auto", "last_name": "Stage"},
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["pipeline_stage_id"] == early.id
+
+    @pytest.mark.asyncio
+    async def test_create_lead_no_stages_seeded_leaves_pipeline_null(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+    ):
+        """If no lead-typed stages exist, lead is created with NULL —
+        the admin backfill endpoint can reattach it later."""
+        response = await client.post(
+            "/api/leads",
+            headers=auth_headers,
+            json={"first_name": "No", "last_name": "Stages"},
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data.get("pipeline_stage_id") is None
+
+    @pytest.mark.asyncio
+    async def test_create_lead_with_status_converted_is_rejected(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+    ):
+        """The create path is the back door the update guard couldn't
+        cover. Both must refuse status='converted' or the orphan-converted
+        bug recurs through POST /api/leads."""
+        response = await client.post(
+            "/api/leads",
+            headers=auth_headers,
+            json={
+                "first_name": "Direct",
+                "last_name": "Convert",
+                "status": "converted",
+            },
+        )
+        assert response.status_code in (400, 422)
+        assert "convert" in response.text.lower()
+
+    @pytest.mark.asyncio
     async def test_create_lead_missing_first_name(
         self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
     ):
@@ -403,6 +474,49 @@ class TestLeadsUpdate:
         assert response.status_code == 404
 
     @pytest.mark.asyncio
+    async def test_update_lead_status_converted_blocked_without_conversion(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_lead: Lead,
+    ):
+        """Setting status='converted' via PATCH must be refused — only the
+        Convert flow should land a lead in that state, since manual edits
+        leave converted_contact_id NULL with no Contact / Opportunity
+        actually created."""
+        response = await client.patch(
+            f"/api/leads/{test_lead.id}",
+            headers=auth_headers,
+            json={"status": "converted"},
+        )
+
+        assert response.status_code == 400
+        assert "convert" in response.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_update_lead_status_converted_allowed_when_already_converted(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_lead: Lead,
+        test_contact: Contact,
+    ):
+        """If converted_contact_id is set (i.e., the Convert flow already
+        ran), re-asserting status='converted' on PATCH is a no-op and
+        must not be blocked. Covers idempotent edits from upstream
+        sync code."""
+        test_lead.converted_contact_id = test_contact.id
+        await db_session.commit()
+        response = await client.patch(
+            f"/api/leads/{test_lead.id}",
+            headers=auth_headers,
+            json={"status": "converted"},
+        )
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
     async def test_update_lead_status(
         self,
         client: AsyncClient,
@@ -443,6 +557,80 @@ class TestLeadsUpdate:
         data = response.json()
         assert data["budget_amount"] == 50000.0
         assert data["budget_currency"] == "EUR"
+
+
+class TestLeadsBackfillPipelineStages:
+    """Tests for the admin POST /api/leads/backfill-pipeline-stages endpoint.
+
+    Recovery for the pre-default-stage era where new leads were created
+    without a pipeline_stage_id and never showed up on the kanban."""
+
+    @pytest.mark.asyncio
+    async def test_backfill_assigns_first_stage_to_unstaged_leads(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_auth_headers: dict,
+        test_user: User,
+    ):
+        first = PipelineStage(
+            name="Discovery", order=1, pipeline_type="lead", is_active=True
+        )
+        db_session.add(first)
+        unstaged = Lead(
+            first_name="Un", last_name="Staged",
+            email="un@example.com",
+            owner_id=test_user.id, created_by_id=test_user.id,
+            pipeline_stage_id=None,
+        )
+        db_session.add(unstaged)
+        await db_session.commit()
+        await db_session.refresh(first)
+        await db_session.refresh(unstaged)
+
+        response = await client.post(
+            "/api/leads/backfill-pipeline-stages",
+            headers=admin_auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["stage_id"] == first.id
+        assert data["updated"] >= 1
+
+        await db_session.refresh(unstaged)
+        assert unstaged.pipeline_stage_id == first.id
+
+    @pytest.mark.asyncio
+    async def test_backfill_412_when_no_lead_stages_exist(
+        self,
+        client: AsyncClient,
+        admin_auth_headers: dict,
+    ):
+        response = await client.post(
+            "/api/leads/backfill-pipeline-stages",
+            headers=admin_auth_headers,
+        )
+        assert response.status_code == 412
+
+    @pytest.mark.asyncio
+    async def test_backfill_requires_admin(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+    ):
+        first = PipelineStage(
+            name="Discovery", order=1, pipeline_type="lead", is_active=True
+        )
+        db_session.add(first)
+        await db_session.commit()
+
+        response = await client.post(
+            "/api/leads/backfill-pipeline-stages",
+            headers=auth_headers,
+        )
+        assert response.status_code in (401, 403)
 
 
 class TestLeadsDelete:
