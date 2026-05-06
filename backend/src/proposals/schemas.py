@@ -208,6 +208,23 @@ class ProposalListResponse(BaseModel):
     pages: int
 
 
+class ProposalAttachmentPublicItem(BaseModel):
+    """One attachment exposed on the public proposal view.
+
+    ``viewed`` is per-token: it tracks whether this specific public link
+    has already been used to download the file. The signer must view
+    every attachment before they're allowed to accept.
+    """
+
+    id: int
+    filename: str
+    file_size: int
+    mime_type: str
+    viewed: bool = False
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ProposalBranding(BaseModel):
     """Tenant branding data for public proposal view."""
     company_name: str | None = None
@@ -247,6 +264,10 @@ class ProposalPublicResponse(BaseModel):
     company: CompanyBrief | None = None
     contact: ContactBrief | None = None
     branding: ProposalBranding | None = None
+    # Public-side attachment list. The signer must open every item
+    # before /accept will succeed; the read-before-sign gate is enforced
+    # server-side in `accept_proposal_public`.
+    attachments: list[ProposalAttachmentPublicItem] = []
 
     model_config = ConfigDict(from_attributes=True)
 

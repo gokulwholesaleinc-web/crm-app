@@ -3,9 +3,13 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import Response
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
+from fastapi.responses import FileResponse, RedirectResponse, Response
+from sqlalchemy import select
 
+from src.attachments.models import Attachment
+from src.attachments.schemas import AttachmentListResponse, AttachmentResponse
+from src.attachments.service import AttachmentService
 from src.audit.utils import (
     audit_entity_create,
     audit_entity_delete,
@@ -22,12 +26,19 @@ from src.core.router_utils import (
     calculate_pages,
     check_ownership,
     get_entity_or_404,
+    raise_bad_request,
+    raise_not_found,
 )
 from src.events.service import PROPOSAL_ACCEPTED, PROPOSAL_SENT, emit
+from src.proposals.attachment_views import (
+    _hash_token,
+    record_attachment_view,
+)
 from src.proposals.schemas import (
     AIGenerateRequest,
     CreateFromTemplateRequest,
     ProposalAcceptRequest,
+    ProposalAttachmentPublicItem,
     ProposalBranding,
     ProposalCreate,
     ProposalListResponse,
@@ -292,6 +303,224 @@ async def generate_proposal(
     return ProposalResponse.model_validate(proposal)
 
 
+def _ensure_unsigned(proposal) -> None:
+    """Refuse staff attachment mutations once the customer has signed.
+
+    The signed PDF mailed to the client lists exactly the attachments
+    that existed at sign time; mutating the set after that point would
+    silently desync the on-record bundle from what the signer agreed to.
+    """
+    if proposal.signed_at is not None:
+        raise_bad_request(
+            "Cannot modify attachments on a signed proposal — clone it instead",
+        )
+
+
+def _proposal_attachment_or_404(
+    attachment: Attachment | None, proposal_id: int,
+) -> None:
+    if (
+        attachment is None
+        or attachment.entity_type != "proposals"
+        or attachment.entity_id != proposal_id
+    ):
+        raise_not_found("Attachment")
+
+
+@router.post(
+    "/{proposal_id}/attachments",
+    response_model=AttachmentResponse,
+    status_code=HTTPStatus.CREATED,
+)
+async def upload_proposal_attachment(
+    proposal_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+    file: UploadFile = File(...),
+):
+    """Staff upload of a PDF attachment for a proposal.
+
+    PDF only — non-PDF uploads 400 because the public viewer renders
+    these inline as PDFs. Refuses once the proposal is signed so the
+    bundle the signer agreed to stays immutable.
+    """
+    service = ProposalService(db)
+    proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
+    check_ownership(proposal, current_user, EntityNames.PROPOSAL)
+    _ensure_unsigned(proposal)
+
+    filename = (file.filename or "").lower()
+    content_type = (file.content_type or "").lower()
+    if not (filename.endswith(".pdf") or content_type == "application/pdf"):
+        raise_bad_request("Only PDF attachments are allowed on proposals")
+
+    att_service = AttachmentService(db)
+    try:
+        attachment = await att_service.upload_file(
+            file=file,
+            entity_type="proposals",
+            entity_id=proposal_id,
+            user_id=current_user.id,
+            category="document",
+        )
+    except ValueError as exc:
+        raise_bad_request(str(exc))
+
+    return AttachmentResponse.model_validate(attachment)
+
+
+@router.get(
+    "/{proposal_id}/attachments",
+    response_model=AttachmentListResponse,
+)
+async def list_proposal_attachments(
+    proposal_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
+):
+    """Staff list of attachments for a proposal."""
+    service = ProposalService(db)
+    proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
+    check_record_access_or_shared(
+        proposal, current_user, data_scope.role_name,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_PROPOSALS),
+    )
+
+    att_service = AttachmentService(db)
+    items, total = await att_service.list_attachments("proposals", proposal_id)
+    return AttachmentListResponse(
+        items=[AttachmentResponse.model_validate(a) for a in items],
+        total=total,
+    )
+
+
+@router.delete(
+    "/{proposal_id}/attachments/{attachment_id}",
+    status_code=HTTPStatus.NO_CONTENT,
+)
+async def delete_proposal_attachment(
+    proposal_id: int,
+    attachment_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Staff delete of a proposal attachment. Refuses once signed."""
+    service = ProposalService(db)
+    proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
+    check_ownership(proposal, current_user, EntityNames.PROPOSAL)
+    _ensure_unsigned(proposal)
+
+    att_service = AttachmentService(db)
+    attachment = await att_service.get_attachment(attachment_id)
+    _proposal_attachment_or_404(attachment, proposal_id)
+
+    await att_service.delete_attachment(attachment)
+
+
+@router.get("/public/{token}/attachments")
+@limiter.limit("30/minute")
+async def list_public_proposal_attachments(
+    token: str,
+    request: Request,
+    db: DBSession,
+) -> list[ProposalAttachmentPublicItem]:
+    """Public list of attachments for a proposal token, with per-token viewed flag."""
+    import hmac as _hmac
+
+    service = ProposalService(db)
+    proposal = await service.get_public_proposal(token)
+    if not proposal or not _hmac.compare_digest(proposal.public_token or "", token):
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Proposal not found")
+
+    att_service = AttachmentService(db)
+    items, _total = await att_service.list_attachments("proposals", proposal.id)
+    if not items:
+        return []
+
+    from src.proposals.attachment_views import ProposalAttachmentView
+    token_hash = _hash_token(token)
+    viewed_rows = await db.execute(
+        select(ProposalAttachmentView.attachment_id)
+        .where(ProposalAttachmentView.token_hash == token_hash)
+        .where(ProposalAttachmentView.attachment_id.in_([a.id for a in items]))
+    )
+    viewed_ids = {r[0] for r in viewed_rows.all()}
+
+    return [
+        ProposalAttachmentPublicItem(
+            id=a.id,
+            filename=a.original_filename,
+            file_size=a.file_size,
+            mime_type=a.mime_type,
+            viewed=a.id in viewed_ids,
+        )
+        for a in items
+    ]
+
+
+@router.get("/public/{token}/attachments/{attachment_id}/download")
+@limiter.limit("30/minute")
+async def download_public_proposal_attachment(
+    token: str,
+    attachment_id: int,
+    request: Request,
+    db: DBSession,
+):
+    """Public download of a proposal attachment.
+
+    Records the per-token view (used by the read-before-sign gate) and
+    redirects to a short-lived R2 presigned URL. Falls back to a direct
+    file response when object storage isn't configured (dev/test).
+    """
+    import hmac as _hmac
+
+    service = ProposalService(db)
+    proposal = await service.get_public_proposal(token)
+    if not proposal or not _hmac.compare_digest(proposal.public_token or "", token):
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Proposal not found")
+
+    att_service = AttachmentService(db)
+    attachment = await att_service.get_attachment(attachment_id)
+    if (
+        attachment is None
+        or attachment.entity_type != "proposals"
+        or attachment.entity_id != proposal.id
+    ):
+        # Same 404 as a missing attachment so cross-tenant probes can't
+        # distinguish "exists but not yours" from "doesn't exist".
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Attachment not found")
+
+    ip_address = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    await record_attachment_view(
+        db,
+        attachment_id=attachment.id,
+        token=token,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+
+    try:
+        download_url = await att_service.get_download_url(attachment)
+    except Exception as exc:
+        logger.info("R2 presign failed for attachment %s: %s", attachment.id, exc)
+        download_url = None
+
+    if download_url:
+        return RedirectResponse(url=download_url, status_code=307)
+
+    file_path = att_service.get_file_path(attachment)
+    if not file_path or not file_path.exists():
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="File not found")
+
+    return FileResponse(
+        path=str(file_path),
+        filename=attachment.original_filename,
+        media_type=attachment.mime_type,
+    )
+
+
 @router.get("/public/{token}", response_model=ProposalPublicResponse)
 @limiter.limit("60/minute")
 async def get_public_proposal(
@@ -331,6 +560,29 @@ async def get_public_proposal(
 
     response = ProposalPublicResponse.model_validate(proposal)
     response.branding = branding
+
+    # Per-token attachment list — drives the read-before-sign gate UI.
+    att_service = AttachmentService(db)
+    items, _total = await att_service.list_attachments("proposals", proposal.id)
+    if items:
+        from src.proposals.attachment_views import ProposalAttachmentView
+        token_hash = _hash_token(token)
+        viewed_rows = await db.execute(
+            select(ProposalAttachmentView.attachment_id)
+            .where(ProposalAttachmentView.token_hash == token_hash)
+            .where(ProposalAttachmentView.attachment_id.in_([a.id for a in items]))
+        )
+        viewed_ids = {r[0] for r in viewed_rows.all()}
+        response.attachments = [
+            ProposalAttachmentPublicItem(
+                id=a.id,
+                filename=a.original_filename,
+                file_size=a.file_size,
+                mime_type=a.mime_type,
+                viewed=a.id in viewed_ids,
+            )
+            for a in items
+        ]
     return response
 
 

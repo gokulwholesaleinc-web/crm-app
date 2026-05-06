@@ -11,6 +11,12 @@ from html import escape
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import selectinload
 
+import hashlib
+
+import httpx
+
+from src.attachments.models import Attachment
+from src.attachments.service import AttachmentService
 from src.config import settings
 from src.core.base_service import BaseService, CRUDService, StatusTransitionMixin
 from src.core.constants import DEFAULT_PAGE_SIZE
@@ -21,6 +27,7 @@ from src.email.pdf_render import pdf_logo_allowed_hosts, render_html_to_pdf
 from src.email.service import EmailService
 from src.email.types import EmailAttachment
 from src.payments.service import PaymentService
+from src.proposals.attachment_views import get_unviewed_attachment_ids
 from src.proposals.models import Proposal, ProposalTemplate, ProposalView
 from src.proposals.schemas import ProposalCreate, ProposalUpdate
 
@@ -285,6 +292,22 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             )
 
         _assert_signer_matches(proposal, signer_email)
+
+        # Read-before-sign gate: every attachment on the proposal must
+        # have been opened from this same public link at least once.
+        # The check uses sha256(public_token) so a forwarded copy of the
+        # link can't piggyback on someone else's "viewed" rows.
+        if proposal.public_token:
+            unviewed = await get_unviewed_attachment_ids(
+                self.db,
+                proposal_id=proposal.id,
+                token=proposal.public_token,
+            )
+            if unviewed:
+                raise ValueError(
+                    "You must open and view all attached documents before signing. "
+                    f"{len(unviewed)} document(s) remain unread.",
+                )
 
         # Atomic status transition: conditional UPDATE guarded by the
         # same (sent|viewed) whitelist. If two accept requests arrive
@@ -1333,19 +1356,41 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 proposal.owner_id or 0,
                 include_signature=True,
             )
+            attachments: list[EmailAttachment] = [EmailAttachment(
+                filename=f"proposal-{proposal.proposal_number}-signed.pdf",
+                content=pdf_bytes,
+                content_type="application/pdf",
+            )]
+
+            extra_attachments, missing_lines = await self._collect_proposal_attachments(
+                proposal,
+            )
+            attachments.extend(extra_attachments)
+
+            final_body = body
+            if missing_lines:
+                # When an attachment can't be fetched (R2 outage, key
+                # rotation, network blip), don't silently drop it from the
+                # email — list the filename + sha256 of the stored object
+                # key so the recipient can ask the CRM user to resend the
+                # missing doc.
+                final_body += (
+                    "<p><em>Some referenced documents could not be attached "
+                    "automatically. Please ask your point of contact to send "
+                    "them separately:</em></p><ul>"
+                    + "".join(f"<li>{line}</li>" for line in missing_lines)
+                    + "</ul>"
+                )
+
             email_service = EmailService(self.db)
             await email_service.queue_email(
                 to_email=signer_email,
                 subject=f"Signed copy — {proposal.title}",
-                body=body,
+                body=final_body,
                 sent_by_id=proposal.owner_id,
                 entity_type="proposals",
                 entity_id=proposal.id,
-                attachments=[EmailAttachment(
-                    filename=f"proposal-{proposal.proposal_number}-signed.pdf",
-                    content=pdf_bytes,
-                    content_type="application/pdf",
-                )],
+                attachments=attachments,
             )
         except Exception as exc:
             # exc_info=True forces a full traceback into the log
@@ -1358,6 +1403,69 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 proposal.id, exc,
                 exc_info=True,
             )
+
+    async def _collect_proposal_attachments(
+        self, proposal: Proposal,
+    ) -> tuple[list[EmailAttachment], list[str]]:
+        """Fetch every staff-uploaded attachment for ``proposal`` from R2.
+
+        Returns ``(attachments, missing_lines)``:
+          * ``attachments`` — successfully-fetched files ready to attach.
+          * ``missing_lines`` — human-readable "filename + sha256(key)"
+            lines for items that failed to download. Caller appends
+            these to the email body so the signer at least knows what
+            was supposed to be attached.
+
+        File reads use a 10s timeout so a hung R2 endpoint can't stall
+        the accept flow indefinitely.
+        """
+        result = await self.db.execute(
+            select(Attachment)
+            .where(Attachment.entity_type == "proposals")
+            .where(Attachment.entity_id == proposal.id)
+            .order_by(Attachment.created_at.asc())
+        )
+        rows = list(result.scalars().all())
+        if not rows:
+            return [], []
+
+        att_service = AttachmentService(self.db)
+        attachments: list[EmailAttachment] = []
+        missing: list[str] = []
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            for att in rows:
+                try:
+                    download_url = await att_service.get_download_url(att)
+                    if download_url:
+                        resp = await client.get(download_url)
+                        resp.raise_for_status()
+                        content = resp.content
+                    else:
+                        # Local-disk fallback (dev/test): read the file
+                        # straight off the upload directory.
+                        path = att_service.get_file_path(att)
+                        if not path or not path.exists():
+                            raise FileNotFoundError(str(path))
+                        content = path.read_bytes()
+
+                    attachments.append(EmailAttachment(
+                        filename=att.original_filename,
+                        content=content,
+                        content_type=att.mime_type or "application/octet-stream",
+                    ))
+                except Exception as exc:
+                    key_for_hash = att.file_path or att.filename or ""
+                    digest = hashlib.sha256(
+                        key_for_hash.encode("utf-8")
+                    ).hexdigest()[:16]
+                    logger.warning(
+                        "Failed to attach proposal attachment %s (proposal=%s): %s",
+                        att.id, proposal.id, exc,
+                    )
+                    missing.append(f"{att.original_filename} (ref {digest})")
+
+        return attachments, missing
 
     async def get_branding_for_proposal(self, proposal: Proposal) -> dict:
         """Get tenant branding from the proposal owner's tenant."""
