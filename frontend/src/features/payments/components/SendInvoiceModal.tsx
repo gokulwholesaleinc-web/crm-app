@@ -9,7 +9,9 @@ import {
 import { useStripeMode } from '../../../hooks/useStripeMode';
 import { showSuccess, showError } from '../../../utils/toast';
 import type { StripeCustomer } from '../../../types';
-import type { PaymentType, RecurringInterval } from '../../../types/proposals';
+import type { PaymentType } from '../../../types/proposals';
+import { OneTimeInvoiceForm } from './OneTimeInvoiceForm';
+import { SubscriptionForm, INTERVAL_PRESETS } from './SubscriptionForm';
 
 interface SendInvoiceModalProps {
   isOpen: boolean;
@@ -18,20 +20,6 @@ interface SendInvoiceModalProps {
   contactEmail?: string;
   defaultAmount?: number;
 }
-
-const DUE_DAY_OPTIONS = [
-  { value: 15, label: '15 days' },
-  { value: 30, label: '30 days' },
-  { value: 45, label: '45 days' },
-  { value: 60, label: '60 days' },
-];
-
-const INTERVAL_PRESETS: Array<{ label: string; interval: RecurringInterval; count: number }> = [
-  { label: 'Monthly', interval: 'month', count: 1 },
-  { label: 'Quarterly', interval: 'month', count: 3 },
-  { label: 'Bi-yearly', interval: 'month', count: 6 },
-  { label: 'Yearly', interval: 'year', count: 1 },
-];
 
 const PAYMENT_TYPE_OPTIONS: Array<{ value: PaymentType; title: string; subtitle: string }> = [
   { value: 'one_time', title: 'One-time', subtitle: 'Single invoice, paid once' },
@@ -82,11 +70,13 @@ export function SendInvoiceModal({
   const [paymentType, setPaymentType] = useState<PaymentType>('one_time');
   const [amount, setAmount] = useState(defaultAmount?.toString() ?? '');
   const [description, setDescription] = useState('');
-  const [dueDays, setDueDays] = useState(30);
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | ''>('');
+  // one_time-specific
+  const [dueDays, setDueDays] = useState(30);
   const [paymentMethodCard, setPaymentMethodCard] = useState(true);
   const [paymentMethodAch, setPaymentMethodAch] = useState(false);
-  const [intervalPreset, setIntervalPreset] = useState<number>(0); // index into INTERVAL_PRESETS
+  // subscription-specific
+  const [intervalPreset, setIntervalPreset] = useState<number>(0);
 
   const { data: customersData, isLoading: loadingCustomers } = useStripeCustomers({ page_size: 100 });
   const syncMutation = useSyncCustomer();
@@ -96,10 +86,6 @@ export function SendInvoiceModal({
 
   const customers = customersData?.items ?? [];
   const isSubmitting = invoiceMutation.isPending || subscriptionMutation.isPending;
-  // Block the whole flow when Stripe isn't configured — every action in
-  // here either creates a Stripe customer, an invoice, or a subscription
-  // checkout, and all of those will 500 with a backend-side ValueError
-  // ("Stripe is not configured ...") if STRIPE_SECRET_KEY is unset.
   const stripeDisabled = stripeMode === 'unconfigured';
 
   const handleSyncAndSelect = async () => {
@@ -231,7 +217,6 @@ export function SendInvoiceModal({
           </div>
         </fieldset>
 
-        {/* Customer Selector */}
         <div>
           <label htmlFor="invoice-customer" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
             Customer
@@ -268,7 +253,6 @@ export function SendInvoiceModal({
           </div>
         </div>
 
-        {/* Amount */}
         <div>
           <label htmlFor="invoice-amount" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
             Amount ($)
@@ -289,7 +273,6 @@ export function SendInvoiceModal({
           />
         </div>
 
-        {/* Description */}
         <div>
           <label htmlFor="invoice-description" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
             Description
@@ -308,76 +291,19 @@ export function SendInvoiceModal({
         </div>
 
         {paymentType === 'one_time' ? (
-          <>
-            {/* Due Days */}
-            <div>
-              <label htmlFor="invoice-due-days" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Due in
-              </label>
-              <select
-                id="invoice-due-days"
-                value={dueDays}
-                onChange={(e) => setDueDays(Number(e.target.value))}
-                className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm text-sm focus-visible:outline-none focus-visible:border-primary-500 focus-visible:ring-1 focus-visible:ring-primary-500"
-              >
-                {DUE_DAY_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Payment Methods */}
-            <fieldset>
-              <legend className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Payment Methods
-              </legend>
-              <div className="mt-2 space-y-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={paymentMethodCard}
-                    onChange={(e) => setPaymentMethodCard(e.target.checked)}
-                    className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus-visible:ring-primary-500"
-                  />
-                  <span className="text-sm text-gray-700 dark:text-gray-300">Card</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={paymentMethodAch}
-                    onChange={(e) => setPaymentMethodAch(e.target.checked)}
-                    className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus-visible:ring-primary-500"
-                  />
-                  <span className="text-sm text-gray-700 dark:text-gray-300">ACH Bank Transfer</span>
-                </label>
-              </div>
-            </fieldset>
-          </>
+          <OneTimeInvoiceForm
+            dueDays={dueDays}
+            setDueDays={setDueDays}
+            paymentMethodCard={paymentMethodCard}
+            setPaymentMethodCard={setPaymentMethodCard}
+            paymentMethodAch={paymentMethodAch}
+            setPaymentMethodAch={setPaymentMethodAch}
+          />
         ) : (
-          <div>
-            <label htmlFor="invoice-interval" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Billing schedule
-            </label>
-            <select
-              id="invoice-interval"
-              value={intervalPreset}
-              onChange={(e) => setIntervalPreset(Number(e.target.value))}
-              className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm text-sm focus-visible:outline-none focus-visible:border-primary-500 focus-visible:ring-1 focus-visible:ring-primary-500"
-            >
-              {INTERVAL_PRESETS.map((preset, idx) => (
-                <option key={preset.label} value={idx}>
-                  {preset.label}
-                </option>
-              ))}
-            </select>
-            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-              Stripe will email the customer a Checkout link. They enter their card or bank once; the
-              first charge runs immediately and subsequent charges run automatically on the schedule
-              you picked. Cancel anytime from the customer's record.
-            </p>
-          </div>
+          <SubscriptionForm
+            intervalPreset={intervalPreset}
+            setIntervalPreset={setIntervalPreset}
+          />
         )}
 
         <ModalFooter>
