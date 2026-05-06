@@ -10,8 +10,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from src.auth.models import User
+from src.auth.security import create_access_token, get_password_hash
 from src.contacts.models import Contact
 from src.companies.models import Company
+from src.opportunities.models import Opportunity, PipelineStage
+from src.payments.models import Payment, StripeCustomer
+from src.proposals.models import Proposal
+from src.quotes.models import Quote
 
 
 class TestContactsList:
@@ -691,3 +696,150 @@ class TestContactsUnauthorized:
         """Test deleting contact without auth fails."""
         response = await client.delete(f"/api/contacts/{test_contact.id}")
         assert response.status_code == 401
+
+
+class TestContactOwnerCascade:
+    """Reassigning a contact's owner should re-assign linked records owned by
+    the previous owner so the new owner sees them in their pipeline."""
+
+    @pytest.mark.asyncio
+    async def test_contact_owner_change_cascades_to_linked_records(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_contact: Contact,
+    ):
+        # Second user that we hand off to.
+        new_owner = User(
+            email="cascade_target@test.com",
+            hashed_password=get_password_hash("password123"),
+            full_name="Cascade Target",
+            is_active=True,
+            is_superuser=False,
+            role="sales_rep",
+        )
+        db_session.add(new_owner)
+        await db_session.commit()
+        await db_session.refresh(new_owner)
+
+        # Stage + opportunity owned by the original owner, on this contact.
+        stage = PipelineStage(
+            name="Discovery",
+            description="Discovery stage",
+            order=1,
+            color="#06b6d4",
+            probability=10,
+            is_won=False,
+            is_lost=False,
+            is_active=True,
+            pipeline_type="opportunity",
+        )
+        db_session.add(stage)
+        await db_session.commit()
+        await db_session.refresh(stage)
+
+        opp = Opportunity(
+            name="Cascade deal",
+            pipeline_stage_id=stage.id,
+            amount=500.0,
+            currency="USD",
+            contact_id=test_contact.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(opp)
+
+        proposal = Proposal(
+            proposal_number="PR-CASCADE-1",
+            title="Cascade proposal",
+            status="draft",
+            contact_id=test_contact.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(proposal)
+
+        quote = Quote(
+            quote_number="QT-CASCADE-1",
+            title="Cascade quote",
+            status="draft",
+            currency="USD",
+            subtotal=0,
+            tax_rate=0,
+            tax_amount=0,
+            total=0,
+            contact_id=test_contact.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(quote)
+
+        # Payment is linked via StripeCustomer.contact_id, not directly.
+        stripe_customer = StripeCustomer(
+            contact_id=test_contact.id,
+            stripe_customer_id="cus_cascade_test",
+            email=test_contact.email,
+            name="Cascade Test Customer",
+        )
+        db_session.add(stripe_customer)
+        await db_session.commit()
+        await db_session.refresh(stripe_customer)
+
+        payment = Payment(
+            stripe_payment_intent_id="pi_cascade_test",
+            customer_id=stripe_customer.id,
+            amount=100.0,
+            currency="USD",
+            status="pending",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(payment)
+        await db_session.commit()
+
+        # An opportunity / proposal / quote / payment owned by SOMEONE ELSE
+        # on the same contact must NOT cascade — guard against an over-broad
+        # UPDATE that yanks records away from a different rep.
+        third_party = User(
+            email="cascade_third_party@test.com",
+            hashed_password=get_password_hash("password123"),
+            full_name="Cascade Third Party",
+            is_active=True,
+            is_superuser=False,
+            role="sales_rep",
+        )
+        db_session.add(third_party)
+        await db_session.commit()
+        await db_session.refresh(third_party)
+
+        third_party_proposal = Proposal(
+            proposal_number="PR-CASCADE-OTHER",
+            title="Third party proposal",
+            status="draft",
+            contact_id=test_contact.id,
+            owner_id=third_party.id,
+            created_by_id=third_party.id,
+        )
+        db_session.add(third_party_proposal)
+        await db_session.commit()
+        await db_session.refresh(third_party_proposal)
+
+        # Hand the contact off to the new owner.
+        response = await client.patch(
+            f"/api/contacts/{test_contact.id}",
+            headers=auth_headers,
+            json={"owner_id": new_owner.id},
+        )
+        assert response.status_code == 200
+        assert response.json()["owner_id"] == new_owner.id
+
+        # Linked records owned by the old owner should now be on the new owner.
+        for row in (opp, proposal, quote, payment):
+            await db_session.refresh(row)
+            assert row.owner_id == new_owner.id, f"{type(row).__name__} did not cascade"
+
+        # Third-party-owned records on the same contact must be untouched.
+        await db_session.refresh(third_party_proposal)
+        assert third_party_proposal.owner_id == third_party.id

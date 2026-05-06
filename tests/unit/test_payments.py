@@ -21,6 +21,7 @@ from src.auth.models import User
 from src.contacts.models import Contact
 from src.companies.models import Company
 from src.roles.models import Role, UserRole
+from src.opportunities.models import Opportunity, PipelineStage
 from src.payments.models import StripeCustomer, Product, Price, Payment, Subscription
 from src.payments.service import PaymentService
 from src.proposals.models import Proposal
@@ -911,3 +912,52 @@ class TestPaymentsByEntity:
         data = response.json()
         ids = [item["id"] for item in data["items"]]
         assert rep_a_payment.id in ids
+
+
+class TestPaymentClosedLostGuard:
+    """create-payment-intent must 400 when opportunity is in a Closed-Lost stage."""
+
+    @pytest.mark.asyncio
+    async def test_create_payment_intent_blocked_when_opportunity_lost(
+        self,
+        client: AsyncClient,
+        db_session,
+        test_user,
+    ):
+        lost_stage = PipelineStage(
+            name="Closed-Lost",
+            description="Deal lost",
+            order=99,
+            color="#ef4444",
+            probability=0,
+            is_won=False,
+            is_lost=True,
+            is_active=True,
+        )
+        db_session.add(lost_stage)
+        await db_session.commit()
+        await db_session.refresh(lost_stage)
+
+        opp = Opportunity(
+            name="Dead deal",
+            pipeline_stage_id=lost_stage.id,
+            amount=1000.0,
+            currency="USD",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(opp)
+        await db_session.commit()
+        await db_session.refresh(opp)
+
+        response = await client.post(
+            "/api/payments/create-payment-intent",
+            json={
+                "amount": 100.0,
+                "currency": "USD",
+                "opportunity_id": opp.id,
+            },
+            headers=_token(test_user),
+        )
+        assert response.status_code == 400
+        assert "Closed-Lost" in response.json()["detail"]

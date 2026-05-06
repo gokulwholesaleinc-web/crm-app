@@ -14,6 +14,7 @@ from src.core.router_utils import (
     get_entity_or_404,
 )
 from src.events.service import PAYMENT_RECEIVED, emit
+from src.opportunities.models import Opportunity, PipelineStage
 from src.payments._router_helpers import (
     _verify_opportunity_access,
     _verify_quote_access,
@@ -31,6 +32,29 @@ from src.payments.service import PaymentService
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+async def _assert_opportunity_not_lost(db: DBSession, opportunity_id: int) -> None:
+    """Block payment creation against a Closed-Lost opportunity.
+
+    Mirrors the Proposal/Quote guard: payments must not silently
+    accumulate on a deal that has been written off — the user has to
+    move the opportunity back to an active stage first.
+    """
+    result = await db.execute(
+        select(PipelineStage.is_lost)
+        .join(Opportunity, Opportunity.pipeline_stage_id == PipelineStage.id)
+        .where(Opportunity.id == opportunity_id)
+    )
+    is_lost = result.scalar_one_or_none()
+    if is_lost is True:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail=(
+                "Cannot create payment for an opportunity in a Closed-Lost "
+                "stage. Move the opportunity back to an active stage first."
+            ),
+        )
 
 
 @router.post("/create-checkout", response_model=CreateCheckoutResponse)
@@ -100,6 +124,9 @@ async def create_payment_intent(
     await _verify_opportunity_access(db, request_data.opportunity_id, current_user)
     if request_data.customer_id is not None:
         await _verify_stripe_customer_access(db, request_data.customer_id, current_user)
+
+    if request_data.opportunity_id is not None:
+        await _assert_opportunity_not_lost(db, request_data.opportunity_id)
 
     service = PaymentService(db)
 

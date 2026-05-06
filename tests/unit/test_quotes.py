@@ -1246,3 +1246,79 @@ class TestQuotePaymentType:
         assert data["signer_email"] is None
         assert data["signed_at"] is None
         assert data["rejection_reason"] is None
+
+
+class TestClosedLostGuard:
+    """Creating a quote against a Closed-Lost opportunity must 400."""
+
+    @pytest.mark.asyncio
+    async def test_create_quote_blocked_when_opportunity_lost(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        lost_stage = PipelineStage(
+            name="Closed-Lost",
+            description="Deal lost",
+            order=99,
+            color="#ef4444",
+            probability=0,
+            is_won=False,
+            is_lost=True,
+            is_active=True,
+        )
+        db_session.add(lost_stage)
+        await db_session.commit()
+        await db_session.refresh(lost_stage)
+
+        opp = Opportunity(
+            name="Dead deal",
+            pipeline_stage_id=lost_stage.id,
+            amount=1000.0,
+            currency="USD",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(opp)
+        await db_session.commit()
+        await db_session.refresh(opp)
+
+        response = await client.post(
+            "/api/quotes",
+            headers=auth_headers,
+            json={
+                "title": "Reanimated quote",
+                "status": "draft",
+                "currency": "USD",
+                "tax_rate": 0,
+                "discount_value": 0,
+                "opportunity_id": opp.id,
+            },
+        )
+        assert response.status_code == 400
+        assert "Closed-Lost" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_create_quote_allowed_for_active_opportunity(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_opportunity,
+    ):
+        response = await client.post(
+            "/api/quotes",
+            headers=auth_headers,
+            json={
+                "title": "Active quote",
+                "status": "draft",
+                "currency": "USD",
+                "tax_rate": 0,
+                "discount_value": 0,
+                "opportunity_id": test_opportunity.id,
+            },
+        )
+        assert response.status_code == 201
+        assert response.json()["opportunity_id"] == test_opportunity.id

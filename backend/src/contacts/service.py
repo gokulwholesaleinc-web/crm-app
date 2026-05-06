@@ -1,9 +1,10 @@
 """Contact service layer."""
 
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
 
 from src.contacts.models import Contact
@@ -11,6 +12,8 @@ from src.contacts.schemas import ContactCreate, ContactUpdate
 from src.core.base_service import CRUDService, TaggableServiceMixin
 from src.core.constants import DEFAULT_PAGE_SIZE, ENTITY_TYPE_CONTACTS
 from src.core.filtering import apply_filters_to_query, build_token_search
+
+logger = logging.getLogger(__name__)
 
 
 class ContactService(
@@ -70,6 +73,90 @@ class ContactService(
             query = await self._filter_by_tags(query, tag_ids)
 
         return await self.paginate_query(query, page, page_size)
+
+    async def update(
+        self,
+        instance: Contact,
+        data: ContactUpdate,
+        user_id: int,
+    ) -> Contact:
+        """Update a contact and cascade owner_id changes to linked records.
+
+        When the owner changes, every Proposal / Quote / Opportunity /
+        Payment that was assigned to the same old owner via this contact
+        gets re-assigned to the new owner in the same transaction. This
+        keeps "my pipeline" lists in sync — without it, a rep handoff left
+        the new owner blind to the deals they just inherited.
+        """
+        old_owner_id = instance.owner_id
+        new_owner_id = data.owner_id if "owner_id" in data.model_fields_set else old_owner_id
+
+        contact = await super().update(instance, data, user_id)
+
+        if (
+            new_owner_id is not None
+            and old_owner_id is not None
+            and new_owner_id != old_owner_id
+        ):
+            await self._cascade_owner_change(contact.id, old_owner_id, new_owner_id)
+
+        return contact
+
+    async def _cascade_owner_change(
+        self,
+        contact_id: int,
+        old_owner_id: int,
+        new_owner_id: int,
+    ) -> None:
+        """Re-assign linked Proposal/Quote/Opportunity/Payment rows whose
+        owner matches ``old_owner_id``. Runs inside the caller's transaction.
+        """
+        from src.opportunities.models import Opportunity
+        from src.payments.models import Payment, StripeCustomer
+        from src.proposals.models import Proposal
+        from src.quotes.models import Quote
+
+        proposal_result = await self.db.execute(
+            update(Proposal)
+            .where(Proposal.contact_id == contact_id)
+            .where(Proposal.owner_id == old_owner_id)
+            .values(owner_id=new_owner_id)
+        )
+        quote_result = await self.db.execute(
+            update(Quote)
+            .where(Quote.contact_id == contact_id)
+            .where(Quote.owner_id == old_owner_id)
+            .values(owner_id=new_owner_id)
+        )
+        opportunity_result = await self.db.execute(
+            update(Opportunity)
+            .where(Opportunity.contact_id == contact_id)
+            .where(Opportunity.owner_id == old_owner_id)
+            .values(owner_id=new_owner_id)
+        )
+        # Payments are linked to a contact through StripeCustomer.contact_id,
+        # not directly. Scope the update to payments whose customer points
+        # at this contact.
+        customer_subquery = (
+            select(StripeCustomer.id).where(StripeCustomer.contact_id == contact_id)
+        )
+        payment_result = await self.db.execute(
+            update(Payment)
+            .where(Payment.customer_id.in_(customer_subquery))
+            .where(Payment.owner_id == old_owner_id)
+            .values(owner_id=new_owner_id)
+        )
+        await self.db.flush()
+
+        logger.info(
+            "Cascaded owner change for contact %d: %d proposals, %d quotes, "
+            "%d opportunities, %d payments",
+            contact_id,
+            proposal_result.rowcount or 0,
+            quote_result.rowcount or 0,
+            opportunity_result.rowcount or 0,
+            payment_result.rowcount or 0,
+        )
 
     async def soft_delete(self, contact: Contact) -> Contact:
         """Soft-delete a contact by setting ``deleted_at`` and ``status``.

@@ -14,6 +14,7 @@ from src.audit.utils import (
 )
 from src.core.constants import ENTITY_TYPE_QUOTES, EntityNames, HTTPStatus
 from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
+from src.core.http_errors import value_error_as_400
 from src.core.rate_limit import limiter
 from src.core.router_utils import (
     CurrentUser,
@@ -109,7 +110,8 @@ async def create_quote(
 ):
     """Create a new quote."""
     service = QuoteService(db)
-    quote = await service.create(quote_data, current_user.id)
+    with value_error_as_400():
+        quote = await service.create(quote_data, current_user.id)
 
     ip_address = request.client.host if request.client else None
     await audit_entity_create(db, "quote", quote.id, current_user.id, ip_address)

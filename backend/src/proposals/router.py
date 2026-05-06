@@ -98,7 +98,8 @@ async def create_proposal(
 ):
     """Create a new proposal."""
     service = ProposalService(db)
-    proposal = await service.create(proposal_data, current_user.id)
+    with value_error_as_400():
+        proposal = await service.create(proposal_data, current_user.id)
 
     ip_address = request.client.host if request.client else None
     await audit_entity_create(db, "proposal", proposal.id, current_user.id, ip_address)
@@ -270,7 +271,8 @@ async def create_proposal_from_template(
         company_id=request_data.company_id,
         status="draft",
     )
-    proposal = await service.create(proposal_data, current_user.id)
+    with value_error_as_400():
+        proposal = await service.create(proposal_data, current_user.id)
 
     ip_address = request.client.host if request.client else None
     await audit_entity_create(db, "proposal", proposal.id, current_user.id, ip_address)
