@@ -985,6 +985,111 @@ class TestChargeRefundedCascadesToProposal:
 
 
 # ---------------------------------------------------------------------------
+# Cascade: subscription renewal Payment links to the original proposal/quote
+# ---------------------------------------------------------------------------
+
+
+class TestSubscriptionRenewalLinkage:
+    @pytest.mark.asyncio
+    async def test_subscription_renewal_payment_links_to_original_proposal(
+        self,
+        db_session: AsyncSession,
+        payment_service: PaymentService,
+        test_user: User,
+    ):
+        """invoice.paid for a Stripe-driven renewal carries the original
+        proposal's quote_id + opportunity_id onto the new Payment row so
+        renewal MRR rolls up to the source deal.
+        """
+        import secrets
+
+        from src.opportunities.models import Opportunity, PipelineStage
+        from src.proposals.models import Proposal
+        from src.quotes.models import Quote
+
+        stage = PipelineStage(
+            name="Active", order=1, probability=80,
+            is_won=False, is_active=True, pipeline_type="opportunity",
+        )
+        db_session.add(stage)
+        await db_session.flush()
+
+        opp = Opportunity(
+            name="Annual renewal",
+            pipeline_stage_id=stage.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(opp)
+        await db_session.flush()
+
+        quote = Quote(
+            quote_number="Q-2026-RENEW-1",
+            title="Renewal quote",
+            status="accepted",
+            opportunity_id=opp.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(quote)
+        await db_session.flush()
+
+        customer = StripeCustomer(
+            stripe_customer_id="cus_renew_link_01",
+            email="renew-link@example.com",
+            name="Renew Link",
+        )
+        db_session.add(customer)
+        await db_session.flush()
+
+        sub = Subscription(
+            stripe_subscription_id="sub_renew_link_01",
+            customer_id=customer.id,
+            status="active",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        proposal = Proposal(
+            proposal_number="PR-2026-RENEW-1",
+            public_token=secrets.token_urlsafe(32),
+            title="Renewal proposal",
+            status="paid",
+            paid_at=datetime.now(UTC),
+            opportunity_id=opp.id,
+            quote_id=quote.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+            amount=Decimal("199.00"),
+            currency="USD",
+            payment_type="subscription",
+            recurring_interval="month",
+            recurring_interval_count=1,
+            stripe_subscription_id="sub_renew_link_01",
+        )
+        db_session.add_all([sub, proposal])
+        await db_session.commit()
+
+        await payment_service._handle_invoice_paid({
+            "id": "in_renewal_link_001",
+            "subscription": "sub_renew_link_01",
+            "customer": "cus_renew_link_01",
+            "amount_paid": 19900,
+            "currency": "usd",
+        })
+
+        result = await db_session.execute(
+            select(Payment).where(
+                Payment.stripe_invoice_id == "in_renewal_link_001"
+            )
+        )
+        renewal = result.scalar_one_or_none()
+        assert renewal is not None
+        assert renewal.status == "succeeded"
+        assert renewal.quote_id == quote.id
+        assert renewal.opportunity_id == opp.id
+
+
+# ---------------------------------------------------------------------------
 # Cascade: create_checkout_session inherits opportunity_id from the quote
 # ---------------------------------------------------------------------------
 

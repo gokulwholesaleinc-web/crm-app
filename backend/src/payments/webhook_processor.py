@@ -597,12 +597,34 @@ class WebhookProcessor:
         )
         currency = (invoice_obj.get("currency") or "usd").upper()
 
+        # Trace the renewal back to the proposal/quote/opportunity that
+        # spawned the subscription so MRR reports can attribute renewal
+        # revenue to the original deal. Payment has no `proposal_id`
+        # column today, so we rely on the proposal's quote_id /
+        # opportunity_id passthrough — same fields the first-cycle
+        # checkout payment carries.
+        quote_id = None
+        opportunity_id = None
+        if stripe_subscription_id:
+            from src.proposals.models import Proposal
+            proposal_result = await self.db.execute(
+                select(Proposal).where(
+                    Proposal.stripe_subscription_id == stripe_subscription_id
+                )
+            )
+            source_proposal = proposal_result.scalar_one_or_none()
+            if source_proposal is not None:
+                quote_id = source_proposal.quote_id
+                opportunity_id = source_proposal.opportunity_id
+
         renewal_payment = Payment(
             stripe_invoice_id=invoice_id,
             amount=amount_dollars,
             currency=currency,
             status="succeeded",
             customer_id=customer_row.id if customer_row else None,
+            quote_id=quote_id,
+            opportunity_id=opportunity_id,
             owner_id=owner_id,
             created_by_id=owner_id,
         )
