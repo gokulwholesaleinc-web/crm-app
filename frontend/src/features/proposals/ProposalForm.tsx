@@ -18,15 +18,28 @@ interface ProposalFormProps {
 
 export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: ProposalFormProps) {
   const [searchParams] = useSearchParams();
-  const urlOpportunityId = searchParams.get('opportunity_id');
+  // Pre-fill any of the four Related Records from URL query params so
+  // navigating "Create Proposal" from a contact / company / opportunity
+  // / quote detail page lands the user on a form with that link
+  // already selected.
+  const parseUrlId = (key: string): number | null => {
+    const raw = searchParams.get(key);
+    if (!raw) return null;
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) ? n : null;
+  };
+  const urlOpportunityId = parseUrlId('opportunity_id');
+  const urlContactId = parseUrlId('contact_id');
+  const urlCompanyId = parseUrlId('company_id');
+  const urlQuoteId = parseUrlId('quote_id');
 
   const [formData, setFormData] = useState({
     title: initialData?.title ?? '',
     content: initialData?.content ?? '',
-    opportunityId: initialData?.opportunity_id ?? (urlOpportunityId ? parseInt(urlOpportunityId, 10) : null) as number | null,
-    contactId: initialData?.contact_id ?? null as number | null,
-    companyId: initialData?.company_id ?? null as number | null,
-    quoteId: initialData?.quote_id ?? null as number | null,
+    opportunityId: (initialData?.opportunity_id ?? urlOpportunityId) as number | null,
+    contactId: (initialData?.contact_id ?? urlContactId) as number | null,
+    companyId: (initialData?.company_id ?? urlCompanyId) as number | null,
+    quoteId: (initialData?.quote_id ?? urlQuoteId) as number | null,
     executiveSummary: initialData?.executive_summary ?? '',
     scopeOfWork: initialData?.scope_of_work ?? '',
     pricingSection: initialData?.pricing_section ?? '',
@@ -61,7 +74,7 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
   const { data: opportunitiesData } = useOpportunities({ page_size: 100 });
   const { data: quotesData } = useQuotes({ page_size: 100 });
   const { data: urlOpportunity } = useOpportunity(
-    urlOpportunityId ? parseInt(urlOpportunityId, 10) : undefined
+    urlOpportunityId ?? undefined,
   );
 
   const contacts = useMemo(() => contactsData?.items ?? [], [contactsData]);

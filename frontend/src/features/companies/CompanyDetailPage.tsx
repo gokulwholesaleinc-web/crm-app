@@ -166,6 +166,13 @@ export function CompanyDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
+          <Button
+            variant="secondary"
+            onClick={() => navigate(`/proposals?action=new&company_id=${companyId}`)}
+            className="flex-1 sm:flex-none"
+          >
+            Create Proposal
+          </Button>
           <Button variant="secondary" onClick={() => setShowEditForm(true)} className="flex-1 sm:flex-none">
             Edit
           </Button>

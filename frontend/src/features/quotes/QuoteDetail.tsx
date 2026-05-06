@@ -28,6 +28,7 @@ import {
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { showSuccess, showError } from '../../utils/toast';
+import { useProposals } from '../../hooks/useProposals';
 import { extractApiErrorDetail } from '../../utils/errors';
 import type { QuoteUpdate, QuoteLineItemCreate, ProductBundle } from '../../types';
 
@@ -37,6 +38,13 @@ function QuoteDetailPage() {
   const quoteId = id ? parseInt(id, 10) : undefined;
 
   const { data: quote, isLoading, error } = useQuote(quoteId);
+  // Surface every Proposal that references this quote so the user can
+  // navigate to whichever one was spawned from it. Skipped while the
+  // quote is loading to avoid an unnecessary request with quoteId=NaN.
+  const { data: proposalsByQuote } = useProposals(
+    quoteId ? { quote_id: quoteId, page_size: 25 } : undefined,
+  );
+  const relatedProposals = proposalsByQuote?.items ?? [];
   usePageTitle(quote ? `Quote - ${quote.title}` : 'Quote');
 
   const updateQuoteMutation = useUpdateQuote();
@@ -263,6 +271,18 @@ function QuoteDetailPage() {
               {sendQuoteMutation.isPending ? 'Sending...' : sendLabel}
             </Button>
           )}
+          <Button
+            variant="secondary"
+            onClick={() => {
+              const params = new URLSearchParams({ action: 'new', quote_id: String(quote.id) });
+              if (quote.contact?.id) params.set('contact_id', String(quote.contact.id));
+              if (quote.company?.id) params.set('company_id', String(quote.company.id));
+              if (quote.opportunity?.id) params.set('opportunity_id', String(quote.opportunity.id));
+              navigate(`/proposals?${params.toString()}`);
+            }}
+          >
+            Create Proposal
+          </Button>
           {canAcceptReject && (
             <>
               <Button
@@ -532,6 +552,32 @@ function QuoteDetailPage() {
                 <p className="text-sm text-gray-500 dark:text-gray-400">No related entities</p>
               )}
             </dl>
+          </div>
+
+          {/* Related Proposals */}
+          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700">
+            <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">
+              Related Proposals
+            </h2>
+            {relatedProposals.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                No proposals reference this quote yet.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {relatedProposals.map((p) => (
+                  <li key={p.id} className="flex items-center justify-between text-sm">
+                    <Link
+                      to={`/proposals/${p.id}`}
+                      className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300 truncate"
+                    >
+                      {p.title}
+                    </Link>
+                    <StatusBadge status={p.status ?? 'draft'} size="sm" showDot={false} />
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           {/* Notes */}

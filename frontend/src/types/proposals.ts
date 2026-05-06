@@ -119,6 +119,7 @@ export interface ProposalFilters {
   opportunity_id?: number;
   contact_id?: number;
   company_id?: number;
+  quote_id?: number;
 }
 
 export interface ProposalTemplate {

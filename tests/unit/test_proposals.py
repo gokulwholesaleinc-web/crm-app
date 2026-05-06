@@ -104,6 +104,57 @@ class TestProposalsList:
         assert any(p["id"] == test_proposal.id for p in data["items"])
 
     @pytest.mark.asyncio
+    async def test_list_proposals_filter_by_quote_id(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """The QuoteDetail page surfaces "Related Proposals" by querying
+        ?quote_id={id}. Backend must filter on Proposal.quote_id."""
+        from src.quotes.models import Quote
+        quote = Quote(
+            quote_number="QT-PROP-FILTER-1",
+            title="Filter quote",
+            status="draft",
+            currency="USD",
+            subtotal=0.0,
+            tax_rate=0.0,
+            tax_amount=0.0,
+            total=0.0,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(quote)
+        await db_session.commit()
+        await db_session.refresh(quote)
+
+        linked = Proposal(
+            proposal_number="PR-LINK-1",
+            title="Linked",
+            status="draft",
+            owner_id=test_user.id, created_by_id=test_user.id,
+            quote_id=quote.id,
+        )
+        unrelated = Proposal(
+            proposal_number="PR-UNREL-1",
+            title="Unrelated",
+            status="draft",
+            owner_id=test_user.id, created_by_id=test_user.id,
+        )
+        db_session.add_all([linked, unrelated])
+        await db_session.commit()
+
+        response = await client.get(
+            f"/api/proposals?quote_id={quote.id}", headers=auth_headers,
+        )
+        assert response.status_code == 200
+        ids = [p["id"] for p in response.json()["items"]]
+        assert linked.id in ids
+        assert unrelated.id not in ids
+
+    @pytest.mark.asyncio
     async def test_list_proposals_pagination(
         self,
         client: AsyncClient,
