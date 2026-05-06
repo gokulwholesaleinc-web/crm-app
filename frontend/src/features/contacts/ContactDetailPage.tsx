@@ -323,14 +323,16 @@ function ContactDetailPage() {
                         autoComplete="off"
                         className="flex-1 min-w-0 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-2.5 py-1 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                       />
-                      <button
+                      <Button
                         type="button"
+                        size="sm"
                         onClick={handleAddAlias}
-                        disabled={addAliasMutation.isPending || !aliasInput.trim()}
-                        className="shrink-0 rounded-md bg-primary-600 px-3 py-1 text-sm font-medium text-white hover:bg-primary-500 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                        disabled={!aliasInput.trim()}
+                        isLoading={addAliasMutation.isPending}
+                        className="shrink-0"
                       >
-                        {addAliasMutation.isPending ? 'Adding...' : 'Add'}
-                      </button>
+                        Add
+                      </Button>
                     </div>
                     {aliasError && (
                       <p role="alert" aria-live="polite" className="mt-1 text-xs text-red-600 dark:text-red-400">{aliasError}</p>
