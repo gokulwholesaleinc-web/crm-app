@@ -263,8 +263,10 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
     async def send_quote_email(self, quote_id: int, user_id: int, attach_pdf: bool = False) -> Quote:
         """Send branded quote email to the contact's email address and mark as sent.
 
-        If the quote has no contact with an email, the quote is still marked
-        as sent but no email is dispatched.
+        Refuses if the quote has no contact, or the contact has no email
+        on file. Previously this was a silent skip — the quote would flip
+        to 'sent' state with no email dispatched, leaving the user
+        thinking the customer received it.
         """
         quote = await self.get_by_id(quote_id)
         if not quote:
@@ -273,66 +275,72 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
         if quote.status not in self.valid_send_statuses:
             raise ValueError(f"Cannot transition from '{quote.status}' to 'sent'")
 
-        # Send email only if quote has a contact with an email address
-        if quote.contact and quote.contact.email:
-            branding = await TenantBrandingHelper.get_branding_for_user(self.db, user_id)
-
-            # Build public view URL for the CTA button in the email.
-            # We use the unguessable public_token (not quote_number) so
-            # the link can't be enumerated. If the row pre-dates the
-            # public_token column for any reason, mint one on the fly.
-            if not quote.public_token:
-                quote.public_token = secrets.token_urlsafe(32)
-                await self.db.flush()
-            base_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
-            view_url = f"{base_url}/quotes/public/{quote.public_token}"
-
-            quote_data = {
-                "quote_number": quote.quote_number,
-                "client_name": quote.contact.full_name,
-                "total": f"{float(quote.total):.2f}",
-                "currency": quote.currency,
-                "valid_until": str(quote.valid_until) if quote.valid_until else "",
-                "items": [
-                    {
-                        "description": item.description,
-                        "quantity": str(float(item.quantity)),
-                        "unit_price": f"{float(item.unit_price):.2f}",
-                        "total": f"{float(item.total):.2f}",
-                    }
-                    for item in quote.line_items
-                ],
-                "view_url": view_url,
-            }
-
-            subject, html_body = render_quote_email(branding, quote_data)
-
-            attachments: list[EmailAttachment] | None = None
-            if attach_pdf:
-                try:
-                    pdf_bytes = await self.generate_quote_pdf(quote_id, user_id)
-                except Exception as exc:
-                    logger.warning(
-                        "PDF render failed for quote %s — sending email without attachment: %s",
-                        quote_id, exc,
-                    )
-                else:
-                    attachments = [EmailAttachment(
-                        filename=f"quote-{quote.quote_number}.pdf",
-                        content=pdf_bytes,
-                        content_type="application/pdf",
-                    )]
-
-            email_service = EmailService(self.db)
-            await email_service.queue_email(
-                to_email=quote.contact.email,
-                subject=subject,
-                body=html_body,
-                sent_by_id=user_id,
-                entity_type="quotes",
-                entity_id=quote.id,
-                attachments=attachments,
+        if not quote.contact:
+            raise ValueError("Quote has no contact attached — link a contact before sending")
+        if not quote.contact.email:
+            raise ValueError(
+                f"{quote.contact.full_name or 'The linked contact'} has no email "
+                "on file — add an email address before sending the quote",
             )
+
+        branding = await TenantBrandingHelper.get_branding_for_user(self.db, user_id)
+
+        # Build public view URL for the CTA button in the email.
+        # We use the unguessable public_token (not quote_number) so
+        # the link can't be enumerated. If the row pre-dates the
+        # public_token column for any reason, mint one on the fly.
+        if not quote.public_token:
+            quote.public_token = secrets.token_urlsafe(32)
+            await self.db.flush()
+        base_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        view_url = f"{base_url}/quotes/public/{quote.public_token}"
+
+        quote_data = {
+            "quote_number": quote.quote_number,
+            "client_name": quote.contact.full_name,
+            "total": f"{float(quote.total):.2f}",
+            "currency": quote.currency,
+            "valid_until": str(quote.valid_until) if quote.valid_until else "",
+            "items": [
+                {
+                    "description": item.description,
+                    "quantity": str(float(item.quantity)),
+                    "unit_price": f"{float(item.unit_price):.2f}",
+                    "total": f"{float(item.total):.2f}",
+                }
+                for item in quote.line_items
+            ],
+            "view_url": view_url,
+        }
+
+        subject, html_body = render_quote_email(branding, quote_data)
+
+        attachments: list[EmailAttachment] | None = None
+        if attach_pdf:
+            try:
+                pdf_bytes = await self.generate_quote_pdf(quote_id, user_id)
+            except Exception as exc:
+                logger.warning(
+                    "PDF render failed for quote %s — sending email without attachment: %s",
+                    quote_id, exc,
+                )
+            else:
+                attachments = [EmailAttachment(
+                    filename=f"quote-{quote.quote_number}.pdf",
+                    content=pdf_bytes,
+                    content_type="application/pdf",
+                )]
+
+        email_service = EmailService(self.db)
+        await email_service.queue_email(
+            to_email=quote.contact.email,
+            subject=subject,
+            body=html_body,
+            sent_by_id=user_id,
+            entity_type="quotes",
+            entity_id=quote.id,
+            attachments=attachments,
+        )
 
         quote.status = "sent"
         quote.sent_at = datetime.now(UTC)

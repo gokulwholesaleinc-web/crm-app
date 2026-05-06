@@ -648,18 +648,104 @@ class TestStatusTransitions:
         client: AsyncClient,
         db_session: AsyncSession,
         auth_headers: dict,
+        test_user: User,
+        test_contact: Contact,
+    ):
+        """Test sending a draft quote.
+
+        The fixture creates the quote with a contact already attached so
+        send_quote_email's "must have a contact with an email" guard is
+        satisfied. The dedicated 'no contact' / 'no email' tests below
+        cover the rejection paths.
+        """
+        quote = Quote(
+            quote_number="QT-2026-SEND1",
+            title="Sendable",
+            status="draft",
+            currency="USD",
+            subtotal=100.0,
+            tax_rate=0.0,
+            tax_amount=0.0,
+            total=100.0,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+            contact_id=test_contact.id,
+        )
+        db_session.add(quote)
+        await db_session.commit()
+        await db_session.refresh(quote)
+
+        response = await client.post(
+            f"/api/quotes/{quote.id}/send",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200, response.json()
+        data = response.json()
+        assert data["status"] == "sent"
+        assert data["sent_at"] is not None
+
+    @pytest.mark.asyncio
+    async def test_send_quote_without_contact_email_returns_400(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """Quote with a contact but no email on file must reject with a
+        message the UI can show — not silent-skip into 'sent'."""
+        no_email_contact = Contact(
+            first_name="No",
+            last_name="Email",
+            email=None,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(no_email_contact)
+        await db_session.commit()
+        await db_session.refresh(no_email_contact)
+
+        quote = Quote(
+            quote_number="QT-2026-NOEM1",
+            title="No-email-contact",
+            status="draft",
+            currency="USD",
+            subtotal=0.0,
+            tax_rate=0.0,
+            tax_amount=0.0,
+            total=0.0,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+            contact_id=no_email_contact.id,
+        )
+        db_session.add(quote)
+        await db_session.commit()
+        await db_session.refresh(quote)
+
+        response = await client.post(
+            f"/api/quotes/{quote.id}/send",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 400
+        assert "no email" in response.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_send_quote_without_contact_returns_400(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
         test_quote: Quote,
     ):
-        """Test sending a draft quote."""
+        """Quote with no contact attached must reject — used to silently
+        skip and mark 'sent'."""
         response = await client.post(
             f"/api/quotes/{test_quote.id}/send",
             headers=auth_headers,
         )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "sent"
-        assert data["sent_at"] is not None
+        assert response.status_code == 400
+        assert "no contact" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
     async def test_accept_sent_quote(

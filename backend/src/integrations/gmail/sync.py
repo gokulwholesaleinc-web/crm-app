@@ -276,7 +276,7 @@ async def _process_message(
     from_addr = msg["from"]
     received_at: datetime = msg["date"] or datetime.now(UTC)
 
-    if from_addr.lower() == connection.email.lower():
+    if from_addr.lower() in connection.self_addresses:
         await _store_sent(msg, connection, db, received_at, require_contact_link=require_contact_link)
     else:
         await _store_inbound(msg, connection, db, received_at, require_contact_link=require_contact_link)
@@ -344,7 +344,7 @@ async def _store_sent(
     recipients = _collect_recipients(msg)
 
     entity_type, entity_id = await _resolve_contact_by_addresses(
-        recipients, db, exclude_emails=[connection.email]
+        recipients, db, exclude_emails=list(connection.self_addresses)
     )
 
     if entity_id is None:
@@ -361,7 +361,8 @@ async def _store_sent(
     row = EmailQueue(
         status="sent",
         sent_at=received_at,
-        from_email=connection.email,
+        # Preserve the alias address so relink + UI see what's in Gmail's Sent folder.
+        from_email=(msg.get("from") or "").strip() or connection.email,
         to_email=to_addr,
         cc=_join_recipients(msg.get("cc_list") or []) or msg.get("cc") or None,
         bcc=_join_recipients(msg.get("bcc_list") or []) or msg.get("bcc") or None,
@@ -394,7 +395,7 @@ async def _store_inbound(
     recipients = _collect_recipients(msg)
 
     entity_type, entity_id = await _resolve_contact_by_addresses(
-        recipients, db, exclude_emails=[connection.email]
+        recipients, db, exclude_emails=list(connection.self_addresses)
     )
 
     if entity_id is None:

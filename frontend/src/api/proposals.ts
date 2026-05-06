@@ -87,9 +87,11 @@ export const rejectProposal = async (proposalId: number): Promise<Proposal> => {
 };
 
 export interface ResendPaymentLinkResult {
-  action: 'resent' | 'already_paid_reconciled';
+  action: 'resent' | 'regenerated' | 'already_paid_reconciled';
   stripe_invoice_id?: string;
   hosted_invoice_url?: string | null;
+  stripe_checkout_session_id?: string;
+  stripe_payment_url?: string | null;
 }
 
 export const resendProposalPaymentLink = async (

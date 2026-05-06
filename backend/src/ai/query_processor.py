@@ -411,8 +411,15 @@ class QueryProcessor:
             tool_calls=tool_log,
         )
 
+        # Prefer the tool's own message when present — it carries
+        # context the user needs (skip reasons, partial-success notes,
+        # etc.). The hardcoded fallback only fires when the tool didn't
+        # provide one. See `action_tools.create_payment_link` which
+        # emits `email_skipped_reason` + a tailored message; without
+        # this surfacing the user assumed the email went out.
+        response_text = data.get("message") or f"Action '{function_name}' completed successfully."
         return {
-            "response": f"Action '{function_name}' completed successfully.",
+            "response": response_text,
             "data": data,
             "function_called": function_name,
             "actions_taken": [{

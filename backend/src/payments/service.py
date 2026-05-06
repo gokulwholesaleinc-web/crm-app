@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 from src.config import settings
 from src.core.base_service import CRUDService
 from src.core.constants import DEFAULT_PAGE_SIZE
+from src.payments.exceptions import NoRecipientEmailError
 from src.payments.models import (
     Payment,
     Product,
@@ -473,7 +474,14 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         )
 
     async def send_payment_receipt(self, payment_id: int) -> None:
-        """Send branded receipt email after successful payment."""
+        """Send branded receipt email after successful payment.
+
+        Raises ``ValueError`` when the payment has no customer or the
+        customer has no email on file — webhook callers catch and log
+        (matching the pattern already in `_handle_payment_succeeded`),
+        and the staff "Resend Receipt" router surfaces the message via
+        a 400 so the user knows why the email didn't go out.
+        """
         from src.email.branded_templates import (
             TenantBrandingHelper,
             render_payment_receipt_email,
@@ -490,16 +498,15 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         )
         payment = result.scalar_one_or_none()
         if not payment:
-            return
+            raise ValueError(f"Payment {payment_id} not found")
 
-        # Determine recipient email
-        to_email = None
-        client_name = "Customer"
-        if payment.customer:
-            to_email = payment.customer.email
-            client_name = payment.customer.name or client_name
+        to_email = payment.customer.email if payment.customer else None
         if not to_email:
-            return
+            raise NoRecipientEmailError(
+                "Customer has no email on file — add an email address "
+                "and try again",
+            )
+        client_name = (payment.customer.name if payment.customer else None) or "Customer"
 
         # Get tenant branding
         branding = TenantBrandingHelper.get_default_branding()
@@ -994,6 +1001,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         interval_count: int,
         success_url: str,
         cancel_url: str,
+        idempotency_key: str | None = None,
     ) -> dict:
         """Create a Stripe Checkout Session (mode=subscription) for an accepted
         subscription proposal.
@@ -1051,7 +1059,9 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             metadata={"proposal_id": str(proposal_id)},
             subscription_data={"metadata": {"proposal_id": str(proposal_id)}},
             # Deterministic key — same reasoning as create_invoice_for_proposal.
-            idempotency_key=f"proposal_sub_{proposal_id}_v1",
+            # Callers regenerating an expired session must pass a distinct key
+            # so Stripe doesn't return the (still-cached) original.
+            idempotency_key=idempotency_key or f"proposal_sub_{proposal_id}_v1",
         )
 
         return {

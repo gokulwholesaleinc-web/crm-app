@@ -26,6 +26,7 @@ import { ProposalAuditCard } from './ProposalAuditCard';
 import { formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { showSuccess, showError } from '../../utils/toast';
+import { extractApiErrorDetail } from '../../utils/errors';
 import type { ProposalUpdate } from '../../types';
 
 function ProposalDetailPage() {
@@ -108,16 +109,13 @@ function ProposalDetailPage() {
       const result = await resendPaymentLinkMutation.mutateAsync(proposal.id);
       if (result.action === 'already_paid_reconciled') {
         showSuccess('Already paid — status reconciled');
+      } else if (result.action === 'regenerated') {
+        showSuccess('Checkout session expired — new link generated and emailed');
       } else {
         showSuccess('Payment link re-emailed to the customer');
       }
     } catch (err) {
-      // axios surfaces the FastAPI 400 detail as response.data.detail
-      const detail =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-          : null;
-      showError(detail || 'Failed to resend payment link');
+      showError(extractApiErrorDetail(err) ?? 'Failed to resend payment link');
     }
   };
 
@@ -132,11 +130,7 @@ function ProposalDetailPage() {
         showSuccess('Billing retried');
       }
     } catch (err) {
-      const detail =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-          : null;
-      showError(detail || 'Failed to retry billing');
+      showError(extractApiErrorDetail(err) ?? 'Failed to retry billing');
     }
   };
 
@@ -199,11 +193,15 @@ function ProposalDetailPage() {
   // stuck (bad Gmail token, Resend sandbox rejection, etc.). The
   // backend /send endpoint re-queues on every call.
   const canSend = ['draft', 'sent', 'viewed'].includes(proposal.status ?? '');
+  const proposalRecipient =
+    proposal.designated_signer_email || proposal.contact?.email || '';
   const sendLabel = isDraft ? 'Send' : 'Resend';
   const canAcceptReject = proposal.status === 'sent' || proposal.status === 'viewed';
   const canEdit = ['draft', 'sent', 'viewed'].includes(proposal.status ?? '');
   const canResendPaymentLink =
-    proposal.status === 'awaiting_payment' && !proposal.paid_at && Boolean(proposal.stripe_invoice_id);
+    proposal.status === 'awaiting_payment' &&
+    !proposal.paid_at &&
+    Boolean(proposal.stripe_invoice_id || proposal.stripe_checkout_session_id);
   // Retry billing covers the case where accept landed (signature recorded)
   // but the Stripe spawn failed. The backend refuses retry once any
   // Stripe artifact is present, so the button only matters when none are.
@@ -255,7 +253,12 @@ function ProposalDetailPage() {
             <Button
               onClick={handleSend}
               leftIcon={<PaperAirplaneIcon className="h-4 w-4" />}
-              disabled={sendProposalMutation.isPending}
+              disabled={sendProposalMutation.isPending || !proposalRecipient}
+              title={
+                proposalRecipient
+                  ? undefined
+                  : 'Set a designated signer email or attach a contact with an email before sending'
+              }
               variant={isDraft ? 'primary' : 'secondary'}
             >
               {sendProposalMutation.isPending ? 'Sending...' : sendLabel}

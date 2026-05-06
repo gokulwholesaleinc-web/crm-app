@@ -428,7 +428,25 @@ class CRMActionTools:
                 select(Contact).where(Contact.id == contact_id)
             )
             contact = contact_result.scalar_one_or_none()
-            if contact and contact.email:
+            if not contact:
+                result["email_sent"] = False
+                result["email_skipped_reason"] = "contact_not_found"
+                result["message"] += (
+                    f" Link was NOT emailed: contact id {contact_id} not found."
+                )
+            elif not contact.email:
+                # Silent-skip used to be the default here. Surface it so the
+                # AI assistant tells the user the email didn't go out — they
+                # can then add the address and resend, or copy the URL into
+                # another channel.
+                result["email_sent"] = False
+                result["email_skipped_reason"] = "contact_missing_email"
+                result["message"] += (
+                    f" Link was NOT emailed: {contact.full_name} has no email "
+                    f"address on file. Copy the checkout URL or add an email "
+                    f"and try again."
+                )
+            else:
                 from src.email.branded_templates import TenantBrandingHelper, render_branded_email
                 from src.email.service import EmailService
 

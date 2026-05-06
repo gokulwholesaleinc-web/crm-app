@@ -99,7 +99,7 @@ export interface Proposal extends ProposalBase {
   views?: ProposalView[];
   created_at: string;
   updated_at: string;
-  contact?: { id: number; full_name: string } | null;
+  contact?: { id: number; full_name: string; email?: string | null } | null;
   company?: { id: number; name: string } | null;
   opportunity?: { id: number; name: string } | null;
   quote?: { id: number; quote_number: string; title: string; total: number } | null;

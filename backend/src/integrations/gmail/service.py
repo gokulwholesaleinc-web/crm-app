@@ -169,6 +169,30 @@ class GmailConnectionService:
         sync_state.last_error = None
         await self.db.flush()
 
+    async def refresh_aliases(self, connection: GmailConnection) -> list[str]:
+        """Pull verified send-as addresses from Gmail and persist on the row.
+
+        `self_addresses` adds the primary lazily, so storing the raw API
+        result is enough for sync-time classification. Empty response with
+        an already-populated row is a no-op — a transient 403 must not
+        regress a previously-good alias set.
+        """
+        from src.integrations.gmail.client import GmailClient
+
+        async with GmailClient(connection, self.db) as client:
+            aliases = await client.list_send_as()
+
+        if not aliases and connection.aliases:
+            logger.info(
+                "[gmail.refresh_aliases] empty response for user_id=%s, keeping last-known-good %d aliases",
+                connection.user_id, len(connection.aliases),
+            )
+            return list(connection.aliases)
+
+        connection.aliases = aliases
+        await self.db.flush()
+        return aliases
+
     async def mark_revoked(self, user_id: int) -> GmailConnection | None:
         conn = await self.get_by_user(user_id)
         if not conn:

@@ -2,6 +2,7 @@
 
 import asyncio
 import hmac as _hmac
+import logging
 import secrets
 from datetime import UTC
 from typing import Annotated
@@ -14,6 +15,8 @@ from src.core.constants import HTTPStatus
 from src.core.router_utils import CurrentUser, DBSession
 from src.integrations.gmail import oauth as gmail_oauth
 from src.integrations.gmail.schemas import (
+    GmailAliasRefreshRequest,
+    GmailAliasRefreshResponse,
     GmailAuthorizeResponse,
     GmailBackfillRequest,
     GmailBackfillStatusResponse,
@@ -24,6 +27,8 @@ from src.integrations.gmail.schemas import (
     GmailStatusResponse,
 )
 from src.integrations.gmail.service import GmailConnectionService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/integrations/gmail", tags=["gmail"])
 
@@ -138,24 +143,29 @@ async def gmail_callback(
     # learning the starting historyId and returning empty.
     try:
         await service.seed_sync_cursor(conn)
-    except Exception as exc:
+    except Exception:
         # Don't fail the connect flow if Gmail rejects the profile call —
         # the first scheduler tick will seed the cursor via the old path.
-        import logging
-        logging.getLogger(__name__).warning(
-            "Failed to seed Gmail sync cursor for user_id=%s: %s",
-            current_user.id, exc,
+        logger.exception(
+            "Failed to seed Gmail sync cursor for user_id=%s", current_user.id
+        )
+
+    # Failure is non-fatal: refresh_aliases keeps last-known-good and
+    # /refresh-aliases is the recovery path.
+    try:
+        await service.refresh_aliases(conn)
+    except Exception:
+        logger.exception(
+            "Failed to refresh Gmail aliases for user_id=%s", current_user.id
         )
     await db.commit()
 
     # Kick off historical backfill in the background — returns immediately.
     try:
         await service.schedule_backfill_if_needed(conn)
-    except Exception as exc:
-        import logging
-        logging.getLogger(__name__).warning(
-            "Failed to schedule Gmail backfill for user_id=%s: %s",
-            current_user.id, exc,
+    except Exception:
+        logger.exception(
+            "Failed to schedule Gmail backfill for user_id=%s", current_user.id
         )
     await db.refresh(conn)
 
@@ -493,6 +503,75 @@ async def gmail_relink(
         linked=linked,
         skipped=skipped,
         dry_run=body.dry_run,
+    )
+
+
+@router.post("/refresh-aliases", response_model=GmailAliasRefreshResponse)
+async def gmail_refresh_aliases(
+    body: GmailAliasRefreshRequest,
+    db: DBSession,
+    _admin: Annotated[object, Depends(get_current_superuser)],
+) -> GmailAliasRefreshResponse:
+    """Admin-only: pull verified send-as aliases for every active connection.
+
+    Skips rows that already have aliases unless ``force=True``. Commits
+    per row so `refreshed` reflects only what actually persisted.
+    """
+    import httpx
+    from sqlalchemy import select
+
+    from src.integrations.gmail.client import GmailAuthError
+    from src.integrations.gmail.models import GmailConnection
+
+    q = select(GmailConnection).where(GmailConnection.revoked_at.is_(None))
+    if body.user_id is not None:
+        q = q.where(GmailConnection.user_id == body.user_id)
+    rows = (await db.execute(q)).scalars().all()
+
+    refreshed: list[dict] = []
+    failures: list[dict] = []
+    skipped = 0
+
+    service = GmailConnectionService(db)
+    for conn in rows:
+        if not body.force and conn.aliases:
+            skipped += 1
+            continue
+
+        reason: str | None = None
+        try:
+            aliases = await service.refresh_aliases(conn)
+        except GmailAuthError as exc:
+            reason = f"auth_revoked:{exc}"
+        except httpx.HTTPStatusError as exc:
+            reason = f"http_{exc.response.status_code}"
+        except Exception as exc:
+            logger.exception(
+                "[gmail_alias_refresh] user_id=%s unexpected failure", conn.user_id
+            )
+            reason = f"unknown:{type(exc).__name__}"
+
+        if reason is not None:
+            await db.rollback()
+            failures.append({"user_id": conn.user_id, "reason": reason})
+            continue
+
+        try:
+            await db.commit()
+        except Exception as exc:
+            logger.exception(
+                "[gmail_alias_refresh] user_id=%s commit failed", conn.user_id
+            )
+            await db.rollback()
+            failures.append(
+                {"user_id": conn.user_id, "reason": f"commit_failed:{type(exc).__name__}"}
+            )
+            continue
+
+        refreshed.append({"user_id": conn.user_id, "aliases": aliases})
+
+    return GmailAliasRefreshResponse(
+        refreshed=refreshed, skipped=skipped, failed=failures
     )
 
 
