@@ -60,8 +60,25 @@ class LeadConverter:
 
         created_company = None
 
-        # Create company if requested
-        if create_company and lead.company_name and not company_id:
+        # Look up the contact match BEFORE deciding whether to spawn a
+        # Company. Reusing an existing contact means the lead's
+        # company_name is redundant — the existing contact already has
+        # whatever company they belong to. Creating one anyway would
+        # leave an orphan Company row that nothing references.
+        existing_contact: Contact | None = None
+        if lead.email:
+            _etype, existing_id = await find_contact_id_by_any_email([lead.email], self.db)
+            if existing_id is not None:
+                existing_contact = await self.db.get(Contact, existing_id)
+
+        # Create company if requested AND we're going to create a fresh
+        # contact. Skipped on reuse — see comment above.
+        if (
+            existing_contact is None
+            and create_company
+            and lead.company_name
+            and not company_id
+        ):
             created_company = Company(
                 name=lead.company_name,
                 website=lead.website,
@@ -73,14 +90,6 @@ class LeadConverter:
             self.db.add(created_company)
             await self.db.flush()
             company_id = created_company.id
-
-        # If a contact already owns this email, reuse it. find_contact_id_by_any_email
-        # is alias-aware so a lead whose email matches a contact's alias also dedups.
-        existing_contact: Contact | None = None
-        if lead.email:
-            _etype, existing_id = await find_contact_id_by_any_email([lead.email], self.db)
-            if existing_id is not None:
-                existing_contact = await self.db.get(Contact, existing_id)
 
         if existing_contact is not None:
             contact = existing_contact
@@ -267,13 +276,19 @@ class LeadConverter:
             create_company=create_company,
         )
 
+        # When convert_to_contact reused an existing contact (no new
+        # company spawned), inherit the contact's existing company onto
+        # the opportunity so reports link the deal to that account
+        # instead of leaving company_id NULL.
+        opp_company_id: int | None = company.id if company else contact.company_id
+
         # Then convert to opportunity
         opportunity = await self.convert_to_opportunity(
             lead=lead,
             user_id=user_id,
             pipeline_stage_id=pipeline_stage_id,
             contact_id=contact.id,
-            company_id=company.id if company else None,
+            company_id=opp_company_id,
         )
 
         return contact, company, opportunity
