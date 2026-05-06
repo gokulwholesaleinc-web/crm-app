@@ -59,6 +59,17 @@ class GmailRelinkResponse(BaseModel):
     dry_run: bool
 
 
+class GmailAliasRefreshRequest(BaseModel):
+    user_id: int | None = None
+    force: bool = False
+
+
+class GmailAliasRefreshResponse(BaseModel):
+    refreshed: list[dict]
+    skipped: int
+    failed: list[dict]
+
+
 class GmailStatusResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
