@@ -214,6 +214,9 @@ async def _get_or_create_backfill_state(
         db.add(state)
         await db.flush()
     return state
+    if reaped:
+        logger.warning("[gmail_backfill] reaped %d abandoned 'running' rows", reaped)
+    return reaped
 
 
 async def _get_or_create_state(
@@ -314,14 +317,6 @@ async def _resolve_entity_from_thread(
     return None, None
 
 
-async def _resolve_contact_by_addresses(
-    addresses: list[str], db: AsyncSession
-) -> tuple[str | None, int | None]:
-    """Alias-aware contact lookup across primary email and contact_email_aliases."""
-    from src.contacts.alias_match import find_contact_id_by_any_email
-    return await find_contact_id_by_any_email(addresses, db)
-
-
 async def _store_sent(
     msg: dict,
     connection: GmailConnection,
@@ -356,6 +351,7 @@ async def _store_sent(
         sent_by_id=connection.user_id,
         entity_type=entity_type,
         entity_id=entity_id,
+        participant_emails=recipients,
     )
     db.add(row)
     await db.flush()
@@ -396,6 +392,7 @@ async def _store_inbound(
         received_at=received_at,
         entity_type=entity_type,
         entity_id=entity_id,
+        participant_emails=recipients,
     )
     db.add(row)
     await db.flush()

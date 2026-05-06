@@ -63,6 +63,46 @@ async def send_email(
         ]
 
     service = EmailService(db)
+
+    # Reply-gating: forbid composing a reply to a thread the user isn't a
+    # participant of. Without this an admin could reply to a colleague's
+    # private inbound mail from the colleague's CRM record. The reply itself
+    # still goes out from the replier's own Gmail connection — that's the
+    # right thing once we've verified they were on the original thread.
+    if data.reply_to_inbound_id is not None or data.reply_to_email_id is not None:
+        from src.email.participants import get_user_connection_emails
+        viewer_emails = set(await get_user_connection_emails(db, current_user.id))
+
+        async def _assert_participant(participants: list[str] | None, fallback_sent_by: int | None) -> None:
+            if fallback_sent_by == current_user.id:
+                return
+            if viewer_emails and viewer_emails.intersection(participants or []):
+                return
+            raise HTTPException(
+                status_code=HTTPStatus.FORBIDDEN,
+                detail="You can only reply to threads you are a participant of",
+            )
+
+        if data.reply_to_inbound_id is not None:
+            from src.email.models import InboundEmail
+            from sqlalchemy import select as _select
+            row = (await db.execute(
+                _select(InboundEmail.participant_emails).where(InboundEmail.id == data.reply_to_inbound_id)
+            )).one_or_none()
+            if row is None:
+                raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Source thread not found")
+            await _assert_participant(row[0], None)
+
+        if data.reply_to_email_id is not None:
+            from src.email.models import EmailQueue
+            from sqlalchemy import select as _select
+            row = (await db.execute(
+                _select(EmailQueue.participant_emails, EmailQueue.sent_by_id).where(EmailQueue.id == data.reply_to_email_id)
+            )).one_or_none()
+            if row is None:
+                raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Source thread not found")
+            await _assert_participant(row[0], row[1])
+
     email = await service.queue_email(
         to_email=data.to_email,
         subject=data.subject,
@@ -150,6 +190,7 @@ async def get_email_thread(
         entity_id=entity_id,
         page=page,
         page_size=page_size,
+        viewer_user_id=current_user.id,
     )
     return ThreadResponse(
         items=[ThreadEmailItem(**item) for item in items],
@@ -217,6 +258,7 @@ async def list_emails(
         entity_type=entity_type,
         entity_id=entity_id,
         status=status,
+        viewer_user_id=current_user.id,
     )
     return EmailListResponse(
         items=[EmailQueueResponse.model_validate(e) for e in items],
@@ -274,4 +316,14 @@ async def get_email(
             status_code=HTTPStatus.NOT_FOUND,
             detail=f"Email with ID {email_id} not found",
         )
+    # Participant-based privacy: composer always sees their row; otherwise
+    # the viewer must be one of the recorded participants.
+    if email.sent_by_id != current_user.id:
+        from src.email.participants import get_user_connection_emails
+        viewer_emails = set(await get_user_connection_emails(db, current_user.id))
+        if not viewer_emails.intersection(email.participant_emails or []):
+            raise HTTPException(
+                status_code=HTTPStatus.NOT_FOUND,
+                detail=f"Email with ID {email_id} not found",
+            )
     return email
