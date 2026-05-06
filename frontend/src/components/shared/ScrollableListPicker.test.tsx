@@ -65,6 +65,16 @@ describe('ScrollableListPicker', () => {
     expect(onSelectionChange).toHaveBeenCalledWith([1]);
   });
 
+  it('select-all preserves out-of-filter selections when a search filter is active', () => {
+    // Bob (id=2) is already selected; user filters to Alice only and clicks Select All.
+    // Bob must not be dropped from the resulting selection.
+    const { onSelectionChange } = renderPicker({ selectedIds: [2] });
+    const input = screen.getByPlaceholderText('Search items...');
+    fireEvent.change(input, { target: { value: 'alice' } });
+    fireEvent.click(screen.getByRole('button', { name: /select all/i }));
+    expect(onSelectionChange).toHaveBeenCalledWith([2, 1]);
+  });
+
   it('select-all without filter selects all items', () => {
     const { onSelectionChange } = renderPicker();
     fireEvent.click(screen.getByRole('button', { name: /select all/i }));

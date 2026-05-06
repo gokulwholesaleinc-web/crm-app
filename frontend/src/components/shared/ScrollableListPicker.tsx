@@ -57,10 +57,15 @@ export function ScrollableListPicker<T>({
   };
 
   const handleSelectAll = () => {
+    const visibleIds = new Set(visibleItems.map(getItemId));
+    // Keep selections that are outside the current filter view, then add all
+    // visible non-disabled items. Without this, filtering to 3 items and
+    // clicking "Select All" would silently clear the other N selected items.
+    const preserved = selectedIds.filter((id) => !visibleIds.has(id));
     const toAdd = visibleItems
       .map(getItemId)
       .filter((id) => !disabledSet.has(id));
-    onSelectionChange(toAdd);
+    onSelectionChange([...preserved, ...toAdd]);
   };
 
   const handleClear = () => {

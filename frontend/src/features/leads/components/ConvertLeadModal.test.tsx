@@ -2,10 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderWithProviders, screen, fireEvent, waitFor } from '../../../test-utils/renderWithProviders';
 import { ConvertLeadModal } from './ConvertLeadModal';
 
-vi.mock('../../../hooks/useOpportunities', () => ({
-  usePipelineStages: () => ({ data: null, isLoading: false }),
-}));
-
 const onClose = vi.fn();
 const onConvert = vi.fn();
 
