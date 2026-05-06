@@ -124,7 +124,12 @@ class GmailSyncWorker:
 
                 async def _fetch_one(msg_id: str) -> None:
                     try:
-                        await _process_message(msg_id, connection, client, db)
+                        # Backfill is contact-scoped: only persist messages that
+                        # link to a known contact (see _process_message docstring).
+                        await _process_message(
+                            msg_id, connection, client, db,
+                            require_contact_link=True,
+                        )
                     except GmailAuthError:
                         raise
                     except IntegrityError:
@@ -251,7 +256,17 @@ async def _process_message(
     connection: GmailConnection,
     client: GmailClient,
     db: AsyncSession,
+    *,
+    require_contact_link: bool = False,
 ) -> None:
+    """Fetch + persist a single Gmail message.
+
+    ``require_contact_link=True`` (used by backfill) drops messages whose
+    addresses don't map to any existing contact AND whose thread has no
+    prior linked row. Forward sync passes False so it keeps ingesting
+    everything — contacts may be created later and a re-resolver pass
+    can backfill the link.
+    """
     msg = await client.get_message(msg_id)
     rfc_message_id = msg["message_id"]
 
@@ -262,9 +277,9 @@ async def _process_message(
     received_at: datetime = msg["date"] or datetime.now(UTC)
 
     if from_addr.lower() == connection.email.lower():
-        await _store_sent(msg, connection, db, received_at)
+        await _store_sent(msg, connection, db, received_at, require_contact_link=require_contact_link)
     else:
-        await _store_inbound(msg, connection, db, received_at)
+        await _store_inbound(msg, connection, db, received_at, require_contact_link=require_contact_link)
 
 
 async def _resolve_entity_from_thread(
@@ -319,6 +334,8 @@ async def _store_sent(
     connection: GmailConnection,
     db: AsyncSession,
     received_at: datetime,
+    *,
+    require_contact_link: bool = False,
 ) -> None:
     """Insert an EmailQueue row for an email sent from the user's phone/other client."""
     from src.email.models import EmailQueue
@@ -326,12 +343,20 @@ async def _store_sent(
     to_addr = msg["to"]
     recipients = _collect_recipients(msg)
 
-    entity_type, entity_id = await _resolve_contact_by_addresses(recipients, db)
+    entity_type, entity_id = await _resolve_contact_by_addresses(
+        recipients, db, exclude_emails=[connection.email]
+    )
 
     if entity_id is None:
         entity_type, entity_id = await _resolve_entity_from_thread(
             msg.get("thread_id"), connection, db
         )
+
+    if require_contact_link and entity_id is None:
+        # Backfill mode: don't store messages that don't link to any
+        # known contact (avoids polluting the email-log with bulk
+        # internal mail, calendar invites, newsletters, etc.).
+        return
 
     row = EmailQueue(
         status="sent",
@@ -359,6 +384,8 @@ async def _store_inbound(
     connection: GmailConnection,
     db: AsyncSession,
     received_at: datetime,
+    *,
+    require_contact_link: bool = False,
 ) -> None:
     """Insert an InboundEmail row for a message received by this account."""
     from src.email.models import InboundEmail
@@ -366,12 +393,18 @@ async def _store_inbound(
     from_addr = msg["from"]
     recipients = _collect_recipients(msg)
 
-    entity_type, entity_id = await _resolve_contact_by_addresses(recipients, db)
+    entity_type, entity_id = await _resolve_contact_by_addresses(
+        recipients, db, exclude_emails=[connection.email]
+    )
 
     if entity_id is None:
         entity_type, entity_id = await _resolve_entity_from_thread(
             msg.get("thread_id"), connection, db
         )
+
+    if require_contact_link and entity_id is None:
+        # Backfill mode: skip — see _store_sent above.
+        return
 
     # resend_email_id is required by the model's unique constraint; use Gmail message id
     row = InboundEmail(
@@ -426,7 +459,10 @@ def _join_recipients(addrs: list[str]) -> str:
 
 
 async def _resolve_contact_by_addresses(
-    addresses: list[str], db: AsyncSession
+    addresses: list[str],
+    db: AsyncSession,
+    *,
+    exclude_emails: list[str] | None = None,
 ) -> tuple[str | None, int | None]:
     """Return ('contacts', id) for the first contact matching any of `addresses`.
 
@@ -434,10 +470,21 @@ async def _resolve_contact_by_addresses(
     position 2+ of the To: header still links the row to that contact
     instead of leaving entity_id NULL.
 
+    ``exclude_emails`` is the connection-owner's own mailbox set — without
+    it, any inbound to Giancarlo where no sender card exists fell through
+    to ``accounting@linkcreativeco.com`` in CC and matched his OWN contact
+    card (id=1884), producing a polluted self-link. Filter those out so
+    the matcher only considers genuine third-party addresses.
+
     Delegates to `find_contact_id_by_any_email` which checks both the primary
     email column AND `contact_email_aliases`, preserves caller-supplied
     priority ordering (from > to-list > cc-list > bcc-list), and skips
     soft-deleted contacts.
     """
     from src.contacts.alias_match import find_contact_id_by_any_email
+
+    if exclude_emails:
+        excluded = {e.lower() for e in exclude_emails if e}
+        addresses = [a for a in addresses if a.lower() not in excluded]
+
     return await find_contact_id_by_any_email(addresses, db)
