@@ -28,6 +28,7 @@ import {
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { showSuccess, showError } from '../../utils/toast';
+import { extractApiErrorDetail } from '../../utils/errors';
 import type { QuoteUpdate, QuoteLineItemCreate, ProductBundle } from '../../types';
 
 function QuoteDetailPage() {
@@ -90,8 +91,8 @@ function QuoteDetailPage() {
     try {
       await sendQuoteMutation.mutateAsync({ quoteId: quote.id });
       showSuccess('Quote email sent');
-    } catch {
-      showError('Failed to send quote email');
+    } catch (err) {
+      showError(extractApiErrorDetail(err) ?? 'Failed to send quote email');
     }
   };
 
@@ -204,6 +205,7 @@ function QuoteDetailPage() {
 
   const isDraft = quote.status === 'draft';
   const canSend = ['draft', 'sent', 'viewed'].includes(quote.status ?? '');
+  const hasContactEmail = Boolean(quote.contact?.email);
   const sendLabel = isDraft ? 'Send Quote' : 'Resend Quote';
   const canAcceptReject = quote.status === 'sent' || quote.status === 'viewed';
 
@@ -250,7 +252,12 @@ function QuoteDetailPage() {
             <Button
               onClick={handleSend}
               leftIcon={<PaperAirplaneIcon className="h-4 w-4" />}
-              disabled={sendQuoteMutation.isPending}
+              disabled={sendQuoteMutation.isPending || !hasContactEmail}
+              title={
+                hasContactEmail
+                  ? undefined
+                  : 'The linked contact has no email on file — add one before sending'
+              }
               aria-label="Send quote email"
             >
               {sendQuoteMutation.isPending ? 'Sending...' : sendLabel}

@@ -31,12 +31,24 @@ class UserBrief(BaseModel):
 
 
 class ContactBrief(BaseModel):
-    """Brief contact representation for related entity responses."""
+    """Brief contact representation for related entity responses.
+
+    Deliberately omits email so this can be embedded in unauthenticated
+    public-token responses (public quote/proposal pages) without leaking
+    the recipient's email to anyone holding the URL.
+    """
     id: int
     full_name: str
 
     class Config:
         from_attributes = True
+
+
+class ContactBriefWithEmail(ContactBrief):
+    """ContactBrief plus email — for authenticated surfaces that need to
+    drive Send-button gating client-side (e.g. proposal/quote detail).
+    Never embed in a public-token response."""
+    email: str | None = None
 
 
 class CompanyBrief(BaseModel):

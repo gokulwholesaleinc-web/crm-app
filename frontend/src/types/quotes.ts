@@ -2,7 +2,11 @@
  * Quote Types
  */
 
-import type { PaginatedResponse, ContactBrief, CompanyBrief } from './common';
+import type {
+  PaginatedResponse,
+  ContactBriefWithEmail,
+  CompanyBrief,
+} from './common';
 
 export interface QuoteLineItem {
   id: number;
@@ -81,7 +85,7 @@ export interface Quote extends QuoteBase {
   created_at: string;
   updated_at: string;
   line_items: QuoteLineItem[];
-  contact?: ContactBrief | null;
+  contact?: ContactBriefWithEmail | null;
   company?: CompanyBrief | null;
   opportunity?: { id: number; name: string } | null;
 }

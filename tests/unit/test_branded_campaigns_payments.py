@@ -387,12 +387,15 @@ class TestPaymentReceiptEmail:
         assert "Receipt Customer" in email.body
 
     @pytest.mark.asyncio
-    async def test_send_payment_receipt_no_customer_email_is_noop(
+    async def test_send_payment_receipt_no_customer_email_raises(
         self,
         db_session: AsyncSession,
         test_user: User,
     ):
-        """send_payment_receipt does nothing when customer has no email."""
+        """send_payment_receipt raises when the customer has no email so the
+        staff "Resend Receipt" button surfaces a specific error instead of
+        silently doing nothing. Webhook callers swallow the ValueError —
+        see _handle_payment_succeeded etc."""
         customer = StripeCustomer(
             stripe_customer_id="cus_no_email",
             email=None,
@@ -415,14 +418,24 @@ class TestPaymentReceiptEmail:
         await db_session.refresh(payment)
 
         service = PaymentService(db_session)
-        await service.send_payment_receipt(payment.id)
+        with pytest.raises(ValueError, match="no email"):
+            await service.send_payment_receipt(payment.id)
 
-        # No email should be queued
         from src.email.models import EmailQueue
         result = await db_session.execute(
             select(EmailQueue).where(EmailQueue.entity_id == payment.id)
         )
         assert result.scalar_one_or_none() is None
+
+    @pytest.mark.asyncio
+    async def test_send_payment_receipt_missing_payment_raises(
+        self,
+        db_session: AsyncSession,
+    ):
+        """A non-existent payment id raises rather than silently no-op'ing."""
+        service = PaymentService(db_session)
+        with pytest.raises(ValueError, match="not found"):
+            await service.send_payment_receipt(99999999)
 
 
 class TestPaymentInvoiceResend:

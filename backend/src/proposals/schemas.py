@@ -135,6 +135,7 @@ class ProposalRejectRequest(BaseModel):
 from src.core.schemas import (  # noqa: E402
     CompanyBrief,
     ContactBrief,
+    ContactBriefWithEmail,
     OpportunityBrief,
     QuoteBrief,
     UserBrief,
@@ -180,7 +181,7 @@ class ProposalResponse(ProposalBase):
     billing_error: str | None = None
     created_at: datetime
     updated_at: datetime
-    contact: ContactBrief | None = None
+    contact: ContactBriefWithEmail | None = None
     company: CompanyBrief | None = None
     opportunity: OpportunityBrief | None = None
     quote: QuoteBrief | None = None

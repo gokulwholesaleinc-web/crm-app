@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import type { AxiosError } from 'axios';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeftIcon, DocumentArrowDownIcon, EnvelopeIcon, ClipboardDocumentIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
 import { EntityLink, StatusBadge } from '../../components/ui';
@@ -8,6 +7,7 @@ import { formatCurrency, formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { apiClient } from '../../api/client';
 import { showSuccess, showError } from '../../utils/toast';
+import { extractApiErrorDetail } from '../../utils/errors';
 import type { StripeCustomerBrief } from '../../types';
 import { StripeTestModeBanner } from '../../components/banners/StripeTestModeBanner';
 
@@ -56,7 +56,9 @@ function PaymentDetailPage() {
       if (revokeTimerRef.current) clearTimeout(revokeTimerRef.current);
       revokeTimerRef.current = setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (err) {
-      const status = (err as AxiosError | undefined)?.response?.status;
+      // The axios response interceptor flattens errors into ApiError
+      // ({detail, status_code}); read status_code directly.
+      const status = (err as { status_code?: number } | undefined)?.status_code;
       console.error('[PaymentDetail] download invoice failed', err);
       if (status === 401 || status === 403) {
         showError('Session expired. Please sign in again.');
@@ -85,8 +87,12 @@ function PaymentDetailPage() {
     try {
       await apiClient.post(`/api/payments/${payment.id}/send-receipt`);
       setReceiptStatus('Receipt email sent successfully');
-    } catch {
-      setReceiptStatus('Failed to send receipt email');
+    } catch (err) {
+      // The axios response interceptor flattens errors into ApiError
+      // ({detail, status_code}) and rejects with that — there's no
+      // `err.response` at the call site. Reading it gives undefined and
+      // the user sees a generic "failed" message.
+      setReceiptStatus(extractApiErrorDetail(err) || 'Failed to send receipt email');
     } finally {
       setSendingReceipt(false);
     }
@@ -100,8 +106,7 @@ function PaymentDetailPage() {
       await apiClient.post(`/api/payments/${payment.id}/send-invoice`);
       setInvoiceStatus('Invoice email sent successfully');
     } catch (err) {
-      const detail = (err as AxiosError<{ detail?: string }> | undefined)?.response?.data?.detail;
-      setInvoiceStatus(detail || 'Failed to send invoice email');
+      setInvoiceStatus(extractApiErrorDetail(err) || 'Failed to send invoice email');
     } finally {
       setSendingInvoice(false);
     }

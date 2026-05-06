@@ -109,7 +109,12 @@ class QuoteUpdate(BaseModel):
     designated_signer_email: str | None = None
 
 
-from src.core.schemas import CompanyBrief, ContactBrief, OpportunityBrief  # noqa: E402
+from src.core.schemas import (  # noqa: E402
+    CompanyBrief,
+    ContactBrief,
+    ContactBriefWithEmail,
+    OpportunityBrief,
+)
 
 
 class QuoteResponse(QuoteBase):
@@ -130,7 +135,7 @@ class QuoteResponse(QuoteBase):
     created_at: datetime
     updated_at: datetime
     line_items: list[QuoteLineItemResponse] = []
-    contact: ContactBrief | None = None
+    contact: ContactBriefWithEmail | None = None
     company: CompanyBrief | None = None
     opportunity: OpportunityBrief | None = None
 
