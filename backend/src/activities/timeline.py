@@ -189,10 +189,12 @@ class ActivityTimeline:
         ]
         if viewer_user_id is not None:
             from src.email.participants import get_user_connection_emails
-            from src.email.service import _outbound_visibility_clause
+            from src.email.service import _dialect_name, _outbound_visibility_clause
             viewer_emails = await get_user_connection_emails(self.db, viewer_user_id)
             email_filters.append(
-                _outbound_visibility_clause(viewer_user_id, viewer_emails)
+                _outbound_visibility_clause(
+                    viewer_user_id, viewer_emails, _dialect_name(self.db)
+                )
             )
         email_result = await self.db.execute(
             select(EmailQueue)

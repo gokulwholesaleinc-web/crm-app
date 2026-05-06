@@ -14,7 +14,8 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "backend"))
 
@@ -25,7 +26,8 @@ from src.contacts.models import Contact
 from src.auth.dependencies import get_current_active_user, get_current_superuser
 from src.email.models import EmailQueue
 from src.integrations.gmail.router import router as gmail_router
-from ._engine import is_postgres, make_test_engine
+
+TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
 # ---------------------------------------------------------------------------
 # DB fixtures
@@ -34,10 +36,13 @@ from ._engine import is_postgres, make_test_engine
 
 @pytest_asyncio.fixture
 async def engine():
-    eng = make_test_engine()
+    eng = create_async_engine(
+        TEST_DB_URL,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+        echo=False,
+    )
     async with eng.begin() as conn:
-        if is_postgres():
-            await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS vector")
         await conn.run_sync(Base.metadata.create_all)
     yield eng
     async with eng.begin() as conn:

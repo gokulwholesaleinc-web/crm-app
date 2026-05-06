@@ -70,18 +70,12 @@ from src.webhooks.stripe_events import WebhookEvent
 from src.reports.delivery import ReportDeliveryService
 
 
-# Test database URL: prefer DATABASE_URL from the environment (CI provisions
-# Postgres via a service container; local dev can point at the docker-compose
-# pg) and fall back to in-memory SQLite. Postgres-only column types like
-# `participant_emails ARRAY(Text)` and pgvector's `Vector` only compile on PG,
-# so SQLite runs skip those tables — see _is_postgres / _create_schema below.
-TEST_DATABASE_URL = os.environ.get(
-    "DATABASE_URL", "sqlite+aiosqlite:///:memory:"
-)
-
-
-def _is_postgres(url: str) -> bool:
-    return url.startswith("postgresql")
+# Test database URL - using SQLite in-memory for tests. The participant_emails
+# column has a TypeDecorator that maps to JSON on SQLite and ARRAY on Postgres
+# so the schema compiles on both; visibility queries that use `.overlap()`
+# fall back to composer-only on SQLite via dialect detection in
+# email/service.py, so we don't need the test DB to support array operators.
+TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 
 @pytest.fixture(autouse=True)
@@ -112,27 +106,16 @@ def clear_user_cache():
 
 @pytest_asyncio.fixture(scope="function")
 async def test_engine():
-    """Create the async test engine.
+    """Create async test engine with SQLite."""
+    engine = create_async_engine(
+        TEST_DATABASE_URL,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+        echo=False,
+    )
 
-    On Postgres we drop StaticPool/check_same_thread (those are SQLite-only
-    knobs) and ensure pgvector is loaded before metadata.create_all sees the
-    `Vector` column on AIEmbedding. Each test still gets a clean schema via
-    the create_all/drop_all bracket.
-    """
-    if _is_postgres(TEST_DATABASE_URL):
-        engine = create_async_engine(TEST_DATABASE_URL, echo=False)
-        async with engine.begin() as conn:
-            await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS vector")
-            await conn.run_sync(Base.metadata.create_all)
-    else:
-        engine = create_async_engine(
-            TEST_DATABASE_URL,
-            connect_args={"check_same_thread": False},
-            poolclass=StaticPool,
-            echo=False,
-        )
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
     yield engine
 

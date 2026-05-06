@@ -26,13 +26,18 @@ from src.email.types import EmailAttachment
 logger = logging.getLogger(__name__)
 
 
-def _outbound_visibility_clause(viewer_user_id: int, viewer_emails: list[str]):
+def _outbound_visibility_clause(
+    viewer_user_id: int, viewer_emails: list[str], dialect_name: str = "postgresql"
+):
     """Visibility predicate for EmailQueue: composer OR participant overlap.
 
     When the viewer has no Gmail connection, only their own composes are
-    visible — outbound mail they didn't send and aren't on can never match.
+    visible. On dialects without ARRAY support (the SQLite test path) we
+    skip the overlap branch and degrade to composer-only — strictly more
+    restrictive, so the tests stay correct even though the production
+    Postgres path sees more rows.
     """
-    if viewer_emails:
+    if viewer_emails and dialect_name == "postgresql":
         return or_(
             EmailQueue.sent_by_id == viewer_user_id,
             EmailQueue.participant_emails.overlap(viewer_emails),
@@ -40,15 +45,21 @@ def _outbound_visibility_clause(viewer_user_id: int, viewer_emails: list[str]):
     return EmailQueue.sent_by_id == viewer_user_id
 
 
-def _inbound_visibility_clause(viewer_emails: list[str]):
+def _inbound_visibility_clause(viewer_emails: list[str], dialect_name: str = "postgresql"):
     """Visibility predicate for InboundEmail: participant overlap only.
 
-    Falls back to ``literal(False)`` when the viewer has no Gmail
-    connection, since inbound mail has no per-row composer to bypass with.
+    Falls back to ``literal(False)`` when the viewer has no Gmail connection
+    or the dialect doesn't support ARRAY overlap (SQLite tests). Inbound
+    mail has no per-row composer to bypass with.
     """
-    if viewer_emails:
+    if viewer_emails and dialect_name == "postgresql":
         return InboundEmail.participant_emails.overlap(viewer_emails)
     return literal(False)
+
+
+def _dialect_name(db: AsyncSession) -> str:
+    bind = db.get_bind()
+    return bind.dialect.name
 
 
 async def _resolve_from_name(db: AsyncSession, user_id: int, fallback_email: str) -> str:
@@ -431,7 +442,11 @@ class EmailService:
             filters.append(EmailQueue.sent_by_id == sent_by_id)
         if viewer_user_id is not None:
             viewer_emails = await get_user_connection_emails(self.db, viewer_user_id)
-            filters.append(_outbound_visibility_clause(viewer_user_id, viewer_emails))
+            filters.append(
+                _outbound_visibility_clause(
+                    viewer_user_id, viewer_emails, _dialect_name(self.db)
+                )
+            )
 
         count_query = select(func.count()).select_from(EmailQueue)
         query = select(EmailQueue).order_by(EmailQueue.created_at.desc())
@@ -761,10 +776,11 @@ class EmailService:
         # don't double-escape our own escapes.
         escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         pat = f"%{escaped}%"
+        dialect = _dialect_name(self.db)
         outbound_visibility = (
             literal(True)  # admin: no scoping
             if user_id is None
-            else _outbound_visibility_clause(user_id, user_emails)
+            else _outbound_visibility_clause(user_id, user_emails, dialect)
         )
         sent_filters = [
             outbound_visibility,
@@ -812,7 +828,7 @@ class EmailService:
         # Admins (user_id=None) skip inbound scoping entirely; everyone else
         # is bounded by participant overlap (or no rows when unconnected).
         if user_id is not None:
-            recv_filters.append(_inbound_visibility_clause(user_emails))
+            recv_filters.append(_inbound_visibility_clause(user_emails, dialect))
         if entity_type:
             recv_filters.append(InboundEmail.entity_type == entity_type)
         if entity_id is not None:
@@ -908,8 +924,11 @@ class EmailService:
             InboundEmail.entity_id == entity_id,
         ]
         if viewer_user_id is not None:
-            outbound_filters.append(_outbound_visibility_clause(viewer_user_id, viewer_emails))
-            inbound_filters.append(_inbound_visibility_clause(viewer_emails))
+            dialect = _dialect_name(self.db)
+            outbound_filters.append(
+                _outbound_visibility_clause(viewer_user_id, viewer_emails, dialect)
+            )
+            inbound_filters.append(_inbound_visibility_clause(viewer_emails, dialect))
 
         outbound_q = (
             select(

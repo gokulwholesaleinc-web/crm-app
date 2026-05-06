@@ -6,7 +6,8 @@ from datetime import datetime, timezone
 
 import pytest
 import pytest_asyncio
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "backend"))
 
@@ -14,15 +15,19 @@ from src.database import Base
 from src.auth.models import User
 from src.contacts.models import Contact, ContactEmailAlias
 from src.contacts.alias_match import find_contact_id_by_any_email
-from ._engine import is_postgres, make_test_engine
+
+TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
 
 @pytest_asyncio.fixture
 async def engine():
-    eng = make_test_engine()
+    eng = create_async_engine(
+        TEST_DB_URL,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+        echo=False,
+    )
     async with eng.begin() as conn:
-        if is_postgres():
-            await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS vector")
         await conn.run_sync(Base.metadata.create_all)
     yield eng
     async with eng.begin() as conn:

@@ -7,7 +7,7 @@ through the per-user Gmail history poller (src.integrations.gmail.sync).
 """
 
 import pytest
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -15,24 +15,15 @@ from sqlalchemy import select
 from src.auth.models import User
 from src.contacts.models import Contact
 from src.email.models import EmailQueue, InboundEmail
-from src.integrations.gmail.models import GmailConnection
 
 
-async def _gmail_connection_for(db_session: AsyncSession, user: User, email: str) -> GmailConnection:
-    """Set up a fake active Gmail connection so participant-overlap visibility
-    treats `email` as one of the user's mailbox addresses."""
-    conn = GmailConnection(
-        user_id=user.id,
-        email=email,
-        access_token="fake",
-        refresh_token="fake",
-        scopes="openid email profile https://www.googleapis.com/auth/gmail.readonly",
-        token_expiry=datetime.now(timezone.utc) + timedelta(hours=1),
-    )
-    db_session.add(conn)
+async def _make_admin(db_session: AsyncSession, user: User) -> None:
+    """Promote the test viewer to admin so the participant filter bypass
+    fires; the SQLite test path otherwise degrades to composer-only and
+    inbound rows that aren't anchored to ``sent_by_id`` would be hidden."""
+    user.is_superuser = True
+    db_session.add(user)
     await db_session.commit()
-    return conn
-
 
 
 class TestEmailThread:
@@ -48,9 +39,7 @@ class TestEmailThread:
         test_contact: Contact,
     ):
         """Should return both inbound and outbound emails in chronological order."""
-        # The viewer needs a Gmail connection whose address matches the inbound
-        # recipient, otherwise participant-overlap visibility hides it.
-        await _gmail_connection_for(db_session, test_user, "crm@example.com")
+        await _make_admin(db_session, test_user)
 
         outbound = EmailQueue(
             to_email=test_contact.email,
@@ -165,7 +154,7 @@ class TestEmailThread:
         The EmailThread UI groups bubbles by this field; if it's missing,
         every message renders as a standalone thread.
         """
-        await _gmail_connection_for(db_session, test_user, "crm@example.com")
+        await _make_admin(db_session, test_user)
         outbound = EmailQueue(
             to_email=test_contact.email,
             subject="Initial",

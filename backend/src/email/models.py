@@ -17,8 +17,30 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.types import TypeDecorator
 
 from src.database import Base
+
+
+class _ParticipantEmails(TypeDecorator):
+    """TEXT[] on Postgres, JSON-array on SQLite (the pytest default).
+
+    Production runs on Postgres where ``ARRAY(Text)`` plus a GIN index gives
+    O(log n) ``&&`` overlap lookups. The unit-test suite runs against
+    in-memory SQLite, which can't compile ARRAY at all — so the column
+    degrades to JSON there. Visibility queries that use ``.overlap()`` only
+    fire on Postgres (see ``email/service.py::_*_visibility_clause``); the
+    SQLite path falls back to composer-only / ``literal(False)`` so the
+    column type never has to support array operators outside Postgres.
+    """
+
+    impl = JSON
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(ARRAY(Text))
+        return dialect.type_descriptor(JSON())
 
 
 class EmailQueue(Base):
@@ -93,7 +115,7 @@ class EmailQueue(Base):
     # time. Used to scope visibility per-user via overlap with the viewer's
     # gmail_connections.email set.
     participant_emails: Mapped[list[str]] = mapped_column(
-        ARRAY(Text), nullable=False, server_default="{}", default=list
+        _ParticipantEmails(), nullable=False, server_default="{}", default=list
     )
 
     __table_args__ = (
@@ -158,7 +180,7 @@ class InboundEmail(Base):
     # Lowercased + deduped bare addresses pulled from From/To/CC/BCC at
     # ingest time. See EmailQueue.participant_emails.
     participant_emails: Mapped[list[str]] = mapped_column(
-        ARRAY(Text), nullable=False, server_default="{}", default=list
+        _ParticipantEmails(), nullable=False, server_default="{}", default=list
     )
 
     __table_args__ = (
