@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.payments.exceptions import NoRecipientEmailError
@@ -632,8 +633,14 @@ class WebhookProcessor:
             async with self.db.begin_nested():
                 self.db.add(renewal_payment)
                 await self.db.flush()
-        except Exception as exc:
-            logger.warning(
+        except IntegrityError as exc:
+            # Concurrent webhook delivery raced us to the unique constraint
+            # on Payment.stripe_invoice_id — the other handler already
+            # recorded this renewal, so silently no-op. This is the
+            # ONLY swallowable case here; any other DB error must
+            # propagate so Stripe retries instead of silently losing a
+            # paid renewal that breaks MRR/ARR reporting.
+            logger.info(
                 "invoice.paid renewal insert race for %s: %s", invoice_id, exc
             )
 

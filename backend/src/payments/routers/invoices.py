@@ -3,8 +3,10 @@
 import logging
 
 from fastapi import APIRouter, HTTPException
+from sqlalchemy import select
 
 from src.core.constants import HTTPStatus
+from src.core.opportunity_guards import assert_opportunity_active
 from src.core.router_utils import CurrentUser, DBSession
 from src.payments._router_helpers import (
     _verify_quote_access,
@@ -39,8 +41,21 @@ async def create_and_send_invoice(
     await _verify_stripe_customer_access(db, request_data.customer_id, current_user)
     await _verify_quote_access(db, request_data.quote_id, current_user)
 
+    # The service inherits quote.opportunity_id onto the spawned invoice
+    # so a Closed-Lost opp could otherwise still receive a billable
+    # invoice via the quote-driven path. Mirror the create-checkout guard.
+    quote_opportunity_id: int | None = None
+    if request_data.quote_id:
+        from src.quotes.models import Quote
+        result = await db.execute(select(Quote).where(Quote.id == request_data.quote_id))
+        quote = result.scalar_one_or_none()
+        if quote:
+            quote_opportunity_id = quote.opportunity_id
+
     service = PaymentService(db)
     try:
+        if quote_opportunity_id is not None:
+            await assert_opportunity_active(db, quote_opportunity_id, "payment")
         result = await service.create_and_send_invoice(
             customer_id=request_data.customer_id,
             amount=float(request_data.amount),

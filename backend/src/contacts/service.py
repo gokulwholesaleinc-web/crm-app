@@ -93,9 +93,13 @@ class ContactService(
 
         contact = await super().update(instance, data, user_id)
 
+        # Cascade whenever the owner actually changed. The previous guard
+        # required both old and new to be non-None, which silently skipped
+        # the owner-cleared case (PATCH owner_id=null) — leaving linked
+        # proposals / quotes / opportunities / payments still owned by
+        # the prior rep while the contact card showed "no owner".
         if (
-            new_owner_id is not None
-            and old_owner_id is not None
+            old_owner_id is not None
             and new_owner_id != old_owner_id
         ):
             await self._cascade_owner_change(contact.id, old_owner_id, new_owner_id)
@@ -106,7 +110,7 @@ class ContactService(
         self,
         contact_id: int,
         old_owner_id: int,
-        new_owner_id: int,
+        new_owner_id: int | None,
     ) -> None:
         """Re-assign linked Proposal/Quote/Opportunity/Payment rows whose
         owner matches ``old_owner_id``. Runs inside the caller's transaction.

@@ -240,8 +240,17 @@ async def get_lead_kanban(
     sales_rep is ignored and collapsed back to the caller.
     """
     # effective_owner_id() honors the scope: admin/manager keep the
-    # requested owner_id; sales_rep/viewer gets their own id regardless.
-    resolved_owner_id = effective_owner_id(data_scope, owner_id) or current_user.id
+    # requested owner_id (None = "everyone"); sales_rep/viewer gets
+    # their own id regardless. Default to the caller's own pipeline
+    # ONLY for non-admins — admins viewing /pipeline expect to see
+    # every team member's leads, otherwise the kanban looks empty
+    # whenever leads belong to someone else (the "I'm admin and the
+    # board is empty even though I have 48 leads under another rep"
+    # scenario).
+    if data_scope.can_see_all():
+        resolved_owner_id = effective_owner_id(data_scope, owner_id)
+    else:
+        resolved_owner_id = effective_owner_id(data_scope, owner_id) or current_user.id
 
     # Get all active lead pipeline stages
     stages_result = await db.execute(

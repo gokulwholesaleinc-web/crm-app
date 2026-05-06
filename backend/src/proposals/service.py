@@ -15,6 +15,7 @@ from src.config import settings
 from src.core.base_service import BaseService, CRUDService, StatusTransitionMixin
 from src.core.constants import DEFAULT_PAGE_SIZE
 from src.core.filtering import build_token_search
+from src.core.opportunity_guards import assert_opportunity_active
 from src.core.url_safety import UnsafeUrlError, validate_public_url
 from src.email.branded_templates import TenantBrandingHelper, render_proposal_email
 from src.email.pdf_render import pdf_logo_allowed_hosts, render_html_to_pdf
@@ -83,30 +84,6 @@ def _resolve_billing(proposal: Proposal) -> dict | None:
         "interval_count": interval_count,
         "description": proposal.title,
     }
-
-
-async def _assert_opportunity_not_lost(db, opportunity_id: int, entity_label: str) -> None:
-    """Block creation of an entity attached to a Closed-Lost opportunity.
-
-    The user must move the opportunity back to an active stage before
-    spawning a new proposal/quote/payment against it — otherwise we
-    silently accumulate billable artifacts on a deal everyone treats as
-    dead.
-    """
-    from src.opportunities.models import Opportunity, PipelineStage
-
-    result = await db.execute(
-        select(PipelineStage.is_lost)
-        .join(Opportunity, Opportunity.pipeline_stage_id == PipelineStage.id)
-        .where(Opportunity.id == opportunity_id)
-    )
-    is_lost = result.scalar_one_or_none()
-    if is_lost is True:
-        raise ValueError(
-            f"Cannot create {entity_label} for an opportunity in a "
-            f"Closed-Lost stage. Move the opportunity back to an active "
-            f"stage first."
-        )
 
 
 def _designated_email_for(proposal: Proposal) -> str:
@@ -244,12 +221,19 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             raise ValueError(
                 "Proposal has been signed and is locked — clone it to make changes",
             )
+        # Mirror the create-path Closed-Lost guard: a PATCH that retargets
+        # the proposal at a Closed-Lost opportunity would otherwise
+        # silently bypass the create check.
+        update_fields = data.model_dump(exclude_unset=True)
+        new_opp = update_fields.get("opportunity_id")
+        if new_opp is not None and new_opp != instance.opportunity_id:
+            await assert_opportunity_active(self.db, new_opp, "proposal")
         return await super().update(instance, data, user_id)
 
     async def create(self, data: ProposalCreate, user_id: int) -> Proposal:
         """Create a new proposal with auto-generated number + public token."""
         if data.opportunity_id is not None:
-            await _assert_opportunity_not_lost(self.db, data.opportunity_id, "proposal")
+            await assert_opportunity_active(self.db, data.opportunity_id, "proposal")
 
         proposal_number = await self._generate_proposal_number()
 

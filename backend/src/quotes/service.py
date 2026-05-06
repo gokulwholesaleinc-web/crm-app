@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 from src.core.base_service import BaseService, CRUDService, StatusTransitionMixin
 from src.core.constants import DEFAULT_PAGE_SIZE
 from src.core.filtering import build_token_search
+from src.core.opportunity_guards import assert_opportunity_active
 from src.email.branded_templates import TenantBrandingHelper, render_quote_email
 from src.email.pdf_render import render_html_to_pdf
 from src.email.pdf_service import BrandedPDFGenerator
@@ -26,30 +27,6 @@ from src.quotes.schemas import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-async def _assert_opportunity_not_lost(db, opportunity_id: int, entity_label: str) -> None:
-    """Block creation of an entity attached to a Closed-Lost opportunity.
-
-    The user must move the opportunity back to an active stage before
-    spawning a new proposal/quote/payment against it — otherwise we
-    silently accumulate billable artifacts on a deal everyone treats as
-    dead.
-    """
-    from src.opportunities.models import Opportunity, PipelineStage
-
-    result = await db.execute(
-        select(PipelineStage.is_lost)
-        .join(Opportunity, Opportunity.pipeline_stage_id == PipelineStage.id)
-        .where(Opportunity.id == opportunity_id)
-    )
-    is_lost = result.scalar_one_or_none()
-    if is_lost is True:
-        raise ValueError(
-            f"Cannot create {entity_label} for an opportunity in a "
-            f"Closed-Lost stage. Move the opportunity back to an active "
-            f"stage first."
-        )
 
 
 def _designated_email_for(quote: Quote) -> str:
@@ -194,7 +171,7 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
     async def create(self, data: QuoteCreate, user_id: int) -> Quote:
         """Create a new quote with optional line items."""
         if data.opportunity_id is not None:
-            await _assert_opportunity_not_lost(self.db, data.opportunity_id, "quote")
+            await assert_opportunity_active(self.db, data.opportunity_id, "quote")
 
         quote_number = await self._generate_quote_number()
 
@@ -238,6 +215,14 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
         return quote
 
     async def update(self, instance: Quote, data: QuoteUpdate, user_id: int) -> Quote:
+        # Mirror the create-path Closed-Lost guard: a PATCH that retargets
+        # the quote at a Closed-Lost opportunity would otherwise silently
+        # bypass the create check.
+        update_fields = data.model_dump(exclude_unset=True)
+        new_opp = update_fields.get("opportunity_id")
+        if new_opp is not None and new_opp != instance.opportunity_id:
+            await assert_opportunity_active(self.db, new_opp, "quote")
+
         quote = await super().update(instance, data, user_id)
 
         # Recalculate totals if relevant fields changed

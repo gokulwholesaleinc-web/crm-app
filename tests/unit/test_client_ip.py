@@ -19,18 +19,7 @@ def _make_request(headers: dict | None = None, client_host: str | None = None):
 
 
 class TestGetClientIp:
-    def test_prefers_cf_connecting_ip(self):
-        req = _make_request(
-            headers={
-                "CF-Connecting-IP": "203.0.113.7",
-                "X-Forwarded-For": "1.1.1.1",
-                "X-Real-IP": "2.2.2.2",
-            },
-            client_host="10.0.0.1",
-        )
-        assert get_client_ip(req) == "203.0.113.7"
-
-    def test_falls_back_to_x_forwarded_for_first_hop(self):
+    def test_prefers_x_forwarded_for_first_hop(self):
         req = _make_request(
             headers={"X-Forwarded-For": "203.0.113.7, 198.51.100.1, 10.0.0.5"},
             client_host="10.0.0.1",
@@ -41,10 +30,6 @@ class TestGetClientIp:
         req = _make_request(headers={"X-Forwarded-For": "  203.0.113.7  ,  10.0.0.5  "})
         assert get_client_ip(req) == "203.0.113.7"
 
-    def test_x_real_ip_when_xff_absent(self):
-        req = _make_request(headers={"X-Real-IP": "203.0.113.9"}, client_host="10.0.0.1")
-        assert get_client_ip(req) == "203.0.113.9"
-
     def test_falls_back_to_request_client_host(self):
         req = _make_request(client_host="198.51.100.1")
         assert get_client_ip(req) == "198.51.100.1"
@@ -52,3 +37,21 @@ class TestGetClientIp:
     def test_returns_none_when_nothing_known(self):
         req = _make_request()
         assert get_client_ip(req) is None
+
+    def test_ignores_cf_connecting_ip(self):
+        # Spoof-prevention: we intentionally don't trust CF-Connecting-IP
+        # because nothing inside the app verifies traffic actually came
+        # through Cloudflare. If the deploy ever moves behind Cloudflare
+        # specifically, gate this header behind a TRUST_PROXY_HEADERS flag.
+        req = _make_request(
+            headers={"CF-Connecting-IP": "203.0.113.7"},
+            client_host="10.0.0.1",
+        )
+        assert get_client_ip(req) == "10.0.0.1"
+
+    def test_ignores_x_real_ip(self):
+        req = _make_request(
+            headers={"X-Real-IP": "203.0.113.9"},
+            client_host="10.0.0.1",
+        )
+        assert get_client_ip(req) == "10.0.0.1"
