@@ -402,13 +402,18 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
     RESEND_COOLDOWN_SECONDS = 60
 
     async def resend_payment_link(self, proposal: Proposal) -> dict:
-        """Re-emit the existing Stripe Invoice. Never creates a new one.
+        """Re-emit the proposal's payment link.
 
-        Acquires SELECT FOR UPDATE on the proposal row so two concurrent
-        clicks can't both call Invoice.send_invoice and double-email the
-        customer. Also enforces a 60s cooldown via ``invoice_sent_at``
-        so rapid sequential clicks don't flood the customer's inbox —
-        the field is bumped on every successful resend.
+        Two billing modes:
+        - Invoice flow: Stripe `Invoice.send_invoice` re-emails the same
+          invoice. Never creates a new one (open/draft are reusable).
+        - Checkout-session flow: open sessions are re-emailed as-is;
+          expired sessions are regenerated with a fresh idempotency key
+          and the new URL is emailed to the customer.
+
+        Acquires SELECT FOR UPDATE so concurrent clicks can't both spawn
+        a Stripe write. 60s cooldown via `invoice_sent_at` protects the
+        customer's inbox.
         """
         from src.payments.service import _get_stripe
 
@@ -441,46 +446,10 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             )
 
         if proposal.stripe_invoice_id:
-            try:
-                inv = stripe.Invoice.retrieve(proposal.stripe_invoice_id)
-            except Exception as exc:
-                raise ValueError(f"Failed to retrieve invoice: {exc}") from exc
+            return await self._resend_invoice(proposal, stripe)
 
-            inv_status = getattr(inv, "status", None)
-            if inv_status == "paid":
-                # DB drift — webhook missed. Reconcile rather than spawn.
-                proposal.status = "paid"
-                proposal.paid_at = datetime.now(UTC)
-                await self.db.flush()
-                return {
-                    "action": "already_paid_reconciled",
-                    "stripe_invoice_id": proposal.stripe_invoice_id,
-                    "hosted_invoice_url": getattr(inv, "hosted_invoice_url", None),
-                }
-            if inv_status in ("void", "uncollectible"):
-                raise ValueError(
-                    f"Invoice was {inv_status} — clone the proposal to bill again",
-                )
-            if inv_status not in ("open", "draft"):
-                raise ValueError(
-                    f"Cannot resend invoice in '{inv_status}' status",
-                )
-
-            try:
-                stripe.Invoice.send_invoice(proposal.stripe_invoice_id)
-            except Exception as exc:
-                raise ValueError(f"Stripe rejected resend: {exc}") from exc
-
-            # Bump the timestamp so the next resend starts the cooldown
-            # from now rather than the original spawn.
-            proposal.invoice_sent_at = datetime.now(UTC)
-            await self.db.flush()
-
-            return {
-                "action": "resent",
-                "stripe_invoice_id": proposal.stripe_invoice_id,
-                "hosted_invoice_url": getattr(inv, "hosted_invoice_url", None),
-            }
+        if proposal.stripe_checkout_session_id:
+            return await self._resend_checkout_session(proposal, stripe)
 
         if proposal.stripe_subscription_id:
             raise ValueError(
@@ -491,6 +460,183 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         raise ValueError(
             "No Stripe artifact on this proposal — accept it first to spawn billing",
         )
+
+    async def _resend_invoice(self, proposal: Proposal, stripe) -> dict:
+        try:
+            inv = stripe.Invoice.retrieve(proposal.stripe_invoice_id)
+        except Exception as exc:
+            raise ValueError(f"Failed to retrieve invoice: {exc}") from exc
+
+        inv_status = getattr(inv, "status", None)
+        if inv_status == "paid":
+            # DB drift — webhook missed. Reconcile rather than spawn.
+            proposal.status = "paid"
+            proposal.paid_at = datetime.now(UTC)
+            await self.db.flush()
+            return {
+                "action": "already_paid_reconciled",
+                "stripe_invoice_id": proposal.stripe_invoice_id,
+                "hosted_invoice_url": getattr(inv, "hosted_invoice_url", None),
+            }
+        if inv_status in ("void", "uncollectible"):
+            raise ValueError(
+                f"Invoice was {inv_status} — clone the proposal to bill again",
+            )
+        if inv_status not in ("open", "draft"):
+            raise ValueError(
+                f"Cannot resend invoice in '{inv_status}' status",
+            )
+
+        try:
+            stripe.Invoice.send_invoice(proposal.stripe_invoice_id)
+        except Exception as exc:
+            raise ValueError(f"Stripe rejected resend: {exc}") from exc
+
+        proposal.invoice_sent_at = datetime.now(UTC)
+        await self.db.flush()
+
+        return {
+            "action": "resent",
+            "stripe_invoice_id": proposal.stripe_invoice_id,
+            "hosted_invoice_url": getattr(inv, "hosted_invoice_url", None),
+        }
+
+    async def _resend_checkout_session(self, proposal: Proposal, stripe) -> dict:
+        """Resend or regenerate a subscription Checkout Session.
+
+        Stripe Checkout Sessions expire after 24h. If the existing session
+        is still ``open`` we just re-email its URL; if it's ``expired`` we
+        spawn a replacement using a fresh idempotency key derived from the
+        old session id (so a network retry within the regeneration call
+        lands on the same new session, but the next deliberate retry
+        creates yet another).
+        """
+        old_session_id = proposal.stripe_checkout_session_id
+        try:
+            sess = stripe.checkout.Session.retrieve(old_session_id)
+        except Exception as exc:
+            raise ValueError(f"Failed to retrieve checkout session: {exc}") from exc
+
+        sess_status = getattr(sess, "status", None)
+        if sess_status == "complete":
+            # Webhook missed. Reconcile rather than spawn.
+            proposal.status = "paid"
+            proposal.paid_at = datetime.now(UTC)
+            await self.db.flush()
+            return {
+                "action": "already_paid_reconciled",
+                "stripe_checkout_session_id": old_session_id,
+                "stripe_payment_url": proposal.stripe_payment_url,
+            }
+        if sess_status == "open":
+            await self._email_checkout_link(proposal, proposal.stripe_payment_url)
+            proposal.invoice_sent_at = datetime.now(UTC)
+            await self.db.flush()
+            return {
+                "action": "resent",
+                "stripe_checkout_session_id": old_session_id,
+                "stripe_payment_url": proposal.stripe_payment_url,
+            }
+        if sess_status != "expired":
+            raise ValueError(
+                f"Cannot resend checkout session in '{sess_status}' status",
+            )
+
+        billing = _resolve_billing(proposal)
+        if billing is None or billing["payment_type"] != "subscription":
+            raise ValueError(
+                "Proposal billing terms can no longer be resolved as a subscription; "
+                "edit the proposal pricing and use Retry Billing.",
+            )
+
+        base = settings.FRONTEND_BASE_URL.rstrip("/")
+        if not base:
+            raise ValueError(
+                "FRONTEND_BASE_URL is not configured; cannot build checkout return URL",
+            )
+        public_path = f"/proposals/public/{proposal.public_token}"
+
+        payments = PaymentService(self.db)
+        try:
+            result = await payments.create_subscription_checkout_for_proposal(
+                proposal_id=proposal.id,
+                contact_id=proposal.contact_id,
+                company_id=proposal.company_id,
+                amount=billing["amount"],
+                currency=billing["currency"],
+                description=billing["description"],
+                interval=billing["interval"],
+                interval_count=billing["interval_count"],
+                success_url=f"{base}{public_path}?paid=1",
+                cancel_url=f"{base}{public_path}",
+                idempotency_key=f"proposal_sub_{proposal.id}_after_{old_session_id}",
+            )
+        except ValueError:
+            raise
+        except Exception as exc:
+            raise ValueError(f"Failed to create new checkout session: {exc}") from exc
+
+        proposal.stripe_checkout_session_id = result["stripe_checkout_session_id"]
+        proposal.stripe_payment_url = result["stripe_payment_url"]
+        proposal.invoice_sent_at = datetime.now(UTC)
+        await self.db.flush()
+
+        await self._email_checkout_link(proposal, result["stripe_payment_url"])
+
+        return {
+            "action": "regenerated",
+            "stripe_checkout_session_id": result["stripe_checkout_session_id"],
+            "stripe_payment_url": result["stripe_payment_url"],
+        }
+
+    async def _email_checkout_link(self, proposal: Proposal, url: str | None) -> None:
+        """Send the customer a fresh email pointing at the checkout URL.
+
+        Routed through the proposal owner's Gmail OAuth connection when
+        present (same path as `send_signed_copy_to_client`). Failure is
+        logged but does not unwind the regeneration — the new URL is
+        already saved on the proposal and the public page surfaces it.
+        """
+        if not url:
+            return
+        recipient = (
+            (proposal.signer_email or proposal.designated_signer_email or "").strip()
+            or (proposal.contact.email if proposal.contact else "")
+        )
+        if not recipient:
+            logger.warning(
+                "Cannot email checkout link for proposal %s: no recipient address",
+                proposal.id,
+            )
+            return
+
+        branding = await self.get_branding_for_proposal(proposal)
+        company = escape(branding.get("company_name") or "Your provider")
+        title = escape(proposal.title)
+        body = (
+            f"<p>Hi,</p>"
+            f"<p>The previous payment link for <strong>{title}</strong> "
+            f"expired. Please use the link below to complete payment:</p>"
+            f'<p><a href="{escape(url)}">Pay now</a></p>'
+            f"<p>{company}</p>"
+        )
+
+        try:
+            email_service = EmailService(self.db)
+            await email_service.queue_email(
+                to_email=recipient,
+                subject=f"New payment link — {proposal.title}",
+                body=body,
+                sent_by_id=proposal.owner_id,
+                entity_type="proposals",
+                entity_id=proposal.id,
+            )
+        except Exception:
+            logger.warning(
+                "Failed to email new checkout link for proposal %s",
+                proposal.id,
+                exc_info=True,
+            )
 
     async def retry_billing(self, proposal: Proposal) -> Proposal:
         """Re-run billing spawn for a proposal that previously failed.

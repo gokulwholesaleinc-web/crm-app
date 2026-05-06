@@ -717,6 +717,158 @@ class TestRetryBilling:
         assert len(registry.created) == 1
 
 
+class _CheckoutResendStub:
+    """Stripe stub for the subscription/checkout resend path.
+
+    Tracks the one or two sessions returned by `Session.retrieve` (keyed
+    by id) and the args every `Session.create` was called with — so tests
+    can assert "the second call used a different idempotency key".
+    """
+
+    def __init__(self, sessions: dict[str, str]):
+        self._sessions = sessions
+        self.retrieved: list[str] = []
+        self.created: list[dict] = []
+        outer = self
+
+        class _Session:
+            @staticmethod
+            def retrieve(session_id):
+                outer.retrieved.append(session_id)
+                return SimpleNamespace(
+                    id=session_id,
+                    status=outer._sessions.get(session_id, "expired"),
+                )
+
+            @staticmethod
+            def create(**kwargs):
+                outer.created.append(kwargs)
+                new_id = f"cs_new_{len(outer.created)}"
+                return SimpleNamespace(
+                    id=new_id,
+                    url=f"https://checkout.stripe.test/{new_id}",
+                )
+
+        class _Customer:
+            @staticmethod
+            def create(**kwargs):
+                return SimpleNamespace(id="cus_stub_1")
+
+        self.checkout = SimpleNamespace(Session=_Session)
+        self.Customer = _Customer
+        self.api_key = "sk_test_stub"
+
+
+class TestResendCheckoutSession:
+    """`resend_payment_link` for proposals on the subscription Checkout flow.
+
+    Open sessions re-emit the existing URL via email; expired sessions
+    spawn a replacement with a fresh idempotency key derived from the
+    old session id."""
+
+    @pytest.fixture
+    async def sub_proposal(
+        self,
+        db_session: AsyncSession,
+        billing_proposal: Proposal,
+    ) -> Proposal:
+        billing_proposal.payment_type = "subscription"
+        billing_proposal.recurring_interval = "month"
+        billing_proposal.recurring_interval_count = 1
+        billing_proposal.status = "awaiting_payment"
+        billing_proposal.stripe_checkout_session_id = "cs_old_111"
+        billing_proposal.stripe_payment_url = "https://checkout.stripe.test/cs_old_111"
+        await db_session.commit()
+        await db_session.refresh(billing_proposal)
+        return billing_proposal
+
+    @pytest.mark.asyncio
+    async def test_expired_session_regenerates(
+        self, db_session: AsyncSession, sub_proposal: Proposal,
+    ):
+        stub = _CheckoutResendStub({"cs_old_111": "expired"})
+        with patch("src.payments.service._get_stripe", return_value=stub), \
+             patch("src.proposals.service.settings") as mock_settings:
+            mock_settings.FRONTEND_BASE_URL = "https://crm.test"
+            service = ProposalService(db_session)
+            result = await service.resend_payment_link(sub_proposal)
+
+        assert result["action"] == "regenerated"
+        assert result["stripe_checkout_session_id"] == "cs_new_1"
+        assert result["stripe_payment_url"].endswith("cs_new_1")
+        assert len(stub.created) == 1
+        assert stub.created[0]["idempotency_key"] == "proposal_sub_{}_after_cs_old_111".format(
+            sub_proposal.id
+        )
+
+        await db_session.refresh(sub_proposal)
+        assert sub_proposal.stripe_checkout_session_id == "cs_new_1"
+        assert sub_proposal.stripe_payment_url.endswith("cs_new_1")
+
+    @pytest.mark.asyncio
+    async def test_open_session_emails_existing_url(
+        self, db_session: AsyncSession, sub_proposal: Proposal,
+    ):
+        stub = _CheckoutResendStub({"cs_old_111": "open"})
+        with patch("src.payments.service._get_stripe", return_value=stub), \
+             patch("src.proposals.service.settings") as mock_settings:
+            mock_settings.FRONTEND_BASE_URL = "https://crm.test"
+            service = ProposalService(db_session)
+            result = await service.resend_payment_link(sub_proposal)
+
+        assert result["action"] == "resent"
+        assert result["stripe_checkout_session_id"] == "cs_old_111"
+        assert stub.created == []  # critical: no new session
+
+    @pytest.mark.asyncio
+    async def test_complete_session_reconciles_to_paid(
+        self, db_session: AsyncSession, sub_proposal: Proposal,
+    ):
+        stub = _CheckoutResendStub({"cs_old_111": "complete"})
+        with patch("src.payments.service._get_stripe", return_value=stub):
+            service = ProposalService(db_session)
+            result = await service.resend_payment_link(sub_proposal)
+
+        assert result["action"] == "already_paid_reconciled"
+        assert stub.created == []
+        await db_session.refresh(sub_proposal)
+        assert sub_proposal.status == "paid"
+        assert sub_proposal.paid_at is not None
+
+    @pytest.mark.asyncio
+    async def test_consecutive_regenerations_use_distinct_idempotency_keys(
+        self, db_session: AsyncSession, sub_proposal: Proposal,
+    ):
+        """Two deliberate regenerations (after waiting out the cooldown) must
+        not share an idempotency key — otherwise Stripe would return the
+        cached newly-created session and we'd never actually rotate."""
+        from datetime import timedelta
+
+        stub = _CheckoutResendStub({"cs_old_111": "expired"})
+        with patch("src.payments.service._get_stripe", return_value=stub), \
+             patch("src.proposals.service.settings") as mock_settings:
+            mock_settings.FRONTEND_BASE_URL = "https://crm.test"
+            service = ProposalService(db_session)
+            await service.resend_payment_link(sub_proposal)
+
+        await db_session.refresh(sub_proposal)
+        # Mark the new session expired and back-date the cooldown so a
+        # second resend is allowed.
+        stub._sessions[sub_proposal.stripe_checkout_session_id] = "expired"
+        sub_proposal.invoice_sent_at = datetime.now(UTC) - timedelta(seconds=120)
+        await db_session.commit()
+
+        with patch("src.payments.service._get_stripe", return_value=stub), \
+             patch("src.proposals.service.settings") as mock_settings:
+            mock_settings.FRONTEND_BASE_URL = "https://crm.test"
+            service = ProposalService(db_session)
+            await service.resend_payment_link(sub_proposal)
+
+        assert len(stub.created) == 2
+        keys = {call["idempotency_key"] for call in stub.created}
+        assert len(keys) == 2, "second regenerate must use a fresh idempotency key"
+
+
 class TestIdempotencyKeysAreDeterministic:
     """A uuid-randomized idempotency key defeats Stripe's dedup. Same logical
     operation (same proposal_id) must produce the same key so a Stripe-side

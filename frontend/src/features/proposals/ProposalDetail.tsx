@@ -108,6 +108,8 @@ function ProposalDetailPage() {
       const result = await resendPaymentLinkMutation.mutateAsync(proposal.id);
       if (result.action === 'already_paid_reconciled') {
         showSuccess('Already paid — status reconciled');
+      } else if (result.action === 'regenerated') {
+        showSuccess('Checkout session expired — new link generated and emailed');
       } else {
         showSuccess('Payment link re-emailed to the customer');
       }
@@ -203,7 +205,9 @@ function ProposalDetailPage() {
   const canAcceptReject = proposal.status === 'sent' || proposal.status === 'viewed';
   const canEdit = ['draft', 'sent', 'viewed'].includes(proposal.status ?? '');
   const canResendPaymentLink =
-    proposal.status === 'awaiting_payment' && !proposal.paid_at && Boolean(proposal.stripe_invoice_id);
+    proposal.status === 'awaiting_payment' &&
+    !proposal.paid_at &&
+    Boolean(proposal.stripe_invoice_id || proposal.stripe_checkout_session_id);
   // Retry billing covers the case where accept landed (signature recorded)
   // but the Stripe spawn failed. The backend refuses retry once any
   // Stripe artifact is present, so the button only matters when none are.
