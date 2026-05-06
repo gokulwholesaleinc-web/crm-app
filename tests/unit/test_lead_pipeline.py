@@ -378,6 +378,80 @@ class TestMoveLeadStage:
         assert data["pipeline_stage_id"] == won_stage.id
 
     @pytest.mark.asyncio
+    async def test_move_lead_to_won_with_existing_contact_email_reuses_contact(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        lead_pipeline_stages: list[PipelineStage],
+    ):
+        """Regression: lead.email already on a Contact must NOT 500 the
+        Won-stage drop. Auto-convert should reuse the existing contact
+        and link the lead to it; the unique index on contacts.email
+        previously raised IntegrityError.
+        """
+        from src.contacts.models import Contact
+        from src.opportunities.models import PipelineStage as OppStage
+
+        new_stage = lead_pipeline_stages[0]
+        won_stage = lead_pipeline_stages[3]
+
+        # First-pipeline opportunity stage is required by full_conversion's
+        # opp-stage lookup; without it the auto-convert silently skips and
+        # the regression doesn't fire.
+        opp_stage = OppStage(
+            name="Opp Discovery",
+            order=1,
+            color="#6366f1",
+            probability=20,
+            is_won=False,
+            is_lost=False,
+            is_active=True,
+            pipeline_type="opportunity",
+        )
+        db_session.add(opp_stage)
+
+        existing = Contact(
+            first_name="Existing",
+            last_name="Person",
+            email="dup@example.com",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(existing)
+        await db_session.commit()
+        await db_session.refresh(existing)
+
+        lead = Lead(
+            first_name="Lead",
+            last_name="Form",
+            email="dup@example.com",
+            status="new",
+            pipeline_stage_id=new_stage.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(lead)
+        await db_session.commit()
+        await db_session.refresh(lead)
+
+        response = await client.post(
+            f"/api/leads/{lead.id}/move",
+            headers=auth_headers,
+            json={"new_stage_id": won_stage.id},
+        )
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert data["status"] == "converted"
+
+        await db_session.refresh(lead)
+        assert lead.converted_contact_id == existing.id
+        # The opportunity should have been created and linked to the
+        # existing contact, not a fresh duplicate.
+        assert lead.converted_opportunity_id is not None
+
+    @pytest.mark.asyncio
     async def test_move_lead_to_lost_syncs_status(
         self,
         client: AsyncClient,
