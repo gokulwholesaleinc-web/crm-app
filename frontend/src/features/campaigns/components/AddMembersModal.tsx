@@ -24,17 +24,10 @@ export function AddMembersModal({
   isLoading = false,
 }: AddMembersModalProps) {
   const [memberType, setMemberType] = useState<MemberType>('contact');
-  const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<Array<string | number>>([]);
 
-  const { data: contactsData, isLoading: isLoadingContacts } = useContacts({
-    page_size: 100,
-    search: searchQuery || undefined,
-  });
-  const { data: leadsData, isLoading: isLoadingLeads } = useLeads({
-    page_size: 100,
-    search: searchQuery || undefined,
-  });
+  const { data: contactsData, isLoading: isLoadingContacts } = useContacts({ page_size: 100 });
+  const { data: leadsData, isLoading: isLoadingLeads } = useLeads({ page_size: 100 });
 
   const existingContactIds = useMemo(
     () => new Set(existingMemberIds.contacts),
@@ -65,7 +58,6 @@ export function AddMembersModal({
   const handleTypeChange = (type: MemberType) => {
     setMemberType(type);
     setSelectedIds([]);
-    setSearchQuery('');
   };
 
   const renderContact = (item: Contact, _isSelected: boolean) => {

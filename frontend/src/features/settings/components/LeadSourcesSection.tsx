@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { UseFormReturn } from 'react-hook-form';
 import {
   useLeadSources,
   useCreateLeadSource,
@@ -27,6 +28,37 @@ interface SourceFormData {
 }
 
 const SOURCE_DEFAULTS: SourceFormData = { name: '', description: '', is_active: true };
+
+function SourceFormFields({ register, formState: { errors }, watch, setValue }: UseFormReturn<SourceFormData>) {
+  const isActive = watch('is_active');
+  return (
+    <>
+      <FormInput
+        label="Source Name"
+        name="name"
+        required
+        register={register('name', { required: 'Source name is required' })}
+        error={errors.name?.message}
+        placeholder="e.g., Website, Referral, Trade Show"
+      />
+      <FormInput
+        label="Description"
+        name="description"
+        register={register('description')}
+        placeholder="Optional description"
+      />
+      <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+        <input
+          type="checkbox"
+          className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+          checked={isActive}
+          onChange={(e) => setValue('is_active', e.target.checked)}
+        />
+        Active — show this source when assigning leads
+      </label>
+    </>
+  );
+}
 
 export function LeadSourcesSection() {
   // active_only=false so admins can see and re-activate disabled sources here.
@@ -128,36 +160,7 @@ export function LeadSourcesSection() {
         isError={createMutation.isError}
         errorMessage="Failed to save lead source. Please try again."
       >
-        {({ register, formState: { errors }, watch, setValue }) => {
-          const isActive = watch('is_active');
-          return (
-            <>
-              <FormInput
-                label="Source Name"
-                name="name"
-                required
-                register={register('name', { required: 'Source name is required' })}
-                error={errors.name?.message}
-                placeholder="e.g., Website, Referral, Trade Show"
-              />
-              <FormInput
-                label="Description"
-                name="description"
-                register={register('description')}
-                placeholder="Optional description"
-              />
-              <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                <input
-                  type="checkbox"
-                  className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                  checked={isActive}
-                  onChange={(e) => setValue('is_active', e.target.checked)}
-                />
-                Active — show this source when assigning leads
-              </label>
-            </>
-          );
-        }}
+        {(form) => <SourceFormFields {...form} />}
       </FormModal>
 
       {editingSource && (
@@ -182,36 +185,7 @@ export function LeadSourcesSection() {
           isError={updateMutation.isError}
           errorMessage="Failed to save lead source. Please try again."
         >
-          {({ register, formState: { errors }, watch, setValue }) => {
-            const isActive = watch('is_active');
-            return (
-              <>
-                <FormInput
-                  label="Source Name"
-                  name="name"
-                  required
-                  register={register('name', { required: 'Source name is required' })}
-                  error={errors.name?.message}
-                  placeholder="e.g., Website, Referral, Trade Show"
-                />
-                <FormInput
-                  label="Description"
-                  name="description"
-                  register={register('description')}
-                  placeholder="Optional description"
-                />
-                <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                  <input
-                    type="checkbox"
-                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                    checked={isActive}
-                    onChange={(e) => setValue('is_active', e.target.checked)}
-                  />
-                  Active — show this source when assigning leads
-                </label>
-              </>
-            );
-          }}
+          {(form) => <SourceFormFields {...form} />}
         </FormModal>
       )}
 

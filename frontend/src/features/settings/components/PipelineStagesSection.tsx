@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { UseFormReturn } from 'react-hook-form';
 import {
   usePipelineStages,
   useCreatePipelineStage,
@@ -38,6 +39,92 @@ const STAGE_DEFAULTS: StageFormData = {
   is_lost: false,
   pipeline_type: 'opportunity',
 };
+
+function StageFormFields({ register, formState: { errors }, watch, setValue }: UseFormReturn<StageFormData>) {
+  const isWon = watch('is_won');
+  const isLost = watch('is_lost');
+  const pipelineType = watch('pipeline_type');
+  return (
+    <>
+      <FormInput
+        label="Stage Name"
+        name="name"
+        required
+        register={register('name', { required: 'Stage name is required' })}
+        error={errors.name?.message}
+        placeholder="e.g., Discovery..."
+      />
+      <FormInput
+        label="Description"
+        name="description"
+        register={register('description')}
+        placeholder="Optional description"
+      />
+      <div className="grid grid-cols-2 gap-4">
+        <FormInput
+          label="Color"
+          name="color"
+          type="color"
+          register={register('color')}
+        />
+        <FormInput
+          label="Win Probability (%)"
+          name="probability"
+          type="number"
+          register={register('probability', {
+            required: 'Probability is required',
+            min: { value: 0, message: 'Min 0' },
+            max: { value: 100, message: 'Max 100' },
+          })}
+          error={errors.probability?.message}
+        />
+      </div>
+      <div>
+        <label htmlFor="stage-pipeline-type" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          Pipeline Side
+        </label>
+        <select
+          id="stage-pipeline-type"
+          value={pipelineType}
+          onChange={(e) => setValue('pipeline_type', e.target.value)}
+          className="block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm dark:bg-gray-700 dark:text-gray-100"
+        >
+          <option value="lead">Lead (left side)</option>
+          <option value="opportunity">Opportunity (right side)</option>
+        </select>
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Controls which side of the pipeline board this stage appears on.
+        </p>
+      </div>
+      <div className="flex gap-4">
+        <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+          <input
+            type="checkbox"
+            className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            checked={isWon}
+            onChange={(e) => {
+              setValue('is_won', e.target.checked);
+              if (e.target.checked) setValue('is_lost', false);
+            }}
+          />
+          Won Stage
+        </label>
+        <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+          <input
+            type="checkbox"
+            className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            checked={isLost}
+            onChange={(e) => {
+              setValue('is_lost', e.target.checked);
+              if (e.target.checked) setValue('is_won', false);
+            }}
+          />
+          Lost Stage
+        </label>
+      </div>
+    </>
+  );
+}
 
 export function PipelineStagesSection() {
   const { data: stages, isLoading } = usePipelineStages(false);
@@ -144,91 +231,7 @@ export function PipelineStagesSection() {
         isError={createMutation.isError}
         errorMessage="Failed to save stage. Please try again."
       >
-        {({ register, formState: { errors }, watch, setValue }) => {
-          const isWon = watch('is_won');
-          const isLost = watch('is_lost');
-          const pipelineType = watch('pipeline_type');
-          return (
-            <>
-              <FormInput
-                label="Stage Name"
-                name="name"
-                required
-                register={register('name', { required: 'Stage name is required' })}
-                error={errors.name?.message}
-                placeholder="e.g., Discovery..."
-              />
-              <FormInput
-                label="Description"
-                name="description"
-                register={register('description')}
-                placeholder="Optional description"
-              />
-              <div className="grid grid-cols-2 gap-4">
-                <FormInput
-                  label="Color"
-                  name="color"
-                  type="color"
-                  register={register('color')}
-                />
-                <FormInput
-                  label="Win Probability (%)"
-                  name="probability"
-                  type="number"
-                  register={register('probability', {
-                    required: 'Probability is required',
-                    min: { value: 0, message: 'Min 0' },
-                    max: { value: 100, message: 'Max 100' },
-                  })}
-                  error={errors.probability?.message}
-                />
-              </div>
-              <div>
-                <label htmlFor="pipeline_type_add" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Pipeline Side
-                </label>
-                <select
-                  id="pipeline_type_add"
-                  value={pipelineType}
-                  onChange={(e) => setValue('pipeline_type', e.target.value)}
-                  className="block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm dark:bg-gray-700 dark:text-gray-100"
-                >
-                  <option value="lead">Lead (left side)</option>
-                  <option value="opportunity">Opportunity (right side)</option>
-                </select>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  Controls which side of the pipeline board this stage appears on.
-                </p>
-              </div>
-              <div className="flex gap-4">
-                <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                  <input
-                    type="checkbox"
-                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                    checked={isWon}
-                    onChange={(e) => {
-                      setValue('is_won', e.target.checked);
-                      if (e.target.checked) setValue('is_lost', false);
-                    }}
-                  />
-                  Won Stage
-                </label>
-                <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                  <input
-                    type="checkbox"
-                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                    checked={isLost}
-                    onChange={(e) => {
-                      setValue('is_lost', e.target.checked);
-                      if (e.target.checked) setValue('is_won', false);
-                    }}
-                  />
-                  Lost Stage
-                </label>
-              </div>
-            </>
-          );
-        }}
+        {(form) => <StageFormFields {...form} />}
       </FormModal>
 
       {deletingStage && (
@@ -300,91 +303,7 @@ export function PipelineStagesSection() {
           isError={updateMutation.isError}
           errorMessage="Failed to save stage. Please try again."
         >
-          {({ register, formState: { errors }, watch, setValue }) => {
-            const isWon = watch('is_won');
-            const isLost = watch('is_lost');
-            const pipelineType = watch('pipeline_type');
-            return (
-              <>
-                <FormInput
-                  label="Stage Name"
-                  name="name"
-                  required
-                  register={register('name', { required: 'Stage name is required' })}
-                  error={errors.name?.message}
-                  placeholder="e.g., Discovery..."
-                />
-                <FormInput
-                  label="Description"
-                  name="description"
-                  register={register('description')}
-                  placeholder="Optional description"
-                />
-                <div className="grid grid-cols-2 gap-4">
-                  <FormInput
-                    label="Color"
-                    name="color"
-                    type="color"
-                    register={register('color')}
-                  />
-                  <FormInput
-                    label="Win Probability (%)"
-                    name="probability"
-                    type="number"
-                    register={register('probability', {
-                      required: 'Probability is required',
-                      min: { value: 0, message: 'Min 0' },
-                      max: { value: 100, message: 'Max 100' },
-                    })}
-                    error={errors.probability?.message}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="pipeline_type_edit" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Pipeline Side
-                  </label>
-                  <select
-                    id="pipeline_type_edit"
-                    value={pipelineType}
-                    onChange={(e) => setValue('pipeline_type', e.target.value)}
-                    className="block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm dark:bg-gray-700 dark:text-gray-100"
-                  >
-                    <option value="lead">Lead (left side)</option>
-                    <option value="opportunity">Opportunity (right side)</option>
-                  </select>
-                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    Controls which side of the pipeline board this stage appears on.
-                  </p>
-                </div>
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                    <input
-                      type="checkbox"
-                      className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                      checked={isWon}
-                      onChange={(e) => {
-                        setValue('is_won', e.target.checked);
-                        if (e.target.checked) setValue('is_lost', false);
-                      }}
-                    />
-                    Won Stage
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                    <input
-                      type="checkbox"
-                      className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                      checked={isLost}
-                      onChange={(e) => {
-                        setValue('is_lost', e.target.checked);
-                        if (e.target.checked) setValue('is_won', false);
-                      }}
-                    />
-                    Lost Stage
-                  </label>
-                </div>
-              </>
-            );
-          }}
+          {(form) => <StageFormFields {...form} />}
         </FormModal>
       )}
     </Card>

@@ -128,11 +128,6 @@ function ContactDetailPage() {
     }
   };
 
-  const getInitialFormData = (): Partial<ContactFormData> | undefined => {
-    if (!contact) return undefined;
-    return contactToFormData(contact);
-  };
-
   const handleDeleteConfirm = async () => {
     if (!contactId) return;
     try {
@@ -568,7 +563,7 @@ function ContactDetailPage() {
 
       <Modal isOpen={showEditForm} onClose={() => setShowEditForm(false)} title="Edit Contact" size="lg">
         <ContactForm
-          initialData={getInitialFormData()}
+          initialData={contact ? contactToFormData(contact) : undefined}
           onSubmit={handleEditSubmit}
           onCancel={() => setShowEditForm(false)}
           isLoading={updateContactMutation.isPending}
