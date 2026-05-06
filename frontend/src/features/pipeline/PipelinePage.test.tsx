@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -31,6 +32,7 @@ vi.mock('../../hooks/usePageTitle', () => ({
 
 vi.mock('../../utils/toast', () => ({
   showError: vi.fn(),
+  showInfo: vi.fn(),
 }));
 
 // Mock lazy-loaded AI components
@@ -171,5 +173,66 @@ describe('PipelinePage', () => {
     // There may be multiple — just check at least one exists
     const addBtns = screen.getAllByRole('button', { name: /add/i });
     expect(addBtns.length).toBeGreaterThan(0);
+  });
+
+  it('search filters cards across stages by name', async () => {
+    vi.mocked(useKanban).mockReturnValue({
+      data: {
+        stages: [
+          makeStage(1, 'Prospecting', [
+            { id: 10, name: 'Acme Renewal', stage_id: 1 },
+            { id: 11, name: 'Globex Migration', stage_id: 1 },
+          ]),
+        ],
+      },
+      isLoading: false,
+      error: null,
+    } as ReturnType<typeof useKanban>);
+
+    renderPage();
+    expect(screen.getByText('Acme Renewal')).toBeInTheDocument();
+    expect(screen.getByText('Globex Migration')).toBeInTheDocument();
+
+    const user = userEvent.setup();
+    const search = screen.getByLabelText('Search pipeline');
+    await user.type(search, 'globex');
+
+    // userEvent drains microtasks + transitions, so the deferred-value
+    // re-render has already landed by the time .type() resolves.
+    await waitFor(() =>
+      expect(screen.queryByText('Acme Renewal')).not.toBeInTheDocument(),
+    );
+    expect(screen.getByText('Globex Migration')).toBeInTheDocument();
+    // Match-count status is rendered inline next to the search input.
+    expect(screen.getByText(/1 of 2 match/i)).toBeInTheDocument();
+  });
+
+  it('search clear button resets the filter', async () => {
+    vi.mocked(useKanban).mockReturnValue({
+      data: {
+        stages: [
+          makeStage(1, 'Prospecting', [
+            { id: 20, name: 'Acme Renewal', stage_id: 1 },
+            { id: 21, name: 'Globex Migration', stage_id: 1 },
+          ]),
+        ],
+      },
+      isLoading: false,
+      error: null,
+    } as ReturnType<typeof useKanban>);
+
+    renderPage();
+    const user = userEvent.setup();
+    const search = screen.getByLabelText('Search pipeline');
+    await user.type(search, 'globex');
+    await waitFor(() =>
+      expect(screen.queryByText('Acme Renewal')).not.toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Clear search' }));
+    await waitFor(() =>
+      expect(screen.getByText('Acme Renewal')).toBeInTheDocument(),
+    );
+    expect(screen.getByText('Globex Migration')).toBeInTheDocument();
   });
 });

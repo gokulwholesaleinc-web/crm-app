@@ -1,4 +1,4 @@
-import { useState, lazy, Suspense } from 'react';
+import { useState, useMemo, useDeferredValue, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PlusIcon } from '@heroicons/react/24/outline';
 import {
@@ -72,6 +72,10 @@ function PipelinePage() {
   const [showForm, setShowForm] = useState(false);
   const [editingOpportunity, setEditingOpportunity] = useState<Opportunity | null>(null);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  // useDeferredValue keeps the input snappy on large boards — typing
+  // doesn't block the filter/render of every column on every keystroke.
+  const deferredQuery = useDeferredValue(searchQuery);
 
   const { data: leadKanban, isLoading: leadsLoading, error: leadsError } = useLeadKanban();
   const { data: oppKanban, isLoading: oppsLoading, error: oppsError } = useKanban();
@@ -89,13 +93,95 @@ function PipelinePage() {
   const isLoading = viewMode === 'kanban' ? leadsLoading || oppsLoading : listLoading;
   const error = leadsError || oppsError;
 
-  const oppStages = oppKanban?.stages ?? [];
-  const leadStages = leadKanban?.stages ?? [];
+  // Apply the search filter in-memory so dragging keeps working — every
+  // visible card still has a real backend stage to move within. We
+  // recompute stage-level count + total_amount over the filtered list
+  // so the column headers reflect what the user can actually see.
+  //
+  // Summary tiles (totalPipelineValue / openDeals / totalLeadsInPipeline)
+  // read off the UNFILTERED stages so the headline figures keep their
+  // dashboard semantics — searching narrows the columns, not the
+  // executive summary at the top of the page. The "X of Y match" hint
+  // next to the search input is the affordance for filtered counts.
+  //
+  // Read .stages off the React Query data INSIDE useMemo. Reading
+  // outside via `oppKanban?.stages ?? []` would mint a fresh `[]` on
+  // every render in the no-data path, busting the memo deps and
+  // re-running the filter even when the search hadn't changed.
+  const {
+    leadStages,
+    oppStages,
+    totalPipelineValue,
+    openDeals,
+    totalLeadsInPipeline,
+    filteredLeadCount,
+    filteredOppCount,
+  } = useMemo(() => {
+    const rawLeadStages = leadKanban?.stages ?? [];
+    const rawOppStages = oppKanban?.stages ?? [];
+    const totalPipelineValue = rawOppStages.reduce((sum, s) => sum + (s.total_amount ?? 0), 0);
+    const openDeals = rawOppStages.reduce((sum, s) => sum + (s.count ?? 0), 0);
+    const totalLeadsInPipeline = rawLeadStages.reduce((sum, s) => sum + (s.count ?? 0), 0);
 
-  const totalPipelineValue = oppStages.reduce((sum, s) => sum + (s.total_amount ?? 0), 0);
-  const openDeals = oppStages.reduce((sum, s) => sum + (s.count ?? 0), 0);
-  const totalLeadsInPipeline = leadStages.reduce((sum, s) => sum + (s.count ?? 0), 0);
+    const needle = deferredQuery.trim().toLowerCase();
+    if (!needle) {
+      return {
+        leadStages: rawLeadStages,
+        oppStages: rawOppStages,
+        totalPipelineValue,
+        openDeals,
+        totalLeadsInPipeline,
+        filteredLeadCount: totalLeadsInPipeline,
+        filteredOppCount: openDeals,
+      };
+    }
+
+    const matchLead = (l: (typeof rawLeadStages)[number]['leads'][number]) =>
+      [l.full_name, l.email, l.company_name]
+        .some((f) => f && f.toLowerCase().includes(needle));
+    const matchOpp = (o: (typeof rawOppStages)[number]['opportunities'][number]) =>
+      [o.name, o.company_name, o.contact_name]
+        .some((f) => f && f.toLowerCase().includes(needle));
+
+    let filteredLeadCount = 0;
+    const leadStages = rawLeadStages.map((s) => {
+      const leads = s.leads.filter(matchLead);
+      filteredLeadCount += leads.length;
+      return { ...s, leads, count: leads.length };
+    });
+    let filteredOppCount = 0;
+    const oppStages = rawOppStages.map((s) => {
+      const opportunities = s.opportunities.filter(matchOpp);
+      filteredOppCount += opportunities.length;
+      // Recompute the column-header total over the filtered subset, but
+      // ONLY when every visible amount is a finite number — drizzle/orm
+      // numeric columns can come over the wire as strings (see the
+      // wholesale Decimal-string incident in memory). If we can't trust
+      // the data, fall back to the backend's pre-filter total instead
+      // of rendering "$01500.001500.00" garbage from string-concat.
+      const allNumeric = opportunities.every(
+        (o) => typeof o.amount === 'number' && Number.isFinite(o.amount),
+      );
+      const total_amount = allNumeric
+        ? opportunities.reduce((sum, o) => sum + (o.amount ?? 0), 0)
+        : (s.total_amount ?? 0);
+      return { ...s, opportunities, count: opportunities.length, total_amount };
+    });
+    return {
+      leadStages,
+      oppStages,
+      totalPipelineValue,
+      openDeals,
+      totalLeadsInPipeline,
+      filteredLeadCount,
+      filteredOppCount,
+    };
+  }, [leadKanban?.stages, oppKanban?.stages, deferredQuery]);
+
   const opportunityItems = opportunitiesData?.items ?? [];
+  const isFiltering = deferredQuery.trim() !== '';
+  const filteredCount = filteredLeadCount + filteredOppCount;
+  const totalCount = totalLeadsInPipeline + openDeals;
 
   // Flat lookup maps used for drag overlay rendering
   const leadById = new Map(leadStages.flatMap((s) => s.leads.map((l) => [l.id, l])));
@@ -149,6 +235,15 @@ function PipelinePage() {
 
     const leadInfo = parseLeadDragId(activeId);
     if (leadInfo) {
+      // Source-card existence check guards against the mid-drag-search
+      // race: user drags a card, types in the search, the card gets
+      // filtered out from the rendered set, dnd-kit still fires onDragEnd
+      // against the original encoded id. Without this check we would
+      // mutate a card the user can no longer see — silent action with
+      // no UI feedback. parseLeadDragId is a pure regex so it succeeds
+      // on the stale id even after the card is gone.
+      if (!leadById.has(leadInfo.leadId)) return;
+
       const targetStageId = leadStageByDragId.get(overId) ?? null;
       if (targetStageId !== null && targetStageId !== leadInfo.stageId) {
         moveLead.mutate({ leadId: leadInfo.leadId, newStageId: targetStageId });
@@ -169,6 +264,9 @@ function PipelinePage() {
 
     const oppInfo = parseOppDragId(activeId);
     if (oppInfo) {
+      // Same race guard as the lead branch above.
+      if (!oppById.has(oppInfo.oppId)) return;
+
       const targetStageId = oppStageByDragId.get(overId) ?? null;
       if (targetStageId !== null && targetStageId !== oppInfo.stageId) {
         moveOpp.mutate({ opportunityId: oppInfo.oppId, newStageId: targetStageId });
@@ -363,13 +461,68 @@ function PipelinePage() {
             </p>
           </div>
         ) : (
-          <DndContext
-            sensors={sensors}
-            collisionDetection={collisionDetection}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-          >
-            <div className="overflow-x-auto pb-4">
+          <>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <label htmlFor="pipeline-search" className="sr-only">
+                Search pipeline
+              </label>
+              <div className="relative w-full sm:max-w-sm">
+                <svg
+                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="m21 21-4.3-4.3M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z"
+                  />
+                </svg>
+                <input
+                  id="pipeline-search"
+                  type="search"
+                  inputMode="search"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search leads + deals by name, company, email..."
+                  className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 pl-9 pr-9 py-1.5 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    aria-label="Clear search"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+              {isFiltering && (
+                <p
+                  className="text-xs text-gray-500 dark:text-gray-400"
+                  aria-live="polite"
+                  role="status"
+                  style={{ fontVariantNumeric: 'tabular-nums' }}
+                >
+                  {filteredCount} of {totalCount} match
+                </p>
+              )}
+            </div>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={collisionDetection}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+            >
+              <div className="overflow-x-auto pb-4">
               <div className="flex flex-col md:flex-row gap-3 md:min-w-max items-start">
                 {leadStages.length > 0 && (
                   <>
@@ -438,11 +591,12 @@ function PipelinePage() {
               </div>
             </div>
 
-            <DragOverlay>
-              {activeLead ? <LeadDragOverlay lead={activeLead} /> : null}
-              {activeOpp ? <OppDragOverlay opp={activeOpp} /> : null}
-            </DragOverlay>
-          </DndContext>
+              <DragOverlay>
+                {activeLead ? <LeadDragOverlay lead={activeLead} /> : null}
+                {activeOpp ? <OppDragOverlay opp={activeOpp} /> : null}
+              </DragOverlay>
+            </DndContext>
+          </>
         )
       ) : (
         <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden border border-transparent dark:border-gray-700">
