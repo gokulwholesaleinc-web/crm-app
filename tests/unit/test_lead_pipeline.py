@@ -8,6 +8,7 @@ kanban board endpoint, lead move endpoint, and pipeline_type isolation.
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.models import User
@@ -391,7 +392,9 @@ class TestMoveLeadStage:
         and link the lead to it; the unique index on contacts.email
         previously raised IntegrityError.
         """
+        from src.companies.models import Company
         from src.contacts.models import Contact
+        from src.opportunities.models import Opportunity
         from src.opportunities.models import PipelineStage as OppStage
 
         new_stage = lead_pipeline_stages[0]
@@ -412,10 +415,23 @@ class TestMoveLeadStage:
         )
         db_session.add(opp_stage)
 
+        # Existing contact already belongs to a company — opportunity
+        # spawned during reuse should inherit that company so reports
+        # link the deal to the right account.
+        existing_company = Company(
+            name="Existing Co",
+            status="customer",
+            created_by_id=test_user.id,
+        )
+        db_session.add(existing_company)
+        await db_session.commit()
+        await db_session.refresh(existing_company)
+
         existing = Contact(
             first_name="Existing",
             last_name="Person",
             email="dup@example.com",
+            company_id=existing_company.id,
             owner_id=test_user.id,
             created_by_id=test_user.id,
         )
@@ -450,6 +466,22 @@ class TestMoveLeadStage:
         # The opportunity should have been created and linked to the
         # existing contact, not a fresh duplicate.
         assert lead.converted_opportunity_id is not None
+
+        # Opportunity should inherit the existing contact's company so
+        # the deal rolls up to the right account in reports.
+        opp = await db_session.get(Opportunity, lead.converted_opportunity_id)
+        assert opp is not None
+        assert opp.contact_id == existing.id
+        assert opp.company_id == existing_company.id
+
+        # No orphan Company should have been spawned just because the
+        # lead's company_name differed from the existing contact's
+        # company.
+        company_count = (await db_session.execute(
+            select(Company).where(Company.created_by_id == test_user.id)
+        )).scalars().all()
+        assert len(company_count) == 1
+        assert company_count[0].id == existing_company.id
 
     @pytest.mark.asyncio
     async def test_move_lead_to_lost_syncs_status(
