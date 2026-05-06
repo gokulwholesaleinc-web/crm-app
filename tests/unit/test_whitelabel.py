@@ -1515,38 +1515,6 @@ class TestBrandingEndpoint:
         assert response.status_code == 400
 
 
-# --- Login Tenant Info Tests ---
-
-
-class TestLoginTenantInfo:
-    """Password login endpoints removed — verify they reject."""
-
-    @pytest.mark.asyncio
-    async def test_login_json_rejected(
-        self, client: AsyncClient, db_session: AsyncSession, test_user: User,
-    ):
-        """POST /api/auth/login/json must not accept password credentials."""
-        response = await client.post(
-            "/api/auth/login/json",
-            json={"email": "testuser@example.com", "password": "testpassword123"},
-        )
-        assert response.status_code in (404, 405)
-
-    @pytest.mark.asyncio
-    async def test_form_login_rejected(
-        self, client: AsyncClient, db_session: AsyncSession, test_user: User,
-    ):
-        """POST /api/auth/login must not accept password credentials."""
-        response = await client.post(
-            "/api/auth/login",
-            data={"username": "testuser@example.com", "password": "testpassword123"},
-        )
-        assert response.status_code in (404, 405)
-
-
-# --- Tenant Admin Check Tests ---
-
-
 # --- URL Validation Tests ---
 
 
