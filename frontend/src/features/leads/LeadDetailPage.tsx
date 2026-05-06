@@ -54,8 +54,15 @@ function LeadDetailPage() {
         phone: data.phone || undefined,
         company_name: data.company || undefined,
         job_title: data.jobTitle || undefined,
-        status: data.status,
       };
+      // Only include status when it actually changed. The backend rejects
+      // status='converted' direct edits, so re-asserting an existing
+      // 'converted' status from an orphan-converted row would 400 every
+      // unrelated edit (e.g. fixing a typo) until the lead is properly
+      // converted. Same logic generalises to other status values.
+      if (data.status && data.status !== lead?.status) {
+        updateData.status = data.status;
+      }
       await updateLeadMutation.mutateAsync({
         id: leadId,
         data: updateData,
@@ -149,6 +156,13 @@ function LeadDetailPage() {
     );
   }
 
+  // The lead's status was flipped to 'converted' (e.g. via the edit form
+  // before the server-side guard landed) but the Convert flow never ran,
+  // so no Contact / Opportunity exists. Surface a banner that lets the
+  // user run conversion now and re-enable the Convert button below.
+  const isOrphanConverted =
+    lead.status === 'converted' && !lead.converted_contact_id;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -175,12 +189,14 @@ function LeadDetailPage() {
             Send Email
           </Button>
           <AIInsightsCard entityType="lead" entityId={lead.id} entityName={lead.full_name || 'Lead'} />
-          {lead.status === 'qualified' && (
+          {(lead.status === 'qualified' || isOrphanConverted) && (
             <Button onClick={() => setShowConvertModal(true)} className="flex-1 sm:flex-none">
               <svg className="h-5 w-5 mr-1 sm:mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <span className="hidden sm:inline">Convert Lead</span>
+              <span className="hidden sm:inline">
+                {isOrphanConverted ? 'Run Conversion' : 'Convert Lead'}
+              </span>
               <span className="sm:hidden">Convert</span>
             </Button>
           )}
@@ -197,6 +213,20 @@ function LeadDetailPage() {
           </Button>
         </div>
       </div>
+
+      {isOrphanConverted && (
+        <div
+          role="alert"
+          aria-live="polite"
+          className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/30 px-4 py-3 text-sm text-amber-900 dark:text-amber-100"
+        >
+          <p className="font-semibold">Lead is marked Converted but conversion never ran.</p>
+          <p className="mt-1">
+            No Contact or Opportunity was created. Click <span className="font-medium">Run Conversion</span>{' '}
+            in the header to create them now.
+          </p>
+        </div>
+      )}
 
       {/* Next Best Action Suggestion */}
       <NextBestActionCard entityType="lead" entityId={lead.id} />

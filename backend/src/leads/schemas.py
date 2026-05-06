@@ -68,6 +68,22 @@ class LeadCreate(LeadBase):
             raise ValueError("Either a name (first or last) or company_name is required")
         return self
 
+    @model_validator(mode="after")
+    def reject_direct_converted_status(self) -> "LeadCreate":
+        # Mirrors the LeadService.update guard. The Convert flow is the
+        # only legitimate path to status='converted' because it also
+        # creates the Contact + Opportunity and stamps converted_*_id.
+        # Without this validator the create endpoint was a back door
+        # that produced the same orphan-converted rows the update guard
+        # blocks.
+        if self.status == "converted":
+            raise ValueError(
+                "Cannot create a lead with status='converted' — use the "
+                "Convert action on a qualified lead so the contact and "
+                "opportunity are created.",
+            )
+        return self
+
 
 class LeadUpdate(BaseModel):
     first_name: str | None = None

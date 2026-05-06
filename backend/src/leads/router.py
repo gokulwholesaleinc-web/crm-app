@@ -5,7 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from src.ai.embedding_hooks import (
     build_lead_embedding_content,
@@ -18,6 +18,7 @@ from src.audit.utils import (
     audit_entity_update,
     snapshot_entity,
 )
+from src.auth.dependencies import get_current_superuser
 from src.auth.models import User
 from src.core.cache import (
     CACHE_LEAD_SOURCES,
@@ -26,6 +27,7 @@ from src.core.cache import (
 )
 from src.core.constants import ENTITY_TYPE_LEADS, EntityNames, ErrorMessages, HTTPStatus
 from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
+from src.core.http_errors import value_error_as_400
 from src.core.permissions import require_permission
 from src.core.router_utils import (
     CurrentUser,
@@ -62,7 +64,7 @@ from src.leads.schemas import (
     SendCampaignRequest,
     TagBrief,
 )
-from src.leads.service import LeadService
+from src.leads.service import LeadService, LeadValidationError
 from src.notifications.service import notify_on_assignment
 from src.opportunities.models import PipelineStage
 
@@ -131,7 +133,12 @@ async def create_lead(
 ):
     """Create a new lead."""
     service = LeadService(db)
-    lead = await service.create(lead_data, current_user.id)
+    try:
+        lead = await service.create(lead_data, current_user.id)
+    except LeadValidationError as exc:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST, detail=str(exc),
+        ) from exc
 
     # Generate embedding for semantic search
     try:
@@ -174,6 +181,49 @@ async def get_lead_pipeline_stages(
     )
     stages = result.scalars().all()
     return [PipelineStageResponse.model_validate(s) for s in stages]
+
+
+@router.post("/backfill-pipeline-stages")
+async def backfill_lead_pipeline_stages(
+    db: DBSession,
+    _admin: Annotated[User, Depends(get_current_superuser)],
+):
+    """Admin-only: assign the first active lead-typed stage to every lead
+    that currently has `pipeline_stage_id` NULL.
+
+    Idempotent — re-running is safe. Used to recover from the pre-default
+    era where new leads were created without a stage and never showed up
+    on the kanban.
+    """
+    first_stage_result = await db.execute(
+        select(PipelineStage)
+        .where(PipelineStage.pipeline_type == "lead")
+        .where(PipelineStage.is_active.is_(True))
+        .order_by(PipelineStage.order)
+        .limit(1)
+    )
+    first_stage = first_stage_result.scalar_one_or_none()
+    if first_stage is None:
+        raise HTTPException(
+            status_code=412,
+            detail=(
+                "No active lead pipeline stages exist. Run the seed script "
+                "or create a PipelineStage row with pipeline_type='lead' first."
+            ),
+        )
+
+    result = await db.execute(
+        update(Lead)
+        .where(Lead.pipeline_stage_id.is_(None))
+        .values(pipeline_stage_id=first_stage.id)
+    )
+    await db.commit()
+
+    return {
+        "stage_id": first_stage.id,
+        "stage_name": first_stage.name,
+        "updated": result.rowcount,
+    }
 
 
 @router.get("/kanban", response_model=LeadKanbanResponse)
@@ -439,7 +489,14 @@ async def update_lead(
     update_fields = list(lead_data.model_dump(exclude_unset=True).keys())
     old_data = snapshot_entity(lead, update_fields)
 
-    updated_lead = await service.update(lead, lead_data, current_user.id)
+    try:
+        updated_lead = await service.update(lead, lead_data, current_user.id)
+    except LeadValidationError as exc:
+        # Catch the sentinel only — broader `except ValueError` would
+        # swallow genuine bugs from filter/score paths.
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST, detail=str(exc),
+        ) from exc
 
     # Update embedding for semantic search
     try:
