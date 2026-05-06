@@ -26,8 +26,8 @@ from src.companies.schemas import (
 )
 from src.companies.service import CompanyService
 from src.contacts.models import Contact
-from src.core.constants import ENTITY_TYPE_COMPANIES, EntityNames, HTTPStatus
 from src.core.client_ip import get_client_ip
+from src.core.constants import ENTITY_TYPE_COMPANIES, EntityNames, HTTPStatus
 from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
 from src.core.router_utils import (
     CurrentUser,

@@ -23,8 +23,8 @@ from src.core.cache import (
     cached_fetch,
     invalidate_pipeline_stages_cache,
 )
-from src.core.constants import ENTITY_TYPE_OPPORTUNITIES, EntityNames, HTTPStatus
 from src.core.client_ip import get_client_ip
+from src.core.constants import ENTITY_TYPE_OPPORTUNITIES, EntityNames, HTTPStatus
 from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
 from src.core.router_utils import (
     CurrentUser,

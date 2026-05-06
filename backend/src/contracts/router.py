@@ -17,8 +17,8 @@ from src.contracts.schemas import (
     ContractUpdate,
 )
 from src.contracts.service import ContractService
-from src.core.constants import HTTPStatus
 from src.core.client_ip import get_client_ip
+from src.core.constants import HTTPStatus
 from src.core.router_utils import (
     CurrentUser,
     DBSession,

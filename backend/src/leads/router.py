@@ -25,10 +25,9 @@ from src.core.cache import (
     cached_fetch,
     invalidate_lead_sources_cache,
 )
-from src.core.constants import ENTITY_TYPE_LEADS, EntityNames, ErrorMessages, HTTPStatus
 from src.core.client_ip import get_client_ip
+from src.core.constants import ENTITY_TYPE_LEADS, EntityNames, ErrorMessages, HTTPStatus
 from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
-from src.core.http_errors import value_error_as_400
 from src.core.permissions import require_permission
 from src.core.router_utils import (
     CurrentUser,
