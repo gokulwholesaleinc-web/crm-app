@@ -280,9 +280,11 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
             <img
               src={tenant.logo_url}
               alt={tenant.company_name || 'Logo'}
-              width={32}
-              height={32}
-              className="h-8 w-8 rounded-lg object-contain flex-shrink-0"
+              height={collapsed ? 32 : 40}
+              className={clsx(
+                'object-contain flex-shrink-0',
+                collapsed ? 'h-8 w-auto max-w-[40px]' : 'h-10 w-auto max-w-[180px]'
+              )}
               onError={() => setLogoError(true)}
             />
           ) : (

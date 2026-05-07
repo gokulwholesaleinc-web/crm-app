@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom';
 import clsx from 'clsx';
 
+export type NumberCardColor = 'primary' | 'secondary' | 'accent';
+
 export interface NumberCardProps {
   title: string;
   value: string | number;
@@ -12,7 +14,14 @@ export interface NumberCardProps {
   };
   href?: string;
   className?: string;
+  colorVariant?: NumberCardColor;
 }
+
+const iconBoxByVariant: Record<NumberCardColor, string> = {
+  primary: 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-300',
+  secondary: 'bg-secondary-50 dark:bg-secondary-900/30 text-secondary-700 dark:text-secondary-200',
+  accent: 'bg-accent-50 dark:bg-accent-900/30 text-accent-700 dark:text-accent-200',
+};
 
 export function NumberCard({
   title,
@@ -22,6 +31,7 @@ export function NumberCard({
   trend,
   href,
   className,
+  colorVariant = 'primary',
 }: NumberCardProps) {
   const cardContent = (
     <div className="flex items-center justify-between">
@@ -46,8 +56,8 @@ export function NumberCard({
         )}
       </div>
       {icon && (
-        <div className="flex-shrink-0 p-3 bg-primary-50 dark:bg-primary-900/30 rounded-lg">
-          <span className="h-6 w-6 text-primary-600">{icon}</span>
+        <div className={clsx('flex-shrink-0 p-3 rounded-lg', iconBoxByVariant[colorVariant])}>
+          <span className="h-6 w-6">{icon}</span>
         </div>
       )}
     </div>
