@@ -398,6 +398,107 @@ class TestStripeCustomer:
         )
         assert resp1.json()["id"] == resp2.json()["id"]
 
+    @pytest.mark.asyncio
+    async def test_list_customers_filter_by_contact_id(
+        self, client: AsyncClient, test_user, test_stripe_customer, test_contact,
+    ):
+        """``contact_id`` filter narrows the list to customers linked to
+        that contact. Drives the OnboardingLinkGenerator's
+        ``hasPaymentMethod`` badge.
+        """
+        response = await client.get(
+            f"/api/payments/customers?contact_id={test_contact.id}",
+            headers=_token(test_user),
+        )
+        assert response.status_code == 200
+        data = response.json()
+        # Either the test fixture's customer matches the contact (1)
+        # or it doesn't (0); the filter should not crash and total
+        # must reflect filtered rows only.
+        assert data["total"] >= 0
+        for item in data["items"]:
+            assert item["contact_id"] == test_contact.id
+
+    @pytest.mark.asyncio
+    async def test_list_customers_filter_or_semantics(
+        self, client: AsyncClient, db_session, test_user, test_contact,
+    ):
+        """Passing BOTH contact_id and company_id should OR the
+        filters — one Stripe customer linked at the company level
+        only must surface when the contact's company id is also sent.
+        Regression for the case where AND semantics would silently
+        report "no payment method" for a company-level customer.
+        """
+        from src.companies.models import Company
+        from src.payments.models import StripeCustomer
+
+        # Seed: company with a stripe customer at the company level
+        # (no contact link), and contact in that company.
+        company = Company(
+            name="Acme",
+            status="customer",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(company)
+        await db_session.commit()
+        await db_session.refresh(company)
+
+        sc = StripeCustomer(
+            stripe_customer_id="cus_or_test",
+            company_id=company.id,
+            email="acme@example.com",
+        )
+        db_session.add(sc)
+        await db_session.commit()
+
+        response = await client.get(
+            f"/api/payments/customers?contact_id={test_contact.id}"
+            f"&company_id={company.id}",
+            headers=_token(test_user),
+        )
+        assert response.status_code == 200
+        data = response.json()
+        # Company-level customer should be reachable when both ids
+        # are passed (OR), even though the contact has no direct
+        # link.
+        assert data["total"] >= 1
+        assert any(
+            item.get("company_id") == company.id for item in data["items"]
+        )
+
+    @pytest.mark.asyncio
+    async def test_list_customers_403_when_rep_passes_unowned_contact(
+        self, client: AsyncClient, db_session, test_contact,
+    ):
+        """A sales_rep passing a ``contact_id`` they don't own must
+        be 403'd, not silently returned an empty list. Without this
+        gate the endpoint becomes a contact-existence oracle since
+        the OR-on-(contact|company) post-filter could leak rows that
+        share a company the rep owns. Regression for the trio
+        review's CRITICAL auth-bypass finding.
+        """
+        from src.auth.models import User
+        from src.auth.security import get_password_hash
+
+        # Sales rep who does NOT own test_contact
+        rep = User(
+            email="rep@example.com",
+            full_name="Rep User",
+            hashed_password=get_password_hash("rep-pw"),
+            role="sales_rep",
+            is_active=True,
+        )
+        db_session.add(rep)
+        await db_session.commit()
+        await db_session.refresh(rep)
+
+        response = await client.get(
+            f"/api/payments/customers?contact_id={test_contact.id}",
+            headers=_token(rep),
+        )
+        assert response.status_code == 403
+
 
 class TestWebhookSignatureVerification:
     """Test webhook HMAC-SHA256 signature verification logic."""
