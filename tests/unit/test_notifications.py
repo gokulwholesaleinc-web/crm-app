@@ -1,10 +1,13 @@
 """Tests for notifications API endpoints."""
 
 import pytest
-import pytest_asyncio
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.auth.models import User
+from src.auth.security import create_access_token, get_password_hash
+from src.notifications.event_handler import notification_event_handler
 from src.notifications.models import Notification
 
 
@@ -391,3 +394,535 @@ class TestNotificationWithEntity:
         item = response.json()["items"][0]
         assert item["entity_type"] == "contacts"
         assert item["entity_id"] == test_contact.id
+
+
+# ---------------------------------------------------------------------------
+# Notifications wiring tests (audit findings)
+# ---------------------------------------------------------------------------
+
+
+async def _create_user(db_session: AsyncSession, email: str, is_superuser: bool = False) -> User:
+    user = User(
+        email=email,
+        hashed_password=get_password_hash("password123"),
+        full_name=email.split("@")[0],
+        is_active=True,
+        is_superuser=is_superuser,
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
+def _auth_headers_for(user: User) -> dict:
+    token = create_access_token(data={"sub": str(user.id)})
+    return {"Authorization": f"Bearer {token}"}
+
+
+class TestActivityAssignmentNotifications:
+    """Tests covering A and B: activity reassignment wiring."""
+
+    @pytest.mark.asyncio
+    async def test_activity_reassign_creates_notification_for_new_assignee(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_contact,
+    ):
+        """Reassigning an activity to a different user creates a notification for that user."""
+        from datetime import datetime, timedelta, timezone
+
+        user_a = await _create_user(db_session, "user_a_assign@example.com")
+        user_b = await _create_user(db_session, "user_b_assign@example.com")
+
+        activity_resp = await client.post(
+            "/api/activities",
+            json={
+                "activity_type": "task",
+                "subject": "Reassignment test",
+                "entity_type": "contacts",
+                "entity_id": test_contact.id,
+                "assigned_to_id": user_a.id,
+                "owner_id": user_a.id,
+                "scheduled_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+            },
+            headers=_auth_headers_for(user_a),
+        )
+        assert activity_resp.status_code == 201, activity_resp.text
+        activity_id = activity_resp.json()["id"]
+
+        # Count user_b assignment notifications before the PATCH
+        before = await db_session.execute(
+            select(Notification).where(
+                Notification.user_id == user_b.id,
+                Notification.type == "assignment",
+            )
+        )
+        before_count = len(before.scalars().all())
+
+        patch_resp = await client.patch(
+            f"/api/activities/{activity_id}",
+            json={"assigned_to_id": user_b.id},
+            headers=_auth_headers_for(user_a),
+        )
+        assert patch_resp.status_code == 200, patch_resp.text
+
+        result = await db_session.execute(
+            select(Notification).where(
+                Notification.user_id == user_b.id,
+                Notification.type == "assignment",
+                Notification.entity_type == "activities",
+                Notification.entity_id == activity_id,
+            )
+        )
+        new_notifs = result.scalars().all()
+        assert len(new_notifs) == before_count + 1
+
+    @pytest.mark.asyncio
+    async def test_activity_reassign_no_notification_when_unchanged(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_contact,
+    ):
+        """PATCHing an activity without changing assigned_to_id creates no new assignment notification."""
+        from datetime import datetime, timedelta, timezone
+
+        user_a = await _create_user(db_session, "user_a_nochg@example.com")
+
+        activity_resp = await client.post(
+            "/api/activities",
+            json={
+                "activity_type": "task",
+                "subject": "No change test",
+                "entity_type": "contacts",
+                "entity_id": test_contact.id,
+                "assigned_to_id": user_a.id,
+                "owner_id": user_a.id,
+                "scheduled_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+            },
+            headers=_auth_headers_for(user_a),
+        )
+        assert activity_resp.status_code == 201, activity_resp.text
+        activity_id = activity_resp.json()["id"]
+
+        before = await db_session.execute(
+            select(Notification).where(
+                Notification.user_id == user_a.id,
+                Notification.type == "assignment",
+            )
+        )
+        before_count = len(before.scalars().all())
+
+        patch_resp = await client.patch(
+            f"/api/activities/{activity_id}",
+            json={"subject": "Updated subject only"},
+            headers=_auth_headers_for(user_a),
+        )
+        assert patch_resp.status_code == 200, patch_resp.text
+
+        after = await db_session.execute(
+            select(Notification).where(
+                Notification.user_id == user_a.id,
+                Notification.type == "assignment",
+            )
+        )
+        after_count = len(after.scalars().all())
+        assert after_count == before_count
+
+
+class TestQuoteRejectNotification:
+    """Test C: quote.rejected emits event and notifies owner."""
+
+    @pytest.mark.asyncio
+    async def test_quote_reject_emits_event_and_notifies_owner(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_contact,
+    ):
+        """Rejecting a quote in 'sent' status creates a quote_rejected notification for the owner."""
+        user_a = await _create_user(db_session, "quote_owner_reject@example.com")
+
+        create_resp = await client.post(
+            "/api/quotes",
+            json={
+                "title": "Quote to reject",
+                "contact_id": test_contact.id,
+                "owner_id": user_a.id,
+                "status": "draft",
+            },
+            headers=_auth_headers_for(user_a),
+        )
+        assert create_resp.status_code == 201, create_resp.text
+        quote_id = create_resp.json()["id"]
+
+        # Move to 'sent' via the service directly in DB
+        from src.quotes.models import Quote
+        quote = await db_session.get(Quote, quote_id)
+        from datetime import datetime, timezone
+        quote.status = "sent"
+        quote.sent_at = datetime.now(timezone.utc)
+        await db_session.commit()
+
+        reject_resp = await client.post(
+            f"/api/quotes/{quote_id}/reject",
+            headers=_auth_headers_for(user_a),
+        )
+        assert reject_resp.status_code == 200, reject_resp.text
+        assert reject_resp.json()["status"] == "rejected"
+
+        result = await db_session.execute(
+            select(Notification).where(
+                Notification.user_id == user_a.id,
+                Notification.type == "quote_rejected",
+            )
+        )
+        notifs = result.scalars().all()
+        assert len(notifs) == 1
+        assert "reject" in notifs[0].title.lower() or "quote" in notifs[0].title.lower()
+
+
+class TestPublicQuoteRejectNotification:
+    """Test C-public: customer-side public reject path is the actual audit gap."""
+
+    @pytest.mark.asyncio
+    async def test_public_quote_reject_emits_event_and_notifies_owner(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_contact,
+    ):
+        """Customer rejecting a quote via /api/quotes/public/{token}/reject creates a quote_rejected notification for the owner."""
+        from datetime import datetime, timezone
+
+        from src.quotes.models import Quote
+        user_a = await _create_user(db_session, "public_quote_reject@example.com")
+
+        # Create the quote with a designated signer email so the public
+        # reject path can match the signer.
+        signer_email = "buyer@example.com"
+        create_resp = await client.post(
+            "/api/quotes",
+            json={
+                "title": "Public reject quote",
+                "contact_id": test_contact.id,
+                "owner_id": user_a.id,
+                "status": "draft",
+                "designated_signer_email": signer_email,
+            },
+            headers=_auth_headers_for(user_a),
+        )
+        assert create_resp.status_code == 201, create_resp.text
+        quote_id = create_resp.json()["id"]
+
+        # Move to 'sent' so reject is allowed; mint a public token.
+        import secrets
+        quote = await db_session.get(Quote, quote_id)
+        quote.status = "sent"
+        quote.sent_at = datetime.now(timezone.utc)
+        if not quote.public_token:
+            quote.public_token = secrets.token_urlsafe(32)
+        token = quote.public_token
+        await db_session.commit()
+
+        reject_resp = await client.post(
+            f"/api/quotes/public/{token}/reject",
+            json={"signer_email": signer_email, "reason": "Too expensive"},
+        )
+        assert reject_resp.status_code == 200, reject_resp.text
+
+        result = await db_session.execute(
+            select(Notification).where(
+                Notification.user_id == user_a.id,
+                Notification.type == "quote_rejected",
+            )
+        )
+        notifs = result.scalars().all()
+        assert len(notifs) == 1
+        assert notifs[0].entity_id == quote_id
+
+
+class TestPublicProposalRejectNotification:
+    """Test D-public: customer-side public reject path is the actual audit gap."""
+
+    @pytest.mark.asyncio
+    async def test_public_proposal_reject_emits_event_and_notifies_owner(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+    ):
+        """Customer rejecting a proposal via /api/proposals/public/{token}/reject creates a proposal_rejected notification for the owner."""
+        from datetime import datetime, timezone
+
+        from src.proposals.models import Proposal
+        user_a = await _create_user(db_session, "public_proposal_reject@example.com")
+
+        signer_email = "buyer@example.com"
+        create_resp = await client.post(
+            "/api/proposals",
+            json={
+                "title": "Public reject proposal",
+                "owner_id": user_a.id,
+                "status": "draft",
+                "designated_signer_email": signer_email,
+            },
+            headers=_auth_headers_for(user_a),
+        )
+        assert create_resp.status_code == 201, create_resp.text
+        proposal_id = create_resp.json()["id"]
+
+        import secrets
+        proposal = await db_session.get(Proposal, proposal_id)
+        proposal.status = "sent"
+        proposal.sent_at = datetime.now(timezone.utc)
+        if not proposal.public_token:
+            proposal.public_token = secrets.token_urlsafe(32)
+        token = proposal.public_token
+        await db_session.commit()
+
+        reject_resp = await client.post(
+            f"/api/proposals/public/{token}/reject",
+            json={"signer_email": signer_email, "reason": "Out of budget"},
+        )
+        assert reject_resp.status_code == 200, reject_resp.text
+
+        result = await db_session.execute(
+            select(Notification).where(
+                Notification.user_id == user_a.id,
+                Notification.type == "proposal_rejected",
+            )
+        )
+        notifs = result.scalars().all()
+        assert len(notifs) == 1
+        assert notifs[0].entity_id == proposal_id
+
+
+class TestProposalRejectNotification:
+    """Test D: proposal.rejected emits event and notifies owner."""
+
+    @pytest.mark.asyncio
+    async def test_proposal_reject_emits_event_and_notifies_owner(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+    ):
+        """Rejecting a proposal in 'sent' status creates a proposal_rejected notification for the owner."""
+        from datetime import datetime, timezone
+
+        user_a = await _create_user(db_session, "proposal_owner_reject@example.com")
+
+        create_resp = await client.post(
+            "/api/proposals",
+            json={
+                "title": "Proposal to reject",
+                "owner_id": user_a.id,
+                "status": "draft",
+            },
+            headers=_auth_headers_for(user_a),
+        )
+        assert create_resp.status_code == 201, create_resp.text
+        proposal_id = create_resp.json()["id"]
+
+        from src.proposals.models import Proposal
+        proposal = await db_session.get(Proposal, proposal_id)
+        proposal.status = "sent"
+        proposal.sent_at = datetime.now(timezone.utc)
+        await db_session.commit()
+
+        reject_resp = await client.post(
+            f"/api/proposals/{proposal_id}/reject",
+            headers=_auth_headers_for(user_a),
+        )
+        assert reject_resp.status_code == 200, reject_resp.text
+        assert reject_resp.json()["status"] == "rejected"
+
+        result = await db_session.execute(
+            select(Notification).where(
+                Notification.user_id == user_a.id,
+                Notification.type == "proposal_rejected",
+            )
+        )
+        notifs = result.scalars().all()
+        assert len(notifs) == 1
+        assert "reject" in notifs[0].title.lower() or "proposal" in notifs[0].title.lower()
+
+
+class TestQuoteSentNotifiesOwner:
+    """Test E: quote.sent routes notification to owner, not the actor."""
+
+    @pytest.mark.asyncio
+    async def test_quote_sent_notifies_owner_not_actor(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_contact,
+    ):
+        """Sending a quote as admin notifies the quote's owner (user_a), not the acting admin."""
+        user_a = await _create_user(db_session, "quote_owner_send@example.com")
+        admin_b = await _create_user(db_session, "admin_actor_send@example.com", is_superuser=True)
+
+        create_resp = await client.post(
+            "/api/quotes",
+            json={
+                "title": "Quote to send",
+                "contact_id": test_contact.id,
+                "owner_id": user_a.id,
+                "status": "draft",
+            },
+            headers=_auth_headers_for(user_a),
+        )
+        assert create_resp.status_code == 201, create_resp.text
+        quote_id = create_resp.json()["id"]
+
+        send_resp = await client.post(
+            f"/api/quotes/{quote_id}/send",
+            headers=_auth_headers_for(admin_b),
+        )
+        assert send_resp.status_code == 200, send_resp.text
+        assert send_resp.json()["status"] == "sent"
+
+        # Owner (user_a) gets a quote_sent notification
+        owner_notifs = await db_session.execute(
+            select(Notification).where(
+                Notification.user_id == user_a.id,
+                Notification.type == "quote_sent",
+            )
+        )
+        assert len(owner_notifs.scalars().all()) == 1
+
+        # Actor (admin_b) does NOT get a quote_sent notification
+        actor_notifs = await db_session.execute(
+            select(Notification).where(
+                Notification.user_id == admin_b.id,
+                Notification.type == "quote_sent",
+            )
+        )
+        assert len(actor_notifs.scalars().all()) == 0
+
+
+class TestProposalSentNotifiesOwner:
+    """Test F: proposal.sent routes notification to owner, not the actor."""
+
+    @pytest.mark.asyncio
+    async def test_proposal_sent_notifies_owner_not_actor(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_contact,
+    ):
+        """Sending a proposal as admin notifies the proposal's owner (user_a), not the acting admin."""
+        user_a = await _create_user(db_session, "proposal_owner_send@example.com")
+        admin_b = await _create_user(db_session, "admin_actor_proposal@example.com", is_superuser=True)
+
+        create_resp = await client.post(
+            "/api/proposals",
+            json={
+                "title": "Proposal to send",
+                "contact_id": test_contact.id,
+                "owner_id": user_a.id,
+                "status": "draft",
+            },
+            headers=_auth_headers_for(user_a),
+        )
+        assert create_resp.status_code == 201, create_resp.text
+        proposal_id = create_resp.json()["id"]
+
+        send_resp = await client.post(
+            f"/api/proposals/{proposal_id}/send",
+            headers=_auth_headers_for(admin_b),
+        )
+        assert send_resp.status_code == 200, send_resp.text
+        assert send_resp.json()["status"] == "sent"
+
+        # Owner (user_a) gets a proposal_sent notification
+        owner_notifs = await db_session.execute(
+            select(Notification).where(
+                Notification.user_id == user_a.id,
+                Notification.type == "proposal_sent",
+            )
+        )
+        assert len(owner_notifs.scalars().all()) == 1
+
+        # Actor (admin_b) does NOT get a proposal_sent notification
+        actor_notifs = await db_session.execute(
+            select(Notification).where(
+                Notification.user_id == admin_b.id,
+                Notification.type == "proposal_sent",
+            )
+        )
+        assert len(actor_notifs.scalars().all()) == 0
+
+
+class TestPaymentReceivedNotification:
+    """Tests G and H: payment.received notification routing."""
+
+    @pytest.mark.asyncio
+    async def test_payment_received_notification_routes_to_quote_owner(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+    ):
+        """payment.received handler creates a notification for the user specified in payload."""
+        # The `client` fixture is required (even though we hit the handler
+        # directly): it monkey-patches src.database.async_session_maker
+        # to point at the SQLite test engine. Without it, the handler
+        # opens its own session against the production DSN and writes
+        # nowhere visible to db_session.
+        user_a = await _create_user(db_session, "payment_owner_notif@example.com")
+
+        payload = {
+            "entity_id": 9001,
+            "entity_type": "payment",
+            "user_id": user_a.id,
+            "data": {
+                "event_type": "checkout.session.completed",
+                "event_id": "evt_test_001",
+                "quote_id": None,
+                "opportunity_id": None,
+            },
+        }
+        await notification_event_handler("payment.received", payload)
+
+        result = await db_session.execute(
+            select(Notification).where(
+                Notification.user_id == user_a.id,
+                Notification.type == "payment_received",
+            )
+        )
+        notifs = result.scalars().all()
+        assert len(notifs) == 1
+        assert notifs[0].entity_id == 9001
+        assert notifs[0].entity_type == "payment"
+
+    @pytest.mark.asyncio
+    async def test_payment_received_no_owner_warns_and_drops(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+    ):
+        """payment.received handler with no user_id creates no notification row."""
+        before = await db_session.execute(
+            select(Notification).where(Notification.type == "payment_received")
+        )
+        before_count = len(before.scalars().all())
+
+        payload = {
+            "entity_id": None,
+            "entity_type": "payment",
+            "user_id": None,
+            "data": {
+                "event_type": "invoice.paid",
+                "event_id": "evt_test_no_owner",
+                "quote_id": None,
+                "opportunity_id": None,
+            },
+        }
+        await notification_event_handler("payment.received", payload)
+
+        after = await db_session.execute(
+            select(Notification).where(Notification.type == "payment_received")
+        )
+        after_count = len(after.scalars().all())
+        assert after_count == before_count

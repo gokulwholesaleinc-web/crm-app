@@ -24,7 +24,12 @@ function getEntityRoute(entityType: string | null, entityId: number | null): str
     opportunities: `/opportunities/${entityId}`,
     company: `/companies/${entityId}`,
     companies: `/companies/${entityId}`,
+    activity: `/activities`,
     activities: `/activities`,
+    quote: `/quotes/${entityId}`,
+    quotes: `/quotes/${entityId}`,
+    proposal: `/proposals/${entityId}`,
+    proposals: `/proposals/${entityId}`,
   };
   return routes[entityType] ?? null;
 }

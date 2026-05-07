@@ -35,6 +35,17 @@ def _ts_to_dt(ts) -> datetime | None:
     return datetime.fromtimestamp(int(ts), tz=UTC)
 
 
+def _payment_context(payment: Payment | None) -> dict | None:
+    if payment is None:
+        return None
+    return {
+        "payment_id": payment.id,
+        "owner_id": payment.owner_id,
+        "quote_id": payment.quote_id,
+        "opportunity_id": payment.opportunity_id,
+    }
+
+
 class WebhookProcessor:
     """Handles Stripe webhook signature verification and event dispatching.
 
@@ -125,10 +136,11 @@ class WebhookProcessor:
                     "status": "replayed",
                 }
 
+        handled_payment: Payment | None = None
         if event_type == "checkout.session.completed":
-            await self._handle_checkout_completed(obj)
+            handled_payment = await self._handle_checkout_completed(obj)
         elif event_type == "payment_intent.succeeded":
-            await self._handle_payment_succeeded(obj)
+            handled_payment = await self._handle_payment_succeeded(obj)
         elif event_type == "payment_intent.payment_failed":
             await self._handle_payment_failed(obj)
         elif event_type == "charge.refunded":
@@ -140,13 +152,13 @@ class WebhookProcessor:
         elif event_type == "customer.subscription.deleted":
             await self._handle_subscription_deleted(obj)
         elif event_type == "invoice.paid":
-            await self._handle_invoice_paid(obj)
+            handled_payment = await self._handle_invoice_paid(obj)
         elif event_type == "invoice.payment_failed":
             await self._handle_invoice_payment_failed(obj)
         elif event_type == "invoice.sent":
             await self._handle_invoice_sent(obj)
         elif event_type == "checkout.session.async_payment_succeeded":
-            await self._handle_async_payment_succeeded(obj)
+            handled_payment = await self._handle_async_payment_succeeded(obj)
         elif event_type == "checkout.session.async_payment_failed":
             await self._handle_async_payment_failed(obj)
         elif event_type == "setup_intent.succeeded":
@@ -162,7 +174,12 @@ class WebhookProcessor:
             )
             await self.db.flush()
 
-        return {"event_type": event_type, "event_id": event_id, "status": "processed"}
+        return {
+            "event_type": event_type,
+            "event_id": event_id,
+            "status": "processed",
+            "payment": _payment_context(handled_payment),
+        }
 
     # ------------------------------------------------------------------
     # Signature verification
@@ -247,7 +264,7 @@ class WebhookProcessor:
     # Event handlers
     # ------------------------------------------------------------------
 
-    async def _handle_checkout_completed(self, session_obj: dict) -> None:
+    async def _handle_checkout_completed(self, session_obj: dict) -> Payment | None:
         """Handle checkout.session.completed event.
 
         For ACH/bank payments, payment_status may be "processing" rather than
@@ -256,7 +273,7 @@ class WebhookProcessor:
         """
         session_id = session_obj.get("id")
         if not session_id:
-            return
+            return None
 
         # Subscription-mode checkouts spawned from a proposal carry the
         # proposal id in session metadata. When the session completes we
@@ -268,6 +285,11 @@ class WebhookProcessor:
             select(Payment).where(Payment.stripe_checkout_session_id == session_id)
         )
         payment = result.scalar_one_or_none()
+        # Only return a Payment when this call actually flipped it to
+        # `succeeded`. Stripe sends multiple events for one payment
+        # (checkout.session.completed + payment_intent.succeeded);
+        # without this gate the router fires PAYMENT_RECEIVED twice.
+        transitioned = False
         if payment and payment.status not in ("succeeded", "refunded"):
             payment_intent_id = session_obj.get("payment_intent")
             if payment_intent_id:
@@ -280,6 +302,7 @@ class WebhookProcessor:
             else:
                 payment.status = "succeeded"
                 await self.db.flush()
+                transitioned = True
 
                 # Send branded receipt email only when fully paid
                 try:
@@ -289,19 +312,24 @@ class WebhookProcessor:
                     logger.info("Receipt skipped for payment %s: %s", payment.id, exc)
                 except (OSError, RuntimeError) as exc:
                     logger.warning("Failed to send receipt for payment %s: %s", payment.id, exc)
+        return payment if transitioned else None
 
-    async def _handle_payment_succeeded(self, intent_obj: dict) -> None:
+    async def _handle_payment_succeeded(self, intent_obj: dict) -> Payment | None:
         """Handle payment_intent.succeeded event."""
         intent_id = intent_obj.get("id")
         if not intent_id:
-            return
+            return None
 
         result = await self.db.execute(
             select(Payment).where(Payment.stripe_payment_intent_id == intent_id)
         )
         payment = result.scalar_one_or_none()
+        # Only return a Payment when this call flipped it to `succeeded`
+        # — see the equivalent comment in _handle_checkout_completed.
+        transitioned = False
         if payment and payment.status != "succeeded":
             payment.status = "succeeded"
+            transitioned = True
             charge = None
             charges = intent_obj.get("charges", {}).get("data", [])
             if charges:
@@ -320,6 +348,7 @@ class WebhookProcessor:
                 logger.info("Receipt skipped for payment %s: %s", payment.id, exc)
             except (OSError, RuntimeError) as exc:
                 logger.warning("Failed to send receipt for payment %s: %s", payment.id, exc)
+        return payment if transitioned else None
 
     async def _handle_payment_failed(self, intent_obj: dict) -> None:
         """Handle payment_intent.payment_failed event."""
@@ -524,7 +553,7 @@ class WebhookProcessor:
             subscription.status = "canceled"
             await self.db.flush()
 
-    async def _handle_invoice_paid(self, invoice_obj: dict) -> None:
+    async def _handle_invoice_paid(self, invoice_obj: dict) -> Payment | None:
         """Handle invoice.paid — covers both initial invoices we created
         in-app and Stripe-initiated subscription renewal invoices.
 
@@ -535,19 +564,23 @@ class WebhookProcessor:
         """
         invoice_id = invoice_obj.get("id")
         if not invoice_id:
-            return
+            return None
 
         result = await self.db.execute(
             select(Payment).where(Payment.stripe_invoice_id == invoice_id)
         )
         payment = result.scalar_one_or_none()
         if payment is not None:
+            transitioned = False
             if payment.status != "succeeded":
                 payment.status = "succeeded"
                 await self.db.flush()
+                transitioned = True
             # Fall through to also mark any linked proposal paid.
             await self._mark_proposal_paid_from_invoice(invoice_id)
-            return
+            # Same single-fire guard as _handle_checkout_completed: don't
+            # re-emit PAYMENT_RECEIVED on Stripe redeliveries.
+            return payment if transitioned else None
 
         # ------------------------------------------------------------------
         # Subscription renewal path: no existing Payment row for this
@@ -581,7 +614,7 @@ class WebhookProcessor:
                 "invoice.paid for unknown invoice %s with no matching subscription/customer",
                 invoice_id,
             )
-            return
+            return None
 
         owner_id = None
         if subscription is not None:
@@ -643,6 +676,11 @@ class WebhookProcessor:
             logger.info(
                 "invoice.paid renewal insert race for %s: %s", invoice_id, exc
             )
+            # Winning racer already emitted PAYMENT_RECEIVED; returning the
+            # rolled-back row would propagate id=None into the emit payload
+            # and double-fire the notification.
+            return None
+        return renewal_payment
 
     async def _handle_invoice_payment_failed(self, invoice_obj: dict) -> None:
         """Handle invoice.payment_failed event -- marks payment as failed."""
@@ -672,18 +710,20 @@ class WebhookProcessor:
             payment.status = "sent"
             await self.db.flush()
 
-    async def _handle_async_payment_succeeded(self, session_obj: dict) -> None:
+    async def _handle_async_payment_succeeded(self, session_obj: dict) -> Payment | None:
         """Handle checkout.session.async_payment_succeeded (ACH success)."""
         session_id = session_obj.get("id")
         if not session_id:
-            return
+            return None
 
         result = await self.db.execute(
             select(Payment).where(Payment.stripe_checkout_session_id == session_id)
         )
         payment = result.scalar_one_or_none()
+        transitioned = False
         if payment and payment.status != "succeeded":
             payment.status = "succeeded"
+            transitioned = True
             payment_intent_id = session_obj.get("payment_intent")
             if payment_intent_id:
                 payment.stripe_payment_intent_id = payment_intent_id
@@ -695,6 +735,7 @@ class WebhookProcessor:
                 logger.info("Receipt skipped for payment %s: %s", payment.id, exc)
             except (OSError, RuntimeError) as exc:
                 logger.warning("Failed to send receipt for payment %s: %s", payment.id, exc)
+        return payment if transitioned else None
 
     async def _handle_async_payment_failed(self, session_obj: dict) -> None:
         """Handle checkout.session.async_payment_failed (ACH failure)."""
