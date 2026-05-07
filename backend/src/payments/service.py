@@ -1179,9 +1179,23 @@ class StripeCustomerService:
         self,
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
+        contact_id: int | None = None,
+        company_id: int | None = None,
     ) -> tuple[list[StripeCustomer], int]:
-        """Get paginated list of Stripe customers."""
+        """Get paginated list of Stripe customers.
+
+        ``contact_id`` / ``company_id`` filter by the CRM record linked
+        to the Stripe customer. Used by the OnboardingLinkGenerator to
+        check if a contact/company already has a Stripe customer
+        without pulling 200+ rows back to the frontend just to filter
+        in JS (which 422'd because the endpoint capped page_size at
+        100).
+        """
         query = select(StripeCustomer)
+        if contact_id is not None:
+            query = query.where(StripeCustomer.contact_id == contact_id)
+        if company_id is not None:
+            query = query.where(StripeCustomer.company_id == company_id)
 
         count_query = select(func.count()).select_from(query.subquery())
         total_result = await self.db.execute(count_query)

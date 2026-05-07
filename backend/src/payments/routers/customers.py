@@ -37,15 +37,25 @@ async def list_customers(
     data_scope: Annotated[DataScope, Depends(get_data_scope)],
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    contact_id: int | None = None,
+    company_id: int | None = None,
 ):
     """List Stripe customers.
 
     Admin/manager see everyone; sales reps only see customers whose linked
     contact or company they own. StripeCustomer has no owner_id column, so
     visibility is derived from the contact/company joined relationships.
+
+    ``contact_id`` / ``company_id`` filter by CRM linkage so callers
+    that just want to know "does this contact already have a Stripe
+    customer?" can do a 1-row check instead of paging the whole
+    table client-side.
     """
     service = StripeCustomerService(db)
-    customers, total = await service.get_list(page=page, page_size=page_size)
+    customers, total = await service.get_list(
+        page=page, page_size=page_size,
+        contact_id=contact_id, company_id=company_id,
+    )
 
     if not data_scope.can_see_all():
         customers = [

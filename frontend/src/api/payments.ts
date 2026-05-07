@@ -66,7 +66,14 @@ export const createPaymentIntent = async (data: CreatePaymentIntentRequest): Pro
 /**
  * List Stripe customers
  */
-export const listCustomers = async (params: { page?: number; page_size?: number } = {}): Promise<StripeCustomerListResponse> => {
+export const listCustomers = async (
+  params: {
+    page?: number;
+    page_size?: number;
+    contact_id?: number;
+    company_id?: number;
+  } = {},
+): Promise<StripeCustomerListResponse> => {
   const response = await apiClient.get<StripeCustomerListResponse>(`${PAYMENTS_BASE}/customers`, { params });
   return response.data;
 };
