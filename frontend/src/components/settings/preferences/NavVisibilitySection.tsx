@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import type { PreferencesSectionProps } from './DensitySection';
+import type { PreferencesSectionProps } from './types';
 import {
   DEFAULT_MAIN_NAVIGATION,
   DEFAULT_SECONDARY_NAVIGATION,

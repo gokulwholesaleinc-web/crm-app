@@ -1,12 +1,5 @@
-import type { DensityMode, UserPreferences } from '../../../hooks/useUserPreferences';
-
-export interface PreferencesSectionProps {
-  draft: UserPreferences;
-  setDraft: <K extends keyof UserPreferences>(
-    key: K,
-    value: UserPreferences[K],
-  ) => void;
-}
+import type { DensityMode } from '../../../hooks/useUserPreferences';
+import type { PreferencesSectionProps } from './types';
 
 const OPTIONS: ReadonlyArray<{
   value: DensityMode;

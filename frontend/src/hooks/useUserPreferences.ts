@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { safeStorage } from '../utils/safeStorage';
 import { useAuthStore } from '../store/authStore';
 
@@ -180,7 +180,16 @@ export function useUserPreferences(): UseUserPreferencesResult {
   const userId = useAuthStore((s) => s.user?.id);
   const [prefs, setPrefs] = useState<UserPreferences>(() => readRaw(userId));
 
+  // The lazy `useState` initializer above already does the disk read for
+  // the initial userId, so skip the first run of this effect — it would
+  // duplicate the read on every mount. After that, re-reading on userId
+  // changes (sign-out + sign-in as a different user) is what we want.
+  const isFirstUserIdRef = useRef(true);
   useEffect(() => {
+    if (isFirstUserIdRef.current) {
+      isFirstUserIdRef.current = false;
+      return;
+    }
     setPrefs(readRaw(userId));
   }, [userId]);
 

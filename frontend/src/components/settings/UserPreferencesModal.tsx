@@ -52,16 +52,22 @@ export function UserPreferencesModal({
   // draft against this, NOT against the live `prefs` (which may have been
   // updated by another tab during the edit session).
   const openBaselineRef = useRef<UserPreferences>(prefs);
+  // Keep the latest `prefs` reachable from the open-transition effect
+  // without listing it as a dep. Listing `prefs` would re-seed `draft`
+  // mid-edit on any cross-tab pref change and silently wipe in-progress
+  // edits — exactly the failure the original eslint-disable guarded
+  // against. The ref pattern carries the same intent without the
+  // suppression.
+  const prefsRef = useRef(prefs);
+  useEffect(() => {
+    prefsRef.current = prefs;
+  });
 
   useEffect(() => {
     if (isOpen) {
-      setDraft(prefs);
-      openBaselineRef.current = prefs;
+      setDraft(prefsRef.current);
+      openBaselineRef.current = prefsRef.current;
     }
-    // We intentionally only re-seed on open transitions; updating `prefs`
-    // mid-edit (from another tab) would clobber the user's in-progress
-    // changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   const updateField = <K extends keyof UserPreferences>(
