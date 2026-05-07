@@ -232,6 +232,7 @@ function DashboardPage() {
               title="Total Contacts"
               value={data?.totalContacts ?? 0}
               href="/contacts"
+              colorVariant="primary"
               trend={{
                 value: data?.contactsTrend ?? 0,
                 isPositive: (data?.contactsTrend ?? 0) >= 0,
@@ -257,6 +258,7 @@ function DashboardPage() {
               title="Total Leads"
               value={data?.totalLeads ?? 0}
               href="/leads"
+              colorVariant="secondary"
               trend={{
                 value: data?.leadsTrend ?? 0,
                 isPositive: (data?.leadsTrend ?? 0) >= 0,
@@ -282,6 +284,7 @@ function DashboardPage() {
               title="Open Opportunities"
               value={data?.totalOpportunities ?? 0}
               href="/pipeline"
+              colorVariant="accent"
               trend={{
                 value: data?.opportunitiesTrend ?? 0,
                 isPositive: (data?.opportunitiesTrend ?? 0) >= 0,
@@ -307,6 +310,7 @@ function DashboardPage() {
               title="Total Revenue"
               value={formatCurrency(data?.totalRevenue ?? 0, 'USD')}
               href="/payments"
+              colorVariant="primary"
               trend={{
                 value: data?.revenueTrend ?? 0,
                 isPositive: (data?.revenueTrend ?? 0) >= 0,
@@ -345,6 +349,7 @@ function DashboardPage() {
             title="Quotes Sent"
             value={salesKpis.quotes_sent}
             href="/quotes"
+            colorVariant="primary"
             icon={
               <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -355,6 +360,7 @@ function DashboardPage() {
             title="Proposals Sent"
             value={salesKpis.proposals_sent}
             href="/proposals"
+            colorVariant="secondary"
             icon={
               <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -365,6 +371,7 @@ function DashboardPage() {
             title="Payments Collected"
             value={formatCurrency(salesKpis.payments_collected_total, 'USD')}
             href="/payments"
+            colorVariant="accent"
             icon={
               <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -374,6 +381,7 @@ function DashboardPage() {
           <NumberCard
             title="Quote Conversion"
             value={`${salesKpis.quote_to_payment_conversion_rate}%`}
+            colorVariant="primary"
             icon={
               <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />

@@ -136,9 +136,8 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
               <img
                 src={tenant.logo_url}
                 alt={tenant.company_name || 'Logo'}
-                width={32}
-                height={32}
-                className="h-8 w-8 rounded-lg object-contain flex-shrink-0"
+                height={40}
+                className="h-10 w-auto max-w-[180px] object-contain flex-shrink-0"
                 onError={() => setMobileLogoError(true)}
               />
             ) : (

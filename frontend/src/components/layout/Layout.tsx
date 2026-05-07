@@ -38,10 +38,21 @@ export function Layout({
   }, [navigate, location.pathname]);
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-gray-900 overflow-hidden">
+    <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-900 overflow-hidden">
       {/* Skip Link */}
       <a href="#main-content" className="skip-link">Skip to main content</a>
 
+      <div
+        aria-hidden="true"
+        className="flex-shrink-0"
+        style={{
+          height: 3,
+          backgroundImage:
+            'linear-gradient(90deg, var(--brand-primary), var(--brand-secondary), var(--brand-accent))',
+        }}
+      />
+
+      <div className="flex flex-1 min-h-0">
       {/* Desktop Sidebar - hidden on mobile/tablet, visible on lg+ */}
       <div className="hidden lg:flex lg:flex-shrink-0">
         <Sidebar
@@ -82,6 +93,7 @@ export function Layout({
             </div>
           </div>
         </main>
+      </div>
       </div>
     </div>
   );
