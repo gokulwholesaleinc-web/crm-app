@@ -317,5 +317,3 @@ export function ContractAttachmentsSection({ contractId, canEdit }: ContractAtta
     </div>
   );
 }
-
-export default ContractAttachmentsSection;
