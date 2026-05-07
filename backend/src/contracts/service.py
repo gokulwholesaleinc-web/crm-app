@@ -148,11 +148,29 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
         if not recipient:
             raise ValueError("No recipient email — provide to_email or link a contact with an email address")
 
-        # Always re-mint so a forwarded old link from a previous send-cycle expires.
-        contract.sign_token = self._mint_token()
-        contract.sign_token_expires_at = self._token_expiry()
-        contract.sent_at = datetime.now(UTC)
-        contract.status = "sent"
+        # Atomic transition: a concurrent send (double-click, replayed
+        # request) would otherwise both pass the status check and both
+        # mint distinct tokens — the first email points at a token the
+        # row no longer carries. Conditional UPDATE ensures only one
+        # racer wins. Re-mint each send so an old forwarded link dies.
+        new_token = self._mint_token()
+        new_expires = self._token_expiry()
+        now = datetime.now(UTC)
+        result = await self.db.execute(
+            update(Contract)
+            .where(Contract.id == contract.id)
+            .where(Contract.status.in_(("draft", "sent")))
+            .values(
+                sign_token=new_token,
+                sign_token_expires_at=new_expires,
+                sent_at=now,
+                status="sent",
+            )
+        )
+        if result.rowcount == 0:
+            raise ValueError(
+                f"Cannot send contract in '{contract.status}' status for signature"
+            )
         await self.db.flush()
         await self.db.refresh(contract)
 
@@ -176,9 +194,14 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
             f"<p>{escape(company)}</p>"
         )
 
+        # `queue_email` catches transport failures internally and returns
+        # the queue row reflecting what happened. Inspect status — if it's
+        # not `sent` (delivered now) or `throttled` (will go out later),
+        # revert the contract so the operator can fix Gmail / mistyped
+        # recipient and resend without a stale `sent_at`.
+        email_service = EmailService(self.db)
         try:
-            email_service = EmailService(self.db)
-            await email_service.queue_email(
+            email = await email_service.queue_email(
                 to_email=recipient,
                 subject=f"Contract for signature — {contract.title}",
                 body=body,
@@ -187,10 +210,23 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
                 entity_id=contract.id,
             )
         except Exception as exc:
-            logger.warning(
-                "Failed to queue send email for contract %s: %s",
-                contract.id, exc,
-                exc_info=True,
+            logger.exception(
+                "Failed to construct send email for contract %s",
+                contract.id,
+            )
+            raise ValueError(f"Could not queue contract email: {exc}") from exc
+
+        if email.status not in ("sent", "throttled"):
+            contract.sign_token = None
+            contract.sign_token_expires_at = None
+            contract.sent_at = None
+            contract.status = "draft"
+            await self.db.flush()
+            await self.db.refresh(contract)
+            detail = email.error or "email send failed"
+            raise ValueError(
+                f"Could not send signature email — {detail}. "
+                "Connect Gmail in Settings or retry."
             )
 
         return contract
@@ -201,11 +237,10 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
         contact_name = contract.contact.full_name if contract.contact else None
         signer_email = contract.contact.email.lower() if contract.contact and contract.contact.email else None
 
+        # `get_branding_for_user` already returns default branding when
+        # the tenant row is missing; bare-except here would hide bugs.
         owner_id = contract.owner_id or 0
-        try:
-            branding = await TenantBrandingHelper.get_branding_for_user(self.db, owner_id)
-        except Exception:
-            branding = TenantBrandingHelper.get_default_branding()
+        branding = await TenantBrandingHelper.get_branding_for_user(self.db, owner_id)
 
         return {
             "id": contract.id,
@@ -281,7 +316,10 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
         await self.db.flush()
         await self.db.refresh(contract)
 
-        # Render signed PDF and upload to R2 — failure doesn't unwind signing.
+        # Render signed PDF and upload to R2. The customer's signature is
+        # already persisted and the status flipped — a render failure here
+        # does NOT unwind signing, but logger.exception ensures the
+        # traceback is loud so the operator can re-render later.
         try:
             pdf_bytes = await self._generate_contract_pdf(contract, include_signature=True)
             timestamp = int(now.timestamp())
@@ -290,21 +328,19 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
             contract.signed_pdf_r2_key = r2_key
             await self.db.flush()
             await self.db.refresh(contract)
-        except Exception as exc:
-            logger.warning(
-                "Failed to render/upload signed PDF for contract %s: %s",
-                contract.id, exc,
-                exc_info=True,
+        except Exception:
+            logger.exception(
+                "Failed to render/upload signed PDF for contract %s",
+                contract.id,
             )
 
         # Email signed copy to signer — failure doesn't unwind signing.
         try:
             await self._send_signed_copy(contract, signer_email)
-        except Exception as exc:
-            logger.warning(
-                "Failed to send signed copy for contract %s: %s",
-                contract.id, exc,
-                exc_info=True,
+        except Exception:
+            logger.exception(
+                "Failed to send signed copy for contract %s",
+                contract.id,
             )
 
         return contract

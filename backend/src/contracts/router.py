@@ -26,6 +26,7 @@ from src.contracts.schemas import (
 from src.contracts.service import ContractService
 from src.core.client_ip import get_client_ip
 from src.core.constants import HTTPStatus
+from src.core.rate_limit import limiter
 from src.core.router_utils import (
     CurrentUser,
     DBSession,
@@ -179,11 +180,14 @@ async def download_signed_pdf(
     try:
         url = await get_download_url(contract.signed_pdf_r2_key, ttl_sec=300)
     except Exception as exc:
-        logger.warning("Failed to generate presigned URL for contract %s: %s", contract_id, exc)
+        logger.exception(
+            "Failed to generate presigned URL for contract %s",
+            contract_id,
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="File storage unavailable — try again later",
-        )
+        ) from exc
 
     return RedirectResponse(url=url, status_code=307)
 
@@ -216,7 +220,17 @@ async def send_contract_for_signature(
             message=body.message,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    # Audit row so the contract's lifecycle is correlatable across users.
+    ip_address = get_client_ip(request)
+    await audit_entity_update(
+        db, "contract", contract.id, current_user.id,
+        {"status": "draft"}, {"status": "sent"}, ip_address,
+    )
 
     base_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
     return ContractSendResponse(
@@ -229,7 +243,8 @@ async def send_contract_for_signature(
 
 
 @router.get("/public/{token}", response_model=ContractPublicView)
-async def get_public_contract(token: str, db: DBSession):
+@limiter.limit("60/minute")
+async def get_public_contract(token: str, request: Request, db: DBSession):
     """Public, no-auth view of a contract by sign token."""
     service = ContractService(db)
     contract = await service.get_by_token(token)
@@ -248,6 +263,7 @@ async def get_public_contract(token: str, db: DBSession):
     response_model=ContractSignResponse,
     status_code=HTTPStatus.OK,
 )
+@limiter.limit("10/minute")
 async def sign_contract_public(
     token: str,
     body: ContractSignRequest,
@@ -276,7 +292,19 @@ async def sign_contract_public(
             signer_ua=signer_ua,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    # Audit row for the sign event. user_id=None marks a public-token
+    # action — the audit log shouldn't misattribute it to a CRM user.
+    await audit_entity_update(
+        db, "contract", contract.id, None,
+        {"status": "sent"},
+        {"status": "signed", "signed_by_name": body.signer_name},
+        signer_ip,
+    )
 
     return ContractSignResponse(
         id=contract.id,
