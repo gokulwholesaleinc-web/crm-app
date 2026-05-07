@@ -1192,9 +1192,22 @@ class StripeCustomerService:
         100).
         """
         query = select(StripeCustomer)
-        if contact_id is not None:
+        # OR semantics when both ids are present: a single Stripe
+        # customer may be linked at the company level only, while the
+        # frontend asks "does this contact's record have a payment
+        # method?" with both ids. AND'ing both clauses would miss the
+        # company-only customer and silently report "no payment
+        # method" for an actually-onboarded business.
+        if contact_id is not None and company_id is not None:
+            query = query.where(
+                or_(
+                    StripeCustomer.contact_id == contact_id,
+                    StripeCustomer.company_id == company_id,
+                )
+            )
+        elif contact_id is not None:
             query = query.where(StripeCustomer.contact_id == contact_id)
-        if company_id is not None:
+        elif company_id is not None:
             query = query.where(StripeCustomer.company_id == company_id)
 
         count_query = select(func.count()).select_from(query.subquery())

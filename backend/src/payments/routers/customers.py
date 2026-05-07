@@ -49,8 +49,20 @@ async def list_customers(
     ``contact_id`` / ``company_id`` filter by CRM linkage so callers
     that just want to know "does this contact already have a Stripe
     customer?" can do a 1-row check instead of paging the whole
-    table client-side.
+    table client-side. Both filters are subject to the same access
+    check the sync / onboarding-link endpoints use — a sales_rep
+    passing an id they don't own gets 403, not an empty result that
+    looks identical to "no customer exists." Without this gate the
+    endpoint becomes a contact-existence oracle since
+    ``c.contact.owner_id == current_user.id OR
+    c.company.owner_id == current_user.id`` leaks rows whenever the
+    queried contact happens to share a company the rep owns.
     """
+    # Helpers no-op on None and on privileged roles, so calling
+    # unconditionally is safe — privileged users still see everyone.
+    await _verify_contact_access(db, contact_id, current_user)
+    await _verify_company_access(db, company_id, current_user)
+
     service = StripeCustomerService(db)
     customers, total = await service.get_list(
         page=page, page_size=page_size,
@@ -63,6 +75,15 @@ async def list_customers(
             if (c.contact and c.contact.owner_id == current_user.id)
             or (c.company and c.company.owner_id == current_user.id)
         ]
+        # ``total`` here is the visible page slice, not the global
+        # match count — pre-existing oddity worth preserving the
+        # current load-bearing semantics (the OnboardingLinkGenerator
+        # frontend uses ``total > 0`` as a "has customer" check; it
+        # works because page_size=1 + access check above means the
+        # page is exactly the customer-or-not for that contact).
+        # ``pages`` is recomputed off the now-filtered total so the
+        # response stays internally consistent for any other caller
+        # that paginates.
         total = len(customers)
 
     return StripeCustomerListResponse(
