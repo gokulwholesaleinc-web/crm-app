@@ -159,7 +159,16 @@ async def delete_stage(
             detail=f"Cannot delete stage '{stage.name}': {count} opportunity(ies) still use it. Move them first.",
         )
 
-    await service.delete(stage)
+    # Same TOCTOU as delete_source: a concurrent opportunity insert against
+    # this stage between count + delete trips the FK; surface as 409 not 500.
+    from sqlalchemy.exc import IntegrityError
+    try:
+        await service.delete(stage)
+    except IntegrityError as exc:
+        raise HTTPException(
+            status_code=HTTPStatus.CONFLICT,
+            detail=f"Cannot delete stage '{stage.name}': it is still referenced by one or more opportunities. Move them first.",
+        ) from exc
     invalidate_pipeline_stages_cache()
 
 

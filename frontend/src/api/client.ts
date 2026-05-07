@@ -94,15 +94,35 @@ const createApiClient = (): AxiosInstance => {
             const parsed = JSON.parse(text) as { detail?: unknown };
             if (typeof parsed.detail === 'string' && parsed.detail.trim()) {
               detailFromBlob = parsed.detail.trim();
+            } else if (Array.isArray(parsed.detail)) {
+              // FastAPI 422 payload: detail is an array of {loc, msg, type}.
+              // Joining the msgs is far more readable than a JSON.stringify
+              // of the whole array. If ANY element doesn't fit the
+              // {msg: string} shape (legacy errors, custom raisers), fall
+              // through to the full dump so we don't surface a curated
+              // subset that hides the malformed elements.
+              const msgs = parsed.detail.map((d) =>
+                typeof d === 'object' && d !== null && typeof (d as { msg?: unknown }).msg === 'string'
+                  ? (d as { msg: string }).msg
+                  : null,
+              );
+              detailFromBlob =
+                msgs.length > 0 && msgs.every((m): m is string => m !== null)
+                  ? msgs.join('; ')
+                  : JSON.stringify(parsed.detail);
             } else if (parsed.detail) {
               detailFromBlob = JSON.stringify(parsed.detail);
             }
           } catch {
             if (text.trim()) detailFromBlob = text.trim();
           }
-        } catch {
-          // Reading the blob body itself failed — fall through to
-          // axios's default error.message.
+        } catch (blobErr) {
+          // Reading the blob body itself failed (already consumed,
+          // network truncation). Falling through to axios's default
+          // error.message would lose the cause; warn for the dev,
+          // user still sees error.message in the toast.
+          // eslint-disable-next-line no-console
+          console.warn('[apiClient] failed to read error blob body:', blobErr);
         }
       }
 

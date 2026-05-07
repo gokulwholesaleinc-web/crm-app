@@ -671,8 +671,22 @@ function PipelinePage() {
                     return (
                       <tr
                         key={opp.id}
-                        className="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
-                        onClick={() => navigate(`/opportunities/${opp.id}`)}
+                        role="button"
+                        tabIndex={0}
+                        className="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500"
+                        onClick={(e) => {
+                          if ((e.target as HTMLElement).closest('a, button')) return;
+                          if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+                          if (window.getSelection()?.toString()) return;
+                          navigate(`/opportunities/${opp.id}`);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.target !== e.currentTarget) return;
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            navigate(`/opportunities/${opp.id}`);
+                          }
+                        }}
                       >
                         <td className="px-4 sm:px-6 py-4">
                           <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate max-w-[150px] sm:max-w-none">

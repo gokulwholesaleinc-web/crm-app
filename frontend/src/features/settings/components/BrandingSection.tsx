@@ -551,7 +551,7 @@ export function BrandingSection() {
                           <p className="text-xs font-mono text-gray-500 dark:text-gray-400 truncate">
                             {s.raw || s.value}
                           </p>
-                          {!isValidHexColor(s.raw) && (
+                          {s.raw && !isValidHexColor(s.raw) && (
                             <p className="text-xs text-red-500 dark:text-red-400">
                               Invalid hex — using fallback
                             </p>

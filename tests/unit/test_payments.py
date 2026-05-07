@@ -15,6 +15,7 @@ import time
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.security import get_password_hash, create_access_token
 from src.auth.models import User
@@ -397,6 +398,26 @@ class TestStripeCustomer:
             headers=_token(test_user),
         )
         assert resp1.json()["id"] == resp2.json()["id"]
+
+    @pytest.mark.asyncio
+    async def test_sync_customer_admin_blocked_on_soft_deleted_contact(
+        self, client: AsyncClient, test_superuser, test_contact, db_session: AsyncSession,
+    ):
+        """Privileged callers (admin/manager/superuser) must NOT be able to
+        sync a Stripe customer against a soft-deleted contact. Without this
+        guard, an admin path produces StripeCustomer rows pointing at
+        tombstoned CRM entities — referential integrity hole.
+        """
+        from datetime import datetime, timezone
+        test_contact.deleted_at = datetime.now(timezone.utc)
+        await db_session.commit()
+
+        response = await client.post(
+            "/api/payments/customers/sync",
+            json={"contact_id": test_contact.id},
+            headers=_token(test_superuser),
+        )
+        assert response.status_code == 404, response.text
 
     @pytest.mark.asyncio
     async def test_list_customers_filter_by_contact_id(

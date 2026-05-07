@@ -764,5 +764,11 @@ async def delete_source(
                 "reference it. Reassign or delete those leads first."
             ),
         )
+    # No IntegrityError race-guard here: Lead.source_id is ON DELETE
+    # SET NULL, so a concurrent INSERT racing the DELETE silently
+    # nullifies the new lead's source instead of raising. The count
+    # gate above is the correctness signal we have for non-racing
+    # callers; tightening the race window would require an advisory
+    # lock or a SELECT FOR UPDATE on the source row.
     await service.delete_source(source)
     invalidate_lead_sources_cache()

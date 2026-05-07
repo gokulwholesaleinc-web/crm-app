@@ -29,7 +29,10 @@ function ProposalsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<TabType>('proposals');
   const searchQuery = searchParams.get('search') || '';
-  const statusFilter = searchParams.get('status') || '';
+  // Stale bookmarks with ?status=invalid silently fall back to "All"
+  // instead of 422'ing the page on every load.
+  const statusParam = searchParams.get('status') || '';
+  const statusFilter = statusOptions.some((o) => o.value === statusParam) ? statusParam : '';
   const setSearchQuery = (q: string) =>
     setSearchParams((prev) => { if (q) prev.set('search', q); else prev.delete('search'); return prev; }, { replace: true });
   const setStatusFilter = (s: string) =>
@@ -364,13 +367,25 @@ function ProposalsPage() {
                   {proposals.map((proposal: Proposal) => (
                     <tr
                       key={proposal.id}
-                      className="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
+                      role="button"
+                      tabIndex={0}
+                      className="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500"
                       onClick={(e) => {
                         if ((e.target as HTMLElement).closest('a, button')) return;
+                        if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
                         if (window.getSelection()?.toString()) return;
                         navigate(`/proposals/${proposal.id}`, {
                           state: { from: window.location.pathname + window.location.search },
                         });
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.target !== e.currentTarget) return;
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          navigate(`/proposals/${proposal.id}`, {
+                            state: { from: window.location.pathname + window.location.search },
+                          });
+                        }
                       }}
                     >
                       <td className="px-6 py-4 whitespace-nowrap">
