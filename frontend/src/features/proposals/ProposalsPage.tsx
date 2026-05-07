@@ -8,7 +8,10 @@ import { AIProposalGenerator } from './AIProposalGenerator';
 import { TemplateGallery } from './TemplateGallery';
 import { SortableTh } from '../../components/shared/SortableTh';
 import { useProposals, useCreateProposal, useDeleteProposal } from '../../hooks/useProposals';
-import { useTableSort } from '../../hooks/useTableSort';
+import {
+  useListPageSizeState,
+  useListSortPersistence,
+} from '../../hooks/useListPageDefaults';
 import { formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { showSuccess, showError } from '../../utils/toast';
@@ -50,8 +53,8 @@ function ProposalsPage() {
     isOpen: false,
     proposal: null,
   });
-  const [pageSize, setPageSize] = useState(25);
-  const { sortBy, sortDir, toggle: toggleSort } = useTableSort();
+  const { sortBy, sortDir, toggle: toggleSort } = useListSortPersistence('proposals');
+  const [pageSize, setPageSize] = useListPageSizeState('proposals');
 
   const {
     data: proposalsData,
@@ -347,7 +350,7 @@ function ProposalsPage() {
 
             {/* Desktop Table */}
             <div className="hidden md:block overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <table data-list-table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-900">
                   <tr>
                     <SortableTh field="title" label="Proposal" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />

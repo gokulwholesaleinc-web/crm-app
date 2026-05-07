@@ -4,6 +4,7 @@ import clsx from 'clsx';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { useTenant } from '../../providers/TenantProvider';
 import { useAuthStore } from '../../store/authStore';
+import { useUserPreferences } from '../../hooks/useUserPreferences';
 import {
   DEFAULT_MAIN_NAVIGATION,
   DEFAULT_SECONDARY_NAVIGATION,
@@ -30,6 +31,15 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
   const mobileSecondaryNav = isMobileAdmin
     ? DEFAULT_SECONDARY_NAVIGATION
     : DEFAULT_SECONDARY_NAVIGATION.filter(item => !ADMIN_ONLY_IDS.has(item.id));
+
+  const { prefs } = useUserPreferences();
+  const hidden = new Set(prefs.hiddenNavIds ?? []);
+  const visibleMainNav = DEFAULT_MAIN_NAVIGATION.filter(i => !hidden.has(i.id));
+  // Settings stays visible so the Preferences modal remains reachable;
+  // see Sidebar.tsx for the matching invariant.
+  const visibleSecondaryNav = mobileSecondaryNav.filter(
+    i => !hidden.has(i.id) || i.id === 'settings'
+  );
 
   useEffect(() => {
     if (isOpen) {
@@ -173,13 +183,13 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
         {/* Navigation */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto overscroll-contain" aria-label="Mobile navigation">
           <div className="space-y-1">
-            {DEFAULT_MAIN_NAVIGATION.map(renderMobileNavItem)}
+            {visibleMainNav.map(renderMobileNavItem)}
           </div>
 
           <div className="my-4 border-t border-gray-200 dark:border-gray-700" />
 
           <div className="space-y-1">
-            {mobileSecondaryNav.map(renderMobileNavItem)}
+            {visibleSecondaryNav.map(renderMobileNavItem)}
           </div>
         </nav>
 

@@ -16,7 +16,10 @@ import { SmartListBuilder } from './components/SmartListBuilder';
 import { useContacts, useCreateContact, useUpdateContact } from '../../hooks/useContacts';
 import { useCheckDuplicates } from '../../hooks/useDedup';
 import { useSavedFilters, useDeleteSavedFilter } from '../../hooks/useFilters';
-import { useTableSort } from '../../hooks/useTableSort';
+import {
+  useListPageSizeState,
+  useListSortPersistence,
+} from '../../hooks/useListPageDefaults';
 import { formatDate, formatPhoneNumber } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
@@ -30,14 +33,14 @@ function ContactsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
   const debouncedSearch = useDebouncedValue(searchQuery, 300);
-  const { sortBy, sortDir, toggle } = useTableSort();
+  const { sortBy, sortDir, toggle } = useListSortPersistence('contacts');
   const [currentPage, setCurrentPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [showSmartListBuilder, setShowSmartListBuilder] = useState(false);
   const [activeFilters, setActiveFilters] = useState<FilterGroup | null>(null);
   const [activeSmartListName, setActiveSmartListName] = useState<string | null>(null);
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize, setPageSize] = useListPageSizeState('contacts');
   const [pendingFormData, setPendingFormData] = useState<ContactFormData | null>(null);
   const [duplicateResults, setDuplicateResults] = useState<DuplicateMatch[]>([]);
   const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
@@ -421,7 +424,7 @@ function ContactsPage() {
 
             {/* Desktop Table View */}
             <div className="hidden md:block overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <table data-list-table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-900">
                   <tr>
                     <SortableTh field="name" label="Name" sortBy={sortBy} sortDir={sortDir} onToggle={toggle} />

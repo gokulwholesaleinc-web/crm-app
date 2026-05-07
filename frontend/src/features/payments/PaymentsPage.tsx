@@ -4,7 +4,10 @@ import { StatusBadge, Button, EntityLink, HelpLink, PaginationBar } from '../../
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { SortableTh } from '../../components/shared/SortableTh';
 import { usePayments, useSubscriptions, useCancelSubscription } from '../../hooks/usePayments';
-import { useTableSort } from '../../hooks/useTableSort';
+import {
+  useListPageSizeState,
+  useListSortPersistence,
+} from '../../hooks/useListPageDefaults';
 import { SendInvoiceModal } from './components/SendInvoiceModal';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
@@ -92,8 +95,8 @@ function PaymentsPage() {
     setSearchParams((prev) => { if (s) prev.set('status', s); else prev.delete('status'); return prev; }, { replace: true });
   const [currentPage, setCurrentPage] = useState(1);
   const [subPage, setSubPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
-  const { sortBy, sortDir, toggle: toggleSort } = useTableSort();
+  const { sortBy, sortDir, toggle: toggleSort } = useListSortPersistence('payments');
+  const [pageSize, setPageSize] = useListPageSizeState('payments');
 
   const {
     data: paymentsData,
@@ -302,7 +305,7 @@ function PaymentsPage() {
 
               {/* Desktop Table */}
               <div className="hidden md:block overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <table data-list-table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                   <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-900">
                     <tr>
                       <SortableTh field="id" label="ID" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
@@ -466,7 +469,7 @@ function PaymentsPage() {
 
               {/* Desktop Table */}
               <div className="hidden md:block overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <table data-list-table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                   <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-900">
                     <tr>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
