@@ -859,6 +859,119 @@ class TestHydrateInlineAttachments:
         assert img_part["data"] == "img-data-b64"
         assert pdf_part["data"] is None
 
+    @pytest.mark.asyncio
+    async def test_hydrate_skips_image_without_cid(self):
+        """An image part with attachment_id but no Content-ID is a regular
+        downloadable attachment, NOT an inline cid: ref. Fetching it
+        burns Gmail quota for nothing (the data wouldn't be substituted
+        anywhere). Must skip without a request.
+        """
+        fetch_count = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal fetch_count
+            fetch_count += 1
+            return httpx.Response(200, json={"data": "x"})
+
+        attachments = [
+            {
+                "mime_type": "image/jpeg",
+                "filename": "photo.jpg",
+                "cid": None,  # regular attachment — not inline
+                "size": 5000,
+                "data": None,
+                "attachment_id": "att-jpg",
+            },
+        ]
+        conn = _make_conn()
+        db = AsyncMock(spec=AsyncSession)
+        http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        client = GmailClient(conn, db, http=http)
+
+        result = await _hydrate_inline_attachments(client, "msg-1", attachments)
+        assert fetch_count == 0
+        assert result[0]["data"] is None
+
+    @pytest.mark.asyncio
+    async def test_hydrate_drops_oversize_actual_bytes(self, caplog):
+        """Gmail's declared body.size is advisory. If a fetch returns
+        actual bytes that exceed the 2.5MB cap, the part is dropped
+        and a WARN log fires with declared vs. actual bytes — without
+        the re-check, _inline_cid_images silently drops the substitution
+        downstream and the operator sees a "broken logo" report with
+        no log trail.
+        """
+        import base64
+        import logging
+
+        # 3MB of bytes — over the 2.5MB cap.
+        big_bytes = b"\xff" * (3 * 1024 * 1024)
+        big_b64url = base64.urlsafe_b64encode(big_bytes).decode().rstrip("=")
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"data": big_b64url})
+
+        attachments = [
+            {
+                "mime_type": "image/png",
+                "filename": "huge.png",
+                "cid": "huge",
+                "size": 100,  # advisory — way under the cap
+                "data": None,
+                "attachment_id": "att-huge",
+            },
+        ]
+        conn = _make_conn()
+        db = AsyncMock(spec=AsyncSession)
+        http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        client = GmailClient(conn, db, http=http)
+
+        with caplog.at_level(
+            logging.WARNING, logger="src.integrations.gmail.client",
+        ):
+            result = await _hydrate_inline_attachments(
+                client, "msg-oversize", attachments,
+            )
+
+        assert result[0]["data"] is None  # not hydrated
+        oversize_logs = [
+            r for r in caplog.records
+            if "[hydrate_inline] oversize" in r.getMessage()
+        ]
+        assert oversize_logs, "expected oversize warn"
+        msg = oversize_logs[0].getMessage()
+        assert "gmail_msg_id=msg-oversize" in msg
+        assert "attachment_id=att-huge" in msg
+        assert "cid=huge" in msg
+
+    @pytest.mark.asyncio
+    async def test_hydrate_propagates_auth_error(self):
+        """A 401 mid-hydration should propagate so the caller can mark
+        the connection revoked. Swallowing it as a generic warning
+        would log five identical lines while the real auth state
+        silently rots.
+        """
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(401, json={"error": "invalid_token"})
+
+        attachments = [
+            {
+                "mime_type": "image/png",
+                "cid": "logo",
+                "size": 100,
+                "data": None,
+                "attachment_id": "att-1",
+                "filename": "logo.png",
+            },
+        ]
+        conn = _make_conn()
+        db = AsyncMock(spec=AsyncSession)
+        http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        client = GmailClient(conn, db, http=http)
+
+        with pytest.raises(GmailAuthError):
+            await _hydrate_inline_attachments(client, "msg-401", attachments)
+
 
 # ---------------------------------------------------------------------------
 # get_message — post-hydration CID substitution

@@ -331,43 +331,104 @@ async def _hydrate_inline_attachments(
     """Fetch data for image/* parts that have attachment_id but no inline data.
 
     Skips parts that already have data, non-image parts, parts with no
-    attachment_id, and parts whose declared size exceeds the 2.5MB cap.
+    attachment_id, parts with no Content-ID (regular file attachments
+    don't need cid: substitution; fetching them would just waste quota),
+    and parts whose declared size exceeds the 2.5MB cap.
     Concurrency-capped at 5 to stay clear of Gmail's quota ceiling.
     Returns a NEW list; does not mutate the input.
-    Per-fetch errors are logged at WARN and skipped so one 404 doesn't
-    strand the rest.
+
+    Token refresh contention: ``client._refresh_if_needed()`` runs once
+    up-front so the 5 concurrent ``get_attachment`` callers don't race
+    on an expired credential and stampede Google's token endpoint.
+
+    Per-fetch error handling distinguishes auth failure from transient
+    misses. ``GmailAuthError`` re-raises out of ``fetch_one`` so
+    ``asyncio.gather`` propagates and the caller can mark the
+    connection revoked instead of logging 5 generic warnings while the
+    real auth state goes invisible. Other exceptions stay swallowed-
+    and-logged so one 404 / network blip doesn't strand the rest.
+
+    Decoded-bytes cap: Gmail's declared ``body.size`` is *advisory*
+    (GUI uploads can mis-report). Re-checking the actual decoded
+    byte length after fetch keeps a 5 MB image from sneaking past
+    the declared cap and bloating the inbound_emails row before
+    ``_inline_cid_images`` silently drops it.
     """
+    # Single up-front refresh; all the concurrent get_attachment calls
+    # below skip _refresh_if_needed because the token expiry is now
+    # well in the future. Without this, 5 parallel coroutines would
+    # each see an expired token and POST 5 refresh requests
+    # simultaneously — Google rate-limits that endpoint, and the
+    # collisions would each commit on the same SQLAlchemy session.
+    await client._refresh_if_needed()
+
     sem = asyncio.Semaphore(_HYDRATE_CONCURRENCY)
+    n_fetched = 0
+    n_skipped_oversize = 0
 
     async def fetch_one(att: dict) -> dict:
+        nonlocal n_fetched, n_skipped_oversize
         mime = att.get("mime_type") or ""
         attachment_id = att.get("attachment_id")
+        cid = att.get("cid")
         if (
             att.get("data")
             or not mime.startswith("image/")
             or not attachment_id
+            or not cid
             or (att.get("size") or 0) > _MAX_INLINE_IMAGE_BYTES
         ):
             return att
         async with sem:
             try:
                 data = await client.get_attachment(message_id, attachment_id)
+            except GmailAuthError:
+                # Auth failure is connection-level, not message-level.
+                # Re-raise so the caller can mark the connection
+                # revoked; a swallow here would log 5 generic
+                # warnings while the real state silently rots.
+                raise
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
-                    "[hydrate_inline] fetch failed gmail_msg_id=%s attachment_id=%s: %s",
-                    message_id, attachment_id, exc,
+                    "[hydrate_inline] fetch failed gmail_msg_id=%s attachment_id=%s cid=%s: %s",
+                    message_id, attachment_id, cid, exc,
                 )
                 return att
         if data is None:
             logger.warning(
-                "[hydrate_inline] 404 gmail_msg_id=%s attachment_id=%s",
-                message_id, attachment_id,
+                "[hydrate_inline] 404 gmail_msg_id=%s attachment_id=%s cid=%s",
+                message_id, attachment_id, cid,
             )
             return att
+        # Re-validate against the cap with the actual decoded bytes —
+        # Gmail's declared size is advisory.
+        try:
+            decoded_len = len(base64.urlsafe_b64decode(data + "=="))
+        except Exception:  # noqa: BLE001 — defensive on hostile inputs
+            logger.warning(
+                "[hydrate_inline] decode failed gmail_msg_id=%s attachment_id=%s cid=%s",
+                message_id, attachment_id, cid,
+            )
+            return att
+        if decoded_len > _MAX_INLINE_IMAGE_BYTES:
+            logger.warning(
+                "[hydrate_inline] oversize gmail_msg_id=%s attachment_id=%s cid=%s "
+                "declared_size=%s actual_bytes=%s cap=%s",
+                message_id, attachment_id, cid,
+                att.get("size"), decoded_len, _MAX_INLINE_IMAGE_BYTES,
+            )
+            n_skipped_oversize += 1
+            return att
+        n_fetched += 1
         return {**att, "data": data}
 
-    results = await asyncio.gather(*[fetch_one(a) for a in attachments])
-    return list(results)
+    result = await asyncio.gather(*(fetch_one(a) for a in attachments))
+    if n_fetched or n_skipped_oversize:
+        logger.info(
+            "[hydrate_inline] gmail_msg_id=%s fetched=%d skipped_oversize=%d",
+            message_id, n_fetched, n_skipped_oversize,
+        )
+    return list(result)
 
 
 def _extract_body(payload: dict) -> tuple[str | None, str | None]:
