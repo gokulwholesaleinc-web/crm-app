@@ -490,6 +490,62 @@ class TestGetMessage:
         expected_b64 = base64.b64encode(blue_png).decode("ascii")
         assert expected_b64 in msg["body_html"]
 
+    def test_inline_cid_decode_failure_logs_with_message_id(
+        self, caplog, monkeypatch,
+    ):
+        """When base64 decoding fails for a single inline image, the
+        warning must include the gmail_msg_id so an operator chasing
+        "logo broken on email X" can grep prod logs by message id
+        instead of guessing across high-cardinality cid collisions.
+
+        ``base64.urlsafe_b64decode`` is tolerant by default (silently
+        skips non-alphabet chars), so triggering the ``except`` branch
+        with raw inputs is unreliable. Patch the decoder to raise so
+        the regression specifically targets the log-correlation
+        contract.
+        """
+        import logging
+
+        import src.integrations.gmail.client as client_mod
+        from src.integrations.gmail.client import _inline_cid_images
+
+        def _raise(_data: bytes) -> bytes:
+            raise ValueError("forced decode failure")
+
+        monkeypatch.setattr(client_mod.base64, "urlsafe_b64decode", _raise)
+
+        attachments = [
+            {
+                "cid": "logo",
+                "mime_type": "image/png",
+                "data": "anything",
+                "size": 50,
+                "filename": "logo.png",
+                "attachment_id": None,
+            },
+        ]
+        html = '<p><img src="cid:logo" alt="x"></p>'
+
+        with caplog.at_level(
+            logging.WARNING, logger="src.integrations.gmail.client",
+        ):
+            out = _inline_cid_images(
+                html, attachments, gmail_msg_id="msg-correlation-id-7",
+            )
+
+        # Substitution didn't happen — the broken cid: stayed.
+        assert "cid:logo" in out
+        assert "data:image/png;base64," not in out
+
+        # And the warning carries gmail_msg_id for correlation.
+        decode_warnings = [
+            r for r in caplog.records
+            if "[inline_cid] base64 decode failed" in r.getMessage()
+        ]
+        assert decode_warnings, "expected base64-decode warning to fire"
+        assert "gmail_msg_id=msg-correlation-id-7" in decode_warnings[0].getMessage()
+        assert "cid=logo" in decode_warnings[0].getMessage()
+
     @pytest.mark.asyncio
     async def test_attachments_metadata_collected_for_non_inline(self):
         """Non-inline attachments (no Content-ID) appear in
