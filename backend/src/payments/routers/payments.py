@@ -150,17 +150,48 @@ async def stripe_webhook(request: Request, db: DBSession):
             detail=str(e),
         ) from e
 
-    if result.get("event_type") in (
+    if result.get("status") == "processed" and result.get("event_type") in (
         "checkout.session.completed",
         "payment_intent.succeeded",
         "invoice.paid",
         "checkout.session.async_payment_succeeded",
     ):
+        payment_ctx = result.get("payment") or {}
+        user_id = payment_ctx.get("owner_id")
+
+        if user_id is None and payment_ctx.get("quote_id"):
+            from sqlalchemy import select
+
+            from src.quotes.models import Quote
+            q = await db.execute(
+                select(Quote.owner_id).where(Quote.id == payment_ctx["quote_id"])
+            )
+            user_id = q.scalar_one_or_none()
+        if user_id is None and payment_ctx.get("opportunity_id"):
+            from sqlalchemy import select
+
+            from src.opportunities.models import Opportunity
+            o = await db.execute(
+                select(Opportunity.owner_id).where(Opportunity.id == payment_ctx["opportunity_id"])
+            )
+            user_id = o.scalar_one_or_none()
+
+        if user_id is None:
+            logger.warning(
+                "PAYMENT_RECEIVED with no resolvable owner: event_id=%s payment_id=%s",
+                result.get("event_id"), payment_ctx.get("payment_id"),
+            )
+
         await emit(PAYMENT_RECEIVED, {
-            "entity_id": None,
+            "entity_id": payment_ctx.get("payment_id"),
             "entity_type": "payment",
-            "user_id": None,
-            "data": {"event_type": result["event_type"], "event_id": result.get("event_id")},
+            "user_id": user_id,
+            "data": {
+                "event_type": result["event_type"],
+                "event_id": result.get("event_id"),
+                "quote_id": payment_ctx.get("quote_id"),
+                "opportunity_id": payment_ctx.get("opportunity_id"),
+            },
         })
 
     return result

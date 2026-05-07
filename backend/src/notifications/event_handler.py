@@ -68,7 +68,75 @@ async def _build_notification(session, event_type: str, payload: dict[str, Any])
             entity_id=entity_id,
         )
 
+    if event_type in ("quote.sent", "quote.accepted", "quote.rejected"):
+        qnum = data.get("quote_number") or "—"
+        label = {"quote.sent": "Quote sent", "quote.accepted": "Quote accepted", "quote.rejected": "Quote rejected"}[event_type]
+        msg = {"quote.sent": f"Quote {qnum} was sent",
+               "quote.accepted": f"Quote {qnum} was accepted",
+               "quote.rejected": f"Quote {qnum} was rejected"}[event_type]
+        recipient_id = await _quote_owner(session, entity_id) if event_type in ("quote.sent", "quote.accepted") else user_id
+        if not recipient_id:
+            return None
+        return Notification(
+            user_id=recipient_id,
+            type=event_type.replace(".", "_"),
+            title=label,
+            message=msg,
+            entity_type=entity_type,
+            entity_id=entity_id,
+        )
+
+    if event_type in ("proposal.sent", "proposal.accepted", "proposal.rejected"):
+        pnum = data.get("proposal_number") or "—"
+        label = {"proposal.sent": "Proposal sent", "proposal.accepted": "Proposal accepted", "proposal.rejected": "Proposal rejected"}[event_type]
+        msg = {"proposal.sent": f"Proposal {pnum} was sent",
+               "proposal.accepted": f"Proposal {pnum} was accepted",
+               "proposal.rejected": f"Proposal {pnum} was rejected"}[event_type]
+        recipient_id = await _proposal_owner(session, entity_id) if event_type in ("proposal.sent", "proposal.accepted") else user_id
+        if not recipient_id:
+            return None
+        return Notification(
+            user_id=recipient_id,
+            type=event_type.replace(".", "_"),
+            title=label,
+            message=msg,
+            entity_type=entity_type,
+            entity_id=entity_id,
+        )
+
+    if event_type == "payment.received":
+        if not user_id:
+            return None
+        return Notification(
+            user_id=user_id,
+            type="payment_received",
+            title="Payment received",
+            message=f"Stripe payment processed ({data.get('event_type', 'payment')})",
+            entity_type=entity_type,
+            entity_id=entity_id,
+        )
+
     return None
+
+
+async def _quote_owner(session, quote_id):
+    if not quote_id:
+        return None
+    from sqlalchemy import select
+
+    from src.quotes.models import Quote
+    result = await session.execute(select(Quote.owner_id).where(Quote.id == quote_id))
+    return result.scalar_one_or_none()
+
+
+async def _proposal_owner(session, proposal_id):
+    if not proposal_id:
+        return None
+    from sqlalchemy import select
+
+    from src.proposals.models import Proposal
+    result = await session.execute(select(Proposal.owner_id).where(Proposal.id == proposal_id))
+    return result.scalar_one_or_none()
 
 
 async def create_completion_notification(
