@@ -668,6 +668,21 @@ async def reject_proposal_public(
             signer_email=reject_data.signer_email,
         )
 
+    # Public reject is the customer-facing path — owner needs the ping.
+    # user_id=None because the actor is unauthenticated; the handler
+    # resolves the recipient via the proposal's owner_id.
+    await emit(PROPOSAL_REJECTED, {
+        "entity_id": proposal.id,
+        "entity_type": "proposal",
+        "user_id": None,
+        "data": {
+            "proposal_number": proposal.proposal_number,
+            "status": proposal.status,
+            "rejected_via": "public",
+            "reason": reject_data.reason,
+        },
+    })
+
     branding_data = await service.get_branding_for_proposal(proposal)
     response = ProposalPublicResponse.model_validate(proposal)
     response.branding = ProposalBranding(

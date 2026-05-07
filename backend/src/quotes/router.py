@@ -302,6 +302,21 @@ async def reject_quote_public(
     except ValueError as e:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e)) from e
 
+    # Public reject is the customer-facing path — owner needs the ping.
+    # user_id=None because the actor is unauthenticated; the handler
+    # resolves the recipient via the quote's owner_id.
+    await emit(QUOTE_REJECTED, {
+        "entity_id": quote.id,
+        "entity_type": "quote",
+        "user_id": None,
+        "data": {
+            "quote_number": quote.quote_number,
+            "status": quote.status,
+            "rejected_via": "public",
+            "reason": reject_data.reason,
+        },
+    })
+
     return _build_branded_response(await service.get_branding_for_quote(quote), quote)
 
 

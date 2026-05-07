@@ -285,6 +285,11 @@ class WebhookProcessor:
             select(Payment).where(Payment.stripe_checkout_session_id == session_id)
         )
         payment = result.scalar_one_or_none()
+        # Only return a Payment when this call actually flipped it to
+        # `succeeded`. Stripe sends multiple events for one payment
+        # (checkout.session.completed + payment_intent.succeeded);
+        # without this gate the router fires PAYMENT_RECEIVED twice.
+        transitioned = False
         if payment and payment.status not in ("succeeded", "refunded"):
             payment_intent_id = session_obj.get("payment_intent")
             if payment_intent_id:
@@ -297,6 +302,7 @@ class WebhookProcessor:
             else:
                 payment.status = "succeeded"
                 await self.db.flush()
+                transitioned = True
 
                 # Send branded receipt email only when fully paid
                 try:
@@ -306,7 +312,7 @@ class WebhookProcessor:
                     logger.info("Receipt skipped for payment %s: %s", payment.id, exc)
                 except (OSError, RuntimeError) as exc:
                     logger.warning("Failed to send receipt for payment %s: %s", payment.id, exc)
-        return payment
+        return payment if transitioned else None
 
     async def _handle_payment_succeeded(self, intent_obj: dict) -> Payment | None:
         """Handle payment_intent.succeeded event."""
@@ -318,8 +324,12 @@ class WebhookProcessor:
             select(Payment).where(Payment.stripe_payment_intent_id == intent_id)
         )
         payment = result.scalar_one_or_none()
+        # Only return a Payment when this call flipped it to `succeeded`
+        # — see the equivalent comment in _handle_checkout_completed.
+        transitioned = False
         if payment and payment.status != "succeeded":
             payment.status = "succeeded"
+            transitioned = True
             charge = None
             charges = intent_obj.get("charges", {}).get("data", [])
             if charges:
@@ -338,7 +348,7 @@ class WebhookProcessor:
                 logger.info("Receipt skipped for payment %s: %s", payment.id, exc)
             except (OSError, RuntimeError) as exc:
                 logger.warning("Failed to send receipt for payment %s: %s", payment.id, exc)
-        return payment
+        return payment if transitioned else None
 
     async def _handle_payment_failed(self, intent_obj: dict) -> None:
         """Handle payment_intent.payment_failed event."""
@@ -561,12 +571,16 @@ class WebhookProcessor:
         )
         payment = result.scalar_one_or_none()
         if payment is not None:
+            transitioned = False
             if payment.status != "succeeded":
                 payment.status = "succeeded"
                 await self.db.flush()
+                transitioned = True
             # Fall through to also mark any linked proposal paid.
             await self._mark_proposal_paid_from_invoice(invoice_id)
-            return payment
+            # Same single-fire guard as _handle_checkout_completed: don't
+            # re-emit PAYMENT_RECEIVED on Stripe redeliveries.
+            return payment if transitioned else None
 
         # ------------------------------------------------------------------
         # Subscription renewal path: no existing Payment row for this
@@ -662,6 +676,10 @@ class WebhookProcessor:
             logger.info(
                 "invoice.paid renewal insert race for %s: %s", invoice_id, exc
             )
+            # Winning racer already emitted PAYMENT_RECEIVED; returning the
+            # rolled-back row would propagate id=None into the emit payload
+            # and double-fire the notification.
+            return None
         return renewal_payment
 
     async def _handle_invoice_payment_failed(self, invoice_obj: dict) -> None:
@@ -702,8 +720,10 @@ class WebhookProcessor:
             select(Payment).where(Payment.stripe_checkout_session_id == session_id)
         )
         payment = result.scalar_one_or_none()
+        transitioned = False
         if payment and payment.status != "succeeded":
             payment.status = "succeeded"
+            transitioned = True
             payment_intent_id = session_obj.get("payment_intent")
             if payment_intent_id:
                 payment.stripe_payment_intent_id = payment_intent_id
@@ -715,7 +735,7 @@ class WebhookProcessor:
                 logger.info("Receipt skipped for payment %s: %s", payment.id, exc)
             except (OSError, RuntimeError) as exc:
                 logger.warning("Failed to send receipt for payment %s: %s", payment.id, exc)
-        return payment
+        return payment if transitioned else None
 
     async def _handle_async_payment_failed(self, session_obj: dict) -> None:
         """Handle checkout.session.async_payment_failed (ACH failure)."""
