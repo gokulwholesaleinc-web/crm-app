@@ -154,9 +154,11 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
                 </span>
               </div>
             )}
-            <span className="ml-2 text-xl font-bold text-gray-900 dark:text-gray-100 truncate">
-              {tenant?.company_name || 'CRM'}
-            </span>
+            {(!tenant?.logo_url || mobileLogoError) && (
+              <span className="ml-2 text-xl font-bold text-gray-900 dark:text-gray-100 truncate">
+                {tenant?.company_name || 'CRM'}
+              </span>
+            )}
           </div>
           <button
             type="button"

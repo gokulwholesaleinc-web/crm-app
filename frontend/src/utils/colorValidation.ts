@@ -30,3 +30,23 @@ export function isValidHexColor(input: string | null | undefined): boolean {
     typeof input === 'string' && HEX_COLOR_RE.test(input.trim())
   );
 }
+
+/**
+ * Concatenate a 2-digit alpha suffix onto a hex color, normalizing the input
+ * so the result is always a valid 8-digit `#rrggbbaa` literal.
+ *
+ * The naive pattern `${color}${alpha}` quietly produces invalid CSS for
+ * `#rgb` (5 chars) and `#rrggbbaa` (10 chars) inputs — browsers drop the
+ * rule and the styled element renders unbranded. Use this helper for every
+ * tenant-color + alpha concatenation so 3- and 8-digit hexes Just Work.
+ */
+export function withAlpha(color: string, alphaHex: string): string {
+  if (typeof color !== 'string') return 'transparent';
+  const trimmed = color.trim();
+  if (!HEX_COLOR_RE.test(trimmed)) return 'transparent';
+  const body = trimmed.slice(1);
+  const rrggbb = body.length === 3
+    ? body.replace(/(.)/g, '$1$1')
+    : body.slice(0, 6);
+  return `#${rrggbb}${alphaHex}`;
+}

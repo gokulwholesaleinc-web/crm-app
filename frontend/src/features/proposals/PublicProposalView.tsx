@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback, startTransition } fr
 import { useParams, useSearchParams } from 'react-router-dom';
 import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
-import { sanitizeHexColor } from '../../utils/colorValidation';
+import { sanitizeHexColor, withAlpha } from '../../utils/colorValidation';
 import { formatDate } from '../../utils/formatters';
 import { cadenceLabel, formatProposalMoney } from './billing';
 import { setPublicPageMeta } from '../quotes/publicMeta';
@@ -337,7 +337,9 @@ function PublicProposalView() {
     accent_color: sanitizeHexColor(rawBranding.accent_color, DEFAULT_BRANDING.accent_color),
   };
   const companyDisplayName = branding.company_name || proposal.company?.name || 'Proposal';
-  const accent = branding.primary_color;
+  const primary = branding.primary_color;
+  const secondary = branding.secondary_color;
+  const accent = branding.accent_color;
 
   const isExpired =
     proposal.valid_until &&
@@ -395,6 +397,13 @@ function PublicProposalView() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 antialiased">
+      <div
+        aria-hidden="true"
+        style={{
+          height: 4,
+          backgroundImage: `linear-gradient(90deg, ${primary}, ${secondary}, ${accent})`,
+        }}
+      />
       {/* Letterhead — plain, light, business-document feel. Text label
           is dropped when a logo image is present to avoid the "logo
           wordmark + typed company name" duplication. */}
@@ -415,7 +424,7 @@ function PublicProposalView() {
               <>
                 <div
                   className="h-8 w-8 rounded flex items-center justify-center flex-shrink-0 text-white text-sm font-semibold"
-                  style={{ backgroundColor: accent }}
+                  style={{ backgroundColor: primary }}
                 >
                   {companyDisplayName[0]?.toUpperCase() || 'P'}
                 </div>
@@ -433,7 +442,7 @@ function PublicProposalView() {
                 style={
                   statusPill === 'rejected'
                     ? { color: '#b91c1c', backgroundColor: '#fef2f2', borderColor: '#fecaca' }
-                    : { color: accent, backgroundColor: `${accent}0f`, borderColor: `${accent}40` }
+                    : { color: accent, backgroundColor: withAlpha(accent, '0f'), borderColor: withAlpha(accent, '40') }
                 }
               >
                 {statusPill === 'paid' ? 'Paid' : statusPill === 'accepted' ? 'Accepted' : 'Declined'}
@@ -481,7 +490,7 @@ function PublicProposalView() {
 
         {contentSections.map((section) => (
           <section key={section.title} className="mt-10 sm:mt-12">
-            <PlainSectionHeader title={section.title} accent={accent} />
+            <PlainSectionHeader title={section.title} accent={primary} />
             <div className="prose-body">
               <p className="whitespace-pre-wrap text-pretty break-words">
                 {section.body}
@@ -494,7 +503,7 @@ function PublicProposalView() {
           <ProposalAttachmentsSection
             attachments={attachments}
             token={token}
-            accent={accent}
+            accent={primary}
             viewedIds={viewedIds}
             onViewed={handleAttachmentViewed}
             onReconcile={fetchProposal}
@@ -506,13 +515,13 @@ function PublicProposalView() {
           <section className="mt-10 sm:mt-12">
             <PlainSectionHeader
               title={proposal.payment_type === 'subscription' ? 'Engagement & Fees' : 'Fees'}
-              accent={accent}
+              accent={primary}
             />
 
             {formattedAmount && (
               <div
-                className="rounded border px-6 py-5 mb-4 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3"
-                style={{ borderColor: `${accent}40`, backgroundColor: `${accent}0a` }}
+                className="rounded-lg border p-5 mb-4 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3"
+                style={{ borderColor: withAlpha(secondary, '40'), backgroundColor: withAlpha(secondary, '14') }}
               >
                 <div>
                   <div className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
@@ -548,7 +557,7 @@ function PublicProposalView() {
           contentSections.length === 0 &&
           !hasPricingBlock && (
             <section className="mt-10 sm:mt-12">
-              <PlainSectionHeader title="Proposal" accent={accent} />
+              <PlainSectionHeader title="Proposal" accent={primary} />
               <div className="prose-body">
                 <p className="whitespace-pre-wrap text-pretty break-words">
                   {proposal.content}
@@ -562,14 +571,14 @@ function PublicProposalView() {
         {confirmingPayment && proposal.status !== 'paid' && (
           <section
             className="mt-10 sm:mt-12 rounded border px-5 py-4"
-            style={{ borderColor: `${accent}40`, backgroundColor: `${accent}0a` }}
+            style={{ borderColor: withAlpha(primary, '40'), backgroundColor: withAlpha(primary, '0a') }}
             role="status"
             aria-live="polite"
           >
             <div className="flex items-center gap-3">
               <span
                 className="inline-block h-4 w-4 rounded-full border-2 border-t-transparent animate-spin"
-                style={{ borderColor: accent, borderTopColor: 'transparent' }}
+                style={{ borderColor: primary, borderTopColor: 'transparent' }}
                 aria-hidden="true"
               />
               <div>
@@ -613,7 +622,7 @@ function PublicProposalView() {
           !confirmingPayment &&
           !paymentTimedOut && (
             <section className="mt-10 sm:mt-12" ref={paySectionRef}>
-              <PlainSectionHeader title="Payment" accent={accent} />
+              <PlainSectionHeader title="Payment" accent={primary} />
               <p className="prose-body mb-5">
                 {proposal.payment_type === 'subscription'
                   ? `Set up your payment method with ${companyDisplayName} via Stripe to activate your subscription. The first billing period will be charged upon checkout completion.`
@@ -667,7 +676,7 @@ function PublicProposalView() {
         {/* Accept / Decline form — standard business form layout */}
         {canRespond && (
           <section className="mt-10 sm:mt-12">
-            <PlainSectionHeader title="Your Response" accent={accent} />
+            <PlainSectionHeader title="Your Response" accent={primary} />
             <p className="prose-body mb-5">
               Please review the proposal above and accept or decline. Your typed name and
               email below constitute your legally binding electronic signature (full
@@ -690,7 +699,7 @@ function PublicProposalView() {
                   onChange={(e) => setSignerName(e.target.value)}
                   disabled={actionPending}
                   className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 px-3 py-2 shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 disabled:opacity-50"
-                  style={{ outlineColor: accent }}
+                  style={{ outlineColor: primary }}
                 />
               </div>
               <div>
@@ -710,7 +719,7 @@ function PublicProposalView() {
                   onChange={(e) => setSignerEmail(e.target.value)}
                   disabled={actionPending}
                   className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 px-3 py-2 shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 disabled:opacity-50"
-                  style={{ outlineColor: accent }}
+                  style={{ outlineColor: primary }}
                 />
               </div>
             </div>

@@ -12,6 +12,7 @@ import { Button } from '../../../components/ui/Button';
 import { useTenant } from '../../../providers/TenantProvider';
 import { SwatchIcon } from '@heroicons/react/24/outline';
 import { useUnsavedChangesWarning } from '../../../hooks/useUnsavedChangesWarning';
+import { isValidHexColor, withAlpha } from '../../../utils/colorValidation';
 
 interface BrandingFormData {
   company_name: string;
@@ -21,6 +22,14 @@ interface BrandingFormData {
   logo_url: string;
   favicon_url: string;
   footer_text: string;
+}
+
+const NEUTRAL_GRAY = '#94a3b8';
+
+function safeColor(value: string, fallback: string): string {
+  if (isValidHexColor(value)) return value;
+  if (isValidHexColor(fallback)) return fallback;
+  return NEUTRAL_GRAY;
 }
 
 export function BrandingSection() {
@@ -400,6 +409,9 @@ export function BrandingSection() {
                     placeholder="#6366f1"
                   />
                 </div>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Used for buttons, links, active navigation, focus rings, and chart highlights.
+                </p>
               </div>
               <div>
                 <label htmlFor="branding-secondary-color" className="form-label">
@@ -428,6 +440,9 @@ export function BrandingSection() {
                     placeholder="#8b5cf6"
                   />
                 </div>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Used as a supporting accent in chart series and category badges.
+                </p>
               </div>
               <div>
                 <label htmlFor="branding-accent-color" className="form-label">
@@ -456,41 +471,157 @@ export function BrandingSection() {
                     placeholder="#22c55e"
                   />
                 </div>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Used for callouts, accent badges, and the third chart series color.
+                </p>
               </div>
             </div>
 
             {/* Preview */}
-            <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
-                Preview
-              </p>
-              <div
-                className="flex items-center justify-between px-4 py-3 rounded-lg"
-                style={{ backgroundColor: formData.primary_color }}
-              >
-                <div className="flex items-center gap-3">
-                  {formData.logo_url && !logoPreviewError ? (
-                    <img
-                      src={formData.logo_url}
-                      alt="Logo"
-                      width={28}
-                      height={28}
-                      className="h-7 w-7 rounded object-contain bg-white/20"
-                      onError={() => setLogoPreviewError(true)}
-                    />
-                  ) : null}
-                  <span className="text-sm font-semibold text-white">
-                    {formData.company_name || 'Company Name'}
-                  </span>
+            {(() => {
+              const primary = safeColor(formData.primary_color, tenant?.primary_color ?? '#6366f1');
+              const secondary = safeColor(formData.secondary_color, tenant?.secondary_color ?? '#8b5cf6');
+              const accent = safeColor(formData.accent_color, tenant?.accent_color ?? '#22c55e');
+              const swatches: Array<{ label: string; value: string; raw: string }> = [
+                { label: 'Primary', value: primary, raw: formData.primary_color },
+                { label: 'Secondary', value: secondary, raw: formData.secondary_color },
+                { label: 'Accent', value: accent, raw: formData.accent_color },
+              ];
+              const bars = [
+                { color: primary, width: '90%' },
+                { color: secondary, width: '70%' },
+                { color: accent, width: '55%' },
+                { color: NEUTRAL_GRAY, width: '35%' },
+              ];
+              return (
+                <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                      Preview
+                    </p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500">
+                      Live — reflects unsaved values
+                    </p>
+                  </div>
+
+                  {/* Header strip */}
+                  <div
+                    className="flex items-center justify-between px-4 py-3 rounded-lg"
+                    style={{ backgroundColor: primary }}
+                  >
+                    <div className="flex items-center gap-3">
+                      {formData.logo_url && !logoPreviewError ? (
+                        <img
+                          src={formData.logo_url}
+                          alt=""
+                          width={28}
+                          height={28}
+                          className="h-7 w-7 rounded object-contain bg-white/20"
+                          onError={() => setLogoPreviewError(true)}
+                        />
+                      ) : null}
+                      <span className="text-sm font-semibold text-white">
+                        {formData.company_name || 'Company Name'}
+                      </span>
+                    </div>
+                    <span
+                      className="inline-block px-3 py-1 rounded-full text-xs font-medium text-white"
+                      style={{ backgroundColor: accent }}
+                    >
+                      Proposal
+                    </span>
+                  </div>
+
+                  {/* Swatch cards */}
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    {swatches.map((s) => (
+                      <div
+                        key={s.label}
+                        className="rounded-md border border-gray-200 dark:border-gray-700 p-3 flex items-center gap-3"
+                      >
+                        <span
+                          className="inline-block h-16 w-16 rounded border border-gray-300 dark:border-gray-600 flex-shrink-0"
+                          style={{ backgroundColor: s.value }}
+                          aria-label={`${s.label} color swatch`}
+                        />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                            {s.label}
+                          </p>
+                          <p className="text-xs font-mono text-gray-500 dark:text-gray-400 truncate">
+                            {s.raw || s.value}
+                          </p>
+                          {!isValidHexColor(s.raw) && (
+                            <p className="text-xs text-red-500 dark:text-red-400">
+                              Invalid hex — using fallback
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Button row */}
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium text-white shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+                      style={{ backgroundColor: primary }}
+                      onClick={(e) => e.preventDefault()}
+                    >
+                      Primary Button
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium bg-transparent border focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+                      style={{ borderColor: secondary, color: secondary }}
+                      onClick={(e) => e.preventDefault()}
+                    >
+                      Secondary Button
+                    </button>
+                  </div>
+
+                  {/* Badge row */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium"
+                      style={{ backgroundColor: withAlpha(primary, '1a'), color: primary }}
+                    >
+                      Primary
+                    </span>
+                    <span
+                      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium"
+                      style={{ backgroundColor: withAlpha(secondary, '1a'), color: secondary }}
+                    >
+                      Secondary
+                    </span>
+                    <span
+                      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium"
+                      style={{ backgroundColor: withAlpha(accent, '1a'), color: accent }}
+                    >
+                      Accent
+                    </span>
+                  </div>
+
+                  {/* Mock bar chart */}
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
+                      Sample chart
+                    </p>
+                    <div className="space-y-1.5" role="img" aria-label="Sample chart preview">
+                      {bars.map((b, i) => (
+                        <div key={i} className="h-3 w-full bg-gray-100 dark:bg-gray-800 rounded">
+                          <div
+                            className="h-full rounded"
+                            style={{ width: b.width, backgroundColor: b.color }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-                <span
-                  className="inline-block px-3 py-1 rounded-full text-xs font-medium text-white"
-                  style={{ backgroundColor: formData.accent_color }}
-                >
-                  Proposal
-                </span>
-              </div>
-            </div>
+              );
+            })()}
 
             {/* Actions */}
             <div className="flex justify-end gap-3 pt-2">
