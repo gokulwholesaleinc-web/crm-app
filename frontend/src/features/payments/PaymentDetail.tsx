@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { useSmartBack } from '../../hooks/useSmartBack';
 import { ArrowLeftIcon, DocumentArrowDownIcon, EnvelopeIcon, ClipboardDocumentIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
 import { EntityLink, StatusBadge } from '../../components/ui';
 import { usePayment } from '../../hooks/usePayments';
@@ -24,6 +25,7 @@ function CustomerName({ customer }: { customer: StripeCustomerBrief }) {
 
 function PaymentDetailPage() {
   const { id } = useParams();
+  const handleBack = useSmartBack('/payments');
   const paymentId = id ? parseInt(id, 10) : undefined;
 
   const { data: payment, isLoading, error } = usePayment(paymentId);
@@ -140,13 +142,14 @@ function PaymentDetailPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
-          <Link
-            to="/payments"
-            className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
-            aria-label="Back to payments"
+          <button
+            type="button"
+            onClick={handleBack}
+            className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+            aria-label="Go back"
           >
             <ArrowLeftIcon className="h-5 w-5" aria-hidden="true" />
-          </Link>
+          </button>
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">

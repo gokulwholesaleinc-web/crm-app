@@ -358,7 +358,17 @@ function ProposalsPage() {
                 </thead>
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                   {proposals.map((proposal: Proposal) => (
-                    <tr key={proposal.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <tr
+                      key={proposal.id}
+                      className="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
+                      onClick={(e) => {
+                        if ((e.target as HTMLElement).closest('a, button')) return;
+                        if (window.getSelection()?.toString()) return;
+                        navigate(`/proposals/${proposal.id}`, {
+                          state: { from: window.location.pathname + window.location.search },
+                        });
+                      }}
+                    >
                       <td className="px-6 py-4 whitespace-nowrap">
                         <Link
                           to={`/proposals/${proposal.id}`}

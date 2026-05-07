@@ -1,5 +1,6 @@
 import { useState, useRef, lazy, Suspense } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { useSmartBack } from '../../hooks/useSmartBack';
 import { Button, HelpLink, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { TabBar, ActivitiesTab, CommonTabContent, SuspenseFallback } from '../../components/shared/DetailPageShell';
 import { EmailComposeModal, EmailThread, GmailReconnectBanner } from '../../components/email';
@@ -56,6 +57,7 @@ function ContactDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const handleBack = useSmartBack('/contacts');
   const contactId = id ? parseInt(id, 10) : undefined;
   // Honor `?tab=` so deep links from the email search modal land on
   // the right tab; `?email=` carries the kind:id deep-link target the
@@ -171,15 +173,16 @@ function ContactDetailPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center space-x-4">
-          <Link
-            to="/contacts"
-            className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 flex-shrink-0"
-            aria-label="Back to contacts"
+          <button
+            type="button"
+            onClick={handleBack}
+            className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
+            aria-label="Go back"
           >
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
-          </Link>
+          </button>
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">
