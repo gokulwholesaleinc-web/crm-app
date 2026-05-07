@@ -431,9 +431,11 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
               </>
             )}
           </button>
-          <p className="text-xs text-gray-400 dark:text-gray-500">
-            {tenant?.footer_text || 'CRM Application v1.0'}
-          </p>
+          {tenant?.footer_text && (
+            <p className="text-xs text-gray-400 dark:text-gray-500">
+              {tenant.footer_text}
+            </p>
+          )}
         </div>
       )}
     </aside>
