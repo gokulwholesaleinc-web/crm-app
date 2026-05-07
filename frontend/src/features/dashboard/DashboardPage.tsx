@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from 'react';
+import { useState } from 'react';
 import { Modal } from '../../components/ui/Modal';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { NumberCard } from './components/NumberCard';
@@ -9,7 +9,6 @@ import { SkeletonCard, SkeletonChart } from '../../components/ui/Skeleton';
 import { ErrorEmptyState } from '../../components/ui/EmptyState';
 import { DateRangePicker } from '../../components/ui/DateRangePicker';
 import type { DateRange } from '../../components/ui/DateRangePicker';
-const DashboardRecommendations = lazy(() => import('../../components/ai/DashboardRecommendations').then(m => ({ default: m.DashboardRecommendations })));
 import { formatCurrency, formatDate } from '../../utils';
 import { useKPIs, usePipelineFunnelChart, useLeadsBySourceChart, useSalesFunnel, useSalesKpis } from '../../hooks/useDashboard';
 import { useUserTimeline } from '../../hooks/useActivities';
@@ -390,11 +389,6 @@ function DashboardPage() {
           />
         </div>
       )}
-
-      {/* AI Suggestions */}
-      <Suspense fallback={null}>
-        <DashboardRecommendations maxItems={3} />
-      </Suspense>
 
       {/* Report Widgets */}
       <ReportWidgetsSection />
