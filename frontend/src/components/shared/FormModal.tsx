@@ -59,6 +59,12 @@ export function FormModal<T extends FieldValues>({
     }
   }, [isOpen, defaultValues, form]);
 
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current !== null) clearTimeout(closeTimerRef.current);
+    };
+  }, []);
+
   const handleFormSubmit = async (data: T) => {
     try {
       await onSubmit(data);
