@@ -424,6 +424,12 @@ async def _store_inbound(
         entity_type=entity_type,
         entity_id=entity_id,
         participant_emails=recipients,
+        # Non-inline attachments (filenames + sizes + Gmail attachment_id
+        # so a future "download" UI can fetch them on demand). Inline
+        # images that already got embedded into body_html as data URIs
+        # ARE included here too, marked is_inline=True, so the metadata
+        # is symmetric and audit-traceable.
+        attachments={"items": msg.get("attachments") or []} if msg.get("attachments") else None,
     )
     db.add(row)
     await db.flush()
