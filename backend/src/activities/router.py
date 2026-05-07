@@ -34,8 +34,8 @@ from src.core.router_utils import (
     get_entity_or_404,
     parse_comma_separated,
 )
-from src.events.service import ACTIVITY_CREATED, emit
-from src.notifications.service import notify_on_activity_due
+from src.events.service import ACTIVITY_ASSIGNED, ACTIVITY_CREATED, emit
+from src.notifications.service import notify_on_activity_due, notify_on_assignment
 
 router = APIRouter(prefix="/api/activities", tags=["activities"])
 
@@ -358,6 +358,7 @@ async def update_activity(
     activity = await get_entity_or_404(service, activity_id, EntityNames.ACTIVITY)
     check_ownership(activity, current_user, EntityNames.ACTIVITY)
 
+    old_assigned_to_id = activity.assigned_to_id
     update_fields = list(activity_data.model_dump(exclude_unset=True).keys())
     old_data = snapshot_entity(activity, update_fields)
 
@@ -366,6 +367,15 @@ async def update_activity(
     new_data = snapshot_entity(updated_activity, update_fields)
     ip_address = get_client_ip(request)
     await audit_entity_update(db, "activity", updated_activity.id, current_user.id, old_data, new_data, ip_address)
+
+    if updated_activity.assigned_to_id and updated_activity.assigned_to_id != old_assigned_to_id:
+        await notify_on_assignment(db, updated_activity.assigned_to_id, "activities", updated_activity.id, updated_activity.subject)
+        await emit(ACTIVITY_ASSIGNED, {
+            "entity_id": updated_activity.id,
+            "entity_type": "activity",
+            "user_id": updated_activity.assigned_to_id,
+            "data": {"subject": updated_activity.subject, "old_assigned_to_id": old_assigned_to_id},
+        })
 
     return ActivityResponse.model_validate(updated_activity)
 

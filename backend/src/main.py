@@ -196,6 +196,7 @@ app.include_router(settings_router)
 
 # Register webhook event handler with event system
 from src.events.service import (
+    ACTIVITY_ASSIGNED,
     ACTIVITY_CREATED,
     COMPANY_CREATED,
     COMPANY_UPDATED,
@@ -208,8 +209,10 @@ from src.events.service import (
     OPPORTUNITY_UPDATED,
     PAYMENT_RECEIVED,
     PROPOSAL_ACCEPTED,
+    PROPOSAL_REJECTED,
     PROPOSAL_SENT,
     QUOTE_ACCEPTED,
+    QUOTE_REJECTED,
     QUOTE_SENT,
 )
 from src.events.service import on as event_on
@@ -220,16 +223,21 @@ for _evt in [
     LEAD_CREATED, LEAD_UPDATED,
     CONTACT_CREATED, CONTACT_UPDATED,
     OPPORTUNITY_CREATED, OPPORTUNITY_UPDATED, OPPORTUNITY_STAGE_CHANGED,
-    ACTIVITY_CREATED,
+    ACTIVITY_CREATED, ACTIVITY_ASSIGNED,
     COMPANY_CREATED, COMPANY_UPDATED,
-    QUOTE_SENT, QUOTE_ACCEPTED,
-    PROPOSAL_SENT, PROPOSAL_ACCEPTED,
+    QUOTE_SENT, QUOTE_ACCEPTED, QUOTE_REJECTED,
+    PROPOSAL_SENT, PROPOSAL_ACCEPTED, PROPOSAL_REJECTED,
     PAYMENT_RECEIVED,
 ]:
     event_on(_evt, webhook_event_handler)
 
 # Register notification event handler for key events
-for _evt in [LEAD_CREATED, CONTACT_CREATED, OPPORTUNITY_STAGE_CHANGED]:
+for _evt in [
+    LEAD_CREATED, CONTACT_CREATED, OPPORTUNITY_STAGE_CHANGED,
+    QUOTE_SENT, QUOTE_REJECTED,
+    PROPOSAL_SENT, PROPOSAL_REJECTED,
+    PAYMENT_RECEIVED,
+]:
     event_on(_evt, notification_event_handler)
 
 

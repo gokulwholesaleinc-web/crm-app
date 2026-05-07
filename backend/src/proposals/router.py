@@ -30,7 +30,7 @@ from src.core.router_utils import (
     raise_bad_request,
     raise_not_found,
 )
-from src.events.service import PROPOSAL_ACCEPTED, PROPOSAL_SENT, emit
+from src.events.service import PROPOSAL_ACCEPTED, PROPOSAL_REJECTED, PROPOSAL_SENT, emit
 from src.proposals.attachment_views import (
     ProposalAttachmentView,
     _hash_token,
@@ -874,4 +874,12 @@ async def reject_proposal(
     check_ownership(proposal, current_user, EntityNames.PROPOSAL)
     with value_error_as_400():
         proposal = await service.mark_rejected(proposal)
+
+    await emit(PROPOSAL_REJECTED, {
+        "entity_id": proposal.id,
+        "entity_type": "proposal",
+        "user_id": proposal.owner_id,
+        "data": {"proposal_number": proposal.proposal_number, "status": proposal.status},
+    })
+
     return ProposalResponse.model_validate(proposal)
