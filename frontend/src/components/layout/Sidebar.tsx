@@ -298,7 +298,7 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
               </span>
             </div>
           )}
-          {!collapsed && (
+          {!collapsed && (!tenant?.logo_url || logoError) && (
             <span className="ml-2 text-xl font-bold text-gray-900 dark:text-gray-100 truncate">
               {tenant?.company_name || 'CRM'}
             </span>
