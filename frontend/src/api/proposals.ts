@@ -208,14 +208,26 @@ export const downloadProposalPDF = async (proposalId: number): Promise<Blob> => 
  * resolves to the envelope object and ``attachments.length`` returns
  * undefined, so neither the empty-state nor the file list ever
  * renders even though the upload mutation succeeded.
+ *
+ * Shape validation (instead of a defensive ``?? []`` fallback): if
+ * the backend ever serves a 200 with a different envelope (legacy
+ * shape, misrouted endpoint, auth-redirect HTML 200, schema rename),
+ * throw with a clear message so React Query exposes it via the
+ * ``error`` branch in ProposalAttachmentsCard. ``?? []`` would mask
+ * the regression as "empty list" indistinguishably from the real
+ * empty case — exactly the failure mode the original bug had.
  */
 export const listProposalAttachments = async (
   proposalId: number,
 ): Promise<ProposalAttachment[]> => {
-  const response = await apiClient.get<{ items: ProposalAttachment[]; total: number }>(
+  const response = await apiClient.get<{ items?: unknown; total?: unknown }>(
     `${PROPOSALS_BASE}/${proposalId}/attachments`,
   );
-  return response.data.items ?? [];
+  const data = response.data;
+  if (!data || typeof data !== 'object' || !Array.isArray(data.items)) {
+    throw new Error('Unexpected proposal attachments response shape');
+  }
+  return data.items as ProposalAttachment[];
 };
 
 /**
