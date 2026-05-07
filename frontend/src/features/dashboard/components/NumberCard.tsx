@@ -17,10 +17,10 @@ export interface NumberCardProps {
   colorVariant?: NumberCardColor;
 }
 
-const iconBoxByVariant: Record<NumberCardColor, string> = {
-  primary: 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-300',
-  secondary: 'bg-secondary-50 dark:bg-secondary-900/30 text-secondary-700 dark:text-secondary-200',
-  accent: 'bg-accent-50 dark:bg-accent-900/30 text-accent-700 dark:text-accent-200',
+const brandVarByVariant: Record<NumberCardColor, string> = {
+  primary: '--brand-primary',
+  secondary: '--brand-secondary',
+  accent: '--brand-accent',
 };
 
 export function NumberCard({
@@ -33,6 +33,7 @@ export function NumberCard({
   className,
   colorVariant = 'primary',
 }: NumberCardProps) {
+  const brandColor = `var(${brandVarByVariant[colorVariant]})`;
   const cardContent = (
     <div className="flex items-center justify-between">
       <div className="flex-1 min-w-0">
@@ -56,7 +57,13 @@ export function NumberCard({
         )}
       </div>
       {icon && (
-        <div className={clsx('flex-shrink-0 p-3 rounded-lg', iconBoxByVariant[colorVariant])}>
+        <div
+          className="flex-shrink-0 p-3 rounded-lg"
+          style={{
+            backgroundColor: `color-mix(in srgb, ${brandColor} 15%, transparent)`,
+            color: brandColor,
+          }}
+        >
           <span className="h-6 w-6">{icon}</span>
         </div>
       )}

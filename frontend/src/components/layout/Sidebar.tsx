@@ -280,6 +280,7 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
             <img
               src={tenant.logo_url}
               alt={tenant.company_name || 'Logo'}
+              width={collapsed ? 32 : 180}
               height={collapsed ? 32 : 40}
               className={clsx(
                 'object-contain flex-shrink-0',
