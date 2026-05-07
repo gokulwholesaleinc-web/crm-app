@@ -281,7 +281,7 @@ class TestBulkDelete:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_leads_for_delete: list,
     ):
         """Test mass deleting leads."""
@@ -289,7 +289,7 @@ class TestBulkDelete:
 
         response = await client.post(
             "/api/import-export/bulk/delete",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "entity_type": "leads",
                 "entity_ids": lead_ids,
@@ -322,7 +322,7 @@ class TestBulkDelete:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_leads_for_delete: list,
     ):
         """Test bulk delete with mix of valid and invalid IDs."""
@@ -330,7 +330,7 @@ class TestBulkDelete:
 
         response = await client.post(
             "/api/import-export/bulk/delete",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "entity_type": "leads",
                 "entity_ids": [valid_id, 99999, 99998],
@@ -349,12 +349,12 @@ class TestBulkDelete:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
     ):
         """Test bulk delete with only invalid IDs still succeeds with 0 deleted."""
         response = await client.post(
             "/api/import-export/bulk/delete",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "entity_type": "leads",
                 "entity_ids": [99999, 99998],
@@ -372,12 +372,12 @@ class TestBulkDelete:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
     ):
         """Test bulk delete with invalid entity type returns 400."""
         response = await client.post(
             "/api/import-export/bulk/delete",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "entity_type": "nonexistent",
                 "entity_ids": [1, 2],
@@ -391,12 +391,12 @@ class TestBulkDelete:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
     ):
         """Test bulk delete with empty entity IDs returns 400."""
         response = await client.post(
             "/api/import-export/bulk/delete",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "entity_type": "leads",
                 "entity_ids": [],
@@ -410,7 +410,7 @@ class TestBulkDelete:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_user: User,
     ):
         """Test bulk deleting contacts."""
@@ -428,7 +428,7 @@ class TestBulkDelete:
 
         response = await client.post(
             "/api/import-export/bulk/delete",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "entity_type": "contacts",
                 "entity_ids": [contact.id],
@@ -445,7 +445,7 @@ class TestBulkDelete:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_user: User,
     ):
         """Test bulk deleting companies."""
@@ -461,7 +461,7 @@ class TestBulkDelete:
 
         response = await client.post(
             "/api/import-export/bulk/delete",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "entity_type": "companies",
                 "entity_ids": [company.id],
@@ -717,353 +717,3 @@ class TestCalendarEndpoint:
         assert response.status_code == 401
 
 
-# =========================================================================
-# Predictive AI Tests
-# =========================================================================
-
-
-class TestWinProbability:
-    """Tests for GET /api/ai/predict/opportunity/{opportunity_id}."""
-
-    @pytest.mark.asyncio
-    async def test_win_probability_basic(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-        test_opportunity: Opportunity,
-    ):
-        """Test win probability returns a valid score for an open opportunity."""
-        response = await client.get(
-            f"/api/ai/predict/opportunity/{test_opportunity.id}",
-            headers=auth_headers,
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert "opportunity_id" in data
-        assert "win_probability" in data
-        assert "base_stage_probability" in data
-        assert "factors" in data
-        assert data["opportunity_id"] == test_opportunity.id
-        assert 0 <= data["win_probability"] <= 100
-        assert isinstance(data["factors"], dict)
-
-    @pytest.mark.asyncio
-    async def test_win_probability_not_found(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-    ):
-        """Test win probability for non-existent opportunity returns 404."""
-        response = await client.get(
-            "/api/ai/predict/opportunity/99999",
-            headers=auth_headers,
-        )
-        assert response.status_code == 404
-
-    @pytest.mark.asyncio
-    async def test_win_probability_won_deal(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-        test_user: User,
-        test_won_stage: PipelineStage,
-        test_contact: Contact,
-        test_company: Company,
-    ):
-        """Test win probability for a won deal returns 100."""
-        won_opp = Opportunity(
-            name="Won Deal",
-            pipeline_stage_id=test_won_stage.id,
-            amount=50000.0,
-            currency="USD",
-            contact_id=test_contact.id,
-            company_id=test_company.id,
-            owner_id=test_user.id,
-            created_by_id=test_user.id,
-        )
-        db_session.add(won_opp)
-        await db_session.commit()
-        await db_session.refresh(won_opp)
-
-        response = await client.get(
-            f"/api/ai/predict/opportunity/{won_opp.id}",
-            headers=auth_headers,
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["win_probability"] == 100
-
-    @pytest.mark.asyncio
-    async def test_win_probability_lost_deal(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-        test_user: User,
-        test_contact: Contact,
-        test_company: Company,
-    ):
-        """Test win probability for a lost deal returns 0."""
-        lost_stage = PipelineStage(
-            name="Lost",
-            order=6,
-            color="#ef4444",
-            probability=0,
-            is_won=False,
-            is_lost=True,
-            is_active=True,
-        )
-        db_session.add(lost_stage)
-        await db_session.commit()
-        await db_session.refresh(lost_stage)
-
-        lost_opp = Opportunity(
-            name="Lost Deal",
-            pipeline_stage_id=lost_stage.id,
-            amount=30000.0,
-            currency="USD",
-            contact_id=test_contact.id,
-            company_id=test_company.id,
-            owner_id=test_user.id,
-            created_by_id=test_user.id,
-        )
-        db_session.add(lost_opp)
-        await db_session.commit()
-        await db_session.refresh(lost_opp)
-
-        response = await client.get(
-            f"/api/ai/predict/opportunity/{lost_opp.id}",
-            headers=auth_headers,
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["win_probability"] == 0
-
-    @pytest.mark.asyncio
-    async def test_win_probability_with_activity_boost(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-        test_opportunity: Opportunity,
-        test_user: User,
-    ):
-        """Test that recent activities boost win probability."""
-        # Create multiple recent activities for the opportunity
-        for i in range(4):
-            activity = Activity(
-                activity_type="call",
-                subject=f"Activity {i}",
-                entity_type="opportunities",
-                entity_id=test_opportunity.id,
-                priority="normal",
-                is_completed=False,
-                owner_id=test_user.id,
-                created_by_id=test_user.id,
-            )
-            db_session.add(activity)
-        await db_session.commit()
-
-        response = await client.get(
-            f"/api/ai/predict/opportunity/{test_opportunity.id}",
-            headers=auth_headers,
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["win_probability"] > 0
-        # With contact and company assigned + high activity, should have bonuses
-        assert "has_contact" in data["factors"] or "high_activity_bonus" in data["factors"]
-
-    @pytest.mark.asyncio
-    async def test_win_probability_unauthorized(
-        self, client: AsyncClient, db_session: AsyncSession
-    ):
-        """Test win probability without auth returns 401."""
-        response = await client.get("/api/ai/predict/opportunity/1")
-        assert response.status_code == 401
-
-
-class TestSuggestNextAction:
-    """Tests for GET /api/ai/suggest/next-action/{entity_type}/{entity_id}."""
-
-    @pytest.mark.asyncio
-    async def test_suggest_next_action_not_found(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-    ):
-        """Test suggesting next action for non-existent entity returns 404."""
-        response = await client.get(
-            "/api/ai/suggest/next-action/leads/99999",
-            headers=auth_headers,
-        )
-        assert response.status_code == 404
-
-    @pytest.mark.asyncio
-    async def test_suggest_next_action_unauthorized(
-        self, client: AsyncClient, db_session: AsyncSession
-    ):
-        """Test next action suggestion without auth returns 401."""
-        response = await client.get("/api/ai/suggest/next-action/leads/1")
-        assert response.status_code == 401
-
-
-class TestActivitySummary:
-    """Tests for GET /api/ai/summary/{entity_type}/{entity_id}."""
-
-    @pytest.mark.asyncio
-    async def test_activity_summary_with_activities(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-        test_contact: Contact,
-        test_activity: Activity,
-    ):
-        """Test activity summary for a contact with activities."""
-        response = await client.get(
-            f"/api/ai/summary/contacts/{test_contact.id}",
-            headers=auth_headers,
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["entity_type"] == "contacts"
-        assert data["entity_id"] == test_contact.id
-        assert data["period_days"] == 30
-        assert data["total_activities"] >= 1
-        assert "by_type" in data
-        assert "summary" in data
-        assert isinstance(data["summary"], str)
-
-    @pytest.mark.asyncio
-    async def test_activity_summary_no_activities(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-        test_user: User,
-    ):
-        """Test activity summary for entity with no activities."""
-        # Create a contact without any activities
-        contact = Contact(
-            first_name="No",
-            last_name="Activities",
-            email="no_activities@example.com",
-            status="active",
-            owner_id=test_user.id,
-            created_by_id=test_user.id,
-        )
-        db_session.add(contact)
-        await db_session.commit()
-        await db_session.refresh(contact)
-
-        response = await client.get(
-            f"/api/ai/summary/contacts/{contact.id}",
-            headers=auth_headers,
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["total_activities"] == 0
-        assert data["by_type"] == {}
-        assert "No activities" in data["summary"]
-
-    @pytest.mark.asyncio
-    async def test_activity_summary_custom_days(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-        test_contact: Contact,
-        test_activity: Activity,
-    ):
-        """Test activity summary with custom days parameter."""
-        response = await client.get(
-            f"/api/ai/summary/contacts/{test_contact.id}?days=7",
-            headers=auth_headers,
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["period_days"] == 7
-
-    @pytest.mark.asyncio
-    async def test_activity_summary_response_structure(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-        test_contact: Contact,
-        test_activity: Activity,
-    ):
-        """Test activity summary returns expected structure."""
-        response = await client.get(
-            f"/api/ai/summary/contacts/{test_contact.id}",
-            headers=auth_headers,
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-
-        # Verify last_activity structure when activities exist
-        if data["total_activities"] > 0:
-            assert "last_activity" in data
-            last = data["last_activity"]
-            assert "id" in last
-            assert "type" in last
-            assert "subject" in last
-            assert "date" in last
-
-    @pytest.mark.asyncio
-    async def test_activity_summary_multiple_types(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-        test_user: User,
-        test_contact: Contact,
-    ):
-        """Test activity summary counts by type correctly."""
-        # Create activities of different types
-        for atype in ["call", "email", "meeting"]:
-            activity = Activity(
-                activity_type=atype,
-                subject=f"Test {atype}",
-                entity_type="contacts",
-                entity_id=test_contact.id,
-                priority="normal",
-                is_completed=atype == "call",
-                owner_id=test_user.id,
-                created_by_id=test_user.id,
-            )
-            db_session.add(activity)
-        await db_session.commit()
-
-        response = await client.get(
-            f"/api/ai/summary/contacts/{test_contact.id}",
-            headers=auth_headers,
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["total_activities"] >= 3
-        assert "call" in data["by_type"]
-        assert "email" in data["by_type"]
-        assert "meeting" in data["by_type"]
-
-    @pytest.mark.asyncio
-    async def test_activity_summary_unauthorized(
-        self, client: AsyncClient, db_session: AsyncSession
-    ):
-        """Test activity summary without auth returns 401."""
-        response = await client.get("/api/ai/summary/contacts/1")
-        assert response.status_code == 401

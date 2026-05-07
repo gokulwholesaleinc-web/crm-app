@@ -16,7 +16,6 @@ import {
   DocumentMagnifyingGlassIcon,
   ArrowsRightLeftIcon,
   ChartBarIcon,
-  SparklesIcon,
   Cog6ToothIcon,
   ShieldCheckIcon,
   AcademicCapIcon,
@@ -1135,58 +1134,6 @@ export const SECTIONS: Section[] = [
             Reports can be exported to CSV from the result view.
           </Bullet>
         </ul>
-      </div>
-    ),
-  },
-  {
-    id: 'ai-assistant',
-    title: 'AI Assistant',
-    icon: SparklesIcon,
-    searchText:
-      'ai assistant chat gpt rag pgvector embeddings recommendations insights summary daily lead opportunity confirmation pending action knowledge document conversation history learning preferences',
-    body: (
-      <div className="space-y-3">
-        <p className="text-sm text-gray-700 dark:text-gray-300">
-          The AI Assistant is a chat interface that has read access to your CRM data and can take
-          guarded actions (with your confirmation) on your behalf. Under the hood it uses GPT-4 with
-          RAG over pgvector embeddings of your contacts, leads, opportunities, and notes.
-        </p>
-        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">What you can ask</h4>
-        <ul className="space-y-1.5">
-          <Bullet>"Analyze my sales pipeline"</Bullet>
-          <Bullet>"Find stale deals"</Bullet>
-          <Bullet>"Show me follow-up priorities"</Bullet>
-          <Bullet>"What are my top priorities today"</Bullet>
-          <Bullet>"High-value opportunities closing this month"</Bullet>
-          <Bullet>"Create a quote and send it"</Bullet>
-        </ul>
-        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Insights endpoints</h4>
-        <ul className="space-y-1.5">
-          <Bullet>
-            <strong>Lead insights:</strong> deep analysis of a specific lead and what to do next.
-          </Bullet>
-          <Bullet>
-            <strong>Opportunity insights:</strong> deep analysis of a specific opportunity.
-          </Bullet>
-          <Bullet>
-            <strong>Daily summary:</strong> a digest of today's activities, deals closing, and
-            action items.
-          </Bullet>
-          <Bullet>
-            <strong>Recommendations:</strong> next-best-actions ranked by urgency.
-          </Bullet>
-        </ul>
-        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Confirmation gating</h4>
-        <p className="text-sm text-gray-700 dark:text-gray-300">
-          When the assistant wants to do something risky (create an opportunity, update a record,
-          send an email), it returns a <em>pending action</em> instead of executing immediately.
-          You see what it wants to do and click <em>Confirm</em> to actually run it. Every action
-          is logged with the function name, arguments, result, risk level, and tokens used.
-        </p>
-        <Tip>
-          You can tune the assistant's behavior in <em>Settings → AI Preferences</em> — communication
-          style, priority entities, and custom instructions are all stored per user.
-        </Tip>
       </div>
     ),
   },

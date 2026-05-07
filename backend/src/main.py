@@ -17,6 +17,7 @@ from sqlalchemy import text
 
 from src.activities.router import router as activities_router
 from src.admin.router import router as admin_router
+
 # AI assistant disabled 2026-05-07 pending Claude API rebuild — see
 # the commented include_router(ai_router) call below. Restore this
 # import alongside the mount when re-enabling.
