@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useSmartBack } from '../../hooks/useSmartBack';
 import { Button, EntityLink, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { TabBar, ActivitiesTab, CommonTabContent } from '../../components/shared/DetailPageShell';
 import { OpportunityForm, OpportunityFormData } from './components/OpportunityForm';
@@ -32,6 +33,7 @@ const TABS: { id: TabType; name: string }[] = [
 function OpportunityDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const handleBack = useSmartBack('/opportunities');
   const opportunityId = id ? parseInt(id, 10) : undefined;
   const [activeTab, setActiveTab] = useState<TabType>('details');
   const [showEditForm, setShowEditForm] = useState(false);
@@ -140,15 +142,16 @@ function OpportunityDetailPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center space-x-4">
-          <Link
-            to="/opportunities"
-            className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 flex-shrink-0"
-            aria-label="Back to opportunities"
+          <button
+            type="button"
+            onClick={handleBack}
+            className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
+            aria-label="Go back"
           >
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
-          </Link>
+          </button>
           <div className="min-w-0">
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">
               {opportunity.name}

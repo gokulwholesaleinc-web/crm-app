@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { StatusBadge, Button, EntityLink, HelpLink, PaginationBar } from '../../components/ui';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { usePayments, useSubscriptions, useCancelSubscription } from '../../hooks/usePayments';
@@ -75,6 +75,7 @@ const statusOptions = [
 
 function PaymentsPage() {
   usePageTitle('Payments');
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<Tab>('All Payments');
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
@@ -312,7 +313,14 @@ function PaymentsPage() {
                   </thead>
                   <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                     {payments.map((payment: Payment) => (
-                      <tr key={payment.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                      <tr
+                        key={payment.id}
+                        className="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
+                        onClick={(e) => {
+                          if ((e.target as HTMLElement).closest('a, button')) return;
+                          navigate(`/payments/${payment.id}`);
+                        }}
+                      >
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
                           <Link
                             to={`/payments/${payment.id}`}

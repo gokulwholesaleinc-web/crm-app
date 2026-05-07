@@ -1,5 +1,6 @@
 import { useState, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useSmartBack } from '../../hooks/useSmartBack';
 import clsx from 'clsx';
 import { BuildingOffice2Icon, ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { Button } from '../../components/ui/Button';
@@ -47,6 +48,7 @@ const TABS: { id: TabType; name: string }[] = [
 export function CompanyDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const handleBack = useSmartBack('/companies');
   const companyId = id ? parseInt(id, 10) : undefined;
 
   const [activeTab, setActiveTab] = useState<TabType>('overview');
@@ -126,9 +128,10 @@ export function CompanyDetailPage() {
       <div className="flex flex-col gap-4">
         <div className="flex items-start gap-3 sm:gap-4">
           <button
-            onClick={() => navigate('/companies')}
-            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex-shrink-0"
-            aria-label="Back to companies"
+            type="button"
+            onClick={handleBack}
+            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+            aria-label="Go back"
           >
             <ArrowLeftIcon className="h-5 w-5 text-gray-500" />
           </button>

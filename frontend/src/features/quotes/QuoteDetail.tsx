@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useSmartBack } from '../../hooks/useSmartBack';
 import {
   ArrowLeftIcon,
   PaperAirplaneIcon,
@@ -35,6 +36,7 @@ import type { QuoteUpdate, QuoteLineItemCreate, ProductBundle } from '../../type
 function QuoteDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const handleBack = useSmartBack('/quotes');
   const quoteId = id ? parseInt(id, 10) : undefined;
 
   const { data: quote, isLoading, error } = useQuote(quoteId);
@@ -222,13 +224,14 @@ function QuoteDetailPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
-          <Link
-            to="/quotes"
-            className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
-            aria-label="Back to quotes"
+          <button
+            type="button"
+            onClick={handleBack}
+            className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+            aria-label="Go back"
           >
             <ArrowLeftIcon className="h-5 w-5" aria-hidden="true" />
-          </Link>
+          </button>
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">
