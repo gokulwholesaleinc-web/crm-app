@@ -135,7 +135,7 @@ def _base_email_html(
     Outlook, Apple Mail).  Includes dark-mode media query support.
     """
     primary = escape(branding.get("primary_color", "#6366f1"))
-    escape(branding.get("secondary_color", "#8b5cf6"))
+    secondary = escape(branding.get("secondary_color", "#8b5cf6"))
     accent = escape(branding.get("accent_color", "#22c55e"))
     company = escape(branding.get("company_name", "CRM"))
     logo_url = _safe_url(branding.get("logo_url", ""))
@@ -233,6 +233,7 @@ def _base_email_html(
     </td>
   </tr></table>
 </td></tr>
+<tr><td style="height:3px;line-height:3px;font-size:0;background-color:{secondary};">&nbsp;</td></tr>
 </table>
 
 <!-- Body -->
