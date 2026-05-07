@@ -11,6 +11,10 @@ import { useSearchParams } from 'react-router-dom';
  * - Re-syncs to the URL when the param changes externally (browser
  *   back/forward, programmatic navigation), so the visible tab always
  *   matches the address bar.
+ * - When the URL has no `tab` param at mount AND `getSavedDefault`
+ *   returns a tab in `allowed`, that saved value seeds the initial
+ *   state (one-shot at mount). Subsequent URL changes ignore the
+ *   saved default, so address-bar drives the visible tab thereafter.
  *
  * `allowed` should be a stable reference (declare at module scope).
  */
@@ -18,12 +22,18 @@ export function useUrlTabState<T extends string>(
   allowed: ReadonlySet<T>,
   fallback: T,
   paramName: string = 'tab',
+  getSavedDefault?: () => T | string | null | undefined,
 ): [T, (next: T) => void] {
   const [searchParams, setSearchParams] = useSearchParams();
   const requested = searchParams.get(paramName);
-  const [activeTab, setActiveTab] = useState<T>(() =>
-    requested && allowed.has(requested as T) ? (requested as T) : fallback,
-  );
+  const [activeTab, setActiveTab] = useState<T>(() => {
+    if (requested && allowed.has(requested as T)) return requested as T;
+    if (requested === null && getSavedDefault) {
+      const saved = getSavedDefault();
+      if (saved && allowed.has(saved as T)) return saved as T;
+    }
+    return fallback;
+  });
 
   // External URL change (back/forward, deep link, programmatic nav)
   // should drive the displayed tab — without this, the address bar and

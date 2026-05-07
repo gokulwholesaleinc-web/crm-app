@@ -3,6 +3,7 @@ import { lazy } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useSmartBack } from '../../hooks/useSmartBack';
 import { useUrlTabState } from '../../hooks/useUrlTabState';
+import { useUserPreferences } from '../../hooks/useUserPreferences';
 import { Button, CopyButton, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { TabBar, ActivitiesTab, CommonTabContent, SuspenseFallback } from '../../components/shared/DetailPageShell';
 import { StickyActionBar } from '../../components/shared/StickyActionBar';
@@ -39,7 +40,13 @@ function LeadDetailPage() {
   const navigate = useNavigate();
   const handleBack = useSmartBack('/leads');
   const leadId = id ? parseInt(id, 10) : undefined;
-  const [activeTab, handleTabChange] = useUrlTabState<TabType>(TAB_IDS, 'details');
+  const { prefs } = useUserPreferences();
+  const [activeTab, handleTabChange] = useUrlTabState<TabType>(
+    TAB_IDS,
+    'details',
+    'tab',
+    () => prefs.tabDefaults?.lead ?? null,
+  );
   const [showConvertModal, setShowConvertModal] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
