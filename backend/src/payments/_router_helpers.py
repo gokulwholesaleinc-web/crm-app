@@ -16,11 +16,24 @@ def _is_privileged(current_user) -> bool:
 
 
 async def _verify_contact_access(db, contact_id: int | None, current_user) -> None:
-    """Raise 403 if the caller cannot access the referenced contact."""
+    """Raise 403 if the caller cannot access the referenced contact.
+
+    Soft-deleted rows (``deleted_at IS NOT NULL``) are treated as missing
+    so the caller gets 404 instead of being able to probe for existence
+    through the helper. Without this filter, a deleted contact passes
+    the existence check and the ownership branch decides 403 vs.
+    proceed — the same fabricated-empty-result oracle the caller is
+    trying to close.
+    """
     if contact_id is None or _is_privileged(current_user):
         return
     from src.contacts.models import Contact
-    result = await db.execute(select(Contact).where(Contact.id == contact_id))
+    result = await db.execute(
+        select(Contact).where(
+            Contact.id == contact_id,
+            Contact.deleted_at.is_(None),
+        )
+    )
     contact = result.scalar_one_or_none()
     if contact is None:
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Contact not found")

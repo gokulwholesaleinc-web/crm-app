@@ -16,6 +16,42 @@ from src.contacts.models import Contact
 from src.companies.models import Company
 
 
+class TestPipelineStagesAuthGate:
+    """Pipeline stages are tenant-wide kanban config; admin only.
+    A sales_rep adding/renaming/deleting stages would scramble every
+    other team member's board.
+    """
+
+    @pytest.mark.asyncio
+    async def test_create_stage_forbidden_for_sales_rep(
+        self, client: AsyncClient, auth_headers: dict,
+    ):
+        response = await client.post(
+            "/api/opportunities/stages",
+            headers=auth_headers,
+            json={
+                "name": "RogueStage",
+                "order": 99,
+                "probability": 50,
+                "is_won": False,
+                "is_lost": False,
+                "is_active": True,
+            },
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_reorder_stages_forbidden_for_sales_rep(
+        self, client: AsyncClient, auth_headers: dict,
+    ):
+        response = await client.post(
+            "/api/opportunities/stages/reorder",
+            headers=auth_headers,
+            json=[{"id": 1, "order": 99}],
+        )
+        assert response.status_code == 403
+
+
 class TestPipelineStages:
     """Tests for pipeline stages endpoints."""
 
@@ -68,12 +104,12 @@ class TestPipelineStages:
 
     @pytest.mark.asyncio
     async def test_create_stage(
-        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+        self, client: AsyncClient, db_session: AsyncSession, admin_auth_headers: dict
     ):
         """Test creating a pipeline stage."""
         response = await client.post(
             "/api/opportunities/stages",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "name": "Negotiation",
                 "description": "Negotiating terms",
@@ -94,12 +130,12 @@ class TestPipelineStages:
 
     @pytest.mark.asyncio
     async def test_create_won_stage(
-        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+        self, client: AsyncClient, db_session: AsyncSession, admin_auth_headers: dict
     ):
         """Test creating a won stage."""
         response = await client.post(
             "/api/opportunities/stages",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "name": "Won",
                 "description": "Deal won",
@@ -117,12 +153,12 @@ class TestPipelineStages:
 
     @pytest.mark.asyncio
     async def test_create_lost_stage(
-        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+        self, client: AsyncClient, db_session: AsyncSession, admin_auth_headers: dict
     ):
         """Test creating a lost stage."""
         response = await client.post(
             "/api/opportunities/stages",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "name": "Lost",
                 "description": "Deal lost",
@@ -143,13 +179,13 @@ class TestPipelineStages:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_pipeline_stage: PipelineStage,
     ):
         """Test updating a pipeline stage."""
         response = await client.patch(
             f"/api/opportunities/stages/{test_pipeline_stage.id}",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "name": "Updated Stage",
                 "probability": 50,
@@ -163,12 +199,12 @@ class TestPipelineStages:
 
     @pytest.mark.asyncio
     async def test_update_stage_not_found(
-        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+        self, client: AsyncClient, db_session: AsyncSession, admin_auth_headers: dict
     ):
         """Test updating non-existent stage."""
         response = await client.patch(
             "/api/opportunities/stages/99999",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={"name": "Test"},
         )
 
@@ -924,7 +960,7 @@ class TestReorderStages:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
     ):
         """Test successfully reordering pipeline stages."""
         # Create multiple stages with initial order
@@ -952,7 +988,7 @@ class TestReorderStages:
         # Reorder: swap stage1 and stage3
         response = await client.post(
             "/api/opportunities/stages/reorder",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json=[
                 {"id": stage1.id, "order": 3},
                 {"id": stage2.id, "order": 2},
@@ -977,7 +1013,7 @@ class TestReorderStages:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_pipeline_stage: PipelineStage,
     ):
         """Test reordering only some stages."""
@@ -994,7 +1030,7 @@ class TestReorderStages:
         # Reorder only the new stage
         response = await client.post(
             "/api/opportunities/stages/reorder",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json=[
                 {"id": another_stage.id, "order": 10},
             ],
@@ -1012,12 +1048,12 @@ class TestReorderStages:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
     ):
         """Test reordering with empty list."""
         response = await client.post(
             "/api/opportunities/stages/reorder",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json=[],
         )
 

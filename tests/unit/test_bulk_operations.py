@@ -61,6 +61,50 @@ async def second_user(db_session: AsyncSession) -> User:
     return user
 
 
+class TestBulkAuthGate:
+    """The bulk endpoints (update / assign / delete) accept arbitrary
+    entity_ids and bypass the per-row DataScope filter the list
+    endpoints apply. Sales reps must therefore be 403'd; without this,
+    a rep could mass-reassign all leads from another rep, mass-delete
+    records they don't own, or mass-update tenant-shared state.
+    """
+
+    @pytest.mark.asyncio
+    async def test_bulk_update_forbidden_for_sales_rep(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,  # default test_user → sales_rep
+    ):
+        response = await client.post(
+            "/api/import-export/bulk/update",
+            headers=auth_headers,
+            json={"entity_type": "leads", "entity_ids": [1], "updates": {"status": "qualified"}},
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_bulk_assign_forbidden_for_sales_rep(
+        self, client: AsyncClient, auth_headers: dict,
+    ):
+        response = await client.post(
+            "/api/import-export/bulk/assign",
+            headers=auth_headers,
+            json={"entity_type": "leads", "entity_ids": [1], "owner_id": 1},
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_bulk_delete_forbidden_for_sales_rep(
+        self, client: AsyncClient, auth_headers: dict,
+    ):
+        response = await client.post(
+            "/api/import-export/bulk/delete",
+            headers=auth_headers,
+            json={"entity_type": "leads", "entity_ids": [1]},
+        )
+        assert response.status_code == 403
+
+
 class TestBulkUpdate:
     """Tests for bulk update endpoint."""
 
@@ -69,7 +113,7 @@ class TestBulkUpdate:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_leads_batch: list,
     ):
         """Test mass updating lead status."""
@@ -77,7 +121,7 @@ class TestBulkUpdate:
 
         response = await client.post(
             "/api/import-export/bulk/update",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "entity_type": "leads",
                 "entity_ids": lead_ids,
@@ -102,7 +146,7 @@ class TestBulkUpdate:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_leads_batch: list,
     ):
         """Test mass updating lead score."""
@@ -110,7 +154,7 @@ class TestBulkUpdate:
 
         response = await client.post(
             "/api/import-export/bulk/update",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "entity_type": "leads",
                 "entity_ids": lead_ids,
@@ -128,12 +172,12 @@ class TestBulkUpdate:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
     ):
         """Test bulk update with invalid entity type returns 400."""
         response = await client.post(
             "/api/import-export/bulk/update",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "entity_type": "nonexistent",
                 "entity_ids": [1, 2],
@@ -148,12 +192,12 @@ class TestBulkUpdate:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
     ):
         """Test bulk update with disallowed fields returns 400."""
         response = await client.post(
             "/api/import-export/bulk/update",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "entity_type": "leads",
                 "entity_ids": [1],
@@ -168,12 +212,12 @@ class TestBulkUpdate:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
     ):
         """Test bulk update with empty entity IDs returns 400."""
         response = await client.post(
             "/api/import-export/bulk/update",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "entity_type": "leads",
                 "entity_ids": [],
@@ -188,13 +232,13 @@ class TestBulkUpdate:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_lead: Lead,
     ):
         """Test bulk update response includes updates_applied field."""
         response = await client.post(
             "/api/import-export/bulk/update",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "entity_type": "leads",
                 "entity_ids": [test_lead.id],
@@ -217,7 +261,7 @@ class TestBulkAssign:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_leads_batch: list,
         second_user: User,
     ):
@@ -226,7 +270,7 @@ class TestBulkAssign:
 
         response = await client.post(
             "/api/import-export/bulk/assign",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "entity_type": "leads",
                 "entity_ids": lead_ids,
@@ -251,14 +295,14 @@ class TestBulkAssign:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_user: User,
         test_contact: Contact,
     ):
         """Test bulk assigning owner to contacts."""
         response = await client.post(
             "/api/import-export/bulk/assign",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "entity_type": "contacts",
                 "entity_ids": [test_contact.id],
@@ -278,12 +322,12 @@ class TestBulkAssign:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
     ):
         """Test bulk assign with invalid entity type."""
         response = await client.post(
             "/api/import-export/bulk/assign",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "entity_type": "invalid",
                 "entity_ids": [1],
@@ -298,12 +342,12 @@ class TestBulkAssign:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
     ):
         """Test bulk assign with empty entity IDs."""
         response = await client.post(
             "/api/import-export/bulk/assign",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "entity_type": "leads",
                 "entity_ids": [],

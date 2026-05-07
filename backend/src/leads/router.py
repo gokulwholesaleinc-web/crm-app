@@ -28,7 +28,7 @@ from src.core.cache import (
 from src.core.client_ip import get_client_ip
 from src.core.constants import ENTITY_TYPE_LEADS, EntityNames, ErrorMessages, HTTPStatus
 from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
-from src.core.permissions import require_permission
+from src.core.permissions import require_manager_or_above, require_permission
 from src.core.router_utils import (
     CurrentUser,
     DBSession,
@@ -710,10 +710,12 @@ async def list_sources(
 )
 async def create_source(
     source_data: LeadSourceCreate,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_manager_or_above)],
     db: DBSession,
 ):
-    """Create a new lead source."""
+    """Create a new lead source. Manager+ only — sources are
+    tenant-wide config and a sales_rep should not be able to seed
+    new ones."""
     service = LeadService(db)
     source = await service.create_source(source_data)
     # Invalidate cache since we added a new source
@@ -725,10 +727,10 @@ async def create_source(
 async def update_source(
     source_id: int,
     source_data: LeadSourceUpdate,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_manager_or_above)],
     db: DBSession,
 ):
-    """Update a lead source."""
+    """Update a lead source. Manager+ only."""
     service = LeadService(db)
     source = await service.update_source(source_id, source_data)
     if source is None:
@@ -742,10 +744,11 @@ async def update_source(
 @router.delete("/sources/{source_id}", status_code=HTTPStatus.NO_CONTENT)
 async def delete_source(
     source_id: int,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_manager_or_above)],
     db: DBSession,
 ):
-    """Delete a lead source. Fails with 409 if any leads still reference it."""
+    """Delete a lead source. Manager+ only. Fails with 409 if any leads
+    still reference it."""
     service = LeadService(db)
     source = await service.get_source_by_id(source_id)
     if source is None:

@@ -8,8 +8,10 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from src.auth.models import User
 from src.core.constants import HTTPStatus
 from src.core.data_scope import DataScope, get_data_scope
+from src.core.permissions import require_manager_or_above
 from src.core.router_utils import CurrentUser, DBSession, raise_bad_request
 from src.import_export.bulk_operations import BulkOperationsHandler
 from src.import_export.csv_handler import CSVHandler
@@ -303,10 +305,15 @@ async def import_with_mapping(
 @router.post("/bulk/update")
 async def bulk_update(
     request: BulkUpdateRequest,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_manager_or_above)],
     db: DBSession,
 ):
-    """Mass update entities of a given type."""
+    """Mass update entities of a given type. Manager+ only.
+
+    A sales_rep should not be able to mass-update records globally —
+    bulk endpoints accept arbitrary entity_ids and bypass the per-row
+    DataScope filter the list endpoints apply.
+    """
     handler = BulkOperationsHandler(db)
     result = await handler.bulk_update(
         entity_type=request.entity_type,
@@ -321,10 +328,11 @@ async def bulk_update(
 @router.post("/bulk/assign")
 async def bulk_assign(
     request: BulkAssignRequest,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_manager_or_above)],
     db: DBSession,
 ):
-    """Mass assign owner to entities."""
+    """Mass assign owner to entities. Manager+ only — reassigning
+    other reps' records is a privileged action."""
     handler = BulkOperationsHandler(db)
     result = await handler.bulk_assign(
         entity_type=request.entity_type,
@@ -339,10 +347,11 @@ async def bulk_assign(
 @router.post("/bulk/delete")
 async def bulk_delete(
     request: BulkDeleteRequest,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_manager_or_above)],
     db: DBSession,
 ):
-    """Mass delete entities of a given type."""
+    """Mass delete entities of a given type. Manager+ only — sales_rep
+    should not be able to wipe records globally."""
     handler = BulkOperationsHandler(db)
     result = await handler.bulk_delete(
         entity_type=request.entity_type,
