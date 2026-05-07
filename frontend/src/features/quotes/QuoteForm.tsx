@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { TrashIcon, PlusIcon, CubeIcon } from '@heroicons/react/24/outline';
 import { Button, SearchableSelect } from '../../components/ui';
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import BillingTermsField, { type BillingTermsValue } from '../../components/forms/BillingTermsField';
 import { useContacts } from '../../hooks/useContacts';
 import { useCompanies } from '../../hooks/useCompanies';
@@ -9,6 +10,7 @@ import { useOpportunities, useOpportunity } from '../../hooks/useOpportunities';
 import { useBundles } from '../../hooks/useQuotes';
 import { useFormSubmitShortcut } from '../../hooks/useSubmitShortcut';
 import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
+import { clampNumberInput } from '../../utils/inputNormalize';
 import type { QuoteCreate, QuoteLineItemCreate, ProductBundle } from '../../types';
 
 interface QuoteFormProps {
@@ -103,6 +105,8 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
   // lean on `formState.isDirty` the way the other forms do.
   const [touched, setTouched] = useState(false);
   useUnsavedChangesWarning(touched);
+
+  const [pendingDeleteIndex, setPendingDeleteIndex] = useState<number | null>(null);
 
   const formRef = useFormSubmitShortcut();
 
@@ -435,12 +439,14 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
                 <div className="w-20">
                   <label htmlFor={`item-qty-${index}`} className="sr-only">Quantity</label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     id={`item-qty-${index}`}
                     value={item.quantity}
-                    onChange={(e) => updateLineItem(index, 'quantity', parseFloat(e.target.value) || 0)}
-                    min="0"
-                    step="any"
+                    onChange={(e) => {
+                      const cleaned = clampNumberInput(e.target.value, { min: 0, allowDecimal: true });
+                      updateLineItem(index, 'quantity', parseFloat(cleaned) || 0);
+                    }}
                     placeholder="Qty"
                     className="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
                   />
@@ -448,12 +454,14 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
                 <div className="w-28">
                   <label htmlFor={`item-price-${index}`} className="sr-only">Unit Price</label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     id={`item-price-${index}`}
                     value={item.unit_price}
-                    onChange={(e) => updateLineItem(index, 'unit_price', parseFloat(e.target.value) || 0)}
-                    min="0"
-                    step="any"
+                    onChange={(e) => {
+                      const cleaned = clampNumberInput(e.target.value, { min: 0, allowDecimal: true });
+                      updateLineItem(index, 'unit_price', parseFloat(cleaned) || 0);
+                    }}
                     placeholder="Price"
                     className="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
                   />
@@ -461,12 +469,14 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
                 <div className="w-24">
                   <label htmlFor={`item-discount-${index}`} className="sr-only">Discount</label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     id={`item-discount-${index}`}
                     value={item.discount}
-                    onChange={(e) => updateLineItem(index, 'discount', parseFloat(e.target.value) || 0)}
-                    min="0"
-                    step="any"
+                    onChange={(e) => {
+                      const cleaned = clampNumberInput(e.target.value, { min: 0, max: 100, allowDecimal: true });
+                      updateLineItem(index, 'discount', parseFloat(cleaned) || 0);
+                    }}
                     placeholder="Disc."
                     className="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
                   />
@@ -476,7 +486,7 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
                 </div>
                 <button
                   type="button"
-                  onClick={() => removeLineItem(index)}
+                  onClick={() => setPendingDeleteIndex(index)}
                   className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400"
                   aria-label={`Remove line item ${index + 1}`}
                   disabled={lineItems.length <= 1}
@@ -599,6 +609,25 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
           Create Quote
         </Button>
       </div>
+
+      <ConfirmDialog
+        isOpen={pendingDeleteIndex !== null}
+        onClose={() => setPendingDeleteIndex(null)}
+        onConfirm={() => {
+          if (pendingDeleteIndex !== null) {
+            removeLineItem(pendingDeleteIndex);
+          }
+          setPendingDeleteIndex(null);
+        }}
+        title="Remove line item?"
+        message={
+          pendingDeleteIndex !== null && lineItems[pendingDeleteIndex]?.description.trim()
+            ? `Remove "${lineItems[pendingDeleteIndex].description}"? This action cannot be undone.`
+            : 'This action cannot be undone.'
+        }
+        confirmLabel="Remove"
+        variant="danger"
+      />
     </form>
   );
 }
