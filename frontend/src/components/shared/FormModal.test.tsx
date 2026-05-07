@@ -163,9 +163,31 @@ describe('FormModal', () => {
     expect(input().value).toBe('initial');
   });
 
+  it('resets to latest defaultValues only on closed→open transition, not on repeated opens', () => {
+    vi.useRealTimers();
+    const { rerender } = renderWithProviders(
+      <TestFormModal isOpen={false} initialName="v1" />
+    );
+
+    // First open: form seeds from defaultValues
+    act(() => {
+      rerender(<TestFormModal isOpen={true} initialName="v1" />);
+    });
+
+    const input = () => screen.getByTestId('name-input') as HTMLInputElement;
+    expect(input().value).toBe('v1');
+
+    // Mutate, then re-open (closed → open flip again)
+    fireEvent.change(input(), { target: { value: 'user-typed' } });
+    act(() => { rerender(<TestFormModal isOpen={false} initialName="v1" />); });
+    act(() => { rerender(<TestFormModal isOpen={true} initialName="updated" />); });
+
+    // Second open resets to the latest defaultValues
+    expect(input().value).toBe('updated');
+  });
+
   it('disables submit button while isPending (shows Loading... text)', () => {
     renderWithProviders(<TestFormModal isPending={true} />);
-    // When isLoading=true, Button renders "Loading..." and is disabled
     const loadingBtn = screen.getByRole('button', { name: /loading/i });
     expect(loadingBtn).toBeDisabled();
   });

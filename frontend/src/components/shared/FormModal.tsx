@@ -37,14 +37,19 @@ export function FormModal<T extends FieldValues>({
 }: FormModalProps<T>) {
   const [success, setSuccess] = useState(false);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevIsOpenRef = useRef(false);
 
   const form = useForm<T>({ defaultValues });
 
   useEffect(() => {
-    if (isOpen) {
+    const wasOpen = prevIsOpenRef.current;
+    prevIsOpenRef.current = isOpen;
+
+    if (!wasOpen && isOpen) {
+      // Transition closed → open: seed form with fresh defaultValues.
       form.reset(defaultValues);
       setSuccess(false);
-    } else {
+    } else if (!isOpen) {
       // Parent closed the modal before the 800 ms auto-close timer fired.
       // Cancel it so it doesn't fire onClose on the next open cycle.
       if (closeTimerRef.current !== null) {
@@ -52,8 +57,13 @@ export function FormModal<T extends FieldValues>({
         closeTimerRef.current = null;
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+  }, [isOpen, defaultValues, form]);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current !== null) clearTimeout(closeTimerRef.current);
+    };
+  }, []);
 
   const handleFormSubmit = async (data: T) => {
     try {

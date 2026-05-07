@@ -165,7 +165,7 @@ function ProposalDetailPage() {
         terms: editTerms || null,
       };
       await updateProposalMutation.mutateAsync({ id: proposal.id, data });
-      setShowEditModal(false);
+      closeEditModal();
       showSuccess('Proposal updated');
     } catch {
       showError('Failed to update proposal');
@@ -180,6 +180,16 @@ function ProposalDetailPage() {
     setEditTimeline(proposal.timeline ?? '');
     setEditTerms(proposal.terms ?? '');
     setShowEditModal(true);
+  };
+
+  const closeEditModal = () => {
+    setShowEditModal(false);
+    setEditTitle(proposal.title);
+    setEditExecutiveSummary(proposal.executive_summary ?? '');
+    setEditScopeOfWork(proposal.scope_of_work ?? '');
+    setEditPricingSection(proposal.pricing_section ?? '');
+    setEditTimeline(proposal.timeline ?? '');
+    setEditTerms(proposal.terms ?? '');
   };
 
   const handleCopyPublicLink = () => {
@@ -199,13 +209,9 @@ function ProposalDetailPage() {
   const isDraft = proposal.status === 'draft';
   const proposalRecipient =
     proposal.designated_signer_email || proposal.contact?.email || '';
-  // Show Send whenever the proposal hasn't moved past the client's
-  // inbox — so the CRM user can resend if the first attempt got
-  // stuck (bad Gmail token, Resend sandbox rejection, etc.). The
-  // backend /send endpoint re-queues on every call. We also require
-  // a recipient (designated signer or linked contact email) — without
-  // one the backend would just 400, mirroring PR #205's pattern of
-  // surfacing the gap up front instead of through a generic toast.
+  // Show Send for draft/sent/viewed so the CRM user can resend if delivery
+  // failed (bad Gmail token, sandbox rejection). Require a recipient so the
+  // frontend gates the 400 the backend would return without one.
   const canSendStatus = ['draft', 'sent', 'viewed'].includes(proposal.status ?? '');
   const canSend = canSendStatus && Boolean(proposalRecipient);
   const showSendButton = canSendStatus;
@@ -510,7 +516,7 @@ function ProposalDetailPage() {
       {/* Edit Proposal Modal */}
       <Modal
         isOpen={showEditModal}
-        onClose={() => setShowEditModal(false)}
+        onClose={closeEditModal}
         title="Edit Proposal"
         size="lg"
         fullScreenOnMobile
@@ -578,7 +584,7 @@ function ProposalDetailPage() {
             />
           </div>
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-            <Button type="button" variant="secondary" onClick={() => setShowEditModal(false)}>Cancel</Button>
+            <Button type="button" variant="secondary" onClick={closeEditModal}>Cancel</Button>
             <Button type="submit" disabled={updateProposalMutation.isPending || !editTitle.trim()}>
               {updateProposalMutation.isPending ? 'Saving...' : 'Save'}
             </Button>
