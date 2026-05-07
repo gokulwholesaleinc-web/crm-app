@@ -352,3 +352,14 @@
     animation: none;
   }
 }
+
+/* User density preference: tightens list-page tables only.
+   Tables opt-in via `data-list-table` so detail-page tabs and dashboard
+   widgets are unaffected. */
+body.density-compact table[data-list-table] thead th,
+body.density-compact table[data-list-table] tbody td {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
