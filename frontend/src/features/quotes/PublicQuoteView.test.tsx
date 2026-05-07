@@ -73,10 +73,8 @@ beforeEach(() => {
 
 describe('PublicQuoteView', () => {
   it('shows loading skeleton initially before GET resolves', () => {
-    // Never resolves during this test — loading state stays visible
     mockGet.mockReturnValue(new Promise(() => {}));
     renderAt();
-    // Title is not rendered during the loading pulse skeleton
     expect(screen.queryByText('Annual Software License')).not.toBeInTheDocument();
   });
 
@@ -100,11 +98,8 @@ describe('PublicQuoteView', () => {
     );
     expect(screen.getByText('QUO-2024-001')).toBeInTheDocument();
     expect(screen.getByText(/Prepared for Jane Doe/)).toBeInTheDocument();
-    // Line item description
     expect(screen.getByText('Widget Pro')).toBeInTheDocument();
-    // Total formatted as USD
     expect(screen.getAllByText('$1,000.00').length).toBeGreaterThan(0);
-    // Company name in header
     expect(screen.getAllByText('Acme Corp').length).toBeGreaterThan(0);
   });
 
