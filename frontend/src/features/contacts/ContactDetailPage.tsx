@@ -2,6 +2,7 @@ import { useState, useRef, lazy, Suspense } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useSmartBack } from '../../hooks/useSmartBack';
 import { useUrlTabState } from '../../hooks/useUrlTabState';
+import { useUserPreferences } from '../../hooks/useUserPreferences';
 import { Button, CopyButton, HelpLink, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { TabBar, ActivitiesTab, CommonTabContent, SuspenseFallback } from '../../components/shared/DetailPageShell';
 import { StickyActionBar } from '../../components/shared/StickyActionBar';
@@ -61,10 +62,16 @@ function ContactDetailPage() {
   const [searchParams] = useSearchParams();
   const handleBack = useSmartBack('/contacts');
   const contactId = id ? parseInt(id, 10) : undefined;
+  const { prefs } = useUserPreferences();
   // Honor `?tab=` so deep links from the email search modal land on
   // the right tab; `?email=` carries the kind:id deep-link target the
   // EmailThread will scroll to.
-  const [activeTab, handleTabChange] = useUrlTabState<TabType>(TAB_IDS, 'details');
+  const [activeTab, handleTabChange] = useUrlTabState<TabType>(
+    TAB_IDS,
+    'details',
+    'tab',
+    () => prefs.tabDefaults?.contact ?? null,
+  );
   const targetEmail = searchParams.get('email');
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);

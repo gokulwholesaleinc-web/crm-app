@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useSmartBack } from '../../hooks/useSmartBack';
 import { useUrlTabState } from '../../hooks/useUrlTabState';
+import { useUserPreferences } from '../../hooks/useUserPreferences';
 import { Button, CopyButton, EntityLink, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { TabBar, ActivitiesTab, CommonTabContent } from '../../components/shared/DetailPageShell';
 import { StickyActionBar } from '../../components/shared/StickyActionBar';
@@ -39,7 +40,13 @@ function OpportunityDetailPage() {
   const navigate = useNavigate();
   const handleBack = useSmartBack('/opportunities');
   const opportunityId = id ? parseInt(id, 10) : undefined;
-  const [activeTab, handleTabChange] = useUrlTabState<TabType>(TAB_IDS, 'details');
+  const { prefs } = useUserPreferences();
+  const [activeTab, handleTabChange] = useUrlTabState<TabType>(
+    TAB_IDS,
+    'details',
+    'tab',
+    () => prefs.tabDefaults?.opportunity ?? null,
+  );
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const actionRowRef = useRef<HTMLDivElement>(null);

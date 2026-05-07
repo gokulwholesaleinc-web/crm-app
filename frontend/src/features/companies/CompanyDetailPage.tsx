@@ -2,6 +2,7 @@ import { useState, useRef, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSmartBack } from '../../hooks/useSmartBack';
 import { useUrlTabState } from '../../hooks/useUrlTabState';
+import { useUserPreferences } from '../../hooks/useUserPreferences';
 import clsx from 'clsx';
 import { BuildingOffice2Icon, ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { Button } from '../../components/ui/Button';
@@ -56,7 +57,13 @@ export function CompanyDetailPage() {
   const handleBack = useSmartBack('/companies');
   const companyId = id ? parseInt(id, 10) : undefined;
 
-  const [activeTab, handleTabChange] = useUrlTabState<TabType>(TAB_IDS, 'overview');
+  const { prefs } = useUserPreferences();
+  const [activeTab, handleTabChange] = useUrlTabState<TabType>(
+    TAB_IDS,
+    'overview',
+    'tab',
+    () => prefs.tabDefaults?.company ?? null,
+  );
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const actionRowRef = useRef<HTMLDivElement>(null);
