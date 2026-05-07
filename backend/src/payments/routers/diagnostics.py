@@ -1,9 +1,13 @@
 """Stripe diagnostics sub-router."""
 
+import logging
+
 from fastapi import APIRouter
 
 from src.config import settings
 from src.core.router_utils import CurrentUser
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -44,6 +48,20 @@ async def get_stripe_mode(current_user: CurrentUser) -> dict:
         mode = "test"
     else:
         mode = "unconfigured"
+
+    # Temporary diagnostic to isolate a "Stripe is not configured" banner
+    # report on prod where the env var is set to a working `rk_test_…`
+    # key. Logs only the prefix length + first 8 chars of the prefix
+    # (never the secret material) plus the resolved mode. Remove once
+    # the report is closed.
+    key_present = bool(key)
+    prefix = key[:8] if key else "(empty)"
+    logger.info(
+        "[stripe-mode-diag] key_present=%s prefix=%s mode=%s",
+        key_present,
+        prefix,
+        mode,
+    )
 
     return {
         "mode": mode,
