@@ -1,7 +1,6 @@
 """Tests for notifications API endpoints."""
 
 import pytest
-import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -747,9 +746,15 @@ class TestPaymentReceivedNotification:
     @pytest.mark.asyncio
     async def test_payment_received_notification_routes_to_quote_owner(
         self,
+        client: AsyncClient,
         db_session: AsyncSession,
     ):
         """payment.received handler creates a notification for the user specified in payload."""
+        # The `client` fixture is required (even though we hit the handler
+        # directly): it monkey-patches src.database.async_session_maker
+        # to point at the SQLite test engine. Without it, the handler
+        # opens its own session against the production DSN and writes
+        # nowhere visible to db_session.
         user_a = await _create_user(db_session, "payment_owner_notif@example.com")
 
         payload = {
@@ -779,6 +784,7 @@ class TestPaymentReceivedNotification:
     @pytest.mark.asyncio
     async def test_payment_received_no_owner_warns_and_drops(
         self,
+        client: AsyncClient,
         db_session: AsyncSession,
     ):
         """payment.received handler with no user_id creates no notification row."""
