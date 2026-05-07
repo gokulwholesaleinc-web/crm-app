@@ -209,13 +209,9 @@ function ProposalDetailPage() {
   const isDraft = proposal.status === 'draft';
   const proposalRecipient =
     proposal.designated_signer_email || proposal.contact?.email || '';
-  // Show Send whenever the proposal hasn't moved past the client's
-  // inbox — so the CRM user can resend if the first attempt got
-  // stuck (bad Gmail token, Resend sandbox rejection, etc.). The
-  // backend /send endpoint re-queues on every call. We also require
-  // a recipient (designated signer or linked contact email) — without
-  // one the backend would just 400, mirroring PR #205's pattern of
-  // surfacing the gap up front instead of through a generic toast.
+  // Show Send for draft/sent/viewed so the CRM user can resend if delivery
+  // failed (bad Gmail token, sandbox rejection). Require a recipient so the
+  // frontend gates the 400 the backend would return without one.
   const canSendStatus = ['draft', 'sent', 'viewed'].includes(proposal.status ?? '');
   const canSend = canSendStatus && Boolean(proposalRecipient);
   const showSendButton = canSendStatus;

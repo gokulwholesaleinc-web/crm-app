@@ -188,7 +188,6 @@ describe('FormModal', () => {
 
   it('disables submit button while isPending (shows Loading... text)', () => {
     renderWithProviders(<TestFormModal isPending={true} />);
-    // When isLoading=true, Button renders "Loading..." and is disabled
     const loadingBtn = screen.getByRole('button', { name: /loading/i });
     expect(loadingBtn).toBeDisabled();
   });
