@@ -24,7 +24,7 @@ from src.core.router_utils import (
     check_ownership,
     get_entity_or_404,
 )
-from src.events.service import QUOTE_ACCEPTED, QUOTE_SENT, emit
+from src.events.service import QUOTE_ACCEPTED, QUOTE_REJECTED, QUOTE_SENT, emit
 from src.quotes.schemas import (
     ProductBundleCreate,
     ProductBundleListResponse,
@@ -463,6 +463,14 @@ async def reject_quote(
         quote = await service.mark_rejected(quote)
     except ValueError as e:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e)) from e
+
+    await emit(QUOTE_REJECTED, {
+        "entity_id": quote.id,
+        "entity_type": "quote",
+        "user_id": quote.owner_id,
+        "data": {"quote_number": quote.quote_number, "status": quote.status},
+    })
+
     return QuoteResponse.model_validate(quote)
 
 

@@ -19,14 +19,17 @@ OPPORTUNITY_CREATED = "opportunity.created"
 OPPORTUNITY_UPDATED = "opportunity.updated"
 OPPORTUNITY_STAGE_CHANGED = "opportunity.stage_changed"
 ACTIVITY_CREATED = "activity.created"
+ACTIVITY_ASSIGNED = "activity.assigned"
 COMPANY_CREATED = "company.created"
 COMPANY_UPDATED = "company.updated"
 
 # Sales pipeline events
 QUOTE_SENT = "quote.sent"
 QUOTE_ACCEPTED = "quote.accepted"
+QUOTE_REJECTED = "quote.rejected"
 PROPOSAL_SENT = "proposal.sent"
 PROPOSAL_ACCEPTED = "proposal.accepted"
+PROPOSAL_REJECTED = "proposal.rejected"
 PAYMENT_RECEIVED = "payment.received"
 
 # Registry: event_type -> list of async handler functions
