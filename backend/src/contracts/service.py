@@ -1,7 +1,10 @@
 """Contract service layer."""
 
+import secrets
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
 
 from src.contracts.models import Contract
 from src.contracts.schemas import ContractCreate, ContractUpdate
@@ -9,6 +12,9 @@ from src.core.base_service import CRUDService
 from src.core.constants import DEFAULT_PAGE_SIZE
 
 ENTITY_TYPE_CONTRACTS = "contracts"
+
+# Mirrors proposals: signing links are valid for 7 days from send.
+SIGN_TOKEN_TTL = timedelta(days=7)
 
 
 class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
@@ -18,6 +24,12 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
     entity_type = ENTITY_TYPE_CONTRACTS
     create_exclude_fields: set = set()
     update_exclude_fields: set = set()
+
+    def _get_eager_load_options(self):
+        return [
+            selectinload(Contract.contact),
+            selectinload(Contract.company),
+        ]
 
     async def get_list(
         self,
@@ -54,3 +66,61 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
         contracts = list(result.scalars().all())
 
         return contracts, total
+
+    async def get_by_token(self, token: str) -> Contract | None:
+        """Resolve a contract by its public sign token.
+
+        Used by the public view + sign endpoints. Returns None when the
+        token is missing, malformed, or no contract carries it.
+        """
+        if not token or len(token) < 16:
+            return None
+        result = await self.db.execute(
+            select(Contract)
+            .options(selectinload(Contract.contact), selectinload(Contract.company))
+            .where(Contract.sign_token == token),
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    def _mint_token() -> str:
+        """Mint an unguessable URL-safe token for the public sign link."""
+        return secrets.token_urlsafe(32)
+
+    @staticmethod
+    def _token_expiry() -> datetime:
+        return datetime.now(UTC) + SIGN_TOKEN_TTL
+
+    # ---------- E-sign workflow stubs (filled in by the e-sign worker) ----------
+
+    async def send_for_signature(
+        self,
+        contract: Contract,
+        user_id: int,
+        to_email: str | None = None,
+        message: str | None = None,
+    ) -> Contract:
+        """Mint a sign token, mark sent_at, and email the signer."""
+        raise NotImplementedError(
+            "send_for_signature is owned by the e-sign worker (Phase 2a).",
+        )
+
+    async def get_public_view(self, contract: Contract) -> dict:
+        """Return the signer-facing projection of a contract."""
+        raise NotImplementedError(
+            "get_public_view is owned by the e-sign worker (Phase 2a).",
+        )
+
+    async def sign_contract(
+        self,
+        contract: Contract,
+        signer_name: str,
+        signer_email: str,
+        signature_data_url: str,
+        signer_ip: str | None = None,
+        signer_ua: str | None = None,
+    ) -> Contract:
+        """Persist signature, generate signed PDF, email signer a copy."""
+        raise NotImplementedError(
+            "sign_contract is owned by the e-sign worker (Phase 2a).",
+        )

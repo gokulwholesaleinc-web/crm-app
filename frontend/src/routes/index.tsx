@@ -56,6 +56,11 @@ const ProposalsPage = lazy(() => import('../features/proposals/ProposalsPage'));
 const ProposalDetailPage = lazy(() => import('../features/proposals/ProposalDetail'));
 const PublicProposalView = lazy(() => import('../features/proposals/PublicProposalView'));
 
+// Contracts
+const ContractsPage = lazy(() => import('../features/contracts/ContractsPage'));
+const ContractDetailPage = lazy(() => import('../features/contracts/ContractDetailPage'));
+const PublicContractView = lazy(() => import('../features/contracts/PublicContractView'));
+
 // Activities
 const ActivitiesPage = lazy(() => import('../features/activities/ActivitiesPage'));
 const CalendarPage = lazy(() => import('../features/calendar/CalendarPage'));
@@ -105,6 +110,7 @@ function AppRoutes() {
       <Route path="/auth/google/callback" element={<GoogleAuthCallbackPage />} />
       <Route path="/proposals/public/:token" element={<PublicProposalView />} />
       <Route path="/quotes/public/:quoteNumber" element={<PublicQuoteView />} />
+      <Route path="/contracts/sign/:token" element={<PublicContractView />} />
 
       {/* Protected routes */}
       <Route
@@ -258,6 +264,28 @@ function AppRoutes() {
           <PrivateRoute>
             <ErrorBoundary>
               <ProposalDetailPage />
+            </ErrorBoundary>
+          </PrivateRoute>
+        }
+      />
+
+      {/* Contracts */}
+      <Route
+        path="/contracts"
+        element={
+          <PrivateRoute>
+            <ErrorBoundary>
+              <ContractsPage />
+            </ErrorBoundary>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/contracts/:id"
+        element={
+          <PrivateRoute>
+            <ErrorBoundary>
+              <ContractDetailPage />
             </ErrorBoundary>
           </PrivateRoute>
         }

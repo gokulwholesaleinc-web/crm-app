@@ -2,7 +2,7 @@
 
 import logging
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request, status
 
 from src.audit.utils import (
     audit_entity_create,
@@ -13,7 +13,12 @@ from src.audit.utils import (
 from src.contracts.schemas import (
     ContractCreate,
     ContractListResponse,
+    ContractPublicView,
     ContractResponse,
+    ContractSendRequest,
+    ContractSendResponse,
+    ContractSignRequest,
+    ContractSignResponse,
     ContractUpdate,
 )
 from src.contracts.service import ContractService
@@ -32,6 +37,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/contracts", tags=["contracts"])
 
 ENTITY_NAME = "Contract"
+
+NOT_IMPLEMENTED_DETAIL = (
+    "Endpoint stub — implementation lands with the e-sign worker (Phase 2a)."
+)
 
 
 @router.get("", response_model=ContractListResponse)
@@ -140,3 +149,72 @@ async def delete_contract(
     await audit_entity_delete(db, "contract", contract.id, current_user.id, ip_address)
 
     await service.delete(contract)
+
+
+# ---------- E-sign workflow (stubs — filled in by Phase 2a worker) ----------
+
+
+@router.post(
+    "/{contract_id}/send",
+    response_model=ContractSendResponse,
+    status_code=HTTPStatus.OK,
+)
+async def send_contract_for_signature(
+    contract_id: int,
+    body: ContractSendRequest,
+    request: Request,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Mint a sign token and email the contact a public link to sign."""
+    service = ContractService(db)
+    contract = await get_entity_or_404(service, contract_id, ENTITY_NAME)
+    check_ownership(contract, current_user, ENTITY_NAME)
+
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail=NOT_IMPLEMENTED_DETAIL,
+    )
+
+
+@router.get("/public/{token}", response_model=ContractPublicView)
+async def get_public_contract(token: str, db: DBSession):
+    """Public, no-auth view of a contract by sign token."""
+    service = ContractService(db)
+    contract = await service.get_by_token(token)
+    if contract is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Sign link not found or expired",
+        )
+
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail=NOT_IMPLEMENTED_DETAIL,
+    )
+
+
+@router.post(
+    "/public/{token}/sign",
+    response_model=ContractSignResponse,
+    status_code=HTTPStatus.OK,
+)
+async def sign_contract_public(
+    token: str,
+    body: ContractSignRequest,
+    request: Request,
+    db: DBSession,
+):
+    """Public sign endpoint — captures name, signature, IP, UA."""
+    service = ContractService(db)
+    contract = await service.get_by_token(token)
+    if contract is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Sign link not found or expired",
+        )
+
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail=NOT_IMPLEMENTED_DETAIL,
+    )
