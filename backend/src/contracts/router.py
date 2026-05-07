@@ -1,6 +1,7 @@
 """Contract API routes."""
 
 import logging
+import os
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 
@@ -37,10 +38,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/contracts", tags=["contracts"])
 
 ENTITY_NAME = "Contract"
-
-NOT_IMPLEMENTED_DETAIL = (
-    "Endpoint stub — implementation lands with the e-sign worker (Phase 2a)."
-)
 
 
 @router.get("", response_model=ContractListResponse)
@@ -157,7 +154,7 @@ async def delete_contract(
     await service.delete(contract)
 
 
-# ---------- E-sign workflow (stubs — filled in by Phase 2a worker) ----------
+# ---------- E-sign workflow ----------
 
 
 @router.post(
@@ -177,9 +174,23 @@ async def send_contract_for_signature(
     contract = await get_entity_or_404(service, contract_id, ENTITY_NAME)
     check_ownership(contract, current_user, ENTITY_NAME)
 
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail=NOT_IMPLEMENTED_DETAIL,
+    try:
+        contract = await service.send_for_signature(
+            contract,
+            user_id=current_user.id,
+            to_email=body.to_email,
+            message=body.message,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+    base_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    return ContractSendResponse(
+        id=contract.id,
+        status=contract.status,
+        sent_at=contract.sent_at,
+        sign_url=f"{base_url}/contracts/sign/{contract.sign_token}",
+        sign_token_expires_at=contract.sign_token_expires_at,
     )
 
 
@@ -194,10 +205,8 @@ async def get_public_contract(token: str, db: DBSession):
             detail="Sign link not found or expired",
         )
 
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail=NOT_IMPLEMENTED_DETAIL,
-    )
+    view = await service.get_public_view(contract)
+    return ContractPublicView(**view)
 
 
 @router.post(
@@ -220,7 +229,24 @@ async def sign_contract_public(
             detail="Sign link not found or expired",
         )
 
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail=NOT_IMPLEMENTED_DETAIL,
+    signer_ip = get_client_ip(request)
+    signer_ua = request.headers.get("user-agent")
+
+    try:
+        contract = await service.sign_contract(
+            contract,
+            signer_name=body.signer_name,
+            signer_email=body.signer_email,
+            signature_data_url=body.signature_data_url,
+            signer_ip=signer_ip,
+            signer_ua=signer_ua,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+    return ContractSignResponse(
+        id=contract.id,
+        status=contract.status,
+        signed_at=contract.signed_at,
+        signed_by_name=contract.signed_by_name,
     )
