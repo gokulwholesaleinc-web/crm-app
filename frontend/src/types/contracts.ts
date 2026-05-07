@@ -44,6 +44,11 @@ export interface Contract {
   updated_at: string;
   contact?: ContactBrief | null;
   company?: CompanyBrief | null;
+  // E-sign fields
+  sent_at?: string | null;
+  signed_at?: string | null;
+  signed_by_name?: string | null;
+  signed_pdf_r2_key?: string | null;
 }
 
 export type ContractListResponse = PaginatedResponse<Contract>;
@@ -55,4 +60,20 @@ export interface ContractFilters {
   company_id?: number;
   status?: string;
   owner_id?: number;
+  search?: string;
+  order_by?: string;
+  order_dir?: string;
+}
+
+export interface ContractStats {
+  total_active_value: number;
+  expiring_this_month: number;
+  status_breakdown: {
+    draft: number;
+    sent: number;
+    signed: number;
+    active: number;
+    expired: number;
+    terminated: number;
+  };
 }

@@ -9,6 +9,7 @@ import type {
   ContractUpdate,
   ContractListResponse,
   ContractFilters,
+  ContractStats,
 } from '../types';
 
 const CONTRACTS_BASE = '/api/contracts';
@@ -66,11 +67,35 @@ export const deleteContract = async (contractId: number): Promise<void> => {
   await apiClient.delete(`${CONTRACTS_BASE}/${contractId}`);
 };
 
+/**
+ * Send contract for signature
+ */
+export const sendContract = async (
+  contractId: number,
+  body: { to_email?: string; message?: string } = {}
+): Promise<{ id: number; status: string; sent_at: string; sign_url: string; sign_token_expires_at: string }> => {
+  const response = await apiClient.post(
+    `${CONTRACTS_BASE}/${contractId}/send`,
+    body
+  );
+  return response.data;
+};
+
+/**
+ * Get contract aggregate stats
+ */
+export const getContractStats = async (): Promise<ContractStats> => {
+  const response = await apiClient.get<ContractStats>(`${CONTRACTS_BASE}/stats`);
+  return response.data;
+};
+
 export const contractsApi = {
   list: listContracts,
   get: getContract,
   create: createContract,
   update: updateContract,
   delete: deleteContract,
+  send: sendContract,
+  stats: getContractStats,
 };
 

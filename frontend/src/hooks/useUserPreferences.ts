@@ -11,7 +11,8 @@ export type ListPageKey =
   | 'leads'
   | 'quotes'
   | 'proposals'
-  | 'payments';
+  | 'payments'
+  | 'contracts';
 
 const LIST_PAGE_KEYS: ReadonlySet<string> = new Set([
   'contacts',
@@ -19,6 +20,7 @@ const LIST_PAGE_KEYS: ReadonlySet<string> = new Set([
   'quotes',
   'proposals',
   'payments',
+  'contracts',
 ]);
 
 const ENTITY_KINDS_WITH_TABS: ReadonlySet<string> = new Set([

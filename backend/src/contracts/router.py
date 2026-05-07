@@ -53,8 +53,11 @@ async def list_contracts(
     company_id: int | None = None,
     status: str | None = None,
     owner_id: int | None = None,
+    search: str | None = None,
+    order_by: str | None = None,
+    order_dir: str | None = None,
 ):
-    """List contracts with pagination and filters."""
+    """List contracts with pagination, filters, search, and sort."""
     service = ContractService(db)
 
     contracts, total = await service.get_list(
@@ -64,6 +67,9 @@ async def list_contracts(
         company_id=company_id,
         status=status,
         owner_id=owner_id,
+        search=search,
+        order_by=order_by,
+        order_dir=order_dir,
     )
 
     contract_responses = [

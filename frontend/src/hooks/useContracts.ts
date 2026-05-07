@@ -3,9 +3,9 @@
  * Uses TanStack Query for data fetching and caching.
  */
 
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createEntityHooks, createQueryKeys } from './useEntityCRUD';
-import { contractsApi } from '../api/contracts';
+import { contractsApi, sendContract, getContractStats } from '../api/contracts';
 import type {
   Contract,
   ContractCreate,
@@ -86,5 +86,31 @@ export function useDeleteContract() {
       queryClient.invalidateQueries({ queryKey: contractKeys.lists() });
       queryClient.removeQueries({ queryKey: contractKeys.detail(id) });
     },
+  });
+}
+
+/**
+ * Hook to send a contract for signature
+ */
+export function useSendContract() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, body }: { id: number; body?: { to_email?: string; message?: string } }) =>
+      sendContract(id, body),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: contractKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: contractKeys.detail(id) });
+    },
+  });
+}
+
+/**
+ * Hook to fetch contract aggregate stats for the dashboard
+ */
+export function useContractStats() {
+  return useQuery({
+    queryKey: ['contracts', 'stats'],
+    queryFn: getContractStats,
   });
 }

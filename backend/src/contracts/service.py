@@ -10,11 +10,21 @@ from src.contracts.models import Contract
 from src.contracts.schemas import ContractCreate, ContractUpdate
 from src.core.base_service import CRUDService
 from src.core.constants import DEFAULT_PAGE_SIZE
+from src.core.filtering import build_token_search
+from src.core.sorting import build_order_clauses
 
 ENTITY_TYPE_CONTRACTS = "contracts"
 
 # Mirrors proposals: signing links are valid for 7 days from send.
 SIGN_TOKEN_TTL = timedelta(days=7)
+
+CONTRACT_SORTABLE_FIELDS = {
+    "title": Contract.title,
+    "status": Contract.status,
+    "value": Contract.value,
+    "end_date": Contract.end_date,
+    "created_at": Contract.created_at,
+}
 
 
 class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
@@ -39,9 +49,15 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
         company_id: int | None = None,
         status: str | None = None,
         owner_id: int | None = None,
+        search: str | None = None,
+        order_by: str | None = None,
+        order_dir: str | None = None,
     ) -> tuple[list[Contract], int]:
         """Get paginated list of contracts with filters."""
-        query = select(Contract)
+        query = select(Contract).options(
+            selectinload(Contract.contact),
+            selectinload(Contract.company),
+        )
 
         if contact_id:
             query = query.where(Contract.contact_id == contact_id)
@@ -55,12 +71,23 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
         if owner_id:
             query = query.where(Contract.owner_id == owner_id)
 
+        if search:
+            condition = build_token_search(search, Contract.title)
+            if condition is not None:
+                query = query.where(condition)
+
         count_query = select(func.count()).select_from(query.subquery())
         total_result = await self.db.execute(count_query)
         total = total_result.scalar() or 0
 
+        order_clauses = build_order_clauses(
+            CONTRACT_SORTABLE_FIELDS,
+            order_by,
+            order_dir,
+            default=[Contract.created_at.desc(), Contract.id.desc()],
+        )
         offset = (page - 1) * page_size
-        query = query.offset(offset).limit(page_size).order_by(Contract.created_at.desc())
+        query = query.offset(offset).limit(page_size).order_by(*order_clauses)
 
         result = await self.db.execute(query)
         contracts = list(result.scalars().all())

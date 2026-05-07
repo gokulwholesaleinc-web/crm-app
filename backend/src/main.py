@@ -34,6 +34,7 @@ from src.companies.router import router as companies_router
 from src.config import settings
 from src.contacts.router import router as contacts_router
 from src.contracts.router import router as contracts_router
+from src.contracts.stats_router import router as contracts_stats_router
 from src.core.constants import CACHE_IMMUTABLE_ASSETS_MAX_AGE_SECONDS
 from src.core.migrations import _run_production_migrations
 from src.core.permissions import require_manager_or_above
@@ -191,6 +192,7 @@ app.include_router(quotes_router)
 app.include_router(payments_router)
 app.include_router(proposals_router)
 app.include_router(contracts_router)
+app.include_router(contracts_stats_router)
 app.include_router(admin_router)
 app.include_router(meta_router)
 app.include_router(expenses_router)
