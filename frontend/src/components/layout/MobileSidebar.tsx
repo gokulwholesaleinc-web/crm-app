@@ -34,9 +34,9 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
 
   const { prefs } = useUserPreferences();
   const hidden = new Set(prefs.hiddenNavIds ?? []);
-  const visibleMainNav = DEFAULT_MAIN_NAVIGATION.filter(
-    i => !hidden.has(i.id) || i.id === 'settings'
-  );
+  const visibleMainNav = DEFAULT_MAIN_NAVIGATION.filter(i => !hidden.has(i.id));
+  // Settings stays visible so the Preferences modal remains reachable;
+  // see Sidebar.tsx for the matching invariant.
   const visibleSecondaryNav = mobileSecondaryNav.filter(
     i => !hidden.has(i.id) || i.id === 'settings'
   );

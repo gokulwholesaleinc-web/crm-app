@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Modal, Button, ConfirmDialog } from '../ui';
 import { PaperClipIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { useSendEmail } from '../../hooks/useEmail';
@@ -169,17 +169,20 @@ export function EmailComposeModal({
   const sendEmailMutation = useSendEmail();
   const { prefs } = useUserPreferences();
   const signature = prefs.signature ?? '';
-  const signatureBlock = useMemo(
-    () => (signature ? `\n\n--\n${signature}` : ''),
-    [signature],
-  );
+  const signatureBlock = signature ? `\n\n--\n${signature}` : '';
+  // Snapshot the sig block at the moment it's actually written into the
+  // body. The dirty check compares against this snapshot, NOT the live
+  // signatureBlock — so a cross-tab signature edit doesn't suddenly flip
+  // a pristine compose into "unsaved changes" and pop the discard
+  // confirm.
+  const seededSigRef = useRef('');
 
   const totalAttachmentBytes = attachments.reduce((sum, a) => sum + a.size, 0);
   const overLimit = totalAttachmentBytes > MAX_TOTAL_BYTES;
 
   const isDirty =
     subject !== '' ||
-    (body !== '' && body !== signatureBlock) ||
+    (body !== '' && body !== seededSigRef.current) ||
     cc !== '' ||
     bcc !== '' ||
     attachments.length > 0;
@@ -222,6 +225,7 @@ export function EmailComposeModal({
           : `Re: ${replyTo.subject}`
       );
       setBody('');
+      seededSigRef.current = '';
       setCc(replyTo.cc || '');
       setShowCcBcc(!!replyTo.cc);
       setQuotedText(buildQuotedReply(replyTo));
@@ -231,6 +235,7 @@ export function EmailComposeModal({
       setTo(defaultTo);
       setSubject('');
       setBody(signatureBlock);
+      seededSigRef.current = signatureBlock;
       setCc('');
       setBcc('');
       setShowCcBcc(false);
@@ -240,6 +245,27 @@ export function EmailComposeModal({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [replyTo]);
+
+  // The modal is typically permanent in parent components — only `isOpen`
+  // toggles. Without this, opening compose, deleting the seeded sig,
+  // closing without sending, and reopening would leave the body empty
+  // for the rest of the session. Reseed only when the body is empty or
+  // still equal to the previously-seeded sig, so we never wipe a draft
+  // the user actively kept.
+  const wasOpenRef = useRef(isOpen);
+  useEffect(() => {
+    const becameOpen = isOpen && !wasOpenRef.current;
+    wasOpenRef.current = isOpen;
+    if (!becameOpen || replyTo) return;
+    if (body === '' || body === seededSigRef.current) {
+      seededSigRef.current = signatureBlock;
+      setBody(signatureBlock);
+    }
+    // Mount-transition only — `body`, `signatureBlock`, `replyTo` are
+    // read on the open transition; tracking them in deps would re-fire
+    // mid-compose on every keystroke or cross-tab sig change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   const handleFilesPicked = async (filesList: FileList | null) => {
     if (!filesList || filesList.length === 0) return;
@@ -338,6 +364,7 @@ export function EmailComposeModal({
       setTo(defaultTo);
       setSubject('');
       setBody(signatureBlock);
+      seededSigRef.current = signatureBlock;
       setCc('');
       setBcc('');
       setShowCcBcc(false);

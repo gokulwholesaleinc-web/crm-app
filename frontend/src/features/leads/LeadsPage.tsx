@@ -71,26 +71,36 @@ function LeadsPage() {
   const searchQuery = searchParams.get('search') || '';
   const statusFilter = searchParams.get('status') || '';
   const currentPage = Number(searchParams.get('page') || '1');
-  // URL wins; saved pref seeds when URL is bare (default 25 if neither).
-  const pageSize = Number(
-    searchParams.get('per_page') || savedPageSize || '25',
-  );
+  // URL wins; saved pref seeds when URL is bare. Both come from
+  // user-controllable surfaces, so guard against NaN/0/negative — a
+  // garbage `?per_page=abc` or a corrupted localStorage value would
+  // otherwise ship `NaN` to the API and the user gets an empty list
+  // with no error.
+  const urlPerPage = Number(searchParams.get('per_page') || '');
+  const candidatePageSize =
+    Number.isFinite(urlPerPage) && urlPerPage > 0
+      ? urlPerPage
+      : (savedPageSize ?? 25);
+  const pageSize =
+    Number.isFinite(candidatePageSize) && candidatePageSize > 0
+      ? candidatePageSize
+      : 25;
 
   const debouncedSearch = useDebouncedValue(searchQuery, 300);
   const { sortBy, sortDir, toggle: toggleSort } = useListSortPersistence('leads');
 
   // Seed `per_page` URL from saved pref on first mount when URL is bare,
   // so back/forward + share-link stay correct after the saved size is
-  // applied. Skip when saved is the default 25 — bare URL already means 25.
+  // applied. We wait until `savedPageSize` is known (auth-store
+  // rehydrating async would otherwise leave it `undefined` on first
+  // render, the one-shot fires immediately, and the user's saved size
+  // never seeds the URL on this navigation).
   const hasSeededPageSize = useRef(false);
   useEffect(() => {
     if (hasSeededPageSize.current) return;
+    if (savedPageSize === undefined) return; // wait for prefs hydrate
     hasSeededPageSize.current = true;
-    if (
-      !searchParams.has('per_page') &&
-      savedPageSize &&
-      savedPageSize !== 25
-    ) {
+    if (!searchParams.has('per_page') && savedPageSize !== 25) {
       setSearchParams(
         (prev) => {
           prev.set('per_page', String(savedPageSize));
@@ -99,9 +109,11 @@ function LeadsPage() {
         { replace: true },
       );
     }
-    // Run once on mount; later URL changes are user-driven.
+    // Re-evaluate when savedPageSize transitions from undefined → number.
+    // After the ref locks, later prefs changes don't re-seed (URL wins
+    // mid-session; the new saved size is honored on next mount).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [savedPageSize]);
 
   const setSearchQuery = (q: string) =>
     setSearchParams((prev) => { if (q) prev.set('search', q); else prev.delete('search'); prev.delete('page'); return prev; }, { replace: true });
@@ -542,7 +554,7 @@ function LeadsPage() {
 
             {/* Desktop Table View */}
             <div className="hidden md:block overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <table data-list-table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-900">
                   <tr>
                     <th scope="col" className="px-4 py-3 w-10">

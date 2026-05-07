@@ -212,7 +212,10 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
     : secondaryNav.filter(item => !ADMIN_ONLY_IDS.has(item.id));
 
   const hidden = new Set(prefs.hiddenNavIds ?? []);
-  const visibleMainNav = mainNav.filter(i => !hidden.has(i.id) || i.id === 'settings');
+  const visibleMainNav = mainNav.filter(i => !hidden.has(i.id));
+  // Settings stays visible regardless of hide pref so users can re-open
+  // Preferences. The Preferences UI also force-checks/disables the
+  // Settings checkbox; this filter exception is the runtime backstop.
   const visibleSecondaryNav = filteredSecondaryNav.filter(i => !hidden.has(i.id) || i.id === 'settings');
 
   const sensors = useSensors(

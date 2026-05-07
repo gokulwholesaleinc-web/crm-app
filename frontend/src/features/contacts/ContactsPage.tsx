@@ -17,7 +17,7 @@ import { useContacts, useCreateContact, useUpdateContact } from '../../hooks/use
 import { useCheckDuplicates } from '../../hooks/useDedup';
 import { useSavedFilters, useDeleteSavedFilter } from '../../hooks/useFilters';
 import {
-  useListPageDefaults,
+  useListPageSizeState,
   useListSortPersistence,
 } from '../../hooks/useListPageDefaults';
 import { formatDate, formatPhoneNumber } from '../../utils/formatters';
@@ -34,18 +34,13 @@ function ContactsPage() {
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
   const debouncedSearch = useDebouncedValue(searchQuery, 300);
   const { sortBy, sortDir, toggle } = useListSortPersistence('contacts');
-  const { savedPageSize, recordPageSize } = useListPageDefaults('contacts');
   const [currentPage, setCurrentPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [showSmartListBuilder, setShowSmartListBuilder] = useState(false);
   const [activeFilters, setActiveFilters] = useState<FilterGroup | null>(null);
   const [activeSmartListName, setActiveSmartListName] = useState<string | null>(null);
-  const [pageSize, setPageSizeState] = useState(savedPageSize ?? 25);
-  const setPageSize = (n: number) => {
-    setPageSizeState(n);
-    recordPageSize(n);
-  };
+  const [pageSize, setPageSize] = useListPageSizeState('contacts');
   const [pendingFormData, setPendingFormData] = useState<ContactFormData | null>(null);
   const [duplicateResults, setDuplicateResults] = useState<DuplicateMatch[]>([]);
   const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
@@ -429,7 +424,7 @@ function ContactsPage() {
 
             {/* Desktop Table View */}
             <div className="hidden md:block overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <table data-list-table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-900">
                   <tr>
                     <SortableTh field="name" label="Name" sortBy={sortBy} sortDir={sortDir} onToggle={toggle} />

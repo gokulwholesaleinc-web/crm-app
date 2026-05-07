@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button, Modal } from '../ui';
 import {
   useUserPreferences,
@@ -14,11 +14,29 @@ export interface UserPreferencesModalProps {
   onClose: () => void;
 }
 
+const PREF_FIELDS: ReadonlyArray<keyof UserPreferences> = [
+  'density',
+  'tabDefaults',
+  'hiddenNavIds',
+  'signature',
+  'listDefaults',
+];
+
+function fieldChanged<K extends keyof UserPreferences>(
+  a: UserPreferences[K],
+  b: UserPreferences[K],
+): boolean {
+  // Pref values are small (≤ a few strings or one object with a handful of
+  // keys) so JSON.stringify is plenty fast and correct for our shapes.
+  return JSON.stringify(a) !== JSON.stringify(b);
+}
+
 /**
  * Per-user preference editor. Sections receive a shared `draft` object and a
  * `setDraft` updater so each can edit its own slice without persisting until
- * the user clicks Save (which writes the merged draft back to localStorage in
- * one call). Cancel discards the draft and reverts to the on-disk values.
+ * the user clicks Save (which writes ONLY the fields that actually changed
+ * since the modal opened — fields a sibling tab edited while the modal was
+ * open are left alone instead of being clobbered by a stale draft snapshot).
  *
  * Each pref slice (density, tabDefaults, hiddenNavIds, signature) is a
  * separate top-level field on UserPreferences — adding a new pref means
@@ -30,12 +48,16 @@ export function UserPreferencesModal({
 }: UserPreferencesModalProps) {
   const { prefs, setMany } = useUserPreferences();
   const [draft, setDraft] = useState<UserPreferences>(prefs);
+  // Snapshot prefs at the moment the modal opens. The Save handler diffs
+  // draft against this, NOT against the live `prefs` (which may have been
+  // updated by another tab during the edit session).
+  const openBaselineRef = useRef<UserPreferences>(prefs);
 
-  // Re-sync draft from on-disk prefs whenever the modal (re)opens. Without
-  // this, closing without saving and reopening would still show the
-  // unsaved-but-stale draft from the previous session.
   useEffect(() => {
-    if (isOpen) setDraft(prefs);
+    if (isOpen) {
+      setDraft(prefs);
+      openBaselineRef.current = prefs;
+    }
     // We intentionally only re-seed on open transitions; updating `prefs`
     // mid-edit (from another tab) would clobber the user's in-progress
     // changes.
@@ -50,7 +72,20 @@ export function UserPreferencesModal({
   };
 
   const handleSave = () => {
-    setMany(draft);
+    const baseline = openBaselineRef.current;
+    const partial: Partial<UserPreferences> = {};
+    for (const key of PREF_FIELDS) {
+      if (fieldChanged(draft[key], baseline[key])) {
+        // Cast widens because TS can't narrow Partial assignment through
+        // a generic key. Each branch is sound by construction since the
+        // value was produced by the matching section bound to the same
+        // key.
+        (partial as Record<keyof UserPreferences, unknown>)[key] = draft[key];
+      }
+    }
+    if (Object.keys(partial).length > 0) {
+      setMany(partial);
+    }
     onClose();
   };
 
