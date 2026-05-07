@@ -7,7 +7,6 @@ import { Button, CopyButton, EntityLink, Spinner, Modal, ConfirmDialog } from '.
 import { TabBar, ActivitiesTab, CommonTabContent } from '../../components/shared/DetailPageShell';
 import { StickyActionBar } from '../../components/shared/StickyActionBar';
 import { OpportunityForm, OpportunityFormData } from './components/OpportunityForm';
-import { AIInsightsCard, NextBestActionCard } from '../../components/ai';
 import { useOpportunity, useDeleteOpportunity, useUpdateOpportunity } from '../../hooks/useOpportunities';
 import { useQuotes } from '../../hooks/useQuotes';
 import { useProposals } from '../../hooks/useProposals';
@@ -241,10 +240,6 @@ function OpportunityDetailPage() {
           </Button>
         </Link>
       </div>
-
-      {/* AI Suggestions */}
-      <NextBestActionCard entityType="opportunity" entityId={opportunity.id} />
-      <AIInsightsCard entityType="opportunity" entityId={opportunity.id} variant="inline" entityName={opportunity.name} />
 
       {/* Tabs */}
       <TabBar tabs={TABS} activeTab={activeTab} onTabChange={handleTabChange} />

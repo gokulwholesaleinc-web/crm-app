@@ -4,14 +4,11 @@
  * Wraps content in Layout component for consistent navigation.
  */
 
-import { lazy, Suspense } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 
 import { useAuthStore } from '../store/authStore';
 import { Spinner } from '../components/ui/Spinner';
 import { Layout } from '../components/layout/Layout';
-
-const FloatingChatWidget = lazy(() => import('../components/ai/FloatingChatWidget').then(m => ({ default: m.FloatingChatWidget })));
 
 interface PrivateRouteProps {
   children: React.ReactNode;
@@ -56,9 +53,6 @@ export function PrivateRoute({ children }: PrivateRouteProps) {
   return (
     <Layout user={layoutUser} onLogout={handleLogout}>
       {children}
-      <Suspense fallback={null}>
-        <FloatingChatWidget />
-      </Suspense>
     </Layout>
   );
 }
