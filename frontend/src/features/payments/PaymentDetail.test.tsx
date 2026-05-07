@@ -122,8 +122,6 @@ describe('PaymentDetailPage', () => {
 
     await waitFor(() => {
       expect(apiClientMock.post).toHaveBeenCalledWith('/api/payments/42/send-receipt');
-    });
-    await waitFor(() => {
       expect(screen.getByRole('status')).toHaveTextContent(/receipt email sent successfully/i);
     });
   });
