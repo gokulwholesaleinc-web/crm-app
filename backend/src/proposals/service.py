@@ -8,6 +8,7 @@ import secrets
 from datetime import UTC, datetime
 from decimal import Decimal
 from html import escape
+from typing import Any
 
 import httpx
 from sqlalchemy import func, or_, select, update
@@ -21,6 +22,7 @@ from src.core.base_service import BaseService, CRUDService, StatusTransitionMixi
 from src.core.constants import DEFAULT_PAGE_SIZE
 from src.core.filtering import build_token_search
 from src.core.opportunity_guards import assert_opportunity_active
+from src.core.sorting import build_order_clauses
 from src.core.url_safety import UnsafeUrlError, validate_public_url
 from src.email.branded_templates import TenantBrandingHelper, render_proposal_email
 from src.email.pdf_render import pdf_logo_allowed_hosts, render_html_to_pdf
@@ -34,6 +36,15 @@ from src.proposals.schemas import ProposalCreate, ProposalUpdate
 logger = logging.getLogger(__name__)
 
 _TEMPLATE_VAR_PATTERN = re.compile(r"\{\{(\w+)\}\}")
+
+
+PROPOSAL_SORTABLE_FIELDS: dict[str, Any] = {
+    "proposal_number": Proposal.proposal_number,
+    "title": Proposal.title,
+    "status": Proposal.status,
+    "view_count": Proposal.view_count,
+    "created_at": Proposal.created_at,
+}
 
 
 def _resolve_billing(proposal: Proposal) -> dict | None:
@@ -182,6 +193,8 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         quote_id: int | None = None,
         owner_id: int | None = None,
         shared_entity_ids: list[int] | None = None,
+        order_by: str | None = None,
+        order_dir: str | None = None,
     ) -> tuple[list[Proposal], int]:
         """Get paginated list of proposals with filters."""
         query = (
@@ -228,8 +241,14 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         total_result = await self.db.execute(count_query)
         total = total_result.scalar() or 0
 
+        order_clauses = build_order_clauses(
+            PROPOSAL_SORTABLE_FIELDS,
+            order_by,
+            order_dir,
+            default=[Proposal.created_at.desc(), Proposal.id.desc()],
+        )
         offset = (page - 1) * page_size
-        query = query.offset(offset).limit(page_size).order_by(Proposal.created_at.desc())
+        query = query.offset(offset).limit(page_size).order_by(*order_clauses)
 
         result = await self.db.execute(query)
         proposals = list(result.scalars().all())

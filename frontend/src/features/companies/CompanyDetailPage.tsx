@@ -1,4 +1,4 @@
-import { useState, lazy, Suspense } from 'react';
+import { useState, useRef, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSmartBack } from '../../hooks/useSmartBack';
 import { useUrlTabState } from '../../hooks/useUrlTabState';
@@ -10,6 +10,7 @@ import { Spinner } from '../../components/ui/Spinner';
 import { Modal } from '../../components/ui/Modal';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { TabBar, ActivitiesTab, CommonTabContent, SuspenseFallback } from '../../components/shared/DetailPageShell';
+import { StickyActionBar } from '../../components/shared/StickyActionBar';
 import { OverviewTab } from './components/tabs/OverviewTab';
 import { OpportunitiesTab } from './components/tabs/OpportunitiesTab';
 import { QuotesTab } from './components/tabs/QuotesTab';
@@ -58,6 +59,7 @@ export function CompanyDetailPage() {
   const [activeTab, handleTabChange] = useUrlTabState<TabType>(TAB_IDS, 'overview');
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const actionRowRef = useRef<HTMLDivElement>(null);
 
   const { data: company, isLoading: isLoadingCompany } = useCompany(companyId);
 
@@ -128,6 +130,18 @@ export function CompanyDetailPage() {
 
   return (
     <div className="space-y-6">
+      <StickyActionBar triggerRef={actionRowRef}>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => navigate(`/proposals?action=new&company_id=${companyId}`)}
+        >
+          Create Proposal
+        </Button>
+        <Button variant="secondary" size="sm" onClick={() => setShowEditForm(true)}>
+          Edit
+        </Button>
+      </StickyActionBar>
       {/* Header */}
       <div className="flex flex-col gap-4">
         <div className="flex items-start gap-3 sm:gap-4">
@@ -178,7 +192,7 @@ export function CompanyDetailPage() {
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
+        <div ref={actionRowRef} className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
           <Button
             variant="secondary"
             onClick={() => navigate(`/proposals?action=new&company_id=${companyId}`)}

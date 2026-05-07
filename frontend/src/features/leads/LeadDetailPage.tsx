@@ -1,10 +1,11 @@
-import { useState, Suspense } from 'react';
+import { useState, Suspense, useRef } from 'react';
 import { lazy } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useSmartBack } from '../../hooks/useSmartBack';
 import { useUrlTabState } from '../../hooks/useUrlTabState';
 import { Button, CopyButton, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { TabBar, ActivitiesTab, CommonTabContent, SuspenseFallback } from '../../components/shared/DetailPageShell';
+import { StickyActionBar } from '../../components/shared/StickyActionBar';
 import { EmailComposeModal, EmailHistory } from '../../components/email';
 import { ConvertLeadModal } from './components/ConvertLeadModal';
 import { LeadForm, LeadFormData } from './components/LeadForm';
@@ -43,6 +44,7 @@ function LeadDetailPage() {
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEmailCompose, setShowEmailCompose] = useState(false);
+  const actionRowRef = useRef<HTMLDivElement>(null);
 
   const { data: lead, isLoading, error } = useLead(leadId);
   const deleteLeadMutation = useDeleteLead();
@@ -170,6 +172,24 @@ function LeadDetailPage() {
 
   return (
     <div className="space-y-6">
+      <StickyActionBar triggerRef={actionRowRef}>
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => setShowEmailCompose(true)}
+          disabled={!lead.email}
+        >
+          Send Email
+        </Button>
+        {(lead.status === 'qualified' || isOrphanConverted) && (
+          <Button size="sm" onClick={() => setShowConvertModal(true)}>
+            {isOrphanConverted ? 'Run Conversion' : 'Convert'}
+          </Button>
+        )}
+        <Button variant="secondary" size="sm" onClick={() => setShowEditForm(true)}>
+          Edit
+        </Button>
+      </StickyActionBar>
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center space-x-3 sm:space-x-4">
@@ -195,7 +215,7 @@ function LeadDetailPage() {
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div ref={actionRowRef} className="flex items-center gap-2 sm:gap-3">
           <Button
             variant="primary"
             onClick={() => setShowEmailCompose(true)}

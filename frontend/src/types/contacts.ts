@@ -56,4 +56,6 @@ export interface ContactFilters {
   owner_id?: number;
   tag_ids?: string;
   filters?: string;
+  order_by?: string;
+  order_dir?: 'asc' | 'desc';
 }

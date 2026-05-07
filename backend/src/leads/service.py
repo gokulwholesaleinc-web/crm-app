@@ -9,12 +9,24 @@ from sqlalchemy.orm import selectinload
 from src.core.base_service import CRUDService, TaggableServiceMixin
 from src.core.constants import DEFAULT_PAGE_SIZE, ENTITY_TYPE_LEADS
 from src.core.filtering import apply_filters_to_query, build_token_search
+from src.core.sorting import build_order_clauses
 from src.leads.models import Lead, LeadSource
 from src.leads.schemas import LeadCreate, LeadSourceCreate, LeadSourceUpdate, LeadUpdate
 from src.leads.scoring import calculate_lead_score
 from src.opportunities.models import PipelineStage
 
 logger = logging.getLogger(__name__)
+
+
+# `name` sorts by (last_name, first_name) — Lead.full_name is a Python property
+# (first/last with company_name fallback), not a column. Surname-first matches
+# the alphabetical convention users expect on a leads list.
+LEAD_SORTABLE_FIELDS: dict[str, Any] = {
+    "name": (Lead.last_name, Lead.first_name),
+    "status": Lead.status,
+    "score": Lead.score,
+    "created_at": Lead.created_at,
+}
 
 
 class LeadValidationError(ValueError):
@@ -51,6 +63,8 @@ class LeadService(
         tag_ids: list[int] | None = None,
         filters: dict[str, Any] | None = None,
         shared_entity_ids: list[int] | None = None,
+        order_by: str | None = None,
+        order_dir: str | None = None,
     ) -> tuple[list[Lead], int]:
         """Get paginated list of leads with filters."""
         query = select(Lead).options(selectinload(Lead.source))
@@ -81,7 +95,13 @@ class LeadService(
         if tag_ids:
             query = await self._filter_by_tags(query, tag_ids)
 
-        return await self.paginate_query(query, page, page_size, order_by=Lead.score.desc())
+        order_clauses = build_order_clauses(
+            LEAD_SORTABLE_FIELDS,
+            order_by,
+            order_dir,
+            default=[Lead.score.desc(), Lead.id.desc()],
+        )
+        return await self.paginate_query(query, page, page_size, order_by=order_clauses)
 
     async def create(self, data: LeadCreate, user_id: int) -> Lead:
         """Create a new lead with auto-scoring.

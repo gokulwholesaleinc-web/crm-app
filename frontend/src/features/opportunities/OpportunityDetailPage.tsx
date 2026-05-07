@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useSmartBack } from '../../hooks/useSmartBack';
 import { useUrlTabState } from '../../hooks/useUrlTabState';
 import { Button, CopyButton, EntityLink, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { TabBar, ActivitiesTab, CommonTabContent } from '../../components/shared/DetailPageShell';
+import { StickyActionBar } from '../../components/shared/StickyActionBar';
 import { OpportunityForm, OpportunityFormData } from './components/OpportunityForm';
 import { AIInsightsCard, NextBestActionCard } from '../../components/ai';
 import { useOpportunity, useDeleteOpportunity, useUpdateOpportunity } from '../../hooks/useOpportunities';
@@ -41,6 +42,7 @@ function OpportunityDetailPage() {
   const [activeTab, handleTabChange] = useUrlTabState<TabType>(TAB_IDS, 'details');
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const actionRowRef = useRef<HTMLDivElement>(null);
 
   const { data: opportunity, isLoading, error } = useOpportunity(opportunityId);
   const deleteOpportunityMutation = useDeleteOpportunity();
@@ -142,6 +144,17 @@ function OpportunityDetailPage() {
 
   return (
     <div className="space-y-6">
+      <StickyActionBar triggerRef={actionRowRef}>
+        <Button variant="secondary" size="sm" onClick={() => setShowEditForm(true)}>
+          Edit
+        </Button>
+        <Link to={`/quotes?opportunity_id=${opportunity.id}`}>
+          <Button variant="secondary" size="sm">Create Quote</Button>
+        </Link>
+        <Link to={`/proposals?opportunity_id=${opportunity.id}`}>
+          <Button variant="secondary" size="sm">Create Proposal</Button>
+        </Link>
+      </StickyActionBar>
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center space-x-4">
@@ -179,7 +192,7 @@ function OpportunityDetailPage() {
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-3 w-full sm:w-auto">
+        <div ref={actionRowRef} className="flex items-center gap-3 w-full sm:w-auto">
           <Button variant="secondary" onClick={() => setShowEditForm(true)} className="flex-1 sm:flex-none">
             Edit
           </Button>

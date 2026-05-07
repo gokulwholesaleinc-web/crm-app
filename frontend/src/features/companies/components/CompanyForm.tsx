@@ -9,6 +9,7 @@ import { Input } from '../../../components/ui/Input';
 import { Select } from '../../../components/ui/Select';
 import { FormTextarea } from '../../../components/forms';
 import { useUnsavedChangesWarning } from '../../../hooks/useUnsavedChangesWarning';
+import { normalizeEmail, normalizePhone } from '../../../utils/inputNormalize';
 import type { Company, CompanyCreate, CompanyUpdate } from '../../../types';
 
 interface CompanyFormProps {
@@ -107,6 +108,7 @@ export function CompanyForm({
     handleSubmit,
     control,
     reset,
+    setValue,
     formState: { errors, isDirty },
   } = useForm<FormValues>({
     defaultValues: {
@@ -232,6 +234,15 @@ export function CompanyForm({
           inputMode="email"
           spellCheck={false}
           placeholder="contact@example.com..."
+          onBlur={(e) =>
+            setValue('email', normalizeEmail(e.target.value), { shouldDirty: true })
+          }
+          onPaste={(e) => {
+            e.preventDefault();
+            setValue('email', normalizeEmail(e.clipboardData.getData('text')), {
+              shouldDirty: true,
+            });
+          }}
         />
       </div>
 
@@ -267,6 +278,15 @@ export function CompanyForm({
           autoComplete="tel"
           inputMode="tel"
           placeholder="+1 (555) 000-0000..."
+          onBlur={(e) =>
+            setValue('phone', normalizePhone(e.target.value), { shouldDirty: true })
+          }
+          onPaste={(e) => {
+            e.preventDefault();
+            setValue('phone', normalizePhone(e.clipboardData.getData('text')), {
+              shouldDirty: true,
+            });
+          }}
         />
       </div>
 

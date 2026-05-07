@@ -91,6 +91,8 @@ async def list_leads(
     min_score: int | None = None,
     tag_ids: str | None = None,
     filters: str | None = None,
+    order_by: str | None = None,
+    order_dir: str | None = None,
 ):
     """List leads with pagination and filters.
 
@@ -111,6 +113,8 @@ async def list_leads(
         tag_ids=parse_tag_ids(tag_ids),
         filters=parse_json_filters(filters),
         shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_LEADS),
+        order_by=order_by,
+        order_dir=order_dir,
     )
 
     tags_map = await service.get_tags_for_entities([l.id for l in leads])

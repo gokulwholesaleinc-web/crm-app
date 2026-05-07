@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { StatusBadge, Button, EntityLink, HelpLink, PaginationBar } from '../../components/ui';
 import { SkeletonTable } from '../../components/ui/Skeleton';
+import { SortableTh } from '../../components/shared/SortableTh';
 import { usePayments, useSubscriptions, useCancelSubscription } from '../../hooks/usePayments';
+import { useTableSort } from '../../hooks/useTableSort';
 import { SendInvoiceModal } from './components/SendInvoiceModal';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
@@ -91,6 +93,7 @@ function PaymentsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [subPage, setSubPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const { sortBy, sortDir, toggle: toggleSort } = useTableSort();
 
   const {
     data: paymentsData,
@@ -101,7 +104,14 @@ function PaymentsPage() {
     page_size: pageSize,
     status: statusFilter || undefined,
     search: searchQuery || undefined,
+    ...(sortBy && { order_by: sortBy, order_dir: sortDir }),
   });
+
+  // Sorting changes ordering — drop back to page 1.
+  const handleSortToggle = (field: string) => {
+    setCurrentPage(1);
+    toggleSort(field);
+  };
 
   const {
     data: subscriptionsData,
@@ -295,24 +305,16 @@ function PaymentsPage() {
                 <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                   <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-900">
                     <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        ID
-                      </th>
+                      <SortableTh field="id" label="ID" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         Customer
                       </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         For
                       </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Amount
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Date
-                      </th>
+                      <SortableTh field="status" label="Status" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
+                      <SortableTh field="amount" label="Amount" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} align="right" />
+                      <SortableTh field="created_at" label="Date" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
                       <th scope="col" className="relative px-6 py-3">
                         <span className="sr-only">Actions</span>
                       </th>

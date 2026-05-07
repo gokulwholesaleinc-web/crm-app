@@ -4,6 +4,7 @@ import { useSmartBack } from '../../hooks/useSmartBack';
 import { useUrlTabState } from '../../hooks/useUrlTabState';
 import { Button, CopyButton, HelpLink, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { TabBar, ActivitiesTab, CommonTabContent, SuspenseFallback } from '../../components/shared/DetailPageShell';
+import { StickyActionBar } from '../../components/shared/StickyActionBar';
 import { EmailComposeModal, EmailThread, GmailReconnectBanner } from '../../components/email';
 import { useGmailStatus } from '../../hooks/useGmailStatus';
 import { ContactForm } from './components/ContactForm';
@@ -73,6 +74,7 @@ function ContactDetailPage() {
   const [aliasInput, setAliasInput] = useState('');
   const [aliasError, setAliasError] = useState<string | null>(null);
   const aliasInputRef = useRef<HTMLInputElement>(null);
+  const actionRowRef = useRef<HTMLDivElement>(null);
 
   const { data: contact, isLoading, error } = useContact(contactId);
   const { data: gmailStatus } = useGmailStatus();
@@ -166,6 +168,19 @@ function ContactDetailPage() {
 
   return (
     <div className="space-y-6">
+      <StickyActionBar triggerRef={actionRowRef}>
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => setShowEmailCompose(true)}
+          disabled={!contact.email}
+        >
+          Send Email
+        </Button>
+        <Button variant="secondary" size="sm" onClick={() => setShowEditForm(true)}>
+          Edit
+        </Button>
+      </StickyActionBar>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center space-x-4">
           <button
@@ -213,7 +228,7 @@ function ContactDetailPage() {
             )}
           </div>
         </div>
-        <div className="flex items-center gap-3 w-full sm:w-auto">
+        <div ref={actionRowRef} className="flex items-center gap-3 w-full sm:w-auto">
           <Button
             variant="primary"
             onClick={() => setShowEmailCompose(true)}

@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useSmartBack } from '../../hooks/useSmartBack';
+import { StickyActionBar } from '../../components/shared/StickyActionBar';
 import {
   ArrowLeftIcon,
   PaperAirplaneIcon,
@@ -63,6 +64,7 @@ function QuoteDetailPage() {
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showBundleDropdown, setShowBundleDropdown] = useState(false);
+  const actionRowRef = useRef<HTMLDivElement>(null);
   const [showAddLineItem, setShowAddLineItem] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editTitle, setEditTitle] = useState('');
@@ -221,6 +223,22 @@ function QuoteDetailPage() {
 
   return (
     <div className="space-y-6">
+      <StickyActionBar triggerRef={actionRowRef}>
+        {canSend && (
+          <Button
+            size="sm"
+            onClick={handleSend}
+            disabled={sendQuoteMutation.isPending || !hasContactEmail}
+          >
+            {sendQuoteMutation.isPending ? 'Sending...' : sendLabel}
+          </Button>
+        )}
+        {isDraft && (
+          <Button variant="secondary" size="sm" onClick={openEditModal}>
+            Edit
+          </Button>
+        )}
+      </StickyActionBar>
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
@@ -243,7 +261,7 @@ function QuoteDetailPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div ref={actionRowRef} className="flex flex-wrap items-center gap-2">
           <HelpLink anchor="tutorial-esign" label="How clients sign and accept" />
           <Button
             variant="secondary"

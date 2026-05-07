@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { Spinner } from '../ui/Spinner';
 import { useTimeline } from '../../hooks/useActivities';
 import { formatDate } from '../../utils/formatters';
+import { QuickAddNote } from './QuickAddNote';
 import clsx from 'clsx';
 
 const NotesList = lazy(() => import('./NotesList'));
@@ -9,6 +10,9 @@ const AttachmentList = lazy(() => import('./AttachmentList'));
 const AuditTimeline = lazy(() => import('./AuditTimeline'));
 const SharePanel = lazy(() => import('./SharePanel'));
 const CommentSection = lazy(() => import('./CommentSection'));
+
+const QUICK_NOTE_ENTITY_TYPES = new Set(['contact', 'lead', 'company', 'opportunity', 'proposal', 'quote']);
+type QuickNoteEntityType = 'contact' | 'lead' | 'company' | 'opportunity' | 'proposal' | 'quote';
 
 export function SuspenseFallback() {
   return (
@@ -64,9 +68,14 @@ interface ActivitiesTabProps {
 export function ActivitiesTab({ entityType, entityId }: ActivitiesTabProps) {
   const { data: timelineData, isLoading } = useTimeline(entityType, entityId);
   const activities = timelineData?.items || [];
+  const canQuickAdd = QUICK_NOTE_ENTITY_TYPES.has(entityType);
 
   return (
-    <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
+    <div>
+      {canQuickAdd && (
+        <QuickAddNote entityType={entityType as QuickNoteEntityType} entityId={entityId} />
+      )}
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
       <div className="px-4 py-5 sm:p-6">
         {isLoading ? (
           <div className="flex items-center justify-center py-4">
@@ -111,6 +120,7 @@ export function ActivitiesTab({ entityType, entityId }: ActivitiesTabProps) {
             ))}
           </ul>
         )}
+      </div>
       </div>
     </div>
   );
