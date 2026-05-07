@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { CheckIcon } from '@heroicons/react/24/outline';
-import { Button, Modal } from '../../../components/ui';
+import { Button, Modal, ConfirmDialog } from '../../../components/ui';
 import { usePipelineStages } from '../../../hooks/useOpportunities';
 
 interface ConvertLeadFormData {
@@ -37,6 +37,7 @@ export function ConvertLeadModal({
   onConvert,
 }: ConvertLeadModalProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const { data: pipelineStages, isLoading: stagesLoading } = usePipelineStages(true, 'opportunity');
 
   const opportunityStages = pipelineStages
@@ -50,7 +51,8 @@ export function ConvertLeadModal({
     handleSubmit,
     watch,
     setValue,
-    formState: { errors },
+    reset,
+    formState: { errors, isDirty },
   } = useForm<ConvertLeadFormData>({
     defaultValues: {
       createContact: true,
@@ -70,6 +72,14 @@ export function ConvertLeadModal({
 
   const createOpportunity = watch('createOpportunity');
 
+  const handleCancel = () => {
+    if (isDirty) {
+      setShowDiscardConfirm(true);
+    } else {
+      onClose();
+    }
+  };
+
   const onSubmit = async (data: ConvertLeadFormData) => {
     setIsLoading(true);
     try {
@@ -80,11 +90,13 @@ export function ConvertLeadModal({
   };
 
   return (
+    <>
     <Modal
       isOpen={isOpen}
       onClose={onClose}
       size="lg"
       showCloseButton={false}
+      closeOnOverlayClick={false}
       fullScreenOnMobile
     >
       <div className="flex flex-col h-full sm:h-auto">
@@ -102,7 +114,6 @@ export function ConvertLeadModal({
 
         <form onSubmit={handleSubmit(onSubmit)} className="mt-6 space-y-4 flex-1 flex flex-col">
           <div className="flex-1 space-y-4 overflow-y-auto">
-            {/* Create Contact Option */}
             <div className="flex items-start">
               <div className="flex items-center h-5">
                 <input
@@ -125,7 +136,6 @@ export function ConvertLeadModal({
               </div>
             </div>
 
-            {/* Create Opportunity Option */}
             <div className="flex items-start">
               <div className="flex items-center h-5">
                 <input
@@ -148,7 +158,6 @@ export function ConvertLeadModal({
               </div>
             </div>
 
-            {/* Opportunity Details (conditional) */}
             {createOpportunity && (
               <div className="ml-4 sm:ml-7 space-y-4 border-l-2 border-gray-200 pl-4">
                 <div>
@@ -232,7 +241,6 @@ export function ConvertLeadModal({
             )}
           </div>
 
-          {/* Form Actions */}
           <div className="mt-5 pt-4 border-t border-gray-200 sm:border-t-0 sm:pt-0 sm:mt-6 flex flex-col-reverse sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense gap-3">
             <Button
               type="submit"
@@ -244,7 +252,7 @@ export function ConvertLeadModal({
             <Button
               type="button"
               variant="secondary"
-              onClick={onClose}
+              onClick={handleCancel}
               className="w-full sm:col-start-1"
             >
               Cancel
@@ -253,5 +261,21 @@ export function ConvertLeadModal({
         </form>
       </div>
     </Modal>
+    {/* Sibling, not child — nesting ConfirmDialog inside Modal stacks two focus traps */}
+    <ConfirmDialog
+      isOpen={showDiscardConfirm}
+      onClose={() => setShowDiscardConfirm(false)}
+      onConfirm={() => {
+        reset();
+        setShowDiscardConfirm(false);
+        onClose();
+      }}
+      title="Discard changes?"
+      message="Your unsaved changes will be lost."
+      confirmLabel="Discard"
+      cancelLabel="Keep editing"
+      variant="danger"
+    />
+    </>
   );
 }

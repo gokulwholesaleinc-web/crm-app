@@ -128,11 +128,6 @@ function ContactDetailPage() {
     }
   };
 
-  const getInitialFormData = (): Partial<ContactFormData> | undefined => {
-    if (!contact) return undefined;
-    return contactToFormData(contact);
-  };
-
   const handleDeleteConfirm = async () => {
     if (!contactId) return;
     try {
@@ -174,7 +169,6 @@ function ContactDetailPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center space-x-4">
           <Link
@@ -257,13 +251,10 @@ function ContactDetailPage() {
         </div>
       </div>
 
-      {/* AI Suggestions */}
       <NextBestActionCard entityType="contact" entityId={contact.id} />
 
-      {/* Tabs */}
       <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
 
-      {/* Tab Content */}
       {activeTab === 'details' && contactId && (
         <>
           <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="h-20 bg-gray-200 dark:bg-gray-700 rounded" /></div>}>
@@ -323,14 +314,16 @@ function ContactDetailPage() {
                         autoComplete="off"
                         className="flex-1 min-w-0 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-2.5 py-1 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                       />
-                      <button
+                      <Button
                         type="button"
+                        size="sm"
                         onClick={handleAddAlias}
-                        disabled={addAliasMutation.isPending || !aliasInput.trim()}
-                        className="shrink-0 rounded-md bg-primary-600 px-3 py-1 text-sm font-medium text-white hover:bg-primary-500 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                        disabled={!aliasInput.trim()}
+                        isLoading={addAliasMutation.isPending}
+                        className="shrink-0"
                       >
-                        {addAliasMutation.isPending ? 'Adding...' : 'Add'}
-                      </button>
+                        Add
+                      </Button>
                     </div>
                     {aliasError && (
                       <p role="alert" aria-live="polite" className="mt-1 text-xs text-red-600 dark:text-red-400">{aliasError}</p>
@@ -559,7 +552,6 @@ function ContactDetailPage() {
         />
       )}
 
-      {/* Email Compose Modal */}
       <EmailComposeModal
         isOpen={showEmailCompose}
         onClose={() => { setShowEmailCompose(false); setReplyToEmail(null); }}
@@ -569,10 +561,9 @@ function ContactDetailPage() {
         replyTo={replyToEmail}
       />
 
-      {/* Edit Form Modal */}
       <Modal isOpen={showEditForm} onClose={() => setShowEditForm(false)} title="Edit Contact" size="lg">
         <ContactForm
-          initialData={getInitialFormData()}
+          initialData={contact ? contactToFormData(contact) : undefined}
           onSubmit={handleEditSubmit}
           onCancel={() => setShowEditForm(false)}
           isLoading={updateContactMutation.isPending}
@@ -580,7 +571,6 @@ function ContactDetailPage() {
         />
       </Modal>
 
-      {/* Delete Confirmation Dialog */}
       <ConfirmDialog
         isOpen={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
@@ -593,7 +583,6 @@ function ContactDetailPage() {
         isLoading={deleteContactMutation.isPending}
       />
 
-      {/* Send Invoice Modal */}
       <Suspense fallback={null}>
         <SendInvoiceModal
           isOpen={showInvoiceModal}

@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useState } from 'react';
+import type { UseFormReturn } from 'react-hook-form';
 import {
   usePipelineStages,
   useCreatePipelineStage,
@@ -12,6 +12,7 @@ import { Button } from '../../../components/ui/Button';
 import { Badge } from '../../../components/ui/Badge';
 import { Modal, ModalFooter } from '../../../components/ui/Modal';
 import { FormInput } from '../../../components/forms';
+import { FormModal } from '../../../components/shared/FormModal';
 import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 import type {
   PipelineStage,
@@ -29,176 +30,99 @@ interface StageFormData {
   pipeline_type: string;
 }
 
-interface StageModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  title: string;
-  initialData?: StageFormData;
-  onSubmit: (data: StageFormData) => Promise<void>;
-  isPending: boolean;
-  isError: boolean;
-}
+const STAGE_DEFAULTS: StageFormData = {
+  name: '',
+  description: '',
+  color: '#6366f1',
+  probability: '0',
+  is_won: false,
+  is_lost: false,
+  pipeline_type: 'opportunity',
+};
 
-function StageModal({ isOpen, onClose, title, initialData, onSubmit, isPending, isError }: StageModalProps) {
-  const [success, setSuccess] = useState(false);
-
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    reset,
-    watch,
-    setValue,
-  } = useForm<StageFormData>({
-    defaultValues: initialData || {
-      name: '',
-      description: '',
-      color: '#6366f1',
-      probability: '0',
-      is_won: false,
-      is_lost: false,
-      pipeline_type: 'opportunity',
-    },
-  });
-
+function StageFormFields({ register, formState: { errors }, watch, setValue }: UseFormReturn<StageFormData>) {
   const isWon = watch('is_won');
   const isLost = watch('is_lost');
   const pipelineType = watch('pipeline_type');
-
-  useEffect(() => {
-    if (isOpen) {
-      reset(initialData || {
-        name: '',
-        description: '',
-        color: '#6366f1',
-        probability: '0',
-        is_won: false,
-        is_lost: false,
-        pipeline_type: 'opportunity',
-      });
-      setSuccess(false);
-    }
-  }, [isOpen, initialData, reset]);
-
-  const handleFormSubmit = async (data: StageFormData) => {
-    try {
-      await onSubmit(data);
-      setSuccess(true);
-      setTimeout(() => {
-        onClose();
-        setSuccess(false);
-      }, 800);
-    } catch {
-      // error handled by parent
-    }
-  };
-
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={title} size="md">
-      <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
-        {isError && (
-          <div className="rounded-md bg-red-50 p-3">
-            <p className="text-sm text-red-800">Failed to save stage. Please try again.</p>
-          </div>
-        )}
-        {success && (
-          <div className="rounded-md bg-green-50 p-3">
-            <p className="text-sm text-green-800">Stage saved successfully!</p>
-          </div>
-        )}
-
+    <>
+      <FormInput
+        label="Stage Name"
+        name="name"
+        required
+        register={register('name', { required: 'Stage name is required' })}
+        error={errors.name?.message}
+        placeholder="e.g., Discovery..."
+      />
+      <FormInput
+        label="Description"
+        name="description"
+        register={register('description')}
+        placeholder="Optional description"
+      />
+      <div className="grid grid-cols-2 gap-4">
         <FormInput
-          label="Stage Name"
-          name="name"
-          required
-          register={register('name', { required: 'Stage name is required' })}
-          error={errors.name?.message}
-          placeholder="e.g., Discovery..."
+          label="Color"
+          name="color"
+          type="color"
+          register={register('color')}
         />
-
         <FormInput
-          label="Description"
-          name="description"
-          register={register('description')}
-          placeholder="Optional description"
+          label="Win Probability (%)"
+          name="probability"
+          type="number"
+          register={register('probability', {
+            required: 'Probability is required',
+            min: { value: 0, message: 'Min 0' },
+            max: { value: 100, message: 'Max 100' },
+          })}
+          error={errors.probability?.message}
         />
-
-        <div className="grid grid-cols-2 gap-4">
-          <FormInput
-            label="Color"
-            name="color"
-            type="color"
-            register={register('color')}
+      </div>
+      <div>
+        <label htmlFor="stage-pipeline-type" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          Pipeline Side
+        </label>
+        <select
+          id="stage-pipeline-type"
+          value={pipelineType}
+          onChange={(e) => setValue('pipeline_type', e.target.value)}
+          className="block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm dark:bg-gray-700 dark:text-gray-100"
+        >
+          <option value="lead">Lead (left side)</option>
+          <option value="opportunity">Opportunity (right side)</option>
+        </select>
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Controls which side of the pipeline board this stage appears on.
+        </p>
+      </div>
+      <div className="flex gap-4">
+        <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+          <input
+            type="checkbox"
+            className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            checked={isWon}
+            onChange={(e) => {
+              setValue('is_won', e.target.checked);
+              if (e.target.checked) setValue('is_lost', false);
+            }}
           />
-
-          <FormInput
-            label="Win Probability (%)"
-            name="probability"
-            type="number"
-            register={register('probability', {
-              required: 'Probability is required',
-              min: { value: 0, message: 'Min 0' },
-              max: { value: 100, message: 'Max 100' },
-            })}
-            error={errors.probability?.message}
+          Won Stage
+        </label>
+        <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+          <input
+            type="checkbox"
+            className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            checked={isLost}
+            onChange={(e) => {
+              setValue('is_lost', e.target.checked);
+              if (e.target.checked) setValue('is_won', false);
+            }}
           />
-        </div>
-
-        <div>
-          <label htmlFor="pipeline_type" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Pipeline Side
-          </label>
-          <select
-            id="pipeline_type"
-            value={pipelineType}
-            onChange={(e) => setValue('pipeline_type', e.target.value)}
-            className="block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm dark:bg-gray-700 dark:text-gray-100"
-          >
-            <option value="lead">Lead (left side)</option>
-            <option value="opportunity">Opportunity (right side)</option>
-          </select>
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Controls which side of the pipeline board this stage appears on.
-          </p>
-        </div>
-
-        <div className="flex gap-4">
-          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-            <input
-              type="checkbox"
-              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-              checked={isWon}
-              onChange={(e) => {
-                setValue('is_won', e.target.checked);
-                if (e.target.checked) setValue('is_lost', false);
-              }}
-            />
-            Won Stage
-          </label>
-          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-            <input
-              type="checkbox"
-              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-              checked={isLost}
-              onChange={(e) => {
-                setValue('is_lost', e.target.checked);
-                if (e.target.checked) setValue('is_won', false);
-              }}
-            />
-            Lost Stage
-          </label>
-        </div>
-
-        <ModalFooter>
-          <Button type="button" variant="secondary" onClick={onClose} disabled={isPending}>
-            Cancel
-          </Button>
-          <Button type="submit" isLoading={isPending} disabled={success}>
-            Save
-          </Button>
-        </ModalFooter>
-      </form>
-    </Modal>
+          Lost Stage
+        </label>
+      </div>
+    </>
   );
 }
 
@@ -286,11 +210,11 @@ export function PipelineStagesSection() {
         )}
       </CardBody>
 
-      {/* Add Stage Modal */}
-      <StageModal
+      <FormModal<StageFormData>
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         title="Add Pipeline Stage"
+        defaultValues={STAGE_DEFAULTS}
         onSubmit={async (data) => {
           const stageData: PipelineStageCreate = {
             name: data.name,
@@ -305,11 +229,13 @@ export function PipelineStagesSection() {
         }}
         isPending={createMutation.isPending}
         isError={createMutation.isError}
-      />
+        errorMessage="Failed to save stage. Please try again."
+      >
+        {(form) => <StageFormFields {...form} />}
+      </FormModal>
 
-      {/* Delete Confirmation Modal */}
       {deletingStage && (
-        <Modal isOpen={!!deletingStage} onClose={() => setDeletingStage(null)} title="Delete Pipeline Stage" size="sm">
+        <Modal isOpen={true} onClose={() => setDeletingStage(null)} title="Delete Pipeline Stage" size="sm">
           <div className="space-y-4">
             <p className="text-sm text-gray-700 dark:text-gray-300">
               Are you sure you want to delete <strong>{deletingStage.name}</strong>? This cannot be undone.
@@ -347,13 +273,12 @@ export function PipelineStagesSection() {
         </Modal>
       )}
 
-      {/* Edit Stage Modal */}
       {editingStage && (
-        <StageModal
-          isOpen={!!editingStage}
+        <FormModal<StageFormData>
+          isOpen={true}
           onClose={() => setEditingStage(null)}
           title="Edit Pipeline Stage"
-          initialData={{
+          defaultValues={{
             name: editingStage.name,
             description: editingStage.description || '',
             color: editingStage.color,
@@ -376,7 +301,10 @@ export function PipelineStagesSection() {
           }}
           isPending={updateMutation.isPending}
           isError={updateMutation.isError}
-        />
+          errorMessage="Failed to save stage. Please try again."
+        >
+          {(form) => <StageFormFields {...form} />}
+        </FormModal>
       )}
     </Card>
   );

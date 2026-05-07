@@ -1,13 +1,8 @@
-/**
- * Modal for adding contacts or leads to a campaign
- */
-
 import { useState, useMemo } from 'react';
 import clsx from 'clsx';
-import { MagnifyingGlassIcon, CheckIcon } from '@heroicons/react/24/outline';
 import { Button } from '../../../components/ui/Button';
 import { Modal, ModalFooter } from '../../../components/ui/Modal';
-import { Spinner } from '../../../components/ui/Spinner';
+import { ScrollableListPicker } from '../../../components/shared/ScrollableListPicker';
 import { useContacts } from '../../../hooks/useContacts';
 import { useLeads } from '../../../hooks/useLeads';
 import type { Contact, Lead } from '../../../types';
@@ -29,17 +24,10 @@ export function AddMembersModal({
   isLoading = false,
 }: AddMembersModalProps) {
   const [memberType, setMemberType] = useState<MemberType>('contact');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Array<string | number>>([]);
 
-  const { data: contactsData, isLoading: isLoadingContacts } = useContacts({
-    page_size: 100,
-    search: searchQuery || undefined,
-  });
-  const { data: leadsData, isLoading: isLoadingLeads } = useLeads({
-    page_size: 100,
-    search: searchQuery || undefined,
-  });
+  const { data: contactsData, isLoading: isLoadingContacts } = useContacts({ page_size: 100 });
+  const { data: leadsData, isLoading: isLoadingLeads } = useLeads({ page_size: 100 });
 
   const existingContactIds = useMemo(
     () => new Set(existingMemberIds.contacts),
@@ -60,27 +48,11 @@ export function AddMembersModal({
     [leadsData, existingLeadIds]
   );
 
-  const currentItems = memberType === 'contact' ? availableContacts : availableLeads;
   const isLoadingItems = memberType === 'contact' ? isLoadingContacts : isLoadingLeads;
-
-  const handleToggleSelect = (id: number) => {
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
-    );
-  };
-
-  const handleSelectAll = () => {
-    const allIds = currentItems.map((item) => item.id);
-    setSelectedIds(allIds);
-  };
-
-  const handleClearSelection = () => {
-    setSelectedIds([]);
-  };
 
   const handleSubmit = async () => {
     if (selectedIds.length === 0) return;
-    await onAdd(memberType, selectedIds);
+    await onAdd(memberType, selectedIds as number[]);
   };
 
   const handleTypeChange = (type: MemberType) => {
@@ -88,9 +60,36 @@ export function AddMembersModal({
     setSelectedIds([]);
   };
 
+  const renderContact = (item: Contact, _isSelected: boolean) => {
+    const name = item.full_name || `${item.first_name} ${item.last_name}`;
+    const email = item.email || '-';
+    const extra = item.company?.name;
+    return (
+      <div className="flex-1 min-w-0">
+        <p className="font-medium text-gray-900 truncate">{name}</p>
+        <p className="text-xs sm:text-sm text-gray-500 truncate">
+          {email}{extra && ` - ${extra}`}
+        </p>
+      </div>
+    );
+  };
+
+  const renderLead = (item: Lead, _isSelected: boolean) => {
+    const name = `${item.first_name} ${item.last_name}`;
+    const email = item.email || '-';
+    const extra = item.company_name;
+    return (
+      <div className="flex-1 min-w-0">
+        <p className="font-medium text-gray-900 truncate">{name}</p>
+        <p className="text-xs sm:text-sm text-gray-500 truncate">
+          {email}{extra && ` - ${extra}`}
+        </p>
+      </div>
+    );
+  };
+
   return (
     <Modal isOpen onClose={onClose} title="Add Campaign Members" size="xl" fullScreenOnMobile>
-      {/* Member Type Tabs */}
       <div className="flex space-x-2 sm:space-x-4 mb-4">
         <button
           type="button"
@@ -118,46 +117,6 @@ export function AddMembersModal({
         </button>
       </div>
 
-      {/* Search */}
-      <div className="relative mb-3">
-        <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-        <label htmlFor="member-search" className="sr-only">Search members</label>
-        <input
-          type="search"
-          id="member-search"
-          name="search"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder={`Search ${memberType}s...`}
-          className="w-full pl-10 pr-4 py-2 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-        />
-      </div>
-
-      {/* Selection Actions */}
-      <div className="flex items-center justify-between text-sm mb-3">
-        <span className="text-gray-600">{selectedIds.length} selected</span>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={handleSelectAll}
-            className="text-primary-600 hover:text-primary-700"
-            disabled={currentItems.length === 0}
-          >
-            Select All
-          </button>
-          <span className="text-gray-300">|</span>
-          <button
-            type="button"
-            onClick={handleClearSelection}
-            className="text-gray-500 hover:text-gray-700"
-            disabled={selectedIds.length === 0}
-          >
-            Clear
-          </button>
-        </div>
-      </div>
-
-      {/* Truncation banners */}
       {memberType === 'contact' && contactsData?.total != null && contactsData.total > availableContacts.length && (
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
           Showing {availableContacts.length} of {contactsData.total} contacts. Use search to narrow down.
@@ -169,68 +128,37 @@ export function AddMembersModal({
         </p>
       )}
 
-      {/* List */}
-      <div className="overflow-y-auto max-h-[40vh]">
-        {isLoadingItems ? (
-          <div className="flex items-center justify-center py-12">
-            <Spinner />
-          </div>
-        ) : currentItems.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">
-            <p>No {memberType}s available to add.</p>
-            {searchQuery && (
-              <p className="text-sm mt-1">Try adjusting your search.</p>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {currentItems.map((item) => {
-              const isSelected = selectedIds.includes(item.id);
-              const name =
-                memberType === 'contact'
-                  ? (item as Contact).full_name ||
-                    `${(item as Contact).first_name} ${(item as Contact).last_name}`
-                  : `${(item as Lead).first_name} ${(item as Lead).last_name}`;
-              const email = item.email || '-';
-              const extra =
-                memberType === 'contact'
-                  ? (item as Contact).company?.name
-                  : (item as Lead).company_name;
-
-              return (
-                <div
-                  key={item.id}
-                  onClick={() => handleToggleSelect(item.id)}
-                  className={clsx(
-                    'flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors',
-                    isSelected
-                      ? 'border-primary-500 bg-primary-50'
-                      : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                  )}
-                >
-                  <div
-                    className={clsx(
-                      'w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0',
-                      isSelected
-                        ? 'border-primary-500 bg-primary-500'
-                        : 'border-gray-300'
-                    )}
-                  >
-                    {isSelected && <CheckIcon className="h-3 w-3 text-white" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-900 truncate">{name}</p>
-                    <p className="text-xs sm:text-sm text-gray-500 truncate">
-                      {email}
-                      {extra && ` - ${extra}`}
-                    </p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      {memberType === 'contact' ? (
+        <ScrollableListPicker<Contact>
+          items={availableContacts}
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
+          getItemId={(c) => c.id}
+          renderItem={renderContact}
+          searchPlaceholder="Search contacts..."
+          filterFn={(c, q) => {
+            const name = (c.full_name || `${c.first_name} ${c.last_name}`).toLowerCase();
+            return name.includes(q.toLowerCase()) || (c.email ?? '').toLowerCase().includes(q.toLowerCase());
+          }}
+          isLoading={isLoadingItems}
+          emptyMessage="No contacts available to add."
+        />
+      ) : (
+        <ScrollableListPicker<Lead>
+          items={availableLeads}
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
+          getItemId={(l) => l.id}
+          renderItem={renderLead}
+          searchPlaceholder="Search leads..."
+          filterFn={(l, q) => {
+            const name = `${l.first_name} ${l.last_name}`.toLowerCase();
+            return name.includes(q.toLowerCase()) || (l.email ?? '').toLowerCase().includes(q.toLowerCase());
+          }}
+          isLoading={isLoadingItems}
+          emptyMessage="No leads available to add."
+        />
+      )}
 
       <ModalFooter>
         <Button variant="secondary" onClick={onClose} disabled={isLoading} className="w-full sm:w-auto">
