@@ -258,7 +258,7 @@ function ContractDetailPage() {
             </div>
           )}
 
-          <ContractAttachmentsSection contractId={contract.id} />
+          <ContractAttachmentsSection contractId={contract.id} canEdit={canEdit} />
         </div>
 
         {/* Sidebar */}
