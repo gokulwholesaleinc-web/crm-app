@@ -1,0 +1,128 @@
+"""Daily contract-lifecycle job: signed→active auto-flip + expiring alerts."""
+
+import logging
+import os
+from datetime import UTC, date, datetime, timedelta
+
+from sqlalchemy import or_, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from src.contracts.models import Contract
+
+logger = logging.getLogger(__name__)
+
+EXPIRING_WINDOW_DAYS = 30
+
+
+class ContractLifecycleService:
+    """Daily lifecycle pass: status auto-flip + expiring-soon alerts."""
+
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def process_due_contracts(self) -> int:
+        flipped = await self._flip_signed_to_active()
+        alerted = await self._alert_expiring_soon()
+        return flipped + alerted
+
+    async def _flip_signed_to_active(self) -> int:
+        today = date.today()
+        result = await self.db.execute(
+            update(Contract)
+            .where(Contract.status == "signed")
+            .where(Contract.start_date.is_not(None))
+            .where(Contract.start_date <= today)
+            .values(status="active")
+        )
+        return result.rowcount or 0
+
+    async def _alert_expiring_soon(self) -> int:
+        now = datetime.now(UTC)
+        cutoff = now.date() + timedelta(days=EXPIRING_WINDOW_DAYS)
+        notify_floor = now - timedelta(days=EXPIRING_WINDOW_DAYS)
+
+        result = await self.db.execute(
+            select(Contract)
+            .options(selectinload(Contract.contact), selectinload(Contract.company))
+            .where(Contract.status == "active")
+            .where(Contract.end_date.is_not(None))
+            .where(Contract.end_date <= cutoff)
+            .where(Contract.end_date >= now.date())
+            .where(
+                or_(
+                    Contract.expiring_notified_at.is_(None),
+                    Contract.expiring_notified_at < notify_floor,
+                )
+            )
+        )
+        contracts = list(result.scalars().all())
+
+        for contract in contracts:
+            try:
+                await self._notify_owner(contract)
+                contract.expiring_notified_at = now
+            except Exception:
+                logger.exception(
+                    "[contracts_lifecycle] notify failed contract=%s", contract.id
+                )
+        await self.db.flush()
+        return len(contracts)
+
+    async def _notify_owner(self, contract: Contract) -> None:
+        if contract.owner_id is None:
+            return
+
+        days_left = (contract.end_date - date.today()).days  # type: ignore[operator]
+        title = f"Contract expiring in {days_left} day{'s' if days_left != 1 else ''}"
+        company_name = contract.company.name if contract.company else "no company"
+        end_date_str = contract.end_date.isoformat() if contract.end_date else "unknown"
+        body = f"{contract.title} ({company_name}) expires on {end_date_str}."
+
+        from src.notifications.service import NotificationService
+
+        notif_service = NotificationService(self.db)
+        await notif_service.create_notification(
+            user_id=contract.owner_id,
+            type="contract_expiring",
+            title=title,
+            message=body,
+            entity_type="contracts",
+            entity_id=contract.id,
+        )
+
+        from sqlalchemy import select as _select
+
+        from src.auth.models import User
+
+        owner_result = await self.db.execute(
+            _select(User).where(User.id == contract.owner_id)
+        )
+        owner = owner_result.scalar_one_or_none()
+        if owner is None or not owner.email:
+            return
+
+        from src.email.branded_templates import TenantBrandingHelper
+        from src.email.service import EmailService
+
+        branding = await TenantBrandingHelper.get_branding_for_user(
+            self.db, contract.owner_id
+        )
+        company_label = branding.get("company_name") or "CRM"
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        view_url = f"{frontend_url}/contracts/{contract.id}"
+        html = (
+            f"<p>{body}</p>"
+            f'<p><a href="{view_url}">Open contract</a></p>'
+            f"<p>{company_label}</p>"
+        )
+
+        email_service = EmailService(self.db)
+        await email_service.queue_email(
+            to_email=owner.email,
+            subject=f"Contract expiring — {contract.title}",
+            body=html,
+            sent_by_id=contract.owner_id,
+            entity_type="contracts",
+            entity_id=contract.id,
+        )
