@@ -99,18 +99,25 @@ describe('PaymentDetailPage', () => {
       }
       return Promise.resolve({ data: null });
     });
+    const origCreateObjectURL = URL.createObjectURL;
+    const origRevokeObjectURL = URL.revokeObjectURL;
     URL.createObjectURL = vi.fn(() => 'blob:test-url');
     URL.revokeObjectURL = vi.fn();
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
 
-    renderWithProviders(<PaymentDetailPage />);
-    fireEvent.click(screen.getByRole('button', { name: /download invoice/i }));
+    try {
+      renderWithProviders(<PaymentDetailPage />);
+      fireEvent.click(screen.getByRole('button', { name: /download invoice/i }));
 
-    await waitFor(() => {
-      expect(apiClientMock.get).toHaveBeenCalledWith('/api/payments/42/invoice', { responseType: 'blob' });
-      expect(openSpy).toHaveBeenCalledWith('blob:test-url', '_blank', 'noopener,noreferrer');
-    });
-    openSpy.mockRestore();
+      await waitFor(() => {
+        expect(apiClientMock.get).toHaveBeenCalledWith('/api/payments/42/invoice', { responseType: 'blob' });
+        expect(openSpy).toHaveBeenCalledWith('blob:test-url', '_blank', 'noopener,noreferrer');
+      });
+    } finally {
+      openSpy.mockRestore();
+      URL.createObjectURL = origCreateObjectURL;
+      URL.revokeObjectURL = origRevokeObjectURL;
+    }
   });
 
   it('resend receipt shows success message when apiClient.post resolves', async () => {
