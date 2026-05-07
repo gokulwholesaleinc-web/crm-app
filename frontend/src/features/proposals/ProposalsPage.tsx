@@ -363,7 +363,10 @@ function ProposalsPage() {
                       className="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
                       onClick={(e) => {
                         if ((e.target as HTMLElement).closest('a, button')) return;
-                        navigate(`/proposals/${proposal.id}`);
+                        if (window.getSelection()?.toString()) return;
+                        navigate(`/proposals/${proposal.id}`, {
+                          state: { from: window.location.pathname + window.location.search },
+                        });
                       }}
                     >
                       <td className="px-6 py-4 whitespace-nowrap">

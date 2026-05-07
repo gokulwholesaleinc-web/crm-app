@@ -6,7 +6,18 @@ interface HistoryState {
 }
 
 interface NavLocationState {
-  from?: string;
+  // Other places in the codebase (PrivateRoute, OAuth callback) put a Location
+  // object on `state.from` for post-login redirects. We only honor string
+  // paths; anything else falls through to the in-app-history check.
+  from?: unknown;
+}
+
+function isSafeInternalPath(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.startsWith('/') &&
+    !value.startsWith('//')
+  );
 }
 
 /**
@@ -14,7 +25,7 @@ interface NavLocationState {
  * to the current page rather than always sending them to a hard-coded list.
  *
  * Resolution order:
- *   1. `location.state.from` — set explicitly by callers that know the origin
+ *   1. `location.state.from` — must be a same-origin path string
  *   2. in-app history (react-router stores idx>0 on PUSH navigations) — go back one
  *   3. `fallbackPath` — typed-URL / fresh-tab / cross-origin entry
  */
@@ -24,7 +35,7 @@ export function useSmartBack(fallbackPath: string) {
 
   return useCallback(() => {
     const fromState = (location.state as NavLocationState | null)?.from;
-    if (fromState) {
+    if (isSafeInternalPath(fromState)) {
       navigate(fromState);
       return;
     }
