@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Modal, Button, ConfirmDialog } from '../ui';
 import { PaperClipIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { useSendEmail } from '../../hooks/useEmail';
 import { useFormSubmitShortcut } from '../../hooks/useSubmitShortcut';
 import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
+import { useUserPreferences } from '../../hooks/useUserPreferences';
 import { showError } from '../../utils/toast';
 import type { ThreadEmailItem } from '../../types/email';
 import type { InlineAttachmentPayload } from '../../api/email';
@@ -166,13 +167,19 @@ export function EmailComposeModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const formRef = useFormSubmitShortcut();
   const sendEmailMutation = useSendEmail();
+  const { prefs } = useUserPreferences();
+  const signature = prefs.signature ?? '';
+  const signatureBlock = useMemo(
+    () => (signature ? `\n\n--\n${signature}` : ''),
+    [signature],
+  );
 
   const totalAttachmentBytes = attachments.reduce((sum, a) => sum + a.size, 0);
   const overLimit = totalAttachmentBytes > MAX_TOTAL_BYTES;
 
   const isDirty =
     subject !== '' ||
-    body !== '' ||
+    (body !== '' && body !== signatureBlock) ||
     cc !== '' ||
     bcc !== '' ||
     attachments.length > 0;
@@ -223,7 +230,7 @@ export function EmailComposeModal({
     } else {
       setTo(defaultTo);
       setSubject('');
-      setBody('');
+      setBody(signatureBlock);
       setCc('');
       setBcc('');
       setShowCcBcc(false);
@@ -330,7 +337,7 @@ export function EmailComposeModal({
       setSendStatusError(null);
       setTo(defaultTo);
       setSubject('');
-      setBody('');
+      setBody(signatureBlock);
       setCc('');
       setBcc('');
       setShowCcBcc(false);
