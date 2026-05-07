@@ -184,11 +184,13 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
         </nav>
 
         {/* Footer */}
-        <div className="px-4 py-4 border-t border-gray-200 dark:border-gray-700 safe-area-inset-bottom">
-          <div className="text-xs text-gray-500 dark:text-gray-400">
-            <p>{tenant?.footer_text || 'CRM Application v1.0'}</p>
+        {tenant?.footer_text && (
+          <div className="px-4 py-4 border-t border-gray-200 dark:border-gray-700 safe-area-inset-bottom">
+            <div className="text-xs text-gray-500 dark:text-gray-400">
+              <p>{tenant.footer_text}</p>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </>
   );
