@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import clsx from 'clsx';
 import { Sidebar, MobileSidebar } from './Sidebar';
 import { Header, User } from './Header';
+import { useDensity } from '../../hooks/useDensity';
 
 export interface LayoutProps {
   children: ReactNode;
@@ -28,6 +29,7 @@ export function Layout({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  useDensity();
 
   const handleGlobalSearch = useCallback((query: string) => {
     const searchableRoutes = ['/contacts', '/companies', '/leads', '/quotes', '/proposals', '/payments'];
