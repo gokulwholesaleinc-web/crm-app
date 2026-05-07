@@ -3,7 +3,6 @@
  * Import from this file or directly from the domain file; both work.
  */
 
-export * from './ai';
 export * from './admin';
 export * from './workflows';
 export * from './audit';

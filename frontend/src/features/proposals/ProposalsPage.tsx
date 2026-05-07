@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { PlusIcon, SparklesIcon, DocumentDuplicateIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, DocumentDuplicateIcon } from '@heroicons/react/24/outline';
 import { Button, EntityLink, Modal, ConfirmDialog, StatusBadge, PaginationBar } from '../../components/ui';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { ProposalForm } from './ProposalForm';
-import { AIProposalGenerator } from './AIProposalGenerator';
 import { TemplateGallery } from './TemplateGallery';
 import { SortableTh } from '../../components/shared/SortableTh';
 import { useProposals, useCreateProposal, useDeleteProposal } from '../../hooks/useProposals';
@@ -48,7 +47,6 @@ function ProposalsPage() {
   // ProposalForm reads the rest of the query string to prefill the
   // Related Records dropdowns.
   const [showForm, setShowForm] = useState(searchParams.get('action') === 'new');
-  const [showAIGenerator, setShowAIGenerator] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; proposal: Proposal | null }>({
     isOpen: false,
     proposal: null,
@@ -122,18 +120,10 @@ function ProposalsPage() {
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Proposals</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Create and manage sales proposals with AI assistance
+            Create and manage sales proposals
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2">
-          <Button
-            variant="secondary"
-            leftIcon={<SparklesIcon className="h-5 w-5" />}
-            onClick={() => setShowAIGenerator(true)}
-            className="w-full sm:w-auto"
-          >
-            AI Generate
-          </Button>
           <Button
             leftIcon={<PlusIcon className="h-5 w-5" />}
             onClick={() => setShowForm(true)}
@@ -276,16 +266,9 @@ function ProposalsPage() {
             </svg>
             <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">No proposals</h3>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              Get started by creating a new proposal or using the AI generator.
+              Get started by creating a new proposal.
             </p>
-            <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
-              <Button
-                variant="secondary"
-                onClick={() => setShowAIGenerator(true)}
-                leftIcon={<SparklesIcon className="h-5 w-5" />}
-              >
-                AI Generate
-              </Button>
+            <div className="mt-6 flex justify-center">
               <Button onClick={() => setShowForm(true)}>Create Proposal</Button>
             </div>
           </div>
@@ -498,16 +481,6 @@ function ProposalsPage() {
           onCancel={handleFormCancel}
           isLoading={createProposalMutation.isPending}
         />
-      </Modal>
-
-      {/* AI Generator Modal */}
-      <Modal
-        isOpen={showAIGenerator}
-        onClose={() => setShowAIGenerator(false)}
-        title="Generate Proposal with AI"
-        size="md"
-      >
-        <AIProposalGenerator onClose={() => setShowAIGenerator(false)} />
       </Modal>
 
       {/* Delete Confirmation */}

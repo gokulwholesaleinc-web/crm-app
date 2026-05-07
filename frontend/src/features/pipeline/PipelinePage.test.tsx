@@ -35,12 +35,6 @@ vi.mock('../../utils/toast', () => ({
   showInfo: vi.fn(),
 }));
 
-// Mock lazy-loaded AI components
-vi.mock('../../components/ai', () => ({
-  AIInsightsCard: () => null,
-  NextBestActionCard: () => null,
-}));
-
 // Mock Modal to avoid headlessui complexity in tests
 vi.mock('../../components/ui', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../components/ui')>();
