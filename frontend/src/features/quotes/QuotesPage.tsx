@@ -7,7 +7,10 @@ import { QuoteForm } from './QuoteForm';
 import { BundleManager } from './BundleManager';
 import { SortableTh } from '../../components/shared/SortableTh';
 import { useQuotes, useCreateQuote, useDeleteQuote } from '../../hooks/useQuotes';
-import { useTableSort } from '../../hooks/useTableSort';
+import {
+  useListPageDefaults,
+  useListSortPersistence,
+} from '../../hooks/useListPageDefaults';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { showSuccess, showError } from '../../utils/toast';
@@ -37,14 +40,19 @@ function QuotesPage() {
   const setStatusFilter = (s: string) =>
     setSearchParams((prev) => { if (s) prev.set('status', s); else prev.delete('status'); return prev; }, { replace: true });
   const [currentPage, setCurrentPage] = useState(1);
-  const { sortBy, sortDir, toggle: toggleSort } = useTableSort();
+  const { sortBy, sortDir, toggle: toggleSort } = useListSortPersistence('quotes');
+  const { savedPageSize, recordPageSize } = useListPageDefaults('quotes');
   const [showForm, setShowForm] = useState(false);
   const [showBundles, setShowBundles] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; quote: Quote | null }>({
     isOpen: false,
     quote: null,
   });
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize, setPageSizeState] = useState(savedPageSize ?? 25);
+  const setPageSize = (n: number) => {
+    setPageSizeState(n);
+    recordPageSize(n);
+  };
 
   const {
     data: quotesData,

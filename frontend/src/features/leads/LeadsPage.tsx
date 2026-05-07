@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { PlusIcon, ViewColumnsIcon } from '@heroicons/react/24/outline';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -12,7 +12,10 @@ import { LeadEmailCampaignModal } from './components/LeadEmailCampaignModal';
 import { AddToCampaignModal } from './components/AddToCampaignModal';
 import { useLeads, useCreateLead, useUpdateLead, useDeleteLead, leadKeys } from '../../hooks/useLeads';
 import { useCheckDuplicates } from '../../hooks/useDedup';
-import { useTableSort } from '../../hooks/useTableSort';
+import {
+  useListPageDefaults,
+  useListSortPersistence,
+} from '../../hooks/useListPageDefaults';
 import { useUsers } from '../../hooks/useAuth';
 import { bulkUpdate, bulkAssign } from '../../api/importExport';
 import { getStatusBadgeClasses, formatStatusLabel, getScoreColor } from '../../utils';
@@ -63,13 +66,42 @@ function LeadsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
+  const { savedPageSize, recordPageSize } = useListPageDefaults('leads');
+
   const searchQuery = searchParams.get('search') || '';
   const statusFilter = searchParams.get('status') || '';
   const currentPage = Number(searchParams.get('page') || '1');
-  const pageSize = Number(searchParams.get('per_page') || '25');
+  // URL wins; saved pref seeds when URL is bare (default 25 if neither).
+  const pageSize = Number(
+    searchParams.get('per_page') || savedPageSize || '25',
+  );
 
   const debouncedSearch = useDebouncedValue(searchQuery, 300);
-  const { sortBy, sortDir, toggle: toggleSort } = useTableSort();
+  const { sortBy, sortDir, toggle: toggleSort } = useListSortPersistence('leads');
+
+  // Seed `per_page` URL from saved pref on first mount when URL is bare,
+  // so back/forward + share-link stay correct after the saved size is
+  // applied. Skip when saved is the default 25 — bare URL already means 25.
+  const hasSeededPageSize = useRef(false);
+  useEffect(() => {
+    if (hasSeededPageSize.current) return;
+    hasSeededPageSize.current = true;
+    if (
+      !searchParams.has('per_page') &&
+      savedPageSize &&
+      savedPageSize !== 25
+    ) {
+      setSearchParams(
+        (prev) => {
+          prev.set('per_page', String(savedPageSize));
+          return prev;
+        },
+        { replace: true },
+      );
+    }
+    // Run once on mount; later URL changes are user-driven.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const setSearchQuery = (q: string) =>
     setSearchParams((prev) => { if (q) prev.set('search', q); else prev.delete('search'); prev.delete('page'); return prev; }, { replace: true });
@@ -77,8 +109,10 @@ function LeadsPage() {
     setSearchParams((prev) => { if (s) prev.set('status', s); else prev.delete('status'); prev.delete('page'); return prev; }, { replace: true });
   const setCurrentPage = (p: number) =>
     setSearchParams((prev) => { if (p === 1) prev.delete('page'); else prev.set('page', String(p)); return prev; }, { replace: true });
-  const setPageSize = (n: number) =>
+  const setPageSize = (n: number) => {
+    recordPageSize(n);
     setSearchParams((prev) => { if (n === 25) prev.delete('per_page'); else prev.set('per_page', String(n)); prev.delete('page'); return prev; }, { replace: true });
+  };
 
   const [showForm, setShowForm] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);

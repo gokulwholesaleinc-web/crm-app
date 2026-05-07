@@ -16,7 +16,10 @@ import { SmartListBuilder } from './components/SmartListBuilder';
 import { useContacts, useCreateContact, useUpdateContact } from '../../hooks/useContacts';
 import { useCheckDuplicates } from '../../hooks/useDedup';
 import { useSavedFilters, useDeleteSavedFilter } from '../../hooks/useFilters';
-import { useTableSort } from '../../hooks/useTableSort';
+import {
+  useListPageDefaults,
+  useListSortPersistence,
+} from '../../hooks/useListPageDefaults';
 import { formatDate, formatPhoneNumber } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
@@ -30,14 +33,19 @@ function ContactsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
   const debouncedSearch = useDebouncedValue(searchQuery, 300);
-  const { sortBy, sortDir, toggle } = useTableSort();
+  const { sortBy, sortDir, toggle } = useListSortPersistence('contacts');
+  const { savedPageSize, recordPageSize } = useListPageDefaults('contacts');
   const [currentPage, setCurrentPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [showSmartListBuilder, setShowSmartListBuilder] = useState(false);
   const [activeFilters, setActiveFilters] = useState<FilterGroup | null>(null);
   const [activeSmartListName, setActiveSmartListName] = useState<string | null>(null);
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize, setPageSizeState] = useState(savedPageSize ?? 25);
+  const setPageSize = (n: number) => {
+    setPageSizeState(n);
+    recordPageSize(n);
+  };
   const [pendingFormData, setPendingFormData] = useState<ContactFormData | null>(null);
   const [duplicateResults, setDuplicateResults] = useState<DuplicateMatch[]>([]);
   const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);

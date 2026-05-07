@@ -4,7 +4,10 @@ import { StatusBadge, Button, EntityLink, HelpLink, PaginationBar } from '../../
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { SortableTh } from '../../components/shared/SortableTh';
 import { usePayments, useSubscriptions, useCancelSubscription } from '../../hooks/usePayments';
-import { useTableSort } from '../../hooks/useTableSort';
+import {
+  useListPageDefaults,
+  useListSortPersistence,
+} from '../../hooks/useListPageDefaults';
 import { SendInvoiceModal } from './components/SendInvoiceModal';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
@@ -92,8 +95,13 @@ function PaymentsPage() {
     setSearchParams((prev) => { if (s) prev.set('status', s); else prev.delete('status'); return prev; }, { replace: true });
   const [currentPage, setCurrentPage] = useState(1);
   const [subPage, setSubPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
-  const { sortBy, sortDir, toggle: toggleSort } = useTableSort();
+  const { sortBy, sortDir, toggle: toggleSort } = useListSortPersistence('payments');
+  const { savedPageSize, recordPageSize } = useListPageDefaults('payments');
+  const [pageSize, setPageSizeState] = useState(savedPageSize ?? 25);
+  const setPageSize = (n: number) => {
+    setPageSizeState(n);
+    recordPageSize(n);
+  };
 
   const {
     data: paymentsData,

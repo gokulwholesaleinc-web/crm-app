@@ -8,7 +8,10 @@ import { AIProposalGenerator } from './AIProposalGenerator';
 import { TemplateGallery } from './TemplateGallery';
 import { SortableTh } from '../../components/shared/SortableTh';
 import { useProposals, useCreateProposal, useDeleteProposal } from '../../hooks/useProposals';
-import { useTableSort } from '../../hooks/useTableSort';
+import {
+  useListPageDefaults,
+  useListSortPersistence,
+} from '../../hooks/useListPageDefaults';
 import { formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { showSuccess, showError } from '../../utils/toast';
@@ -50,8 +53,13 @@ function ProposalsPage() {
     isOpen: false,
     proposal: null,
   });
-  const [pageSize, setPageSize] = useState(25);
-  const { sortBy, sortDir, toggle: toggleSort } = useTableSort();
+  const { sortBy, sortDir, toggle: toggleSort } = useListSortPersistence('proposals');
+  const { savedPageSize, recordPageSize } = useListPageDefaults('proposals');
+  const [pageSize, setPageSizeState] = useState(savedPageSize ?? 25);
+  const setPageSize = (n: number) => {
+    setPageSizeState(n);
+    recordPageSize(n);
+  };
 
   const {
     data: proposalsData,
