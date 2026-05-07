@@ -16,6 +16,7 @@ import {
   ClipboardDocumentIcon,
 } from '@heroicons/react/24/outline';
 import { Button, HelpLink, Modal, ConfirmDialog, StatusBadge } from '../../components/ui';
+import { StickyActionBar } from '../../components/shared/StickyActionBar';
 import {
   useProposal,
   useUpdateProposal,
@@ -59,6 +60,7 @@ function ProposalDetailPage() {
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const actionRowRef = useRef<HTMLDivElement>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editExecutiveSummary, setEditExecutiveSummary] = useState('');
   const [editScopeOfWork, setEditScopeOfWork] = useState('');
@@ -236,6 +238,23 @@ function ProposalDetailPage() {
 
   return (
     <div className="space-y-6">
+      <StickyActionBar triggerRef={actionRowRef}>
+        {showSendButton && (
+          <Button
+            size="sm"
+            onClick={handleSend}
+            disabled={sendProposalMutation.isPending || !canSend}
+            variant={isDraft ? 'primary' : 'secondary'}
+          >
+            {sendProposalMutation.isPending ? 'Sending...' : sendLabel}
+          </Button>
+        )}
+        {canEdit && (
+          <Button variant="secondary" size="sm" onClick={openEditModal}>
+            Edit
+          </Button>
+        )}
+      </StickyActionBar>
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
@@ -263,7 +282,7 @@ function ProposalDetailPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div ref={actionRowRef} className="flex flex-wrap items-center gap-2">
           <HelpLink anchor="tutorial-esign" label="How clients sign and accept" />
           {canEdit && (
             <Button variant="secondary" onClick={openEditModal} leftIcon={<PencilIcon className="h-4 w-4" />}>
