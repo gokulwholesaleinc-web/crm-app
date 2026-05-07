@@ -2,6 +2,7 @@
 
 import base64
 import logging
+import re
 from datetime import UTC, datetime, timedelta
 from email.utils import getaddresses, parsedate_to_datetime
 
@@ -204,6 +205,24 @@ def _parse_message(data: dict) -> dict:
     headers = {h["name"].lower(): h["value"] for h in payload.get("headers", [])}
 
     body_text, body_html = _extract_body(payload)
+    attachments = _walk_attachments(payload)
+
+    # Substitute Content-ID references in the HTML body with inline data URIs
+    # so the browser can actually render embedded images. Without this, the
+    # canonical Gmail HTML email — which references its inline logo/photo
+    # attachments via <img src="cid:..."> — renders as broken-image icons
+    # in the EmailThread view. Falls back to the original HTML on any
+    # decode error (we'd rather show the surrounding text than nothing).
+    if body_html:
+        try:
+            body_html = _inline_cid_images(body_html, attachments)
+        except Exception as exc:
+            logger.warning(
+                "[gmail_parse] inline-cid substitution failed for message %s: %s",
+                data.get("id"),
+                exc,
+            )
+
     date_str = headers.get("date", "")
     parsed_date = _parse_date(date_str)
 
@@ -211,6 +230,23 @@ def _parse_message(data: dict) -> dict:
     cc_header = headers.get("cc", "")
     bcc_header = headers.get("bcc", "")
     to_email = _first_address(to_header)
+
+    # Strip the inline-only image data from the persisted attachment list
+    # — once it's substituted into the HTML body we don't need to keep a
+    # second copy on the row. Non-inline attachments (cid is None) keep
+    # their metadata so a future "download attachment" UI has what it
+    # needs to fetch from Gmail on demand.
+    attachments_meta = [
+        {
+            "filename": a["filename"],
+            "mime_type": a["mime_type"],
+            "size": a["size"],
+            "attachment_id": a["attachment_id"],
+            "is_inline": a["cid"] is not None,
+        }
+        for a in attachments
+        if (a["filename"] or a["cid"]) and a["mime_type"]
+    ]
 
     return {
         "headers": headers,
@@ -230,6 +266,7 @@ def _parse_message(data: dict) -> dict:
         "date": parsed_date,
         "thread_id": data.get("threadId", ""),
         "raw_payload": data,
+        "attachments": attachments_meta,
     }
 
 
@@ -252,6 +289,121 @@ def _extract_body(payload: dict) -> tuple[str | None, str | None]:
             html_body = h
 
     return plain, html_body
+
+
+# Cap individual inline images at ~2.5MB raw bytes to keep email rows
+# from ballooning past sane Postgres TOAST thresholds. Anything bigger
+# almost certainly came from a sender's photo attachment, not a
+# logo/banner — if we ever need those, we'll pull them on demand from
+# Gmail by attachment_id rather than embed.
+_MAX_INLINE_IMAGE_BYTES = 2_500_000
+
+
+def _walk_attachments(payload: dict) -> list[dict]:
+    """Walk every leaf MIME part and harvest attachment metadata.
+
+    Returns one entry per non-multipart, non-text part. Each entry has::
+
+        {
+            "mime_type": "image/png",
+            "filename": "logo.png" | "",
+            "cid":      "image001@1234.5678" | None,
+            "size":     12345,
+            "data":     "<base64url body>" | None,   # only for small,
+                                                     # inline payloads
+            "attachment_id": "ANGjdJ..." | None,     # for fetch-on-demand
+        }
+
+    Inline images (those with a Content-ID header) keep their decoded
+    bytes via the ``data`` field so the caller can substitute them
+    into the HTML body. Non-inline attachments have ``data=None`` and
+    rely on the ``attachment_id`` for a separate Gmail API call.
+    """
+    out: list[dict] = []
+
+    def visit(part: dict) -> None:
+        mime = part.get("mimeType", "") or ""
+        if mime.startswith("multipart/"):
+            for child in part.get("parts", []):
+                visit(child)
+            return
+        if mime.startswith("text/"):
+            # text/plain + text/html are handled by _extract_body; skip.
+            return
+        body = part.get("body", {}) or {}
+        if not (body.get("data") or body.get("attachmentId")):
+            return  # empty/structural part — nothing to harvest
+        headers = {
+            (h.get("name") or "").lower(): h.get("value") or ""
+            for h in (part.get("headers") or [])
+        }
+        cid_raw = headers.get("content-id", "").strip()
+        cid = cid_raw.strip("<>") or None
+        out.append(
+            {
+                "mime_type": mime,
+                "filename": part.get("filename") or "",
+                "cid": cid,
+                "size": int(body.get("size") or 0),
+                "data": body.get("data"),
+                "attachment_id": body.get("attachmentId"),
+            }
+        )
+
+    visit(payload)
+    return out
+
+
+_CID_SRC_RE = re.compile(
+    r"""(src|background)\s*=\s*(['"])cid:([^'"]+)\2""",
+    re.IGNORECASE,
+)
+
+
+def _inline_cid_images(html: str, attachments: list[dict]) -> str:
+    """Replace ``<img src="cid:...">`` with embedded ``data:`` URIs.
+
+    Only inline images whose payload is already in the message (``data``
+    field set, image/* mime type, under the size cap) are substituted.
+    Everything else stays as ``cid:...`` — those references still won't
+    render, but at least the HTML structure is preserved and the broken-
+    image icon is honest.
+    """
+    if not html or not attachments:
+        return html
+
+    cid_to_data_uri: dict[str, str] = {}
+    for att in attachments:
+        cid = att.get("cid")
+        mime = att.get("mime_type") or ""
+        raw_b64 = att.get("data")
+        size = att.get("size") or 0
+        if not (cid and raw_b64 and mime.startswith("image/")):
+            continue
+        if size > _MAX_INLINE_IMAGE_BYTES:
+            continue
+        try:
+            decoded = base64.urlsafe_b64decode(raw_b64 + "==")
+        except Exception:  # noqa: BLE001 — defensive on hostile inputs
+            continue
+        if len(decoded) > _MAX_INLINE_IMAGE_BYTES:
+            continue
+        std_b64 = base64.b64encode(decoded).decode("ascii")
+        cid_to_data_uri[cid.lower()] = f"data:{mime};base64,{std_b64}"
+
+    if not cid_to_data_uri:
+        return html
+
+    def replace(match: re.Match[str]) -> str:
+        attr = match.group(1)
+        quote = match.group(2)
+        cid = match.group(3).strip().lower()
+        uri = cid_to_data_uri.get(cid)
+        if not uri:
+            return match.group(0)
+        return f"{attr}={quote}{uri}{quote}"
+
+    return _CID_SRC_RE.sub(replace, html)
 
 
 def _decode_body(part: dict) -> str | None:

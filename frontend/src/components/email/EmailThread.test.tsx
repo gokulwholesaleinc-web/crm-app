@@ -131,4 +131,27 @@ describe('EmailThread', () => {
     // Header remains expanded because Reply click does not propagate to the toggle.
     expect(header).toHaveAttribute('aria-expanded', 'true');
   });
+
+  it('renders inline data: image URIs through DOMPurify (regression for Giancarlo)', () => {
+    // 1x1 transparent PNG as a real, browser-renderable data URI. The
+    // backend Gmail sync substitutes cid: refs with these before we ever
+    // see the body. Without ADD_DATA_URI_TAGS=['img'] in the purify
+    // config, DOMPurify strips data: src and the user sees a broken
+    // image — same symptom as the original cid: bug.
+    const tinyPng =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+    const html =
+      '<p>Logo: <img src="' +
+      tinyPng +
+      '" alt="brand-logo" data-testid="inline-img"></p>';
+    mockUseEmailThread.mockReturnValue({
+      data: threadResponse([makeEmail({ id: 1, body_html: html })]),
+      isLoading: false,
+    });
+
+    renderWithProviders(<EmailThread entityType="contacts" entityId={1883} />);
+
+    const img = screen.getByAltText('brand-logo') as HTMLImageElement;
+    expect(img.getAttribute('src')).toBe(tinyPng);
+  });
 });

@@ -277,6 +277,146 @@ class TestGetMessage:
 
         assert msg["thread_id"] == "thread-99"
 
+    @pytest.mark.asyncio
+    async def test_inline_cid_image_substituted_into_body_html(self):
+        """An <img src="cid:..."> in body_html with a matching inline image
+        part should be rewritten to a data: URI so the browser can render
+        it. This is the regression for Giancarlo's "image shows as link
+        instead of rendering" complaint.
+        """
+        import base64
+        png_bytes = (
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
+            b"\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
+            b"\x00\x00\x00\rIDATx\x9cc\xf8\xff\xff?\x00\x05\xfe\x02\xfe\xa6"
+            b"\xa3\x10\x84\x00\x00\x00\x00IEND\xaeB`\x82"
+        )
+        png_b64url = base64.urlsafe_b64encode(png_bytes).decode().rstrip("=")
+        html = b'<p>logo: <img src="cid:logo123" alt="logo"></p>'
+        payload = {
+            "id": "m1",
+            "threadId": "t1",
+            "payload": {
+                "mimeType": "multipart/related",
+                "headers": [
+                    {"name": "Subject", "value": "Inline image"},
+                    {"name": "From", "value": "s@example.com"},
+                    {"name": "To", "value": "me@example.com"},
+                    {"name": "Date", "value": "Mon, 14 Apr 2025 10:00:00 +0000"},
+                ],
+                "parts": [
+                    {
+                        "mimeType": "text/html",
+                        "body": {"data": base64.urlsafe_b64encode(html).decode()},
+                    },
+                    {
+                        "mimeType": "image/png",
+                        "filename": "logo.png",
+                        "headers": [
+                            {"name": "Content-ID", "value": "<logo123>"},
+                            {"name": "Content-Disposition", "value": "inline"},
+                        ],
+                        "body": {"data": png_b64url, "size": len(png_bytes)},
+                    },
+                ],
+            },
+        }
+        client, _ = _make_client(_make_conn(), payload)
+        msg = await client.get_message("m1")
+
+        assert msg["body_html"] is not None
+        assert "cid:logo123" not in msg["body_html"]
+        assert "data:image/png;base64," in msg["body_html"]
+        # Attachment metadata is preserved + flagged inline.
+        items = (msg.get("attachments") or [])
+        assert any(a["filename"] == "logo.png" and a["is_inline"] for a in items)
+
+    @pytest.mark.asyncio
+    async def test_oversized_inline_image_left_as_cid(self):
+        """Don't embed images bigger than the inline cap; keep the cid:
+        reference so the body row stays small. Reader sees a broken
+        image rather than a 50MB body row.
+        """
+        import base64
+        # Forge a part whose declared body size exceeds the cap. Decoded
+        # bytes irrelevant — the cap check uses size first.
+        big = b"\x00" * 5  # actual bytes don't matter for the size gate
+        html = b'<img src="cid:huge">'
+        payload = {
+            "id": "m1",
+            "threadId": "t1",
+            "payload": {
+                "mimeType": "multipart/related",
+                "headers": [
+                    {"name": "Subject", "value": "Big image"},
+                    {"name": "From", "value": "s@example.com"},
+                    {"name": "To", "value": "me@example.com"},
+                    {"name": "Date", "value": "Mon, 14 Apr 2025 10:00:00 +0000"},
+                ],
+                "parts": [
+                    {
+                        "mimeType": "text/html",
+                        "body": {"data": base64.urlsafe_b64encode(html).decode()},
+                    },
+                    {
+                        "mimeType": "image/jpeg",
+                        "filename": "huge.jpg",
+                        "headers": [{"name": "Content-ID", "value": "<huge>"}],
+                        "body": {
+                            "data": base64.urlsafe_b64encode(big).decode(),
+                            "size": 9_999_999,
+                        },
+                    },
+                ],
+            },
+        }
+        client, _ = _make_client(_make_conn(), payload)
+        msg = await client.get_message("m1")
+        assert "cid:huge" in (msg["body_html"] or "")
+        assert "data:image/jpeg" not in (msg["body_html"] or "")
+
+    @pytest.mark.asyncio
+    async def test_attachments_metadata_collected_for_non_inline(self):
+        """Non-inline attachments (no Content-ID) appear in
+        msg['attachments'] with attachment_id so a future download UI
+        can fetch them. Body_html is untouched since there's nothing
+        to substitute.
+        """
+        import base64
+        payload = {
+            "id": "m1",
+            "threadId": "t1",
+            "payload": {
+                "mimeType": "multipart/mixed",
+                "headers": [
+                    {"name": "Subject", "value": "PDF attached"},
+                    {"name": "From", "value": "s@example.com"},
+                    {"name": "To", "value": "me@example.com"},
+                    {"name": "Date", "value": "Mon, 14 Apr 2025 10:00:00 +0000"},
+                ],
+                "parts": [
+                    {
+                        "mimeType": "text/plain",
+                        "body": {"data": base64.urlsafe_b64encode(b"see attached").decode()},
+                    },
+                    {
+                        "mimeType": "application/pdf",
+                        "filename": "contract.pdf",
+                        "body": {"attachmentId": "ANGjdJxxxx", "size": 100_000},
+                    },
+                ],
+            },
+        }
+        client, _ = _make_client(_make_conn(), payload)
+        msg = await client.get_message("m1")
+        items = msg.get("attachments") or []
+        assert any(
+            a["filename"] == "contract.pdf"
+            and a["attachment_id"] == "ANGjdJxxxx"
+            and a["is_inline"] is False
+            for a in items
+        )
+
 
 # ---------------------------------------------------------------------------
 # _refresh_if_needed

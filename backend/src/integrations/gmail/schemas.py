@@ -70,6 +70,20 @@ class GmailAliasRefreshResponse(BaseModel):
     failed: list[dict]
 
 
+class GmailRehydrateInlineImagesRequest(BaseModel):
+    user_id: int | None = None
+    dry_run: bool = False
+    limit: int = 2_000
+
+
+class GmailRehydrateInlineImagesResponse(BaseModel):
+    scanned: int
+    rehydrated: int
+    skipped: int
+    failed: int
+    dry_run: bool
+
+
 class GmailStatusResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

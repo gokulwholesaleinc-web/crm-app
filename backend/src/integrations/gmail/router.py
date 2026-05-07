@@ -22,6 +22,8 @@ from src.integrations.gmail.schemas import (
     GmailBackfillStatusResponse,
     GmailCallbackRequest,
     GmailConnectionResponse,
+    GmailRehydrateInlineImagesRequest,
+    GmailRehydrateInlineImagesResponse,
     GmailRelinkRequest,
     GmailRelinkResponse,
     GmailStatusResponse,
@@ -609,6 +611,166 @@ async def gmail_refresh_aliases(
 
     return GmailAliasRefreshResponse(
         refreshed=refreshed, skipped=skipped, failed=failures
+    )
+
+
+@router.post(
+    "/rehydrate-inline-images",
+    response_model=GmailRehydrateInlineImagesResponse,
+)
+async def gmail_rehydrate_inline_images(
+    body: GmailRehydrateInlineImagesRequest,
+    db: DBSession,
+    http_factory: GmailHttpFactory,
+    _admin: Annotated[object, Depends(get_current_superuser)],
+) -> GmailRehydrateInlineImagesResponse:
+    """Admin-only: re-fetch existing inbound emails whose body_html still
+    contains ``cid:`` references and rewrite them to embedded data: URIs.
+
+    Background: until PR-NEXT, the Gmail sync pipeline only extracted
+    text bodies and ignored attachments — so any HTML email with an
+    inline image rendered as a broken image in the EmailThread view.
+    The forward-going sync now substitutes inline images at write time.
+    This endpoint applies the same substitution to historical rows
+    that pre-date that fix by re-fetching the original Gmail message.
+
+    Per-row behavior:
+      1. Look up the inbound row's Gmail message id
+         (resend_email_id parses as ``gmail:<id>``).
+      2. Find the connection that owns the mailbox the row was
+         received on (matches the row's ``to_email`` against
+         GmailConnection.email).
+      3. Refetch the full message via Gmail's messages.get.
+      4. Re-parse — the new ``_parse_message`` runs the cid→data:
+         substitution and returns rewritten body_html plus
+         attachments metadata.
+      5. UPDATE the row only if body_html actually changed.
+
+    Skipped if the connection is revoked (we can't refetch), if the
+    row's body_html doesn't contain any ``cid:``, or if Gmail returns
+    a non-existent / deleted message. Each per-row error is counted
+    in ``failed``; the loop continues so one bad message doesn't
+    block the rest.
+    """
+    import contextlib
+
+    from sqlalchemy import and_, select
+
+    from src.email.models import InboundEmail
+    from src.integrations.gmail.client import GmailClient
+    from src.integrations.gmail.models import GmailConnection
+
+    limit = max(1, min(body.limit, 20_000))
+
+    # Build a {connection_email_lower → GmailConnection} index up front
+    # so we don't re-query the connection table per row.
+    conn_rows = (await db.execute(
+        select(GmailConnection).where(GmailConnection.revoked_at.is_(None))
+    )).scalars().all()
+    if body.user_id is not None:
+        conn_rows = [c for c in conn_rows if c.user_id == body.user_id]
+    conn_by_email: dict[str, GmailConnection] = {}
+    for c in conn_rows:
+        if c.email:
+            conn_by_email[c.email.lower()] = c
+
+    if not conn_by_email:
+        return GmailRehydrateInlineImagesResponse(
+            scanned=0, rehydrated=0, skipped=0, failed=0, dry_run=body.dry_run
+        )
+
+    # Pull candidate rows: inbound emails whose body_html still
+    # contains a ``cid:`` reference. Postgres LIKE is fine here — the
+    # column is text, the substring is short, and this is admin-only
+    # plumbing that runs once per outage.
+    filters = [InboundEmail.body_html.ilike("%cid:%")]
+    if body.user_id is not None:
+        scoped_emails = list(conn_by_email.keys())
+        if not scoped_emails:
+            return GmailRehydrateInlineImagesResponse(
+                scanned=0, rehydrated=0, skipped=0, failed=0, dry_run=body.dry_run
+            )
+        # Filter inbound rows to those addressed to this user's mailbox.
+        from sqlalchemy import func as sa_func
+        filters.append(sa_func.lower(InboundEmail.to_email).in_(scoped_emails))
+
+    rows = (await db.execute(
+        select(InboundEmail)
+        .where(and_(*filters))
+        .order_by(InboundEmail.id.desc())
+        .limit(limit)
+    )).scalars().all()
+
+    scanned = 0
+    rehydrated = 0
+    skipped = 0
+    failed = 0
+
+    # Cache one GmailClient per connection so a 50-row backfill against
+    # a single mailbox doesn't open 50 httpx clients.
+    clients: dict[int, GmailClient] = {}
+    try:
+        for row in rows:
+            scanned += 1
+            to_email = (row.to_email or "").lower()
+            conn = conn_by_email.get(to_email)
+            if conn is None:
+                skipped += 1
+                continue
+
+            # resend_email_id was minted as ``gmail:<message_id>`` by
+            # _store_inbound. Older rows that came from Resend webhooks
+            # use a different prefix; skip those.
+            rid = row.resend_email_id or ""
+            if not rid.startswith("gmail:"):
+                skipped += 1
+                continue
+            gmail_msg_id = rid[len("gmail:"):]
+
+            client = clients.get(conn.user_id)
+            if client is None:
+                client = GmailClient(conn, db)
+                await client.__aenter__()
+                clients[conn.user_id] = client
+
+            try:
+                fresh = await client.get_message(gmail_msg_id)
+            except Exception as exc:
+                logger.warning(
+                    "[rehydrate_inline] fetch failed for inbound id=%s gmail=%s: %s",
+                    row.id, gmail_msg_id, exc,
+                )
+                failed += 1
+                continue
+
+            new_html = fresh.get("body_html")
+            new_attachments = fresh.get("attachments") or []
+            if not new_html or new_html == row.body_html:
+                # Re-fetch returned identical or empty HTML — nothing to
+                # change. Still count it as scanned + skipped.
+                skipped += 1
+                continue
+
+            if not body.dry_run:
+                row.body_html = new_html
+                if new_attachments and not row.attachments:
+                    row.attachments = {"items": new_attachments}
+                db.add(row)
+            rehydrated += 1
+    finally:
+        for c in clients.values():
+            with contextlib.suppress(Exception):
+                await c.__aexit__(None, None, None)
+
+    if not body.dry_run and rehydrated:
+        await db.commit()
+
+    return GmailRehydrateInlineImagesResponse(
+        scanned=scanned,
+        rehydrated=rehydrated,
+        skipped=skipped,
+        failed=failed,
+        dry_run=body.dry_run,
     )
 
 
