@@ -26,7 +26,10 @@ function QuotesPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const searchQuery = searchParams.get('search') || '';
-  const statusFilter = searchParams.get('status') || '';
+  // Stale bookmarks with ?status=invalid silently fall back to "All"
+  // instead of 422'ing the page on every load.
+  const statusParam = searchParams.get('status') || '';
+  const statusFilter = statusOptions.some((o) => o.value === statusParam) ? statusParam : '';
   const setSearchQuery = (q: string) =>
     setSearchParams((prev) => { if (q) prev.set('search', q); else prev.delete('search'); return prev; }, { replace: true });
   const setStatusFilter = (s: string) =>

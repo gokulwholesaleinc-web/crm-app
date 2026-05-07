@@ -764,5 +764,19 @@ async def delete_source(
                 "reference it. Reassign or delete those leads first."
             ),
         )
-    await service.delete_source(source)
+    # The count + delete pair is not atomic: a concurrent POST /leads
+    # against this source between the two queries lands an FK row that
+    # the DELETE then trips. Surface that as a 409 with the same wording
+    # so the caller sees an actionable error instead of a generic 500.
+    from sqlalchemy.exc import IntegrityError
+    try:
+        await service.delete_source(source)
+    except IntegrityError as exc:
+        raise HTTPException(
+            status_code=HTTPStatus.CONFLICT,
+            detail=(
+                f"Cannot delete source '{source.name}': it is still referenced "
+                "by one or more leads. Reassign or delete those leads first."
+            ),
+        ) from exc
     invalidate_lead_sources_cache()
