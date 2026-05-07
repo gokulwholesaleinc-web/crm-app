@@ -29,18 +29,18 @@ import {
 } from '@heroicons/react/24/outline';
 import { formatCurrency } from '../../utils/formatters';
 
-// ---------- Contract Stats Widgets ----------
-
 function ContractStatsSection() {
   const { data: stats, isLoading, error } = useContractStats();
 
   if (error) return null;
 
   const statusBreakdown = stats
-    ? Object.entries(stats.status_breakdown).map(([label, value]) => ({
-        label: label.charAt(0).toUpperCase() + label.slice(1),
-        value: value as number,
-      })).filter((d) => d.value > 0)
+    ? Object.entries(stats.status_breakdown)
+        .map(([label, value]) => ({
+          label: label.charAt(0).toUpperCase() + label.slice(1),
+          value,
+        }))
+        .filter((d) => d.value > 0)
     : [];
 
   return (
