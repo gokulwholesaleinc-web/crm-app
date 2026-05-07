@@ -82,6 +82,14 @@ class GmailRehydrateInlineImagesResponse(BaseModel):
     skipped: int
     failed: int
     dry_run: bool
+    # Per-reason breakdown of the ``skipped`` total. Without this an
+    # operator running this against a busy mailbox sees `skipped=950,
+    # rehydrated=50` and can't tell whether 950 are unmatchable
+    # (no_connection / wrong_id_prefix), unfixable (gmail_returned_empty
+    # — attachment GC'd by Google), or already-correct
+    # (html_unchanged). The named buckets surface the actionable
+    # signal so the next debugging pass has somewhere to start.
+    skipped_breakdown: dict[str, int] = {}
 
 
 class GmailStatusResponse(BaseModel):

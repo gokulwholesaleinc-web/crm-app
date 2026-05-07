@@ -134,10 +134,10 @@ describe('EmailThread', () => {
 
   it('renders inline data: image URIs through DOMPurify (regression for Giancarlo)', () => {
     // 1x1 transparent PNG as a real, browser-renderable data URI. The
-    // backend Gmail sync substitutes cid: refs with these before we ever
-    // see the body. Without ADD_DATA_URI_TAGS=['img'] in the purify
-    // config, DOMPurify strips data: src and the user sees a broken
-    // image — same symptom as the original cid: bug.
+    // backend Gmail sync substitutes cid: refs with these before we
+    // ever see the body. DOMPurify's default data-URI allowlist
+    // already includes <img>, so the URI passes through to the
+    // rendered DOM without any extra config.
     const tinyPng =
       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
     const html =
@@ -153,5 +153,31 @@ describe('EmailThread', () => {
 
     const img = screen.getByAltText('brand-logo') as HTMLImageElement;
     expect(img.getAttribute('src')).toBe(tinyPng);
+  });
+
+  it('strips <svg> and <image> from inbound HTML (no profile escape)', () => {
+    // Adversarial inbound: USE_PROFILES.html doesn't load the SVG
+    // profile, so <svg> and <image> are stripped entirely — no
+    // SVG-script-execution surface even though data: URIs are
+    // permitted on real <img>. Regression guard so future config
+    // tweaks don't accidentally widen the surface.
+    const html =
+      '<p>safe</p>' +
+      '<svg><image href="data:image/svg+xml,<svg onload=alert(1)></svg>" data-testid="svg-image"></svg>';
+    mockUseEmailThread.mockReturnValue({
+      data: threadResponse([makeEmail({ id: 1, body_html: html })]),
+      isLoading: false,
+    });
+
+    renderWithProviders(<EmailThread entityType="contacts" entityId={1883} />);
+
+    // The page itself renders chrome SVGs (Reply icon, etc.), so the
+    // assertion is scoped to the .email-html-content wrapper holding
+    // the sanitized inbound body.
+    const bodyContainer = document.querySelector('.email-html-content');
+    expect(bodyContainer).not.toBeNull();
+    expect(bodyContainer!.querySelector('svg')).toBeNull();
+    expect(bodyContainer!.querySelector('image')).toBeNull();
+    expect(screen.getByText('safe')).toBeInTheDocument();
   });
 });

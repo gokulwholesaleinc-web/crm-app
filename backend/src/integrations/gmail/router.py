@@ -655,15 +655,27 @@ async def gmail_rehydrate_inline_images(
     import contextlib
 
     from sqlalchemy import and_, select
+    from sqlalchemy import func as sa_func
 
     from src.email.models import InboundEmail
     from src.integrations.gmail.client import GmailClient
     from src.integrations.gmail.models import GmailConnection
 
     limit = max(1, min(body.limit, 20_000))
+    # Commit per-batch so a long backfill doesn't hold row locks for the
+    # entire Gmail-fetch loop, doesn't accumulate megabytes of dirty
+    # session state in memory, and doesn't lose all progress on an
+    # uncaught exception mid-run. 50 rows ≈ a few seconds of Gmail
+    # quota at the typical messages.get rate, which is short enough.
+    COMMIT_BATCH = 50
 
-    # Build a {connection_email_lower → GmailConnection} index up front
-    # so we don't re-query the connection table per row.
+    # Build a {address_lower → GmailConnection} index up front so we
+    # don't re-query the connection table per row. Includes every
+    # primary email AND every send-as alias, mirroring the matcher
+    # self-exclude work in PR #203 — without aliases, inbound mail
+    # routed to ``team+foo@company.com`` or to a send-as identity
+    # silently skips because row.to_email won't equal
+    # connection.email.
     conn_rows = (await db.execute(
         select(GmailConnection).where(GmailConnection.revoked_at.is_(None))
     )).scalars().all()
@@ -671,12 +683,13 @@ async def gmail_rehydrate_inline_images(
         conn_rows = [c for c in conn_rows if c.user_id == body.user_id]
     conn_by_email: dict[str, GmailConnection] = {}
     for c in conn_rows:
-        if c.email:
-            conn_by_email[c.email.lower()] = c
+        for addr in c.self_addresses:
+            conn_by_email[addr] = c
 
     if not conn_by_email:
         return GmailRehydrateInlineImagesResponse(
-            scanned=0, rehydrated=0, skipped=0, failed=0, dry_run=body.dry_run
+            scanned=0, rehydrated=0, skipped=0, failed=0, dry_run=body.dry_run,
+            skipped_breakdown={},
         )
 
     # Pull candidate rows: inbound emails whose body_html still
@@ -685,14 +698,11 @@ async def gmail_rehydrate_inline_images(
     # plumbing that runs once per outage.
     filters = [InboundEmail.body_html.ilike("%cid:%")]
     if body.user_id is not None:
-        scoped_emails = list(conn_by_email.keys())
-        if not scoped_emails:
-            return GmailRehydrateInlineImagesResponse(
-                scanned=0, rehydrated=0, skipped=0, failed=0, dry_run=body.dry_run
-            )
-        # Filter inbound rows to those addressed to this user's mailbox.
-        from sqlalchemy import func as sa_func
-        filters.append(sa_func.lower(InboundEmail.to_email).in_(scoped_emails))
+        # Filter inbound rows to those addressed to any address owned
+        # by this user's connection (primary + aliases).
+        filters.append(
+            sa_func.lower(InboundEmail.to_email).in_(conn_by_email.keys())
+        )
 
     rows = (await db.execute(
         select(InboundEmail)
@@ -703,8 +713,18 @@ async def gmail_rehydrate_inline_images(
 
     scanned = 0
     rehydrated = 0
-    skipped = 0
     failed = 0
+    # Skipped is the catch-all "not rehydrated AND not failed" bucket.
+    # Track each reason separately so the operator can see whether
+    # this run silently couldn't help vs. was already correct vs. is
+    # blocked on a missing connection.
+    skipped_breakdown: dict[str, int] = {
+        "no_connection": 0,
+        "wrong_id_prefix": 0,
+        "gmail_returned_empty": 0,
+        "html_unchanged": 0,
+    }
+    pending_writes = 0
 
     # Cache one GmailClient per connection so a 50-row backfill against
     # a single mailbox doesn't open 50 httpx clients.
@@ -715,7 +735,7 @@ async def gmail_rehydrate_inline_images(
             to_email = (row.to_email or "").lower()
             conn = conn_by_email.get(to_email)
             if conn is None:
-                skipped += 1
+                skipped_breakdown["no_connection"] += 1
                 continue
 
             # resend_email_id was minted as ``gmail:<message_id>`` by
@@ -723,7 +743,7 @@ async def gmail_rehydrate_inline_images(
             # use a different prefix; skip those.
             rid = row.resend_email_id or ""
             if not rid.startswith("gmail:"):
-                skipped += 1
+                skipped_breakdown["wrong_id_prefix"] += 1
                 continue
             gmail_msg_id = rid[len("gmail:"):]
 
@@ -745,32 +765,62 @@ async def gmail_rehydrate_inline_images(
 
             new_html = fresh.get("body_html")
             new_attachments = fresh.get("attachments") or []
-            if not new_html or new_html == row.body_html:
-                # Re-fetch returned identical or empty HTML — nothing to
-                # change. Still count it as scanned + skipped.
-                skipped += 1
+            if not new_html:
+                # Gmail returned the message body without any HTML — no
+                # way to fix this row from a re-fetch. Likely the
+                # attachment was GC'd or the message was edited.
+                skipped_breakdown["gmail_returned_empty"] += 1
+                continue
+            if new_html == row.body_html:
+                # Identical bytes back — either the original parse was
+                # already correct, or the regex didn't fire on either
+                # pass (unquoted `cid:` ref against the old quoted-only
+                # regex used to land here; the follow-up adds an
+                # unquoted branch but historical rows persisted with
+                # the old shape stay stuck until forward sync rewrites
+                # them via a normal reply).
+                skipped_breakdown["html_unchanged"] += 1
                 continue
 
             if not body.dry_run:
                 row.body_html = new_html
-                if new_attachments and not row.attachments:
-                    row.attachments = {"items": new_attachments}
+                if new_attachments:
+                    # Merge with whatever was on the row already so a
+                    # second run doesn't drop newly-discovered files.
+                    existing_items = (row.attachments or {}).get("items") or []
+                    seen = {
+                        (it.get("attachment_id"), it.get("cid"), it.get("filename"))
+                        for it in existing_items
+                    }
+                    merged = list(existing_items)
+                    for new_att in new_attachments:
+                        key = (new_att.get("attachment_id"), new_att.get("cid"), new_att.get("filename"))
+                        if key not in seen:
+                            merged.append(new_att)
+                            seen.add(key)
+                    row.attachments = {"items": merged}
                 db.add(row)
+                pending_writes += 1
+                if pending_writes >= COMMIT_BATCH:
+                    await db.commit()
+                    pending_writes = 0
             rehydrated += 1
     finally:
         for c in clients.values():
             with contextlib.suppress(Exception):
                 await c.__aexit__(None, None, None)
 
-    if not body.dry_run and rehydrated:
+    if not body.dry_run and pending_writes:
         await db.commit()
 
+    skipped_total = sum(skipped_breakdown.values())
     return GmailRehydrateInlineImagesResponse(
         scanned=scanned,
         rehydrated=rehydrated,
-        skipped=skipped,
+        skipped=skipped_total,
         failed=failed,
         dry_run=body.dry_run,
+        skipped_breakdown=skipped_breakdown,
     )
 
 
