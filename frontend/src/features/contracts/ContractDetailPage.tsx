@@ -18,7 +18,7 @@ import { extractApiErrorDetail } from '../../utils/errors';
 import type { ContractUpdate } from '../../types';
 import clsx from 'clsx';
 
-// TODO: import ContractAttachmentsSection from './ContractAttachmentsSection' when available
+import { ContractAttachmentsSection } from './ContractAttachmentsSection';
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   draft: { bg: 'bg-gray-100 dark:bg-gray-700', text: 'text-gray-700 dark:text-gray-300' },
@@ -258,14 +258,7 @@ function ContractDetailPage() {
             </div>
           )}
 
-          {/* Attachments placeholder — filled in by the attachments worker */}
-          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700">
-            <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Attachments</h2>
-            {/* ContractAttachmentsSection will be mounted here by the attachments worker */}
-            <p className="text-sm text-gray-400 dark:text-gray-500 italic">
-              Attachment management is being set up.
-            </p>
-          </div>
+          <ContractAttachmentsSection contractId={contract.id} />
         </div>
 
         {/* Sidebar */}
