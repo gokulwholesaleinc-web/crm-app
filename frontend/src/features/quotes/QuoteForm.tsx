@@ -219,6 +219,7 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoading) return;
 
     const data: QuoteCreate = {
       title: formData.title,

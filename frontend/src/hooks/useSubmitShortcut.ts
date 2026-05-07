@@ -23,14 +23,29 @@ export function useSubmitShortcut(
 }
 
 /**
- * Convenience wrapper for the common form pattern: attach a ref to a `<form>`
- * and have Cmd/Ctrl+Enter call `requestSubmit()` on it. Returns the ref.
+ * Convenience wrapper for the common form pattern: returns a callback ref
+ * to attach to a `<form>`. Cmd/Ctrl+Enter inside the form calls
+ * `requestSubmit()` on it.
+ *
+ * Returns a callback ref (not a RefObject) so the listener re-attaches
+ * every time the form node remounts — important for modals that keep
+ * the parent component mounted but unmount the form-bearing JSX when
+ * the modal is closed (e.g. EmailComposeModal).
  */
-export function useFormSubmitShortcut(): RefObject<HTMLFormElement> {
-  const formRef = useRef<HTMLFormElement>(null);
-  const submit = useCallback(() => {
-    formRef.current?.requestSubmit();
+export function useFormSubmitShortcut(): (node: HTMLFormElement | null) => void {
+  const cleanupRef = useRef<(() => void) | null>(null);
+
+  return useCallback((node: HTMLFormElement | null) => {
+    cleanupRef.current?.();
+    cleanupRef.current = null;
+    if (!node) return;
+    const handler = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+        event.preventDefault();
+        node.requestSubmit();
+      }
+    };
+    node.addEventListener('keydown', handler);
+    cleanupRef.current = () => node.removeEventListener('keydown', handler);
   }, []);
-  useSubmitShortcut(formRef, submit);
-  return formRef;
 }

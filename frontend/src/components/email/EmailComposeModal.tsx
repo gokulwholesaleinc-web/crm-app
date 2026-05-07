@@ -276,6 +276,7 @@ export function EmailComposeModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (sendEmailMutation.isPending) return;
     setSendStatusError(null);
     if (overLimit) {
       showError(

@@ -64,8 +64,13 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
   const [touched, setTouched] = useState(false);
   useUnsavedChangesWarning(touched);
 
-  // Today (YYYY-MM-DD) for `min` on Valid Until — stable for form lifetime.
-  const todayDate = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  // Today in user's LOCAL timezone (YYYY-MM-DD) for `min` on Valid Until.
+  // Only applied when creating a new proposal — see `min` site below.
+  const todayDate = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, []);
+  const isEditing = !!initialData;
 
   const formRef = useFormSubmitShortcut();
 
@@ -118,6 +123,7 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoading) return;
 
     const amountTrimmed = billing.amount.trim();
     const amountValue = amountTrimmed === '' ? null : amountTrimmed;
@@ -271,7 +277,7 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
               type="date"
               id="proposal-valid-until"
               name="valid_until"
-              min={todayDate}
+              min={isEditing ? undefined : todayDate}
               value={formData.validUntil}
               onChange={(e) => updateField('validUntil', e.target.value)}
               className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"

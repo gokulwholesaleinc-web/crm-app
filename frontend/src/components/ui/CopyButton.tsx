@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import clsx from 'clsx';
 import { ClipboardIcon, CheckIcon } from '@heroicons/react/24/outline';
+import { showError } from '../../utils/toast';
 
 interface CopyButtonProps {
   value: string;
@@ -17,14 +18,17 @@ export function CopyButton({ value, label = 'Copy', className }: CopyButtonProps
   }, []);
 
   const handleClick = async () => {
-    if (!navigator.clipboard?.writeText) return;
+    if (!navigator.clipboard?.writeText) {
+      showError('Clipboard unavailable in this browser');
+      return;
+    }
     try {
       await navigator.clipboard.writeText(value);
       setCopied(true);
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       timeoutRef.current = setTimeout(() => setCopied(false), 1500);
     } catch {
-      // Permission denied or unavailable — fail silently
+      showError(`Could not copy ${label.toLowerCase()}`);
     }
   };
 

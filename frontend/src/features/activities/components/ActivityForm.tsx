@@ -130,12 +130,18 @@ export function ActivityForm({
 
   useUnsavedChangesWarning(isDirty);
 
-  // Today as YYYY-MM-DD / YYYY-MM-DDTHH:mm — used as `min` on forward-looking
-  // date fields. Stable for the form's lifetime so the input value doesn't
-  // re-validate against a new "now" on every render.
+  // Today in the user's LOCAL timezone as YYYY-MM-DD / YYYY-MM-DDTHH:mm —
+  // used as `min` on forward-looking date fields when CREATING a new activity.
+  // Skipped on edit so users can keep an existing past due_date. Stable for
+  // the form's lifetime so the input doesn't re-validate against a new "now".
   const { todayDate, todayDateTime } = useMemo(() => {
-    const now = new Date().toISOString();
-    return { todayDate: now.slice(0, 10), todayDateTime: now.slice(0, 16) };
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mi = String(d.getMinutes()).padStart(2, '0');
+    return { todayDate: `${yyyy}-${mm}-${dd}`, todayDateTime: `${yyyy}-${mm}-${dd}T${hh}:${mi}` };
   }, []);
 
   const formRef = useFormSubmitShortcut();
@@ -162,6 +168,7 @@ export function ActivityForm({
   }, [activity, reset]);
 
   const onFormSubmit = async (data: FormValues) => {
+    if (isLoading) return;
     const baseData = {
       activity_type: data.activity_type,
       subject: data.subject,
@@ -272,7 +279,7 @@ export function ActivityForm({
           {...register('due_date')}
           type="date"
           label="Due Date"
-          min={todayDate}
+          min={isEditing ? undefined : todayDate}
           error={errors.due_date?.message}
         />
       </div>
@@ -369,7 +376,7 @@ export function ActivityForm({
             {...register('task_reminder_at')}
             type="datetime-local"
             label="Reminder At"
-            min={todayDateTime}
+            min={isEditing ? undefined : todayDateTime}
           />
         </div>
       )}
