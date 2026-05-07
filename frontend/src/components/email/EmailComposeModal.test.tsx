@@ -11,6 +11,7 @@ vi.mock('../../hooks/useEmail', () => ({
   useSendEmail: () => ({
     mutateAsync,
     isPending: mockIsPending,
+    reset: vi.fn(),
   }),
 }));
 
@@ -164,7 +165,6 @@ describe('EmailComposeModal', () => {
     mutateAsync.mockResolvedValueOnce({});
     renderWithProviders(<EmailComposeModal {...BASE_PROPS} replyTo={REPLY_TO} />);
 
-    // Toggle is rendered, quote textarea is collapsed by default.
     const toggle = screen.getByRole('button', { name: 'Show quoted text' });
     expect(toggle).toBeInTheDocument();
     expect(screen.queryByLabelText('Quoted message')).not.toBeInTheDocument();
@@ -173,8 +173,6 @@ describe('EmailComposeModal', () => {
     expect(screen.getByLabelText('Quoted message')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Hide quoted text' })).toBeInTheDocument();
 
-    // Submit and verify the body sent includes the user's reply text +
-    // the quoted block, joined by a blank line.
     fireEvent.change(screen.getByLabelText('Body'), { target: { value: 'Got it, thanks!' } });
     fireEvent.submit(screen.getByLabelText('Subject').closest('form')!);
     await waitFor(() => expect(mutateAsync).toHaveBeenCalled());

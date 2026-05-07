@@ -16,11 +16,12 @@ vi.mock('../../hooks/usePayments', () => ({
   usePayment: (id: number | undefined) => usePaymentMock(id),
 }));
 
-const apiPostMock = vi.fn();
+const apiClientMock = vi.hoisted(() => ({
+  post: vi.fn(),
+  get: vi.fn(),
+}));
 vi.mock('../../api/client', () => ({
-  apiClient: {
-    post: (...args: unknown[]) => apiPostMock(...args),
-  },
+  apiClient: apiClientMock,
 }));
 
 const basePayment = {
@@ -87,35 +88,56 @@ describe('PaymentDetailPage', () => {
     expect(screen.getByText('No related entities')).toBeInTheDocument();
   });
 
-  it('download invoice button opens /api/payments/:id/invoice in a new tab', () => {
+  it('download invoice button opens /api/payments/:id/invoice in a new tab', async () => {
     usePaymentMock.mockReturnValue({ data: basePayment, isLoading: false, error: null });
+    // StripeTestModeBanner calls apiClient.get('/api/payments/mode') on mount.
+    // Route all GET calls through an implementation that returns the blob for
+    // the invoice endpoint and a stub for any other path.
+    apiClientMock.get.mockImplementation((url: string) => {
+      if (url === '/api/payments/42/invoice') {
+        return Promise.resolve({ data: new Blob(['fake'], { type: 'application/pdf' }) });
+      }
+      return Promise.resolve({ data: null });
+    });
+    const origCreateObjectURL = URL.createObjectURL;
+    const origRevokeObjectURL = URL.revokeObjectURL;
+    URL.createObjectURL = vi.fn(() => 'blob:test-url');
+    URL.revokeObjectURL = vi.fn();
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
 
-    renderWithProviders(<PaymentDetailPage />);
-    fireEvent.click(screen.getByRole('button', { name: /download invoice/i }));
+    try {
+      renderWithProviders(<PaymentDetailPage />);
+      fireEvent.click(screen.getByRole('button', { name: /download invoice/i }));
 
-    expect(openSpy).toHaveBeenCalledWith('/api/payments/42/invoice', '_blank');
-    openSpy.mockRestore();
+      await waitFor(() => {
+        expect(apiClientMock.get).toHaveBeenCalledWith('/api/payments/42/invoice', { responseType: 'blob' });
+        expect(openSpy).toHaveBeenCalledWith('blob:test-url', '_blank', 'noopener,noreferrer');
+      });
+    } finally {
+      openSpy.mockRestore();
+      URL.createObjectURL = origCreateObjectURL;
+      URL.revokeObjectURL = origRevokeObjectURL;
+    }
   });
 
   it('resend receipt shows success message when apiClient.post resolves', async () => {
     usePaymentMock.mockReturnValue({ data: basePayment, isLoading: false, error: null });
-    apiPostMock.mockResolvedValueOnce({ data: { success: true } });
+    apiClientMock.post.mockResolvedValueOnce({ data: { success: true } });
 
     renderWithProviders(<PaymentDetailPage />);
     fireEvent.click(screen.getByRole('button', { name: /resend receipt email/i }));
 
     await waitFor(() => {
-      expect(apiPostMock).toHaveBeenCalledWith('/api/payments/42/send-receipt');
-    });
-    await waitFor(() => {
+      expect(apiClientMock.post).toHaveBeenCalledWith('/api/payments/42/send-receipt');
       expect(screen.getByRole('status')).toHaveTextContent(/receipt email sent successfully/i);
     });
   });
 
   it('resend receipt shows failure message when apiClient.post rejects', async () => {
     usePaymentMock.mockReturnValue({ data: basePayment, isLoading: false, error: null });
-    apiPostMock.mockRejectedValueOnce(new Error('network down'));
+    // Reject with a plain object (no detail, no message) so extractApiErrorDetail
+    // returns null and the component falls back to its own default string.
+    apiClientMock.post.mockRejectedValueOnce({ status_code: 500 });
 
     renderWithProviders(<PaymentDetailPage />);
     fireEvent.click(screen.getByRole('button', { name: /resend receipt email/i }));
@@ -128,7 +150,7 @@ describe('PaymentDetailPage', () => {
   it('disables the resend button while a request is in flight', async () => {
     usePaymentMock.mockReturnValue({ data: basePayment, isLoading: false, error: null });
     let resolvePost: ((value: unknown) => void) | undefined;
-    apiPostMock.mockImplementationOnce(() => new Promise((resolve) => { resolvePost = resolve; }));
+    apiClientMock.post.mockImplementationOnce(() => new Promise((resolve) => { resolvePost = resolve; }));
 
     renderWithProviders(<PaymentDetailPage />);
     const button = screen.getByRole('button', { name: /resend receipt email/i });
