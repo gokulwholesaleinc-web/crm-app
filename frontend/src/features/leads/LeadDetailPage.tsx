@@ -2,7 +2,8 @@ import { useState, Suspense } from 'react';
 import { lazy } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useSmartBack } from '../../hooks/useSmartBack';
-import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
+import { useUrlTabState } from '../../hooks/useUrlTabState';
+import { Button, CopyButton, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { TabBar, ActivitiesTab, CommonTabContent, SuspenseFallback } from '../../components/shared/DetailPageShell';
 import { EmailComposeModal, EmailHistory } from '../../components/email';
 import { ConvertLeadModal } from './components/ConvertLeadModal';
@@ -30,12 +31,14 @@ const TABS: { id: TabType; name: string }[] = [
   { id: 'sharing', name: 'Sharing' },
 ];
 
+const TAB_IDS: ReadonlySet<TabType> = new Set(TABS.map((t) => t.id));
+
 function LeadDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const handleBack = useSmartBack('/leads');
   const leadId = id ? parseInt(id, 10) : undefined;
-  const [activeTab, setActiveTab] = useState<TabType>('details');
+  const [activeTab, handleTabChange] = useUrlTabState<TabType>(TAB_IDS, 'details');
   const [showConvertModal, setShowConvertModal] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -176,9 +179,15 @@ function LeadDetailPage() {
             </svg>
           </button>
           <div className="min-w-0">
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">
-              {lead.full_name || 'Unnamed Lead'}
-            </h1>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">
+                {lead.full_name || 'Unnamed Lead'}
+              </h1>
+              <span className="inline-flex items-center gap-1">
+                <span className="text-xs font-mono text-gray-500 dark:text-gray-400">#{lead.id}</span>
+                <CopyButton value={String(lead.id)} label="ID" />
+              </span>
+            </div>
             {lead.job_title && lead.company_name && (
               <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
                 {lead.job_title} at {lead.company_name}
@@ -278,7 +287,7 @@ function LeadDetailPage() {
       </div>
 
       {/* Tabs */}
-      <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
+      <TabBar tabs={TABS} activeTab={activeTab} onTabChange={handleTabChange} />
 
       {/* Tab Content */}
       {activeTab === 'details' && (
@@ -288,19 +297,23 @@ function LeadDetailPage() {
             <dl className="grid grid-cols-1 gap-4 sm:gap-x-4 sm:gap-y-6 sm:grid-cols-2">
               <div>
                 <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Email</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100 break-all">
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100 break-all flex items-center gap-2">
                   <a href={`mailto:${lead.email}`} className="text-primary-600 hover:text-primary-500">
                     {lead.email}
                   </a>
+                  {lead.email && <CopyButton value={lead.email} label="email" />}
                 </dd>
               </div>
               <div>
                 <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Phone</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100 flex items-center gap-2">
                   {lead.phone ? (
-                    <a href={`tel:${lead.phone}`} className="text-primary-600 hover:text-primary-500">
-                      {formatPhoneNumber(lead.phone)}
-                    </a>
+                    <>
+                      <a href={`tel:${lead.phone}`} className="text-primary-600 hover:text-primary-500">
+                        {formatPhoneNumber(lead.phone)}
+                      </a>
+                      <CopyButton value={lead.phone} label="phone" />
+                    </>
                   ) : '-'}
                 </dd>
               </div>

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useSmartBack } from '../../hooks/useSmartBack';
-import { Button, EntityLink, Spinner, Modal, ConfirmDialog } from '../../components/ui';
+import { useUrlTabState } from '../../hooks/useUrlTabState';
+import { Button, CopyButton, EntityLink, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { TabBar, ActivitiesTab, CommonTabContent } from '../../components/shared/DetailPageShell';
 import { OpportunityForm, OpportunityFormData } from './components/OpportunityForm';
 import { AIInsightsCard, NextBestActionCard } from '../../components/ai';
@@ -30,12 +31,14 @@ const TABS: { id: TabType; name: string }[] = [
   { id: 'sharing', name: 'Sharing' },
 ];
 
+const TAB_IDS: ReadonlySet<TabType> = new Set(TABS.map((t) => t.id));
+
 function OpportunityDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const handleBack = useSmartBack('/opportunities');
   const opportunityId = id ? parseInt(id, 10) : undefined;
-  const [activeTab, setActiveTab] = useState<TabType>('details');
+  const [activeTab, handleTabChange] = useUrlTabState<TabType>(TAB_IDS, 'details');
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -153,9 +156,15 @@ function OpportunityDetailPage() {
             </svg>
           </button>
           <div className="min-w-0">
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">
-              {opportunity.name}
-            </h1>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">
+                {opportunity.name}
+              </h1>
+              <span className="inline-flex items-center gap-1">
+                <span className="text-xs font-mono text-gray-500 dark:text-gray-400">#{opportunity.id}</span>
+                <CopyButton value={String(opportunity.id)} label="ID" />
+              </span>
+            </div>
             <div className="flex flex-wrap items-center gap-2 mt-1">
               <span className={getStatusBadgeClasses(stageName, 'opportunity')}>
                 {opportunity.pipeline_stage?.name || stageName}
@@ -218,7 +227,7 @@ function OpportunityDetailPage() {
       <AIInsightsCard entityType="opportunity" entityId={opportunity.id} variant="inline" entityName={opportunity.name} />
 
       {/* Tabs */}
-      <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
+      <TabBar tabs={TABS} activeTab={activeTab} onTabChange={handleTabChange} />
 
       {/* Tab Content */}
       {activeTab === 'details' && (

@@ -2,12 +2,13 @@
  * Form for creating/editing activities (handles all types: call, email, meeting, task, note)
  */
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
 import { Select } from '../../../components/ui/Select';
 import { FormTextarea } from '../../../components/forms';
+import { useFormSubmitShortcut } from '../../../hooks/useSubmitShortcut';
 import { useUnsavedChangesWarning } from '../../../hooks/useUnsavedChangesWarning';
 import type { Activity, ActivityCreate, ActivityUpdate } from '../../../types';
 
@@ -129,6 +130,22 @@ export function ActivityForm({
 
   useUnsavedChangesWarning(isDirty);
 
+  // Today in the user's LOCAL timezone as YYYY-MM-DD / YYYY-MM-DDTHH:mm —
+  // used as `min` on forward-looking date fields when CREATING a new activity.
+  // Skipped on edit so users can keep an existing past due_date. Stable for
+  // the form's lifetime so the input doesn't re-validate against a new "now".
+  const { todayDate, todayDateTime } = useMemo(() => {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mi = String(d.getMinutes()).padStart(2, '0');
+    return { todayDate: `${yyyy}-${mm}-${dd}`, todayDateTime: `${yyyy}-${mm}-${dd}T${hh}:${mi}` };
+  }, []);
+
+  const formRef = useFormSubmitShortcut();
+
   // Reset form when activity prop changes
   useEffect(() => {
     if (activity) {
@@ -151,6 +168,7 @@ export function ActivityForm({
   }, [activity, reset]);
 
   const onFormSubmit = async (data: FormValues) => {
+    if (isLoading) return;
     const baseData = {
       activity_type: data.activity_type,
       subject: data.subject,
@@ -205,7 +223,7 @@ export function ActivityForm({
   };
 
   return (
-    <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-3 sm:space-y-4">
+    <form ref={formRef} onSubmit={handleSubmit(onFormSubmit)} className="space-y-3 sm:space-y-4">
       {/* Activity Type & Priority - stack on mobile */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
         <Controller
@@ -237,6 +255,7 @@ export function ActivityForm({
         label="Subject"
         placeholder="Enter activity subject"
         error={errors.subject?.message}
+        autoFocus
       />
 
       <FormTextarea
@@ -260,6 +279,7 @@ export function ActivityForm({
           {...register('due_date')}
           type="date"
           label="Due Date"
+          min={isEditing ? undefined : todayDate}
           error={errors.due_date?.message}
         />
       </div>
@@ -356,6 +376,7 @@ export function ActivityForm({
             {...register('task_reminder_at')}
             type="datetime-local"
             label="Reminder At"
+            min={isEditing ? undefined : todayDateTime}
           />
         </div>
       )}
@@ -365,7 +386,7 @@ export function ActivityForm({
         <Button type="button" variant="secondary" onClick={onCancel} className="w-full sm:w-auto">
           Cancel
         </Button>
-        <Button type="submit" isLoading={isLoading} className="w-full sm:w-auto">
+        <Button type="submit" isLoading={isLoading} disabled={isLoading} className="w-full sm:w-auto">
           {isEditing ? 'Update Activity' : 'Create Activity'}
         </Button>
       </div>

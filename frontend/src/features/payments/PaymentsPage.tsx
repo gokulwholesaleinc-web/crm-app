@@ -76,11 +76,15 @@ const statusOptions = [
 function PaymentsPage() {
   usePageTitle('Payments');
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<Tab>('All Payments');
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
-  const [statusFilter, setStatusFilter] = useState('');
-  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
+  const statusFilter = searchParams.get('status') || '';
+  const searchQuery = searchParams.get('search') || '';
+  const setSearchQuery = (q: string) =>
+    setSearchParams((prev) => { if (q) prev.set('search', q); else prev.delete('search'); return prev; }, { replace: true });
+  const setStatusFilter = (s: string) =>
+    setSearchParams((prev) => { if (s) prev.set('status', s); else prev.delete('status'); return prev; }, { replace: true });
   const [currentPage, setCurrentPage] = useState(1);
   const [subPage, setSubPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -286,7 +290,7 @@ function PaymentsPage() {
               {/* Desktop Table */}
               <div className="hidden md:block overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead className="bg-gray-50 dark:bg-gray-900">
+                  <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-900">
                     <tr>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         ID
@@ -446,7 +450,7 @@ function PaymentsPage() {
               {/* Desktop Table */}
               <div className="hidden md:block overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead className="bg-gray-50 dark:bg-gray-900">
+                  <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-900">
                     <tr>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         Customer

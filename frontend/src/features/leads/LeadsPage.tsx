@@ -492,7 +492,7 @@ function LeadsPage() {
             {/* Desktop Table View */}
             <div className="hidden md:block overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                <thead className="bg-gray-50 dark:bg-gray-900">
+                <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-900">
                   <tr>
                     <th scope="col" className="px-4 py-3 w-10">
                       <input

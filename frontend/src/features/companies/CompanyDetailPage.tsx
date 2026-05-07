@@ -1,9 +1,11 @@
 import { useState, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSmartBack } from '../../hooks/useSmartBack';
+import { useUrlTabState } from '../../hooks/useUrlTabState';
 import clsx from 'clsx';
 import { BuildingOffice2Icon, ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { Button } from '../../components/ui/Button';
+import { CopyButton } from '../../components/ui/CopyButton';
 import { Spinner } from '../../components/ui/Spinner';
 import { Modal } from '../../components/ui/Modal';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
@@ -45,13 +47,15 @@ const TABS: { id: TabType; name: string }[] = [
   { id: 'sharing', name: 'Sharing' },
 ];
 
+const TAB_IDS: ReadonlySet<TabType> = new Set(TABS.map((t) => t.id));
+
 export function CompanyDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const handleBack = useSmartBack('/companies');
   const companyId = id ? parseInt(id, 10) : undefined;
 
-  const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const [activeTab, handleTabChange] = useUrlTabState<TabType>(TAB_IDS, 'overview');
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -150,7 +154,13 @@ export function CompanyDetailPage() {
               </div>
             )}
             <div className="min-w-0">
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">{company.name}</h1>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">{company.name}</h1>
+                <span className="inline-flex items-center gap-1">
+                  <span className="text-xs font-mono text-gray-500 dark:text-gray-400">#{company.id}</span>
+                  <CopyButton value={String(company.id)} label="ID" />
+                </span>
+              </div>
               <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1">
                 <span
                   className={clsx(
@@ -186,7 +196,7 @@ export function CompanyDetailPage() {
       </div>
 
       {/* Tabs */}
-      <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
+      <TabBar tabs={TABS} activeTab={activeTab} onTabChange={handleTabChange} />
 
       {/* Tab Content */}
       {activeTab === 'overview' && companyId && (

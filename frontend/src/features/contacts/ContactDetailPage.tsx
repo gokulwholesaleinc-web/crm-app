@@ -1,7 +1,8 @@
 import { useState, useRef, lazy, Suspense } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useSmartBack } from '../../hooks/useSmartBack';
-import { Button, HelpLink, Spinner, Modal, ConfirmDialog } from '../../components/ui';
+import { useUrlTabState } from '../../hooks/useUrlTabState';
+import { Button, CopyButton, HelpLink, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { TabBar, ActivitiesTab, CommonTabContent, SuspenseFallback } from '../../components/shared/DetailPageShell';
 import { EmailComposeModal, EmailThread, GmailReconnectBanner } from '../../components/email';
 import { useGmailStatus } from '../../hooks/useGmailStatus';
@@ -62,13 +63,7 @@ function ContactDetailPage() {
   // Honor `?tab=` so deep links from the email search modal land on
   // the right tab; `?email=` carries the kind:id deep-link target the
   // EmailThread will scroll to.
-  const initialTab = (() => {
-    const requested = searchParams.get('tab');
-    return requested && TAB_IDS.has(requested as TabType)
-      ? (requested as TabType)
-      : 'details';
-  })();
-  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
+  const [activeTab, handleTabChange] = useUrlTabState<TabType>(TAB_IDS, 'details');
   const targetEmail = searchParams.get('email');
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -197,6 +192,10 @@ function ContactDetailPage() {
                   Subscriber
                 </span>
               )}
+              <span className="inline-flex items-center gap-1">
+                <span className="text-xs font-mono text-gray-500 dark:text-gray-400">#{contact.id}</span>
+                <CopyButton value={String(contact.id)} label="ID" />
+              </span>
             </div>
             {(contact.job_title || contact.company?.name) && (
               <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
@@ -256,7 +255,7 @@ function ContactDetailPage() {
 
       <NextBestActionCard entityType="contact" entityId={contact.id} />
 
-      <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
+      <TabBar tabs={TABS} activeTab={activeTab} onTabChange={handleTabChange} />
 
       {activeTab === 'details' && contactId && (
         <>
@@ -271,10 +270,11 @@ function ContactDetailPage() {
               <dl className="grid grid-cols-1 gap-4 sm:gap-x-4 sm:gap-y-6 sm:grid-cols-2">
                 <div>
                   <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Email</dt>
-                  <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
+                  <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100 flex items-center gap-2">
                     <a href={`mailto:${contact.email}`} className="text-primary-600 hover:text-primary-500">
                       {contact.email}
                     </a>
+                    {contact.email && <CopyButton value={contact.email} label="email" />}
                   </dd>
                 </div>
                 <div className="sm:col-span-2">
@@ -335,11 +335,14 @@ function ContactDetailPage() {
                 </div>
                 <div>
                   <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Phone</dt>
-                  <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
+                  <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100 flex items-center gap-2">
                     {contact.phone ? (
-                      <a href={`tel:${contact.phone}`} className="text-primary-600 hover:text-primary-500">
-                        {formatPhoneNumber(contact.phone)}
-                      </a>
+                      <>
+                        <a href={`tel:${contact.phone}`} className="text-primary-600 hover:text-primary-500">
+                          {formatPhoneNumber(contact.phone)}
+                        </a>
+                        <CopyButton value={contact.phone} label="phone" />
+                      </>
                     ) : '-'}
                   </dd>
                 </div>
