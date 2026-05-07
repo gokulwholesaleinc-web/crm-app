@@ -1,5 +1,6 @@
 """Low-level Gmail API client — no FastAPI dependencies, no routes."""
 
+import asyncio
 import base64
 import logging
 import re
@@ -132,10 +133,57 @@ class GmailClient:
 
         return records
 
+    async def get_attachment(
+        self,
+        message_id: str,
+        attachment_id: str,
+    ) -> str | None:
+        """Fetch a single attachment's bytes from Gmail.
+
+        Returns the base64url-encoded ``data`` field — same shape as the
+        inline ``body.data`` Gmail returns for small parts. Returns None
+        on 404. Raises GmailAuthError on 401.
+        """
+        await self._refresh_if_needed()
+        path = f"users/me/messages/{message_id}/attachments/{attachment_id}"
+        url = f"{_GMAIL_BASE}/{path}"
+        resp = await self._http.get(url, headers=self._auth_headers())
+        if resp.status_code == 401:
+            raise GmailAuthError(f"401 on GET {path}")
+        if resp.status_code == 404:
+            return None
+        resp.raise_for_status()
+        return resp.json().get("data")
+
     async def get_message(self, message_id: str) -> dict:
         """Fetch a full message and return a normalised dict."""
         data = await self._get(f"users/me/messages/{message_id}", format="full")
-        return _parse_message(data)
+        parsed = _parse_message(data)
+
+        # Hydrate any inline image parts that Gmail returned without inline
+        # data (attachment_id only). This happens for images above Gmail's
+        # ~2MB inline-embed threshold. After hydration, re-run CID substitution
+        # so the HTML body gets the data: URIs populated.
+        raw_attachments = _walk_attachments(data.get("payload", {}))
+        needs_hydration = any(
+            a["attachment_id"] and not a["data"] and (a["mime_type"] or "").startswith("image/")
+            for a in raw_attachments
+        )
+        if needs_hydration:
+            hydrated = await _hydrate_inline_attachments(self, message_id, raw_attachments)
+            if parsed.get("body_html"):
+                try:
+                    parsed["body_html"] = _inline_cid_images(
+                        parsed["body_html"], hydrated, gmail_msg_id=message_id,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "[gmail_get_message] post-hydration cid substitution failed "
+                        "gmail_msg_id=%s: %s",
+                        message_id, exc,
+                    )
+
+        return parsed
 
     async def get_profile(self) -> dict:
         """Return the authenticated user's Gmail profile (includes historyId)."""
@@ -270,6 +318,56 @@ def _parse_message(data: dict) -> dict:
         "raw_payload": data,
         "attachments": attachments_meta,
     }
+
+
+_HYDRATE_CONCURRENCY = 5
+
+
+async def _hydrate_inline_attachments(
+    client: "GmailClient",
+    message_id: str,
+    attachments: list[dict],
+) -> list[dict]:
+    """Fetch data for image/* parts that have attachment_id but no inline data.
+
+    Skips parts that already have data, non-image parts, parts with no
+    attachment_id, and parts whose declared size exceeds the 2.5MB cap.
+    Concurrency-capped at 5 to stay clear of Gmail's quota ceiling.
+    Returns a NEW list; does not mutate the input.
+    Per-fetch errors are logged at WARN and skipped so one 404 doesn't
+    strand the rest.
+    """
+    sem = asyncio.Semaphore(_HYDRATE_CONCURRENCY)
+
+    async def fetch_one(att: dict) -> dict:
+        mime = att.get("mime_type") or ""
+        attachment_id = att.get("attachment_id")
+        if (
+            att.get("data")
+            or not mime.startswith("image/")
+            or not attachment_id
+            or (att.get("size") or 0) > _MAX_INLINE_IMAGE_BYTES
+        ):
+            return att
+        async with sem:
+            try:
+                data = await client.get_attachment(message_id, attachment_id)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "[hydrate_inline] fetch failed gmail_msg_id=%s attachment_id=%s: %s",
+                    message_id, attachment_id, exc,
+                )
+                return att
+        if data is None:
+            logger.warning(
+                "[hydrate_inline] 404 gmail_msg_id=%s attachment_id=%s",
+                message_id, attachment_id,
+            )
+            return att
+        return {**att, "data": data}
+
+    results = await asyncio.gather(*[fetch_one(a) for a in attachments])
+    return list(results)
 
 
 def _extract_body(payload: dict) -> tuple[str | None, str | None]:

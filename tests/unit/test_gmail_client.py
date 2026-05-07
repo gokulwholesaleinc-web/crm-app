@@ -7,22 +7,21 @@ get_message header extraction, _refresh_if_needed on expired token.
 
 import base64
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
-import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.integrations.gmail.client import (
     GmailAuthError,
     GmailClient,
     _first_address,
+    _hydrate_inline_attachments,
     _parse_address_list,
 )
-from src.integrations.gmail.models import GmailConnection, GmailSyncState
-
+from src.integrations.gmail.models import GmailConnection
 
 # ---------------------------------------------------------------------------
 # Fake GmailConnection builder
@@ -41,7 +40,7 @@ def _make_conn(
     conn.email = email
     conn.access_token = access_token
     conn.refresh_token = refresh_token
-    conn.token_expiry = token_expiry or datetime.now(timezone.utc) + timedelta(hours=1)
+    conn.token_expiry = token_expiry or datetime.now(UTC) + timedelta(hours=1)
     conn.scopes = "https://mail.google.com/"
     conn.revoked_at = None
     return conn
@@ -615,7 +614,7 @@ class TestRefreshIfNeeded:
 
         conn = _make_conn(
             access_token="old-token",
-            token_expiry=datetime.now(timezone.utc) - timedelta(seconds=10),
+            token_expiry=datetime.now(UTC) - timedelta(seconds=10),
         )
         db = AsyncMock(spec=AsyncSession)
         db.add = MagicMock()
@@ -638,7 +637,7 @@ class TestRefreshIfNeeded:
                 refresh_posts.append(request)
             return httpx.Response(200, json={"emailAddress": "u@e.com", "historyId": "5"})
 
-        conn = _make_conn(token_expiry=datetime.now(timezone.utc) + timedelta(hours=1))
+        conn = _make_conn(token_expiry=datetime.now(UTC) + timedelta(hours=1))
         db = AsyncMock(spec=AsyncSession)
         http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
         client = GmailClient(conn, db, http=http)
@@ -658,7 +657,7 @@ class TestRefreshIfNeeded:
             return httpx.Response(401, json={"error": "invalid_client"})
 
         conn = _make_conn(
-            token_expiry=datetime.now(timezone.utc) - timedelta(seconds=10)
+            token_expiry=datetime.now(UTC) - timedelta(seconds=10)
         )
         db = AsyncMock(spec=AsyncSession)
         http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
@@ -682,7 +681,7 @@ class TestRefreshIfNeeded:
             return httpx.Response(400, json={"error": "invalid_grant"})
 
         conn = _make_conn(
-            token_expiry=datetime.now(timezone.utc) - timedelta(seconds=10)
+            token_expiry=datetime.now(UTC) - timedelta(seconds=10)
         )
         db = AsyncMock(spec=AsyncSession)
         http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
@@ -726,3 +725,211 @@ class TestParseAddressList:
         assert _first_address("a@b.com, c@d.com") == "a@b.com"
         assert _first_address('"Doe, Jane" <j@x.com>, bob@y.com') == "j@x.com"
         assert _first_address("") == ""
+
+
+# ---------------------------------------------------------------------------
+# get_attachment
+# ---------------------------------------------------------------------------
+
+class TestGetAttachment:
+    @pytest.mark.asyncio
+    async def test_get_attachment_returns_data(self):
+        """get_attachment should return the base64url data string on 200."""
+        fake_data = "SGVsbG8gV29ybGQ"  # "Hello World" in base64url
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert "/attachments/att-abc" in str(request.url)
+            return httpx.Response(200, json={"size": 11, "data": fake_data})
+
+        conn = _make_conn()
+        db = AsyncMock(spec=AsyncSession)
+        http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        client = GmailClient(conn, db, http=http)
+
+        result = await client.get_attachment("msg-1", "att-abc")
+
+        assert result == fake_data
+
+    @pytest.mark.asyncio
+    async def test_get_attachment_returns_none_on_404(self):
+        """get_attachment should return None when Gmail returns 404 (attachment GC'd)."""
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(404, json={"error": {"code": 404, "message": "Not Found"}})
+
+        conn = _make_conn()
+        db = AsyncMock(spec=AsyncSession)
+        http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        client = GmailClient(conn, db, http=http)
+
+        result = await client.get_attachment("msg-1", "att-gone")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_get_attachment_raises_auth_error_on_401(self):
+        """get_attachment should raise GmailAuthError on 401 response."""
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(401, json={"error": "invalid_credentials"})
+
+        conn = _make_conn()
+        db = AsyncMock(spec=AsyncSession)
+        http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        client = GmailClient(conn, db, http=http)
+
+        with pytest.raises(GmailAuthError):
+            await client.get_attachment("msg-1", "att-xyz")
+
+
+# ---------------------------------------------------------------------------
+# _hydrate_inline_attachments
+# ---------------------------------------------------------------------------
+
+class TestHydrateInlineAttachments:
+    @pytest.mark.asyncio
+    async def test_hydrate_skips_parts_with_data(self):
+        """Parts that already have data should be returned unchanged."""
+        existing_data = "already-here-b64"
+        attachments = [
+            {
+                "mime_type": "image/png",
+                "filename": "logo.png",
+                "cid": "logo",
+                "size": 100,
+                "data": existing_data,
+                "attachment_id": "att-123",
+            }
+        ]
+
+        conn = _make_conn()
+        db = AsyncMock(spec=AsyncSession)
+        # No HTTP responses needed — get_attachment should never be called.
+        http = httpx.AsyncClient(transport=httpx.MockTransport(
+            lambda req: httpx.Response(500, json={"error": "should not be called"})
+        ))
+        client = GmailClient(conn, db, http=http)
+
+        result = await _hydrate_inline_attachments(client, "msg-1", attachments)
+
+        assert len(result) == 1
+        assert result[0]["data"] == existing_data
+
+    @pytest.mark.asyncio
+    async def test_hydrate_only_fetches_images(self):
+        """Non-image parts with attachment_id must not trigger a fetch; only image/* does."""
+        fetched_ids: list[str] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            # Record which attachment_id was requested
+            parts = str(request.url).split("/attachments/")
+            if len(parts) > 1:
+                fetched_ids.append(parts[1])
+            return httpx.Response(200, json={"data": "img-data-b64"})
+
+        attachments = [
+            {
+                "mime_type": "image/png",
+                "filename": "logo.png",
+                "cid": "logo",
+                "size": 100,
+                "data": None,
+                "attachment_id": "att-img",
+            },
+            {
+                "mime_type": "application/pdf",
+                "filename": "contract.pdf",
+                "cid": None,
+                "size": 50_000,
+                "data": None,
+                "attachment_id": "att-pdf",
+            },
+        ]
+
+        conn = _make_conn()
+        db = AsyncMock(spec=AsyncSession)
+        http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        client = GmailClient(conn, db, http=http)
+
+        result = await _hydrate_inline_attachments(client, "msg-1", attachments)
+
+        # Only the image part triggered a fetch.
+        assert fetched_ids == ["att-img"]
+        # Image part now has data; PDF part is unchanged (no data).
+        img_part = next(a for a in result if a["mime_type"] == "image/png")
+        pdf_part = next(a for a in result if a["mime_type"] == "application/pdf")
+        assert img_part["data"] == "img-data-b64"
+        assert pdf_part["data"] is None
+
+
+# ---------------------------------------------------------------------------
+# get_message — post-hydration CID substitution
+# ---------------------------------------------------------------------------
+
+class TestGetMessageHydration:
+    @pytest.mark.asyncio
+    async def test_get_message_substitutes_cid_after_hydration(self):
+        """End-to-end: a message with cid: ref + image part that only has
+        attachment_id (no inline data) should trigger get_attachment, and
+        the returned data should be substituted into body_html as a data: URI.
+        """
+        import base64
+
+        png_bytes = (
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
+            b"\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
+            b"\x00\x00\x00\rIDATx\x9cc\xf8\xff\xff?\x00\x05\xfe\x02\xfe\xa6"
+            b"\xa3\x10\x84\x00\x00\x00\x00IEND\xaeB`\x82"
+        )
+        png_b64url = base64.urlsafe_b64encode(png_bytes).decode().rstrip("=")
+        html = b'<p>logo: <img src="cid:fetched-logo" alt="logo"></p>'
+
+        # First response: the full message (image part has only attachmentId, no data)
+        gmail_message = {
+            "id": "msg-hydrate-1",
+            "threadId": "t1",
+            "payload": {
+                "mimeType": "multipart/related",
+                "headers": [
+                    {"name": "Subject", "value": "Attachment hydration test"},
+                    {"name": "From", "value": "s@example.com"},
+                    {"name": "To", "value": "me@example.com"},
+                    {"name": "Date", "value": "Mon, 14 Apr 2025 10:00:00 +0000"},
+                ],
+                "parts": [
+                    {
+                        "mimeType": "text/html",
+                        "body": {"data": base64.urlsafe_b64encode(html).decode()},
+                    },
+                    {
+                        "mimeType": "image/png",
+                        "filename": "logo.png",
+                        "headers": [
+                            {"name": "Content-ID", "value": "<fetched-logo>"},
+                            {"name": "Content-Disposition", "value": "inline"},
+                        ],
+                        # No inline data — only attachmentId (simulates large image)
+                        "body": {"attachmentId": "att-fetch-me", "size": 500},
+                    },
+                ],
+            },
+        }
+
+        call_count = [0]
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            call_count[0] += 1
+            url = str(request.url)
+            if "/attachments/att-fetch-me" in url:
+                return httpx.Response(200, json={"data": png_b64url, "size": len(png_bytes)})
+            # messages.get call
+            return httpx.Response(200, json=gmail_message)
+
+        conn = _make_conn()
+        db = AsyncMock(spec=AsyncSession)
+        http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        client = GmailClient(conn, db, http=http)
+
+        msg = await client.get_message("msg-hydrate-1")
+
+        assert msg["body_html"] is not None
+        assert "cid:fetched-logo" not in msg["body_html"]
+        assert "data:image/png;base64," in msg["body_html"]
