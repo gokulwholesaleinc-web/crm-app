@@ -97,16 +97,19 @@ const createApiClient = (): AxiosInstance => {
             } else if (Array.isArray(parsed.detail)) {
               // FastAPI 422 payload: detail is an array of {loc, msg, type}.
               // Joining the msgs is far more readable than a JSON.stringify
-              // of the whole array (which is what users used to see in the
-              // toast for blob-download validation failures).
-              const msgs = parsed.detail
-                .map((d) =>
-                  typeof d === 'object' && d !== null && 'msg' in d
-                    ? String((d as { msg: unknown }).msg)
-                    : '',
-                )
-                .filter(Boolean);
-              detailFromBlob = msgs.length ? msgs.join('; ') : JSON.stringify(parsed.detail);
+              // of the whole array. If ANY element doesn't fit the
+              // {msg: string} shape (legacy errors, custom raisers), fall
+              // through to the full dump so we don't surface a curated
+              // subset that hides the malformed elements.
+              const msgs = parsed.detail.map((d) =>
+                typeof d === 'object' && d !== null && typeof (d as { msg?: unknown }).msg === 'string'
+                  ? (d as { msg: string }).msg
+                  : null,
+              );
+              detailFromBlob =
+                msgs.length > 0 && msgs.every((m): m is string => m !== null)
+                  ? msgs.join('; ')
+                  : JSON.stringify(parsed.detail);
             } else if (parsed.detail) {
               detailFromBlob = JSON.stringify(parsed.detail);
             }

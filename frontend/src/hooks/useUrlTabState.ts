@@ -27,10 +27,19 @@ export function useUrlTabState<T extends string>(
 
   // External URL change (back/forward, deep link, programmatic nav)
   // should drive the displayed tab — without this, the address bar and
-  // the visible tab can diverge after a Back press.
+  // the visible tab can diverge after a Back press. When the URL holds
+  // an INVALID value, also normalize the URL itself so the docstring's
+  // "address bar always matches visible tab" guarantee holds.
   useEffect(() => {
-    const next = requested && allowed.has(requested as T) ? (requested as T) : fallback;
+    const isValid = !!requested && allowed.has(requested as T);
+    const next = isValid ? (requested as T) : fallback;
     if (next !== activeTab) setActiveTab(next);
+    if (!isValid && requested !== null) {
+      setSearchParams((prev) => {
+        prev.set(paramName, fallback);
+        return prev;
+      }, { replace: true });
+    }
     // `allowed` and `fallback` are expected to be stable references
     // per the docstring; depending on `requested` is sufficient.
     // eslint-disable-next-line react-hooks/exhaustive-deps
