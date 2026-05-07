@@ -1,4 +1,4 @@
-import type { PreferencesSectionProps } from './DensitySection';
+import type { PreferencesSectionProps } from './types';
 
 const inputClass =
   'mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 shadow-sm text-sm focus-visible:outline-none focus-visible:border-primary-500 focus-visible:ring-1 focus-visible:ring-primary-500';

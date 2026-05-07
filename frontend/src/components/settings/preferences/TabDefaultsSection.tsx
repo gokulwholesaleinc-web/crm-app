@@ -3,7 +3,7 @@ import type {
   EntityKindWithTabs,
   UserPreferences,
 } from '../../../hooks/useUserPreferences';
-import type { PreferencesSectionProps } from './DensitySection';
+import type { PreferencesSectionProps } from './types';
 
 // Tab IDs are mirrored from each entity's detail page. They stay in sync
 // because invalid saved values are silently ignored by `useUrlTabState`
@@ -74,7 +74,7 @@ const TAB_LABEL_OVERRIDES: Record<string, string> = {
 };
 
 function formatTabLabel(id: string): string {
-  return TAB_LABEL_OVERRIDES[id] ?? id.charAt(0).toUpperCase() + id.slice(1);
+  return TAB_LABEL_OVERRIDES[id] ?? (id.charAt(0).toUpperCase() + id.slice(1));
 }
 
 const NO_PREFERENCE_VALUE = '';
