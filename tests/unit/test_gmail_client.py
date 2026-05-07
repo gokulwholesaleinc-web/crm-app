@@ -376,6 +376,121 @@ class TestGetMessage:
         assert "data:image/jpeg" not in (msg["body_html"] or "")
 
     @pytest.mark.asyncio
+    async def test_inline_cid_image_substituted_when_src_is_unquoted(self):
+        """Outlook-on-Windows + some Apple Mail variants emit
+        ``<img src=cid:logo>`` (no quotes). The first regex pass only
+        handled quoted refs; this verifies the unquoted branch fires
+        too. Without it, Giancarlo's mail clients with Outlook-bouncers
+        in the chain would still show broken images.
+        """
+        import base64
+        png_bytes = (
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
+            b"\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
+            b"\x00\x00\x00\rIDATx\x9cc\xf8\xff\xff?\x00\x05\xfe\x02\xfe\xa6"
+            b"\xa3\x10\x84\x00\x00\x00\x00IEND\xaeB`\x82"
+        )
+        png_b64url = base64.urlsafe_b64encode(png_bytes).decode().rstrip("=")
+        html = b"<p>logo: <img src=cid:logo123 alt=logo></p>"
+        payload = {
+            "id": "m1",
+            "threadId": "t1",
+            "payload": {
+                "mimeType": "multipart/related",
+                "headers": [
+                    {"name": "Subject", "value": "Outlook unquoted"},
+                    {"name": "From", "value": "s@example.com"},
+                    {"name": "To", "value": "me@example.com"},
+                    {"name": "Date", "value": "Mon, 14 Apr 2025 10:00:00 +0000"},
+                ],
+                "parts": [
+                    {
+                        "mimeType": "text/html",
+                        "body": {"data": base64.urlsafe_b64encode(html).decode()},
+                    },
+                    {
+                        "mimeType": "image/png",
+                        "filename": "logo.png",
+                        "headers": [
+                            {"name": "Content-ID", "value": "<logo123>"},
+                            {"name": "Content-Disposition", "value": "inline"},
+                        ],
+                        "body": {"data": png_b64url, "size": len(png_bytes)},
+                    },
+                ],
+            },
+        }
+        client, _ = _make_client(_make_conn(), payload)
+        msg = await client.get_message("m1")
+
+        assert "cid:logo123" not in msg["body_html"]
+        assert "data:image/png;base64," in msg["body_html"]
+
+    @pytest.mark.asyncio
+    async def test_inline_cid_duplicate_last_wins(self):
+        """RFC 2392 forbids duplicate Content-IDs but real senders do it.
+        When two image parts share the same cid, the last walked one
+        wins. Behavior-preserving regression guard so a future
+        well-intentioned "first wins" rewrite doesn't silently change
+        which logo renders.
+        """
+        import base64
+        red_png = (
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
+            b"\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
+            b"\x00\x00\x00\rIDATx\x9cc\xf8\xff\xff?\x00\x05\xfe\x02\xfe\xa6"
+            b"\xa3\x10\x84\x00\x00\x00\x00IEND\xaeB`\x82"
+        )
+        # Different but valid PNG bytes for the second part.
+        blue_png = red_png + b"\x00"  # any byte difference is enough; the test
+        # only cares that the resulting data: URI is the LATER one.
+        html = b'<img src="cid:dup">'
+        payload = {
+            "id": "m1",
+            "threadId": "t1",
+            "payload": {
+                "mimeType": "multipart/related",
+                "headers": [
+                    {"name": "Subject", "value": "dup cid"},
+                    {"name": "From", "value": "s@example.com"},
+                    {"name": "To", "value": "me@example.com"},
+                    {"name": "Date", "value": "Mon, 14 Apr 2025 10:00:00 +0000"},
+                ],
+                "parts": [
+                    {
+                        "mimeType": "text/html",
+                        "body": {"data": base64.urlsafe_b64encode(html).decode()},
+                    },
+                    {
+                        "mimeType": "image/png",
+                        "filename": "first.png",
+                        "headers": [{"name": "Content-ID", "value": "<dup>"}],
+                        "body": {
+                            "data": base64.urlsafe_b64encode(red_png).decode().rstrip("="),
+                            "size": len(red_png),
+                        },
+                    },
+                    {
+                        "mimeType": "image/png",
+                        "filename": "second.png",
+                        "headers": [{"name": "Content-ID", "value": "<dup>"}],
+                        "body": {
+                            "data": base64.urlsafe_b64encode(blue_png).decode().rstrip("="),
+                            "size": len(blue_png),
+                        },
+                    },
+                ],
+            },
+        }
+        client, _ = _make_client(_make_conn(), payload)
+        msg = await client.get_message("m1")
+
+        assert "data:image/png;base64," in msg["body_html"]
+        # Last-wins: the substituted URI corresponds to blue_png.
+        expected_b64 = base64.b64encode(blue_png).decode("ascii")
+        assert expected_b64 in msg["body_html"]
+
+    @pytest.mark.asyncio
     async def test_attachments_metadata_collected_for_non_inline(self):
         """Non-inline attachments (no Content-ID) appear in
         msg['attachments'] with attachment_id so a future download UI

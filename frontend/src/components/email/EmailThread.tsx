@@ -45,13 +45,12 @@ function looksLikeHtml(value: string): boolean {
 // is ours, but inbound is hostile; deny iframes, embeds, JS-bearing
 // attrs, and inline `style` (history of CSS exfil bugs in mail clients).
 //
-// ADD_DATA_URI_TAGS=['img'] is required so the inline-image substitution
-// in the Gmail sync pipeline (client.py::_inline_cid_images) actually
-// lands in the rendered DOM. Without this, DOMPurify's default URI
-// allowlist excludes `data:` schemes and silently strips the src,
-// leaving Giancarlo with broken-image icons even though the body
-// contained the embedded photo. Inline image data URIs are bound to
-// MIME image/* by the backend before they ever reach this allowlist.
+// data: URIs on `<img>` are permitted by DOMPurify's default
+// DEFAULT_DATA_URI_TAGS set (img, audio, video, source, image, track),
+// so the inline-image substitution in the Gmail sync pipeline
+// (client.py::_inline_cid_images) is rendered without further config.
+// USE_PROFILES.html doesn't load the svg profile, so `<svg>` and
+// `<image>` are stripped entirely — no SVG-script-execution surface.
 const EMAIL_HTML_PURIFY_CONFIG = {
   USE_PROFILES: { html: true },
   FORBID_TAGS: ['form', 'script', 'iframe', 'object', 'embed', 'base', 'meta', 'link', 'style'],
@@ -61,7 +60,6 @@ const EMAIL_HTML_PURIFY_CONFIG = {
   // confuse the next reader — the hook always wins.
   FORBID_ATTR: ['style', 'srcdoc', 'formaction', 'action', 'ping'],
   ALLOW_DATA_ATTR: false,
-  ADD_DATA_URI_TAGS: ['img'],
 };
 
 const REPLY_ARROW_ICON = (

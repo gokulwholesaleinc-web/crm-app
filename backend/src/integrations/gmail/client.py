@@ -354,8 +354,19 @@ def _walk_attachments(payload: dict) -> list[dict]:
     return out
 
 
-_CID_SRC_RE = re.compile(
+# Two regexes because real-world senders emit BOTH quoted and unquoted
+# cid: refs:
+#   <img src="cid:logo">   ← Gmail web compose, most clients
+#   <img src=cid:logo>     ← Outlook on Windows + some Apple Mail variants
+# A single regex with optional quotes is hard to bound (the unquoted
+# terminator is `whitespace|>` rather than the same quote), so we keep
+# two simple patterns and run both through .sub.
+_CID_SRC_RE_QUOTED = re.compile(
     r"""(src|background)\s*=\s*(['"])cid:([^'"]+)\2""",
+    re.IGNORECASE,
+)
+_CID_SRC_RE_UNQUOTED = re.compile(
+    r"""(src|background)\s*=\s*cid:([^\s>]+)""",
     re.IGNORECASE,
 )
 
@@ -368,6 +379,12 @@ def _inline_cid_images(html: str, attachments: list[dict]) -> str:
     Everything else stays as ``cid:...`` — those references still won't
     render, but at least the HTML structure is preserved and the broken-
     image icon is honest.
+
+    Handles both quoted and unquoted ``src=cid:`` syntaxes — Outlook on
+    Windows and some Apple Mail variants emit the unquoted form, which
+    a quoted-only matcher would silently leave broken (the rehydrate
+    endpoint then re-fetches them and can't tell the regex didn't match
+    vs. the attachment is missing — see PR follow-up).
     """
     if not html or not attachments:
         return html
@@ -384,17 +401,27 @@ def _inline_cid_images(html: str, attachments: list[dict]) -> str:
             continue
         try:
             decoded = base64.urlsafe_b64decode(raw_b64 + "==")
-        except Exception:  # noqa: BLE001 — defensive on hostile inputs
+        except Exception as exc:  # noqa: BLE001 — defensive on hostile inputs
+            logger.warning(
+                "[inline_cid] base64 decode failed cid=%s mime=%s: %s",
+                cid, mime, exc,
+            )
             continue
         if len(decoded) > _MAX_INLINE_IMAGE_BYTES:
             continue
         std_b64 = base64.b64encode(decoded).decode("ascii")
-        cid_to_data_uri[cid.lower()] = f"data:{mime};base64,{std_b64}"
+        key = cid.lower()
+        # RFC 2392 forbids duplicate Content-IDs but real senders do it.
+        # Last-wins keeps the existing behavior; the warning surfaces
+        # the case so the next "wrong logo" report has a breadcrumb.
+        if key in cid_to_data_uri:
+            logger.info("[inline_cid] duplicate cid=%s — last-wins", cid)
+        cid_to_data_uri[key] = f"data:{mime};base64,{std_b64}"
 
     if not cid_to_data_uri:
         return html
 
-    def replace(match: re.Match[str]) -> str:
+    def replace_quoted(match: re.Match[str]) -> str:
         attr = match.group(1)
         quote = match.group(2)
         cid = match.group(3).strip().lower()
@@ -403,7 +430,20 @@ def _inline_cid_images(html: str, attachments: list[dict]) -> str:
             return match.group(0)
         return f"{attr}={quote}{uri}{quote}"
 
-    return _CID_SRC_RE.sub(replace, html)
+    def replace_unquoted(match: re.Match[str]) -> str:
+        attr = match.group(1)
+        cid = match.group(2).strip().lower()
+        uri = cid_to_data_uri.get(cid)
+        if not uri:
+            return match.group(0)
+        # Re-emit as quoted form so downstream HTML stays well-formed
+        # even if the substituted data: URI contains an attribute-
+        # boundary char.
+        return f'{attr}="{uri}"'
+
+    html = _CID_SRC_RE_QUOTED.sub(replace_quoted, html)
+    html = _CID_SRC_RE_UNQUOTED.sub(replace_unquoted, html)
+    return html
 
 
 def _decode_body(part: dict) -> str | None:
