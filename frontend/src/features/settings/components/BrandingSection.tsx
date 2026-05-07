@@ -12,6 +12,7 @@ import { Button } from '../../../components/ui/Button';
 import { useTenant } from '../../../providers/TenantProvider';
 import { SwatchIcon } from '@heroicons/react/24/outline';
 import { useUnsavedChangesWarning } from '../../../hooks/useUnsavedChangesWarning';
+import { isValidHexColor, withAlpha } from '../../../utils/colorValidation';
 
 interface BrandingFormData {
   company_name: string;
@@ -23,15 +24,12 @@ interface BrandingFormData {
   footer_text: string;
 }
 
-const HEX_RE = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
 const NEUTRAL_GRAY = '#94a3b8';
 
-function isValidHex(value: string): boolean {
-  return HEX_RE.test(value);
-}
-
 function safeColor(value: string, fallback: string): string {
-  return isValidHex(value) ? value : isValidHex(fallback) ? fallback : NEUTRAL_GRAY;
+  if (isValidHexColor(value)) return value;
+  if (isValidHexColor(fallback)) return fallback;
+  return NEUTRAL_GRAY;
 }
 
 export function BrandingSection() {
@@ -553,7 +551,7 @@ export function BrandingSection() {
                           <p className="text-xs font-mono text-gray-500 dark:text-gray-400 truncate">
                             {s.raw || s.value}
                           </p>
-                          {!isValidHex(s.raw) && (
+                          {!isValidHexColor(s.raw) && (
                             <p className="text-xs text-red-500 dark:text-red-400">
                               Invalid hex — using fallback
                             </p>
@@ -587,19 +585,19 @@ export function BrandingSection() {
                   <div className="flex flex-wrap items-center gap-2">
                     <span
                       className="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium"
-                      style={{ backgroundColor: primary + '1a', color: primary }}
+                      style={{ backgroundColor: withAlpha(primary, '1a'), color: primary }}
                     >
                       Primary
                     </span>
                     <span
                       className="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium"
-                      style={{ backgroundColor: secondary + '1a', color: secondary }}
+                      style={{ backgroundColor: withAlpha(secondary, '1a'), color: secondary }}
                     >
                       Secondary
                     </span>
                     <span
                       className="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium"
-                      style={{ backgroundColor: accent + '1a', color: accent }}
+                      style={{ backgroundColor: withAlpha(accent, '1a'), color: accent }}
                     >
                       Accent
                     </span>

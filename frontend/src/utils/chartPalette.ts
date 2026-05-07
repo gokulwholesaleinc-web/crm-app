@@ -4,7 +4,7 @@
  * are visible in charts; series 4+ use a fixed neutral tail.
  */
 
-const HEX_RE = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
+import { isValidHexColor } from './colorValidation';
 
 const FALLBACK_TAIL = [
   '#06b6d4',
@@ -26,7 +26,7 @@ function readBrandVar(token: BrandToken): string | null {
   const raw = getComputedStyle(document.documentElement)
     .getPropertyValue(`--brand-${token}`)
     .trim();
-  return HEX_RE.test(raw) ? raw : null;
+  return isValidHexColor(raw) ? raw : null;
 }
 
 export function getBrandColor(token: BrandToken, fallback: string): string {

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback, startTransition } fr
 import { useParams, useSearchParams } from 'react-router-dom';
 import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
-import { sanitizeHexColor } from '../../utils/colorValidation';
+import { sanitizeHexColor, withAlpha } from '../../utils/colorValidation';
 import { formatDate } from '../../utils/formatters';
 import { cadenceLabel, formatProposalMoney } from './billing';
 import { setPublicPageMeta } from '../quotes/publicMeta';
@@ -442,7 +442,7 @@ function PublicProposalView() {
                 style={
                   statusPill === 'rejected'
                     ? { color: '#b91c1c', backgroundColor: '#fef2f2', borderColor: '#fecaca' }
-                    : { color: accent, backgroundColor: `${accent}0f`, borderColor: `${accent}40` }
+                    : { color: accent, backgroundColor: withAlpha(accent, '0f'), borderColor: withAlpha(accent, '40') }
                 }
               >
                 {statusPill === 'paid' ? 'Paid' : statusPill === 'accepted' ? 'Accepted' : 'Declined'}
@@ -521,7 +521,7 @@ function PublicProposalView() {
             {formattedAmount && (
               <div
                 className="rounded-lg border p-5 mb-4 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3"
-                style={{ borderColor: `${secondary}40`, backgroundColor: `${secondary}14` }}
+                style={{ borderColor: withAlpha(secondary, '40'), backgroundColor: withAlpha(secondary, '14') }}
               >
                 <div>
                   <div className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
@@ -571,7 +571,7 @@ function PublicProposalView() {
         {confirmingPayment && proposal.status !== 'paid' && (
           <section
             className="mt-10 sm:mt-12 rounded border px-5 py-4"
-            style={{ borderColor: `${primary}40`, backgroundColor: `${primary}0a` }}
+            style={{ borderColor: withAlpha(primary, '40'), backgroundColor: withAlpha(primary, '0a') }}
             role="status"
             aria-live="polite"
           >

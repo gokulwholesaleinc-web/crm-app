@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sanitizeHexColor, isValidHexColor } from './colorValidation';
+import { sanitizeHexColor, isValidHexColor, withAlpha } from './colorValidation';
 
 describe('sanitizeHexColor', () => {
   const FALLBACK = '#6366f1';
@@ -65,5 +65,31 @@ describe('isValidHexColor', () => {
     expect(isValidHexColor('red')).toBe(false);
     expect(isValidHexColor(null)).toBe(false);
     expect(isValidHexColor(undefined)).toBe(false);
+  });
+});
+
+describe('withAlpha', () => {
+  it('appends alpha to a 6-digit hex unchanged', () => {
+    expect(withAlpha('#64f28f', '14')).toBe('#64f28f14');
+  });
+
+  it('expands 3-digit shorthand to 6 before appending alpha', () => {
+    expect(withAlpha('#fa0', '40')).toBe('#ffaa0040');
+    expect(withAlpha('#ABC', '0f')).toBe('#AABBCC0f');
+  });
+
+  it('strips existing alpha from 8-digit hex before appending', () => {
+    expect(withAlpha('#64f28fff', '14')).toBe('#64f28f14');
+  });
+
+  it('returns transparent for invalid input rather than producing broken CSS', () => {
+    expect(withAlpha('not-a-color', '14')).toBe('transparent');
+    expect(withAlpha('rgb(0,0,0)', '14')).toBe('transparent');
+    expect(withAlpha('', '14')).toBe('transparent');
+    expect(withAlpha('#ff00a', '14')).toBe('transparent');
+  });
+
+  it('trims whitespace before validating', () => {
+    expect(withAlpha('  #64f28f  ', '14')).toBe('#64f28f14');
   });
 });
