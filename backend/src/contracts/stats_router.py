@@ -4,7 +4,7 @@ from datetime import date, timedelta
 
 from fastapi import APIRouter
 from pydantic import BaseModel
-from sqlalchemy import case, func, select
+from sqlalchemy import func, select
 
 from src.contracts.models import Contract
 from src.core.router_utils import CurrentUser, DBSession

@@ -91,12 +91,10 @@ class ContractLifecycleService:
             entity_id=contract.id,
         )
 
-        from sqlalchemy import select as _select
-
         from src.auth.models import User
 
         owner_result = await self.db.execute(
-            _select(User).where(User.id == contract.owner_id)
+            select(User).where(User.id == contract.owner_id)
         )
         owner = owner_result.scalar_one_or_none()
         if owner is None or not owner.email:

@@ -66,7 +66,7 @@ function SignatureCanvas({
   canvasRef,
   disabled,
 }: {
-  canvasRef: React.RefObject<HTMLCanvasElement | null>;
+  canvasRef: React.RefObject<HTMLCanvasElement>;
   disabled: boolean;
 }) {
   const drawing = useRef(false);
@@ -123,7 +123,7 @@ export default function PublicContractView() {
   const [actionPending, setActionPending] = useState(false);
   const [actionDone, setActionDone] = useState(false);
   const [logoError, setLogoError] = useState(false);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => { setLogoError(false); }, [contract?.branding?.logo_url]);
 

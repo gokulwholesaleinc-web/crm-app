@@ -4,6 +4,7 @@ import logging
 import os
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi.responses import RedirectResponse
 
 from src.audit.utils import (
     audit_entity_create,
@@ -152,6 +153,39 @@ async def delete_contract(
     await audit_entity_delete(db, "contract", contract.id, current_user.id, ip_address)
 
     await service.delete(contract)
+
+
+# ---------- Signed PDF download ----------
+
+
+@router.get("/{contract_id}/signed-pdf")
+async def download_signed_pdf(
+    contract_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Redirect to a short-lived presigned URL for the signed PDF stored in R2."""
+    from src.attachments.object_storage import get_download_url
+
+    service = ContractService(db)
+    contract = await get_entity_or_404(service, contract_id, ENTITY_NAME)
+
+    if not contract.signed_pdf_r2_key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Signed PDF not available for this contract",
+        )
+
+    try:
+        url = await get_download_url(contract.signed_pdf_r2_key, ttl_sec=300)
+    except Exception as exc:
+        logger.warning("Failed to generate presigned URL for contract %s: %s", contract_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="File storage unavailable — try again later",
+        )
+
+    return RedirectResponse(url=url, status_code=307)
 
 
 # ---------- E-sign workflow ----------

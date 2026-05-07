@@ -121,7 +121,6 @@ const createApiClient = (): AxiosInstance => {
           // network truncation). Falling through to axios's default
           // error.message would lose the cause; warn for the dev,
           // user still sees error.message in the toast.
-          // eslint-disable-next-line no-console
           console.warn('[apiClient] failed to read error blob body:', blobErr);
         }
       }
