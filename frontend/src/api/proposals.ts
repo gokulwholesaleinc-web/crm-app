@@ -260,6 +260,35 @@ export const deleteProposalAttachment = async (
 };
 
 /**
+ * Open a staff-side preview of a proposal attachment in a new browser tab.
+ *
+ * The attachment download endpoint requires bearer auth, so a plain
+ * ``window.open(url)`` of the API URL would 401 — the bearer header
+ * never reaches the new tab. Fetch the file as a blob through the
+ * authenticated apiClient, mint an object URL, then open that. The
+ * URL is revoked after a short delay so memory doesn't leak when the
+ * user opens many attachments in a single session, and long enough
+ * for the new tab's PDF viewer to actually load the bytes.
+ *
+ * Returns a promise that resolves once the new tab has been opened.
+ */
+export const openProposalAttachmentPreview = async (
+  attachmentId: number,
+): Promise<void> => {
+  const response = await apiClient.get<Blob>(
+    `/api/attachments/${attachmentId}/download`,
+    { responseType: 'blob' },
+  );
+  const blobUrl = URL.createObjectURL(response.data);
+  // noopener/noreferrer keeps the new tab from accessing window.opener
+  // (the staff CRM session). Per OWASP guidance for any user-content link.
+  window.open(blobUrl, '_blank', 'noopener,noreferrer');
+  // 60s is enough for the new tab's PDF.js / built-in viewer to fetch
+  // the blob URL contents; revoking too early aborts the load.
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+};
+
+/**
  * URL for the public download endpoint that 302-redirects to a presigned R2
  * URL. Hitting it records the view as a side effect, which is why the public
  * page opens it in a new tab rather than fetching it as JSON.
