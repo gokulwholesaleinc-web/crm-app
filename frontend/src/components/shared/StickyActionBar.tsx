@@ -11,11 +11,17 @@ export function StickyActionBar({ children, triggerRef }: StickyActionBarProps) 
   useEffect(() => {
     const target = triggerRef?.current;
     if (!target) return;
+    // Show the sticky bar only after the original action row has scrolled
+    // ABOVE the viewport (its bottom edge crosses y=0). Using
+    // `boundingClientRect.bottom < 0` makes the trigger explicit; the prior
+    // `rootMargin: '0px 0px -100% 0px'` collapsed the root to a 1px line
+    // which made `isIntersecting` false on the unscrolled page and the bar
+    // appeared duplicated on first paint.
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry) setShow(!entry.isIntersecting);
+        if (entry) setShow(entry.boundingClientRect.bottom < 0);
       },
-      { threshold: 0, rootMargin: '0px 0px -100% 0px' }
+      { threshold: 0 }
     );
     observer.observe(target);
     return () => observer.disconnect();

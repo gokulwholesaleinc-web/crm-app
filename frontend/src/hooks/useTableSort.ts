@@ -36,6 +36,11 @@ export function useTableSort(): UseTableSortResult {
             next.delete('sort');
             next.delete('dir');
           }
+          // Sort change invalidates the current page offset; drop back to
+          // page 1 so callers using URL-backed pagination get correct rows.
+          // Pages whose currentPage is local state should also reset on
+          // [sortBy, sortDir] change via useEffect.
+          next.delete('page');
           return next;
         },
         { replace: true },

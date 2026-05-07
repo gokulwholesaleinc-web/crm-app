@@ -521,12 +521,17 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
             Discount Value
           </label>
           <input
-            type="number"
+            type="text"
+            inputMode="decimal"
             id="quote-discount-value"
             value={formData.discountValue}
-            onChange={(e) => updateField('discountValue', parseFloat(e.target.value) || 0)}
-            min="0"
-            step="any"
+            onChange={(e) => {
+              const opts = formData.discountType === 'percent'
+                ? { min: 0, max: 100, allowDecimal: true }
+                : { min: 0, allowDecimal: true };
+              const cleaned = clampNumberInput(e.target.value, opts);
+              updateField('discountValue', parseFloat(cleaned) || 0);
+            }}
             className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
           />
         </div>

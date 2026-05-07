@@ -69,7 +69,9 @@ class BaseService(Generic[ModelType]):
         total_result = await self.db.execute(count_query)
         total = total_result.scalar() or 0
 
-        if order_by is not None:
+        # Use truthiness so an empty list/tuple falls through to the default
+        # ordering instead of producing unordered SQL with OFFSET/LIMIT.
+        if order_by:
             clauses = order_by if isinstance(order_by, list | tuple) else [order_by]
             query = query.order_by(*clauses)
         else:
