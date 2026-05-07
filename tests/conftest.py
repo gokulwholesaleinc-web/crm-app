@@ -184,6 +184,22 @@ async def auth_headers(auth_token: str) -> dict:
 
 
 @pytest_asyncio.fixture(scope="function")
+async def superuser_token(test_superuser: User) -> str:
+    """Create authentication token for superuser (bypasses all role gates)."""
+    return create_access_token(data={"sub": str(test_superuser.id)})
+
+
+@pytest_asyncio.fixture(scope="function")
+async def admin_auth_headers(superuser_token: str) -> dict:
+    """Authorization headers for an admin/superuser. Use this for tests
+    that exercise privileged endpoints (bulk ops, sources/stages
+    config, admin tools) — the default ``auth_headers`` is a
+    sales_rep and will 403 against role-gated endpoints.
+    """
+    return {"Authorization": f"Bearer {superuser_token}"}
+
+
+@pytest_asyncio.fixture(scope="function")
 async def client(db_session: AsyncSession, test_engine) -> AsyncGenerator[AsyncClient, None]:
     """Create async test client."""
     from src.main import app
