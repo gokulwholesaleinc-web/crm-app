@@ -31,6 +31,7 @@ import {
   listProposalAttachments,
   uploadProposalAttachment,
   deleteProposalAttachment,
+  openProposalAttachmentPreview,
 } from '../../api/proposals';
 import { formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
@@ -783,15 +784,33 @@ function ProposalAttachmentsCard({ proposalId, isLocked }: ProposalAttachmentsCa
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                aria-label={`Delete ${attachment.original_filename}`}
-                onClick={() => setPendingDelete(attachment)}
-                disabled={isLocked || deleteMutation.isPending}
-                className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 rounded disabled:opacity-30 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-500"
-              >
-                <TrashIcon className="h-4 w-4" aria-hidden="true" />
-              </button>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <button
+                  type="button"
+                  aria-label={`View ${attachment.original_filename} in a new tab`}
+                  onClick={async () => {
+                    try {
+                      await openProposalAttachmentPreview(attachment.id);
+                    } catch (err) {
+                      showError(
+                        extractApiErrorDetail(err) ?? 'Failed to open attachment',
+                      );
+                    }
+                  }}
+                  className="p-1.5 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500"
+                >
+                  <EyeIcon className="h-4 w-4" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Delete ${attachment.original_filename}`}
+                  onClick={() => setPendingDelete(attachment)}
+                  disabled={isLocked || deleteMutation.isPending}
+                  className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 rounded disabled:opacity-30 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-500"
+                >
+                  <TrashIcon className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
             </li>
           ))}
         </ul>
