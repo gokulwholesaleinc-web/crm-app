@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button, SearchableSelect } from '../../components/ui';
 import BillingTermsField, { type BillingTermsValue } from '../../components/forms/BillingTermsField';
@@ -6,6 +6,7 @@ import { useContacts } from '../../hooks/useContacts';
 import { useCompanies } from '../../hooks/useCompanies';
 import { useOpportunities, useOpportunity } from '../../hooks/useOpportunities';
 import { useQuotes } from '../../hooks/useQuotes';
+import { useSubmitShortcut } from '../../hooks/useSubmitShortcut';
 import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
 import type { ProposalCreate } from '../../types';
 
@@ -62,6 +63,15 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
   // `formState.isDirty`. Auto-fill from URL opportunity does NOT count.
   const [touched, setTouched] = useState(false);
   useUnsavedChangesWarning(touched);
+
+  // Today (YYYY-MM-DD) for `min` on Valid Until — stable for form lifetime.
+  const todayDate = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  const formRef = useRef<HTMLFormElement>(null);
+  const submitForm = useCallback(() => {
+    formRef.current?.requestSubmit();
+  }, []);
+  useSubmitShortcut(formRef, submitForm);
 
   const updateField = <K extends keyof typeof formData>(field: K, value: typeof formData[K]) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -146,7 +156,7 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
       <div className="space-y-4">
         <div>
           <label htmlFor="proposal-title" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -157,6 +167,7 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
             id="proposal-title"
             name="title"
             required
+            autoFocus
             value={formData.title}
             onChange={(e) => updateField('title', e.target.value)}
             className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
@@ -264,6 +275,7 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
               type="date"
               id="proposal-valid-until"
               name="valid_until"
+              min={todayDate}
               value={formData.validUntil}
               onChange={(e) => updateField('validUntil', e.target.value)}
               className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"

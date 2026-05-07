@@ -2,12 +2,13 @@
  * Form for creating/editing activities (handles all types: call, email, meeting, task, note)
  */
 
-import { useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
 import { Select } from '../../../components/ui/Select';
 import { FormTextarea } from '../../../components/forms';
+import { useSubmitShortcut } from '../../../hooks/useSubmitShortcut';
 import { useUnsavedChangesWarning } from '../../../hooks/useUnsavedChangesWarning';
 import type { Activity, ActivityCreate, ActivityUpdate } from '../../../types';
 
@@ -129,6 +130,20 @@ export function ActivityForm({
 
   useUnsavedChangesWarning(isDirty);
 
+  // Today as YYYY-MM-DD / YYYY-MM-DDTHH:mm — used as `min` on forward-looking
+  // date fields. Stable for the form's lifetime so the input value doesn't
+  // re-validate against a new "now" on every render.
+  const { todayDate, todayDateTime } = useMemo(() => {
+    const now = new Date().toISOString();
+    return { todayDate: now.slice(0, 10), todayDateTime: now.slice(0, 16) };
+  }, []);
+
+  const formRef = useRef<HTMLFormElement>(null);
+  const submitForm = useCallback(() => {
+    formRef.current?.requestSubmit();
+  }, []);
+  useSubmitShortcut(formRef, submitForm);
+
   // Reset form when activity prop changes
   useEffect(() => {
     if (activity) {
@@ -205,7 +220,7 @@ export function ActivityForm({
   };
 
   return (
-    <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-3 sm:space-y-4">
+    <form ref={formRef} onSubmit={handleSubmit(onFormSubmit)} className="space-y-3 sm:space-y-4">
       {/* Activity Type & Priority - stack on mobile */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
         <Controller
@@ -237,6 +252,7 @@ export function ActivityForm({
         label="Subject"
         placeholder="Enter activity subject"
         error={errors.subject?.message}
+        autoFocus
       />
 
       <FormTextarea
@@ -260,6 +276,7 @@ export function ActivityForm({
           {...register('due_date')}
           type="date"
           label="Due Date"
+          min={todayDate}
           error={errors.due_date?.message}
         />
       </div>
@@ -356,6 +373,7 @@ export function ActivityForm({
             {...register('task_reminder_at')}
             type="datetime-local"
             label="Reminder At"
+            min={todayDateTime}
           />
         </div>
       )}
@@ -365,7 +383,7 @@ export function ActivityForm({
         <Button type="button" variant="secondary" onClick={onCancel} className="w-full sm:w-auto">
           Cancel
         </Button>
-        <Button type="submit" isLoading={isLoading} className="w-full sm:w-auto">
+        <Button type="submit" isLoading={isLoading} disabled={isLoading} className="w-full sm:w-auto">
           {isEditing ? 'Update Activity' : 'Create Activity'}
         </Button>
       </div>

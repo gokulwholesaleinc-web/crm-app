@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useCallback, useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { TrashIcon, PlusIcon, CubeIcon } from '@heroicons/react/24/outline';
 import { Button, SearchableSelect } from '../../components/ui';
@@ -7,6 +7,7 @@ import { useContacts } from '../../hooks/useContacts';
 import { useCompanies } from '../../hooks/useCompanies';
 import { useOpportunities, useOpportunity } from '../../hooks/useOpportunities';
 import { useBundles } from '../../hooks/useQuotes';
+import { useSubmitShortcut } from '../../hooks/useSubmitShortcut';
 import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
 import type { QuoteCreate, QuoteLineItemCreate, ProductBundle } from '../../types';
 
@@ -102,6 +103,12 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
   // lean on `formState.isDirty` the way the other forms do.
   const [touched, setTouched] = useState(false);
   useUnsavedChangesWarning(touched);
+
+  const formRef = useRef<HTMLFormElement>(null);
+  const submitForm = useCallback(() => {
+    formRef.current?.requestSubmit();
+  }, []);
+  useSubmitShortcut(formRef, submitForm);
 
   const updateField = <K extends keyof typeof formData>(field: K, value: typeof formData[K]) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -241,7 +248,7 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
       {/* Basic Info */}
       <div className="space-y-4">
         <div>
@@ -253,6 +260,7 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
             id="quote-title"
             name="title"
             required
+            autoFocus
             value={formData.title}
             onChange={(e) => updateField('title', e.target.value)}
             className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"

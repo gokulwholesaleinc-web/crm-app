@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
 import { Modal, Button, ConfirmDialog } from '../ui';
 import { PaperClipIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { useSendEmail } from '../../hooks/useEmail';
+import { useSubmitShortcut } from '../../hooks/useSubmitShortcut';
 import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
 import { showError } from '../../utils/toast';
 import type { ThreadEmailItem } from '../../types/email';
@@ -163,7 +164,13 @@ export function EmailComposeModal({
   // mutation's `error` channel doesn't see (it only surfaces HTTP errors).
   const [sendStatusError, setSendStatusError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const sendEmailMutation = useSendEmail();
+
+  const submitForm = useCallback(() => {
+    formRef.current?.requestSubmit();
+  }, []);
+  useSubmitShortcut(formRef, submitForm);
 
   const totalAttachmentBytes = attachments.reduce((sum, a) => sum + a.size, 0);
   const overLimit = totalAttachmentBytes > MAX_TOTAL_BYTES;
@@ -358,7 +365,7 @@ export function EmailComposeModal({
       title={replyTo ? 'Reply to Email' : 'Compose Email'}
       size="lg"
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
         {/* From (read-only) */}
         {fromEmail && (
           <div>
@@ -393,6 +400,7 @@ export function EmailComposeModal({
             placeholder="recipient@example.com..."
             autoComplete="email"
             spellCheck={false}
+            autoFocus={!to}
           />
         </div>
 
@@ -461,6 +469,7 @@ export function EmailComposeModal({
             className={inputClass}
             placeholder="Email subject..."
             autoComplete="off"
+            autoFocus={!!to && !subject}
           />
         </div>
 
