@@ -25,6 +25,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { useTenant } from '../../providers/TenantProvider';
 import { useAuthStore } from '../../store/authStore';
+import { useUserPreferences } from '../../hooks/useUserPreferences';
 import { safeStorage } from '../../utils/safeStorage';
 import {
   DEFAULT_MAIN_NAVIGATION,
@@ -204,10 +205,15 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
   );
 
   const { user } = useAuthStore();
+  const { prefs, setPref } = useUserPreferences();
   const isAdminUser = user?.is_superuser || user?.role === 'admin';
   const filteredSecondaryNav = isAdminUser
     ? secondaryNav
     : secondaryNav.filter(item => !ADMIN_ONLY_IDS.has(item.id));
+
+  const hidden = new Set(prefs.hiddenNavIds ?? []);
+  const visibleMainNav = mainNav.filter(i => !hidden.has(i.id) || i.id === 'settings');
+  const visibleSecondaryNav = filteredSecondaryNav.filter(i => !hidden.has(i.id) || i.id === 'settings');
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -255,10 +261,11 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
     setSecondaryNav([...DEFAULT_SECONDARY_NAVIGATION]);
     safeStorage.remove(STORAGE_KEY_MAIN);
     safeStorage.remove(STORAGE_KEY_SECONDARY);
-  }, []);
+    setPref('hiddenNavIds', []);
+  }, [setPref]);
 
-  const mainIds = mainNav.map(item => item.id);
-  const secondaryIds = filteredSecondaryNav.map(item => item.id);
+  const mainIds = visibleMainNav.map(item => item.id);
+  const secondaryIds = visibleSecondaryNav.map(item => item.id);
 
   return (
     <aside
@@ -320,7 +327,7 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
             >
               <SortableContext items={mainIds} strategy={verticalListSortingStrategy}>
                 <div className="space-y-1">
-                  {mainNav.map(item => (
+                  {visibleMainNav.map(item => (
                     <SortableNavItem
                       key={item.id}
                       item={item}
@@ -341,7 +348,7 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
             >
               <SortableContext items={secondaryIds} strategy={verticalListSortingStrategy}>
                 <div className="space-y-1">
-                  {filteredSecondaryNav.map(item => (
+                  {visibleSecondaryNav.map(item => (
                     <SortableNavItem
                       key={item.id}
                       item={item}
@@ -378,7 +385,7 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
         ) : (
           <>
             <div className="space-y-1">
-              {mainNav.map(item => (
+              {visibleMainNav.map(item => (
                 <StaticNavItem
                   key={item.id}
                   item={item}
@@ -391,7 +398,7 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
             <div className="my-4 border-t border-gray-200 dark:border-gray-700" />
 
             <div className="space-y-1">
-              {filteredSecondaryNav.map(item => (
+              {visibleSecondaryNav.map(item => (
                 <StaticNavItem
                   key={item.id}
                   item={item}
