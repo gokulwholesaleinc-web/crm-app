@@ -8,7 +8,8 @@ export type BadgeVariant =
   | 'blue'
   | 'indigo'
   | 'purple'
-  | 'pink';
+  | 'pink'
+  | 'accent';
 
 export type BadgeSize = 'sm' | 'md' | 'lg';
 
@@ -29,6 +30,7 @@ const variantStyles: Record<BadgeVariant, string> = {
   indigo: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300',
   purple: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300',
   pink: 'bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-300',
+  accent: 'bg-accent-100 text-accent-800 dark:bg-accent-900/30 dark:text-accent-300',
 };
 
 const dotStyles: Record<BadgeVariant, string> = {
@@ -40,6 +42,7 @@ const dotStyles: Record<BadgeVariant, string> = {
   indigo: 'bg-indigo-400',
   purple: 'bg-purple-400',
   pink: 'bg-pink-400',
+  accent: 'bg-accent-400',
 };
 
 const sizeStyles: Record<BadgeSize, string> = {
