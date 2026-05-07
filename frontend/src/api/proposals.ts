@@ -201,14 +201,21 @@ export const downloadProposalPDF = async (proposalId: number): Promise<Blob> => 
 
 /**
  * List attachments for a proposal (staff side).
+ *
+ * The backend returns a paginated envelope ``{items: [...], total: N}``
+ * (FastAPI's AttachmentListResponse), not a bare array — unwrap to the
+ * shape the caller expects. Without this, the React Query cache
+ * resolves to the envelope object and ``attachments.length`` returns
+ * undefined, so neither the empty-state nor the file list ever
+ * renders even though the upload mutation succeeded.
  */
 export const listProposalAttachments = async (
   proposalId: number,
 ): Promise<ProposalAttachment[]> => {
-  const response = await apiClient.get<ProposalAttachment[]>(
+  const response = await apiClient.get<{ items: ProposalAttachment[]; total: number }>(
     `${PROPOSALS_BASE}/${proposalId}/attachments`,
   );
-  return response.data;
+  return response.data.items ?? [];
 };
 
 /**
