@@ -1,4 +1,4 @@
-import { useState, useMemo, ReactNode } from 'react';
+import { useState, useMemo, useId, ReactNode } from 'react';
 import clsx from 'clsx';
 import { MagnifyingGlassIcon, CheckIcon } from '@heroicons/react/24/outline';
 import { Spinner } from '../ui/Spinner';
@@ -35,6 +35,7 @@ export function ScrollableListPicker<T>({
   showSelectAll = true,
 }: ScrollableListPickerProps<T>) {
   const [query, setQuery] = useState('');
+  const searchId = useId();
 
   const disabledSet = useMemo(() => new Set(disabledIds), [disabledIds]);
 
@@ -78,10 +79,10 @@ export function ScrollableListPicker<T>({
     <div>
       <div className="relative mb-3">
         <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-        <label htmlFor="slp-search" className="sr-only">{searchPlaceholder}</label>
+        <label htmlFor={searchId} className="sr-only">{searchPlaceholder}</label>
         <input
           type="search"
-          id="slp-search"
+          id={searchId}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={searchPlaceholder}
