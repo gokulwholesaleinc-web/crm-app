@@ -11,6 +11,7 @@ import { LeadEmailCampaignModal } from './components/LeadEmailCampaignModal';
 import { AddToCampaignModal } from './components/AddToCampaignModal';
 import { useLeads, useCreateLead, useUpdateLead, useDeleteLead, leadKeys } from '../../hooks/useLeads';
 import { useCheckDuplicates } from '../../hooks/useDedup';
+import { useTableSort, type SortDirection } from '../../hooks/useTableSort';
 import { useUsers } from '../../hooks/useAuth';
 import { bulkUpdate, bulkAssign } from '../../api/importExport';
 import { getStatusBadgeClasses, formatStatusLabel, getScoreColor } from '../../utils';
@@ -56,6 +57,45 @@ function ScoreIndicator({ score }: { score: number }) {
 
 const INITIAL_DELETE_CONFIRM = { isOpen: false, lead: null } as const;
 
+const SORTABLE_TH_CLASS =
+  'px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider';
+
+function SortableTh({
+  field,
+  label,
+  sortBy,
+  sortDir,
+  onToggle,
+}: {
+  field: string;
+  label: string;
+  sortBy: string | undefined;
+  sortDir: SortDirection | undefined;
+  onToggle: (field: string) => void;
+}) {
+  const isActive = sortBy === field;
+  const ariaSort: 'ascending' | 'descending' | 'none' = isActive
+    ? sortDir === 'asc'
+      ? 'ascending'
+      : 'descending'
+    : 'none';
+  const indicator = isActive ? (sortDir === 'asc' ? '↑' : '↓') : '';
+  return (
+    <th scope="col" aria-sort={ariaSort} className={SORTABLE_TH_CLASS}>
+      <button
+        type="button"
+        onClick={() => onToggle(field)}
+        className="inline-flex items-center gap-1 uppercase tracking-wider focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
+      >
+        {label}
+        <span aria-hidden="true" className="w-3 text-gray-400">
+          {indicator}
+        </span>
+      </button>
+    </th>
+  );
+}
+
 function LeadsPage() {
   usePageTitle('Leads');
   const navigate = useNavigate();
@@ -67,6 +107,7 @@ function LeadsPage() {
   const pageSize = Number(searchParams.get('per_page') || '25');
 
   const debouncedSearch = useDebouncedValue(searchQuery, 300);
+  const { sortBy, sortDir, toggle: toggleSort } = useTableSort();
 
   const setSearchQuery = (q: string) =>
     setSearchParams((prev) => { if (q) prev.set('search', q); else prev.delete('search'); prev.delete('page'); return prev; }, { replace: true });
@@ -97,7 +138,21 @@ function LeadsPage() {
     page_size: pageSize,
     search: debouncedSearch || undefined,
     status: statusFilter || undefined,
+    ...(sortBy && { order_by: sortBy, order_dir: sortDir }),
   });
+
+  // Sorting changes ordering — drop back to page 1 so we don't land on an
+  // offset that no longer corresponds to where the user expected to be.
+  const handleSortToggle = (field: string) => {
+    setSearchParams(
+      (prev) => {
+        prev.delete('page');
+        return prev;
+      },
+      { replace: true },
+    );
+    toggleSort(field);
+  };
 
   const createLeadMutation = useCreateLead();
   const updateLeadMutation = useUpdateLead();
@@ -503,42 +558,22 @@ function LeadsPage() {
                         className="rounded border-gray-300 text-primary-600 focus-visible:ring-primary-500"
                       />
                     </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
-                    >
-                      Name
-                    </th>
+                    <SortableTh field="name" label="Name" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
                     <th
                       scope="col"
                       className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                     >
                       Company
                     </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
-                    >
-                      Status
-                    </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
-                    >
-                      Score
-                    </th>
+                    <SortableTh field="status" label="Status" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
+                    <SortableTh field="score" label="Score" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
                     <th
                       scope="col"
                       className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                     >
                       Source
                     </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
-                    >
-                      Created
-                    </th>
+                    <SortableTh field="created_at" label="Created" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
                     <th scope="col" className="relative px-6 py-3">
                       <span className="sr-only">Actions</span>
                     </th>

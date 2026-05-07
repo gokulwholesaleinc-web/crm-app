@@ -7,6 +7,7 @@ import { ProposalForm } from './ProposalForm';
 import { AIProposalGenerator } from './AIProposalGenerator';
 import { TemplateGallery } from './TemplateGallery';
 import { useProposals, useCreateProposal, useDeleteProposal } from '../../hooks/useProposals';
+import { useTableSort, type SortDirection } from '../../hooks/useTableSort';
 import { formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { showSuccess, showError } from '../../utils/toast';
@@ -22,6 +23,50 @@ const statusOptions = [
 ];
 
 type TabType = 'proposals' | 'templates';
+
+const SORTABLE_TH_CLASS =
+  'px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider';
+const SORTABLE_TH_CLASS_RIGHT =
+  'px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider';
+
+function SortableTh({
+  field,
+  label,
+  sortBy,
+  sortDir,
+  onToggle,
+  align = 'left',
+}: {
+  field: string;
+  label: string;
+  sortBy: string | undefined;
+  sortDir: SortDirection | undefined;
+  onToggle: (field: string) => void;
+  align?: 'left' | 'right';
+}) {
+  const isActive = sortBy === field;
+  const ariaSort: 'ascending' | 'descending' | 'none' = isActive
+    ? sortDir === 'asc'
+      ? 'ascending'
+      : 'descending'
+    : 'none';
+  const indicator = isActive ? (sortDir === 'asc' ? '↑' : '↓') : '';
+  const thClass = align === 'right' ? SORTABLE_TH_CLASS_RIGHT : SORTABLE_TH_CLASS;
+  return (
+    <th scope="col" aria-sort={ariaSort} className={thClass}>
+      <button
+        type="button"
+        onClick={() => onToggle(field)}
+        className="inline-flex items-center gap-1 uppercase tracking-wider focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
+      >
+        {label}
+        <span aria-hidden="true" className="w-3 text-gray-400">
+          {indicator}
+        </span>
+      </button>
+    </th>
+  );
+}
 
 function ProposalsPage() {
   usePageTitle('Proposals');
@@ -49,6 +94,7 @@ function ProposalsPage() {
     proposal: null,
   });
   const [pageSize, setPageSize] = useState(25);
+  const { sortBy, sortDir, toggle: toggleSort } = useTableSort();
 
   const {
     data: proposalsData,
@@ -59,7 +105,14 @@ function ProposalsPage() {
     page_size: pageSize,
     search: searchQuery || undefined,
     status: statusFilter || undefined,
+    ...(sortBy && { order_by: sortBy, order_dir: sortDir }),
   });
+
+  // Sorting changes ordering — drop back to page 1.
+  const handleSortToggle = (field: string) => {
+    setCurrentPage(1);
+    toggleSort(field);
+  };
 
   const createProposalMutation = useCreateProposal();
   const deleteProposalMutation = useDeleteProposal();
@@ -340,24 +393,16 @@ function ProposalsPage() {
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-900">
                   <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Proposal
-                    </th>
+                    <SortableTh field="title" label="Proposal" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Contact / Company
                     </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                      Views
-                    </th>
+                    <SortableTh field="status" label="Status" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
+                    <SortableTh field="view_count" label="Views" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} align="right" />
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Created by
                     </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Created
-                    </th>
+                    <SortableTh field="created_at" label="Created" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
                     <th scope="col" className="relative px-6 py-3">
                       <span className="sr-only">Actions</span>
                     </th>

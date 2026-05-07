@@ -77,6 +77,8 @@ export interface PaymentFilters {
   opportunity_id?: number;
   owner_id?: number;
   search?: string;
+  order_by?: string;
+  order_dir?: 'asc' | 'desc';
 }
 
 export interface ProductPrice {

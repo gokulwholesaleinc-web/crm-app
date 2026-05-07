@@ -4,6 +4,7 @@ import logging
 import os
 import secrets
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
@@ -12,6 +13,7 @@ from src.core.base_service import BaseService, CRUDService, StatusTransitionMixi
 from src.core.constants import DEFAULT_PAGE_SIZE
 from src.core.filtering import build_token_search
 from src.core.opportunity_guards import assert_opportunity_active
+from src.core.sorting import build_order_clauses
 from src.email.branded_templates import TenantBrandingHelper, render_quote_email
 from src.email.pdf_render import render_html_to_pdf
 from src.email.pdf_service import BrandedPDFGenerator
@@ -27,6 +29,15 @@ from src.quotes.schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+QUOTE_SORTABLE_FIELDS: dict[str, Any] = {
+    "quote_number": Quote.quote_number,
+    "title": Quote.title,
+    "status": Quote.status,
+    "total": Quote.total,
+    "created_at": Quote.created_at,
+}
 
 
 def _designated_email_for(quote: Quote) -> str:
@@ -119,6 +130,8 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
         opportunity_id: int | None = None,
         owner_id: int | None = None,
         shared_entity_ids: list[int] | None = None,
+        order_by: str | None = None,
+        order_dir: str | None = None,
     ) -> tuple[list[Quote], int]:
         """Get paginated list of quotes with filters."""
         query = (
@@ -160,8 +173,14 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
         total_result = await self.db.execute(count_query)
         total = total_result.scalar() or 0
 
+        order_clauses = build_order_clauses(
+            QUOTE_SORTABLE_FIELDS,
+            order_by,
+            order_dir,
+            default=[Quote.created_at.desc(), Quote.id.desc()],
+        )
         offset = (page - 1) * page_size
-        query = query.offset(offset).limit(page_size).order_by(Quote.created_at.desc())
+        query = query.offset(offset).limit(page_size).order_by(*order_clauses)
 
         result = await self.db.execute(query)
         quotes = list(result.scalars().all())

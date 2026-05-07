@@ -70,7 +70,8 @@ class BaseService(Generic[ModelType]):
         total = total_result.scalar() or 0
 
         if order_by is not None:
-            query = query.order_by(order_by)
+            clauses = order_by if isinstance(order_by, list | tuple) else [order_by]
+            query = query.order_by(*clauses)
         else:
             created_at = getattr(self.model, 'created_at', None)
             if created_at is not None:

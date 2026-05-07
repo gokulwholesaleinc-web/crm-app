@@ -5,6 +5,7 @@ import logging
 import uuid
 from collections.abc import Sequence
 from decimal import ROUND_HALF_UP, Decimal
+from typing import Any
 
 from sqlalchemy import String, func, or_, select
 from sqlalchemy.orm import selectinload
@@ -12,6 +13,7 @@ from sqlalchemy.orm import selectinload
 from src.config import settings
 from src.core.base_service import CRUDService
 from src.core.constants import DEFAULT_PAGE_SIZE
+from src.core.sorting import build_order_clauses
 from src.payments.exceptions import NoRecipientEmailError
 from src.payments.models import (
     Payment,
@@ -26,6 +28,13 @@ from src.payments.schemas import (
     ProductUpdate,
 )
 from src.payments.webhook_processor import WebhookProcessor
+
+PAYMENT_SORTABLE_FIELDS: dict[str, Any] = {
+    "id": Payment.id,
+    "amount": Payment.amount,
+    "status": Payment.status,
+    "created_at": Payment.created_at,
+}
 
 
 # Common: rounding money to integer cents. Stripe expects amounts as ints.
@@ -121,6 +130,8 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         owner_id: int | None = None,
         shared_entity_ids: list[int] | None = None,
         search: str | None = None,
+        order_by: str | None = None,
+        order_dir: str | None = None,
     ) -> tuple[list[Payment], int]:
         """Get paginated list of payments with filters.
 
@@ -179,8 +190,14 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         total_result = await self.db.execute(count_query)
         total = total_result.scalar() or 0
 
+        order_clauses = build_order_clauses(
+            PAYMENT_SORTABLE_FIELDS,
+            order_by,
+            order_dir,
+            default=[Payment.created_at.desc(), Payment.id.desc()],
+        )
         offset = (page - 1) * page_size
-        query = query.offset(offset).limit(page_size).order_by(Payment.created_at.desc())
+        query = query.offset(offset).limit(page_size).order_by(*order_clauses)
 
         result = await self.db.execute(query)
         payments = list(result.scalars().all())

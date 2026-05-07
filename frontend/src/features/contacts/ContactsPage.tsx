@@ -15,6 +15,7 @@ import { SmartListBuilder } from './components/SmartListBuilder';
 import { useContacts, useCreateContact, useUpdateContact } from '../../hooks/useContacts';
 import { useCheckDuplicates } from '../../hooks/useDedup';
 import { useSavedFilters, useDeleteSavedFilter } from '../../hooks/useFilters';
+import { useTableSort } from '../../hooks/useTableSort';
 import { formatDate, formatPhoneNumber } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
@@ -22,12 +23,53 @@ import { showSuccess, showError } from '../../utils/toast';
 import type { Contact } from '../../types';
 import type { DuplicateMatch } from '../../api/dedup';
 import type { FilterGroup } from '../../api/filters';
+import type { SortDirection } from '../../hooks/useTableSort';
+
+const SORTABLE_TH_CLASS =
+  'px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider';
+
+function SortableTh({
+  field,
+  label,
+  sortBy,
+  sortDir,
+  onToggle,
+}: {
+  field: string;
+  label: string;
+  sortBy: string | undefined;
+  sortDir: SortDirection | undefined;
+  onToggle: (field: string) => void;
+}) {
+  const isActive = sortBy === field;
+  const ariaSort: 'ascending' | 'descending' | 'none' = isActive
+    ? sortDir === 'asc'
+      ? 'ascending'
+      : 'descending'
+    : 'none';
+  const indicator = isActive ? (sortDir === 'asc' ? '↑' : '↓') : '';
+  return (
+    <th scope="col" aria-sort={ariaSort} className={SORTABLE_TH_CLASS}>
+      <button
+        type="button"
+        onClick={() => onToggle(field)}
+        className="inline-flex items-center gap-1 uppercase tracking-wider focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
+      >
+        {label}
+        <span aria-hidden="true" className="w-3 text-gray-400">
+          {indicator}
+        </span>
+      </button>
+    </th>
+  );
+}
 
 function ContactsPage() {
   usePageTitle('Contacts');
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
   const debouncedSearch = useDebouncedValue(searchQuery, 300);
+  const { sortBy, sortDir, toggle } = useTableSort();
   const [currentPage, setCurrentPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
@@ -56,6 +98,12 @@ function ContactsPage() {
     }
   }, [searchParams, setSearchParams]);
 
+  // Reset to page 1 when the sort changes — a new ordering with the old
+  // offset would skip rows the user expects to see.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [sortBy, sortDir]);
+
   // Use the hooks for data fetching
   const {
     data: contactsData,
@@ -66,6 +114,7 @@ function ContactsPage() {
     page_size: pageSize,
     search: debouncedSearch || undefined,
     ...(activeFilters ? { filters: JSON.stringify(activeFilters) } : {}),
+    ...(sortBy && { order_by: sortBy, order_dir: sortDir }),
   });
 
   const createContactMutation = useCreateContact();
@@ -414,18 +463,8 @@ function ContactsPage() {
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-900">
                   <tr>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
-                    >
-                      Name
-                    </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
-                    >
-                      Email
-                    </th>
+                    <SortableTh field="name" label="Name" sortBy={sortBy} sortDir={sortDir} onToggle={toggle} />
+                    <SortableTh field="email" label="Email" sortBy={sortBy} sortDir={sortDir} onToggle={toggle} />
                     <th
                       scope="col"
                       className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
@@ -456,12 +495,7 @@ function ContactsPage() {
                     >
                       Status
                     </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
-                    >
-                      Created
-                    </th>
+                    <SortableTh field="created_at" label="Created" sortBy={sortBy} sortDir={sortDir} onToggle={toggle} />
                     <th scope="col" className="relative px-6 py-3">
                       <span className="sr-only">Actions</span>
                     </th>

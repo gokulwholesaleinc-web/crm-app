@@ -75,6 +75,8 @@ async def list_quotes(
     company_id: int | None = None,
     opportunity_id: int | None = None,
     owner_id: int | None = None,
+    order_by: str | None = None,
+    order_dir: str | None = None,
 ):
     """List quotes with pagination and filters."""
     effective_owner_id = owner_id if data_scope.can_see_all() else data_scope.owner_id
@@ -91,6 +93,8 @@ async def list_quotes(
         opportunity_id=opportunity_id,
         owner_id=effective_owner_id,
         shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_QUOTES),
+        order_by=order_by,
+        order_dir=order_dir,
     )
 
     return QuoteListResponse(

@@ -89,6 +89,8 @@ export interface LeadFilters {
   owner_id?: number;
   min_score?: number;
   tag_ids?: string;
+  order_by?: string;
+  order_dir?: 'asc' | 'desc';
 }
 
 // Lead Conversion Types
