@@ -584,6 +584,121 @@ class TestQuoteRejectNotification:
         assert "reject" in notifs[0].title.lower() or "quote" in notifs[0].title.lower()
 
 
+class TestPublicQuoteRejectNotification:
+    """Test C-public: customer-side public reject path is the actual audit gap."""
+
+    @pytest.mark.asyncio
+    async def test_public_quote_reject_emits_event_and_notifies_owner(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_contact,
+    ):
+        """Customer rejecting a quote via /api/quotes/public/{token}/reject creates a quote_rejected notification for the owner."""
+        from datetime import datetime, timezone
+
+        from src.quotes.models import Quote
+        user_a = await _create_user(db_session, "public_quote_reject@example.com")
+
+        # Create the quote with a designated signer email so the public
+        # reject path can match the signer.
+        signer_email = "buyer@example.com"
+        create_resp = await client.post(
+            "/api/quotes",
+            json={
+                "title": "Public reject quote",
+                "contact_id": test_contact.id,
+                "owner_id": user_a.id,
+                "status": "draft",
+                "designated_signer_email": signer_email,
+            },
+            headers=_auth_headers_for(user_a),
+        )
+        assert create_resp.status_code == 201, create_resp.text
+        quote_id = create_resp.json()["id"]
+
+        # Move to 'sent' so reject is allowed; mint a public token.
+        import secrets
+        quote = await db_session.get(Quote, quote_id)
+        quote.status = "sent"
+        quote.sent_at = datetime.now(timezone.utc)
+        if not quote.public_token:
+            quote.public_token = secrets.token_urlsafe(32)
+        token = quote.public_token
+        await db_session.commit()
+
+        reject_resp = await client.post(
+            f"/api/quotes/public/{token}/reject",
+            json={"signer_email": signer_email, "reason": "Too expensive"},
+        )
+        assert reject_resp.status_code == 200, reject_resp.text
+
+        result = await db_session.execute(
+            select(Notification).where(
+                Notification.user_id == user_a.id,
+                Notification.type == "quote_rejected",
+            )
+        )
+        notifs = result.scalars().all()
+        assert len(notifs) == 1
+        assert notifs[0].entity_id == quote_id
+
+
+class TestPublicProposalRejectNotification:
+    """Test D-public: customer-side public reject path is the actual audit gap."""
+
+    @pytest.mark.asyncio
+    async def test_public_proposal_reject_emits_event_and_notifies_owner(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+    ):
+        """Customer rejecting a proposal via /api/proposals/public/{token}/reject creates a proposal_rejected notification for the owner."""
+        from datetime import datetime, timezone
+
+        from src.proposals.models import Proposal
+        user_a = await _create_user(db_session, "public_proposal_reject@example.com")
+
+        signer_email = "buyer@example.com"
+        create_resp = await client.post(
+            "/api/proposals",
+            json={
+                "title": "Public reject proposal",
+                "owner_id": user_a.id,
+                "status": "draft",
+                "designated_signer_email": signer_email,
+            },
+            headers=_auth_headers_for(user_a),
+        )
+        assert create_resp.status_code == 201, create_resp.text
+        proposal_id = create_resp.json()["id"]
+
+        import secrets
+        proposal = await db_session.get(Proposal, proposal_id)
+        proposal.status = "sent"
+        proposal.sent_at = datetime.now(timezone.utc)
+        if not proposal.public_token:
+            proposal.public_token = secrets.token_urlsafe(32)
+        token = proposal.public_token
+        await db_session.commit()
+
+        reject_resp = await client.post(
+            f"/api/proposals/public/{token}/reject",
+            json={"signer_email": signer_email, "reason": "Out of budget"},
+        )
+        assert reject_resp.status_code == 200, reject_resp.text
+
+        result = await db_session.execute(
+            select(Notification).where(
+                Notification.user_id == user_a.id,
+                Notification.type == "proposal_rejected",
+            )
+        )
+        notifs = result.scalars().all()
+        assert len(notifs) == 1
+        assert notifs[0].entity_id == proposal_id
+
+
 class TestProposalRejectNotification:
     """Test D: proposal.rejected emits event and notifies owner."""
 

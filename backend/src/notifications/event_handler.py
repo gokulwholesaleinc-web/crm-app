@@ -132,6 +132,8 @@ async def _build_notification(session, event_type: str, payload: dict[str, Any])
         )
 
     if event_type == "payment.received":
+        if not user_id:
+            return None
         return Notification(
             user_id=user_id,
             type="payment_received",
