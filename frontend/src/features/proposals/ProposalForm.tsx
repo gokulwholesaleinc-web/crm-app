@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button, SearchableSelect } from '../../components/ui';
 import BillingTermsField, { type BillingTermsValue } from '../../components/forms/BillingTermsField';
@@ -6,7 +6,7 @@ import { useContacts } from '../../hooks/useContacts';
 import { useCompanies } from '../../hooks/useCompanies';
 import { useOpportunities, useOpportunity } from '../../hooks/useOpportunities';
 import { useQuotes } from '../../hooks/useQuotes';
-import { useSubmitShortcut } from '../../hooks/useSubmitShortcut';
+import { useFormSubmitShortcut } from '../../hooks/useSubmitShortcut';
 import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
 import type { ProposalCreate } from '../../types';
 
@@ -67,11 +67,7 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
   // Today (YYYY-MM-DD) for `min` on Valid Until — stable for form lifetime.
   const todayDate = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
-  const formRef = useRef<HTMLFormElement>(null);
-  const submitForm = useCallback(() => {
-    formRef.current?.requestSubmit();
-  }, []);
-  useSubmitShortcut(formRef, submitForm);
+  const formRef = useFormSubmitShortcut();
 
   const updateField = <K extends keyof typeof formData>(field: K, value: typeof formData[K]) => {
     setFormData((prev) => ({ ...prev, [field]: value }));

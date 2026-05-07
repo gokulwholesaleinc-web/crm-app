@@ -2,13 +2,13 @@
  * Form for creating/editing activities (handles all types: call, email, meeting, task, note)
  */
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
 import { Select } from '../../../components/ui/Select';
 import { FormTextarea } from '../../../components/forms';
-import { useSubmitShortcut } from '../../../hooks/useSubmitShortcut';
+import { useFormSubmitShortcut } from '../../../hooks/useSubmitShortcut';
 import { useUnsavedChangesWarning } from '../../../hooks/useUnsavedChangesWarning';
 import type { Activity, ActivityCreate, ActivityUpdate } from '../../../types';
 
@@ -138,11 +138,7 @@ export function ActivityForm({
     return { todayDate: now.slice(0, 10), todayDateTime: now.slice(0, 16) };
   }, []);
 
-  const formRef = useRef<HTMLFormElement>(null);
-  const submitForm = useCallback(() => {
-    formRef.current?.requestSubmit();
-  }, []);
-  useSubmitShortcut(formRef, submitForm);
+  const formRef = useFormSubmitShortcut();
 
   // Reset form when activity prop changes
   useEffect(() => {

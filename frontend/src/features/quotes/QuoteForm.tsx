@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { TrashIcon, PlusIcon, CubeIcon } from '@heroicons/react/24/outline';
 import { Button, SearchableSelect } from '../../components/ui';
@@ -7,7 +7,7 @@ import { useContacts } from '../../hooks/useContacts';
 import { useCompanies } from '../../hooks/useCompanies';
 import { useOpportunities, useOpportunity } from '../../hooks/useOpportunities';
 import { useBundles } from '../../hooks/useQuotes';
-import { useSubmitShortcut } from '../../hooks/useSubmitShortcut';
+import { useFormSubmitShortcut } from '../../hooks/useSubmitShortcut';
 import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
 import type { QuoteCreate, QuoteLineItemCreate, ProductBundle } from '../../types';
 
@@ -104,11 +104,7 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
   const [touched, setTouched] = useState(false);
   useUnsavedChangesWarning(touched);
 
-  const formRef = useRef<HTMLFormElement>(null);
-  const submitForm = useCallback(() => {
-    formRef.current?.requestSubmit();
-  }, []);
-  useSubmitShortcut(formRef, submitForm);
+  const formRef = useFormSubmitShortcut();
 
   const updateField = <K extends keyof typeof formData>(field: K, value: typeof formData[K]) => {
     setFormData((prev) => ({ ...prev, [field]: value }));

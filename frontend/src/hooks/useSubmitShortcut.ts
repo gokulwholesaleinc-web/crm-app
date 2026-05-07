@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, type RefObject } from 'react';
 
 /**
  * Cmd/Ctrl+Enter triggers `onSubmit` when focus is inside `targetRef`.
@@ -20,4 +20,17 @@ export function useSubmitShortcut(
     target.addEventListener('keydown', handler);
     return () => target.removeEventListener('keydown', handler);
   }, [targetRef, onSubmit]);
+}
+
+/**
+ * Convenience wrapper for the common form pattern: attach a ref to a `<form>`
+ * and have Cmd/Ctrl+Enter call `requestSubmit()` on it. Returns the ref.
+ */
+export function useFormSubmitShortcut(): RefObject<HTMLFormElement> {
+  const formRef = useRef<HTMLFormElement>(null);
+  const submit = useCallback(() => {
+    formRef.current?.requestSubmit();
+  }, []);
+  useSubmitShortcut(formRef, submit);
+  return formRef;
 }

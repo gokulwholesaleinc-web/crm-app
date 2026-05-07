@@ -1,7 +1,8 @@
 import { useState, Suspense } from 'react';
 import { lazy } from 'react';
-import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useSmartBack } from '../../hooks/useSmartBack';
+import { useUrlTabState } from '../../hooks/useUrlTabState';
 import { Button, CopyButton, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { TabBar, ActivitiesTab, CommonTabContent, SuspenseFallback } from '../../components/shared/DetailPageShell';
 import { EmailComposeModal, EmailHistory } from '../../components/email';
@@ -35,21 +36,9 @@ const TAB_IDS: ReadonlySet<TabType> = new Set(TABS.map((t) => t.id));
 function LeadDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
   const handleBack = useSmartBack('/leads');
   const leadId = id ? parseInt(id, 10) : undefined;
-  const initialTab = (() => {
-    const requested = searchParams.get('tab');
-    return requested && TAB_IDS.has(requested as TabType) ? (requested as TabType) : 'details';
-  })();
-  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
-  const handleTabChange = (next: TabType) => {
-    setActiveTab(next);
-    setSearchParams((prev) => {
-      prev.set('tab', next);
-      return prev;
-    }, { replace: true });
-  };
+  const [activeTab, handleTabChange] = useUrlTabState<TabType>(TAB_IDS, 'details');
   const [showConvertModal, setShowConvertModal] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);

@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useSmartBack } from '../../hooks/useSmartBack';
+import { useUrlTabState } from '../../hooks/useUrlTabState';
 import { Button, CopyButton, EntityLink, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { TabBar, ActivitiesTab, CommonTabContent } from '../../components/shared/DetailPageShell';
 import { OpportunityForm, OpportunityFormData } from './components/OpportunityForm';
@@ -35,21 +36,9 @@ const TAB_IDS: ReadonlySet<TabType> = new Set(TABS.map((t) => t.id));
 function OpportunityDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
   const handleBack = useSmartBack('/opportunities');
   const opportunityId = id ? parseInt(id, 10) : undefined;
-  const initialTab = (() => {
-    const requested = searchParams.get('tab');
-    return requested && TAB_IDS.has(requested as TabType) ? (requested as TabType) : 'details';
-  })();
-  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
-  const handleTabChange = (next: TabType) => {
-    setActiveTab(next);
-    setSearchParams((prev) => {
-      prev.set('tab', next);
-      return prev;
-    }, { replace: true });
-  };
+  const [activeTab, handleTabChange] = useUrlTabState<TabType>(TAB_IDS, 'details');
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 

@@ -1,6 +1,7 @@
 import { useState, lazy, Suspense } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useSmartBack } from '../../hooks/useSmartBack';
+import { useUrlTabState } from '../../hooks/useUrlTabState';
 import clsx from 'clsx';
 import { BuildingOffice2Icon, ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { Button } from '../../components/ui/Button';
@@ -51,22 +52,10 @@ const TAB_IDS: ReadonlySet<TabType> = new Set(TABS.map((t) => t.id));
 export function CompanyDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
   const handleBack = useSmartBack('/companies');
   const companyId = id ? parseInt(id, 10) : undefined;
 
-  const initialTab = (() => {
-    const requested = searchParams.get('tab');
-    return requested && TAB_IDS.has(requested as TabType) ? (requested as TabType) : 'overview';
-  })();
-  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
-  const handleTabChange = (next: TabType) => {
-    setActiveTab(next);
-    setSearchParams((prev) => {
-      prev.set('tab', next);
-      return prev;
-    }, { replace: true });
-  };
+  const [activeTab, handleTabChange] = useUrlTabState<TabType>(TAB_IDS, 'overview');
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
