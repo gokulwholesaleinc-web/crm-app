@@ -745,7 +745,7 @@ async def gmail_rehydrate_inline_images(
             if not rid.startswith("gmail:"):
                 skipped_breakdown["wrong_id_prefix"] += 1
                 continue
-            gmail_msg_id = rid[len("gmail:"):]
+            gmail_msg_id = rid.removeprefix("gmail:")
 
             client = clients.get(conn.user_id)
             if client is None:
@@ -802,8 +802,26 @@ async def gmail_rehydrate_inline_images(
                 db.add(row)
                 pending_writes += 1
                 if pending_writes >= COMMIT_BATCH:
-                    await db.commit()
-                    pending_writes = 0
+                    try:
+                        await db.commit()
+                        pending_writes = 0
+                    except Exception:
+                        # A mid-loop commit failure must not strand the
+                        # operator with a 500 and zero context — prior
+                        # batches stayed durably committed, which means
+                        # a retry would silently re-process them as
+                        # ``html_unchanged`` (no progress signal). Log
+                        # the partial counters with the row id we
+                        # stopped at, then re-raise so FastAPI's
+                        # default 500 handler still fires.
+                        logger.exception(
+                            "[rehydrate_inline] commit failed mid-batch, "
+                            "partial progress: scanned=%s rehydrated=%s failed=%s "
+                            "skipped_breakdown=%s last_row_id=%s",
+                            scanned, rehydrated, failed,
+                            skipped_breakdown, row.id,
+                        )
+                        raise
             rehydrated += 1
     finally:
         for c in clients.values():
@@ -811,7 +829,18 @@ async def gmail_rehydrate_inline_images(
                 await c.__aexit__(None, None, None)
 
     if not body.dry_run and pending_writes:
-        await db.commit()
+        try:
+            await db.commit()
+        except Exception:
+            # Same logic as the mid-batch commit guard above — surface
+            # partial progress before re-raising.
+            logger.exception(
+                "[rehydrate_inline] final commit failed, "
+                "partial progress: scanned=%s rehydrated=%s failed=%s "
+                "skipped_breakdown=%s",
+                scanned, rehydrated, failed, skipped_breakdown,
+            )
+            raise
 
     skipped_total = sum(skipped_breakdown.values())
     return GmailRehydrateInlineImagesResponse(

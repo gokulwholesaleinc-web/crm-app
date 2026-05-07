@@ -215,7 +215,9 @@ def _parse_message(data: dict) -> dict:
     # decode error (we'd rather show the surrounding text than nothing).
     if body_html:
         try:
-            body_html = _inline_cid_images(body_html, attachments)
+            body_html = _inline_cid_images(
+                body_html, attachments, gmail_msg_id=data.get("id"),
+            )
         except Exception as exc:
             logger.warning(
                 "[gmail_parse] inline-cid substitution failed for message %s: %s",
@@ -371,7 +373,12 @@ _CID_SRC_RE_UNQUOTED = re.compile(
 )
 
 
-def _inline_cid_images(html: str, attachments: list[dict]) -> str:
+def _inline_cid_images(
+    html: str,
+    attachments: list[dict],
+    *,
+    gmail_msg_id: str | None = None,
+) -> str:
     """Replace ``<img src="cid:...">`` with embedded ``data:`` URIs.
 
     Only inline images whose payload is already in the message (``data``
@@ -382,9 +389,12 @@ def _inline_cid_images(html: str, attachments: list[dict]) -> str:
 
     Handles both quoted and unquoted ``src=cid:`` syntaxes — Outlook on
     Windows and some Apple Mail variants emit the unquoted form, which
-    a quoted-only matcher would silently leave broken (the rehydrate
-    endpoint then re-fetches them and can't tell the regex didn't match
-    vs. the attachment is missing — see PR follow-up).
+    a quoted-only matcher would silently leave broken.
+
+    ``gmail_msg_id`` is woven into the per-cid log lines so an operator
+    chasing "Giancarlo's logo is broken on email X" can grep prod logs
+    by message id instead of paging through every duplicate
+    ``image001.png@…`` warning across the tenant.
     """
     if not html or not attachments:
         return html
@@ -403,8 +413,8 @@ def _inline_cid_images(html: str, attachments: list[dict]) -> str:
             decoded = base64.urlsafe_b64decode(raw_b64 + "==")
         except Exception as exc:  # noqa: BLE001 — defensive on hostile inputs
             logger.warning(
-                "[inline_cid] base64 decode failed cid=%s mime=%s: %s",
-                cid, mime, exc,
+                "[inline_cid] base64 decode failed gmail_msg_id=%s cid=%s mime=%s: %s",
+                gmail_msg_id, cid, mime, exc,
             )
             continue
         if len(decoded) > _MAX_INLINE_IMAGE_BYTES:
@@ -412,10 +422,16 @@ def _inline_cid_images(html: str, attachments: list[dict]) -> str:
         std_b64 = base64.b64encode(decoded).decode("ascii")
         key = cid.lower()
         # RFC 2392 forbids duplicate Content-IDs but real senders do it.
-        # Last-wins keeps the existing behavior; the warning surfaces
-        # the case so the next "wrong logo" report has a breadcrumb.
+        # Last-wins keeps the existing behavior; warning level (not info)
+        # so the line surfaces in default prod log filters when the next
+        # "wrong logo" report comes in. gmail_msg_id is the correlation
+        # key — without it, ``image001.png@…`` collisions across the
+        # tenant make the line useless to grep.
         if key in cid_to_data_uri:
-            logger.info("[inline_cid] duplicate cid=%s — last-wins", cid)
+            logger.warning(
+                "[inline_cid] duplicate cid gmail_msg_id=%s cid=%s — last-wins",
+                gmail_msg_id, cid,
+            )
         cid_to_data_uri[key] = f"data:{mime};base64,{std_b64}"
 
     if not cid_to_data_uri:
