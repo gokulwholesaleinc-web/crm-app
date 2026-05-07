@@ -4,6 +4,7 @@ import { PlusIcon, FunnelIcon, BookmarkIcon, XMarkIcon } from '@heroicons/react/
 import { Button, Modal, PaginationBar } from '../../components/ui';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { DuplicateWarningModal } from '../../components/shared/DuplicateWarningModal';
+import { SortableTh } from '../../components/shared/SortableTh';
 import { ContactForm } from './components/ContactForm';
 import {
   contactFormDataToCreate,
@@ -23,46 +24,6 @@ import { showSuccess, showError } from '../../utils/toast';
 import type { Contact } from '../../types';
 import type { DuplicateMatch } from '../../api/dedup';
 import type { FilterGroup } from '../../api/filters';
-import type { SortDirection } from '../../hooks/useTableSort';
-
-const SORTABLE_TH_CLASS =
-  'px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider';
-
-function SortableTh({
-  field,
-  label,
-  sortBy,
-  sortDir,
-  onToggle,
-}: {
-  field: string;
-  label: string;
-  sortBy: string | undefined;
-  sortDir: SortDirection | undefined;
-  onToggle: (field: string) => void;
-}) {
-  const isActive = sortBy === field;
-  const ariaSort: 'ascending' | 'descending' | 'none' = isActive
-    ? sortDir === 'asc'
-      ? 'ascending'
-      : 'descending'
-    : 'none';
-  const indicator = isActive ? (sortDir === 'asc' ? '↑' : '↓') : '';
-  return (
-    <th scope="col" aria-sort={ariaSort} className={SORTABLE_TH_CLASS}>
-      <button
-        type="button"
-        onClick={() => onToggle(field)}
-        className="inline-flex items-center gap-1 uppercase tracking-wider focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
-      >
-        {label}
-        <span aria-hidden="true" className="w-3 text-gray-400">
-          {indicator}
-        </span>
-      </button>
-    </th>
-  );
-}
 
 function ContactsPage() {
   usePageTitle('Contacts');

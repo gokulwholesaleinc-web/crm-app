@@ -5,13 +5,14 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button, Modal, ConfirmDialog, PaginationBar } from '../../components/ui';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { DuplicateWarningModal } from '../../components/shared/DuplicateWarningModal';
+import { SortableTh } from '../../components/shared/SortableTh';
 import { LeadForm, LeadFormData } from './components/LeadForm';
 import { BulkActionToolbar } from './components/BulkActionToolbar';
 import { LeadEmailCampaignModal } from './components/LeadEmailCampaignModal';
 import { AddToCampaignModal } from './components/AddToCampaignModal';
 import { useLeads, useCreateLead, useUpdateLead, useDeleteLead, leadKeys } from '../../hooks/useLeads';
 import { useCheckDuplicates } from '../../hooks/useDedup';
-import { useTableSort, type SortDirection } from '../../hooks/useTableSort';
+import { useTableSort } from '../../hooks/useTableSort';
 import { useUsers } from '../../hooks/useAuth';
 import { bulkUpdate, bulkAssign } from '../../api/importExport';
 import { getStatusBadgeClasses, formatStatusLabel, getScoreColor } from '../../utils';
@@ -56,45 +57,6 @@ function ScoreIndicator({ score }: { score: number }) {
 }
 
 const INITIAL_DELETE_CONFIRM = { isOpen: false, lead: null } as const;
-
-const SORTABLE_TH_CLASS =
-  'px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider';
-
-function SortableTh({
-  field,
-  label,
-  sortBy,
-  sortDir,
-  onToggle,
-}: {
-  field: string;
-  label: string;
-  sortBy: string | undefined;
-  sortDir: SortDirection | undefined;
-  onToggle: (field: string) => void;
-}) {
-  const isActive = sortBy === field;
-  const ariaSort: 'ascending' | 'descending' | 'none' = isActive
-    ? sortDir === 'asc'
-      ? 'ascending'
-      : 'descending'
-    : 'none';
-  const indicator = isActive ? (sortDir === 'asc' ? '↑' : '↓') : '';
-  return (
-    <th scope="col" aria-sort={ariaSort} className={SORTABLE_TH_CLASS}>
-      <button
-        type="button"
-        onClick={() => onToggle(field)}
-        className="inline-flex items-center gap-1 uppercase tracking-wider focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
-      >
-        {label}
-        <span aria-hidden="true" className="w-3 text-gray-400">
-          {indicator}
-        </span>
-      </button>
-    </th>
-  );
-}
 
 function LeadsPage() {
   usePageTitle('Leads');
