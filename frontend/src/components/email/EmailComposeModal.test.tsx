@@ -11,6 +11,7 @@ vi.mock('../../hooks/useEmail', () => ({
   useSendEmail: () => ({
     mutateAsync,
     isPending: mockIsPending,
+    reset: vi.fn(),
   }),
 }));
 

@@ -226,25 +226,40 @@ describe('PublicQuoteView', () => {
     renderAt();
     await waitFor(() => screen.getByRole('button', { name: 'Reject this quote' }));
 
+    // Clicking reject now opens a modal — fill in email and confirm.
     fireEvent.click(screen.getByRole('button', { name: 'Reject this quote' }));
+    await waitFor(() => screen.getByRole('dialog', { name: 'Reject Quote' }));
+
+    fireEvent.change(screen.getByLabelText('Email Address'), {
+      target: { value: 'test@example.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /confirm rejection/i }));
 
     await waitFor(() =>
       expect(screen.getByText('Quote Rejected')).toBeInTheDocument()
     );
     expect(mockPost).toHaveBeenCalledWith(
       '/api/quotes/public/test-token-abc/reject',
-      {}
+      { signer_email: 'test@example.com' }
     );
     expect(screen.getByText(/Thank you for your response/)).toBeInTheDocument();
   });
 
   it('shows rejection failure message when reject POST fails', async () => {
     mockGet.mockResolvedValue({ data: baseQuote });
+    // Reject with a plain Error (no .response.data.detail) so the fallback message fires.
     mockPost.mockRejectedValue(new Error('Network Error'));
     renderAt();
     await waitFor(() => screen.getByRole('button', { name: 'Reject this quote' }));
 
+    // Open the modal and fill in email before submitting.
     fireEvent.click(screen.getByRole('button', { name: 'Reject this quote' }));
+    await waitFor(() => screen.getByRole('dialog', { name: 'Reject Quote' }));
+
+    fireEvent.change(screen.getByLabelText('Email Address'), {
+      target: { value: 'test@example.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /confirm rejection/i }));
 
     await waitFor(() =>
       expect(
