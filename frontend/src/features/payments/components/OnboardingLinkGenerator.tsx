@@ -19,12 +19,16 @@ export function OnboardingLinkGenerator({
   const [generatedLink, setGeneratedLink] = useState('');
   const linkMutation = useCreateOnboardingLink();
 
-  // Check if this contact/company already has a Stripe customer
-  const { data: customersData } = useStripeCustomers({ page_size: 200 });
-  const customers = customersData?.items ?? [];
-  const hasPaymentMethod = customers.some(
-    (c) => (contactId && c.contact_id === contactId) || (companyId && c.company_id === companyId)
+  // Check if this contact/company already has a Stripe customer.
+  // Filtered server-side so we don't pull every customer in the
+  // tenant just to filter client-side — the previous page_size=200
+  // also exceeded the endpoint's hard cap of 100 and 422'd in prod.
+  const { data: customersData } = useStripeCustomers(
+    contactId ? { contact_id: contactId, page_size: 1 }
+    : companyId ? { company_id: companyId, page_size: 1 }
+    : undefined,
   );
+  const hasPaymentMethod = (customersData?.total ?? 0) > 0;
 
   const handleGenerateLink = async () => {
     try {
