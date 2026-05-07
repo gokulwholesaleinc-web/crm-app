@@ -123,7 +123,10 @@ function applyBrandingToDOM(config: TenantConfig | null) {
     document.title = `${config.company_name} - CRM`;
   }
 
-  // Update favicon — fall back to /favicon.svg if the tenant URL 404s
+  // Update favicon — fall back to /favicon.ico (the in-tree fallback,
+  // matching index.html). The legacy /favicon.svg was deleted in
+  // PR #247; pointing back at it produces a 404 in the console every
+  // time a tenant favicon URL fails to load.
   if (config.favicon_url) {
     let link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
     if (!link) {
@@ -133,7 +136,7 @@ function applyBrandingToDOM(config: TenantConfig | null) {
     }
     const img = new Image();
     img.onload = () => { link!.href = config.favicon_url!; };
-    img.onerror = () => { link!.href = '/favicon.svg'; };
+    img.onerror = () => { link!.href = '/favicon.ico'; };
     img.src = config.favicon_url;
   }
 
