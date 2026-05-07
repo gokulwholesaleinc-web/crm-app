@@ -14,7 +14,6 @@ import {
   contactToFormData,
   type ContactFormData,
 } from './components/contactFormHelpers';
-import { NextBestActionCard } from '../../components/ai';
 import { useContact, useDeleteContact, useUpdateContact } from '../../hooks/useContacts';
 import { useContactAliases, useAddAlias, useDeleteAlias } from '../../hooks/useContactAliases';
 import { showSuccess, showError } from '../../utils/toast';
@@ -274,8 +273,6 @@ function ContactDetailPage() {
           </Button>
         </div>
       </div>
-
-      <NextBestActionCard entityType="contact" entityId={contact.id} />
 
       <TabBar tabs={TABS} activeTab={activeTab} onTabChange={handleTabChange} />
 

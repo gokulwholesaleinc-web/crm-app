@@ -1,4 +1,4 @@
-import { useState, useMemo, useDeferredValue, lazy, Suspense } from 'react';
+import { useState, useMemo, useDeferredValue } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PlusIcon } from '@heroicons/react/24/outline';
 import {
@@ -20,8 +20,6 @@ import {
 } from '@dnd-kit/sortable';
 import { Button, EntityLink, Spinner, Modal } from '../../components/ui';
 import { OpportunityForm, OpportunityFormData } from '../opportunities/components/OpportunityForm';
-const AIInsightsCard = lazy(() => import('../../components/ai').then(m => ({ default: m.AIInsightsCard })));
-const NextBestActionCard = lazy(() => import('../../components/ai').then(m => ({ default: m.NextBestActionCard })));
 import { useLeadKanban, useMoveLeadStage } from '../../hooks/useLeads';
 import {
   useOpportunities,
@@ -751,24 +749,6 @@ function PipelinePage() {
         fullScreenOnMobile
       >
         <div className="space-y-6">
-          {editingOpportunity && (
-            <Suspense
-              fallback={
-                <div className="animate-pulse h-32 bg-gray-100 dark:bg-gray-700 rounded-lg" />
-              }
-            >
-              <div className="space-y-4">
-                <NextBestActionCard entityType="opportunity" entityId={editingOpportunity.id} />
-                <AIInsightsCard
-                  entityType="opportunity"
-                  entityId={editingOpportunity.id}
-                  entityName={editingOpportunity.name}
-                  variant="inline"
-                />
-              </div>
-            </Suspense>
-          )}
-
           <OpportunityForm
             initialData={getInitialFormData()}
             onSubmit={handleFormSubmit}

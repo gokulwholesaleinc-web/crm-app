@@ -10,7 +10,6 @@ import { StickyActionBar } from '../../components/shared/StickyActionBar';
 import { EmailComposeModal, EmailHistory } from '../../components/email';
 import { ConvertLeadModal } from './components/ConvertLeadModal';
 import { LeadForm, LeadFormData } from './components/LeadForm';
-import { AIInsightsCard, NextBestActionCard } from '../../components/ai';
 import { getStatusBadgeClasses, formatStatusLabel, getScoreColor } from '../../utils';
 import { showError } from '../../utils/toast';
 import { formatDate, formatPhoneNumber } from '../../utils/formatters';
@@ -232,7 +231,6 @@ function LeadDetailPage() {
           >
             Send Email
           </Button>
-          <AIInsightsCard entityType="lead" entityId={lead.id} entityName={lead.full_name || 'Lead'} />
           {(lead.status === 'qualified' || isOrphanConverted) && (
             <Button onClick={() => setShowConvertModal(true)} className="flex-1 sm:flex-none">
               <svg className="h-5 w-5 mr-1 sm:mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -271,9 +269,6 @@ function LeadDetailPage() {
           </p>
         </div>
       )}
-
-      {/* Next Best Action Suggestion */}
-      <NextBestActionCard entityType="lead" entityId={lead.id} />
 
       {/* Lead Score Card */}
       <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4 sm:p-6">

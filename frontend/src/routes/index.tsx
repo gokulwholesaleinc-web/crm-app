@@ -65,7 +65,6 @@ const CampaignsPage = lazy(() => import('../features/campaigns/CampaignsPage'));
 const CampaignDetailPage = lazy(() => import('../features/campaigns/CampaignDetailPage'));
 
 // AI Assistant
-const AIAssistantPage = lazy(() => import('../features/ai-assistant/AIAssistantPage'));
 
 // Reports
 const ReportsPage = lazy(() => import('../features/reports/ReportsPage'));
@@ -310,17 +309,6 @@ function AppRoutes() {
         }
       />
 
-      {/* AI Assistant */}
-      <Route
-        path="/ai-assistant"
-        element={
-          <PrivateRoute>
-            <ErrorBoundary>
-              <AIAssistantPage />
-            </ErrorBoundary>
-          </PrivateRoute>
-        }
-      />
 
       {/* Reports */}
       <Route

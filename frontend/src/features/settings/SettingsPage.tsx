@@ -21,7 +21,6 @@ import {
 } from '@heroicons/react/24/outline';
 import { EditProfileModal } from './components/EditProfileModal';
 import { BrandingSection } from './components/BrandingSection';
-import { AIPreferencesSection } from './components/AIPreferencesSection';
 import { PipelineStagesSection } from './components/PipelineStagesSection';
 import { LeadSourcesSection } from './components/LeadSourcesSection';
 import { WebhooksSection } from './components/WebhooksSection';
@@ -40,7 +39,6 @@ interface NavItem {
 const NAV_ITEMS: readonly NavItem[] = [
   { id: 'profile', label: 'Profile' },
   { id: 'branding', label: 'Branding' },
-  { id: 'ai-preferences', label: 'AI Preferences' },
   { id: 'pipeline-stages', label: 'Pipeline Stages' },
   { id: 'lead-sources', label: 'Lead Sources' },
   // IntegrationsSection owns its own `id="integrations"` — link target
@@ -325,14 +323,6 @@ function SettingsPage() {
 
           <section id="branding" ref={setSectionRef('branding')} className="scroll-mt-6">
             <BrandingSection />
-          </section>
-
-          <section
-            id="ai-preferences"
-            ref={setSectionRef('ai-preferences')}
-            className="scroll-mt-6"
-          >
-            <AIPreferencesSection />
           </section>
 
           <section
