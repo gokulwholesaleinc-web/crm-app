@@ -21,14 +21,26 @@ def _publishable_prefix(pk: str | None) -> str | None:
     return None
 
 
+# Stripe accepts both standard secret keys (`sk_*`) and restricted keys
+# (`rk_*`) for API calls. Restricted keys are scoped to a subset of
+# resources — recommended for production deployments where the platform
+# only needs (say) Customers + Invoices + Subscriptions, not full
+# account access. `_get_stripe()` already accepts either; this endpoint
+# previously only recognised `sk_*`, so a working `rk_*`-keyed install
+# kept reporting "unconfigured" and the SendInvoiceModal showed a stale
+# warning banner.
+_LIVE_PREFIXES = ("sk_live_", "rk_live_")
+_TEST_PREFIXES = ("sk_test_", "rk_test_")
+
+
 @router.get("/mode")
 async def get_stripe_mode(current_user: CurrentUser) -> dict:
     """Return Stripe key mode: live, test, or unconfigured."""
     key = settings.STRIPE_SECRET_KEY or ""
 
-    if key.startswith("sk_live_"):
+    if any(key.startswith(p) for p in _LIVE_PREFIXES):
         mode = "live"
-    elif key.startswith("sk_test_"):
+    elif any(key.startswith(p) for p in _TEST_PREFIXES):
         mode = "test"
     else:
         mode = "unconfigured"
