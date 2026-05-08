@@ -15,6 +15,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 
+from src.account.router import router as account_router
 from src.activities.router import router as activities_router
 from src.admin.router import router as admin_router
 
@@ -179,6 +180,7 @@ app.include_router(attachments_router)
 app.include_router(dedup_router)
 app.include_router(email_router)
 app.include_router(notifications_router)
+app.include_router(account_router)
 app.include_router(filters_router)
 app.include_router(reports_router)
 app.include_router(audit_router)

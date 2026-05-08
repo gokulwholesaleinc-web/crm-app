@@ -4,6 +4,7 @@ import logging
 from typing import Any
 
 import src.database as _db
+from src.account.notification_gate import should_notify_in_app
 from src.notifications.models import Notification
 from src.opportunities.models import PipelineStage
 
@@ -19,6 +20,23 @@ _RECIPIENT_REQUIRED_EVENTS = frozenset({
     "proposal.sent", "proposal.rejected",
     "payment.received",
 })
+
+
+# Map handler event_type → user-facing matrix key (Settings UI's
+# NOTIFICATION_EVENT_TYPES). Only events the user can actually toggle
+# from the UI belong here; events absent from the map fall through
+# ungated and keep firing as before. Adding a row here without also
+# adding the matching toggle on the frontend is a trap — the user
+# would never be able to opt back in from the UI. Mapping
+# `proposal.rejected` to `proposal_signed` (a positive event) was a
+# real bug: a user disabling "proposal signed" toasts would silently
+# lose rejection alerts too. The other events (stage_change, quote.*,
+# proposal.sent) don't have UI toggles in v1 so they're not gated yet
+# either; surface them in the matrix first, then add a row here.
+_MATRIX_EVENT_NAMES: dict[str, str] = {
+    "lead.created": "lead_assigned",
+    "payment.received": "payment_received",
+}
 
 
 async def notification_event_handler(event_type: str, payload: dict[str, Any]) -> None:
@@ -54,6 +72,21 @@ async def notification_event_handler(event_type: str, payload: dict[str, Any]) -
             await session.rollback()
 
 
+async def _gate(session, event_type: str, recipient_id: int) -> bool:
+    """Apply the per-user matrix gate; events absent from the map always fire."""
+    matrix_event = _MATRIX_EVENT_NAMES.get(event_type)
+    if matrix_event is None:
+        return True
+    allowed = await should_notify_in_app(session, recipient_id, matrix_event)
+    if not allowed:
+        logger.debug(
+            "Notification gated off by user prefs: event=%s user_id=%s",
+            event_type,
+            recipient_id,
+        )
+    return allowed
+
+
 async def _build_notification(session, event_type: str, payload: dict[str, Any]):
     """Build a Notification from the event payload, or return None if not applicable."""
     user_id = payload.get("user_id")
@@ -63,6 +96,8 @@ async def _build_notification(session, event_type: str, payload: dict[str, Any])
 
     if event_type in ("lead.created", "contact.created"):
         if not user_id:
+            return None
+        if not await _gate(session, event_type, user_id):
             return None
         name = f"{data.get('first_name', '')} {data.get('last_name', '')}".strip() or "Unknown"
         label = "Lead" if event_type == "lead.created" else "Contact"
@@ -76,6 +111,8 @@ async def _build_notification(session, event_type: str, payload: dict[str, Any])
         )
 
     if event_type == "opportunity.stage_changed":
+        if not user_id or not await _gate(session, event_type, user_id):
+            return None
         opp_name = data.get("name", "Unknown")
         new_stage_id = data.get("new_stage_id")
         stage_name = "unknown"
@@ -106,6 +143,8 @@ async def _build_notification(session, event_type: str, payload: dict[str, Any])
         recipient_id = await _lookup_owner(session, Quote, entity_id)
         if not recipient_id:
             return None
+        if not await _gate(session, event_type, recipient_id):
+            return None
         return Notification(
             user_id=recipient_id,
             type=event_type.replace(".", "_"),
@@ -122,6 +161,8 @@ async def _build_notification(session, event_type: str, payload: dict[str, Any])
         recipient_id = await _lookup_owner(session, Proposal, entity_id)
         if not recipient_id:
             return None
+        if not await _gate(session, event_type, recipient_id):
+            return None
         return Notification(
             user_id=recipient_id,
             type=event_type.replace(".", "_"),
@@ -133,6 +174,8 @@ async def _build_notification(session, event_type: str, payload: dict[str, Any])
 
     if event_type == "payment.received":
         if not user_id:
+            return None
+        if not await _gate(session, event_type, user_id):
             return None
         return Notification(
             user_id=user_id,

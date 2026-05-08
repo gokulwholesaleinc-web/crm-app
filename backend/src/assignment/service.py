@@ -1,17 +1,34 @@
 """Lead auto-assignment service layer."""
 
 import logging
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import func, select
 
-from src.assignment.models import AssignmentRule
+from src.assignment.models import AssignmentLog, AssignmentRule
 from src.assignment.schemas import AssignmentRuleCreate, AssignmentRuleUpdate
 from src.core.base_service import BaseService
 from src.core.constants import DEFAULT_PAGE_SIZE
 from src.leads.models import Lead
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(slots=True)
+class AssignmentDecision:
+    """Result of an assign_lead call.
+
+    `reason` is one of:
+      - `rule_match` — a filtered rule's filters matched the lead.
+      - `default_fallback` — no filtered rule matched; the catch-all
+        `is_default=True` rule fired.
+    `manual_override` is reserved for log rows that callers write
+    directly (e.g. an admin reassign action) and never produced here.
+    """
+    user_id: int
+    rule_id: int
+    reason: str
 
 
 class AssignmentService(BaseService[AssignmentRule]):
@@ -42,7 +59,27 @@ class AssignmentService(BaseService[AssignmentRule]):
         rules = list(result.scalars().all())
         return rules, total
 
+    async def _demote_existing_default(self, except_rule_id: int | None = None) -> None:
+        """Clear is_default on any other rule before promoting a new one.
+
+        The DB enforces "at most one default" via a partial unique
+        index. Without this demote, two admins racing to set a default
+        would surface as a raw IntegrityError 500; even single-admin,
+        promoting a new default would 500 until the prior one is
+        explicitly cleared. Run inside the same transaction as the
+        promote so the swap is atomic.
+        """
+        from sqlalchemy import update as sa_update
+
+        stmt = sa_update(AssignmentRule).where(AssignmentRule.is_default == True).values(is_default=False)
+        if except_rule_id is not None:
+            stmt = stmt.where(AssignmentRule.id != except_rule_id)
+        await self.db.execute(stmt)
+        await self.db.flush()
+
     async def create_rule(self, data: AssignmentRuleCreate, user_id: int) -> AssignmentRule:
+        if data.is_default:
+            await self._demote_existing_default()
         rule = AssignmentRule(**data.model_dump(), created_by_id=user_id)
         self.db.add(rule)
         await self.db.flush()
@@ -51,6 +88,8 @@ class AssignmentService(BaseService[AssignmentRule]):
 
     async def update_rule(self, rule: AssignmentRule, data: AssignmentRuleUpdate) -> AssignmentRule:
         update_data = data.model_dump(exclude_unset=True)
+        if update_data.get("is_default") is True:
+            await self._demote_existing_default(except_rule_id=rule.id)
         for field, value in update_data.items():
             setattr(rule, field, value)
         await self.db.flush()
@@ -90,7 +129,18 @@ class AssignmentService(BaseService[AssignmentRule]):
         return True
 
     async def _get_round_robin_user(self, rule: AssignmentRule) -> int | None:
-        """Get next user in round-robin rotation."""
+        """Get next user in round-robin rotation.
+
+        Mutates and flushes `rule.last_assigned_index`. The flush is a
+        SQLAlchemy flush — it sends UPDATE to the DB but does not
+        commit, so a request-scoped transaction rollback (e.g. the
+        lead create raises) reverts the bump. The
+        `test_round_robin_rolls_back_with_failed_lead_create` test
+        in tests/unit/test_lead_assignment_wiring.py pins this
+        contract — DO NOT defer this advance into log_decision unless
+        you can guarantee callers always run the two operations in the
+        same transaction.
+        """
         if not rule.user_ids:
             return None
         next_index = (rule.last_assigned_index + 1) % len(rule.user_ids)
@@ -118,32 +168,94 @@ class AssignmentService(BaseService[AssignmentRule]):
         # Return user with fewest leads
         return min(user_lead_counts, key=lambda u: user_lead_counts[u])
 
-    async def assign_lead(self, lead_data: dict[str, Any]) -> int | None:
-        """Find matching active assignment rule and return the assigned user_id.
+    async def _resolve_user(self, rule: AssignmentRule) -> int | None:
+        if rule.assignment_type == "round_robin":
+            return await self._get_round_robin_user(rule)
+        if rule.assignment_type == "load_balance":
+            return await self._get_load_balance_user(rule)
+        return None
 
-        Returns None if no matching rule is found.
+    async def assign_lead(self, lead_data: dict[str, Any]) -> AssignmentDecision | None:
+        """Pick an assignee for a new lead per the active rule set.
+
+        Two-pass selection so a default catch-all never starves a
+        filtered rule:
+          1. Iterate non-default active rules in creation order; first
+             whose `filters` match wins.
+          2. If no filtered rule matched, the active `is_default=True`
+             rule (at most one — DB partial unique index enforces) fires
+             as the fallback.
+
+        Returns `None` when no rule produces a user — the caller should
+        leave `owner_id` unset rather than guess.
         """
         result = await self.db.execute(
-            select(AssignmentRule).where(AssignmentRule.is_active == True)
+            select(AssignmentRule)
+            .where(AssignmentRule.is_active == True)
             .order_by(AssignmentRule.created_at.asc())
         )
         rules = list(result.scalars().all())
 
+        # Pass 1: filtered (non-default) rules in creation order.
         for rule in rules:
+            if rule.is_default:
+                continue
             if not self._matches_filters(lead_data, rule.filters):
                 continue
-
-            if rule.assignment_type == "round_robin":
-                user_id = await self._get_round_robin_user(rule)
-            elif rule.assignment_type == "load_balance":
-                user_id = await self._get_load_balance_user(rule)
-            else:
-                continue
-
+            user_id = await self._resolve_user(rule)
             if user_id is not None:
-                return user_id
+                return AssignmentDecision(
+                    user_id=user_id, rule_id=rule.id, reason="rule_match",
+                )
+
+        # Pass 2: default fallback. Partial unique index → at most one.
+        for rule in rules:
+            if not rule.is_default:
+                continue
+            user_id = await self._resolve_user(rule)
+            if user_id is not None:
+                return AssignmentDecision(
+                    user_id=user_id, rule_id=rule.id, reason="default_fallback",
+                )
+            break
 
         return None
+
+    async def log_decision(
+        self,
+        lead_id: int,
+        decision: AssignmentDecision,
+    ) -> AssignmentLog:
+        """Persist an audit row for an auto-assignment decision."""
+        log = AssignmentLog(
+            lead_id=lead_id,
+            rule_id=decision.rule_id,
+            assigned_user_id=decision.user_id,
+            reason=decision.reason,
+        )
+        self.db.add(log)
+        await self.db.flush()
+        return log
+
+    async def log_manual_override(
+        self,
+        lead_id: int,
+        user_id: int | None,
+    ) -> AssignmentLog:
+        """Audit row for an admin/owner reassign action.
+
+        Keeps the per-rule load-balance math honest — the lead now
+        sits with `user_id`, but no rule "earned" the placement.
+        """
+        log = AssignmentLog(
+            lead_id=lead_id,
+            rule_id=None,
+            assigned_user_id=user_id,
+            reason="manual_override",
+        )
+        self.db.add(log)
+        await self.db.flush()
+        return log
 
     async def get_assignment_stats(self, user_ids: list[int]) -> list[dict[str, Any]]:
         """Get active lead counts for a list of users."""

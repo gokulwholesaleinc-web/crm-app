@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
+from src.assignment.service import AssignmentDecision, AssignmentService
 from src.core.base_service import CRUDService, TaggableServiceMixin
 from src.core.constants import DEFAULT_PAGE_SIZE, ENTITY_TYPE_LEADS
 from src.core.filtering import apply_filters_to_query, build_token_search
@@ -112,6 +113,15 @@ class LeadService(
         Refuses status='converted' on this path too — same reasoning as
         update; manual setting bypasses the Convert flow's contact +
         opportunity creation.
+
+        When the caller did not specify `owner_id`, the active assignment
+        rules are consulted and the lead is routed to the picked user.
+        Specifying `owner_id` explicitly (admin/manager assigning during
+        create) skips auto-assignment so the chosen owner is honored.
+        Each auto-routing decision writes an `assignment_log` row so the
+        per-rule stats panel and future reporting can attribute the
+        placement to a rule rather than guessing from `Lead.owner_id`
+        alone.
         """
         if data.status == "converted":
             raise LeadValidationError(
@@ -119,7 +129,17 @@ class LeadService(
                 "Convert action on a qualified lead so the contact and "
                 "opportunity are created.",
             )
-        lead = await super().create(data, user_id)
+        decision = await self._auto_assign(data)
+        try:
+            lead = await super().create(data, user_id)
+        except Exception:
+            # Don't leave the caller's LeadCreate dirty (owner_id mutated
+            # by _auto_assign) if persistence failed — they may retry.
+            if decision is not None:
+                data.owner_id = None
+            raise
+        if decision is not None:
+            await AssignmentService(self.db).log_decision(lead.id, decision)
         if lead.pipeline_stage_id is None:
             stage_id = await self._first_lead_stage_id()
             if stage_id is not None:
@@ -134,6 +154,26 @@ class LeadService(
                     lead.id,
                 )
         return await self._recalculate_score(lead)
+
+    async def _auto_assign(self, data: LeadCreate) -> AssignmentDecision | None:
+        """Resolve `data.owner_id` via active assignment rules when blank.
+
+        Returns the AssignmentDecision so the caller can write the audit
+        row once the lead row exists (we need the lead.id). If the
+        caller already chose an owner, or no rule produced a user, we
+        leave `data.owner_id` as-is and return None.
+        """
+        if data.owner_id is not None:
+            return None
+        decision = await AssignmentService(self.db).assign_lead({
+            "source_id": data.source_id,
+            "industry": data.industry,
+            "status": data.status,
+        })
+        if decision is None:
+            return None
+        data.owner_id = decision.user_id
+        return decision
 
     async def update(self, lead: Lead, data: LeadUpdate, user_id: int) -> Lead:
         """Update a lead and recalculate score.

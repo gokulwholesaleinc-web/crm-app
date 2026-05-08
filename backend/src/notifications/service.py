@@ -5,6 +5,7 @@ import logging
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.account.notification_gate import should_notify_in_app
 from src.auth.models import User
 from src.core.constants import DEFAULT_PAGE_SIZE
 from src.notifications.models import Notification
@@ -133,8 +134,10 @@ async def notify_on_assignment(
     entity_type: str,
     entity_id: int,
     entity_name: str,
-) -> Notification:
+) -> Notification | None:
     """Create a notification when an entity is assigned to a user."""
+    if not await should_notify_in_app(db, user_id, "lead_assigned"):
+        return None
     service = NotificationService(db)
     return await service.create_notification(
         user_id=user_id,
@@ -154,8 +157,16 @@ async def notify_on_stage_change(
     entity_name: str,
     old_stage: str,
     new_stage: str,
-) -> Notification:
-    """Create a notification when a pipeline stage changes."""
+) -> Notification | None:
+    """Create a notification when a pipeline stage changes.
+
+    NOT gated on user prefs in v1 — the Settings UI matrix doesn't
+    surface a `stage_change` toggle, and the parallel event-bus path
+    (`opportunity.stage_changed` via the notification_event_handler)
+    isn't in `_MATRIX_EVENT_NAMES` either, so gating only this path
+    would create a confusing asymmetry. When the UI gains a stage-
+    change toggle, gate both paths together.
+    """
     service = NotificationService(db)
     return await service.create_notification(
         user_id=user_id,
@@ -174,8 +185,10 @@ async def notify_on_mention(
     entity_type: str,
     entity_id: int,
     content_snippet: str,
-) -> Notification:
+) -> Notification | None:
     """Create a notification when a user is @mentioned."""
+    if not await should_notify_in_app(db, mentioned_user_id, "mention"):
+        return None
     service = NotificationService(db)
     return await service.create_notification(
         user_id=mentioned_user_id,
@@ -192,8 +205,10 @@ async def notify_on_activity_due(
     user_id: int,
     activity_id: int,
     activity_subject: str,
-) -> Notification:
+) -> Notification | None:
     """Create a notification when an activity is due."""
+    if not await should_notify_in_app(db, user_id, "task_due"):
+        return None
     service = NotificationService(db)
     return await service.create_notification(
         user_id=user_id,
