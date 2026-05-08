@@ -1,6 +1,6 @@
 """Dashboard API routes."""
 
-from typing import Annotated as _Annotated  # alias to avoid shadowing existing Annotated-free code
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
@@ -42,24 +42,33 @@ async def get_dashboard(
     current_user: CurrentUser,
     db: DBSession,
     response: Response,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
     date_from: str | None = Query(None, description="Start date (YYYY-MM-DD)"),
     date_to: str | None = Query(None, description="End date (YYYY-MM-DD)"),
+    owner_id: int | None = Query(None, description="Admin/manager: scope to a specific user; sales reps see only their own"),
 ):
-    """Get full dashboard data including KPIs and charts."""
+    """Get full dashboard data including KPIs and charts.
+
+    Sales reps are locked to self by ``effective_owner_id``. Admin/manager
+    may pass ``owner_id`` to view a peer, or omit it for the tenant-wide
+    rollup (``user_id=None`` flows through the generators as "no owner
+    filter").
+    """
     parsed_from = _parse_date(date_from)
     parsed_to = _parse_date(date_to)
-    cache_key = f"dashboard:{current_user.id}:{date_from}:{date_to}"
+    resolved_owner_id = effective_owner_id(data_scope, owner_id)
+    cache_key = f"dashboard:{current_user.id}:{resolved_owner_id}:{date_from}:{date_to}"
     cached = _get_cached(cache_key)
     if cached is not None:
         response.headers["Cache-Control"] = "private, max-age=60"
         return cached
 
     # Get KPIs
-    kpi_generator = NumberCardGenerator(db, user_id=current_user.id, date_from=parsed_from, date_to=parsed_to)
-    kpis = await kpi_generator.get_all_kpis(user_id=current_user.id)
+    kpi_generator = NumberCardGenerator(db, user_id=resolved_owner_id, date_from=parsed_from, date_to=parsed_to)
+    kpis = await kpi_generator.get_all_kpis(user_id=resolved_owner_id)
 
     # Get charts
-    chart_generator = ChartDataGenerator(db, user_id=current_user.id, date_from=parsed_from, date_to=parsed_to)
+    chart_generator = ChartDataGenerator(db, user_id=resolved_owner_id, date_from=parsed_from, date_to=parsed_to)
     charts_data = [
         await chart_generator.get_pipeline_funnel(),
         await chart_generator.get_leads_by_status(),
@@ -94,20 +103,23 @@ async def get_kpis(
     current_user: CurrentUser,
     db: DBSession,
     response: Response,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
     date_from: str | None = Query(None, description="Start date (YYYY-MM-DD)"),
     date_to: str | None = Query(None, description="End date (YYYY-MM-DD)"),
+    owner_id: int | None = Query(None, description="Admin/manager: scope to a specific user; sales reps see only their own"),
 ):
-    """Get KPI number cards only."""
+    """Get KPI number cards only. Same ``owner_id`` scoping as ``/api/dashboard``."""
     parsed_from = _parse_date(date_from)
     parsed_to = _parse_date(date_to)
-    cache_key = f"kpis:{current_user.id}:{date_from}:{date_to}"
+    resolved_owner_id = effective_owner_id(data_scope, owner_id)
+    cache_key = f"kpis:{current_user.id}:{resolved_owner_id}:{date_from}:{date_to}"
     cached = _get_cached(cache_key)
     if cached is not None:
         response.headers["Cache-Control"] = "private, max-age=60"
         return cached
 
-    generator = NumberCardGenerator(db, user_id=current_user.id, date_from=parsed_from, date_to=parsed_to)
-    kpis = await generator.get_all_kpis(user_id=current_user.id)
+    generator = NumberCardGenerator(db, user_id=resolved_owner_id, date_from=parsed_from, date_to=parsed_to)
+    kpis = await generator.get_all_kpis(user_id=resolved_owner_id)
     result = [NumberCardData(**kpi) for kpi in kpis]
     _set_cached(cache_key, result)
     response.headers["Cache-Control"] = "private, max-age=60"
@@ -118,18 +130,21 @@ async def get_kpis(
 async def get_sales_funnel(
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
     date_from: str | None = Query(None, description="Start date (YYYY-MM-DD)"),
     date_to: str | None = Query(None, description="End date (YYYY-MM-DD)"),
+    owner_id: int | None = Query(None, description="Admin/manager: scope to a specific user"),
 ):
     """Get sales funnel data with lead counts, conversion rates, and avg time in stage."""
     parsed_from = _parse_date(date_from)
     parsed_to = _parse_date(date_to)
-    cache_key = f"funnel:{current_user.id}:{date_from}:{date_to}"
+    resolved_owner_id = effective_owner_id(data_scope, owner_id)
+    cache_key = f"funnel:{current_user.id}:{resolved_owner_id}:{date_from}:{date_to}"
     cached = _get_cached(cache_key)
     if cached is not None:
         return cached
 
-    generator = ChartDataGenerator(db, user_id=current_user.id, date_from=parsed_from, date_to=parsed_to)
+    generator = ChartDataGenerator(db, user_id=resolved_owner_id, date_from=parsed_from, date_to=parsed_to)
     data = await generator.get_sales_funnel()
     result = SalesFunnelResponse(
         stages=[FunnelStage(**s) for s in data["stages"]],
@@ -170,13 +185,21 @@ async def get_sales_kpis(
     current_user: CurrentUser,
     db: DBSession,
     response: Response,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
     date_from: str | None = Query(None, description="Start date (YYYY-MM-DD)"),
     date_to: str | None = Query(None, description="End date (YYYY-MM-DD)"),
+    owner_id: int | None = Query(None, description="Admin/manager: scope to a specific user"),
 ):
-    """Get sales pipeline KPIs: quotes sent, proposals sent, payments collected, conversion rate."""
+    """Get sales pipeline KPIs: quotes sent, proposals sent, payments collected, conversion rate.
+
+    ``resolved_owner_id is None`` means the tenant-wide rollup case
+    (admin/manager omitted ``owner_id``) — filters drop their owner
+    constraint.
+    """
     parsed_from = _parse_date(date_from)
     parsed_to = _parse_date(date_to)
-    cache_key = f"sales-kpis:{current_user.id}:{date_from}:{date_to}"
+    resolved_owner_id = effective_owner_id(data_scope, owner_id)
+    cache_key = f"sales-kpis:{current_user.id}:{resolved_owner_id}:{date_from}:{date_to}"
     cached = _get_cached(cache_key)
     if cached is not None:
         response.headers["Cache-Control"] = "private, max-age=60"
@@ -184,7 +207,9 @@ async def get_sales_kpis(
 
     from datetime import datetime
 
-    quotes_filters = [Quote.owner_id == current_user.id, Quote.status != "draft"]
+    quotes_filters = [Quote.status != "draft"]
+    if resolved_owner_id is not None:
+        quotes_filters.append(Quote.owner_id == resolved_owner_id)
     if parsed_from:
         quotes_filters.append(Quote.created_at >= datetime.combine(parsed_from, datetime.min.time()))
     if parsed_to:
@@ -193,7 +218,9 @@ async def get_sales_kpis(
         select(func.count(Quote.id)).where(*quotes_filters)
     )
 
-    proposals_filters = [Proposal.created_by_id == current_user.id, Proposal.status != "draft"]
+    proposals_filters = [Proposal.status != "draft"]
+    if resolved_owner_id is not None:
+        proposals_filters.append(Proposal.created_by_id == resolved_owner_id)
     if parsed_from:
         proposals_filters.append(Proposal.created_at >= datetime.combine(parsed_from, datetime.min.time()))
     if parsed_to:
@@ -202,10 +229,9 @@ async def get_sales_kpis(
         select(func.count(Proposal.id)).where(*proposals_filters)
     )
 
-    payments_filters = [
-        Payment.status == "succeeded",
-        Payment.owner_id == current_user.id,
-    ]
+    payments_filters = [Payment.status == "succeeded"]
+    if resolved_owner_id is not None:
+        payments_filters.append(Payment.owner_id == resolved_owner_id)
     if parsed_from:
         payments_filters.append(Payment.created_at >= datetime.combine(parsed_from, datetime.min.time()))
     if parsed_to:
@@ -217,7 +243,9 @@ async def get_sales_kpis(
         ).where(*payments_filters)
     )
 
-    total_quotes_filters = [Quote.owner_id == current_user.id]
+    total_quotes_filters = []
+    if resolved_owner_id is not None:
+        total_quotes_filters.append(Quote.owner_id == resolved_owner_id)
     if parsed_from:
         total_quotes_filters.append(Quote.created_at >= datetime.combine(parsed_from, datetime.min.time()))
     if parsed_to:
@@ -226,7 +254,9 @@ async def get_sales_kpis(
         select(func.count(Quote.id)).where(*total_quotes_filters)
     )
 
-    accepted_quotes_filters = [Quote.owner_id == current_user.id, Quote.status == "accepted"]
+    accepted_quotes_filters = [Quote.status == "accepted"]
+    if resolved_owner_id is not None:
+        accepted_quotes_filters.append(Quote.owner_id == resolved_owner_id)
     if parsed_from:
         accepted_quotes_filters.append(Quote.created_at >= datetime.combine(parsed_from, datetime.min.time()))
     if parsed_to:
@@ -334,7 +364,7 @@ async def get_converted_revenue(
 async def get_unified_pipeline(
     current_user: CurrentUser,
     db: DBSession,
-    data_scope: _Annotated[DataScope, Depends(get_data_scope)],
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
     owner_id: int | None = Query(None, description="Filter by owner ID"),
 ):
     """Get unified pipeline view with both lead and opportunity stages.
