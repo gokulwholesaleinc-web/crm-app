@@ -37,8 +37,8 @@ from src.contacts.router import router as contacts_router
 from src.contracts.router import router as contracts_router
 from src.contracts.stats_router import router as contracts_stats_router
 from src.core.constants import CACHE_IMMUTABLE_ASSETS_MAX_AGE_SECONDS
-from src.core.migrations import _run_production_migrations
 from src.core.me_router import router as me_router
+from src.core.migrations import _run_production_migrations
 from src.core.permissions import require_manager_or_above
 from src.core.rate_limit import limiter
 from src.core.router_utils import CurrentUser
