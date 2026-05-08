@@ -84,7 +84,7 @@ def _make_inbound_msg(
     to: str,
     cc: str | None = None,
     thread_id: str = "thread-001",
-    in_reply_to: str = "<original@example.com>",
+    in_reply_to: str | None = "<original@example.com>",
     subject: str = "Re: Test",
     body: str = "Reply body",
 ) -> dict:
@@ -300,15 +300,69 @@ class TestNotificationGuardDirect:
             msg_id="<cold-inbound-001@gmail.com>",
             from_="cold@external.com",
             to="sales@crm.com",
-            in_reply_to="",  # no In-Reply-To
+            in_reply_to=None,  # cold inbound — no In-Reply-To header
         )
-        msg["in_reply_to"] = None  # override to None explicitly
         await _store_inbound(msg, sales_conn, db, datetime.now(UTC))
         await db.commit()
 
         notifs = (await db.execute(select(Notification))).scalars().all()
         assert not any(n.type == "email_reply" for n in notifs), (
             "Cold inbound (no In-Reply-To) must not fire email_reply notification"
+        )
+
+
+class TestAliasParticipantPath:
+    @pytest.mark.asyncio
+    async def test_alias_user_matched_and_passes_guard(self, db: AsyncSession):
+        """User matched via send-as alias must both be found by resolver and pass the guard.
+
+        This is the bug the trio block caught: find_user_ids_by_addresses matched
+        on aliases (Postgres) but get_user_connection_emails only returned primary
+        email, so the guard would log-warn and drop the notification for alias users.
+        """
+        user = await _make_user(db, "giancarlo@crm.com")
+        # Primary connection email differs from the alias the client emailed
+        conn = GmailConnection(
+            user_id=user.id,
+            email="giancarlo@crm.com",
+            aliases=["giancarlo@linkcreativeco.com"],
+            access_token="tok",
+            scopes="https://mail.google.com/",
+        )
+        db.add(conn)
+
+        contact = Contact(
+            first_name="Client",
+            last_name="Alias",
+            email="client@external.com",
+            owner_id=None,
+        )
+        db.add(contact)
+        await db.flush()
+        await db.commit()
+
+        from src.notifications.service import notify_on_email_reply_received
+        from src.email.participants import get_user_connection_emails
+
+        # Verify the helper now returns both primary and alias
+        addrs = await get_user_connection_emails(db, user.id)
+        assert "giancarlo@crm.com" in addrs
+        assert "giancarlo@linkcreativeco.com" in addrs
+
+        # Guard must pass when participant_emails contains the alias address
+        result = await notify_on_email_reply_received(
+            db=db,
+            recipient_user_id=user.id,
+            contact_id=contact.id,
+            sender_email="client@external.com",
+            sender_name="Client",
+            subject_line="Re: Proposal",
+            snippet="Looks great",
+            participant_emails=["giancarlo@linkcreativeco.com", "client@external.com"],
+        )
+
+        assert result is not None, (
+            "Notification must fire when recipient is matched via send-as alias"
         )
 
 

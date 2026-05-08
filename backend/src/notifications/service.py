@@ -446,7 +446,7 @@ async def notify_on_email_reply_received(
 
         user_addrs = set(await get_user_connection_emails(db, recipient_user_id))
         if not user_addrs.intersection(a.lower() for a in participant_emails):
-            logger.warning(
+            logger.debug(
                 "notify_on_email_reply_received: user %s not in participant_emails — skipping",
                 recipient_user_id,
             )

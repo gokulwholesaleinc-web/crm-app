@@ -25,19 +25,27 @@ def collect_participants(*headers: str | None) -> list[str]:
 async def get_user_connection_emails(db: AsyncSession, user_id: int) -> list[str]:
     """Return all active Gmail connection addresses for a user, lowercased.
 
-    Used as the membership set for participant-overlap visibility queries.
-    A user with no connection sees nothing scoped this way; outbound rows
-    they composed themselves remain visible via the ``sent_by_id`` branch.
+    Includes primary email AND send-as aliases so the participant-overlap guard
+    in notify_on_email_reply_received doesn't drop users matched via an alias.
+    Mirrors GmailConnection.self_addresses but as a DB query rather than a
+    property on an already-loaded object.
     """
     from src.integrations.gmail.models import GmailConnection
 
     result = await db.execute(
-        select(GmailConnection.email).where(
+        select(GmailConnection.email, GmailConnection.aliases).where(
             GmailConnection.user_id == user_id,
             GmailConnection.revoked_at.is_(None),
         )
     )
-    return [e.lower() for e in result.scalars()]
+    out: list[str] = []
+    for row in result:
+        if row.email:
+            out.append(row.email.lower())
+        for a in (row.aliases or []):
+            if a:
+                out.append(a.lower())
+    return out
 
 
 async def find_user_ids_by_addresses(
@@ -62,19 +70,16 @@ async def find_user_ids_by_addresses(
     # Primary email match — works on both SQLite (test) and Postgres (prod)
     primary_match = sql_func.lower(GmailConnection.email).in_(lowered)
 
-    # Alias overlap — Postgres-only: aliases && ARRAY[...]. On SQLite the
-    # _AliasArray stores as JSON so we skip the alias branch there.
-    try:
+    # Alias overlap — Postgres-only: aliases && ARRAY[...]. _AliasArray degrades
+    # to JSON on SQLite (tests), so .overlap() is unavailable there.
+    if db.get_bind().dialect.name == "postgresql":
         from sqlalchemy.dialects.postgresql import array as pg_array
 
         alias_match = GmailConnection.aliases.overlap(
             pg_array(lowered, type_=Text)
         )
         where_clause = or_(primary_match, alias_match)
-    except (ImportError, AttributeError):
-        # AttributeError: _AliasArray degrades to JSON on SQLite so .overlap()
-        # is not available on the comparator. Primary-email match is sufficient
-        # for tests; prod Postgres gets the full alias coverage.
+    else:
         where_clause = primary_match
 
     result = await db.execute(
