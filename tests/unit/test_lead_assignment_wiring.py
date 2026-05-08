@@ -241,3 +241,107 @@ class TestLeadCreateAutoAssign:
         )
 
         assert lead.owner_id is None
+
+
+class TestRoundRobinTransactionAtomicity:
+    """Pins the request-transaction-atomicity contract for round-robin
+    index advance. `_get_round_robin_user` flushes (not commits) the
+    bumped index, so a request-scope rollback unwinds it. Production
+    callers (LeadService.create) run both assign_lead and the lead
+    persist in the same request session — a failed lead-create
+    rollback reverts the rotation skip.
+
+    DO NOT defer the bump into `log_decision` unless you can guarantee
+    callers always run both in the same transaction.
+    """
+
+    @pytest.mark.asyncio
+    async def test_index_advance_is_undone_by_session_rollback(
+        self, db_session: AsyncSession, test_user: User, second_user: User,
+    ):
+        from src.assignment.service import AssignmentService
+
+        rule = await _add_rule(
+            db_session,
+            name="rotation rule",
+            user_ids=[test_user.id, second_user.id],
+            created_by=test_user.id,
+        )
+
+        # Pre-flush state
+        assert rule.last_assigned_index == -1
+
+        # assign_lead flushes the bump.
+        decision = await AssignmentService(db_session).assign_lead({})
+        assert decision is not None and decision.user_id == test_user.id
+        await db_session.refresh(rule)
+        assert rule.last_assigned_index == 0  # flushed
+
+        # Rolling back the session (the production failure path: the
+        # request handler raises after assign_lead returned) reverts.
+        await db_session.rollback()
+        await db_session.refresh(rule)
+        assert rule.last_assigned_index == -1
+
+
+class TestDefaultRulePromotion:
+    """The DB enforces 'at most one is_default rule' via a partial
+    unique index. AssignmentService.create_rule / update_rule must
+    demote the prior default in the same transaction so promoting a
+    new one is atomic and never surfaces a raw IntegrityError 500.
+    """
+
+    @pytest.mark.asyncio
+    async def test_create_default_demotes_prior(
+        self, db_session: AsyncSession, test_user: User, second_user: User,
+    ):
+        from src.assignment.schemas import AssignmentRuleCreate
+        from src.assignment.service import AssignmentService
+
+        # Existing default rule.
+        old_default = await _add_rule(
+            db_session, name="old default",
+            user_ids=[test_user.id], is_default=True, created_by=test_user.id,
+        )
+
+        # New default created via service — should demote old.
+        new_default = await AssignmentService(db_session).create_rule(
+            AssignmentRuleCreate(
+                name="new default",
+                assignment_type="round_robin",
+                user_ids=[second_user.id],
+                is_default=True,
+            ),
+            user_id=test_user.id,
+        )
+        await db_session.commit()
+        await db_session.refresh(old_default)
+        await db_session.refresh(new_default)
+
+        assert new_default.is_default is True
+        assert old_default.is_default is False
+
+    @pytest.mark.asyncio
+    async def test_update_to_default_demotes_prior(
+        self, db_session: AsyncSession, test_user: User, second_user: User,
+    ):
+        from src.assignment.schemas import AssignmentRuleUpdate
+        from src.assignment.service import AssignmentService
+
+        old_default = await _add_rule(
+            db_session, name="old default",
+            user_ids=[test_user.id], is_default=True, created_by=test_user.id,
+        )
+        candidate = await _add_rule(
+            db_session, name="candidate",
+            user_ids=[second_user.id], is_default=False, created_by=test_user.id,
+        )
+
+        promoted = await AssignmentService(db_session).update_rule(
+            candidate, AssignmentRuleUpdate(is_default=True),
+        )
+        await db_session.commit()
+        await db_session.refresh(old_default)
+
+        assert promoted.is_default is True
+        assert old_default.is_default is False

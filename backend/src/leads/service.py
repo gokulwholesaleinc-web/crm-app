@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
-from src.assignment.service import AssignmentService
+from src.assignment.service import AssignmentDecision, AssignmentService
 from src.core.base_service import CRUDService, TaggableServiceMixin
 from src.core.constants import DEFAULT_PAGE_SIZE, ENTITY_TYPE_LEADS
 from src.core.filtering import apply_filters_to_query, build_token_search
@@ -130,7 +130,14 @@ class LeadService(
                 "opportunity are created.",
             )
         decision = await self._auto_assign(data)
-        lead = await super().create(data, user_id)
+        try:
+            lead = await super().create(data, user_id)
+        except Exception:
+            # Don't leave the caller's LeadCreate dirty (owner_id mutated
+            # by _auto_assign) if persistence failed — they may retry.
+            if decision is not None:
+                data.owner_id = None
+            raise
         if decision is not None:
             await AssignmentService(self.db).log_decision(lead.id, decision)
         if lead.pipeline_stage_id is None:
@@ -148,7 +155,7 @@ class LeadService(
                 )
         return await self._recalculate_score(lead)
 
-    async def _auto_assign(self, data: LeadCreate):
+    async def _auto_assign(self, data: LeadCreate) -> AssignmentDecision | None:
         """Resolve `data.owner_id` via active assignment rules when blank.
 
         Returns the AssignmentDecision so the caller can write the audit

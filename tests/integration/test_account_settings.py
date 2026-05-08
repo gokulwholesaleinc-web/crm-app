@@ -7,7 +7,6 @@ dispatchers consult before queuing notifications.
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 

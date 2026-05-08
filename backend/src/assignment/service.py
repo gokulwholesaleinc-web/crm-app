@@ -59,7 +59,27 @@ class AssignmentService(BaseService[AssignmentRule]):
         rules = list(result.scalars().all())
         return rules, total
 
+    async def _demote_existing_default(self, except_rule_id: int | None = None) -> None:
+        """Clear is_default on any other rule before promoting a new one.
+
+        The DB enforces "at most one default" via a partial unique
+        index. Without this demote, two admins racing to set a default
+        would surface as a raw IntegrityError 500; even single-admin,
+        promoting a new default would 500 until the prior one is
+        explicitly cleared. Run inside the same transaction as the
+        promote so the swap is atomic.
+        """
+        from sqlalchemy import update as sa_update
+
+        stmt = sa_update(AssignmentRule).where(AssignmentRule.is_default == True).values(is_default=False)
+        if except_rule_id is not None:
+            stmt = stmt.where(AssignmentRule.id != except_rule_id)
+        await self.db.execute(stmt)
+        await self.db.flush()
+
     async def create_rule(self, data: AssignmentRuleCreate, user_id: int) -> AssignmentRule:
+        if data.is_default:
+            await self._demote_existing_default()
         rule = AssignmentRule(**data.model_dump(), created_by_id=user_id)
         self.db.add(rule)
         await self.db.flush()
@@ -68,6 +88,8 @@ class AssignmentService(BaseService[AssignmentRule]):
 
     async def update_rule(self, rule: AssignmentRule, data: AssignmentRuleUpdate) -> AssignmentRule:
         update_data = data.model_dump(exclude_unset=True)
+        if update_data.get("is_default") is True:
+            await self._demote_existing_default(except_rule_id=rule.id)
         for field, value in update_data.items():
             setattr(rule, field, value)
         await self.db.flush()
@@ -107,7 +129,18 @@ class AssignmentService(BaseService[AssignmentRule]):
         return True
 
     async def _get_round_robin_user(self, rule: AssignmentRule) -> int | None:
-        """Get next user in round-robin rotation."""
+        """Get next user in round-robin rotation.
+
+        Mutates and flushes `rule.last_assigned_index`. The flush is a
+        SQLAlchemy flush — it sends UPDATE to the DB but does not
+        commit, so a request-scoped transaction rollback (e.g. the
+        lead create raises) reverts the bump. The
+        `test_round_robin_rolls_back_with_failed_lead_create` test
+        in tests/unit/test_lead_assignment_wiring.py pins this
+        contract — DO NOT defer this advance into log_decision unless
+        you can guarantee callers always run the two operations in the
+        same transaction.
+        """
         if not rule.user_ids:
             return None
         next_index = (rule.last_assigned_index + 1) % len(rule.user_ids)

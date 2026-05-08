@@ -258,13 +258,27 @@ class MetaService:
 
         await self.db.flush()
 
-        # Auto-create CRM leads from captured data
+        # Auto-create CRM leads from captured data. Per-capture
+        # try/except so a single malformed payload doesn't abort the
+        # whole batch — the capture row already persisted at the flush
+        # above, so leaving processed=False is the right state for the
+        # bad row while the others still proceed.
         for capture in captures:
-            if capture.raw_data:
+            if not capture.raw_data:
+                continue
+            try:
                 lead_id = await self._create_lead_from_capture(capture)
-                if lead_id:
-                    capture.lead_id = lead_id
-                    capture.processed = True
+            except Exception as e:
+                logger.exception(
+                    "Meta capture %s: lead-create failed; capture row remains "
+                    "processed=False for manual triage: %s",
+                    capture.leadgen_id,
+                    e,
+                )
+                continue
+            if lead_id:
+                capture.lead_id = lead_id
+                capture.processed = True
 
         await self.db.flush()
         return captures
@@ -398,9 +412,13 @@ class MetaService:
 
         actor_id = await self._resolve_system_actor_id()
         if actor_id is None:
-            logger.warning(
-                "No active superuser found — leaving Meta lead capture %s "
-                "unprocessed; will retry on next webhook or backfill.",
+            # ERROR not WARNING: nothing currently re-drives unprocessed
+            # captures (no cron, no admin endpoint), so this is a hard
+            # drop until someone runs a manual backfill. Surface it.
+            logger.error(
+                "Meta lead capture %s dropped: no active superuser to "
+                "attribute the lead to. Capture stays processed=False but "
+                "will NOT be retried automatically — manual triage needed.",
                 capture.leadgen_id,
             )
             return None
@@ -428,6 +446,53 @@ class MetaService:
         )
 
         lead = await LeadService(self.db).create(lead_data, user_id=actor_id)
+
+        # The router's POST /api/leads endpoint fires several side
+        # effects after LeadService.create — audit row, embedding
+        # storage, lead.created event (which the notification
+        # event-handler subscribes to for in-app pings), and an
+        # assignment notification when the owner differs from the
+        # actor. We replicate the full set here so a Meta-captured
+        # lead is indistinguishable from a UI-created one downstream.
+        # The longer-term cleanup is to push these into LeadService
+        # itself; tracked separately so this PR stays scoped.
+        from src.ai.embedding_hooks import (
+            build_lead_embedding_content,
+            store_entity_embedding,
+        )
+        from src.audit.utils import audit_entity_create
+        from src.events.service import LEAD_CREATED, emit
+        from src.notifications.service import notify_on_assignment
+
+        try:
+            await store_entity_embedding(
+                self.db, "lead", lead.id, build_lead_embedding_content(lead),
+            )
+        except Exception as e:  # parity with router which only warns
+            logger.warning("Meta capture %s: embedding store failed: %s",
+                           capture.leadgen_id, e)
+
+        await audit_entity_create(
+            self.db, "lead", lead.id, actor_id, ip_address=None,
+        )
+
+        await emit(LEAD_CREATED, {
+            "entity_id": lead.id,
+            "entity_type": "lead",
+            "user_id": actor_id,
+            "data": {
+                "first_name": lead.first_name,
+                "last_name": lead.last_name,
+                "email": lead.email,
+                "status": lead.status,
+            },
+        })
+
+        if lead.owner_id and lead.owner_id != actor_id:
+            await notify_on_assignment(
+                self.db, lead.owner_id, "leads", lead.id, lead.full_name,
+            )
+
         return lead.id
 
     async def _get_or_create_meta_lead_source(self) -> int:

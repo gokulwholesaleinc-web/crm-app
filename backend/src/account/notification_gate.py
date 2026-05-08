@@ -17,11 +17,20 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.account.models import UserNotificationPrefs, UserPreferences
 
 logger = logging.getLogger(__name__)
+
+# Errors we deliberately fall open on. Anything else (asyncio.CancelledError,
+# memory errors, etc.) propagates so the request fails loudly. The fail-open
+# choice covers shape errors on event_matrix (`TypeError`/`AttributeError` if
+# someone hand-edits the row to a non-dict) and DB blips (`SQLAlchemyError`)
+# — both are recoverable; silently dropping a notification a user wants is
+# the worse failure mode the project's silent-failure rule is meant to catch.
+_GATE_RECOVERABLE = (SQLAlchemyError, TypeError, AttributeError, KeyError, ValueError)
 
 
 async def _load_prefs(
@@ -87,7 +96,7 @@ async def should_notify_in_app(
             tz_name = await _load_user_timezone(db, user_id)
             try:
                 tz = ZoneInfo(tz_name)
-            except Exception:
+            except _GATE_RECOVERABLE:
                 tz = ZoneInfo("America/Chicago")
             now_hhmm = datetime.now(tz).strftime("%H:%M")
             if _in_quiet_window(
@@ -96,7 +105,7 @@ async def should_notify_in_app(
                 return False
 
         return True
-    except Exception:
+    except _GATE_RECOVERABLE:
         logger.warning(
             "notification_gate.should_notify_in_app failed for user_id=%s event=%s; defaulting allow",
             user_id,
@@ -120,7 +129,7 @@ async def should_send_email(
         if not _matrix_allows(prefs.event_matrix, event_type, "email"):
             return False
         return True
-    except Exception:
+    except _GATE_RECOVERABLE:
         logger.warning(
             "notification_gate.should_send_email failed for user_id=%s event=%s; defaulting allow",
             user_id,

@@ -158,9 +158,15 @@ async def notify_on_stage_change(
     old_stage: str,
     new_stage: str,
 ) -> Notification | None:
-    """Create a notification when a pipeline stage changes."""
-    if not await should_notify_in_app(db, user_id, "stage_change"):
-        return None
+    """Create a notification when a pipeline stage changes.
+
+    NOT gated on user prefs in v1 — the Settings UI matrix doesn't
+    surface a `stage_change` toggle, and the parallel event-bus path
+    (`opportunity.stage_changed` via the notification_event_handler)
+    isn't in `_MATRIX_EVENT_NAMES` either, so gating only this path
+    would create a confusing asymmetry. When the UI gains a stage-
+    change toggle, gate both paths together.
+    """
     service = NotificationService(db)
     return await service.create_notification(
         user_id=user_id,
