@@ -29,6 +29,12 @@ class AssignmentRule(Base):
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    # Catch-all rule that fires when no filtered rule matches. Partial
+    # unique index in the DB enforces "at most one default".
+    is_default: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+
     created_by_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
@@ -44,4 +50,32 @@ class AssignmentRule(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+
+
+class AssignmentLog(Base):
+    """Audit trail for every auto-assignment decision.
+
+    `reason` records *why* this user got the lead — `rule_match` (a
+    filtered rule fired), `default_fallback` (the catch-all rule fired
+    because no filter matched), or `manual_override` (an admin
+    reassign action so the count isn't double-charged to the rule's
+    load-balance math). Read by the per-rule stats panel and any
+    future reporting widget.
+    """
+    __tablename__ = "assignment_log"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    lead_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("leads.id", ondelete="CASCADE"), nullable=False
+    )
+    rule_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("assignment_rules.id", ondelete="SET NULL")
+    )
+    assigned_user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    reason: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
