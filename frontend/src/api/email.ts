@@ -88,6 +88,14 @@ export interface EmailSearchResponse {
   pages: number;
 }
 
+/**
+ * Email volume stats — re-exported from `api/campaigns` so the email
+ * surface owns the ``/api/email/volume-stats`` call site logically. The
+ * underlying function is identical; this avoids cross-feature imports
+ * (campaigns→inbox) when more callers wire up.
+ */
+export { getVolumeStats } from './campaigns';
+
 export const emailApi = {
   send: (data: SendEmailPayload) =>
     apiClient.post<EmailQueueItem>('/api/email/send', data).then((r) => r.data),
