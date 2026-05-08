@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import re
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
@@ -10,6 +11,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.integrations.gmail.client import GmailAuthError, GmailClient
 from src.integrations.gmail.models import GmailBackfillState, GmailConnection, GmailSyncState
+
+# Strips HTML tags so a body_html-only message produces a readable snippet
+# instead of escaped <p>/<div>/<br> text in the notification email.
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+_WHITESPACE_RE = re.compile(r"\s+")
+
+
+def _strip_html_to_text(html: str) -> str:
+    """Best-effort HTML → plain text for inbound email body snippets.
+
+    Intentionally crude — full HTML parsing isn't worth the dep for a
+    280-char preview. Drops every tag, collapses whitespace, returns the
+    first chunk. The notification template still escapes the result, so
+    this is purely a UX improvement: stops the user from seeing literal
+    ``<p>Looks great</p>`` when the inbound was HTML-only.
+    """
+    if not html:
+        return ""
+    no_tags = _HTML_TAG_RE.sub(" ", html)
+    return _WHITESPACE_RE.sub(" ", no_tags).strip()
 
 # Backfill loop is deliberately sequential (per-message awaits in a for-
 # loop) so we don't bombard Gmail's per-account rate limits. Removed a
@@ -433,6 +454,59 @@ async def _store_inbound(
     )
     db.add(row)
     await db.flush()
+
+    # Notify the contact owner when this is a reply to a thread we're on.
+    # Wrapped in a SAVEPOINT so a notification-side failure (DB blip,
+    # FK violation, model error) cannot poison the parent transaction
+    # and silently destroy the InboundEmail row we just flushed. Without
+    # the savepoint, an exception inside ``notify_on_email_reply_received``
+    # leaves the session in ROLLBACK_REQUIRED state — the outer
+    # ``sync_account.commit()`` then fails with PendingRollbackError and
+    # the inbound row is lost. ``msg["from"]`` is the bare address
+    # stripped by ``_first_address``; pass ``from_header`` (preserved
+    # in :func:`gmail.client._parse_message`) so the display name
+    # actually reaches the notification surface.
+    if (
+        entity_type == "contacts"
+        and entity_id is not None
+        and msg.get("in_reply_to")
+    ):
+        from src.contacts.models import Contact as _Contact
+        from src.notifications.service import notify_on_email_reply_received
+
+        owner_result = await db.execute(
+            select(_Contact.owner_id).where(_Contact.id == entity_id)
+        )
+        owner_id = owner_result.scalar_one_or_none()
+        if owner_id is not None:
+            try:
+                async with db.begin_nested():
+                    await notify_on_email_reply_received(
+                        db=db,
+                        recipient_user_id=owner_id,
+                        contact_id=entity_id,
+                        sender_email=from_addr,
+                        sender_name=_parse_name_from(
+                            msg.get("from_header") or msg.get("from") or ""
+                        ),
+                        subject_line=msg.get("subject") or "",
+                        snippet=(
+                            msg.get("body_text")
+                            or _strip_html_to_text(msg.get("body_html") or "")
+                            or ""
+                        ),
+                    )
+            except Exception:
+                logger.exception(
+                    "notify_on_email_reply_received failed for inbound %s",
+                    row.id,
+                )
+
+
+def _parse_name_from(addr_header: str) -> str:
+    """Extract display name from 'Name <email>' format; return '' for bare addresses."""
+    m = re.match(r"^\s*(.+?)\s*<[^>]+>\s*$", addr_header or "")
+    return m.group(1).strip() if m else ""
 
 
 def _collect_recipients(msg: dict) -> list[str]:

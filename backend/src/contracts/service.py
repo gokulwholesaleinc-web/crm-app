@@ -356,6 +356,22 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
                 contract.id,
             )
 
+        # Owner-side notification (matrix-gated) — skip when no owner.
+        if contract.owner_id:
+            from src.notifications.service import notify_on_contract_signed
+
+            try:
+                await notify_on_contract_signed(
+                    db=self.db,
+                    owner_id=contract.owner_id,
+                    contract_id=contract.id,
+                    contract_title=contract.title,
+                    signer_name=contract.signed_by_name,
+                    signed_at=contract.signed_at.strftime("%B %d, %Y · %H:%M UTC") if contract.signed_at else None,
+                )
+            except Exception:
+                logger.exception("contract_signed notify failed for contract %s", contract.id)
+
         return contract
 
     async def _generate_contract_pdf(
@@ -587,9 +603,6 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
 
         owner_id = contract.owner_id or 0
         branding = await TenantBrandingHelper.get_branding_for_user(self.db, owner_id)
-        company = branding.get("company_name") or "Your provider"
-        signer_name = escape(contract.signed_by_name or "")
-        title = escape(contract.title)
 
         # Render first so the body text can honestly reflect whether a
         # PDF will be attached. Otherwise the signer reads "PDF
@@ -608,27 +621,22 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
                 contract.id,
             )
 
-        if attachments:
-            body = (
-                f"<p>Hi {signer_name or 'there'},</p>"
-                f"<p>Thank you for signing <strong>{title}</strong>. A signed "
-                f"PDF copy is attached for your records.</p>"
-                f"<p>{escape(company)}</p>"
-            )
-        else:
-            body = (
-                f"<p>Hi {signer_name or 'there'},</p>"
-                f"<p>Thank you for signing <strong>{title}</strong>. Your "
-                f"signed copy will be available shortly — we'll re-send it "
-                f"once the PDF is ready. Reply to this email if you need "
-                f"it sooner.</p>"
-                f"<p>{escape(company)}</p>"
-            )
+        from src.email.branded_templates import render_contract_signed_email
+
+        subject, body = render_contract_signed_email(branding, {
+            "audience": "signer",
+            "contract_title": contract.title,
+            "signer_name": contract.signed_by_name,
+            # Render the "PDF will follow" copy when the PDF render
+            # failed; the unattached "PDF copy is attached" line
+            # otherwise lies to the signer.
+            "pdf_pending": not attachments,
+        })
 
         email_service = EmailService(self.db)
         await email_service.queue_email(
             to_email=signer_email,
-            subject=f"Signed copy — {contract.title}",
+            subject=subject,
             body=body,
             sent_by_id=owner_id,
             entity_type=ENTITY_TYPE_CONTRACTS,

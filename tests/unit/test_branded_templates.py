@@ -12,10 +12,17 @@ from src.whitelabel.models import Tenant, TenantSettings, TenantUser
 from src.email.branded_templates import (
     TenantBrandingHelper,
     render_branded_email,
-    render_quote_email,
-    render_proposal_email,
-    render_payment_receipt_email,
     render_campaign_wrapper,
+    render_contract_expiring_email,
+    render_contract_signed_email,
+    render_email_reply_email,
+    render_lead_assigned_email,
+    render_mention_email,
+    render_payment_receipt_email,
+    render_proposal_email,
+    render_proposal_signed_email,
+    render_quote_email,
+    render_task_due_email,
 )
 from src.email.pdf_service import BrandedPDFGenerator
 from src.email.service import EmailService
@@ -681,3 +688,274 @@ class TestTenantSettingsUrlValidation:
 
         with pytest.raises(ValidationError):
             TenantSettingsUpdate(logo_url="Javascript:alert(1)")
+
+
+# ---------------------------------------------------------------------------
+# Notification matrix templates (lead_assigned / task_due / mention /
+# email_reply_received / contract_expiring / contract_signed /
+# proposal_signed)
+# ---------------------------------------------------------------------------
+
+NOTIF_BRANDING = {
+    "company_name": "Acme Corp",
+    "logo_url": "",
+    "primary_color": "#ff4400",
+    "secondary_color": "#ffaa00",
+    "accent_color": "#22c55e",
+    "footer_text": "Acme Corp — 123 Main St",
+    "privacy_policy_url": "",
+    "terms_of_service_url": "",
+    "email_from_name": "Acme Corp",
+    "email_from_address": "",
+}
+
+
+class TestLeadAssignedEmail:
+    """Renderer for the ``lead_assigned`` matrix event."""
+
+    def test_renders_subject_and_lead_card(self):
+        """Should put the lead's name in the subject, render the lead card, and include a CTA."""
+        subject, html = render_lead_assigned_email(
+            NOTIF_BRANDING,
+            {
+                "lead_full_name": "Jane Cooper",
+                "lead_email": "jane@example.com",
+                "lead_company_name": "Cooper LLC",
+                "lead_url": "https://crm.example.com/leads/42",
+                "assigner_name": "Daisy Lead",
+            },
+        )
+        assert subject == "New lead assigned: Jane Cooper"
+        assert "Jane Cooper" in html
+        assert "Cooper LLC" in html
+        assert "jane@example.com" in html
+        assert "Daisy Lead" in html
+        assert "https://crm.example.com/leads/42" in html
+        assert NOTIF_BRANDING["primary_color"] in html
+
+    def test_missing_optional_fields_no_blank_rows(self):
+        """Should omit Company / Email rows when those fields are absent rather than rendering empty cells."""
+        _, html = render_lead_assigned_email(
+            NOTIF_BRANDING,
+            {"lead_full_name": "Solo Lead", "lead_url": "https://crm.example.com/leads/1"},
+        )
+        assert "Cooper LLC" not in html
+        assert "jane@example.com" not in html
+
+    def test_assigner_falls_back_to_company(self):
+        """Should use the branding company name when ``assigner_name`` is missing."""
+        _, html = render_lead_assigned_email(
+            NOTIF_BRANDING,
+            {"lead_full_name": "Lead McLead", "lead_url": "https://x"},
+        )
+        assert "Acme Corp" in html
+
+
+class TestTaskDueEmail:
+    """Renderer for the ``task_due`` matrix event."""
+
+    def test_renders_subject_and_due_card(self):
+        """Should name the task in the subject and render the due-at + entity rows."""
+        subject, html = render_task_due_email(
+            NOTIF_BRANDING,
+            {
+                "activity_subject": "Follow up on demo",
+                "activity_due_at": "Friday, May 8",
+                "activity_url": "https://crm.example.com/activities/9",
+                "entity_label": "Cooper LLC · Jane",
+            },
+        )
+        assert subject == "Task due — Follow up on demo"
+        assert "Follow up on demo" in html
+        assert "Friday, May 8" in html
+        assert "Cooper LLC" in html
+        assert "https://crm.example.com/activities/9" in html
+        assert NOTIF_BRANDING["primary_color"] in html
+
+
+class TestMentionEmail:
+    """Renderer for the ``mention`` matrix event."""
+
+    def test_truncates_long_snippet(self):
+        """Should cap the comment snippet at 280 chars with a typographic ellipsis."""
+        long = "x" * 600
+        subject, html = render_mention_email(
+            NOTIF_BRANDING,
+            {
+                "author_name": "Daisy Mentions",
+                "entity_label": "Acme - Q3 Renewal",
+                "entity_url": "https://crm.example.com/contacts/7",
+                "content_snippet": long,
+            },
+        )
+        assert "Daisy Mentions mentioned you" in subject
+        assert "Acme - Q3 Renewal" in subject
+        assert "Daisy Mentions" in html
+        assert "…" in html
+        assert "x" * 600 not in html
+        assert NOTIF_BRANDING["primary_color"] in html
+
+    def test_html_in_snippet_is_escaped(self):
+        """Should escape (not interpret) any HTML in the comment body — defensive against stored XSS."""
+        _, html = render_mention_email(
+            NOTIF_BRANDING,
+            {
+                "author_name": "Eve",
+                "entity_label": "x",
+                "entity_url": "https://x",
+                "content_snippet": "<script>alert(1)</script>",
+            },
+        )
+        assert "<script>alert(1)</script>" not in html
+        assert "&lt;script&gt;" in html
+
+
+class TestEmailReplyEmail:
+    """Renderer for the ``email_reply_received`` matrix event."""
+
+    def test_renders_subject_and_thread_card(self):
+        """Should prefix the inbound subject in the email subject and link to the thread view."""
+        subject, html = render_email_reply_email(
+            NOTIF_BRANDING,
+            {
+                "sender_email": "client@external.com",
+                "sender_name": "Big Client",
+                "subject_line": "Re: Proposal questions",
+                "snippet": "Looks great — when can we sign?",
+                "thread_url": "https://crm.example.com/contacts/7?tab=email",
+            },
+        )
+        assert subject == "Reply received — Re: Proposal questions"
+        assert "Big Client" in html
+        assert "client@external.com" in html
+        assert "Looks great" in html
+        assert "https://crm.example.com/contacts/7?tab=email" in html
+        assert NOTIF_BRANDING["primary_color"] in html
+
+    def test_missing_subject_line_uses_placeholder(self):
+        """Should still render a sensible subject + body when the inbound has no Subject header."""
+        subject, html = render_email_reply_email(
+            NOTIF_BRANDING,
+            {
+                "sender_email": "x@y.com",
+                "sender_name": "",
+                "subject_line": "",
+                "snippet": "",
+                "thread_url": "https://x",
+            },
+        )
+        assert "(no subject)" in subject
+        assert "(no subject)" in html
+
+
+class TestContractExpiringEmail:
+    """Renderer for the ``contract_expiring`` matrix event."""
+
+    def test_renders_days_left_and_company(self):
+        """Should put days_left + contract title in the subject and render the contract card."""
+        subject, html = render_contract_expiring_email(
+            NOTIF_BRANDING,
+            {
+                "contract_title": "MSA 2026",
+                "company_name": "Cooper LLC",
+                "end_date": "2026-06-01",
+                "days_left": 14,
+                "contract_url": "https://crm.example.com/contracts/42",
+            },
+        )
+        assert subject == "Contract expiring in 14 days — MSA 2026"
+        assert "MSA 2026" in html
+        assert "Cooper LLC" in html
+        assert "2026-06-01" in html
+        assert "14 day" in html
+        assert "https://crm.example.com/contracts/42" in html
+        assert NOTIF_BRANDING["primary_color"] in html
+
+    def test_singular_day_pluralization(self):
+        """Should say "1 day" not "1 days" when only one day remains."""
+        subject, html = render_contract_expiring_email(
+            NOTIF_BRANDING,
+            {
+                "contract_title": "Tight Deal",
+                "end_date": "2026-05-08",
+                "days_left": 1,
+                "contract_url": "https://x",
+            },
+        )
+        assert "1 day —" in subject
+        assert "1 day</strong>" in html
+
+
+class TestContractSignedEmail:
+    """Renderer for the ``contract_signed`` matrix event (owner audience) and the always-on signer copy."""
+
+    def test_owner_audience_renders_signed_card(self):
+        """Owner-side notification should include signer + signed-at metadata + a CTA back to the contract."""
+        subject, html = render_contract_signed_email(
+            NOTIF_BRANDING,
+            {
+                "audience": "owner",
+                "contract_title": "MSA 2026",
+                "signer_name": "Jane Cooper",
+                "signed_at": "May 7, 2026 14:23 UTC",
+                "contract_url": "https://crm.example.com/contracts/42",
+            },
+        )
+        assert subject == "Contract signed — MSA 2026"
+        assert "Jane Cooper" in html
+        assert "May 7, 2026" in html
+        assert "https://crm.example.com/contracts/42" in html
+        assert NOTIF_BRANDING["primary_color"] in html
+
+    def test_signer_audience_thanks_signer(self):
+        """Signer-side copy should be a thank-you with no internal CTA leaked to the external party."""
+        subject, html = render_contract_signed_email(
+            NOTIF_BRANDING,
+            {
+                "audience": "signer",
+                "contract_title": "MSA 2026",
+                "signer_name": "Jane Cooper",
+            },
+        )
+        assert subject == "Signed copy — MSA 2026"
+        assert "Thank you for signing" in html
+        assert "Jane Cooper" in html
+        assert "Open contract" not in html
+
+
+class TestProposalSignedEmail:
+    """Renderer for the ``proposal_signed`` matrix event (owner-side)."""
+
+    def test_renders_owner_notification(self):
+        """Should put proposal title + signer + CTA in place and use the tenant primary color."""
+        subject, html = render_proposal_signed_email(
+            NOTIF_BRANDING,
+            {
+                "proposal_title": "Q3 Engagement",
+                "signer_name": "Jane Cooper",
+                "signed_at": "May 7, 2026 14:23 UTC",
+                "proposal_url": "https://crm.example.com/proposals/9",
+            },
+        )
+        assert subject == "Proposal signed — Q3 Engagement"
+        assert "Q3 Engagement" in html
+        assert "Jane Cooper" in html
+        assert "https://crm.example.com/proposals/9" in html
+        assert NOTIF_BRANDING["primary_color"] in html
+
+
+class TestNotifTemplatesUrlSafety:
+    """Defensive scheme allowlist on the new notification templates."""
+
+    def test_javascript_url_in_lead_cta_is_dropped(self):
+        """A javascript: lead_url must not survive — XSS defense in depth."""
+        _, html = render_lead_assigned_email(
+            NOTIF_BRANDING,
+            {
+                "lead_full_name": "Phisher",
+                "lead_url": "javascript:alert(1)",
+            },
+        )
+        assert "javascript:alert" not in html
+        assert "Open lead" not in html
+

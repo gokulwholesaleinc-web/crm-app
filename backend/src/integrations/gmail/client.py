@@ -304,6 +304,12 @@ def _parse_message(data: dict) -> dict:
         "body_html": body_html,
         "subject": headers.get("subject", ""),
         "from": _first_address(headers.get("from", "")),
+        # Preserve the raw RFC From header (`Display Name <addr@host>`)
+        # so notification surfaces can render the sender's name.
+        # ``from`` above is stripped to a bare address by
+        # ``_first_address`` for contact matching, which loses the
+        # display name.
+        "from_header": headers.get("from", ""),
         "to": to_email,
         "to_list": _parse_address_list(to_header),
         "cc": cc_header,

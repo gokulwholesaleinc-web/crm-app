@@ -118,6 +118,17 @@ async def should_notify_in_app(
 async def should_send_email(
     db: AsyncSession, user_id: int, event_type: str
 ) -> bool:
+    """Fail-CLOSED for email — opposite of in-app fail-open.
+
+    The cost of false-allow on email is real: a user who explicitly
+    opted out of email notifications gets one anyway, *and* — for
+    cooldown-stamped events like ``contract_expiring`` — they then get
+    locked out of re-notification for the cooldown window once the
+    cooldown stamp lands. In-app fail-open is defensible (extra bell
+    icon); email fail-open is a stated-preference violation. So a
+    transient DB blip in the gate suppresses the send rather than
+    leaking through.
+    """
     try:
         prefs = await _load_prefs(db, user_id)
         if prefs is None:
@@ -126,14 +137,12 @@ async def should_send_email(
             return False
         if prefs.email_digest == "off":
             return False
-        if not _matrix_allows(prefs.event_matrix, event_type, "email"):
-            return False
-        return True
+        return _matrix_allows(prefs.event_matrix, event_type, "email")
     except _GATE_RECOVERABLE:
         logger.warning(
-            "notification_gate.should_send_email failed for user_id=%s event=%s; defaulting allow",
+            "notification_gate.should_send_email failed for user_id=%s event=%s; defaulting suppress",
             user_id,
             event_type,
             exc_info=True,
         )
-        return True
+        return False

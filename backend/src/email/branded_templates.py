@@ -549,6 +549,390 @@ def render_payment_invoice_email(branding: dict, payment_data: dict) -> tuple[st
 
 
 # ---------------------------------------------------------------------------
+# Notification matrix templates
+# ---------------------------------------------------------------------------
+#
+# These mirror the user-facing event keys exposed in the Settings →
+# Notifications matrix (see ``frontend/src/api/account.ts``
+# ``NOTIFICATION_EVENT_TYPES``). Each renderer returns ``(subject,
+# html_body)`` so the dispatcher can pass both straight through to
+# ``EmailService.queue_email``.
+
+_TRUNCATE_SNIPPET_CHARS = 280
+
+
+def _truncate(text: str, limit: int) -> str:
+    """Trim ``text`` to ``limit`` chars with a trailing ellipsis when cut."""
+    s = (text or "").strip()
+    if len(s) <= limit:
+        return s
+    # Use the typographic ellipsis per CLAUDE.md.
+    return s[: limit - 1].rstrip() + "…"
+
+
+def render_lead_assigned_email(
+    branding: dict, data: dict
+) -> tuple[str, str]:
+    """Returns (subject, html_body) for a "lead assigned to you" email.
+
+    Expected ``data`` keys: ``lead_full_name``, ``lead_email`` (optional),
+    ``lead_company_name`` (optional), ``lead_url`` (deep link), and
+    ``assigner_name`` (optional). The assigner falls back to the
+    branding company name when not provided.
+    """
+    lead_name = escape(str(data.get("lead_full_name") or "a new lead"))
+    lead_email = escape(str(data.get("lead_email") or ""))
+    lead_company = escape(str(data.get("lead_company_name") or ""))
+    assigner = escape(str(
+        data.get("assigner_name") or branding.get("company_name") or "CRM"
+    ))
+    lead_url = data.get("lead_url")
+
+    rows = [f'<tr><td style="padding:4px 0;color:#6b7280;width:120px;">Lead</td>'
+            f'<td style="padding:4px 0;font-weight:600;color:#111827;">{lead_name}</td></tr>']
+    if lead_company:
+        rows.append(
+            f'<tr><td style="padding:4px 0;color:#6b7280;">Company</td>'
+            f'<td style="padding:4px 0;color:#111827;">{lead_company}</td></tr>'
+        )
+    if lead_email:
+        rows.append(
+            f'<tr><td style="padding:4px 0;color:#6b7280;">Email</td>'
+            f'<td style="padding:4px 0;color:#111827;">{lead_email}</td></tr>'
+        )
+
+    body_html = f"""\
+<p>{assigner} has assigned a new lead to you.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color:#f9fafb;border-radius:6px;padding:16px;margin:16px 0;font-size:14px;">
+<tbody>
+{''.join(rows)}
+</tbody>
+</table>
+<p style="color:#6b7280;font-size:13px;">Open the lead to add an activity, qualify it, or hand it off.</p>"""
+
+    subject = f"New lead assigned: {data.get('lead_full_name') or 'unnamed lead'}"
+    html = render_branded_email(
+        branding=branding,
+        subject=subject,
+        headline="New lead assigned to you",
+        body_html=body_html,
+        cta_text="Open lead" if lead_url else None,
+        cta_url=lead_url,
+    )
+    return subject, html
+
+
+def render_task_due_email(branding: dict, data: dict) -> tuple[str, str]:
+    """Returns (subject, html_body) for a "task due soon" email.
+
+    Expected ``data`` keys: ``activity_subject``, ``activity_due_at``
+    (preformatted string), ``activity_url`` (deep link), ``entity_label``
+    (optional — e.g. "Acme Inc · John Doe").
+    """
+    activity_subject = escape(str(data.get("activity_subject") or "Untitled task"))
+    due_at = escape(str(data.get("activity_due_at") or ""))
+    entity_label = escape(str(data.get("entity_label") or ""))
+    activity_url = data.get("activity_url")
+
+    rows = [f'<tr><td style="padding:4px 0;color:#6b7280;width:120px;">Task</td>'
+            f'<td style="padding:4px 0;font-weight:600;color:#111827;">{activity_subject}</td></tr>']
+    if due_at:
+        rows.append(
+            f'<tr><td style="padding:4px 0;color:#6b7280;">Due</td>'
+            f'<td style="padding:4px 0;color:#111827;">{due_at}</td></tr>'
+        )
+    if entity_label:
+        rows.append(
+            f'<tr><td style="padding:4px 0;color:#6b7280;">Linked to</td>'
+            f'<td style="padding:4px 0;color:#111827;">{entity_label}</td></tr>'
+        )
+
+    body_html = f"""\
+<p>You have a task coming due in your CRM.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color:#f9fafb;border-radius:6px;padding:16px;margin:16px 0;font-size:14px;">
+<tbody>
+{''.join(rows)}
+</tbody>
+</table>"""
+
+    subject = f"Task due — {data.get('activity_subject') or 'Untitled task'}"
+    html = render_branded_email(
+        branding=branding,
+        subject=subject,
+        headline="Task due soon",
+        body_html=body_html,
+        cta_text="Open task" if activity_url else None,
+        cta_url=activity_url,
+    )
+    return subject, html
+
+
+def render_mention_email(branding: dict, data: dict) -> tuple[str, str]:
+    """Returns (subject, html_body) for an "@mention" email.
+
+    Expected ``data`` keys: ``author_name``, ``entity_label`` (e.g. the
+    contact / lead / opportunity title), ``entity_url`` (deep link), and
+    ``content_snippet`` (the comment body — truncated to 280 chars before
+    rendering so a long thread doesn't blow out the email layout).
+    """
+    author = escape(str(data.get("author_name") or "Someone"))
+    entity_label = escape(str(data.get("entity_label") or "an item"))
+    entity_url = data.get("entity_url")
+    snippet_raw = _truncate(str(data.get("content_snippet") or ""), _TRUNCATE_SNIPPET_CHARS)
+    snippet = escape(snippet_raw) if snippet_raw else ""
+
+    snippet_block = (
+        f'<blockquote style="margin:16px 0;padding:12px 16px;border-left:3px solid '
+        f'{escape(branding.get("primary_color", "#6366f1"))};background-color:#f9fafb;'
+        f'font-size:14px;color:#374151;white-space:pre-wrap;">{snippet}</blockquote>'
+        if snippet else ""
+    )
+
+    body_html = f"""\
+<p><strong>{author}</strong> mentioned you on <strong>{entity_label}</strong>.</p>
+{snippet_block}"""
+
+    subject = f"{data.get('author_name') or 'Someone'} mentioned you on {data.get('entity_label') or 'an item'}"
+    html = render_branded_email(
+        branding=branding,
+        subject=subject,
+        headline=f"{data.get('author_name') or 'Someone'} mentioned you",
+        body_html=body_html,
+        cta_text="View thread" if entity_url else None,
+        cta_url=entity_url,
+    )
+    return subject, html
+
+
+def render_email_reply_email(branding: dict, data: dict) -> tuple[str, str]:
+    """Returns (subject, html_body) for an "inbound email reply" notification.
+
+    Expected ``data`` keys: ``sender_email``, ``sender_name`` (optional),
+    ``subject_line`` (the inbound message's subject), ``snippet`` (body
+    preview — truncated to 280 chars), and ``thread_url`` (deep link to
+    the CRM thread view).
+    """
+    sender_email = escape(str(data.get("sender_email") or ""))
+    sender_name = escape(str(data.get("sender_name") or "")) or sender_email or "A contact"
+    raw_subject = str(data.get("subject_line") or "(no subject)")
+    subject_line = escape(raw_subject)
+    snippet_raw = _truncate(str(data.get("snippet") or ""), _TRUNCATE_SNIPPET_CHARS)
+    snippet = escape(snippet_raw) if snippet_raw else ""
+    thread_url = data.get("thread_url")
+
+    sender_block = (
+        f'<p style="margin:0 0 12px;color:#374151;">'
+        f'<strong>{sender_name}</strong>'
+        + (f' &lt;{sender_email}&gt;' if sender_email and sender_name != sender_email else '')
+        + '</p>'
+    )
+    snippet_block = (
+        f'<blockquote style="margin:0;padding:12px 16px;border-left:3px solid '
+        f'{escape(branding.get("primary_color", "#6366f1"))};background-color:#f9fafb;'
+        f'font-size:14px;color:#374151;white-space:pre-wrap;">{snippet}</blockquote>'
+        if snippet else ""
+    )
+
+    body_html = f"""\
+<p>You have a new email reply on a thread you own.</p>
+{sender_block}
+<p style="margin:0 0 8px;font-size:14px;color:#6b7280;">Subject</p>
+<p style="margin:0 0 16px;font-size:15px;font-weight:600;color:#111827;">{subject_line}</p>
+{snippet_block}"""
+
+    subject = f"Reply received — {raw_subject}"
+    html = render_branded_email(
+        branding=branding,
+        subject=subject,
+        headline="Email reply received",
+        body_html=body_html,
+        cta_text="Open thread" if thread_url else None,
+        cta_url=thread_url,
+    )
+    return subject, html
+
+
+def render_contract_expiring_email(
+    branding: dict, data: dict
+) -> tuple[str, str]:
+    """Returns (subject, html_body) for the daily "contract expiring" alert.
+
+    Expected ``data`` keys: ``contract_title``, ``company_name``
+    (optional), ``end_date`` (preformatted string), ``days_left`` (int),
+    ``contract_url`` (deep link).
+    """
+    title = escape(str(data.get("contract_title") or "Contract"))
+    company = escape(str(data.get("company_name") or ""))
+    end_date = escape(str(data.get("end_date") or ""))
+    days_left = int(data.get("days_left") or 0)
+    contract_url = data.get("contract_url")
+
+    plural = "" if days_left == 1 else "s"
+    rows = [f'<tr><td style="padding:4px 0;color:#6b7280;width:120px;">Contract</td>'
+            f'<td style="padding:4px 0;font-weight:600;color:#111827;">{title}</td></tr>']
+    if company:
+        rows.append(
+            f'<tr><td style="padding:4px 0;color:#6b7280;">Company</td>'
+            f'<td style="padding:4px 0;color:#111827;">{company}</td></tr>'
+        )
+    if end_date:
+        rows.append(
+            f'<tr><td style="padding:4px 0;color:#6b7280;">Expires</td>'
+            f'<td style="padding:4px 0;color:#111827;">{end_date}</td></tr>'
+        )
+
+    body_html = f"""\
+<p>The contract below expires in <strong>{days_left} day{plural}</strong>. Renewal usually takes a few business days — start the conversation now to avoid a service gap.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color:#f9fafb;border-radius:6px;padding:16px;margin:16px 0;font-size:14px;">
+<tbody>
+{''.join(rows)}
+</tbody>
+</table>"""
+
+    subject = f"Contract expiring in {days_left} day{plural} — {data.get('contract_title') or 'Contract'}"
+    html = render_branded_email(
+        branding=branding,
+        subject=subject,
+        headline=f"Contract expiring in {days_left} day{plural}",
+        body_html=body_html,
+        cta_text="Open contract" if contract_url else None,
+        cta_url=contract_url,
+    )
+    return subject, html
+
+
+def render_contract_signed_email(
+    branding: dict, data: dict
+) -> tuple[str, str]:
+    """Returns (subject, html_body) for the "contract signed" notification.
+
+    Used for **two distinct flows**:
+      1. signer-side transactional copy — caller supplies ``audience='signer'``,
+         ``signer_name``. Always-on, never matrix-gated.
+      2. owner-side notification — caller supplies ``audience='owner'``,
+         ``signer_name``, ``signed_at``, ``contract_url``. Matrix-gated on
+         ``contract_signed``.
+
+    Expected ``data`` keys: ``audience`` ('signer' | 'owner'),
+    ``contract_title``, ``signer_name``, ``signed_at`` (preformatted str,
+    optional), ``contract_url`` (optional — owner only).
+    """
+    title = escape(str(data.get("contract_title") or "Contract"))
+    signer_name = escape(str(data.get("signer_name") or ""))
+    signed_at = escape(str(data.get("signed_at") or ""))
+    contract_url = data.get("contract_url")
+    audience = (data.get("audience") or "owner").lower()
+    company = escape(branding.get("company_name", "CRM"))
+
+    if audience == "signer":
+        # Distinct copy when the PDF couldn't be rendered — saying
+        # "attached for your records" while attaching nothing is
+        # actively misleading.
+        if data.get("pdf_pending"):
+            body_html = f"""\
+<p>Hi {signer_name or 'there'},</p>
+<p>Thank you for signing <strong>{title}</strong>. Your signed PDF copy will be sent once it's ready — usually within a few minutes. Reply to this email if you don't see it shortly.</p>
+<p>{company}</p>"""
+        else:
+            body_html = f"""\
+<p>Hi {signer_name or 'there'},</p>
+<p>Thank you for signing <strong>{title}</strong>. A signed PDF copy is attached for your records.</p>
+<p>{company}</p>"""
+        subject = f"Signed copy — {data.get('contract_title') or 'Contract'}"
+        headline = "Thank you for signing"
+        cta_text = None
+        cta_url = None
+    else:
+        rows = [f'<tr><td style="padding:4px 0;color:#6b7280;width:120px;">Contract</td>'
+                f'<td style="padding:4px 0;font-weight:600;color:#111827;">{title}</td></tr>']
+        if signer_name:
+            rows.append(
+                f'<tr><td style="padding:4px 0;color:#6b7280;">Signed by</td>'
+                f'<td style="padding:4px 0;color:#111827;">{signer_name}</td></tr>'
+            )
+        if signed_at:
+            rows.append(
+                f'<tr><td style="padding:4px 0;color:#6b7280;">Signed at</td>'
+                f'<td style="padding:4px 0;color:#111827;">{signed_at}</td></tr>'
+            )
+        body_html = f"""\
+<p>Your contract has been electronically signed.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color:#f9fafb;border-radius:6px;padding:16px;margin:16px 0;font-size:14px;">
+<tbody>
+{''.join(rows)}
+</tbody>
+</table>"""
+        subject = f"Contract signed — {data.get('contract_title') or 'Contract'}"
+        headline = "Contract signed"
+        cta_text = "Open contract" if contract_url else None
+        cta_url = contract_url
+
+    html = render_branded_email(
+        branding=branding,
+        subject=subject,
+        headline=headline,
+        body_html=body_html,
+        cta_text=cta_text,
+        cta_url=cta_url,
+    )
+    return subject, html
+
+
+def render_proposal_signed_email(
+    branding: dict, data: dict
+) -> tuple[str, str]:
+    """Returns (subject, html_body) for the OWNER-side "proposal signed" notification.
+
+    Distinct from :func:`render_proposal_email` — that one is the
+    send-for-signature email to the signer; this is the post-acceptance
+    notification to the internal owner. Signer-side post-acceptance copy
+    (with the signed PDF attached) stays in proposals/service.py and is
+    not template-ified to keep the attachment-heavy logic local.
+
+    Expected ``data`` keys: ``proposal_title``, ``signer_name`` (signer
+    of the e-sign), ``signed_at`` (preformatted str, optional),
+    ``proposal_url`` (deep link).
+    """
+    title = escape(str(data.get("proposal_title") or "Proposal"))
+    signer_name = escape(str(data.get("signer_name") or ""))
+    signed_at = escape(str(data.get("signed_at") or ""))
+    proposal_url = data.get("proposal_url")
+
+    rows = [f'<tr><td style="padding:4px 0;color:#6b7280;width:120px;">Proposal</td>'
+            f'<td style="padding:4px 0;font-weight:600;color:#111827;">{title}</td></tr>']
+    if signer_name:
+        rows.append(
+            f'<tr><td style="padding:4px 0;color:#6b7280;">Signed by</td>'
+            f'<td style="padding:4px 0;color:#111827;">{signer_name}</td></tr>'
+        )
+    if signed_at:
+        rows.append(
+            f'<tr><td style="padding:4px 0;color:#6b7280;">Signed at</td>'
+            f'<td style="padding:4px 0;color:#111827;">{signed_at}</td></tr>'
+        )
+
+    body_html = f"""\
+<p>Your proposal has been accepted and electronically signed.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color:#f9fafb;border-radius:6px;padding:16px;margin:16px 0;font-size:14px;">
+<tbody>
+{''.join(rows)}
+</tbody>
+</table>
+<p style="color:#6b7280;font-size:13px;">If billing is configured the next step (Stripe invoice or checkout) is automatically queued.</p>"""
+
+    subject = f"Proposal signed — {data.get('proposal_title') or 'Proposal'}"
+    html = render_branded_email(
+        branding=branding,
+        subject=subject,
+        headline="Proposal signed",
+        body_html=body_html,
+        cta_text="Open proposal" if proposal_url else None,
+        cta_url=proposal_url,
+    )
+    return subject, html
+
+
+# ---------------------------------------------------------------------------
 # Campaign wrapper
 # ---------------------------------------------------------------------------
 

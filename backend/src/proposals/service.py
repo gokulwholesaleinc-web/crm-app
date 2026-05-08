@@ -24,7 +24,11 @@ from src.core.filtering import build_token_search
 from src.core.opportunity_guards import assert_opportunity_active
 from src.core.sorting import build_order_clauses
 from src.core.url_safety import UnsafeUrlError, validate_public_url
-from src.email.branded_templates import TenantBrandingHelper, render_proposal_email
+from src.email.branded_templates import (
+    TenantBrandingHelper,
+    render_contract_signed_email,
+    render_proposal_email,
+)
 from src.email.pdf_render import pdf_logo_allowed_hosts, render_html_to_pdf
 from src.email.service import EmailService
 from src.email.types import EmailAttachment
@@ -413,6 +417,31 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         await self.send_signed_copy_to_client(proposal)
 
         await self._maybe_spawn_billing(proposal)
+
+        # Owner-side proposal_signed notification — matrix-gated; signer
+        # already received their always-on signed copy above. Import is
+        # outside the try so an ImportError surfaces loudly rather than
+        # masquerading as a runtime swallow.
+        if proposal.owner_id:
+            from src.notifications.service import notify_on_proposal_signed
+
+            try:
+                await notify_on_proposal_signed(
+                    db=self.db,
+                    owner_id=proposal.owner_id,
+                    proposal_id=proposal.id,
+                    proposal_title=proposal.title,
+                    signer_name=proposal.signer_name,
+                    signed_at=(
+                        proposal.signed_at.strftime("%B %d, %Y · %H:%M UTC")
+                        if proposal.signed_at
+                        else None
+                    ),
+                )
+            except Exception:
+                logger.exception(
+                    "proposal_signed notify failed for proposal %s", proposal.id,
+                )
 
         await self.db.refresh(proposal)
         return proposal
@@ -1407,15 +1436,11 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             return
 
         branding = await self.get_branding_for_proposal(proposal)
-        company = branding.get("company_name") or "Your provider"
-        signer_name = escape(proposal.signer_name or "")
-        title = escape(proposal.title)
-        body = (
-            f"<p>Hi {signer_name or 'there'},</p>"
-            f"<p>Thank you for accepting <strong>{title}</strong>. A signed "
-            f"PDF copy is attached for your records.</p>"
-            f"<p>{escape(company)}</p>"
-        )
+        subject, body = render_contract_signed_email(branding, {
+            "audience": "signer",
+            "contract_title": proposal.title,
+            "signer_name": proposal.signer_name,
+        })
 
         # Render + queue are both best-effort: a failure in either leaves
         # the proposal accepted but without a signed-copy email. The CRM
@@ -1444,18 +1469,19 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 # email — list the filename + sha256 of the stored object
                 # key so the recipient can ask the CRM user to resend the
                 # missing doc.
-                final_body += (
+                appendix = (
                     "<p><em>Some referenced documents could not be attached "
                     "automatically. Please ask your point of contact to send "
                     "them separately:</em></p><ul>"
                     + "".join(f"<li>{line}</li>" for line in missing_lines)
                     + "</ul>"
                 )
+                final_body = final_body.replace("</body>", appendix + "</body>", 1)
 
             email_service = EmailService(self.db)
             await email_service.queue_email(
                 to_email=signer_email,
-                subject=f"Signed copy — {proposal.title}",
+                subject=subject,
                 body=final_body,
                 sent_by_id=proposal.owner_id,
                 entity_type="proposals",
