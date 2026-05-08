@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import aliased
 
+from src.audit.service import AuditService
 from src.auth.models import User
 from src.core.constants import HTTPStatus
 from src.core.data_scope import (
@@ -127,6 +128,26 @@ async def share_entity(
     await db.refresh(share)
     invalidate_scope_cache(request.shared_with_user_id)
 
+    # Audit row keyed to the shared record so it surfaces in that entity's history.
+    try:
+        await AuditService(db).log_change(
+            entity_type=_ENTITY_SINGULAR.get(request.entity_type, request.entity_type),
+            entity_id=request.entity_id,
+            user_id=current_user.id,
+            action="share",
+            changes=[{
+                "field": "shared_with_user_id",
+                "old": None,
+                "new": request.shared_with_user_id,
+                "permission_level": request.permission_level,
+            }],
+        )
+    except Exception:
+        logger.exception(
+            "share audit log failed for entity=%s/%s shared_with=%s",
+            request.entity_type, request.entity_id, request.shared_with_user_id,
+        )
+
     sharer_name = current_user.full_name or current_user.email
     entity_singular = _ENTITY_SINGULAR.get(request.entity_type, request.entity_type)
     if request.permission_level == "assignee":
@@ -207,10 +228,32 @@ async def revoke_share(
         )
 
     shared_with_id = share.shared_with_user_id
+    revoked_entity_type = share.entity_type
+    revoked_entity_id = share.entity_id
+    revoked_permission = share.permission_level
     await db.delete(share)
     await db.flush()
     # Invalidate scope cache so the shared-with user loses access immediately
     invalidate_scope_cache(shared_with_id)
+
+    try:
+        await AuditService(db).log_change(
+            entity_type=_ENTITY_SINGULAR.get(revoked_entity_type, revoked_entity_type),
+            entity_id=revoked_entity_id,
+            user_id=current_user.id,
+            action="unshare",
+            changes=[{
+                "field": "shared_with_user_id",
+                "old": shared_with_id,
+                "new": None,
+                "permission_level": revoked_permission,
+            }],
+        )
+    except Exception:
+        logger.exception(
+            "unshare audit log failed for share_id=%s entity=%s/%s",
+            share_id, revoked_entity_type, revoked_entity_id,
+        )
 
 
 # ---------------------------------------------------------------------------
