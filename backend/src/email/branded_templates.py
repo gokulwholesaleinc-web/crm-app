@@ -211,11 +211,16 @@ def _base_email_html(
     # company wordmark and suppress the text company name next to it —
     # otherwise you get "LINKCREATIVE  Link Creative" side-by-side.
     if logo_url:
+        # White pill wraps the logo so it stays visible regardless of header
+        # primary color (e.g. a white logo on a white header would disappear).
         logo_html = (
+            f'<table role="presentation" cellpadding="0" cellspacing="0" '
+            f'style="display:inline-table;vertical-align:middle;margin-right:12px;">'
+            f'<tr><td style="background-color:#ffffff;border-radius:6px;padding:8px 12px;">'
             f'<img src="{escape(logo_url)}" alt="{company}" '
             f'height="40" '
-            f'style="display:inline-block;vertical-align:middle;margin-right:12px;'
-            f'height:40px;width:auto;max-width:200px;border-radius:6px;" />'
+            f'style="display:block;height:40px;width:auto;max-width:200px;" />'
+            f'</td></tr></table>'
         )
         company_label = ""
     else:
@@ -284,7 +289,7 @@ def _base_email_html(
 
 <!-- Header -->
 <table role="presentation" cellpadding="0" cellspacing="0" width="600" style="max-width:600px;width:100%;">
-<tr><td style="background-color:{primary};padding:20px 24px;border-radius:8px 8px 0 0;">
+<tr><td style="background-color:{primary};padding:24px 32px;border-radius:8px 8px 0 0;">
   <table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr>
     <td style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:18px;font-weight:700;">
       {logo_html}{company_label}
@@ -296,7 +301,7 @@ def _base_email_html(
 
 <!-- Body -->
 <table role="presentation" class="email-card" cellpadding="0" cellspacing="0" width="600" style="max-width:600px;width:100%;background-color:{surface_light};">
-<tr><td style="padding:32px 24px;">
+<tr><td style="padding:32px 32px;">
   <h1 class="email-headline" style="margin:0 0 16px;font-family:Arial,Helvetica,sans-serif;font-size:22px;font-weight:700;color:#111827;">{escape(headline)}</h1>
   <div class="email-text" style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;color:#374151;">
     {body_html}
@@ -794,8 +799,7 @@ def render_email_reply_email(branding: dict, data: dict) -> tuple[str, str]:
     body_html = f"""\
 <p>You have a new email reply on a thread you own.</p>
 {sender_block}
-<p style="margin:0 0 8px;font-size:14px;color:#6b7280;">Subject</p>
-<p style="margin:0 0 16px;font-size:15px;font-weight:600;color:#111827;">{subject_line}</p>
+<p style="margin:0 0 16px;font-size:15px;color:#374151;"><strong style="color:#6b7280;">Subject:</strong> <span style="font-weight:600;color:#111827;">{subject_line}</span></p>
 {snippet_block}"""
 
     subject = f"Reply received — {raw_subject}"

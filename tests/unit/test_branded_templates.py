@@ -1056,3 +1056,80 @@ class TestSafeHexAtRender:
         assert "#f9fafb" in html  # bg_color_light fallback
         assert "#ffffff" in html  # surface_color_light fallback
 
+
+# ---------------------------------------------------------------------------
+# Visual polish fixes (PR #271)
+# ---------------------------------------------------------------------------
+
+
+_WHITE_HEADER_BRANDING = {
+    **NOTIF_BRANDING,
+    "logo_url": "https://example.com/logo.png",
+    "primary_color": "#ffffff",  # white header — logo would disappear without the pill
+}
+
+_NO_LOGO_BRANDING = {**NOTIF_BRANDING, "logo_url": ""}
+
+
+class TestLogoWhitePill:
+    """Logo must be wrapped in a white pill so it remains visible on any header color."""
+
+    def test_logo_wrapped_in_white_background_cell(self):
+        """White pill td must appear in the header when a logo URL is set."""
+        html = render_branded_email(
+            _WHITE_HEADER_BRANDING, "s", "h", "<p>b</p>"
+        )
+        assert "background-color:#ffffff;border-radius:6px;padding:8px 12px;" in html
+        assert 'src="https://example.com/logo.png"' in html
+
+    def test_no_logo_omits_pill(self):
+        """When no logo is provided the white pill table must not appear."""
+        html = render_branded_email(_NO_LOGO_BRANDING, "s", "h", "<p>b</p>")
+        assert "border-radius:6px;padding:8px 12px;" not in html
+
+
+class TestHeaderBodyPadding:
+    """Header and body padding must be increased for better breathing room."""
+
+    def test_header_padding_24_32(self):
+        """Header td uses padding:24px 32px."""
+        html = render_branded_email(_NO_LOGO_BRANDING, "s", "h", "<p>b</p>")
+        assert "padding:24px 32px;border-radius:8px 8px 0 0;" in html
+
+    def test_body_padding_32_32(self):
+        """Body card td uses padding:32px 32px."""
+        html = render_branded_email(_NO_LOGO_BRANDING, "s", "h", "<p>b</p>")
+        assert "padding:32px 32px;" in html
+
+
+class TestSubjectInlineLabel:
+    """Subject line must render as a single inline paragraph, not two separate <p> tags."""
+
+    def test_subject_rendered_inline(self):
+        """The old two-<p> Subject pattern must not appear; new inline <strong>Subject:</strong> must."""
+        _, html = render_email_reply_email(
+            _NO_LOGO_BRANDING,
+            {
+                "sender_email": "client@example.com",
+                "subject_line": "Re: Proposal",
+                "snippet": "Looks good.",
+            },
+        )
+        assert '<p style="margin:0 0 8px;font-size:14px;color:#6b7280;">Subject</p>' not in html
+        assert '<strong style="color:#6b7280;">Subject:</strong>' in html
+        assert "Re: Proposal" in html
+
+    def test_subject_label_and_value_in_same_paragraph(self):
+        """Label and value must share a single <p> with no </p><p> between them."""
+        _, html = render_email_reply_email(
+            _NO_LOGO_BRANDING,
+            {
+                "sender_email": "a@b.com",
+                "subject_line": "Hello from client",
+                "snippet": "",
+            },
+        )
+        idx_label = html.index("Subject:")
+        idx_value = html.index("Hello from client")
+        assert "</p>" not in html[idx_label:idx_value]
+
