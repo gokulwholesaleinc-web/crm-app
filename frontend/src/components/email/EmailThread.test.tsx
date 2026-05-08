@@ -166,7 +166,15 @@ describe('EmailThread', () => {
       '<table><tr><td>Giancarlo · CEO · Link Creative</td></tr></table>' +
       '</div>';
     mockUseEmailThread.mockReturnValue({
-      data: threadResponse([makeEmail({ id: 1, body_html: html })]),
+      data: threadResponse([
+        makeEmail({
+          id: 1,
+          direction: 'inbound',
+          from_email: 'them@example.com',
+          to_email: 'me@example.com',
+          body_html: html,
+        }),
+      ]),
       isLoading: false,
     });
 
@@ -178,12 +186,32 @@ describe('EmailThread', () => {
     expect(body!.textContent).not.toContain('can you confirm?');
     expect(body!.textContent).not.toContain('Giancarlo');
 
-    const toggle = screen.getByRole('button', { name: /Show quoted history/i });
+    // Toggle label names *both* cuts since the body had a quote AND a sig.
+    const toggle = screen.getByRole('button', { name: /Show quoted history & signature/i });
     fireEvent.click(toggle);
 
     const expanded = document.querySelector('.email-html-content');
     expect(expanded!.textContent).toContain('can you confirm?');
     expect(expanded!.textContent).toContain('Giancarlo');
+  });
+
+  it('does NOT trim outbound HTML (our own branded templates pass through untouched)', () => {
+    // A future branded template could legitimately quote a customer
+    // testimonial in a <blockquote type="cite">; trimming it would
+    // silently erase the marketing payload. Outbound bypasses trim.
+    const html =
+      '<p>Thanks for your purchase!</p>' +
+      '<blockquote type="cite">"Their service is amazing." — Jane</blockquote>';
+    mockUseEmailThread.mockReturnValue({
+      data: threadResponse([makeEmail({ id: 1, direction: 'outbound', body_html: html })]),
+      isLoading: false,
+    });
+
+    renderWithProviders(<EmailThread entityType="contacts" entityId={1883} />);
+
+    const body = document.querySelector('.email-html-content');
+    expect(body!.textContent).toContain('Their service is amazing');
+    expect(screen.queryByRole('button', { name: /Show quoted history/i })).not.toBeInTheDocument();
   });
 
   it('strips <svg> and <image> from inbound HTML (no profile escape)', () => {
