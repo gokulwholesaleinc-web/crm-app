@@ -22,6 +22,7 @@ import {
   QuestionMarkCircleIcon,
   UserPlusIcon,
   ShareIcon,
+  InboxIcon,
 } from '@heroicons/react/24/outline';
 
 export interface NavItem {
@@ -38,6 +39,7 @@ export const DEFAULT_MAIN_NAVIGATION: NavItem[] = [
   { id: 'companies', name: 'Companies', href: '/companies', icon: BuildingOfficeIcon },
   { id: 'leads', name: 'Leads', href: '/leads', icon: FunnelIcon },
   { id: 'pipeline', name: 'Pipeline', href: '/pipeline', icon: ViewColumnsIcon },
+  { id: 'inbox', name: 'Inbox', href: '/inbox', icon: InboxIcon },
   { id: 'quotes', name: 'Quotes', href: '/quotes', icon: DocumentTextIcon },
   { id: 'proposals', name: 'Proposals', href: '/proposals', icon: DocumentDuplicateIcon },
   { id: 'contracts', name: 'Contracts', href: '/contracts', icon: ScaleIcon },
