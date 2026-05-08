@@ -21,6 +21,7 @@ import {
   ShieldCheckIcon,
   QuestionMarkCircleIcon,
   UserPlusIcon,
+  ShareIcon,
 } from '@heroicons/react/24/outline';
 
 export interface NavItem {
@@ -56,12 +57,13 @@ export const DEFAULT_SECONDARY_NAVIGATION: NavItem[] = [
   { id: 'help', name: 'Help', href: '/help', icon: QuestionMarkCircleIcon },
   { id: 'admin', name: 'Admin', href: '/admin', icon: ShieldCheckIcon },
   { id: 'approvals', name: 'User Approvals', href: '/admin/user-approvals', icon: UserPlusIcon },
+  { id: 'admin-sharing', name: 'Sharing', href: '/admin/sharing', icon: ShareIcon },
 ];
 
 export const STORAGE_KEY_MAIN = 'crm-sidebar-order:v1';
 export const STORAGE_KEY_SECONDARY = 'crm-sidebar-secondary-order:v1';
 
-export const ADMIN_ONLY_IDS = new Set(['admin', 'approvals']);
+export const ADMIN_ONLY_IDS = new Set(['admin', 'approvals', 'admin-sharing']);
 
 export function readStoredOrder(key: string): string[] | null {
   const parsed = safeStorage.getJson<unknown>(key);

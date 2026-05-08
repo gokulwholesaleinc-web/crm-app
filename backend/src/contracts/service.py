@@ -6,7 +6,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from html import escape
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import selectinload
 
 from src.attachments.object_storage import upload_file_bytes
@@ -60,6 +60,7 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
         company_id: int | None = None,
         status: str | None = None,
         owner_id: int | None = None,
+        shared_entity_ids: list[int] | None = None,
         search: str | None = None,
         order_by: str | None = None,
         order_dir: str | None = None,
@@ -79,8 +80,13 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
         if status:
             query = query.where(Contract.status == status)
 
-        if owner_id:
-            query = query.where(Contract.owner_id == owner_id)
+        if owner_id or shared_entity_ids:
+            clauses = []
+            if owner_id:
+                clauses.append(Contract.owner_id == owner_id)
+            if shared_entity_ids:
+                clauses.append(Contract.id.in_(shared_entity_ids))
+            query = query.where(or_(*clauses))
 
         if search:
             condition = build_token_search(search, Contract.title)

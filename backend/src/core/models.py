@@ -90,8 +90,8 @@ class EntityShare(Base, TimestampMixin):
         nullable=False,
     )
     permission_level: Mapped[str] = mapped_column(
-        String(10), nullable=False, default="view"
-    )  # "view" or "edit"
+        String(20), nullable=False, default="view"
+    )  # "view", "edit", or "assignee" (assignee == owner-equivalent for visibility + edit)
 
     __table_args__ = (
         Index("ix_entity_shares_entity", "entity_type", "entity_id"),

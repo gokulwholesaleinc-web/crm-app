@@ -5,6 +5,7 @@ import { NumberCard } from './components/NumberCard';
 import { ChartCard } from './components/ChartCard';
 import { SalesFunnelChart } from './components/SalesFunnelChart';
 import { ReportWidgetCard } from './components/ReportWidgetCard';
+import { SharedWithMeWidget } from './SharedWithMeWidget';
 import { SkeletonCard, SkeletonChart } from '../../components/ui/Skeleton';
 import { ErrorEmptyState } from '../../components/ui/EmptyState';
 import { DateRangePicker } from '../../components/ui/DateRangePicker';
@@ -389,6 +390,9 @@ function DashboardPage() {
           />
         </div>
       )}
+
+      {/* Shared with me */}
+      <SharedWithMeWidget />
 
       {/* Report Widgets */}
       <ReportWidgetsSection />

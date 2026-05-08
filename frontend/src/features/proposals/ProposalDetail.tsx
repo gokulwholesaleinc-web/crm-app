@@ -17,6 +17,8 @@ import {
 } from '@heroicons/react/24/outline';
 import { Button, HelpLink, Modal, ConfirmDialog, StatusBadge } from '../../components/ui';
 import { StickyActionBar } from '../../components/shared/StickyActionBar';
+import { EntitySharing } from '../../components/shared/EntitySharing';
+import { useAuthStore } from '../../store/authStore';
 import {
   useProposal,
   useUpdateProposal,
@@ -210,6 +212,14 @@ function ProposalDetailPage() {
       () => showError('Failed to copy link')
     );
   };
+
+  const currentUser = useAuthStore.getState().user;
+  const canManageSharing =
+    !!currentUser &&
+    (currentUser.id === (proposal.owner?.id ?? proposal.owner_id) ||
+      currentUser.is_superuser ||
+      currentUser.role === 'admin' ||
+      currentUser.role === 'manager');
 
   const isDraft = proposal.status === 'draft';
   const proposalRecipient =
@@ -483,6 +493,14 @@ function ProposalDetailPage() {
               timestamp on accept, plus the full public-link view log
               for forensics and billing disputes. */}
           <ProposalAuditCard proposal={proposal} />
+
+          {/* Sharing */}
+          <EntitySharing
+            entityType="proposals"
+            entityId={proposal.id}
+            ownerName={proposal.owner?.full_name ?? undefined}
+            canManage={canManageSharing}
+          />
 
           {/* Related Entities */}
           <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700">

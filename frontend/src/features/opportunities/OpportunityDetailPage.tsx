@@ -8,6 +8,7 @@ import { TabBar, ActivitiesTab, CommonTabContent } from '../../components/shared
 import { StickyActionBar } from '../../components/shared/StickyActionBar';
 import { OpportunityForm, OpportunityFormData } from './components/OpportunityForm';
 import { useOpportunity, useDeleteOpportunity, useUpdateOpportunity } from '../../hooks/useOpportunities';
+import { useAuthStore } from '../../store/authStore';
 import { useQuotes } from '../../hooks/useQuotes';
 import { useProposals } from '../../hooks/useProposals';
 import { usePayments } from '../../hooks/usePayments';
@@ -147,6 +148,14 @@ function OpportunityDetailPage() {
   }
 
   const stageName = opportunity.pipeline_stage?.name?.toLowerCase().replace(/\s+/g, '_') ?? '';
+
+  const currentUser = useAuthStore((s) => s.user);
+  const canManageSharing =
+    !!currentUser &&
+    (currentUser.id === opportunity.owner_id ||
+      currentUser.is_superuser ||
+      currentUser.role === 'admin' ||
+      currentUser.role === 'manager');
 
   return (
     <div className="space-y-6">
@@ -466,6 +475,7 @@ function OpportunityDetailPage() {
           entityType="opportunities"
           entityId={opportunityId}
           enabledTabs={['notes', 'attachments', 'comments', 'history', 'sharing']}
+          canManage={canManageSharing}
         />
       )}
 

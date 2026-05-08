@@ -14,6 +14,8 @@ import {
   ArrowDownTrayIcon,
 } from '@heroicons/react/24/outline';
 import { Button, HelpLink, Modal, ConfirmDialog, StatusBadge } from '../../components/ui';
+import { EntitySharing } from '../../components/shared/EntitySharing';
+import { useAuthStore } from '../../store/authStore';
 import {
   useQuote,
   useUpdateQuote,
@@ -214,6 +216,14 @@ function QuoteDetailPage() {
     setEditDescription(quote.description ?? '');
     setShowEditModal(true);
   };
+
+  const currentUser = useAuthStore.getState().user;
+  const canManageSharing =
+    !!currentUser &&
+    (currentUser.id === quote.owner_id ||
+      currentUser.is_superuser ||
+      currentUser.role === 'admin' ||
+      currentUser.role === 'manager');
 
   const isDraft = quote.status === 'draft';
   const canSend = ['draft', 'sent', 'viewed'].includes(quote.status ?? '');
@@ -608,6 +618,13 @@ function QuoteDetailPage() {
               <p className="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap">{quote.notes}</p>
             </div>
           )}
+
+          {/* Sharing */}
+          <EntitySharing
+            entityType="quotes"
+            entityId={quote.id}
+            canManage={canManageSharing}
+          />
         </div>
       </div>
 

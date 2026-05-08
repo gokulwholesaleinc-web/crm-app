@@ -8,7 +8,7 @@ import clsx from 'clsx';
 const NotesList = lazy(() => import('./NotesList'));
 const AttachmentList = lazy(() => import('./AttachmentList'));
 const AuditTimeline = lazy(() => import('./AuditTimeline'));
-const SharePanel = lazy(() => import('./SharePanel'));
+const EntitySharing = lazy(() => import('./EntitySharing'));
 const CommentSection = lazy(() => import('./CommentSection'));
 
 const QUICK_NOTE_ENTITY_TYPES = new Set(['contact', 'lead', 'company', 'opportunity', 'proposal', 'quote']);
@@ -133,6 +133,10 @@ interface CommonTabContentProps {
   entityType: string;
   entityId: number;
   enabledTabs?: CommonTab[];
+  /** Owner display name shown in the Sharing tab header. */
+  ownerName?: string;
+  /** True when the current user may add/revoke shares (owner or admin/manager). */
+  canManage?: boolean;
 }
 
 const DEFAULT_TABS: CommonTab[] = ['notes', 'attachments', 'history', 'sharing'];
@@ -142,6 +146,8 @@ export function CommonTabContent({
   entityType,
   entityId,
   enabledTabs = DEFAULT_TABS,
+  ownerName,
+  canManage = false,
 }: CommonTabContentProps) {
   const enabled = new Set(enabledTabs);
 
@@ -173,7 +179,12 @@ export function CommonTabContent({
 
       {enabled.has('sharing') && activeTab === 'sharing' && (
         <Suspense fallback={<SuspenseFallback />}>
-          <SharePanel entityType={entityType} entityId={entityId} />
+          <EntitySharing
+            entityType={entityType as import('./EntitySharing').EntitySharingProps['entityType']}
+            entityId={entityId}
+            ownerName={ownerName}
+            canManage={canManage}
+          />
         </Suspense>
       )}
     </>

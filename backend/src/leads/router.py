@@ -102,6 +102,12 @@ async def list_leads(
     """
     service = LeadService(db)
 
+    assignee_ids = (
+        await service.get_assignee_entity_ids(current_user.id)
+        if data_scope.is_scoped
+        else None
+    )
+
     leads, total = await service.get_list(
         page=page,
         page_size=page_size,
@@ -113,6 +119,7 @@ async def list_leads(
         tag_ids=parse_tag_ids(tag_ids),
         filters=parse_json_filters(filters),
         shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_LEADS),
+        assignee_entity_ids=assignee_ids,
         order_by=order_by,
         order_dir=order_dir,
     )

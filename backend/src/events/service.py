@@ -30,6 +30,10 @@ QUOTE_REJECTED = "quote.rejected"
 PROPOSAL_SENT = "proposal.sent"
 PROPOSAL_ACCEPTED = "proposal.accepted"
 PROPOSAL_REJECTED = "proposal.rejected"
+PROPOSAL_SIGNED = "proposal.signed"
+CONTRACT_SIGNED = "contract.signed"
+ENTITY_SHARED_WITH_YOU = "entity_shared_with_you"
+RECORD_ASSIGNED_TO_YOU = "record_assigned_to_you"
 PAYMENT_RECEIVED = "payment.received"
 
 # Registry: event_type -> list of async handler functions

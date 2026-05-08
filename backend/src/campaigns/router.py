@@ -29,8 +29,8 @@ from src.campaigns.service import (
     EmailCampaignStepService,
     EmailTemplateService,
 )
-from src.core.constants import EntityNames, HTTPStatus
-from src.core.data_scope import DataScope, get_data_scope
+from src.core.constants import ENTITY_TYPE_CAMPAIGNS, EntityNames, HTTPStatus
+from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
 from src.core.router_utils import (
     CurrentUser,
     DBSession,
@@ -203,8 +203,6 @@ async def list_campaigns(
     owner_id to filter. Spoofed owner_id from a sales_rep is ignored.
     """
     resolved_owner_id = effective_owner_id(data_scope, owner_id)
-    if resolved_owner_id is None and not data_scope.can_see_all():
-        resolved_owner_id = current_user.id
 
     service = CampaignService(db)
 
@@ -215,6 +213,7 @@ async def list_campaigns(
         campaign_type=campaign_type,
         status=status,
         owner_id=resolved_owner_id,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_CAMPAIGNS),
     )
 
     return CampaignListResponse(
@@ -249,11 +248,15 @@ async def get_campaign(
     campaign_id: int,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Get a campaign by ID."""
     service = CampaignService(db)
     campaign = await get_entity_or_404(service, campaign_id, EntityNames.CAMPAIGN)
-    check_ownership(campaign, current_user, EntityNames.CAMPAIGN)
+    check_record_access_or_shared(
+        campaign, current_user, data_scope.role_name,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_CAMPAIGNS),
+    )
     return CampaignResponse.model_validate(campaign)
 
 
@@ -290,11 +293,15 @@ async def get_campaign_stats(
     campaign_id: int,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Get campaign statistics."""
     service = CampaignService(db)
     campaign = await get_entity_or_404(service, campaign_id, EntityNames.CAMPAIGN)
-    check_ownership(campaign, current_user, EntityNames.CAMPAIGN)
+    check_record_access_or_shared(
+        campaign, current_user, data_scope.role_name,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_CAMPAIGNS),
+    )
     stats = await service.get_campaign_stats(campaign_id)
     return CampaignStats(**stats)
 
@@ -304,11 +311,15 @@ async def get_campaign_analytics(
     campaign_id: int,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Get email analytics (open/click/bounce rates) for a campaign, per step."""
     service = CampaignService(db)
     campaign = await get_entity_or_404(service, campaign_id, EntityNames.CAMPAIGN)
-    check_ownership(campaign, current_user, EntityNames.CAMPAIGN)
+    check_record_access_or_shared(
+        campaign, current_user, data_scope.role_name,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_CAMPAIGNS),
+    )
     return await service.get_campaign_analytics(campaign_id)
 
 
@@ -319,6 +330,7 @@ async def list_campaign_members(
     campaign_id: int,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
     status: str | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
@@ -326,7 +338,10 @@ async def list_campaign_members(
     """List members of a campaign."""
     campaign_service = CampaignService(db)
     campaign = await get_entity_or_404(campaign_service, campaign_id, EntityNames.CAMPAIGN)
-    check_ownership(campaign, current_user, EntityNames.CAMPAIGN)
+    check_record_access_or_shared(
+        campaign, current_user, data_scope.role_name,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_CAMPAIGNS),
+    )
 
     member_service = CampaignMemberService(db)
     members, _ = await member_service.get_campaign_members(
@@ -428,11 +443,15 @@ async def get_campaign_steps(
     campaign_id: int,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Get all steps for a campaign."""
     campaign_service = CampaignService(db)
     campaign = await get_entity_or_404(campaign_service, campaign_id, EntityNames.CAMPAIGN)
-    check_ownership(campaign, current_user, EntityNames.CAMPAIGN)
+    check_record_access_or_shared(
+        campaign, current_user, data_scope.role_name,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_CAMPAIGNS),
+    )
 
     step_service = EmailCampaignStepService(db)
     steps = await step_service.get_steps(campaign_id)

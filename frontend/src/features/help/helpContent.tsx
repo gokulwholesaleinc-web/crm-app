@@ -8,6 +8,7 @@ import {
   ViewColumnsIcon,
   DocumentTextIcon,
   DocumentDuplicateIcon,
+  ScaleIcon,
   CreditCardIcon,
   CalendarIcon,
   MegaphoneIcon,
@@ -20,6 +21,7 @@ import {
   ShieldCheckIcon,
   AcademicCapIcon,
   ArrowRightIcon,
+  ShareIcon,
 } from '@heroicons/react/24/outline';
 
 export interface Section {
@@ -100,9 +102,10 @@ export const SECTIONS: Section[] = [
           </h4>
           <ul className="space-y-1.5">
             <Bullet>
-              The left sidebar has two groups: a main group (Dashboard through Campaigns) and a
-              secondary group (Sequences, Workflows, Duplicates, Import/Export, Reports, AI
-              Assistant, Settings, Admin).
+              The left sidebar has two groups: a main group (Dashboard, Contacts, Companies,
+              Leads, Pipeline, Quotes, Proposals, Contracts, Payments, Activities, Calendar,
+              Campaigns) and a secondary group (Sequences, Workflows, Duplicates, Import/Export,
+              Reports, Settings, Help, Admin).
             </Bullet>
             <Bullet>
               Click <strong>Customize Menu</strong> at the bottom of the sidebar to drag items into
@@ -466,10 +469,6 @@ export const SECTIONS: Section[] = [
             Conversion Rate.
           </Bullet>
           <Bullet>
-            <strong>AI Recommendations:</strong> Lazy-loaded suggestions for which deals to chase
-            next, generated from your data.
-          </Bullet>
-          <Bullet>
             <strong>Report Widgets:</strong> Pin any saved report from the Reports tab as a widget.
             Use the "Add widget" modal to choose from your saved reports.
           </Bullet>
@@ -719,12 +718,12 @@ export const SECTIONS: Section[] = [
     title: 'Proposals',
     icon: DocumentDuplicateIcon,
     searchText:
-      'proposals proposal cover letter executive summary scope of work pricing timeline terms templates ai generator template gallery public link view tracking',
+      'proposals proposal cover letter executive summary scope of work pricing timeline terms templates template gallery public link view tracking',
     body: (
       <div className="space-y-3">
         <p className="text-sm text-gray-700 dark:text-gray-300">
           Proposals are long-form sales documents — think the pitch deck of a quote. They support
-          rich content sections, templates, and AI-assisted drafting.
+          rich content sections and reusable templates.
         </p>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Sections</h4>
         <ul className="space-y-1.5">
@@ -735,15 +734,12 @@ export const SECTIONS: Section[] = [
           <Bullet>Timeline</Bullet>
           <Bullet>Terms</Bullet>
         </ul>
-        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Templates &amp; AI</h4>
+        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Templates</h4>
         <ul className="space-y-1.5">
           <Bullet>
             The Proposals page has two tabs: <em>Proposals</em> and <em>Templates</em>. Use the
             <em> Template Gallery</em> to start a new proposal from a reusable template with merge
             variables.
-          </Bullet>
-          <Bullet>
-            The <em>AI Proposal Generator</em> can draft a full proposal from a short brief.
           </Bullet>
         </ul>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Sharing, e-signature &amp; tracking</h4>
@@ -768,6 +764,55 @@ export const SECTIONS: Section[] = [
             <em>Tutorials</em> #2 and #3.
           </Bullet>
         </ul>
+      </div>
+    ),
+  },
+  {
+    id: 'contracts',
+    title: 'Contracts',
+    icon: ScaleIcon,
+    searchText:
+      'contracts contract e-signature esign sign draft sent signed active expired attachment public link expiry alert daily notification',
+    body: (
+      <div className="space-y-3">
+        <p className="text-sm text-gray-700 dark:text-gray-300">
+          Contracts are formal agreements you send to a contact for e-signature. They live at{' '}
+          <a href="/contracts" className="text-primary-600 hover:underline dark:text-primary-400">/contracts</a> and
+          attach to contacts and companies.
+        </p>
+        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Status flow</h4>
+        <p className="text-sm text-gray-700 dark:text-gray-300">
+          <Badge variant="gray">draft</Badge> →{' '}
+          <Badge variant="blue">sent</Badge> →{' '}
+          <Badge variant="green">signed</Badge> /{' '}
+          <Badge variant="gray">expired</Badge>
+        </p>
+        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Sending &amp; signing</h4>
+        <ul className="space-y-1.5">
+          <Bullet>
+            Click <em>Send for Signature</em> on a draft contract. A public signing link is
+            generated at <code>/contracts/public/&#123;token&#125;</code> and emailed to the contact.
+          </Bullet>
+          <Bullet>
+            The client opens the link, reviews the document, and clicks <em>Sign</em>. Their
+            name, email, IP, and timestamp are captured. A signed PDF is generated and stored.
+          </Bullet>
+          <Bullet>
+            Once signed, the contract auto-flips to <Badge variant="green">signed</Badge> and the
+            owner is notified in the header bell.
+          </Bullet>
+        </ul>
+        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Expiry alerts</h4>
+        <p className="text-sm text-gray-700 dark:text-gray-300">
+          If a contract has an end date, the system sends a daily expiring-soon
+          notification (in-app) starting 30 days before the end date. Admins also see
+          a count of contracts expiring within 30 days on the Reports page.
+        </p>
+        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Attachments</h4>
+        <p className="text-sm text-gray-700 dark:text-gray-300">
+          The contract detail page has an <em>Attachments</em> tab for supporting files (e.g., SOW,
+          exhibits). The signed PDF download appears on the detail page once signing is complete.
+        </p>
       </div>
     ),
   },
@@ -1121,8 +1166,8 @@ export const SECTIONS: Section[] = [
         </p>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">3. With AI</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          Click the <em>AI Generate</em> button and describe what you want in plain English. GPT-4
-          parses your prompt into a report definition you can run, edit, or save.
+          Click the <em>AI Generate</em> button and describe what you want in plain English. The
+          report definition is generated from your prompt — you can run, edit, or save it.
         </p>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Saved reports</h4>
         <ul className="space-y-1.5">
@@ -1161,10 +1206,6 @@ export const SECTIONS: Section[] = [
             proposals you send.
           </Bullet>
           <Bullet>
-            <strong>AI Preferences:</strong> communication style and custom instructions for the AI
-            Assistant.
-          </Bullet>
-          <Bullet>
             <strong>Pipeline Stages:</strong> create, rename, reorder, and color your deal stages.
             Set probabilities and the won/lost flags here.
           </Bullet>
@@ -1173,8 +1214,8 @@ export const SECTIONS: Section[] = [
             ads, etc.) used on the Leads page.
           </Bullet>
           <Bullet>
-            <strong>Integrations:</strong> connect Google Calendar (sync events) and Meta
-            (Facebook/Instagram pages, with token expiry visible).
+            <strong>Integrations:</strong> connect Gmail (email sync), Google Calendar (event
+            sync), and Meta (Facebook/Instagram pages). Token expiry is visible per integration.
           </Bullet>
           <Bullet>
             <strong>Email Settings:</strong> daily send limit, warmup configuration, and warmup
@@ -1236,6 +1277,111 @@ export const SECTIONS: Section[] = [
           A 30-day chronological log of every action across the system: who did it, what they did
           (create/update/delete), which entity, when. Color-coded so you can spot anything unusual.
         </p>
+      </div>
+    ),
+  },
+  {
+    id: 'team-collaboration',
+    title: 'Team Collaboration',
+    icon: ShareIcon,
+    searchText:
+      'team collaboration sharing share record access permission view edit owner assignee private visibility shared with me notifications admin sharing',
+    body: (
+      <div className="space-y-4">
+        <p className="text-sm text-gray-700 dark:text-gray-300">
+          By default, each record belongs to the rep who created it. Sales reps see only their own
+          records and records explicitly shared with them. Admins and managers see everything.
+        </p>
+
+        <div>
+          <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">
+            Sharing a record
+          </h4>
+          <ul className="space-y-1.5">
+            <Bullet>
+              Open any record detail page (
+              <a href="/leads" className="text-primary-600 hover:underline dark:text-primary-400">Lead</a>,{' '}
+              <a href="/pipeline" className="text-primary-600 hover:underline dark:text-primary-400">Opportunity</a>,{' '}
+              Proposal, Quote,{' '}
+              <a href="/contacts" className="text-primary-600 hover:underline dark:text-primary-400">Contact</a>,{' '}
+              <a href="/companies" className="text-primary-600 hover:underline dark:text-primary-400">Company</a>, or{' '}
+              <a href="/contracts" className="text-primary-600 hover:underline dark:text-primary-400">Contract</a>
+              ) and click the <strong>Sharing</strong> tab.
+            </Bullet>
+            <Bullet>
+              Click <em>Share</em>, pick a teammate from the dropdown, choose a permission level,
+              and confirm.
+            </Bullet>
+            <Bullet>
+              All three permission levels currently grant read + edit access. The
+              <strong> View / Edit / Assignee</strong> labels are recorded for future
+              differential enforcement and for use in the &ldquo;Shared with me&rdquo;
+              widget &mdash; pick whichever best describes the teammate&rsquo;s role.
+            </Bullet>
+            <Bullet>
+              <strong>Assignee</strong> additionally surfaces the record in the teammate&rsquo;s
+              &ldquo;my&rdquo; list (e.g. &ldquo;my opportunities&rdquo;) as if they owned it.
+              Use this when two reps are working a deal together.
+            </Bullet>
+            <Bullet>
+              To remove access, click the trash icon next to the share entry. The person who
+              shared the record, the recipient, or any admin/manager can revoke it.
+            </Bullet>
+          </ul>
+        </div>
+
+        <div>
+          <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">
+            Shared with me
+          </h4>
+          <ul className="space-y-1.5">
+            <Bullet>
+              The{' '}
+              <a href="/" className="text-primary-600 hover:underline dark:text-primary-400">Dashboard</a>{' '}
+              has a <strong>Shared with me</strong> card listing records other reps have given you
+              access to, grouped by type. Click any row to jump straight to the record.
+            </Bullet>
+          </ul>
+        </div>
+
+        <div>
+          <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">
+            Notifications
+          </h4>
+          <ul className="space-y-1.5">
+            <Bullet>
+              You get a notification when a teammate shares a record with you, when they assign
+              you to a record, and when a proposal or contract you own is signed.
+            </Bullet>
+            <Bullet>
+              In-app notifications appear in the bell icon in the header. Email mirrors follow your
+              global notification setting.
+            </Bullet>
+          </ul>
+        </div>
+
+        <div>
+          <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">
+            Admin visibility
+          </h4>
+          <ul className="space-y-1.5">
+            <Bullet>
+              Admins and managers see and edit all records regardless of owner or share state.
+              They do not need an explicit share to access anything.
+            </Bullet>
+            <Bullet>
+              Admins can audit every share in the system from{' '}
+              <a href="/admin/sharing" className="text-primary-600 hover:underline dark:text-primary-400">Admin → Sharing</a>:
+              filter by entity type, by who shared, by who received, or by permission level, and
+              revoke any share with one click.
+            </Bullet>
+          </ul>
+        </div>
+
+        <Tip>
+          Sharing is per-record, not per-folder. If you want a rep to see all your opportunities,
+          you need to share each one individually — or change their role to manager/admin.
+        </Tip>
       </div>
     ),
   },

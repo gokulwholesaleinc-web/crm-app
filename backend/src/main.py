@@ -40,6 +40,7 @@ from src.core.constants import CACHE_IMMUTABLE_ASSETS_MAX_AGE_SECONDS
 from src.core.migrations import _run_production_migrations
 from src.core.permissions import require_manager_or_above
 from src.core.rate_limit import limiter
+from src.core.me_router import router as me_router
 from src.core.router_utils import CurrentUser
 from src.core.sharing_router import router as sharing_router
 from src.dashboard.router import router as dashboard_router
@@ -189,6 +190,7 @@ app.include_router(roles_router)
 app.include_router(webhooks_router)
 app.include_router(assignment_router)
 app.include_router(sequences_router)
+app.include_router(me_router)
 app.include_router(sharing_router)
 app.include_router(quotes_router)
 app.include_router(payments_router)

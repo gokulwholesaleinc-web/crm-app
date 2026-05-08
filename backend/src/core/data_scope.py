@@ -134,8 +134,16 @@ async def get_data_scope(
         for entity_type, entity_id in result.all():
             shared.setdefault(entity_type, []).append(entity_id)
     except (ImportError, sqlalchemy.exc.ProgrammingError, sqlalchemy.exc.OperationalError) as exc:
-        # EntityShare table may not exist yet during migrations
-        logger.debug("Could not load shared entities: %s", exc)
+        # EntityShare table may not exist yet during migrations — quiet fallback.
+        logger.debug("Could not load shared entities (table missing?): %s", exc)
+    except Exception:
+        # Any other failure (timeout, interface error, ...) means the user will
+        # silently lose visibility of records shared with them. Log loudly so
+        # operators can diagnose; still fall back to an empty share map.
+        logger.exception(
+            "Failed to load shared entity IDs for user_id=%s — shared records will be invisible",
+            current_user.id,
+        )
 
     scope = DataScope(
         user_id=current_user.id,

@@ -3,7 +3,7 @@
 import logging
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, or_, select
 
 from src.campaigns.models import Campaign, CampaignMember, EmailCampaignStep, EmailTemplate
 from src.campaigns.schemas import (
@@ -41,6 +41,7 @@ class CampaignService(CRUDService[Campaign, CampaignCreate, CampaignUpdate]):
         campaign_type: str | None = None,
         status: str | None = None,
         owner_id: int | None = None,
+        shared_entity_ids: list[int] | None = None,
     ) -> tuple[list[Campaign], int]:
         """Get paginated list of campaigns with filters."""
         query = select(Campaign)
@@ -56,8 +57,13 @@ class CampaignService(CRUDService[Campaign, CampaignCreate, CampaignUpdate]):
         if status:
             query = query.where(Campaign.status == status)
 
-        if owner_id:
-            query = query.where(Campaign.owner_id == owner_id)
+        if owner_id or shared_entity_ids:
+            clauses = []
+            if owner_id:
+                clauses.append(Campaign.owner_id == owner_id)
+            if shared_entity_ids:
+                clauses.append(Campaign.id.in_(shared_entity_ids))
+            query = query.where(or_(*clauses))
 
         count_query = select(func.count()).select_from(query.subquery())
         total_result = await self.db.execute(count_query)
