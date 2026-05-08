@@ -55,6 +55,8 @@ def _build_branded_response(branding_data: dict, quote) -> QuotePublicResponse:
         primary_color=branding_data.get("primary_color", "#6366f1"),
         secondary_color=branding_data.get("secondary_color", "#8b5cf6"),
         accent_color=branding_data.get("accent_color", "#22c55e"),
+        bg_color_light=branding_data.get("bg_color_light", "#f9fafb"),
+        surface_color_light=branding_data.get("surface_color_light", "#ffffff"),
         footer_text=branding_data.get("footer_text"),
     )
     response = QuotePublicResponse.model_validate(quote)

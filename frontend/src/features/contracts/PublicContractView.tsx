@@ -20,6 +20,8 @@ interface ContractBranding {
   primary_color: string;
   secondary_color: string;
   accent_color: string;
+  bg_color_light: string;
+  surface_color_light: string;
   footer_text: string | null;
   privacy_policy_url: string | null;
   terms_of_service_url: string | null;
@@ -49,6 +51,8 @@ const DEFAULT_BRANDING: ContractBranding = {
   primary_color: '#6366f1',
   secondary_color: '#8b5cf6',
   accent_color: '#22c55e',
+  bg_color_light: '#f9fafb',
+  surface_color_light: '#ffffff',
   footer_text: null,
   privacy_policy_url: null,
   terms_of_service_url: null,
@@ -235,6 +239,8 @@ export default function PublicContractView() {
     primary_color: sanitizeHexColor(rawBranding.primary_color, DEFAULT_BRANDING.primary_color),
     secondary_color: sanitizeHexColor(rawBranding.secondary_color, DEFAULT_BRANDING.secondary_color),
     accent_color: sanitizeHexColor(rawBranding.accent_color, DEFAULT_BRANDING.accent_color),
+    bg_color_light: sanitizeHexColor(rawBranding.bg_color_light, DEFAULT_BRANDING.bg_color_light),
+    surface_color_light: sanitizeHexColor(rawBranding.surface_color_light, DEFAULT_BRANDING.surface_color_light),
   };
   const companyDisplayName = branding.company_name || contract.company_name || 'Contract';
   const primary = branding.primary_color;
@@ -251,13 +257,13 @@ export default function PublicContractView() {
   const signedDate = contract.signed_at ? formatDate(contract.signed_at, 'long') : null;
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900 antialiased">
+    <div className="min-h-screen text-gray-900 antialiased" style={{ backgroundColor: branding.bg_color_light }}>
       <div
         aria-hidden="true"
         style={{ height: 4, backgroundImage: `linear-gradient(90deg, ${primary}, ${accent})` }}
       />
 
-      <header className="bg-white border-b border-gray-200">
+      <header className="border-b border-gray-200" style={{ backgroundColor: branding.surface_color_light }}>
         <div className="mx-auto max-w-3xl px-6 sm:px-10 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             {branding.logo_url && !logoError ? (
@@ -455,8 +461,8 @@ export default function PublicContractView() {
 
       {/* ESIGN disclosure footer */}
       <footer
-        className="mt-16 bg-white border-t border-gray-200"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        className="mt-16 border-t border-gray-200"
+        style={{ backgroundColor: branding.surface_color_light, paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         <div className="mx-auto max-w-3xl px-6 sm:px-10 py-8 space-y-5">
           <details className="group text-sm">

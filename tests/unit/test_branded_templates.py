@@ -117,7 +117,8 @@ class TestTenantBrandingHelper:
         branding = TenantBrandingHelper.get_default_branding()
         required_keys = {
             "company_name", "logo_url", "primary_color", "secondary_color",
-            "accent_color", "footer_text", "privacy_policy_url",
+            "accent_color", "bg_color_light", "surface_color_light",
+            "footer_text", "privacy_policy_url",
             "terms_of_service_url", "email_from_name", "email_from_address",
         }
         assert required_keys == set(branding.keys())
@@ -958,4 +959,100 @@ class TestNotifTemplatesUrlSafety:
         )
         assert "javascript:alert" not in html
         assert "Open lead" not in html
+
+
+class TestSafeHexAtRender:
+    """``_safe_hex`` is the render-side guard mirroring the schema validator.
+
+    ``TenantBrandingHelper.get_branding_for_user`` reads straight from the
+    ORM, bypassing ``_validate_color_field``. Without this guard a
+    pre-validator row, raw-SQL insert, or buggy migration could ship a
+    malformed hex into a ``<style>`` block; the email client silently
+    drops the rule and the customer sees an unbranded email with no
+    diagnostic trace.
+    """
+
+    def test_safe_hex_accepts_valid_hex(self):
+        from src.email.branded_templates import _safe_hex
+        assert _safe_hex("#abc", "#000000") == "#abc"
+        assert _safe_hex("#abcdef", "#000000") == "#abcdef"
+        assert _safe_hex("  #abcdef  ", "#000000") == "#abcdef"
+
+    def test_safe_hex_rejects_garbage(self):
+        from src.email.branded_templates import _safe_hex
+        fallback = "#000000"
+        # Strings that "look like colors" but aren't valid hex.
+        assert _safe_hex("red", fallback) == fallback
+        assert _safe_hex("#zzz", fallback) == fallback
+        assert _safe_hex("#12345", fallback) == fallback
+        # 8-digit form is rejected to mirror the schema validator (DB
+        # column is VARCHAR(7) — see PR #263 second-pass review).
+        assert _safe_hex("#aabbccdd", fallback) == fallback
+        # Empty / whitespace / None / non-string.
+        assert _safe_hex("", fallback) == fallback
+        assert _safe_hex("   ", fallback) == fallback
+        assert _safe_hex(None, fallback) == fallback
+
+    def test_safe_hex_logs_on_fallback(self, caplog):
+        """A corrupt-row fallback must surface in logs so Sentry catches it."""
+        import logging
+        from src.email.branded_templates import _safe_hex
+
+        with caplog.at_level(logging.WARNING, logger="src.email.branded_templates"):
+            result = _safe_hex("not-a-hex", "#fallback", field="primary_color")
+
+        assert result == "#fallback"
+        assert any(
+            "primary_color" in r.message and "not-a-hex" in r.message
+            for r in caplog.records
+        ), f"Expected warning naming the field + bad value, got: {[r.message for r in caplog.records]}"
+
+    def test_safe_hex_silent_on_empty_or_none(self, caplog):
+        """Empty / None aren't logged — those just mean 'use the default'."""
+        import logging
+        from src.email.branded_templates import _safe_hex
+
+        with caplog.at_level(logging.WARNING, logger="src.email.branded_templates"):
+            _safe_hex("", "#fallback")
+            _safe_hex(None, "#fallback")
+
+        assert len(caplog.records) == 0, (
+            f"Expected no warnings for empty/None, got: {[r.message for r in caplog.records]}"
+        )
+
+    def test_email_template_drops_garbage_colors(self):
+        """Render path must not echo malformed hex into the inline CSS.
+
+        ``_base_email_html`` directly emits primary, secondary, bg_light,
+        and surface_light into inline CSS; accent is consumed by the
+        wrapping templates (campaign / receipt / etc.) and isn't always
+        present in the base render — covered by the per-template tests
+        above. We only assert here on the four colors the base shell
+        always emits.
+        """
+        bad_branding = {
+            "company_name": "Test",
+            "primary_color": "javascript:alert(1)",
+            "secondary_color": "#zzz",
+            "accent_color": "red",
+            "bg_color_light": "not-a-color",
+            "surface_color_light": "#12345",
+        }
+        html = render_branded_email(
+            bad_branding,
+            "Subject",
+            "Headline",
+            "<p>Body</p>",
+        )
+        # None of the garbage values reach the rendered HTML.
+        assert "javascript:alert" not in html
+        assert "#zzz" not in html
+        assert "not-a-color" not in html
+        assert "#12345" not in html
+        # Documented defaults take over for each rejected field that
+        # the base shell renders.
+        assert "#6366f1" in html  # primary fallback
+        assert "#8b5cf6" in html  # secondary fallback
+        assert "#f9fafb" in html  # bg_color_light fallback
+        assert "#ffffff" in html  # surface_color_light fallback
 

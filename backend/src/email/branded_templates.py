@@ -5,6 +5,8 @@ company info from TenantSettings so every outbound email matches the
 tenant's brand.
 """
 
+import logging
+import re
 from html import escape
 
 from sqlalchemy import select
@@ -13,10 +15,43 @@ from sqlalchemy.orm import selectinload
 
 from src.whitelabel.models import Tenant, TenantSettings, TenantUser
 
+logger = logging.getLogger(__name__)
+
 # Schemes allowed in outbound email links. ``html.escape`` does not block
 # ``javascript:``/``data:`` URLs inside ``href``/``src`` attributes, so every
 # externally-sourced URL that lands in an email must also pass this filter.
 _SAFE_URL_SCHEMES = ("https://", "http://", "mailto:")
+
+# Mirrors the ``_HEX_COLOR_RE`` in ``whitelabel/schemas.py`` and the
+# frontend ``HEX_COLOR_RE`` in ``utils/colorValidation.ts``. Three- and
+# six-digit hex only — eight-digit is rejected because the underlying
+# ``tenant_settings`` columns are ``VARCHAR(7)``.
+_HEX_COLOR_RE = re.compile(r"^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+
+
+def _safe_hex(value: str | None, fallback: str, *, field: str = "color") -> str:
+    """Return ``value`` if it's a valid hex color, else ``fallback``.
+
+    Defensive second layer for the email/PDF render path. ``TenantSettings``
+    has a Pydantic ``_validate_color_field`` that rejects bad hex on PATCH
+    (PR #263 trio fix), but ``TenantBrandingHelper.get_branding_for_user``
+    reads straight from the ORM — it can't catch a row that pre-dates the
+    validator, was inserted via raw SQL, or made it through a buggy
+    migration. Without this guard, a malformed value flows verbatim into
+    a ``style="background-color:zzz;"`` declaration that email clients
+    silently drop, and the customer sees an unbranded rendering with no
+    log entry to diagnose from.
+
+    Logs at WARNING when fallback fires so Sentry can surface corrupt
+    rows; otherwise this would replace one silent failure with another.
+    """
+    if isinstance(value, str) and _HEX_COLOR_RE.match(value.strip()):
+        return value.strip()
+    if value not in (None, ""):
+        logger.warning(
+            "branding %s fell back to %s (invalid hex: %r)", field, fallback, value
+        )
+    return fallback
 
 
 def _safe_url(url: str | None) -> str:
@@ -50,6 +85,13 @@ _DEFAULT_BRANDING = {
     "primary_color": "#6366f1",
     "secondary_color": "#8b5cf6",
     "accent_color": "#22c55e",
+    # Page + surface backgrounds (light mode only on customer-facing
+    # surfaces — public quote/contract/proposal pages and emails
+    # render light by default; the app's dark mode is for authenticated
+    # sellers and lives on its own CSS-var path). Defaults match the
+    # `tenant_settings` column defaults.
+    "bg_color_light": "#f9fafb",
+    "surface_color_light": "#ffffff",
     "footer_text": "",
     "privacy_policy_url": "",
     "terms_of_service_url": "",
@@ -105,6 +147,8 @@ class TenantBrandingHelper:
             "primary_color": s.primary_color or _DEFAULT_BRANDING["primary_color"],
             "secondary_color": s.secondary_color or _DEFAULT_BRANDING["secondary_color"],
             "accent_color": s.accent_color or _DEFAULT_BRANDING["accent_color"],
+            "bg_color_light": s.bg_color_light or _DEFAULT_BRANDING["bg_color_light"],
+            "surface_color_light": s.surface_color_light or _DEFAULT_BRANDING["surface_color_light"],
             "footer_text": s.footer_text or "",
             "privacy_policy_url": s.privacy_policy_url or "",
             "terms_of_service_url": s.terms_of_service_url or "",
@@ -134,9 +178,23 @@ def _base_email_html(
     Uses inline CSS for maximum email-client compatibility (Gmail,
     Outlook, Apple Mail).  Includes dark-mode media query support.
     """
-    primary = escape(branding.get("primary_color", "#6366f1"))
-    secondary = escape(branding.get("secondary_color", "#8b5cf6"))
-    accent = escape(branding.get("accent_color", "#22c55e"))
+    # _safe_hex sanitizes each color before it reaches the inline-CSS
+    # sinks below. ``escape`` is HTML-escaping, not hex validation; a
+    # corrupt-row payload of "red" or "#zzz" would otherwise produce
+    # ``background-color:red;`` (which clients quietly drop) and the
+    # customer would see a white email with no diagnostic trace. See
+    # _safe_hex docstring for why ORM-level reads bypass the schema
+    # validator.
+    primary = escape(_safe_hex(branding.get("primary_color"), "#6366f1", field="primary_color"))
+    secondary = escape(_safe_hex(branding.get("secondary_color"), "#8b5cf6", field="secondary_color"))
+    accent = escape(_safe_hex(branding.get("accent_color"), "#22c55e", field="accent_color"))
+    # Light-mode page + card surface colors. The email's dark-mode media
+    # query keeps its hardcoded #1f2937 / #111827 — those approximate
+    # the tenant_settings dark defaults and refactoring them through
+    # tenant settings risks regressions in finicky email clients
+    # (Outlook desktop especially) for marginal gain.
+    bg_light = escape(_safe_hex(branding.get("bg_color_light"), "#f9fafb", field="bg_color_light"))
+    surface_light = escape(_safe_hex(branding.get("surface_color_light"), "#ffffff", field="surface_color_light"))
     company = escape(branding.get("company_name", "CRM"))
     logo_url = _safe_url(branding.get("logo_url", ""))
     footer_text = escape(branding.get("footer_text", ""))
@@ -220,8 +278,8 @@ def _base_email_html(
 }}
 </style>
 </head>
-<body style="margin:0;padding:0;background-color:#f3f4f6;font-family:Arial,Helvetica,sans-serif;">
-<table role="presentation" class="email-bg" cellpadding="0" cellspacing="0" width="100%" style="background-color:#f3f4f6;">
+<body style="margin:0;padding:0;background-color:{bg_light};font-family:Arial,Helvetica,sans-serif;">
+<table role="presentation" class="email-bg" cellpadding="0" cellspacing="0" width="100%" style="background-color:{bg_light};">
 <tr><td align="center" style="padding:24px 16px;">
 
 <!-- Header -->
@@ -237,7 +295,7 @@ def _base_email_html(
 </table>
 
 <!-- Body -->
-<table role="presentation" class="email-card" cellpadding="0" cellspacing="0" width="600" style="max-width:600px;width:100%;background-color:#ffffff;">
+<table role="presentation" class="email-card" cellpadding="0" cellspacing="0" width="600" style="max-width:600px;width:100%;background-color:{surface_light};">
 <tr><td style="padding:32px 24px;">
   <h1 class="email-headline" style="margin:0 0 16px;font-family:Arial,Helvetica,sans-serif;font-size:22px;font-weight:700;color:#111827;">{escape(headline)}</h1>
   <div class="email-text" style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;color:#374151;">
@@ -431,7 +489,7 @@ def render_payment_receipt_email(branding: dict, payment_data: dict) -> tuple[st
     currency = escape(str(payment_data.get("currency", "USD")))
     pay_date = escape(str(payment_data.get("payment_date", "")))
     pay_method = escape(str(payment_data.get("payment_method", "")))
-    accent = escape(branding.get("accent_color", "#22c55e"))
+    accent = escape(_safe_hex(branding.get("accent_color"), "#22c55e", field="accent_color"))
 
     items = payment_data.get("items", [])
     items_html = ""
@@ -503,7 +561,7 @@ def render_payment_invoice_email(branding: dict, payment_data: dict) -> tuple[st
     amount = escape(str(payment_data.get("amount", "0.00")))
     currency = escape(str(payment_data.get("currency", "USD")))
     due_date = escape(str(payment_data.get("due_date", "")))
-    accent = escape(branding.get("accent_color", "#22c55e"))
+    accent = escape(_safe_hex(branding.get("accent_color"), "#22c55e", field="accent_color"))
     pay_url = _safe_url(payment_data.get("payment_url", ""))
 
     pay_button = ""
@@ -683,7 +741,7 @@ def render_mention_email(branding: dict, data: dict) -> tuple[str, str]:
 
     snippet_block = (
         f'<blockquote style="margin:16px 0;padding:12px 16px;border-left:3px solid '
-        f'{escape(branding.get("primary_color", "#6366f1"))};background-color:#f9fafb;'
+        f'{escape(_safe_hex(branding.get("primary_color"), "#6366f1", field="primary_color"))};background-color:#f9fafb;'
         f'font-size:14px;color:#374151;white-space:pre-wrap;">{snippet}</blockquote>'
         if snippet else ""
     )
@@ -728,7 +786,7 @@ def render_email_reply_email(branding: dict, data: dict) -> tuple[str, str]:
     )
     snippet_block = (
         f'<blockquote style="margin:0;padding:12px 16px;border-left:3px solid '
-        f'{escape(branding.get("primary_color", "#6366f1"))};background-color:#f9fafb;'
+        f'{escape(_safe_hex(branding.get("primary_color"), "#6366f1", field="primary_color"))};background-color:#f9fafb;'
         f'font-size:14px;color:#374151;white-space:pre-wrap;">{snippet}</blockquote>'
         if snippet else ""
     )
