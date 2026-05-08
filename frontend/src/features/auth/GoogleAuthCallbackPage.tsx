@@ -105,7 +105,7 @@ function GoogleAuthCallbackPage() {
   }, [searchParams, navigate, storeLogin]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
+    <div className="flex min-h-screen items-center justify-center bg-brand-page px-4">
       <div className="text-center max-w-md">
         {state.kind === 'loading' && (
           <>

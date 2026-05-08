@@ -761,23 +761,40 @@ export function BrandingSection() {
             })()}
 
             {/* Actions */}
-            <div className="flex justify-end gap-3 pt-2">
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-between gap-3 pt-2">
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => { setIsEditing(false); setLogoPreviewError(false); setFaviconPreviewError(false); }}
+                onClick={() => {
+                  // Stage the documented defaults into formData so the
+                  // admin sees the reset reflected in pickers + preview
+                  // and can review before saving. They still need to
+                  // click Save to persist; Cancel reverts.
+                  setFormData((prev) => ({ ...prev, ...COLOR_DEFAULTS }));
+                  toast.success('Colors reset to defaults — click Save to apply');
+                }}
+                title="Restore the seven color fields to their original defaults"
               >
-                Cancel
+                Reset Colors to Defaults
               </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleSave}
-                disabled={updateBranding.isPending || hasInvalidColor}
-                title={hasInvalidColor ? 'Fix invalid hex colors before saving' : undefined}
-              >
-                {updateBranding.isPending ? 'Saving...' : 'Save Branding'}
-              </Button>
+              <div className="flex justify-end gap-3">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => { setIsEditing(false); setLogoPreviewError(false); setFaviconPreviewError(false); }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleSave}
+                  disabled={updateBranding.isPending || hasInvalidColor}
+                  title={hasInvalidColor ? 'Fix invalid hex colors before saving' : undefined}
+                >
+                  {updateBranding.isPending ? 'Saving...' : 'Save Branding'}
+                </Button>
+              </div>
             </div>
           </div>
         )}
