@@ -1,6 +1,6 @@
 """Account-settings tables + assignment-rule fallback flag + assignment_log.
 
-Revision ID: 023_account_settings_and_assignment
+Revision ID: 023_account_settings
 Revises: 022_contracts_esign
 Create Date: 2026-05-07
 
@@ -18,18 +18,25 @@ Single migration covers two adjacent feature areas:
 Both tables key off `users.id` with `ON DELETE CASCADE` so user
 deletion drops the prefs without an orphan-row sweep job.
 
-Originally written as `022_account_settings_and_assignment` on PR #255
-but the contracts-expansion PR (#254) merged first and claimed slot
-022 with `022_contracts_esign`. Both files declared
-`down_revision = "021_proposal_attachment_views"` — alembic loaded the
-contracts head and silently skipped this one, so prod backend deployed
-with the new ORM models pointing at non-existent tables. Re-parented
-to 022_contracts_esign and renumbered to 023 as the recovery hotfix.
+History — two iterations to get this right:
+1. Originally written as `022_account_settings_and_assignment` on PR
+   #255 but the contracts-expansion PR (#254) merged first and claimed
+   slot 022 with `022_contracts_esign`. Both files declared
+   `down_revision = "021_proposal_attachment_views"` — alembic loaded
+   the contracts head and silently skipped this one. PR #256 hotfix
+   re-parented + renumbered to `023_*`.
+2. PR #256's revision id `023_account_settings_and_assignment` was 38
+   chars, but `alembic_version.version_num` is VARCHAR(32). Backend
+   crashed on first attempt with StringDataRightTruncationError trying
+   to write the new head. Shortened to `023_account_settings` (20
+   chars). Production startup script halts uvicorn on alembic failure,
+   so 502s — not a partial-state risk; the upgrade transaction rolls
+   back and `version_num` stays at `022_contracts_esign`.
 """
 
 from alembic import op
 
-revision = "023_account_settings_and_assignment"
+revision = "023_account_settings"
 down_revision = "022_contracts_esign"
 branch_labels = None
 depends_on = None
