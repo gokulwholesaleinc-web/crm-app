@@ -255,7 +255,14 @@ class TestExpiringAlert:
     async def test_alert_skips_contract_without_owner(
         self, db_session: AsyncSession, test_user
     ):
-        """Contract with owner_id=None is skipped silently without crashing."""
+        """Contract with owner_id=None is skipped silently without crashing.
+
+        After the channel-aware cooldown refactor, an ownerless contract
+        leaves BOTH cooldown columns NULL (we no longer prematurely
+        stamp before knowing whether the channel actually fires). This
+        is intentional: if an owner is later assigned, the next scan
+        re-considers it.
+        """
         contract = Contract(
             title="Ownerless Contract",
             status="active",
@@ -272,11 +279,9 @@ class TestExpiringAlert:
         await svc.process_due_contracts()
         await db_session.commit()
 
-        # expiring_notified_at still set (loop ran) but no notification/email created
         await db_session.refresh(contract)
-        # The contract matched the query (active, end_date in window, not notified),
-        # so expiring_notified_at is set to now — but _notify_owner returns early.
-        assert contract.expiring_notified_at is not None
+        assert contract.expiring_notified_at is None
+        assert contract.expiring_email_notified_at is None
 
         from sqlalchemy import select
         notif_count = await db_session.execute(
@@ -286,3 +291,153 @@ class TestExpiringAlert:
             )
         )
         assert notif_count.scalar_one_or_none() is None
+
+
+# ---------------------------------------------------------------------------
+# Channel-aware cooldown (PR A — migration 028)
+# ---------------------------------------------------------------------------
+
+class TestChannelAwareCooldown:
+    """Each channel keeps its own cooldown stamp.
+
+    Before this PR, a single ``expiring_notified_at`` stamped
+    unconditionally after in-app fired, blocking BOTH channels even when
+    email had been gated off — a user who flipped email back on was
+    silently locked out for up to ``EXPIRING_WINDOW_DAYS``.
+    """
+
+    async def test_email_off_does_not_consume_email_cooldown(
+        self, db_session: AsyncSession, test_user
+    ):
+        """Email pref off → in-app stamp set, email stamp stays NULL."""
+        from src.account.models import UserNotificationPrefs
+
+        test_user.email = "owner-cooldown@example.com"
+        prefs = UserNotificationPrefs(
+            user_id=test_user.id,
+            event_matrix={"contract_expiring": {"email": False}},
+        )
+        db_session.add(prefs)
+        await db_session.flush()
+
+        contract = _make_contract(
+            db_session,
+            test_user,
+            status="active",
+            end_date=date.today() + timedelta(days=10),
+            expiring_notified_at=None,
+            expiring_email_notified_at=None,
+        )
+        await db_session.commit()
+
+        await ContractLifecycleService(db_session).process_due_contracts()
+        await db_session.commit()
+
+        await db_session.refresh(contract)
+        assert contract.expiring_notified_at is not None
+        assert contract.expiring_email_notified_at is None
+
+        from sqlalchemy import select
+        email_q = await db_session.execute(
+            select(EmailQueue).where(
+                EmailQueue.entity_type == "contracts",
+                EmailQueue.entity_id == contract.id,
+            )
+        )
+        assert email_q.scalar_one_or_none() is None
+
+    async def test_email_pref_flip_on_fires_email_next_scan(
+        self, db_session: AsyncSession, test_user
+    ):
+        """Re-enabling email after a previous in-app-only fire delivers the email."""
+        from src.account.models import UserNotificationPrefs
+
+        test_user.email = "owner-flip@example.com"
+        prefs = UserNotificationPrefs(
+            user_id=test_user.id,
+            event_matrix={"contract_expiring": {"email": False}},
+        )
+        db_session.add(prefs)
+        await db_session.flush()
+
+        contract = _make_contract(
+            db_session,
+            test_user,
+            status="active",
+            end_date=date.today() + timedelta(days=10),
+            expiring_notified_at=None,
+            expiring_email_notified_at=None,
+        )
+        await db_session.commit()
+
+        # First scan with email off — only in_app fires.
+        await ContractLifecycleService(db_session).process_due_contracts()
+        await db_session.commit()
+
+        await db_session.refresh(contract)
+        assert contract.expiring_notified_at is not None
+        assert contract.expiring_email_notified_at is None
+
+        # User re-enables email for contract_expiring.
+        prefs.event_matrix = {"contract_expiring": {"email": True}}
+        await db_session.flush()
+        # JSON column isn't wrapped in MutableDict on this model, so a
+        # whole-value rebind is enough in practice — flag_modified is
+        # belt-and-suspenders to make the dirty signal explicit. Don't
+        # cargo-cult onto plain assignments elsewhere.
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(prefs, "event_matrix")
+        await db_session.commit()
+
+        # Second scan — in_app cooldown is still hot (just stamped),
+        # email cooldown is NULL → only email fires now.
+        await ContractLifecycleService(db_session).process_due_contracts()
+        await db_session.commit()
+
+        await db_session.refresh(contract)
+        assert contract.expiring_email_notified_at is not None
+
+        from sqlalchemy import select
+        email_q = await db_session.execute(
+            select(EmailQueue).where(
+                EmailQueue.entity_type == "contracts",
+                EmailQueue.entity_id == contract.id,
+            )
+        )
+        rows = list(email_q.scalars().all())
+        assert len(rows) == 1
+        assert rows[0].to_email == test_user.email
+
+        # In-app stayed deduped — only the original notification exists.
+        from sqlalchemy import func
+        notif_count = await db_session.execute(
+            select(func.count()).where(
+                Notification.entity_type == "contracts",
+                Notification.entity_id == contract.id,
+            )
+        )
+        assert notif_count.scalar() == 1
+
+    async def test_both_channels_stamp_on_full_fire(
+        self, db_session: AsyncSession, test_user
+    ):
+        """Default prefs (both channels allowed) → both columns stamped."""
+        test_user.email = "owner-both@example.com"
+        await db_session.flush()
+
+        contract = _make_contract(
+            db_session,
+            test_user,
+            status="active",
+            end_date=date.today() + timedelta(days=10),
+            expiring_notified_at=None,
+            expiring_email_notified_at=None,
+        )
+        await db_session.commit()
+
+        await ContractLifecycleService(db_session).process_due_contracts()
+        await db_session.commit()
+
+        await db_session.refresh(contract)
+        assert contract.expiring_notified_at is not None
+        assert contract.expiring_email_notified_at is not None

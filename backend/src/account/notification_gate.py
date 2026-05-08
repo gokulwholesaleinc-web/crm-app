@@ -74,51 +74,109 @@ def _in_quiet_window(now_hhmm: str, start: str, end: str) -> bool:
     return now_hhmm >= start or now_hhmm < end
 
 
-async def should_notify_in_app(
-    db: AsyncSession, user_id: int, event_type: str
+async def _resolve_in_app(
+    db: AsyncSession,
+    prefs: UserNotificationPrefs,
+    user_id: int,
+    event_type: str,
 ) -> bool:
+    """In-app gate logic given an already-loaded prefs row.
+
+    Quiet-hours TZ lookup is the only async leg; everything else is
+    pure-Python on ``prefs`` so we don't hit the DB twice for matrix
+    checks. Caller wraps the recoverable-error catch.
+    """
+    if not prefs.in_app_enabled:
+        return False
+
+    if not _matrix_allows(prefs.event_matrix, event_type, "in_app"):
+        return False
+
+    if (
+        prefs.quiet_hours_enabled
+        and prefs.quiet_hours_start
+        and prefs.quiet_hours_end
+    ):
+        tz_name = await _load_user_timezone(db, user_id)
+        try:
+            tz = ZoneInfo(tz_name)
+        except _GATE_RECOVERABLE:
+            tz = ZoneInfo("America/Chicago")
+        now_hhmm = datetime.now(tz).strftime("%H:%M")
+        if _in_quiet_window(
+            now_hhmm, prefs.quiet_hours_start, prefs.quiet_hours_end
+        ):
+            return False
+
+    return True
+
+
+async def gate_event(
+    db: AsyncSession, user_id: int, event_type: str
+) -> tuple[bool, bool]:
+    """Return ``(in_app_allowed, email_allowed)`` from a single prefs load.
+
+    Combined helper halves the per-event DB chatter that calling
+    :func:`should_notify_in_app` and :func:`should_send_email`
+    back-to-back used to incur (one ``SELECT user_notification_prefs``
+    round-trip each).
+
+    Preserves the asymmetric fail modes:
+    - in-app: fail-OPEN on recoverable errors (extra bell is benign)
+    - email: fail-CLOSED on recoverable errors (silent opt-out violation
+      is the worse failure mode, especially under cooldown stamping)
+    """
     try:
         prefs = await _load_prefs(db, user_id)
-        if prefs is None:
-            return True
-
-        if not prefs.in_app_enabled:
-            return False
-
-        if not _matrix_allows(prefs.event_matrix, event_type, "in_app"):
-            return False
-
-        if (
-            prefs.quiet_hours_enabled
-            and prefs.quiet_hours_start
-            and prefs.quiet_hours_end
-        ):
-            tz_name = await _load_user_timezone(db, user_id)
-            try:
-                tz = ZoneInfo(tz_name)
-            except _GATE_RECOVERABLE:
-                tz = ZoneInfo("America/Chicago")
-            now_hhmm = datetime.now(tz).strftime("%H:%M")
-            if _in_quiet_window(
-                now_hhmm, prefs.quiet_hours_start, prefs.quiet_hours_end
-            ):
-                return False
-
-        return True
     except _GATE_RECOVERABLE:
         logger.warning(
-            "notification_gate.should_notify_in_app failed for user_id=%s event=%s; defaulting allow",
+            "notification_gate.gate_event prefs-load failed for user_id=%s event=%s; defaulting (allow_in_app=True, allow_email=False)",
             user_id,
             event_type,
             exc_info=True,
         )
-        return True
+        return (True, False)
+
+    if prefs is None:
+        # New users without a prefs row: allow both. Email default-allow
+        # mirrors the pre-refactor single-channel ``should_send_email``.
+        return (True, True)
+
+    try:
+        in_app_allowed = await _resolve_in_app(db, prefs, user_id, event_type)
+    except _GATE_RECOVERABLE:
+        logger.warning(
+            "notification_gate.gate_event in-app resolve failed for user_id=%s event=%s; defaulting allow",
+            user_id,
+            event_type,
+            exc_info=True,
+        )
+        in_app_allowed = True
+
+    email_allowed = (
+        prefs.email_enabled
+        and prefs.email_digest != "off"
+        and _matrix_allows(prefs.event_matrix, event_type, "email")
+    )
+
+    return (in_app_allowed, email_allowed)
+
+
+async def should_notify_in_app(
+    db: AsyncSession, user_id: int, event_type: str
+) -> bool:
+    """Single-channel in-app gate. Prefer :func:`gate_event` when both
+    channels are checked — this wrapper exists for callers that genuinely
+    only need one side (e.g. flows that don't have an email surface).
+    """
+    in_app_allowed, _ = await gate_event(db, user_id, event_type)
+    return in_app_allowed
 
 
 async def should_send_email(
     db: AsyncSession, user_id: int, event_type: str
 ) -> bool:
-    """Fail-CLOSED for email — opposite of in-app fail-open.
+    """Single-channel email gate.
 
     The cost of false-allow on email is real: a user who explicitly
     opted out of email notifications gets one anyway, *and* — for
@@ -127,22 +185,8 @@ async def should_send_email(
     cooldown stamp lands. In-app fail-open is defensible (extra bell
     icon); email fail-open is a stated-preference violation. So a
     transient DB blip in the gate suppresses the send rather than
-    leaking through.
+    leaking through. ``gate_event`` carries this same fail-CLOSED
+    behaviour.
     """
-    try:
-        prefs = await _load_prefs(db, user_id)
-        if prefs is None:
-            return True
-        if not prefs.email_enabled:
-            return False
-        if prefs.email_digest == "off":
-            return False
-        return _matrix_allows(prefs.event_matrix, event_type, "email")
-    except _GATE_RECOVERABLE:
-        logger.warning(
-            "notification_gate.should_send_email failed for user_id=%s event=%s; defaulting suppress",
-            user_id,
-            event_type,
-            exc_info=True,
-        )
-        return False
+    _, email_allowed = await gate_event(db, user_id, event_type)
+    return email_allowed
