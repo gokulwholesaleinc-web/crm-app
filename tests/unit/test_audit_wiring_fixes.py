@@ -21,6 +21,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.activities.models import Activity
 from src.audit.models import AuditLog
 from src.auth.models import User
 from src.auth.security import create_access_token, get_password_hash
@@ -147,6 +148,48 @@ class TestSharingAuditLog:
         assert rows[0].changes is not None
         assert rows[0].changes[0]["new"] == other_user.id
         assert rows[0].changes[0]["permission_level"] == "view"
+
+    @pytest.mark.asyncio
+    async def test_share_activity_audit_row_uses_singular_entity_type(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_user: User,
+        other_user: User,
+        test_activity: Activity,
+        auth_headers: dict,
+    ):
+        """Regression: PR #266's local _ENTITY_SINGULAR dict was missing
+        ``activities``/``payments``/``expenses``, so audits on those types
+        were keyed to plural form ("activities") and never surfaced in
+        entity history (which queries singular). Replaced with
+        ``canonical_singular`` from ``core.entity_access``.
+        """
+        resp = await client.post(
+            "/api/sharing",
+            json={
+                "entity_type": "activities",
+                "entity_id": test_activity.id,
+                "shared_with_user_id": other_user.id,
+                "permission_level": "view",
+            },
+            headers=auth_headers,
+        )
+        assert resp.status_code == 201
+
+        rows = (
+            await db_session.execute(
+                select(AuditLog).where(
+                    AuditLog.entity_type == "activity",
+                    AuditLog.entity_id == test_activity.id,
+                    AuditLog.action == "share",
+                )
+            )
+        ).scalars().all()
+        assert len(rows) == 1, (
+            "expected audit row keyed to singular 'activity'; "
+            "if 0 rows, _ENTITY_SINGULAR fallthrough re-introduced"
+        )
 
     @pytest.mark.asyncio
     async def test_revoke_creates_audit_row(

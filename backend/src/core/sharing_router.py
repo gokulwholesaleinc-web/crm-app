@@ -19,7 +19,7 @@ from src.core.data_scope import (
     get_data_scope,
     invalidate_scope_cache,
 )
-from src.core.entity_access import _resolve_entity
+from src.core.entity_access import _resolve_entity, canonical_singular
 from src.core.models import EntityShare
 from src.core.router_utils import CurrentUser, DBSession
 from src.notifications.service import NotificationService
@@ -28,18 +28,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/sharing", tags=["sharing"])
 
-# Singular forms for notification copy. rstrip("s") would mangle
-# "opportunities" -> "opportunitie" and "companies" -> "companie".
-_ENTITY_SINGULAR = {
-    "leads": "lead",
-    "opportunities": "opportunity",
-    "contacts": "contact",
-    "companies": "company",
-    "proposals": "proposal",
-    "contracts": "contract",
-    "campaigns": "campaign",
-    "quotes": "quote",
-}
+# Singular form for notification copy and audit-row keying comes from
+# canonical_singular (core.entity_access), which knows every shareable
+# entity type. A local dict drifts (PR #266 missed activity/payment/expense,
+# leaking shared activities to be audit-keyed under "activities" while the
+# rest of the codebase queries history under "activity").
 
 
 class ShareRequest(BaseModel):
@@ -131,7 +124,7 @@ async def share_entity(
     # Audit row keyed to the shared record so it surfaces in that entity's history.
     try:
         await AuditService(db).log_change(
-            entity_type=_ENTITY_SINGULAR.get(request.entity_type, request.entity_type),
+            entity_type=canonical_singular(request.entity_type),
             entity_id=request.entity_id,
             user_id=current_user.id,
             action="share",
@@ -149,7 +142,7 @@ async def share_entity(
         )
 
     sharer_name = current_user.full_name or current_user.email
-    entity_singular = _ENTITY_SINGULAR.get(request.entity_type, request.entity_type)
+    entity_singular = canonical_singular(request.entity_type)
     if request.permission_level == "assignee":
         notif_type = "record_assigned_to_you"
         title = f"{sharer_name} assigned a {entity_singular} to you"
@@ -236,9 +229,10 @@ async def revoke_share(
     # Invalidate scope cache so the shared-with user loses access immediately
     invalidate_scope_cache(shared_with_id)
 
+    # Mirror audit row for the unshare event, same keying as POST /api/sharing.
     try:
         await AuditService(db).log_change(
-            entity_type=_ENTITY_SINGULAR.get(revoked_entity_type, revoked_entity_type),
+            entity_type=canonical_singular(revoked_entity_type),
             entity_id=revoked_entity_id,
             user_id=current_user.id,
             action="unshare",

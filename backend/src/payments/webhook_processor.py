@@ -625,6 +625,21 @@ class WebhookProcessor:
             elif customer_row.company and customer_row.company.owner_id:
                 owner_id = customer_row.company.owner_id
 
+        if owner_id is None:
+            # Per-user dashboard KPIs filter by Payment.owner_id, so an
+            # orphan owner means this payment is invisible on every user's
+            # tile. Surface so an operator can backfill before the period
+            # close drifts from Stripe's books.
+            logger.warning(
+                "invoice.paid for invoice %s has no derivable owner_id "
+                "(stripe_customer_id=%s, contact=%s, company=%s); "
+                "Payment row will be excluded from per-user KPI totals",
+                invoice_id,
+                stripe_customer_id,
+                customer_row.contact_id if customer_row else None,
+                customer_row.company_id if customer_row else None,
+            )
+
         amount_cents = invoice_obj.get("amount_paid") or invoice_obj.get("total") or 0
         amount_dollars = (Decimal(int(amount_cents)) / Decimal("100")).quantize(
             Decimal("0.01")
