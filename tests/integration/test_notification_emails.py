@@ -58,9 +58,10 @@ async def _disable_email_event(db: AsyncSession, user_id: int, event_key: str) -
 
 class TestNotifyOnAssignmentEmail:
     async def test_email_queued_when_prefs_allow(
-        self, db_session: AsyncSession, test_user: User
+        self, db_session: AsyncSession, test_user_opted_in: User
     ):
-        """Default prefs → EmailQueue row to test_user.email with correct subject."""
+        """Opted-in prefs → EmailQueue row to test_user.email with correct subject."""
+        test_user = test_user_opted_in
         await notify_on_assignment(
             db_session,
             test_user.id,
@@ -94,9 +95,10 @@ class TestNotifyOnAssignmentEmail:
         assert rows == []
 
     async def test_inapp_still_fires_when_email_off(
-        self, db_session: AsyncSession, test_user: User
+        self, db_session: AsyncSession, test_user_opted_in: User
     ):
         """In-app notification row is created even when email is disabled."""
+        test_user = test_user_opted_in
         await _disable_email_event(db_session, test_user.id, "lead_assigned")
         await notify_on_assignment(
             db_session,
@@ -134,8 +136,9 @@ class TestNotifyOnAssignmentEmail:
 
 
 class TestNotifyOnActivityDueEmail:
-    async def test_email_queued(self, db_session: AsyncSession, test_user: User):
-        """Default prefs → EmailQueue row with task-due subject."""
+    async def test_email_queued(self, db_session: AsyncSession, test_user_opted_in: User):
+        """Opted-in prefs → EmailQueue row with task-due subject."""
+        test_user = test_user_opted_in
         await notify_on_activity_due(
             db_session,
             test_user.id,
@@ -171,8 +174,9 @@ class TestNotifyOnActivityDueEmail:
 
 
 class TestNotifyOnMentionEmail:
-    async def test_email_queued(self, db_session: AsyncSession, test_user: User):
-        """Default prefs → EmailQueue row with mention subject."""
+    async def test_email_queued(self, db_session: AsyncSession, test_user_opted_in: User):
+        """Opted-in prefs → EmailQueue row with mention subject."""
+        test_user = test_user_opted_in
         await notify_on_mention(
             db_session,
             test_user.id,
@@ -211,8 +215,9 @@ class TestNotifyOnMentionEmail:
 
 
 class TestNotifyOnEmailReplyReceivedEmail:
-    async def test_email_queued(self, db_session: AsyncSession, test_user: User):
-        """Default prefs → EmailQueue row with reply-received subject."""
+    async def test_email_queued(self, db_session: AsyncSession, test_user_opted_in: User):
+        """Opted-in prefs → EmailQueue row with reply-received subject."""
+        test_user = test_user_opted_in
         await notify_on_email_reply_received(
             db_session,
             recipient_user_id=test_user.id,
@@ -245,9 +250,10 @@ class TestNotifyOnEmailReplyReceivedEmail:
         assert rows == []
 
     async def test_inapp_creates_notification_row(
-        self, db_session: AsyncSession, test_user: User
+        self, db_session: AsyncSession, test_user_opted_in: User
     ):
         """In-app notification row created for email reply event."""
+        test_user = test_user_opted_in
         await notify_on_email_reply_received(
             db_session,
             recipient_user_id=test_user.id,
@@ -268,8 +274,9 @@ class TestNotifyOnEmailReplyReceivedEmail:
 
 
 class TestNotifyOnProposalSignedEmail:
-    async def test_email_queued(self, db_session: AsyncSession, test_user: User):
-        """Default prefs → EmailQueue row with proposal-signed subject."""
+    async def test_email_queued(self, db_session: AsyncSession, test_user_opted_in: User):
+        """Opted-in prefs → EmailQueue row with proposal-signed subject."""
+        test_user = test_user_opted_in
         await notify_on_proposal_signed(
             db_session,
             owner_id=test_user.id,
@@ -306,8 +313,9 @@ class TestNotifyOnProposalSignedEmail:
 
 
 class TestNotifyOnContractSignedEmail:
-    async def test_email_queued(self, db_session: AsyncSession, test_user: User):
-        """Default prefs → EmailQueue row with contract-signed subject."""
+    async def test_email_queued(self, db_session: AsyncSession, test_user_opted_in: User):
+        """Opted-in prefs → EmailQueue row with contract-signed subject."""
+        test_user = test_user_opted_in
         await notify_on_contract_signed(
             db_session,
             owner_id=test_user.id,

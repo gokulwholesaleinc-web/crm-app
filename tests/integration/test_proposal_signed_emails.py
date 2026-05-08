@@ -90,12 +90,13 @@ class TestProposalSignedEmails:
     async def test_signer_and_owner_email_queued(
         self,
         db_session: AsyncSession,
-        test_user: User,
+        test_user_opted_in: User,
         test_contact: Contact,
         test_tenant: Tenant,
         test_tenant_user: TenantUser,
     ):
         """accept_proposal_public creates signer-side AND owner-side EmailQueue rows."""
+        test_user = test_user_opted_in
         proposal = await _make_proposal(db_session, test_user, test_contact)
 
         await _accept(db_session, proposal)
@@ -160,12 +161,13 @@ class TestProposalSignedEmails:
     async def test_owner_in_app_notification_created(
         self,
         db_session: AsyncSession,
-        test_user: User,
+        test_user_opted_in: User,
         test_contact: Contact,
         test_tenant: Tenant,
         test_tenant_user: TenantUser,
     ):
         """An in-app Notification of type proposal_signed is created for the owner."""
+        test_user = test_user_opted_in
         proposal = await _make_proposal(db_session, test_user, test_contact)
 
         await _accept(db_session, proposal)

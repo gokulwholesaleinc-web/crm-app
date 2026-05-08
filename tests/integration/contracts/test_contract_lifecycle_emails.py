@@ -71,9 +71,10 @@ class TestContractExpiringEmailSent:
     async def test_email_queued_with_branded_subject(
         self,
         db_session: AsyncSession,
-        test_user: User,
+        test_user_opted_in: User,
         test_company: Company,
     ):
+        test_user = test_user_opted_in
         contract = await _active_contract_expiring_soon(db_session, test_user, test_company)
         await ContractLifecycleService(db_session).process_due_contracts()
 
@@ -99,7 +100,9 @@ class TestContractExpiringEmailSuppressed:
     ):
         prefs = UserNotificationPrefs(
             user_id=test_user.id,
-            event_matrix={"contract_expiring": {"email": False}},
+            in_app_enabled=True,
+            email_enabled=True,
+            event_matrix={"contract_expiring": {"in_app": True, "email": False}},
         )
         db_session.add(prefs)
         await db_session.commit()
@@ -126,9 +129,10 @@ class TestContractSignedBothEmailsQueued:
     async def test_signer_and_owner_emails_queued(
         self,
         db_session: AsyncSession,
-        test_user: User,
+        test_user_opted_in: User,
         test_contact: Contact,
     ):
+        test_user = test_user_opted_in
         contract = await _sent_contract(db_session, test_user, test_contact)
         svc = ContractService(db_session)
 
@@ -199,9 +203,10 @@ class TestContractSignedNotificationWritten:
     async def test_notification_row_created(
         self,
         db_session: AsyncSession,
-        test_user: User,
+        test_user_opted_in: User,
         test_contact: Contact,
     ):
+        test_user = test_user_opted_in
         contract = await _sent_contract(db_session, test_user, test_contact)
         svc = ContractService(db_session)
 

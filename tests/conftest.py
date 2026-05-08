@@ -692,6 +692,38 @@ async def test_contract(
 # =============================================================================
 
 @pytest_asyncio.fixture(scope="function")
+async def test_user_opted_in(db_session: AsyncSession, test_user: User) -> User:
+    """test_user with all notification channels and matrix entries enabled.
+
+    Use for tests that exercise notification dispatch and need the gate to pass.
+    For opt-in semantics tests (asserting silence), use test_user directly (no prefs row).
+    """
+    prefs = UserNotificationPrefs(
+        user_id=test_user.id,
+        in_app_enabled=True,
+        email_enabled=True,
+        event_matrix={
+            event: {"in_app": True, "email": True}
+            for event in (
+                "lead_assigned",
+                "task_due",
+                "mention",
+                "contract_expiring",
+                "contract_signed",
+                "proposal_signed",
+                "email_reply_received",
+                "payment_received",
+                "team_invitation",
+                "share_received",
+            )
+        },
+    )
+    db_session.add(prefs)
+    await db_session.commit()
+    return test_user
+
+
+@pytest_asyncio.fixture(scope="function")
 async def test_payment(
     db_session: AsyncSession,
     test_user: User,

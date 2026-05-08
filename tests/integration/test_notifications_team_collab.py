@@ -16,6 +16,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.account.models import UserNotificationPrefs
 from src.auth.models import User
 from src.auth.security import create_access_token, get_password_hash
 from src.companies.models import Company
@@ -117,6 +118,18 @@ DUMMY_SIGNATURE = (
     "data:image/png;base64,"
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
 )
+
+
+async def _opt_in(db: AsyncSession, user: User, *event_keys: str) -> None:
+    """Create an opted-in prefs row for user with in_app + email enabled for each event key."""
+    prefs = UserNotificationPrefs(
+        user_id=user.id,
+        in_app_enabled=True,
+        email_enabled=True,
+        event_matrix={key: {"in_app": True, "email": True} for key in event_keys},
+    )
+    db.add(prefs)
+    await db.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -304,6 +317,7 @@ class TestProposalSignedNotification:
     ):
         """Signing a proposal via public link notifies the owner with proposal_signed."""
         owner = await _make_user(db_session, "proposal_owner@example.com", "Proposal Owner")
+        await _opt_in(db_session, owner, "proposal_signed")
 
         proposal = Proposal(
             proposal_number="PR-TC-001",
@@ -349,6 +363,7 @@ class TestProposalSignedNotification:
     ):
         """The signer (not the owner) must NOT get a proposal_signed notification."""
         owner = await _make_user(db_session, "proposal_owner2@example.com", "Proposal Owner 2")
+        await _opt_in(db_session, owner, "proposal_signed")
 
         proposal = Proposal(
             proposal_number="PR-TC-002",
@@ -399,6 +414,7 @@ class TestContractSignedNotification:
         from datetime import UTC, datetime, timedelta
 
         owner = await _make_user(db_session, "contract_owner@example.com", "Contract Owner")
+        await _opt_in(db_session, owner, "contract_signed")
 
         contract = Contract(
             title="TC Test Service Agreement",
@@ -450,6 +466,7 @@ class TestContractSignedNotification:
         from datetime import UTC, datetime, timedelta
 
         owner = await _make_user(db_session, "contract_owner2@example.com", "Contract Owner 2")
+        await _opt_in(db_session, owner, "contract_signed")
 
         contract = Contract(
             title="Another TC Contract",
