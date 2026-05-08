@@ -225,6 +225,94 @@ class TestEmailReplyNotificationRouting:
         assert sales.id in notified_ids, "Sales rep should get notification even when contact has no owner"
 
 
+class TestNotificationGuardDirect:
+    @pytest.mark.asyncio
+    async def test_guard_skips_when_recipient_not_on_message(self, db: AsyncSession):
+        """notify_on_email_reply_received returns None when recipient's email isn't in participant_emails."""
+        user = await _make_user(db, "unrelated@crm.com")
+        await _make_connection(db, user.id, "unrelated@crm.com")
+        contact = Contact(
+            first_name="Client", last_name="X", email="client@external.com", owner_id=user.id
+        )
+        db.add(contact)
+        await db.flush()
+        await db.commit()
+
+        from src.notifications.service import notify_on_email_reply_received
+
+        result = await notify_on_email_reply_received(
+            db=db,
+            recipient_user_id=user.id,
+            contact_id=contact.id,
+            sender_email="client@external.com",
+            sender_name="Client",
+            subject_line="Re: Hello",
+            snippet="body",
+            # Participant list does NOT include the recipient's address
+            participant_emails=["sales@crm.com", "client@external.com"],
+        )
+
+        assert result is None, "Guard must return None when recipient address is absent from participant_emails"
+        notifs = (await db.execute(select(Notification))).scalars().all()
+        assert not any(n.user_id == user.id for n in notifs), "No in-app notification should be created"
+
+    @pytest.mark.asyncio
+    async def test_guard_allows_when_recipient_is_participant(self, db: AsyncSession):
+        """notify_on_email_reply_received creates notification when recipient is in participant_emails."""
+        user = await _make_user(db, "rep@crm.com")
+        await _make_connection(db, user.id, "rep@crm.com")
+        contact = Contact(
+            first_name="Client", last_name="Y", email="client@external.com", owner_id=user.id
+        )
+        db.add(contact)
+        await db.flush()
+        await db.commit()
+
+        from src.notifications.service import notify_on_email_reply_received
+
+        result = await notify_on_email_reply_received(
+            db=db,
+            recipient_user_id=user.id,
+            contact_id=contact.id,
+            sender_email="client@external.com",
+            sender_name="Client",
+            subject_line="Re: Hello",
+            snippet="body",
+            participant_emails=["rep@crm.com", "client@external.com"],
+        )
+
+        assert result is not None, "Notification should be created when recipient is a participant"
+
+    @pytest.mark.asyncio
+    async def test_no_notification_when_message_has_no_in_reply_to(self, db: AsyncSession):
+        """Cold inbound (no In-Reply-To header) must never trigger a reply notification."""
+        sales = await _make_user(db, "sales@crm.com")
+        sales_conn = await _make_connection(db, sales.id, "sales@crm.com")
+        contact = Contact(
+            first_name="Client", last_name="Cold", email="cold@external.com", owner_id=sales.id
+        )
+        db.add(contact)
+        await db.flush()
+        await db.commit()
+
+        from src.integrations.gmail.sync import _store_inbound
+
+        msg = _make_inbound_msg(
+            msg_id="<cold-inbound-001@gmail.com>",
+            from_="cold@external.com",
+            to="sales@crm.com",
+            in_reply_to="",  # no In-Reply-To
+        )
+        msg["in_reply_to"] = None  # override to None explicitly
+        await _store_inbound(msg, sales_conn, db, datetime.now(UTC))
+        await db.commit()
+
+        notifs = (await db.execute(select(Notification))).scalars().all()
+        assert not any(n.type == "email_reply" for n in notifs), (
+            "Cold inbound (no In-Reply-To) must not fire email_reply notification"
+        )
+
+
 class TestDeepLinkTabSuffix:
     def test_email_reply_deep_link_uses_emails_plural(self):
         """The deep-link suffix must be '?tab=emails' to match frontend TabType."""
