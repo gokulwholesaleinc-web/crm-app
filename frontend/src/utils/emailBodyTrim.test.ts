@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { trimQuotedHtml, trimQuotedText } from './emailBodyTrim';
+import { trimQuotedHtml, trimQuotedText, trimToggleLabel } from './emailBodyTrim';
 
 describe('trimQuotedHtml', () => {
   it('strips Gmail quote blocks', () => {
@@ -11,6 +11,7 @@ describe('trimQuotedHtml', () => {
       '</div>';
     const result = trimQuotedHtml(html);
     expect(result.trimmed).toBe(true);
+    expect(result.cut).toBe('quote');
     expect(result.body).toContain('attached is the invoice');
     expect(result.body).not.toContain('old message body');
     expect(result.body).not.toContain('gmail_quote');
@@ -25,8 +26,20 @@ describe('trimQuotedHtml', () => {
       '</div>';
     const result = trimQuotedHtml(html);
     expect(result.trimmed).toBe(true);
+    expect(result.cut).toBe('signature');
     expect(result.body).not.toContain('gmail_signature');
     expect(result.body).not.toContain('Link Creative');
+  });
+
+  it('reports cut=both when both quote and signature were trimmed', () => {
+    const html =
+      '<p>Approved.</p>' +
+      '<div class="gmail_signature">Giancarlo</div>' +
+      '<div class="gmail_quote">previous</div>';
+    const result = trimQuotedHtml(html);
+    expect(result.trimmed).toBe(true);
+    expect(result.cut).toBe('both');
+    expect(result.body).toContain('Approved');
   });
 
   it('strips Apple Mail blockquote type=cite', () => {
@@ -41,11 +54,12 @@ describe('trimQuotedHtml', () => {
     expect(result.body).not.toContain('original text here');
   });
 
-  it('strips Outlook divRplyFwdMsg + everything after', () => {
+  it('strips Outlook divRplyFwdMsg + the trailing stray <hr> and quoted body', () => {
     const html =
       '<p>Confirmed for Tuesday.</p>' +
+      '<hr>' +
       '<div id="divRplyFwdMsg">' +
-      '<hr><b>From:</b> someone@example.com<br><b>Sent:</b> Monday<br>' +
+      '<b>From:</b> someone@example.com<br><b>Sent:</b> Monday<br>' +
       '</div>' +
       '<p>Original message body still tagged on after the divider.</p>';
     const result = trimQuotedHtml(html);
@@ -53,19 +67,24 @@ describe('trimQuotedHtml', () => {
     expect(result.body).toContain('Confirmed for Tuesday');
     expect(result.body).not.toContain('divRplyFwdMsg');
     expect(result.body).not.toContain('Original message body');
+    // Stray <hr> that lived between the new message and the divider
+    // gets cleaned up by trimDanglingTrailers — it has no content under
+    // it after the cut and would render as a useless rule.
+    expect(result.body).not.toContain('<hr>');
   });
 
   it('returns the original body untouched when no marker present', () => {
     const html = '<p>Just a plain note, no quote.</p>';
     const result = trimQuotedHtml(html);
     expect(result.trimmed).toBe(false);
+    expect(result.cut).toBe('none');
     expect(result.body).toBe(html);
   });
 
   it('keeps the new message when Gmail wraps it in <div dir="ltr"> with the quote', () => {
     // Real Gmail output puts new text + quoted reply inside the same
     // wrapper. Naive ancestor-walk-and-remove deletes the wrapper too,
-    // which would erase the new text. Regression for that bug.
+    // which would erase the new text. Range-based cut preserves it.
     const html =
       '<div dir="ltr">' +
       '<p>Approved — please proceed.</p><br>' +
@@ -97,12 +116,13 @@ describe('trimQuotedHtml', () => {
       '</div>';
     const result = trimQuotedHtml(html);
     expect(result.trimmed).toBe(true);
+    expect(result.cut).toBe('signature');
     expect(result.body).toContain('Approved');
     expect(result.body).not.toContain('Giancarlo');
   });
 
   it('handles empty input safely', () => {
-    expect(trimQuotedHtml('')).toEqual({ body: '', trimmed: false });
+    expect(trimQuotedHtml('')).toEqual({ body: '', trimmed: false, cut: 'none' });
   });
 });
 
@@ -111,6 +131,7 @@ describe('trimQuotedText', () => {
     const text = 'Hi there,\n\nLet me know.\n\n-- \nGiancarlo · CEO\nLink Creative\n+1 555 1234';
     const result = trimQuotedText(text);
     expect(result.trimmed).toBe(true);
+    expect(result.cut).toBe('signature');
     expect(result.body).toContain('Let me know');
     expect(result.body).not.toContain('Giancarlo');
     expect(result.body).not.toContain('555 1234');
@@ -121,6 +142,7 @@ describe('trimQuotedText', () => {
       'Sounds great.\n\nOn Mon, Apr 28, 2026 at 10:15 AM Daisy <daisy@example.com> wrote:\n> previous message\n> > older message';
     const result = trimQuotedText(text);
     expect(result.trimmed).toBe(true);
+    expect(result.cut).toBe('quote');
     expect(result.body).toContain('Sounds great');
     expect(result.body).not.toContain('previous message');
   });
@@ -130,6 +152,7 @@ describe('trimQuotedText', () => {
       'Approved.\n\nFrom: bob@example.com\nSent: Monday, April 28, 2026 10:15 AM\nTo: alice@example.com\nSubject: Quote\n\nOriginal body';
     const result = trimQuotedText(text);
     expect(result.trimmed).toBe(true);
+    expect(result.cut).toBe('quote');
     expect(result.body).toContain('Approved');
     expect(result.body).not.toContain('Original body');
   });
@@ -138,6 +161,7 @@ describe('trimQuotedText', () => {
     const text = 'Last week I wrote my report.\nFollow-up coming tomorrow.';
     const result = trimQuotedText(text);
     expect(result.trimmed).toBe(false);
+    expect(result.cut).toBe('none');
     expect(result.body).toBe(text);
   });
 
@@ -149,6 +173,21 @@ describe('trimQuotedText', () => {
   });
 
   it('handles empty input safely', () => {
-    expect(trimQuotedText('')).toEqual({ body: '', trimmed: false });
+    expect(trimQuotedText('')).toEqual({ body: '', trimmed: false, cut: 'none' });
+  });
+});
+
+describe('trimToggleLabel', () => {
+  it('uses accurate copy for each cut variant', () => {
+    expect(trimToggleLabel('quote', false)).toBe('Show quoted history');
+    expect(trimToggleLabel('signature', false)).toBe('Show signature');
+    expect(trimToggleLabel('both', false)).toBe('Show quoted history & signature');
+    expect(trimToggleLabel('quote', true)).toBe('Hide quoted history');
+    expect(trimToggleLabel('signature', true)).toBe('Hide signature');
+  });
+
+  it('returns empty string when nothing was cut', () => {
+    expect(trimToggleLabel('none', false)).toBe('');
+    expect(trimToggleLabel('none', true)).toBe('');
   });
 });
