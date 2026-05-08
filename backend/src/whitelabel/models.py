@@ -69,6 +69,13 @@ class TenantSettings(Base, TimestampMixin):
     secondary_color: Mapped[str] = mapped_column(String(7), default="#8b5cf6")
     accent_color: Mapped[str] = mapped_column(String(7), default="#22c55e")
 
+    # Page + surface backgrounds, per theme. Defaults match the prior
+    # hardcoded Tailwind values (gray-50/gray-900, white/gray-800).
+    bg_color_light: Mapped[str] = mapped_column(String(7), default="#f9fafb")
+    bg_color_dark: Mapped[str] = mapped_column(String(7), default="#111827")
+    surface_color_light: Mapped[str] = mapped_column(String(7), default="#ffffff")
+    surface_color_dark: Mapped[str] = mapped_column(String(7), default="#1f2937")
+
     # Email settings
     email_from_name: Mapped[str | None] = mapped_column(String(255))
     email_from_address: Mapped[str | None] = mapped_column(String(255))

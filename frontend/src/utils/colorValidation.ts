@@ -8,12 +8,16 @@
  * These helpers collapse anything that isn't a strict hex color to a fallback.
  */
 
-const HEX_COLOR_RE = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
+// Accepts `#rgb` and `#rrggbb`. The 8-digit `#rrggbbaa` form is
+// rejected to stay in lockstep with the backend validator + the
+// `tenant_settings` VARCHAR(7) columns; the `withAlpha` helper below
+// handles alpha compositing on the consumer side.
+const HEX_COLOR_RE = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 
 /**
- * Returns `input` if it's a well-formed `#rgb`, `#rrggbb`, or `#rrggbbaa`
- * hex string; otherwise returns `fallback`. Trims whitespace before checking
- * and treats `null`/`undefined` as invalid.
+ * Returns `input` if it's a well-formed `#rgb` or `#rrggbb` hex string;
+ * otherwise returns `fallback`. Trims whitespace before checking and
+ * treats `null`/`undefined` as invalid.
  */
 export function sanitizeHexColor(
   input: string | null | undefined,

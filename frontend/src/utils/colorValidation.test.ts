@@ -14,8 +14,11 @@ describe('sanitizeHexColor', () => {
     expect(sanitizeHexColor('#ABC', FALLBACK)).toBe('#ABC');
   });
 
-  it('accepts 8-digit hex with alpha', () => {
-    expect(sanitizeHexColor('#ff00aa80', FALLBACK)).toBe('#ff00aa80');
+  it('rejects 8-digit hex (column is VARCHAR(7))', () => {
+    // Validator + DB column are deliberately in lockstep; 9-char values
+    // would clear the regex and then 500 on the UPDATE with truncation.
+    // Alpha compositing is handled by `withAlpha` on the consumer side.
+    expect(sanitizeHexColor('#ff00aa80', FALLBACK)).toBe(FALLBACK);
   });
 
   it('trims whitespace before checking', () => {
@@ -60,7 +63,7 @@ describe('isValidHexColor', () => {
   it('matches sanitizeHexColor acceptance criteria', () => {
     expect(isValidHexColor('#ff00aa')).toBe(true);
     expect(isValidHexColor('#fa0')).toBe(true);
-    expect(isValidHexColor('#ff00aa80')).toBe(true);
+    expect(isValidHexColor('#ff00aa80')).toBe(false); // 8-digit rejected
     expect(isValidHexColor('ff00aa')).toBe(false);
     expect(isValidHexColor('red')).toBe(false);
     expect(isValidHexColor(null)).toBe(false);
@@ -78,8 +81,11 @@ describe('withAlpha', () => {
     expect(withAlpha('#ABC', '0f')).toBe('#AABBCC0f');
   });
 
-  it('strips existing alpha from 8-digit hex before appending', () => {
-    expect(withAlpha('#64f28fff', '14')).toBe('#64f28f14');
+  it('returns transparent for 8-digit input (regex deliberately rejects)', () => {
+    // 8-digit input would imply alpha already; we don't accept it
+    // anywhere now. transparent is the safer fallback than producing
+    // a malformed CSS value that browsers would silently drop.
+    expect(withAlpha('#64f28fff', '14')).toBe('transparent');
   });
 
   it('returns transparent for invalid input rather than producing broken CSS', () => {
