@@ -262,8 +262,24 @@ export function BrandingSection() {
       refreshBranding();
       queryClient.invalidateQueries({ queryKey: ['tenant', 'config', tenantSlug] });
     },
-    onError: () => {
-      toast.error('Failed to update branding');
+    onError: (error: unknown) => {
+      // Surface the server's validation message verbatim when present so
+      // the admin learns which field is bad. Pydantic returns either a
+      // plain string detail (older paths) or an array of {loc, msg, ...}
+      // entries (validator failures); both are common enough to warrant
+      // explicit handling. Unknown shapes fall back to a generic toast.
+      const detail = (error as { response?: { data?: { detail?: unknown } } } | undefined)
+        ?.response?.data?.detail;
+      let message = 'Failed to update branding';
+      if (typeof detail === 'string') {
+        message = detail;
+      } else if (Array.isArray(detail) && detail.length > 0) {
+        const first = detail[0] as { msg?: unknown; loc?: unknown[] };
+        const loc = Array.isArray(first?.loc) ? first.loc.filter((p) => p !== 'body').join('.') : '';
+        const msg = typeof first?.msg === 'string' ? first.msg : '';
+        if (msg) message = loc ? `${loc}: ${msg}` : msg;
+      }
+      toast.error(message);
     },
   });
 

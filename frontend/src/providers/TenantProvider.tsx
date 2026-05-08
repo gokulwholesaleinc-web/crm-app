@@ -144,8 +144,14 @@ function applyBrandingToDOM(config: TenantConfig | null) {
   // no error anywhere.
   const setBg = (key: string, raw: string, fallback: string) => {
     const sanitized = sanitizeHexColor(raw, fallback);
-    if (sanitized !== raw && import.meta.env.DEV) {
-      console.warn(`[branding] ${key} fell back from ${JSON.stringify(raw)} to ${fallback} (not a valid hex)`);
+    if (sanitized !== raw) {
+      // Always warn — a tenant whose stored hex doesn't round-trip is a
+      // data-integrity event we want visibility on in prod, not just DEV.
+      // (The validator rejects bad input on PATCH; reaching this branch
+      // means a stale cache or a row that bypassed the validator.)
+      console.warn(
+        `[branding] ${key} fell back from ${JSON.stringify(raw)} to ${fallback} (not a valid hex)`,
+      );
     }
     root.style.setProperty(key, sanitized);
   };

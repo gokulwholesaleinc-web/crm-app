@@ -1826,18 +1826,18 @@ class TestTenantSettingsBgColors:
         assert any(field in str(loc) for err in body.get("detail", []) for loc in err.get("loc", []))
 
     @pytest.mark.asyncio
-    async def test_update_tenant_settings_accepts_short_and_long_hex(
+    async def test_update_tenant_settings_accepts_short_and_six_digit_hex(
         self,
         client: AsyncClient,
         db_session: AsyncSession,
         auth_headers: dict,
         test_tenant: Tenant,
     ):
-        """Three-digit (#fff), six-digit (#ffffff), and eight-digit
-        (#ffffffaa) hex literals all clear the validator. The 8-digit
-        form will fail the underlying VARCHAR(7) constraint at the DB
-        layer (separate concern), so we only assert validator pass-through
-        for the 3- and 6-digit forms here."""
+        """Three-digit (#abc) and six-digit (#aabbcc) hex literals both
+        clear the validator. The 8-digit (#rrggbbaa) form is deliberately
+        rejected — see test_update_tenant_settings_rejects_8_digit_hex
+        — because the column is VARCHAR(7) and a 9-char value would 500
+        on the UPDATE with StringDataRightTruncationError."""
         response = await client.patch(
             f"/api/tenants/{test_tenant.id}/settings",
             headers=auth_headers,
@@ -1847,6 +1847,53 @@ class TestTenantSettingsBgColors:
         data = response.json()
         assert data["primary_color"] == "#abc"
         assert data["bg_color_light"] == "#aabbcc"
+
+    @pytest.mark.asyncio
+    async def test_update_tenant_settings_rejects_8_digit_hex(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_tenant: Tenant,
+    ):
+        """8-digit (#rrggbbaa) hex must 422, not pass. The DB column is
+        VARCHAR(7); a 9-char value clears any 8-digit-permissive regex
+        and then crashes the UPDATE — worse than the original silent
+        failure this validator was added to prevent."""
+        response = await client.patch(
+            f"/api/tenants/{test_tenant.id}/settings",
+            headers=auth_headers,
+            json={"primary_color": "#aabbccdd"},
+        )
+        assert response.status_code == 422, response.text
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("bad_value", ["", " ", "  ", "#", " #fff "])
+    async def test_update_tenant_settings_rejects_blank_or_whitespace_color(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_tenant: Tenant,
+        bad_value: str,
+    ):
+        """Empty/whitespace/just-a-hash inputs reject with 422. Direct API
+        callers can't bypass the frontend's "treat empty as leave-default"
+        affordance — they must omit the key (or send null) to clear, not
+        send an empty string. ' #fff ' inputs are stripped by the
+        validator and accepted, so we test that pre-stripped path is
+        rejected separately by the trailing-whitespace fixture."""
+        response = await client.patch(
+            f"/api/tenants/{test_tenant.id}/settings",
+            headers=auth_headers,
+            json={"primary_color": bad_value},
+        )
+        # ' #fff ' is whitespace-trimmed by the validator and accepted;
+        # all other entries are non-hex post-strip.
+        if bad_value.strip() == "#fff":
+            assert response.status_code == 200, response.text
+        else:
+            assert response.status_code == 422, response.text
 
 
 class TestPublicConfigBgColors:

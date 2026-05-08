@@ -31,8 +31,13 @@ _COLOR_FIELD_LABELS = {
 }
 
 # Mirrors frontend/src/utils/colorValidation.ts so the validator and
-# the React picker agree on what "hex" means.
-_HEX_COLOR_RE = re.compile(r'^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$')
+# the React picker agree on what "hex" means. Deliberately rejects the
+# 8-digit (#rrggbbaa) form: every color column is VARCHAR(7), so a
+# 9-char value clears the regex but then 500s on UPDATE with
+# StringDataRightTruncationError. The native <input type="color">
+# only emits 6-digit anyway; alpha compositing is handled by the
+# `withAlpha` helper on the consumer side.
+_HEX_COLOR_RE = re.compile(r'^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$')
 
 
 def _validate_url_field(v: str | None, info: ValidationInfo) -> str | None:
