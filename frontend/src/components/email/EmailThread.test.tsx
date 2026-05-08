@@ -155,6 +155,37 @@ describe('EmailThread', () => {
     expect(img.getAttribute('src')).toBe(tinyPng);
   });
 
+  it('trims gmail_quote + gmail_signature from inbound HTML by default and exposes a toggle', async () => {
+    const html =
+      '<p>Approved — please proceed.</p>' +
+      '<div class="gmail_quote">' +
+      '<div>On Mon, Apr 28 Daisy &lt;daisy@example.com&gt; wrote:</div>' +
+      '<blockquote>can you confirm?</blockquote>' +
+      '</div>' +
+      '<div class="gmail_signature">' +
+      '<table><tr><td>Giancarlo · CEO · Link Creative</td></tr></table>' +
+      '</div>';
+    mockUseEmailThread.mockReturnValue({
+      data: threadResponse([makeEmail({ id: 1, body_html: html })]),
+      isLoading: false,
+    });
+
+    renderWithProviders(<EmailThread entityType="contacts" entityId={1883} />);
+
+    const body = document.querySelector('.email-html-content');
+    expect(body).not.toBeNull();
+    expect(body!.textContent).toContain('Approved');
+    expect(body!.textContent).not.toContain('can you confirm?');
+    expect(body!.textContent).not.toContain('Giancarlo');
+
+    const toggle = screen.getByRole('button', { name: /Show quoted history/i });
+    fireEvent.click(toggle);
+
+    const expanded = document.querySelector('.email-html-content');
+    expect(expanded!.textContent).toContain('can you confirm?');
+    expect(expanded!.textContent).toContain('Giancarlo');
+  });
+
   it('strips <svg> and <image> from inbound HTML (no profile escape)', () => {
     // Adversarial inbound: USE_PROFILES.html doesn't load the SVG
     // profile, so <svg> and <image> are stripped entirely — no
