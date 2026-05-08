@@ -49,10 +49,10 @@ class UserNotificationPrefs(Base):
     )
 
     in_app_enabled: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("true")
+        Boolean, nullable=False, server_default=text("false")
     )
     email_enabled: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("true")
+        Boolean, nullable=False, server_default=text("false")
     )
     email_digest: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default=text("'instant'")

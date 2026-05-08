@@ -5,6 +5,8 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.account.models import UserNotificationPrefs
+from src.account.notification_gate import should_notify_in_app, should_send_email
 from src.auth.models import User
 from src.auth.security import create_access_token, get_password_hash
 from src.notifications.event_handler import notification_event_handler
@@ -420,6 +422,35 @@ def _auth_headers_for(user: User) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
+async def _enable_all_notifications(db_session: AsyncSession, user: User) -> None:
+    """Create a fully-opted-in UserNotificationPrefs row for the given user.
+
+    Required under the opt-in gate: new users with no prefs row get no
+    notifications. Tests that assert a notification fires must opt the
+    recipient in explicitly.
+    """
+    prefs = UserNotificationPrefs(
+        user_id=user.id,
+        in_app_enabled=True,
+        email_enabled=True,
+        event_matrix={
+            "assignment": {"in_app": True, "email": True},
+            "payment_received": {"in_app": True, "email": True},
+            "activity_due": {"in_app": True, "email": True},
+            "task_due": {"in_app": True, "email": True},
+            "mention": {"in_app": True, "email": True},
+            "lead_assigned": {"in_app": True, "email": True},
+            "stage_change": {"in_app": True, "email": True},
+            "contract_signed": {"in_app": True, "email": True},
+            "proposal_signed": {"in_app": True, "email": True},
+            "contract_expiring": {"in_app": True, "email": True},
+            "email_reply_received": {"in_app": True, "email": True},
+        },
+    )
+    db_session.add(prefs)
+    await db_session.flush()
+
+
 class TestActivityAssignmentNotifications:
     """Tests covering A and B: activity reassignment wiring."""
 
@@ -435,6 +466,7 @@ class TestActivityAssignmentNotifications:
 
         user_a = await _create_user(db_session, "user_a_assign@example.com")
         user_b = await _create_user(db_session, "user_b_assign@example.com")
+        await _enable_all_notifications(db_session, user_b)
 
         activity_resp = await client.post(
             "/api/activities",
@@ -871,6 +903,7 @@ class TestPaymentReceivedNotification:
         # opens its own session against the production DSN and writes
         # nowhere visible to db_session.
         user_a = await _create_user(db_session, "payment_owner_notif@example.com")
+        await _enable_all_notifications(db_session, user_a)
 
         payload = {
             "entity_id": 9001,
@@ -926,3 +959,50 @@ class TestPaymentReceivedNotification:
         )
         after_count = len(after.scalars().all())
         assert after_count == before_count
+
+
+# ---------------------------------------------------------------------------
+# Opt-in gate invariant tests
+# ---------------------------------------------------------------------------
+
+
+class TestOptInGate:
+    """The notification gate is fail-closed: no prefs row or disabled
+    channel must return False, not True."""
+
+    @pytest.mark.asyncio
+    async def test_default_user_with_no_prefs_gets_no_notifications(
+        self, db_session: AsyncSession
+    ):
+        """A fresh user with no UserNotificationPrefs row must get no in-app or email notifications.
+
+        Opt-in invariant: missing prefs row → fail-closed on both channels.
+        """
+        user = await _create_user(db_session, "no_prefs_user@example.com")
+
+        assert not await should_notify_in_app(db_session, user.id, "assignment")
+        assert not await should_notify_in_app(db_session, user.id, "payment_received")
+        assert not await should_send_email(db_session, user.id, "assignment")
+        assert not await should_send_email(db_session, user.id, "payment_received")
+
+    @pytest.mark.asyncio
+    async def test_user_with_disabled_in_app_skips_in_app_notification(
+        self, db_session: AsyncSession
+    ):
+        """in_app_enabled=False blocks in-app even when the event is in the matrix.
+
+        email_enabled=True with the event enabled still passes for email,
+        confirming the two channels are independent.
+        """
+        user = await _create_user(db_session, "disabled_inapp@example.com")
+        prefs = UserNotificationPrefs(
+            user_id=user.id,
+            in_app_enabled=False,
+            email_enabled=True,
+            event_matrix={"assignment": {"in_app": True, "email": True}},
+        )
+        db_session.add(prefs)
+        await db_session.flush()
+
+        assert not await should_notify_in_app(db_session, user.id, "assignment")
+        assert await should_send_email(db_session, user.id, "assignment")

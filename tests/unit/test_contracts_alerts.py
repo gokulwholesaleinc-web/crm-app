@@ -9,11 +9,11 @@ from datetime import UTC, date, datetime, timedelta
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.account.models import UserNotificationPrefs
 from src.contracts.models import Contract
 from src.contracts.scheduler import ContractLifecycleService
 from src.email.models import EmailQueue
 from src.notifications.models import Notification
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -107,6 +107,16 @@ class TestExpiringAlert:
     ):
         """Active contract expiring in 10 days creates Notification + EmailQueue row."""
         test_user.email = "owner@example.com"
+        await db_session.flush()
+
+        # Opt test_user in — required under the opt-in gate.
+        prefs = UserNotificationPrefs(
+            user_id=test_user.id,
+            in_app_enabled=True,
+            email_enabled=True,
+            event_matrix={"contract_expiring": {"in_app": True, "email": True}},
+        )
+        db_session.add(prefs)
         await db_session.flush()
 
         contract = _make_contract(

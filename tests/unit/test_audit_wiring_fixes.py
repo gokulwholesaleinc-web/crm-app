@@ -21,6 +21,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.account.models import UserNotificationPrefs
 from src.activities.models import Activity
 from src.audit.models import AuditLog
 from src.auth.models import User
@@ -29,7 +30,6 @@ from src.contacts.models import Contact
 from src.dashboard.router import _dashboard_cache
 from src.notifications.models import Notification
 from src.payments.models import Payment
-
 
 # ---------------------------------------------------------------------------
 # Helpers / shared fixtures
@@ -281,6 +281,16 @@ class TestContractSignNoDoubleFire:
         )
         assert send_resp.status_code == 200
         token = send_resp.json()["sign_url"].split("/")[-1]
+
+        # Opt test_user in so the gate allows the notification through.
+        prefs = UserNotificationPrefs(
+            user_id=test_user.id,
+            in_app_enabled=True,
+            email_enabled=False,
+            event_matrix={"contract_signed": {"in_app": True, "email": False}},
+        )
+        db_session.add(prefs)
+        await db_session.flush()
 
         sign_resp = await client.post(
             f"/api/contracts/public/{token}/sign",

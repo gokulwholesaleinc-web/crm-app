@@ -11,12 +11,32 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.account.models import UserNotificationPrefs
 from src.auth.models import User
-from src.leads.models import Lead, LeadSource
-from src.contacts.models import Contact
 from src.companies.models import Company
-from src.opportunities.models import Opportunity, PipelineStage
+from src.contacts.models import Contact
+from src.leads.models import Lead, LeadSource
 from src.notifications.models import Notification
+from src.opportunities.models import Opportunity, PipelineStage
+
+
+async def _enable_all_notifications(db_session: AsyncSession, user: User) -> None:
+    """Create a fully-opted-in prefs row — required under the opt-in gate."""
+    prefs = UserNotificationPrefs(
+        user_id=user.id,
+        in_app_enabled=True,
+        email_enabled=True,
+        event_matrix={
+            "assignment": {"in_app": True, "email": True},
+            "activity_due": {"in_app": True, "email": True},
+            "task_due": {"in_app": True, "email": True},
+            "stage_change": {"in_app": True, "email": True},
+            "lead_assigned": {"in_app": True, "email": True},
+            "mention": {"in_app": True, "email": True},
+        },
+    )
+    db_session.add(prefs)
+    await db_session.flush()
 
 
 class TestLeadAssignmentNotification:
@@ -42,6 +62,7 @@ class TestLeadAssignmentNotification:
         db_session.add(other_user)
         await db_session.commit()
         await db_session.refresh(other_user)
+        await _enable_all_notifications(db_session, other_user)
 
         response = await client.post(
             "/api/leads",
@@ -87,6 +108,7 @@ class TestLeadAssignmentNotification:
         db_session.add(new_owner)
         await db_session.commit()
         await db_session.refresh(new_owner)
+        await _enable_all_notifications(db_session, new_owner)
 
         response = await client.patch(
             f"/api/leads/{test_lead.id}",
@@ -178,6 +200,8 @@ class TestActivityDueNotification:
         test_contact: Contact,
     ):
         """Creating an activity with a due_date should create an activity_due notification."""
+        await _enable_all_notifications(db_session, test_user)
+
         response = await client.post(
             "/api/activities",
             headers=auth_headers,
