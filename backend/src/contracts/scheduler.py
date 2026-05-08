@@ -15,6 +15,26 @@ logger = logging.getLogger(__name__)
 EXPIRING_WINDOW_DAYS = 30
 
 
+def _is_overdue(stamp: datetime | None, floor: datetime) -> bool:
+    """``stamp < floor``, tolerant of SQLite returning tz-naive rows.
+
+    Postgres preserves the tz-aware datetime we wrote; SQLite drops the
+    offset on read. Both columns are stored UTC by convention, so when
+    the two sides disagree on tzinfo we strip it from both — comparing
+    naive-vs-aware would raise ``TypeError`` and abort the scheduler.
+
+    Invariant: writers MUST stamp UTC (``datetime.now(UTC)``). A naive
+    local-time stamp would compare against a naive UTC floor and silently
+    drift by the local offset. The scheduler stamps UTC; tests use UTC.
+    Don't break that.
+    """
+    if stamp is None:
+        return True
+    if (stamp.tzinfo is None) != (floor.tzinfo is None):
+        return stamp.replace(tzinfo=None) < floor.replace(tzinfo=None)
+    return stamp < floor
+
+
 class ContractLifecycleService:
     """Daily lifecycle pass: status auto-flip + expiring-soon alerts."""
 
@@ -63,6 +83,13 @@ class ContractLifecycleService:
         wouldn't see. Keeping the shared-session pattern for now;
         per-row commit isolation lands as a follow-up alongside test
         infrastructure that supports both modes.
+
+        Per-channel cooldown: the candidate query ORs both
+        ``expiring_notified_at`` (in-app) and
+        ``expiring_email_notified_at`` (email) so a contract re-enters
+        the set if EITHER channel is overdue. Each channel stamps its
+        own column only on a successful fire, so flipping a user's
+        email pref off no longer consumes the email cooldown.
         """
         now = datetime.now(UTC)
         cutoff = now.date() + timedelta(days=EXPIRING_WINDOW_DAYS)
@@ -79,6 +106,8 @@ class ContractLifecycleService:
                 or_(
                     Contract.expiring_notified_at.is_(None),
                     Contract.expiring_notified_at < notify_floor,
+                    Contract.expiring_email_notified_at.is_(None),
+                    Contract.expiring_email_notified_at < notify_floor,
                 )
             )
         )
@@ -87,9 +116,8 @@ class ContractLifecycleService:
         notified = 0
         for contract in contracts:
             try:
-                await self._notify_owner(contract)
-                contract.expiring_notified_at = now
-                notified += 1
+                if await self._notify_owner(contract, now=now, notify_floor=notify_floor):
+                    notified += 1
             except Exception:
                 logger.exception(
                     "[contracts_lifecycle] notify failed contract=%s", contract.id,
@@ -97,9 +125,31 @@ class ContractLifecycleService:
         await self.db.flush()
         return notified
 
-    async def _notify_owner(self, contract: Contract) -> None:
+    async def _notify_owner(
+        self,
+        contract: Contract,
+        *,
+        now: datetime,
+        notify_floor: datetime,
+    ) -> bool:
+        """Fire whichever channels are overdue. Returns True if either
+        channel actually delivered (so the caller can count it).
+
+        Each channel stamps its own cooldown column only on success.
+        Combined gate runs once per contract regardless of overdue
+        flags so we only pay one prefs round-trip per recipient.
+        """
         if contract.owner_id is None:
-            return
+            return False
+
+        fire_in_app = _is_overdue(contract.expiring_notified_at, notify_floor)
+        fire_email = _is_overdue(contract.expiring_email_notified_at, notify_floor)
+
+        from src.account.notification_gate import gate_event
+
+        in_app_allowed, email_allowed = await gate_event(
+            self.db, contract.owner_id, "contract_expiring"
+        )
 
         days_left = (contract.end_date - date.today()).days  # type: ignore[operator]
         title = f"Contract expiring in {days_left} day{'s' if days_left != 1 else ''}"
@@ -107,30 +157,34 @@ class ContractLifecycleService:
         end_date_str = contract.end_date.isoformat() if contract.end_date else "unknown"
         body = f"{contract.title} ({company_name}) expires on {end_date_str}."
 
-        from src.notifications.service import NotificationService
+        fired_any = False
 
-        notif_service = NotificationService(self.db)
-        await notif_service.create_notification(
-            user_id=contract.owner_id,
-            type="contract_expiring",
-            title=title,
-            message=body,
-            entity_type="contracts",
-            entity_id=contract.id,
-        )
+        if fire_in_app and in_app_allowed:
+            from src.notifications.service import NotificationService
 
-        from src.account.notification_gate import should_send_email
+            notif_service = NotificationService(self.db)
+            await notif_service.create_notification(
+                user_id=contract.owner_id,
+                type="contract_expiring",
+                title=title,
+                message=body,
+                entity_type="contracts",
+                entity_id=contract.id,
+            )
+            contract.expiring_notified_at = now
+            fired_any = True
+
+        if not (fire_email and email_allowed):
+            return fired_any
+
         from src.auth.models import User
-
-        if not await should_send_email(self.db, contract.owner_id, "contract_expiring"):
-            return
 
         owner_result = await self.db.execute(
             select(User).where(User.id == contract.owner_id)
         )
         owner = owner_result.scalar_one_or_none()
         if owner is None or not owner.email:
-            return
+            return fired_any
 
         from src.email.branded_templates import TenantBrandingHelper, render_contract_expiring_email
         from src.email.service import EmailService
@@ -157,3 +211,5 @@ class ContractLifecycleService:
             entity_type="contracts",
             entity_id=contract.id,
         )
+        contract.expiring_email_notified_at = now
+        return True

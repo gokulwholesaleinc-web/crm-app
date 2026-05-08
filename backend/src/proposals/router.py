@@ -873,12 +873,46 @@ async def accept_proposal(
     current_user: CurrentUser,
     db: DBSession,
 ):
-    """Mark a proposal as accepted."""
+    """Mark a proposal as accepted (internal/admin path).
+
+    Distinct from the public e-sign path at ``/public/{token}/accept``:
+    that flow captures a real customer signature plus IP/UA, runs the
+    read-before-sign attachment gate, and verifies signer_email. This
+    endpoint is the rep-side "the customer accepted offline" action —
+    no signature, no e-sign payload. To keep KPIs/billing/notifications
+    consistent with the public path, it still spawns the implied Stripe
+    artifact and fires the owner-side proposal_signed notification.
+    A signed-copy email is intentionally NOT sent because there is no
+    countersigned PDF to attach.
+    """
     service = ProposalService(db)
     proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
     check_ownership(proposal, current_user, EntityNames.PROPOSAL)
     with value_error_as_400():
         proposal = await service.mark_accepted(proposal)
+
+    # Spawn the Stripe artifact the proposal's payment_type implies.
+    # Mirrors the public-accept flow; failures are logged inside the
+    # helper and don't unwind the acceptance.
+    await service._maybe_spawn_billing(proposal)
+
+    if proposal.owner_id and proposal.owner_id != current_user.id:
+        from src.notifications.service import notify_on_proposal_signed
+
+        try:
+            await notify_on_proposal_signed(
+                db=db,
+                owner_id=proposal.owner_id,
+                proposal_id=proposal.id,
+                proposal_title=proposal.title,
+                signer_name=None,
+                signed_at=None,
+            )
+        except Exception:
+            logger.exception(
+                "proposal_signed notify failed (admin-accept) for proposal %s",
+                proposal.id,
+            )
 
     await emit(PROPOSAL_ACCEPTED, {
         "entity_id": proposal.id,

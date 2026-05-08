@@ -715,6 +715,114 @@ class TestStatusTransitions:
         assert data["accepted_at"] is not None
 
     @pytest.mark.asyncio
+    async def test_admin_accept_fires_owner_notify(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_auth_headers: dict,
+        test_admin_user: User,
+    ):
+        """Admin-accept on someone else's proposal must fire the
+        owner-side ``proposal_signed`` notification.
+
+        Pre-PR-A regression: this admin path called only
+        ``mark_accepted`` — no notify, no billing, no signed-copy
+        email. Owner watching their dashboard never knew the proposal
+        was accepted.
+
+        Signed-copy email is intentionally NOT sent: there is no
+        countersigned PDF when the rep accepts on behalf of the client.
+        """
+        from src.notifications.models import Notification
+        from src.email.models import EmailQueue
+
+        owner = User(
+            email="proposal-owner@example.com",
+            hashed_password=get_password_hash("ownerpass123"),
+            full_name="Proposal Owner",
+            is_active=True,
+            is_superuser=False,
+        )
+        db_session.add(owner)
+        await db_session.commit()
+        await db_session.refresh(owner)
+
+        proposal = Proposal(
+            proposal_number="PR-2026-ADMIN-ACCEPT",
+            title="Admin Accept Parity",
+            status="sent",
+            owner_id=owner.id,
+            created_by_id=owner.id,
+        )
+        db_session.add(proposal)
+        await db_session.commit()
+        await db_session.refresh(proposal)
+
+        response = await client.post(
+            f"/api/proposals/{proposal.id}/accept",
+            headers=admin_auth_headers,
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["status"] == "accepted"
+
+        # Owner gets the proposal_signed in-app notification
+        notif_q = await db_session.execute(
+            select(Notification).where(
+                Notification.user_id == owner.id,
+                Notification.entity_type == "proposals",
+                Notification.entity_id == proposal.id,
+                Notification.type == "proposal_signed",
+            )
+        )
+        assert notif_q.scalar_one_or_none() is not None
+
+        # No signed-copy email lands in EmailQueue (no signature)
+        signed_copy_q = await db_session.execute(
+            select(EmailQueue).where(
+                EmailQueue.entity_type == "proposals",
+                EmailQueue.entity_id == proposal.id,
+            )
+        )
+        rows = list(signed_copy_q.scalars().all())
+        # Only the owner-side notification email may be queued (matrix
+        # default-on); no signer-side "Signed copy attached" email.
+        for row in rows:
+            assert "signed copy" not in row.subject.lower()
+
+    @pytest.mark.asyncio
+    async def test_self_accept_does_not_self_notify(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        sent_proposal: Proposal,
+    ):
+        """Owner accepting their own proposal does not get a
+        proposal_signed self-notification.
+
+        ``proposal.owner_id == current_user.id`` short-circuits the
+        notify path so the rep doesn't get a "your proposal was signed"
+        ping for an action they just performed.
+        """
+        from src.notifications.models import Notification
+
+        response = await client.post(
+            f"/api/proposals/{sent_proposal.id}/accept",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+
+        notif_q = await db_session.execute(
+            select(Notification).where(
+                Notification.user_id == test_user.id,
+                Notification.entity_id == sent_proposal.id,
+                Notification.type == "proposal_signed",
+            )
+        )
+        assert notif_q.scalar_one_or_none() is None
+
+    @pytest.mark.asyncio
     async def test_reject_sent_proposal(
         self,
         client: AsyncClient,

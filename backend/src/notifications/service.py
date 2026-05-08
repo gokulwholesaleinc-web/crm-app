@@ -6,7 +6,7 @@ import os
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.account.notification_gate import should_notify_in_app, should_send_email
+from src.account.notification_gate import gate_event
 from src.auth.models import User
 from src.core.constants import DEFAULT_PAGE_SIZE
 from src.notifications.models import Notification
@@ -234,7 +234,8 @@ async def notify_on_assignment(
     name).
     """
     notif: Notification | None = None
-    if await should_notify_in_app(db, user_id, "lead_assigned"):
+    in_app_allowed, email_allowed = await gate_event(db, user_id, "lead_assigned")
+    if in_app_allowed:
         service = NotificationService(db)
         notif = await service.create_notification(
             user_id=user_id,
@@ -245,7 +246,7 @@ async def notify_on_assignment(
             entity_id=entity_id,
         )
 
-    if await should_send_email(db, user_id, "lead_assigned"):
+    if email_allowed:
         from src.email.branded_templates import (
             TenantBrandingHelper,
             render_lead_assigned_email,
@@ -322,7 +323,8 @@ async def notify_on_mention(
     the entity_type slug when absent.
     """
     notif: Notification | None = None
-    if await should_notify_in_app(db, mentioned_user_id, "mention"):
+    in_app_allowed, email_allowed = await gate_event(db, mentioned_user_id, "mention")
+    if in_app_allowed:
         service = NotificationService(db)
         notif = await service.create_notification(
             user_id=mentioned_user_id,
@@ -333,7 +335,7 @@ async def notify_on_mention(
             entity_id=entity_id,
         )
 
-    if await should_send_email(db, mentioned_user_id, "mention"):
+    if email_allowed:
         from src.email.branded_templates import (
             TenantBrandingHelper,
             render_mention_email,
@@ -380,7 +382,8 @@ async def notify_on_activity_due(
     arguments still get the in-app notification and a slimmer email.
     """
     notif: Notification | None = None
-    if await should_notify_in_app(db, user_id, "task_due"):
+    in_app_allowed, email_allowed = await gate_event(db, user_id, "task_due")
+    if in_app_allowed:
         service = NotificationService(db)
         notif = await service.create_notification(
             user_id=user_id,
@@ -391,7 +394,7 @@ async def notify_on_activity_due(
             entity_id=activity_id,
         )
 
-    if await should_send_email(db, user_id, "task_due"):
+    if email_allowed:
         from src.email.branded_templates import (
             TenantBrandingHelper,
             render_task_due_email,
@@ -465,7 +468,10 @@ async def notify_on_email_reply_received(
             return None
 
     notif: Notification | None = None
-    if await should_notify_in_app(db, recipient_user_id, "email_reply_received"):
+    in_app_allowed, email_allowed = await gate_event(
+        db, recipient_user_id, "email_reply_received"
+    )
+    if in_app_allowed:
         service = NotificationService(db)
         display_name = sender_name or sender_email or "A contact"
         truncated = snippet[:200] if snippet else ""
@@ -478,7 +484,7 @@ async def notify_on_email_reply_received(
             entity_id=contact_id,
         )
 
-    if await should_send_email(db, recipient_user_id, "email_reply_received"):
+    if email_allowed:
         from src.email.branded_templates import (
             TenantBrandingHelper,
             render_email_reply_email,
@@ -526,7 +532,8 @@ async def notify_on_proposal_signed(
     in-app + email notification to the internal owner.
     """
     notif: Notification | None = None
-    if await should_notify_in_app(db, owner_id, "proposal_signed"):
+    in_app_allowed, email_allowed = await gate_event(db, owner_id, "proposal_signed")
+    if in_app_allowed:
         service = NotificationService(db)
         notif = await service.create_notification(
             user_id=owner_id,
@@ -537,7 +544,7 @@ async def notify_on_proposal_signed(
             entity_id=proposal_id,
         )
 
-    if await should_send_email(db, owner_id, "proposal_signed"):
+    if email_allowed:
         from src.email.branded_templates import (
             TenantBrandingHelper,
             render_proposal_signed_email,
@@ -582,7 +589,8 @@ async def notify_on_contract_signed(
     their PDF — this is the matrix-gated owner-side notification.
     """
     notif: Notification | None = None
-    if await should_notify_in_app(db, owner_id, "contract_signed"):
+    in_app_allowed, email_allowed = await gate_event(db, owner_id, "contract_signed")
+    if in_app_allowed:
         service = NotificationService(db)
         notif = await service.create_notification(
             user_id=owner_id,
@@ -593,7 +601,7 @@ async def notify_on_contract_signed(
             entity_id=contract_id,
         )
 
-    if await should_send_email(db, owner_id, "contract_signed"):
+    if email_allowed:
         from src.email.branded_templates import (
             TenantBrandingHelper,
             render_contract_signed_email,
