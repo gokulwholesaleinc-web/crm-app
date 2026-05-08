@@ -300,6 +300,14 @@ export function BrandingSection() {
     updateBranding.mutate(payload);
   };
 
+  // Stage the documented defaults into formData so the admin sees the reset
+  // reflected in pickers + preview and can review before saving. Cancel still
+  // reverts; only Save persists.
+  const handleResetColors = () => {
+    setFormData((prev) => ({ ...prev, ...COLOR_DEFAULTS }));
+    toast.success('Colors reset to defaults — click Save to apply');
+  };
+
   // Show informational message when no tenant is configured.
   // Placed after all hooks to comply with rules-of-hooks.
   if (!tenantSlug) {
@@ -765,14 +773,7 @@ export function BrandingSection() {
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => {
-                  // Stage the documented defaults into formData so the
-                  // admin sees the reset reflected in pickers + preview
-                  // and can review before saving. They still need to
-                  // click Save to persist; Cancel reverts.
-                  setFormData((prev) => ({ ...prev, ...COLOR_DEFAULTS }));
-                  toast.success('Colors reset to defaults — click Save to apply');
-                }}
+                onClick={handleResetColors}
                 title="Restore the seven color fields to their original defaults"
               >
                 Reset Colors to Defaults
