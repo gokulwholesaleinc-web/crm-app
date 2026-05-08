@@ -23,6 +23,8 @@ interface QuoteBranding {
   primary_color: string;
   secondary_color: string;
   accent_color: string;
+  bg_color_light: string;
+  surface_color_light: string;
   footer_text: string | null;
 }
 
@@ -61,6 +63,8 @@ const DEFAULT_BRANDING: QuoteBranding = {
   primary_color: '#6366f1',
   secondary_color: '#8b5cf6',
   accent_color: '#22c55e',
+  bg_color_light: '#f9fafb',
+  surface_color_light: '#ffffff',
   footer_text: null,
 };
 
@@ -199,10 +203,10 @@ function PublicQuoteView() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div role="status" aria-label="Loading quote…" className="animate-pulse motion-reduce:animate-none text-center">
-          <div className="h-8 w-48 bg-gray-200 dark:bg-gray-700 rounded mx-auto mb-4" />
-          <div className="h-4 w-32 bg-gray-200 dark:bg-gray-700 rounded mx-auto" />
+          <div className="h-8 w-48 bg-gray-200 rounded mx-auto mb-4" />
+          <div className="h-4 w-32 bg-gray-200 rounded mx-auto" />
         </div>
       </div>
     );
@@ -210,10 +214,10 @@ function PublicQuoteView() {
 
   if (error || !quote) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center px-4">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
         <div className="text-center max-w-md">
           <svg
-            className="mx-auto h-16 w-16 text-gray-400 dark:text-gray-500 mb-4"
+            className="mx-auto h-16 w-16 text-gray-400 mb-4"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -226,10 +230,10 @@ function PublicQuoteView() {
               d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
             />
           </svg>
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
+          <h1 className="text-xl font-semibold text-gray-900 mb-2">
             Quote Not Found
           </h1>
-          <p className="text-gray-500 dark:text-gray-400">
+          <p className="text-gray-500">
             {error || 'This quote may have been removed or the link is invalid.'}
           </p>
         </div>
@@ -247,6 +251,8 @@ function PublicQuoteView() {
     primary_color: sanitizeHexColor(rawBranding.primary_color, DEFAULT_BRANDING.primary_color),
     secondary_color: sanitizeHexColor(rawBranding.secondary_color, DEFAULT_BRANDING.secondary_color),
     accent_color: sanitizeHexColor(rawBranding.accent_color, DEFAULT_BRANDING.accent_color),
+    bg_color_light: sanitizeHexColor(rawBranding.bg_color_light, DEFAULT_BRANDING.bg_color_light),
+    surface_color_light: sanitizeHexColor(rawBranding.surface_color_light, DEFAULT_BRANDING.surface_color_light),
   };
   const companyDisplayName = branding.company_name || quote.company?.name || 'Quote';
 
@@ -267,7 +273,10 @@ function PublicQuoteView() {
   const onSecondary = pickReadableText(branding.secondary_color);
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    // Customer-facing surface uses the tenant's light-mode bg directly via
+    // inline style — public viewers don't have the `dark` class set, and we
+    // want logged-in seller previews to match the customer experience.
+    <div className="min-h-screen" style={{ backgroundColor: branding.bg_color_light }}>
       {/* Branded Top Bar — text color picked from primary_color luminance so a
           tenant who configures #ffffff (or any pale color) doesn't end up with
           unreadable white-on-white. */}
@@ -414,7 +423,7 @@ function PublicQuoteView() {
         )}
 
         {/* Totals Summary */}
-        <section className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 sm:p-8">
+        <section className="rounded-lg shadow-sm border border-gray-200 p-6 sm:p-8" style={{ backgroundColor: branding.surface_color_light }}>
           <h2
             className="text-lg font-semibold mb-4"
             style={{ color: branding.primary_color }}
@@ -480,7 +489,7 @@ function PublicQuoteView() {
 
         {/* Accept / Reject Actions */}
         {canRespond && (
-          <section className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 sm:p-8">
+          <section className="rounded-lg shadow-sm border border-gray-200 p-6 sm:p-8" style={{ backgroundColor: branding.surface_color_light }}>
             <h2
               className="text-lg font-semibold mb-2"
               style={{ color: branding.primary_color }}

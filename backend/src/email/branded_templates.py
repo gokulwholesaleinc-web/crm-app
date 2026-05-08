@@ -50,6 +50,13 @@ _DEFAULT_BRANDING = {
     "primary_color": "#6366f1",
     "secondary_color": "#8b5cf6",
     "accent_color": "#22c55e",
+    # Page + surface backgrounds (light mode only on customer-facing
+    # surfaces — public quote/contract/proposal pages and emails
+    # render light by default; the app's dark mode is for authenticated
+    # sellers and lives on its own CSS-var path). Defaults match the
+    # `tenant_settings` column defaults.
+    "bg_color_light": "#f9fafb",
+    "surface_color_light": "#ffffff",
     "footer_text": "",
     "privacy_policy_url": "",
     "terms_of_service_url": "",
@@ -105,6 +112,8 @@ class TenantBrandingHelper:
             "primary_color": s.primary_color or _DEFAULT_BRANDING["primary_color"],
             "secondary_color": s.secondary_color or _DEFAULT_BRANDING["secondary_color"],
             "accent_color": s.accent_color or _DEFAULT_BRANDING["accent_color"],
+            "bg_color_light": s.bg_color_light or _DEFAULT_BRANDING["bg_color_light"],
+            "surface_color_light": s.surface_color_light or _DEFAULT_BRANDING["surface_color_light"],
             "footer_text": s.footer_text or "",
             "privacy_policy_url": s.privacy_policy_url or "",
             "terms_of_service_url": s.terms_of_service_url or "",
@@ -137,6 +146,13 @@ def _base_email_html(
     primary = escape(branding.get("primary_color", "#6366f1"))
     secondary = escape(branding.get("secondary_color", "#8b5cf6"))
     accent = escape(branding.get("accent_color", "#22c55e"))
+    # Light-mode page + card surface colors. The email's dark-mode media
+    # query keeps its hardcoded #1f2937 / #111827 — those approximate
+    # the tenant_settings dark defaults and refactoring them through
+    # tenant settings risks regressions in finicky email clients
+    # (Outlook desktop especially) for marginal gain.
+    bg_light = escape(branding.get("bg_color_light", "#f9fafb"))
+    surface_light = escape(branding.get("surface_color_light", "#ffffff"))
     company = escape(branding.get("company_name", "CRM"))
     logo_url = _safe_url(branding.get("logo_url", ""))
     footer_text = escape(branding.get("footer_text", ""))
@@ -220,8 +236,8 @@ def _base_email_html(
 }}
 </style>
 </head>
-<body style="margin:0;padding:0;background-color:#f3f4f6;font-family:Arial,Helvetica,sans-serif;">
-<table role="presentation" class="email-bg" cellpadding="0" cellspacing="0" width="100%" style="background-color:#f3f4f6;">
+<body style="margin:0;padding:0;background-color:{bg_light};font-family:Arial,Helvetica,sans-serif;">
+<table role="presentation" class="email-bg" cellpadding="0" cellspacing="0" width="100%" style="background-color:{bg_light};">
 <tr><td align="center" style="padding:24px 16px;">
 
 <!-- Header -->
@@ -237,7 +253,7 @@ def _base_email_html(
 </table>
 
 <!-- Body -->
-<table role="presentation" class="email-card" cellpadding="0" cellspacing="0" width="600" style="max-width:600px;width:100%;background-color:#ffffff;">
+<table role="presentation" class="email-card" cellpadding="0" cellspacing="0" width="600" style="max-width:600px;width:100%;background-color:{surface_light};">
 <tr><td style="padding:32px 24px;">
   <h1 class="email-headline" style="margin:0 0 16px;font-family:Arial,Helvetica,sans-serif;font-size:22px;font-weight:700;color:#111827;">{escape(headline)}</h1>
   <div class="email-text" style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;color:#374151;">

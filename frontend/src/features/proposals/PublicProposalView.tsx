@@ -26,6 +26,8 @@ interface ProposalBranding {
   primary_color: string;
   secondary_color: string;
   accent_color: string;
+  bg_color_light: string;
+  surface_color_light: string;
   footer_text: string | null;
   privacy_policy_url: string | null;
   terms_of_service_url: string | null;
@@ -62,6 +64,8 @@ const DEFAULT_BRANDING: ProposalBranding = {
   primary_color: '#6366f1',
   secondary_color: '#8b5cf6',
   accent_color: '#22c55e',
+  bg_color_light: '#f9fafb',
+  surface_color_light: '#ffffff',
   footer_text: null,
   privacy_policy_url: null,
   terms_of_service_url: null,
@@ -335,6 +339,8 @@ function PublicProposalView() {
     primary_color: sanitizeHexColor(rawBranding.primary_color, DEFAULT_BRANDING.primary_color),
     secondary_color: sanitizeHexColor(rawBranding.secondary_color, DEFAULT_BRANDING.secondary_color),
     accent_color: sanitizeHexColor(rawBranding.accent_color, DEFAULT_BRANDING.accent_color),
+    bg_color_light: sanitizeHexColor(rawBranding.bg_color_light, DEFAULT_BRANDING.bg_color_light),
+    surface_color_light: sanitizeHexColor(rawBranding.surface_color_light, DEFAULT_BRANDING.surface_color_light),
   };
   const companyDisplayName = branding.company_name || proposal.company?.name || 'Proposal';
   const primary = branding.primary_color;
@@ -396,7 +402,11 @@ function PublicProposalView() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 antialiased">
+    // Customer-facing page bg from tenant settings; drop dark variants
+    // (`dark:bg-gray-950` was hardcoded outside the bg/surface palette
+    // anyway). Logged-in seller previews now match what the customer
+    // sees.
+    <div className="min-h-screen text-gray-900 antialiased" style={{ backgroundColor: branding.bg_color_light }}>
       <div
         aria-hidden="true"
         style={{
@@ -407,7 +417,7 @@ function PublicProposalView() {
       {/* Letterhead — plain, light, business-document feel. Text label
           is dropped when a logo image is present to avoid the "logo
           wordmark + typed company name" duplication. */}
-      <header className="bg-white border-b border-gray-200">
+      <header className="border-b border-gray-200" style={{ backgroundColor: branding.surface_color_light }}>
         <div className="mx-auto max-w-3xl px-6 sm:px-10 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             {branding.logo_url && !logoError ? (
@@ -798,8 +808,8 @@ function PublicProposalView() {
           with safe-area-inset-bottom so iPhone home indicator doesn't overlap
           the disclosure text (requires viewport-fit=cover in index.html). */}
       <footer
-        className="mt-16 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        className="mt-16 border-t border-gray-200"
+        style={{ backgroundColor: branding.surface_color_light, paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         <div className="mx-auto max-w-3xl px-6 sm:px-10 py-8 space-y-5">
           <details className="group text-sm">
