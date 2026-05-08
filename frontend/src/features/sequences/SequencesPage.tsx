@@ -218,7 +218,7 @@ function EnrollModal({
 }) {
   const [contactId, setContactId] = useState<number | null>(null);
   const enrollMutation = useEnrollContact();
-  const { data: contactsData } = useContacts({ page_size: 200 });
+  const { data: contactsData } = useContacts({ page_size: 100 });
 
   const contactOptions = useMemo(
     () =>
