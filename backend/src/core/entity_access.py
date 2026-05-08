@@ -39,14 +39,23 @@ _ENTITY_PLURALS = {
 _ENTITY_SINGULARS = {plural: singular for singular, plural in _ENTITY_PLURALS.items()}
 
 
-def _canonical_singular(entity_type: str) -> str:
-    """Return the canonical singular form of an entity type input."""
+def canonical_singular(entity_type: str) -> str:
+    """Return the canonical singular form of an entity type input.
+
+    Accepts either singular ("contact") or plural ("contacts") forms.
+    Unknown inputs are returned lowercased unchanged.
+    """
     lower = entity_type.lower()
     if lower in _ENTITY_PLURALS:
         return lower
     if lower in _ENTITY_SINGULARS:
         return _ENTITY_SINGULARS[lower]
     return lower
+
+
+# Backwards-compatible alias for the old private name. Internal callers in
+# this module continue to import it; remove once those are migrated.
+_canonical_singular = canonical_singular
 
 
 async def _resolve_entity(db: AsyncSession, entity_type: str, entity_id: int):
