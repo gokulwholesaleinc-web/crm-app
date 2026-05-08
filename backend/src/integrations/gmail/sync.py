@@ -455,50 +455,47 @@ async def _store_inbound(
     db.add(row)
     await db.flush()
 
-    # Notify the contact owner when this is a reply to a thread we're on.
-    # Wrapped in a SAVEPOINT so a notification-side failure (DB blip,
-    # FK violation, model error) cannot poison the parent transaction
-    # and silently destroy the InboundEmail row we just flushed. Without
-    # the savepoint, an exception inside ``notify_on_email_reply_received``
-    # leaves the session in ROLLBACK_REQUIRED state — the outer
-    # ``sync_account.commit()`` then fails with PendingRollbackError and
-    # the inbound row is lost. ``msg["from"]`` is the bare address
-    # stripped by ``_first_address``; pass ``from_header`` (preserved
-    # in :func:`gmail.client._parse_message`) so the display name
-    # actually reaches the notification surface.
+    # Notify users who are actual participants (To/CC) when an inbound reply
+    # lands. Routing by Contact.owner_id would ping whoever imported the
+    # contact even when they're not on the thread — a privacy leak.
+    # Wrapped in per-user SAVEPOINTs so a failure on one recipient cannot
+    # poison the parent transaction and silently destroy the InboundEmail row
+    # we just flushed (without the savepoint an exception leaves the session
+    # in ROLLBACK_REQUIRED state and the outer commit fails with
+    # PendingRollbackError). Pass ``from_header`` so the display name reaches
+    # the notification surface.
     if (
         entity_type == "contacts"
         and entity_id is not None
         and msg.get("in_reply_to")
     ):
-        from src.contacts.models import Contact as _Contact
+        from src.email.participants import find_user_ids_by_addresses
         from src.notifications.service import notify_on_email_reply_received
 
-        owner_result = await db.execute(
-            select(_Contact.owner_id).where(_Contact.id == entity_id)
+        recipient_user_ids = await find_user_ids_by_addresses(db, recipients)
+        sender_name = _parse_name_from(msg.get("from_header") or msg.get("from") or "")
+        snippet = (
+            msg.get("body_text")
+            or _strip_html_to_text(msg.get("body_html") or "")
+            or ""
         )
-        owner_id = owner_result.scalar_one_or_none()
-        if owner_id is not None:
+        for user_id in recipient_user_ids:
             try:
                 async with db.begin_nested():
                     await notify_on_email_reply_received(
                         db=db,
-                        recipient_user_id=owner_id,
+                        recipient_user_id=user_id,
                         contact_id=entity_id,
                         sender_email=from_addr,
-                        sender_name=_parse_name_from(
-                            msg.get("from_header") or msg.get("from") or ""
-                        ),
+                        sender_name=sender_name,
                         subject_line=msg.get("subject") or "",
-                        snippet=(
-                            msg.get("body_text")
-                            or _strip_html_to_text(msg.get("body_html") or "")
-                            or ""
-                        ),
+                        snippet=snippet,
+                        participant_emails=recipients,
                     )
             except Exception:
                 logger.exception(
-                    "notify_on_email_reply_received failed for inbound %s",
+                    "notify_on_email_reply_received failed for user %s inbound %s",
+                    user_id,
                     row.id,
                 )
 

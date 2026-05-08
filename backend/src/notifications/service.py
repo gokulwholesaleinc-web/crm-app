@@ -429,8 +429,9 @@ async def notify_on_email_reply_received(
     sender_name: str | None,
     subject_line: str,
     snippet: str,
+    participant_emails: list[str] | None = None,
 ) -> Notification | None:
-    """Notify the contact owner when an inbound email reply lands.
+    """Notify a participant user when an inbound email reply lands.
 
     Fired by the Gmail sync worker after :func:`_store_inbound`
     successfully links an inbound message to a CRM contact AND the
@@ -440,6 +441,17 @@ async def notify_on_email_reply_received(
     The deep link points at the contact detail page's email tab; the
     front-end will scroll to the latest message.
     """
+    if participant_emails is not None and participant_emails:
+        from src.email.participants import get_user_connection_emails
+
+        user_addrs = set(await get_user_connection_emails(db, recipient_user_id))
+        if not user_addrs.intersection(a.lower() for a in participant_emails):
+            logger.warning(
+                "notify_on_email_reply_received: user %s not in participant_emails — skipping",
+                recipient_user_id,
+            )
+            return None
+
     notif: Notification | None = None
     if await should_notify_in_app(db, recipient_user_id, "email_reply_received"):
         service = NotificationService(db)
@@ -463,7 +475,7 @@ async def notify_on_email_reply_received(
         branding = await TenantBrandingHelper.get_branding_for_user(
             db, recipient_user_id,
         )
-        deep_link = _deep_link("contacts", contact_id, suffix="?tab=email")
+        deep_link = _deep_link("contacts", contact_id, suffix="?tab=emails")
         subject, body = render_email_reply_email(
             branding,
             {

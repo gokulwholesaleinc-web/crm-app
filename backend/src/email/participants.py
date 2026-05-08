@@ -38,3 +38,48 @@ async def get_user_connection_emails(db: AsyncSession, user_id: int) -> list[str
         )
     )
     return [e.lower() for e in result.scalars()]
+
+
+async def find_user_ids_by_addresses(
+    db: AsyncSession, addresses: list[str]
+) -> list[int]:
+    """Return distinct user_ids whose active Gmail connection email matches any address.
+
+    Also checks aliases column so send-as aliases resolve to the right user.
+    Match is case-insensitive. Users with revoked connections are excluded.
+    """
+    if not addresses:
+        return []
+
+    from sqlalchemy import func as sql_func
+    from sqlalchemy import or_
+    from sqlalchemy.types import Text
+
+    from src.integrations.gmail.models import GmailConnection
+
+    lowered = [a.strip().lower() for a in addresses if a]
+
+    # Primary email match — works on both SQLite (test) and Postgres (prod)
+    primary_match = sql_func.lower(GmailConnection.email).in_(lowered)
+
+    # Alias overlap — Postgres-only: aliases && ARRAY[...]. On SQLite the
+    # _AliasArray stores as JSON so we skip the alias branch there.
+    try:
+        from sqlalchemy.dialects.postgresql import array as pg_array
+
+        alias_match = GmailConnection.aliases.overlap(
+            pg_array(lowered, type_=Text)
+        )
+        where_clause = or_(primary_match, alias_match)
+    except Exception:  # SQLite / fallback
+        where_clause = primary_match
+
+    result = await db.execute(
+        select(GmailConnection.user_id)
+        .where(
+            GmailConnection.revoked_at.is_(None),
+            where_clause,
+        )
+        .distinct()
+    )
+    return list(result.scalars())
