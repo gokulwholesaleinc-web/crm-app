@@ -22,17 +22,19 @@ _RECIPIENT_REQUIRED_EVENTS = frozenset({
 })
 
 
-# Map handler event_type → user-facing matrix key (Settings UI).
-# Events not in this map are NOT gated by the per-user matrix —
-# operational-style notifications (admin pending-user, completion alerts)
-# always fire. Keep keys aligned with the Settings UI toggles.
+# Map handler event_type → user-facing matrix key (Settings UI's
+# NOTIFICATION_EVENT_TYPES). Only events the user can actually toggle
+# from the UI belong here; events absent from the map fall through
+# ungated and keep firing as before. Adding a row here without also
+# adding the matching toggle on the frontend is a trap — the user
+# would never be able to opt back in from the UI. Mapping
+# `proposal.rejected` to `proposal_signed` (a positive event) was a
+# real bug: a user disabling "proposal signed" toasts would silently
+# lose rejection alerts too. The other events (stage_change, quote.*,
+# proposal.sent) don't have UI toggles in v1 so they're not gated yet
+# either; surface them in the matrix first, then add a row here.
 _MATRIX_EVENT_NAMES: dict[str, str] = {
     "lead.created": "lead_assigned",
-    "opportunity.stage_changed": "stage_change",
-    "quote.sent": "quote_sent",
-    "quote.rejected": "quote_rejected",
-    "proposal.sent": "proposal_sent",
-    "proposal.rejected": "proposal_signed",
     "payment.received": "payment_received",
 }
 

@@ -362,21 +362,13 @@ class TestMetaLeadConversion:
 
 
 class TestMetaLeadAutoAssignment:
-    """Auto-assignment is the lead-worker's parallel branch — these
-    tests will only pass once both branches merge. Marked `xfail` so
-    we still get signal if assignment lands on this branch but don't
-    block the cleanup landing now.
+    """Cross-feature integration: a Meta-captured lead lands through
+    LeadService.create, which now consults the active AssignmentRule
+    set. The previous direct-Lead-construction code skipped this hop
+    entirely, so meta leads sat unassigned until a human triaged them.
     """
 
     @pytest.mark.asyncio
-    @pytest.mark.xfail(
-        reason=(
-            "Depends on AssignmentService wiring on the lead worker's "
-            "branch (task #8). Will pass once LeadService.create fires "
-            "auto-assignment for new rows."
-        ),
-        strict=False,
-    )
     async def test_active_assignment_rule_picks_owner(
         self,
         db_session: AsyncSession,
