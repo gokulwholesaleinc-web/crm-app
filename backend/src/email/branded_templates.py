@@ -213,13 +213,20 @@ def _base_email_html(
     if logo_url:
         # White pill wraps the logo so it stays visible regardless of header
         # primary color (e.g. a white logo on a white header would disappear).
+        # width="224" on the table (200px logo + 12px×2 padding) is required by
+        # Outlook 2013-2021's Word rendering engine, which ignores display:inline-table
+        # and CSS max-width on tables — without it the pill expands to full 600px.
+        # width="200" on the img caps natural pixel width in Outlook the same way.
         logo_html = (
             f'<table role="presentation" cellpadding="0" cellspacing="0" '
-            f'style="display:inline-table;vertical-align:middle;margin-right:12px;">'
-            f'<tr><td style="background-color:#ffffff;border-radius:6px;padding:8px 12px;">'
+            f'width="224" '
+            f'style="display:inline-table;vertical-align:middle;margin-right:12px;'
+            f'background-color:#ffffff;border-radius:6px;">'
+            f'<tr><td style="padding:8px 12px;">'
             f'<img src="{escape(logo_url)}" alt="{company}" '
-            f'height="40" '
-            f'style="display:block;height:40px;width:auto;max-width:200px;" />'
+            f'width="200" height="40" '
+            f'style="display:inline-block;vertical-align:middle;'
+            f'height:40px;width:200px;max-width:200px;" />'
             f'</td></tr></table>'
         )
         company_label = ""

@@ -1075,17 +1075,28 @@ class TestLogoWhitePill:
     """Logo must be wrapped in a white pill so it remains visible on any header color."""
 
     def test_logo_wrapped_in_white_background_cell(self):
-        """White pill td must appear in the header when a logo URL is set."""
+        """White pill table carries white background and border-radius when a logo URL is set."""
         html = render_branded_email(
             _WHITE_HEADER_BRANDING, "s", "h", "<p>b</p>"
         )
-        assert "background-color:#ffffff;border-radius:6px;padding:8px 12px;" in html
+        assert "background-color:#ffffff;border-radius:6px;" in html
         assert 'src="https://example.com/logo.png"' in html
 
     def test_no_logo_omits_pill(self):
         """When no logo is provided the white pill table must not appear."""
         html = render_branded_email(_NO_LOGO_BRANDING, "s", "h", "<p>b</p>")
-        assert "border-radius:6px;padding:8px 12px;" not in html
+        assert "background-color:#ffffff;border-radius:6px;" not in html
+
+    def test_logo_pill_table_has_width_attribute(self):
+        """Pill table must carry width= HTML attr — Outlook Word engine ignores CSS max-width on tables."""
+        html = render_branded_email(_WHITE_HEADER_BRANDING, "s", "h", "<p>b</p>")
+        assert 'width="224"' in html
+
+    def test_logo_img_has_width_and_height_attributes(self):
+        """Img must carry width= and height= HTML attrs for Outlook to constrain natural pixel size."""
+        html = render_branded_email(_WHITE_HEADER_BRANDING, "s", "h", "<p>b</p>")
+        assert 'width="200"' in html
+        assert 'height="40"' in html
 
 
 class TestHeaderBodyPadding:
