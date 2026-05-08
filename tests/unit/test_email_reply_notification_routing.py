@@ -311,6 +311,67 @@ class TestNotificationGuardDirect:
         )
 
 
+class TestGuardEdgeCases:
+    @pytest.mark.asyncio
+    async def test_guard_skips_on_empty_participant_list(self, db: AsyncSession):
+        """Guard returns None when participant_emails=[] (caller bug path, not a real skip)."""
+        user = await _make_user(db, "rep@crm.com")
+        await _make_connection(db, user.id, "rep@crm.com")
+        contact = Contact(first_name="C", last_name="D", email="c@ext.com", owner_id=user.id)
+        db.add(contact)
+        await db.flush()
+        await db.commit()
+
+        from src.notifications.service import notify_on_email_reply_received
+
+        result = await notify_on_email_reply_received(
+            db=db,
+            recipient_user_id=user.id,
+            contact_id=contact.id,
+            sender_email="c@ext.com",
+            sender_name="C",
+            subject_line="Re: Hi",
+            snippet="body",
+            participant_emails=[],  # empty — distinct from None
+        )
+        assert result is None, "Empty participant_emails must short-circuit to None"
+
+    @pytest.mark.asyncio
+    async def test_guard_skips_when_user_has_no_active_connection(self, db: AsyncSession):
+        """Guard returns None when the recipient has no active Gmail connection."""
+        from datetime import timezone
+        from src.integrations.gmail.models import GmailConnection as _GC
+
+        user = await _make_user(db, "noconn@crm.com")
+        # Revoked connection — not active
+        revoked = _GC(
+            user_id=user.id,
+            email="noconn@crm.com",
+            access_token="tok",
+            scopes="https://mail.google.com/",
+            revoked_at=datetime.now(UTC),
+        )
+        db.add(revoked)
+        contact = Contact(first_name="E", last_name="F", email="e@ext.com", owner_id=user.id)
+        db.add(contact)
+        await db.flush()
+        await db.commit()
+
+        from src.notifications.service import notify_on_email_reply_received
+
+        result = await notify_on_email_reply_received(
+            db=db,
+            recipient_user_id=user.id,
+            contact_id=contact.id,
+            sender_email="e@ext.com",
+            sender_name="E",
+            subject_line="Re: Hi",
+            snippet="body",
+            participant_emails=["noconn@crm.com", "e@ext.com"],
+        )
+        assert result is None, "User with no active connection must not receive notification"
+
+
 class TestAliasParticipantPath:
     @pytest.mark.asyncio
     async def test_alias_user_matched_and_passes_guard(self, db: AsyncSession):

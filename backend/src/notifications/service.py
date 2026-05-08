@@ -441,13 +441,25 @@ async def notify_on_email_reply_received(
     The deep link points at the contact detail page's email tab; the
     front-end will scroll to the latest message.
     """
-    if participant_emails:
+    if participant_emails is not None:
         from src.email.participants import get_user_connection_emails
 
-        user_addrs = set(await get_user_connection_emails(db, recipient_user_id))
-        if not user_addrs.intersection(a.lower() for a in participant_emails):
+        if not participant_emails:
             logger.debug(
-                "notify_on_email_reply_received: user %s not in participant_emails — skipping",
+                "notify_on_email_reply_received: participant_emails is empty for user %s — skipping",
+                recipient_user_id,
+            )
+            return None
+        user_addrs = set(await get_user_connection_emails(db, recipient_user_id))
+        if not user_addrs:
+            logger.debug(
+                "notify_on_email_reply_received: user %s has no active Gmail connection — skipping",
+                recipient_user_id,
+            )
+            return None
+        if not user_addrs.intersection(a.lower() for a in participant_emails):
+            logger.warning(
+                "notify_on_email_reply_received: user %s connection emails do not overlap participant_emails — skipping",
                 recipient_user_id,
             )
             return None

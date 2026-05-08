@@ -163,3 +163,34 @@ class TestFindUserIdsByAddresses:
         result = await find_user_ids_by_addresses(db, ["grace@example.com"])
         assert u1.id in result
         assert u2.id not in result
+
+    @pytest.mark.asyncio
+    async def test_alias_match_returns_user(self, db: AsyncSession):
+        """Should match user whose send-as alias (not primary email) appears in the list.
+
+        This was the silent-failure-hunter CRITICAL: the SQL-side .overlap() approach
+        crashed on Postgres because _AliasArray.impl=JSON has no .overlap() comparator.
+        The Python-side filter on self_addresses fixes it on all dialects including SQLite.
+        """
+        from src.integrations.gmail.models import GmailConnection
+
+        user = await _make_user(db, "giancarlo@crm-internal.com")
+        conn = GmailConnection(
+            user_id=user.id,
+            email="giancarlo@crm-internal.com",
+            aliases=["giancarlo@linkcreativeco.com"],
+            access_token="tok",
+            scopes="https://mail.google.com/",
+        )
+        db.add(conn)
+        await db.commit()
+
+        from src.email.participants import find_user_ids_by_addresses
+
+        # Address is an alias, not the primary email
+        result = await find_user_ids_by_addresses(db, ["giancarlo@linkcreativeco.com"])
+        assert user.id in result, "User must be found when matched via send-as alias"
+
+        # Primary email still works too
+        result2 = await find_user_ids_by_addresses(db, ["giancarlo@crm-internal.com"])
+        assert user.id in result2

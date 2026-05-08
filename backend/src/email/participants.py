@@ -51,43 +51,30 @@ async def get_user_connection_emails(db: AsyncSession, user_id: int) -> list[str
 async def find_user_ids_by_addresses(
     db: AsyncSession, addresses: list[str]
 ) -> list[int]:
-    """Return distinct user_ids whose active Gmail connection email matches any address.
+    """Return distinct user_ids whose active Gmail connection (primary or alias) matches any address.
 
-    Also checks aliases column so send-as aliases resolve to the right user.
+    Filters in Python on the model's ``self_addresses`` property so we don't depend
+    on dialect-specific ARRAY operators. ``_AliasArray.impl=JSON`` binds the Python-side
+    comparator to JSON regardless of dialect, so ``.overlap()`` raises AttributeError on
+    every dialect — including Postgres prod. Connections are bounded (~tens per tenant)
+    so loading them all for the per-inbound notify path is fine.
+
     Match is case-insensitive. Users with revoked connections are excluded.
     """
     if not addresses:
         return []
 
-    from sqlalchemy import func as sql_func
-    from sqlalchemy import or_
-    from sqlalchemy.types import Text
-
     from src.integrations.gmail.models import GmailConnection
 
-    lowered = [a.strip().lower() for a in addresses if a]
-
-    # Primary email match — works on both SQLite (test) and Postgres (prod)
-    primary_match = sql_func.lower(GmailConnection.email).in_(lowered)
-
-    # Alias overlap — Postgres-only: aliases && ARRAY[...]. _AliasArray degrades
-    # to JSON on SQLite (tests), so .overlap() is unavailable there.
-    if db.get_bind().dialect.name == "postgresql":
-        from sqlalchemy.dialects.postgresql import array as pg_array
-
-        alias_match = GmailConnection.aliases.overlap(
-            pg_array(lowered, type_=Text)
-        )
-        where_clause = or_(primary_match, alias_match)
-    else:
-        where_clause = primary_match
+    lowered = {a.strip().lower() for a in addresses if a}
+    if not lowered:
+        return []
 
     result = await db.execute(
-        select(GmailConnection.user_id)
-        .where(
-            GmailConnection.revoked_at.is_(None),
-            where_clause,
-        )
-        .distinct()
+        select(GmailConnection).where(GmailConnection.revoked_at.is_(None))
     )
-    return list(result.scalars())
+    matched: set[int] = set()
+    for conn in result.scalars():
+        if conn.self_addresses & lowered:
+            matched.add(conn.user_id)
+    return list(matched)
