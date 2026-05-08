@@ -10,7 +10,6 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.account.models import UserNotificationPrefs
 from src.auth.models import User
 from src.companies.models import Company
@@ -27,11 +26,8 @@ async def _enable_all_notifications(db_session: AsyncSession, user: User) -> Non
         in_app_enabled=True,
         email_enabled=True,
         event_matrix={
-            "assignment": {"in_app": True, "email": True},
-            "activity_due": {"in_app": True, "email": True},
-            "task_due": {"in_app": True, "email": True},
-            "stage_change": {"in_app": True, "email": True},
             "lead_assigned": {"in_app": True, "email": True},
+            "task_due": {"in_app": True, "email": True},
             "mention": {"in_app": True, "email": True},
         },
     )

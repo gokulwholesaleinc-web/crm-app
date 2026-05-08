@@ -60,8 +60,11 @@ export interface NotificationEventTypeMeta {
   description?: string;
 }
 
-// Render order for the matrix table. Default ON for any unspecified event:
-// the matrix is opt-out, not opt-in.
+// Render order for the matrix table. The gate is opt-in: any event key
+// absent from the user's event_matrix is treated as OFF by notification_gate.py.
+// Adding an event here without a matching backend gate_event call is safe
+// (the UI will show a toggle but it won't suppress anything). The reverse
+// is a silent leak — always add the backend gate key first.
 export const NOTIFICATION_EVENT_TYPES: readonly NotificationEventTypeMeta[] = [
   { key: 'lead_assigned', label: 'Lead assigned to me' },
   { key: 'payment_received', label: 'Payment received' },

@@ -3,7 +3,7 @@
 Both rows are 1:1 with `users` and lazy-created on first GET via
 ``AccountPrefsService.get_or_create_*``. The ``event_matrix`` JSONB
 holds the event×channel toggle map; see ``notification_gate`` for the
-opt-out semantics.
+opt-in semantics.
 """
 
 from datetime import datetime

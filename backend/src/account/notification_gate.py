@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -25,9 +25,11 @@ from src.account.models import UserNotificationPrefs, UserPreferences
 
 logger = logging.getLogger(__name__)
 
-# Errors we deliberately fail-closed on. Anything else (asyncio.CancelledError,
-# memory errors, etc.) propagates so the request fails loudly.
-_GATE_RECOVERABLE = (SQLAlchemyError, TypeError, AttributeError, KeyError, ValueError)
+# Errors we deliberately fail-closed on at the gate boundary (prefs load +
+# the outer gate_event try/except). KeyError and ValueError are intentionally
+# excluded: they indicate a programming error inside the gate itself and should
+# propagate so they're visible, not silently swallowed as "transient".
+_GATE_RECOVERABLE = (SQLAlchemyError, TypeError, AttributeError)
 
 
 async def _load_prefs(
@@ -103,7 +105,12 @@ async def _resolve_in_app(
         tz_name = await _load_user_timezone(db, user_id)
         try:
             tz = ZoneInfo(tz_name)
-        except _GATE_RECOVERABLE:
+        except ZoneInfoNotFoundError:
+            logger.warning(
+                "Unknown timezone %r for user %s; falling back to America/Chicago",
+                tz_name,
+                user_id,
+            )
             tz = ZoneInfo("America/Chicago")
         now_hhmm = datetime.now(tz).strftime("%H:%M")
         if _in_quiet_window(

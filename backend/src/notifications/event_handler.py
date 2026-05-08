@@ -73,10 +73,18 @@ async def notification_event_handler(event_type: str, payload: dict[str, Any]) -
 
 
 async def _gate(session, event_type: str, recipient_id: int) -> bool:
-    """Apply the per-user matrix gate; events absent from the map always fire."""
+    """Apply the per-user matrix gate; respects master in_app_enabled switch for all events."""
     matrix_event = _MATRIX_EVENT_NAMES.get(event_type)
     if matrix_event is None:
-        return True
+        # Event has no UI toggle yet. Still respect the user's master
+        # in_app_enabled switch — opt-in contract requires it. Returning
+        # True here would let unmatrixed events fire for users who set
+        # in_app_enabled=False in Settings → Notifications.
+        from src.account.notification_gate import _load_prefs
+        prefs = await _load_prefs(session, recipient_id)
+        if prefs is None:
+            return False
+        return bool(prefs.in_app_enabled)
     allowed = await should_notify_in_app(session, recipient_id, matrix_event)
     if not allowed:
         logger.debug(
@@ -210,9 +218,15 @@ async def create_completion_notification(
     """Create a notification for campaign/sequence completion.
 
     Called directly from campaign/sequence services, not via the event bus.
+    Respects the user's master in_app_enabled switch — completion events
+    have no UI matrix toggle yet, so only the master switch is checked.
     """
     async with _db.async_session_maker() as session:
         try:
+            from src.account.notification_gate import _load_prefs
+            prefs = await _load_prefs(session, user_id)
+            if prefs is None or not prefs.in_app_enabled:
+                return
             notification = Notification(
                 user_id=user_id,
                 type=notification_type,

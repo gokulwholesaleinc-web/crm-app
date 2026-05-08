@@ -453,7 +453,7 @@ class TestChannelAwareCooldown:
     async def test_both_channels_stamp_on_full_fire(
         self, db_session: AsyncSession, test_user
     ):
-        """Default prefs (both channels allowed) → both columns stamped."""
+        """Both channels enabled → both columns stamped."""
         test_user.email = "owner-both@example.com"
         await db_session.flush()
 
