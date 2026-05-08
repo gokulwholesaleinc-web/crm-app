@@ -49,6 +49,7 @@ from src.whitelabel.models import Tenant, TenantSettings, TenantUser
 from src.attachments.models import Attachment
 from src.email.models import EmailQueue, InboundEmail, EmailSettings
 from src.notifications.models import Notification
+from src.account.models import UserNotificationPrefs, UserPreferences
 from src.filters.models import SavedFilter
 from src.reports.models import SavedReport
 from src.audit.models import AuditLog
