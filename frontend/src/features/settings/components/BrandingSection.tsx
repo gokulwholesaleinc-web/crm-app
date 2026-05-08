@@ -30,18 +30,143 @@ interface BrandingFormData {
 
 const NEUTRAL_GRAY = '#94a3b8';
 
-// Defaults match the backend constants and the previously-hardcoded
-// Tailwind values (gray-50/gray-900 page, white/gray-800 cards). Kept
-// in one place so seeding, dirty-check, and read-mode fallback agree.
-const BG_LIGHT_DEFAULT = '#f9fafb';
-const BG_DARK_DEFAULT = '#111827';
-const SURFACE_LIGHT_DEFAULT = '#ffffff';
-const SURFACE_DARK_DEFAULT = '#1f2937';
+// Default values for every color field. Keyed by the form-data key so
+// seeding, dirty-check, read-mode fallback, and the picker placeholder
+// all read from the same source. Backend constants in
+// `src/core/constants.py` must match; tests cover both ends.
+type ColorField =
+  | 'primary_color'
+  | 'secondary_color'
+  | 'accent_color'
+  | 'bg_color_light'
+  | 'bg_color_dark'
+  | 'surface_color_light'
+  | 'surface_color_dark';
+
+const COLOR_DEFAULTS: Record<ColorField, string> = {
+  primary_color: '#6366f1',
+  secondary_color: '#8b5cf6',
+  accent_color: '#22c55e',
+  bg_color_light: '#f9fafb',
+  bg_color_dark: '#111827',
+  surface_color_light: '#ffffff',
+  surface_color_dark: '#1f2937',
+};
+
+type PaletteField = 'primary_color' | 'secondary_color' | 'accent_color';
+type SurfaceField =
+  | 'bg_color_light'
+  | 'bg_color_dark'
+  | 'surface_color_light'
+  | 'surface_color_dark';
+
+const PALETTE_FIELDS: readonly PaletteField[] = [
+  'primary_color',
+  'secondary_color',
+  'accent_color',
+];
+const SURFACE_FIELDS: readonly SurfaceField[] = [
+  'bg_color_light',
+  'bg_color_dark',
+  'surface_color_light',
+  'surface_color_dark',
+];
+
+const COLOR_LABELS: Record<ColorField, string> = {
+  primary_color: 'Primary Color',
+  secondary_color: 'Secondary Color',
+  accent_color: 'Accent Color',
+  bg_color_light: 'Light Mode Background',
+  bg_color_dark: 'Dark Mode Background',
+  surface_color_light: 'Light Mode Card Surface',
+  surface_color_dark: 'Dark Mode Card Surface',
+};
+
+const PALETTE_HINTS: Record<PaletteField, string> = {
+  primary_color:
+    'Used for buttons, links, active navigation, focus rings, and chart highlights.',
+  secondary_color: 'Used as a supporting accent in chart series and category badges.',
+  accent_color: 'Used for callouts, accent badges, and the third chart series color.',
+};
+
+// Loose shape so we don't have to import the full TenantConfig type just
+// for typing fallbacks; only color fields are read here.
+type TenantConfigLike = Partial<Record<ColorField, string | null | undefined>> & {
+  company_name?: string | null;
+};
+
+function tenantColor(tenant: TenantConfigLike | null | undefined, field: ColorField): string {
+  return tenant?.[field] ?? COLOR_DEFAULTS[field];
+}
 
 function safeColor(value: string, fallback: string): string {
   if (isValidHexColor(value)) return value;
   if (isValidHexColor(fallback)) return fallback;
   return NEUTRAL_GRAY;
+}
+
+interface ColorReadoutProps {
+  label: string;
+  value: string;
+}
+
+function ColorReadout({ label, value }: ColorReadoutProps) {
+  return (
+    <div>
+      <label className="block text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">
+        {label}
+      </label>
+      <div className="mt-1 flex items-center gap-2">
+        <span
+          className="inline-block h-5 w-5 rounded border border-gray-300 dark:border-gray-600"
+          style={{ backgroundColor: value }}
+          aria-hidden="true"
+        />
+        <span className="text-sm text-gray-900 dark:text-gray-100">{value}</span>
+      </div>
+    </div>
+  );
+}
+
+interface ColorPickerProps {
+  field: ColorField;
+  label: string;
+  value: string;
+  onChange: (next: string) => void;
+  hint?: string;
+}
+
+function ColorPicker({ field, label, value, onChange, hint }: ColorPickerProps) {
+  const inputId = `branding-${field.replace(/_/g, '-')}`;
+  return (
+    <div>
+      <label htmlFor={inputId} className="form-label">
+        {label}
+      </label>
+      <div className="flex items-center gap-2">
+        <input
+          id={inputId}
+          type="color"
+          className="h-10 w-14 cursor-pointer rounded border border-gray-300 dark:border-gray-600"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <input
+          type="text"
+          className="form-input flex-1"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          aria-label={`${label} hex value`}
+          spellCheck={false}
+          autoComplete="off"
+          placeholder={COLOR_DEFAULTS[field]}
+        />
+      </div>
+      {hint ? (
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{hint}</p>
+      ) : null}
+    </div>
+  );
 }
 
 export function BrandingSection() {
@@ -50,56 +175,41 @@ export function BrandingSection() {
   const [isEditing, setIsEditing] = useState(false);
   const [logoPreviewError, setLogoPreviewError] = useState(false);
   const [faviconPreviewError, setFaviconPreviewError] = useState(false);
-  const [formData, setFormData] = useState<BrandingFormData>({
+  const [formData, setFormData] = useState<BrandingFormData>(() => ({
     company_name: '',
-    primary_color: '#6366f1',
-    secondary_color: '#8b5cf6',
-    accent_color: '#22c55e',
-    bg_color_light: BG_LIGHT_DEFAULT,
-    bg_color_dark: BG_DARK_DEFAULT,
-    surface_color_light: SURFACE_LIGHT_DEFAULT,
-    surface_color_dark: SURFACE_DARK_DEFAULT,
     logo_url: '',
     favicon_url: '',
     footer_text: '',
-  });
+    ...COLOR_DEFAULTS,
+  }));
+
+  const seededFromTenant = useMemo<BrandingFormData>(() => {
+    const colors = Object.fromEntries(
+      (Object.keys(COLOR_DEFAULTS) as ColorField[]).map((f) => [f, tenantColor(tenant, f)])
+    ) as Record<ColorField, string>;
+    return {
+      ...colors,
+      company_name: tenant?.company_name ?? '',
+      logo_url: tenant?.logo_url ?? '',
+      favicon_url: tenant?.favicon_url ?? '',
+      footer_text: tenant?.footer_text ?? '',
+    };
+  }, [tenant]);
 
   // Real dirty check: only warn on unload when the form's actually been
   // mutated, not just because the user clicked Edit and the form was
   // seeded with server values.
   const isDirty = useMemo(() => {
     if (!isEditing) return false;
-    return (
-      formData.company_name !== (tenant?.company_name ?? '') ||
-      formData.primary_color !== (tenant?.primary_color ?? '#6366f1') ||
-      formData.secondary_color !== (tenant?.secondary_color ?? '#8b5cf6') ||
-      formData.accent_color !== (tenant?.accent_color ?? '#22c55e') ||
-      formData.bg_color_light !== (tenant?.bg_color_light ?? BG_LIGHT_DEFAULT) ||
-      formData.bg_color_dark !== (tenant?.bg_color_dark ?? BG_DARK_DEFAULT) ||
-      formData.surface_color_light !== (tenant?.surface_color_light ?? SURFACE_LIGHT_DEFAULT) ||
-      formData.surface_color_dark !== (tenant?.surface_color_dark ?? SURFACE_DARK_DEFAULT) ||
-      formData.logo_url !== (tenant?.logo_url ?? '') ||
-      formData.favicon_url !== (tenant?.favicon_url ?? '') ||
-      formData.footer_text !== (tenant?.footer_text ?? '')
+    return (Object.keys(seededFromTenant) as Array<keyof BrandingFormData>).some(
+      (key) => formData[key] !== seededFromTenant[key]
     );
-  }, [isEditing, formData, tenant]);
+  }, [isEditing, formData, seededFromTenant]);
 
   useUnsavedChangesWarning(isDirty);
 
   const startEditing = () => {
-    setFormData({
-      company_name: tenant?.company_name ?? '',
-      primary_color: tenant?.primary_color ?? '#6366f1',
-      secondary_color: tenant?.secondary_color ?? '#8b5cf6',
-      accent_color: tenant?.accent_color ?? '#22c55e',
-      bg_color_light: tenant?.bg_color_light ?? BG_LIGHT_DEFAULT,
-      bg_color_dark: tenant?.bg_color_dark ?? BG_DARK_DEFAULT,
-      surface_color_light: tenant?.surface_color_light ?? SURFACE_LIGHT_DEFAULT,
-      surface_color_dark: tenant?.surface_color_dark ?? SURFACE_DARK_DEFAULT,
-      logo_url: tenant?.logo_url ?? '',
-      favicon_url: tenant?.favicon_url ?? '',
-      footer_text: tenant?.footer_text ?? '',
-    });
+    setFormData(seededFromTenant);
     setLogoPreviewError(false);
     setFaviconPreviewError(false);
     setIsEditing(true);
@@ -133,19 +243,15 @@ export function BrandingSection() {
   });
 
   const handleSave = () => {
-    updateBranding.mutate({
-      company_name: formData.company_name || undefined,
-      primary_color: formData.primary_color || undefined,
-      secondary_color: formData.secondary_color || undefined,
-      accent_color: formData.accent_color || undefined,
-      bg_color_light: formData.bg_color_light || undefined,
-      bg_color_dark: formData.bg_color_dark || undefined,
-      surface_color_light: formData.surface_color_light || undefined,
-      surface_color_dark: formData.surface_color_dark || undefined,
-      logo_url: formData.logo_url || undefined,
-      favicon_url: formData.favicon_url || undefined,
-      footer_text: formData.footer_text || undefined,
+    // Strip empty strings so the backend keeps its defaults instead of
+    // overwriting them with "". Object spread preserves explicit field
+    // names for type-checking against TenantSettingsUpdate.
+    const payload: Partial<BrandingFormData> = {};
+    (Object.keys(formData) as Array<keyof BrandingFormData>).forEach((key) => {
+      const value = formData[key];
+      if (value) payload[key] = value;
     });
+    updateBranding.mutate(payload);
   };
 
   // Show informational message when no tenant is configured.
@@ -247,111 +353,13 @@ export function BrandingSection() {
                 <p className="mt-1 text-sm text-gray-900 dark:text-gray-100">Not set</p>
               )}
             </div>
-            <div>
-              <label className="block text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">
-                Primary Color
-              </label>
-              <div className="mt-1 flex items-center gap-2">
-                <span
-                  className="inline-block h-5 w-5 rounded border border-gray-300 dark:border-gray-600"
-                  style={{ backgroundColor: tenant?.primary_color ?? '#6366f1' }}
-                  aria-hidden="true"
-                />
-                <span className="text-sm text-gray-900 dark:text-gray-100">
-                  {tenant?.primary_color ?? '#6366f1'}
-                </span>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">
-                Secondary Color
-              </label>
-              <div className="mt-1 flex items-center gap-2">
-                <span
-                  className="inline-block h-5 w-5 rounded border border-gray-300 dark:border-gray-600"
-                  style={{ backgroundColor: tenant?.secondary_color ?? '#8b5cf6' }}
-                  aria-hidden="true"
-                />
-                <span className="text-sm text-gray-900 dark:text-gray-100">
-                  {tenant?.secondary_color ?? '#8b5cf6'}
-                </span>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">
-                Accent Color
-              </label>
-              <div className="mt-1 flex items-center gap-2">
-                <span
-                  className="inline-block h-5 w-5 rounded border border-gray-300 dark:border-gray-600"
-                  style={{ backgroundColor: tenant?.accent_color ?? '#22c55e' }}
-                  aria-hidden="true"
-                />
-                <span className="text-sm text-gray-900 dark:text-gray-100">
-                  {tenant?.accent_color ?? '#22c55e'}
-                </span>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">
-                Light Mode Background
-              </label>
-              <div className="mt-1 flex items-center gap-2">
-                <span
-                  className="inline-block h-5 w-5 rounded border border-gray-300 dark:border-gray-600"
-                  style={{ backgroundColor: tenant?.bg_color_light ?? BG_LIGHT_DEFAULT }}
-                  aria-hidden="true"
-                />
-                <span className="text-sm text-gray-900 dark:text-gray-100">
-                  {tenant?.bg_color_light ?? BG_LIGHT_DEFAULT}
-                </span>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">
-                Dark Mode Background
-              </label>
-              <div className="mt-1 flex items-center gap-2">
-                <span
-                  className="inline-block h-5 w-5 rounded border border-gray-300 dark:border-gray-600"
-                  style={{ backgroundColor: tenant?.bg_color_dark ?? BG_DARK_DEFAULT }}
-                  aria-hidden="true"
-                />
-                <span className="text-sm text-gray-900 dark:text-gray-100">
-                  {tenant?.bg_color_dark ?? BG_DARK_DEFAULT}
-                </span>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">
-                Light Mode Card Surface
-              </label>
-              <div className="mt-1 flex items-center gap-2">
-                <span
-                  className="inline-block h-5 w-5 rounded border border-gray-300 dark:border-gray-600"
-                  style={{ backgroundColor: tenant?.surface_color_light ?? SURFACE_LIGHT_DEFAULT }}
-                  aria-hidden="true"
-                />
-                <span className="text-sm text-gray-900 dark:text-gray-100">
-                  {tenant?.surface_color_light ?? SURFACE_LIGHT_DEFAULT}
-                </span>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">
-                Dark Mode Card Surface
-              </label>
-              <div className="mt-1 flex items-center gap-2">
-                <span
-                  className="inline-block h-5 w-5 rounded border border-gray-300 dark:border-gray-600"
-                  style={{ backgroundColor: tenant?.surface_color_dark ?? SURFACE_DARK_DEFAULT }}
-                  aria-hidden="true"
-                />
-                <span className="text-sm text-gray-900 dark:text-gray-100">
-                  {tenant?.surface_color_dark ?? SURFACE_DARK_DEFAULT}
-                </span>
-              </div>
-            </div>
+            {([...PALETTE_FIELDS, ...SURFACE_FIELDS] as ColorField[]).map((field) => (
+              <ColorReadout
+                key={field}
+                label={COLOR_LABELS[field]}
+                value={tenantColor(tenant, field)}
+              />
+            ))}
             <div>
               <label className="block text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">
                 Footer Text
@@ -470,99 +478,16 @@ export function BrandingSection() {
 
             {/* Color pickers */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <div>
-                <label htmlFor="branding-primary-color" className="form-label">
-                  Primary Color
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    id="branding-primary-color"
-                    type="color"
-                    className="h-10 w-14 cursor-pointer rounded border border-gray-300 dark:border-gray-600"
-                    value={formData.primary_color}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, primary_color: e.target.value }))
-                    }
-                  />
-                  <input
-                    type="text"
-                    className="form-input flex-1"
-                    value={formData.primary_color}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, primary_color: e.target.value }))
-                    }
-                    aria-label="Primary color hex value"
-                    spellCheck={false}
-                    autoComplete="off"
-                    placeholder="#6366f1"
-                  />
-                </div>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  Used for buttons, links, active navigation, focus rings, and chart highlights.
-                </p>
-              </div>
-              <div>
-                <label htmlFor="branding-secondary-color" className="form-label">
-                  Secondary Color
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    id="branding-secondary-color"
-                    type="color"
-                    className="h-10 w-14 cursor-pointer rounded border border-gray-300 dark:border-gray-600"
-                    value={formData.secondary_color}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, secondary_color: e.target.value }))
-                    }
-                  />
-                  <input
-                    type="text"
-                    className="form-input flex-1"
-                    value={formData.secondary_color}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, secondary_color: e.target.value }))
-                    }
-                    aria-label="Secondary color hex value"
-                    spellCheck={false}
-                    autoComplete="off"
-                    placeholder="#8b5cf6"
-                  />
-                </div>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  Used as a supporting accent in chart series and category badges.
-                </p>
-              </div>
-              <div>
-                <label htmlFor="branding-accent-color" className="form-label">
-                  Accent Color
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    id="branding-accent-color"
-                    type="color"
-                    className="h-10 w-14 cursor-pointer rounded border border-gray-300 dark:border-gray-600"
-                    value={formData.accent_color}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, accent_color: e.target.value }))
-                    }
-                  />
-                  <input
-                    type="text"
-                    className="form-input flex-1"
-                    value={formData.accent_color}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, accent_color: e.target.value }))
-                    }
-                    aria-label="Accent color hex value"
-                    spellCheck={false}
-                    autoComplete="off"
-                    placeholder="#22c55e"
-                  />
-                </div>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  Used for callouts, accent badges, and the third chart series color.
-                </p>
-              </div>
+              {PALETTE_FIELDS.map((field) => (
+                <ColorPicker
+                  key={field}
+                  field={field}
+                  label={COLOR_LABELS[field]}
+                  value={formData[field]}
+                  onChange={(next) => setFormData((prev) => ({ ...prev, [field]: next }))}
+                  hint={PALETTE_HINTS[field]}
+                />
+              ))}
             </div>
 
             {/* Background + surface color pickers (light + dark) */}
@@ -576,130 +501,29 @@ export function BrandingSection() {
                 if you want a true black.
               </p>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div>
-                  <label htmlFor="branding-bg-light" className="form-label">
-                    Light Mode Background
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      id="branding-bg-light"
-                      type="color"
-                      className="h-10 w-14 cursor-pointer rounded border border-gray-300 dark:border-gray-600"
-                      value={formData.bg_color_light}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, bg_color_light: e.target.value }))
-                      }
-                    />
-                    <input
-                      type="text"
-                      className="form-input flex-1"
-                      value={formData.bg_color_light}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, bg_color_light: e.target.value }))
-                      }
-                      aria-label="Light mode background hex value"
-                      spellCheck={false}
-                      autoComplete="off"
-                      placeholder={BG_LIGHT_DEFAULT}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label htmlFor="branding-bg-dark" className="form-label">
-                    Dark Mode Background
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      id="branding-bg-dark"
-                      type="color"
-                      className="h-10 w-14 cursor-pointer rounded border border-gray-300 dark:border-gray-600"
-                      value={formData.bg_color_dark}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, bg_color_dark: e.target.value }))
-                      }
-                    />
-                    <input
-                      type="text"
-                      className="form-input flex-1"
-                      value={formData.bg_color_dark}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, bg_color_dark: e.target.value }))
-                      }
-                      aria-label="Dark mode background hex value"
-                      spellCheck={false}
-                      autoComplete="off"
-                      placeholder={BG_DARK_DEFAULT}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label htmlFor="branding-surface-light" className="form-label">
-                    Light Mode Card Surface
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      id="branding-surface-light"
-                      type="color"
-                      className="h-10 w-14 cursor-pointer rounded border border-gray-300 dark:border-gray-600"
-                      value={formData.surface_color_light}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, surface_color_light: e.target.value }))
-                      }
-                    />
-                    <input
-                      type="text"
-                      className="form-input flex-1"
-                      value={formData.surface_color_light}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, surface_color_light: e.target.value }))
-                      }
-                      aria-label="Light mode card surface hex value"
-                      spellCheck={false}
-                      autoComplete="off"
-                      placeholder={SURFACE_LIGHT_DEFAULT}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label htmlFor="branding-surface-dark" className="form-label">
-                    Dark Mode Card Surface
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      id="branding-surface-dark"
-                      type="color"
-                      className="h-10 w-14 cursor-pointer rounded border border-gray-300 dark:border-gray-600"
-                      value={formData.surface_color_dark}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, surface_color_dark: e.target.value }))
-                      }
-                    />
-                    <input
-                      type="text"
-                      className="form-input flex-1"
-                      value={formData.surface_color_dark}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, surface_color_dark: e.target.value }))
-                      }
-                      aria-label="Dark mode card surface hex value"
-                      spellCheck={false}
-                      autoComplete="off"
-                      placeholder={SURFACE_DARK_DEFAULT}
-                    />
-                  </div>
-                </div>
+                {SURFACE_FIELDS.map((field) => (
+                  <ColorPicker
+                    key={field}
+                    field={field}
+                    label={COLOR_LABELS[field]}
+                    value={formData[field]}
+                    onChange={(next) => setFormData((prev) => ({ ...prev, [field]: next }))}
+                  />
+                ))}
               </div>
             </div>
 
             {/* Preview */}
             {(() => {
-              const primary = safeColor(formData.primary_color, tenant?.primary_color ?? '#6366f1');
-              const secondary = safeColor(formData.secondary_color, tenant?.secondary_color ?? '#8b5cf6');
-              const accent = safeColor(formData.accent_color, tenant?.accent_color ?? '#22c55e');
-              const bgLight = safeColor(formData.bg_color_light, tenant?.bg_color_light ?? BG_LIGHT_DEFAULT);
-              const bgDark = safeColor(formData.bg_color_dark, tenant?.bg_color_dark ?? BG_DARK_DEFAULT);
-              const surfaceLight = safeColor(formData.surface_color_light, tenant?.surface_color_light ?? SURFACE_LIGHT_DEFAULT);
-              const surfaceDark = safeColor(formData.surface_color_dark, tenant?.surface_color_dark ?? SURFACE_DARK_DEFAULT);
+              const effective = (field: ColorField) =>
+                safeColor(formData[field], tenantColor(tenant, field));
+              const primary = effective('primary_color');
+              const secondary = effective('secondary_color');
+              const accent = effective('accent_color');
+              const bgLight = effective('bg_color_light');
+              const bgDark = effective('bg_color_dark');
+              const surfaceLight = effective('surface_color_light');
+              const surfaceDark = effective('surface_color_dark');
               const swatches: Array<{ label: string; value: string; raw: string }> = [
                 { label: 'Primary', value: primary, raw: formData.primary_color },
                 { label: 'Secondary', value: secondary, raw: formData.secondary_color },
