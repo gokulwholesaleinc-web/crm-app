@@ -138,39 +138,39 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
         to_email: str | None = None,
         message: str | None = None,
     ) -> Contract:
-        """Mint a sign token, mark sent_at, and email the signer."""
+        """Mint a sign token, mark sent_at, and email the signer.
+
+        Acquires a row-level lock before any state mutation. Two concurrent
+        send requests on the same contract row serialize on the lock, so
+        the second request's email is queued *after* the first commits its
+        token — only the latest token is live, but at least no email goes
+        out mid-flush with a token the row no longer holds. (Mirrors the
+        ``SELECT … FOR UPDATE`` pattern in
+        ``proposals/service.resend_payment_link``.)
+        """
+        recipient = to_email or (contract.contact.email if contract.contact else None)
+        if not recipient:
+            raise ValueError("No recipient email — provide to_email or link a contact with an email address")
+
+        # Lock the contract row for the rest of the transaction. Postgres
+        # serializes; SQLite (test) treats it as a no-op which is fine
+        # because tests are single-threaded.
+        locked = await self.db.execute(
+            select(Contract).where(Contract.id == contract.id).with_for_update(),
+        )
+        contract = locked.scalar_one()
+
         if contract.status not in ("draft", "sent"):
             raise ValueError(
                 f"Cannot send contract in '{contract.status}' status for signature"
             )
 
-        recipient = to_email or (contract.contact.email if contract.contact else None)
-        if not recipient:
-            raise ValueError("No recipient email — provide to_email or link a contact with an email address")
-
-        # Atomic transition: a concurrent send (double-click, replayed
-        # request) would otherwise both pass the status check and both
-        # mint distinct tokens — the first email points at a token the
-        # row no longer carries. Conditional UPDATE ensures only one
-        # racer wins. Re-mint each send so an old forwarded link dies.
-        new_token = self._mint_token()
-        new_expires = self._token_expiry()
-        now = datetime.now(UTC)
-        result = await self.db.execute(
-            update(Contract)
-            .where(Contract.id == contract.id)
-            .where(Contract.status.in_(("draft", "sent")))
-            .values(
-                sign_token=new_token,
-                sign_token_expires_at=new_expires,
-                sent_at=now,
-                status="sent",
-            )
-        )
-        if result.rowcount == 0:
-            raise ValueError(
-                f"Cannot send contract in '{contract.status}' status for signature"
-            )
+        # Re-mint each send so an old forwarded link from a previous
+        # send-cycle stops working.
+        contract.sign_token = self._mint_token()
+        contract.sign_token_expires_at = self._token_expiry()
+        contract.sent_at = datetime.now(UTC)
+        contract.status = "sent"
         await self.db.flush()
         await self.db.refresh(contract)
 
@@ -219,7 +219,16 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
         # Only revert on a terminal "failed" status. "retry" means the
         # send is in the queue and the retry worker will pick it up;
         # "throttled" means it'll go out at the next throttle window.
-        # The EmailQueue UI surfaces both for operator visibility.
+        # The EmailQueue UI surfaces both for operator visibility, and
+        # we log retry status loud here so a stuck-in-retry contract is
+        # greppable without trawling the queue table.
+        if email.status == "retry":
+            logger.warning(
+                "Contract %s email %s in retry (attempts=%d, error=%r) — "
+                "monitor email queue, may need manual resend",
+                contract.id, email.id, email.retry_count, email.error,
+            )
+
         if email.status == "failed":
             contract.sign_token = None
             contract.sign_token_expires_at = None
@@ -582,13 +591,9 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
         signer_name = escape(contract.signed_by_name or "")
         title = escape(contract.title)
 
-        body = (
-            f"<p>Hi {signer_name or 'there'},</p>"
-            f"<p>Thank you for signing <strong>{title}</strong>. A signed "
-            f"PDF copy is attached for your records.</p>"
-            f"<p>{escape(company)}</p>"
-        )
-
+        # Render first so the body text can honestly reflect whether a
+        # PDF will be attached. Otherwise the signer reads "PDF
+        # attached" and finds nothing.
         attachments: list[EmailAttachment] = []
         try:
             pdf_bytes = await self._generate_contract_pdf(contract, include_signature=True)
@@ -597,11 +602,27 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
                 content=pdf_bytes,
                 content_type="application/pdf",
             )]
-        except Exception as exc:
-            logger.warning(
-                "PDF render failed for signed contract %s: %s",
-                contract.id, exc,
-                exc_info=True,
+        except Exception:
+            logger.exception(
+                "PDF render failed for signed contract %s",
+                contract.id,
+            )
+
+        if attachments:
+            body = (
+                f"<p>Hi {signer_name or 'there'},</p>"
+                f"<p>Thank you for signing <strong>{title}</strong>. A signed "
+                f"PDF copy is attached for your records.</p>"
+                f"<p>{escape(company)}</p>"
+            )
+        else:
+            body = (
+                f"<p>Hi {signer_name or 'there'},</p>"
+                f"<p>Thank you for signing <strong>{title}</strong>. Your "
+                f"signed copy will be available shortly — we'll re-send it "
+                f"once the PDF is ready. Reply to this email if you need "
+                f"it sooner.</p>"
+                f"<p>{escape(company)}</p>"
             )
 
         email_service = EmailService(self.db)

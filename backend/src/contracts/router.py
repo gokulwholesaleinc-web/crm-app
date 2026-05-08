@@ -212,6 +212,10 @@ async def send_contract_for_signature(
     contract = await get_entity_or_404(service, contract_id, ENTITY_NAME)
     check_ownership(contract, current_user, ENTITY_NAME)
 
+    # Snapshot the inbound status so the audit row reflects the actual
+    # transition (draft→sent on first send, sent→sent on re-send).
+    old_status = contract.status
+
     try:
         contract = await service.send_for_signature(
             contract,
@@ -229,7 +233,7 @@ async def send_contract_for_signature(
     ip_address = get_client_ip(request)
     await audit_entity_update(
         db, "contract", contract.id, current_user.id,
-        {"status": "draft"}, {"status": "sent"}, ip_address,
+        {"status": old_status}, {"status": "sent"}, ip_address,
     )
 
     base_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
@@ -299,12 +303,22 @@ async def sign_contract_public(
 
     # Audit row for the sign event. user_id=None marks a public-token
     # action — the audit log shouldn't misattribute it to a CRM user.
-    await audit_entity_update(
-        db, "contract", contract.id, None,
-        {"status": "sent"},
-        {"status": "signed", "signed_by_name": body.signer_name},
-        signer_ip,
-    )
+    # Wrapped in try/except so a transient audit failure can't 500 the
+    # signer after they've already submitted (re-submit would 400 with
+    # "Cannot sign contract in 'signed' status" — confusing UX).
+    try:
+        await audit_entity_update(
+            db, "contract", contract.id, None,
+            {"status": "sent"},
+            {"status": "signed", "signed_by_name": body.signer_name},
+            signer_ip,
+        )
+    except Exception:
+        logger.exception(
+            "Audit write failed after public sign for contract %s "
+            "(contract was signed; audit row missing)",
+            contract.id,
+        )
 
     return ContractSignResponse(
         id=contract.id,

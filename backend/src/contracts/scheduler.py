@@ -22,13 +22,23 @@ class ContractLifecycleService:
         self.db = db
 
     async def process_due_contracts(self) -> int:
-        flipped = await self._flip_signed_to_active()
-        alerted = await self._alert_expiring_soon()
-        # Heartbeat log even when both are zero so a broken cron is
-        # detectable from "absent line" instead of "always silent".
-        logger.info(
-            "[contracts_lifecycle] flipped=%d alerted=%d", flipped, alerted,
-        )
+        # Heartbeat fires unconditionally — a broken cron is now
+        # distinguishable from a thrown job (errored=True) and from a
+        # silent zero-action run (flipped=0 alerted=0 errored=False).
+        flipped = alerted = 0
+        errored = False
+        try:
+            flipped = await self._flip_signed_to_active()
+            alerted = await self._alert_expiring_soon()
+        except Exception:
+            errored = True
+            logger.exception("[contracts_lifecycle] job failed")
+            raise
+        finally:
+            logger.info(
+                "[contracts_lifecycle] flipped=%d alerted=%d errored=%s",
+                flipped, alerted, errored,
+            )
         return flipped + alerted
 
     async def _flip_signed_to_active(self) -> int:
