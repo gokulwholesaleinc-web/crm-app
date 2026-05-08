@@ -9,11 +9,14 @@ import { useAuthStore } from '../store/authStore';
 import { CACHE_TIMES } from '../config/queryConfig';
 import type { ChartData } from '../types';
 
-// Query keys
+// Query keys — ownerId is part of the cache key so an admin switching
+// viewing target doesn't see the previous user's cached numbers.
 export const dashboardKeys = {
   all: ['dashboard'] as const,
-  full: (dateRange?: DateRangeParams) => [...dashboardKeys.all, 'full', dateRange?.dateFrom, dateRange?.dateTo] as const,
-  kpis: (dateRange?: DateRangeParams) => [...dashboardKeys.all, 'kpis', dateRange?.dateFrom, dateRange?.dateTo] as const,
+  full: (dateRange?: DateRangeParams) =>
+    [...dashboardKeys.all, 'full', dateRange?.dateFrom, dateRange?.dateTo, dateRange?.ownerId ?? null] as const,
+  kpis: (dateRange?: DateRangeParams) =>
+    [...dashboardKeys.all, 'kpis', dateRange?.dateFrom, dateRange?.dateTo, dateRange?.ownerId ?? null] as const,
   charts: () => [...dashboardKeys.all, 'charts'] as const,
   chart: (chartType: string, params?: Record<string, unknown>) =>
     [...dashboardKeys.charts(), chartType, params] as const,
@@ -51,7 +54,7 @@ export function useKPIs(dateRange?: DateRangeParams) {
 export function usePipelineFunnelChart(dateRange?: DateRangeParams) {
   const { isAuthenticated, isLoading: authLoading } = useAuthStore();
   return useQuery({
-    queryKey: dashboardKeys.chart('pipeline-funnel', { dateFrom: dateRange?.dateFrom, dateTo: dateRange?.dateTo }),
+    queryKey: dashboardKeys.chart('pipeline-funnel', { dateFrom: dateRange?.dateFrom, dateTo: dateRange?.dateTo, ownerId: dateRange?.ownerId ?? null }),
     queryFn: () => dashboardApi.getPipelineFunnelChart(dateRange),
     ...CACHE_TIMES.DASHBOARD,
     enabled: isAuthenticated && !authLoading,
@@ -64,7 +67,7 @@ export function usePipelineFunnelChart(dateRange?: DateRangeParams) {
 export function useLeadsByStatusChart(dateRange?: DateRangeParams) {
   const { isAuthenticated, isLoading: authLoading } = useAuthStore();
   return useQuery({
-    queryKey: dashboardKeys.chart('leads-by-status', { dateFrom: dateRange?.dateFrom, dateTo: dateRange?.dateTo }),
+    queryKey: dashboardKeys.chart('leads-by-status', { dateFrom: dateRange?.dateFrom, dateTo: dateRange?.dateTo, ownerId: dateRange?.ownerId ?? null }),
     queryFn: () => dashboardApi.getLeadsByStatusChart(dateRange),
     ...CACHE_TIMES.DASHBOARD,
     enabled: isAuthenticated && !authLoading,
@@ -77,7 +80,7 @@ export function useLeadsByStatusChart(dateRange?: DateRangeParams) {
 export function useLeadsBySourceChart(dateRange?: DateRangeParams) {
   const { isAuthenticated, isLoading: authLoading } = useAuthStore();
   return useQuery({
-    queryKey: dashboardKeys.chart('leads-by-source', { dateFrom: dateRange?.dateFrom, dateTo: dateRange?.dateTo }),
+    queryKey: dashboardKeys.chart('leads-by-source', { dateFrom: dateRange?.dateFrom, dateTo: dateRange?.dateTo, ownerId: dateRange?.ownerId ?? null }),
     queryFn: () => dashboardApi.getLeadsBySourceChart(dateRange),
     ...CACHE_TIMES.DASHBOARD,
     enabled: isAuthenticated && !authLoading,
@@ -90,7 +93,7 @@ export function useLeadsBySourceChart(dateRange?: DateRangeParams) {
 export function useRevenueTrendChart(months = 6, dateRange?: DateRangeParams) {
   const { isAuthenticated, isLoading: authLoading } = useAuthStore();
   return useQuery({
-    queryKey: dashboardKeys.chart('revenue-trend', { months, dateFrom: dateRange?.dateFrom, dateTo: dateRange?.dateTo }),
+    queryKey: dashboardKeys.chart('revenue-trend', { months, dateFrom: dateRange?.dateFrom, dateTo: dateRange?.dateTo, ownerId: dateRange?.ownerId ?? null }),
     queryFn: () => dashboardApi.getRevenueTrendChart(months, dateRange),
     ...CACHE_TIMES.DASHBOARD,
     enabled: isAuthenticated && !authLoading,
@@ -103,7 +106,7 @@ export function useRevenueTrendChart(months = 6, dateRange?: DateRangeParams) {
 export function useActivitiesChart(days = 30, dateRange?: DateRangeParams) {
   const { isAuthenticated, isLoading: authLoading } = useAuthStore();
   return useQuery({
-    queryKey: dashboardKeys.chart('activities', { days, dateFrom: dateRange?.dateFrom, dateTo: dateRange?.dateTo }),
+    queryKey: dashboardKeys.chart('activities', { days, dateFrom: dateRange?.dateFrom, dateTo: dateRange?.dateTo, ownerId: dateRange?.ownerId ?? null }),
     queryFn: () => dashboardApi.getActivitiesChart(days, dateRange),
     ...CACHE_TIMES.DASHBOARD,
     enabled: isAuthenticated && !authLoading,
@@ -116,7 +119,7 @@ export function useActivitiesChart(days = 30, dateRange?: DateRangeParams) {
 export function useNewLeadsTrendChart(weeks = 8, dateRange?: DateRangeParams) {
   const { isAuthenticated, isLoading: authLoading } = useAuthStore();
   return useQuery({
-    queryKey: dashboardKeys.chart('new-leads-trend', { weeks, dateFrom: dateRange?.dateFrom, dateTo: dateRange?.dateTo }),
+    queryKey: dashboardKeys.chart('new-leads-trend', { weeks, dateFrom: dateRange?.dateFrom, dateTo: dateRange?.dateTo, ownerId: dateRange?.ownerId ?? null }),
     queryFn: () => dashboardApi.getNewLeadsTrendChart(weeks, dateRange),
     ...CACHE_TIMES.DASHBOARD,
     enabled: isAuthenticated && !authLoading,
@@ -129,7 +132,7 @@ export function useNewLeadsTrendChart(weeks = 8, dateRange?: DateRangeParams) {
 export function useConversionRatesChart(dateRange?: DateRangeParams) {
   const { isAuthenticated, isLoading: authLoading } = useAuthStore();
   return useQuery({
-    queryKey: dashboardKeys.chart('conversion-rates', { dateFrom: dateRange?.dateFrom, dateTo: dateRange?.dateTo }),
+    queryKey: dashboardKeys.chart('conversion-rates', { dateFrom: dateRange?.dateFrom, dateTo: dateRange?.dateTo, ownerId: dateRange?.ownerId ?? null }),
     queryFn: () => dashboardApi.getConversionRatesChart(dateRange),
     ...CACHE_TIMES.DASHBOARD,
     enabled: isAuthenticated && !authLoading,
@@ -142,7 +145,7 @@ export function useConversionRatesChart(dateRange?: DateRangeParams) {
 export function useSalesFunnel(dateRange?: DateRangeParams) {
   const { isAuthenticated, isLoading: authLoading } = useAuthStore();
   return useQuery({
-    queryKey: dashboardKeys.chart('sales-funnel', { dateFrom: dateRange?.dateFrom, dateTo: dateRange?.dateTo }),
+    queryKey: dashboardKeys.chart('sales-funnel', { dateFrom: dateRange?.dateFrom, dateTo: dateRange?.dateTo, ownerId: dateRange?.ownerId ?? null }),
     queryFn: () => dashboardApi.getSalesFunnel(dateRange),
     ...CACHE_TIMES.DASHBOARD,
     enabled: isAuthenticated && !authLoading,
@@ -155,7 +158,7 @@ export function useSalesFunnel(dateRange?: DateRangeParams) {
 export function useSalesKpis(dateRange?: DateRangeParams) {
   const { isAuthenticated, isLoading: authLoading } = useAuthStore();
   return useQuery({
-    queryKey: dashboardKeys.chart('sales-kpis', { dateFrom: dateRange?.dateFrom, dateTo: dateRange?.dateTo }),
+    queryKey: dashboardKeys.chart('sales-kpis', { dateFrom: dateRange?.dateFrom, dateTo: dateRange?.dateTo, ownerId: dateRange?.ownerId ?? null }),
     queryFn: () => dashboardApi.getSalesKpis(dateRange),
     ...CACHE_TIMES.DASHBOARD,
     enabled: isAuthenticated && !authLoading,

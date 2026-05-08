@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { Modal } from '../../components/ui/Modal';
+import { ViewingAsSelector } from './components/ViewingAsSelector';
+import { loadStoredViewingAs, type ViewingAsValue } from './components/viewingAsStorage';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { NumberCard } from './components/NumberCard';
 import { ChartCard } from './components/ChartCard';
@@ -18,6 +20,7 @@ import { useSavedReports } from '../../hooks/useReports';
 import { listDashboardWidgets, createDashboardWidget } from '../../api/dashboard';
 import { useAuthStore } from '../../store/authStore';
 import type { NumberCardData, ChartDataPoint } from '../../types';
+import { getBrandColor } from '../../utils/chartPalette';
 
 function buildCardMap(cards: NumberCardData[]): Map<string, NumberCardData> {
   return new Map(cards.map(c => [c.id, c]));
@@ -171,13 +174,18 @@ function DashboardPage() {
   usePageTitle('Dashboard');
 
   const [dateRange, setDateRange] = useState<DateRange>({ dateFrom: null, dateTo: null });
+  const [viewingAs, setViewingAs] = useState<ViewingAsValue>(() => loadStoredViewingAs());
 
-  const { data: kpiCards, isLoading: isLoadingKpis, error: dashboardError } = useKPIs(dateRange);
-  const { data: pipelineData } = usePipelineFunnelChart(dateRange);
-  const { data: leadsBySourceData } = useLeadsBySourceChart(dateRange);
+  // ownerId is null for sales reps and for admins viewing the tenant
+  // rollup; non-null when an admin has selected a peer.
+  const dashboardParams = { ...dateRange, ownerId: viewingAs };
+
+  const { data: kpiCards, isLoading: isLoadingKpis, error: dashboardError } = useKPIs(dashboardParams);
+  const { data: pipelineData } = usePipelineFunnelChart(dashboardParams);
+  const { data: leadsBySourceData } = useLeadsBySourceChart(dashboardParams);
   const { data: timelineData } = useUserTimeline();
-  const { data: funnelData } = useSalesFunnel(dateRange);
-  const { data: salesKpis } = useSalesKpis(dateRange);
+  const { data: funnelData } = useSalesFunnel(dashboardParams);
+  const { data: salesKpis } = useSalesKpis(dashboardParams);
 
   const error = dashboardError instanceof Error ? dashboardError.message : dashboardError ? String(dashboardError) : null;
 
@@ -214,7 +222,10 @@ function DashboardPage() {
             Overview of your CRM performance
           </p>
         </div>
-        <DateRangePicker onChange={(range) => setDateRange(range)} />
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+          <ViewingAsSelector value={viewingAs} onChange={setViewingAs} />
+          <DateRangePicker onChange={(range) => setDateRange(range)} />
+        </div>
       </div>
 
       {/* KPI Cards */}
@@ -421,9 +432,10 @@ function DashboardPage() {
                     <div className="flex-1 sm:ml-4">
                       <div className="relative h-3 sm:h-4 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                         <div
-                          className="absolute h-full bg-primary-500 rounded-full"
+                          className="absolute h-full rounded-full"
                           style={{
                             width: `${Math.min((count / maxCount) * 100, 100)}%`,
+                            backgroundColor: getBrandColor('primary', '#6366f1'),
                           }}
                         />
                       </div>
@@ -460,9 +472,10 @@ function DashboardPage() {
                     <div className="flex-1 sm:ml-4">
                       <div className="relative h-3 sm:h-4 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                         <div
-                          className="absolute h-full bg-green-500 rounded-full"
+                          className="absolute h-full rounded-full"
                           style={{
                             width: `${Math.min((count / maxCount) * 100, 100)}%`,
+                            backgroundColor: getBrandColor('secondary', '#22c55e'),
                           }}
                         />
                       </div>

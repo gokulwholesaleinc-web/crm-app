@@ -639,3 +639,241 @@ class TestSalesFunnel:
         for stage in data["stages"]:
             assert "stage" in stage
             assert "count" in stage
+
+
+# ---------------------------------------------------------------------------
+# Admin user-switcher (PR B)
+# ---------------------------------------------------------------------------
+
+class TestDashboardAdminUserSwitcher:
+    """Verify the ``owner_id`` query param on /api/dashboard/kpis +
+    /api/dashboard/sales-kpis is honored only for admin/manager.
+
+    Sales reps passing someone else's owner_id are silently coerced to
+    themselves by ``effective_owner_id`` — that's the public contract.
+    """
+
+    @pytest.mark.asyncio
+    async def test_sales_rep_owner_id_is_coerced_to_self(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_pipeline_stage: PipelineStage,
+    ):
+        """Sales rep passing a peer's id sees only their own KPIs.
+
+        Construct two users with different opportunity counts. Sales-rep
+        token belongs to user A. Pass owner_id=B's id. KPIs returned
+        must reflect A's data (because effective_owner_id silently
+        coerces back).
+        """
+        from src.auth.security import get_password_hash
+
+        peer = User(
+            email="peer-rep@example.com",
+            hashed_password=get_password_hash("peer123"),
+            full_name="Peer Rep",
+            is_active=True,
+            is_superuser=False,
+        )
+        db_session.add(peer)
+        await db_session.commit()
+        await db_session.refresh(peer)
+
+        # 5 opps for caller, 1 for peer.
+        for i in range(5):
+            db_session.add(
+                Opportunity(
+                    name=f"My Deal {i}",
+                    pipeline_stage_id=test_pipeline_stage.id,
+                    amount=100.0,
+                    owner_id=test_user.id,
+                    created_by_id=test_user.id,
+                )
+            )
+        db_session.add(
+            Opportunity(
+                name="Peer Deal",
+                pipeline_stage_id=test_pipeline_stage.id,
+                amount=999.0,
+                owner_id=peer.id,
+                created_by_id=peer.id,
+            )
+        )
+        await db_session.commit()
+
+        response = await client.get(
+            f"/api/dashboard/kpis?owner_id={peer.id}",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        kpis = {k["id"]: k for k in response.json()}
+        # open_opportunities should reflect 5 (caller's), not 1 (peer's).
+        opps = kpis.get("open_opportunities")
+        assert opps is not None
+        assert opps["value"] == 5
+
+    @pytest.mark.asyncio
+    async def test_admin_can_scope_to_another_user(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_auth_headers: dict,
+        test_user: User,
+        test_pipeline_stage: PipelineStage,
+    ):
+        """Admin passing owner_id=test_user.id sees test_user's KPIs."""
+        for i in range(3):
+            db_session.add(
+                Opportunity(
+                    name=f"User Deal {i}",
+                    pipeline_stage_id=test_pipeline_stage.id,
+                    amount=200.0,
+                    owner_id=test_user.id,
+                    created_by_id=test_user.id,
+                )
+            )
+        await db_session.commit()
+
+        response = await client.get(
+            f"/api/dashboard/kpis?owner_id={test_user.id}",
+            headers=admin_auth_headers,
+        )
+        assert response.status_code == 200
+        kpis = {k["id"]: k for k in response.json()}
+        opps = kpis.get("open_opportunities")
+        assert opps is not None
+        assert opps["value"] == 3
+
+    @pytest.mark.asyncio
+    async def test_admin_no_owner_id_returns_tenant_wide(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_auth_headers: dict,
+        test_user: User,
+        test_pipeline_stage: PipelineStage,
+    ):
+        """Admin without owner_id sees the rollup across all users.
+
+        Two distinct owners, 2 + 4 = 6 opps total. Admin omits owner_id.
+        ``effective_owner_id`` returns None (admin can_see_all → pass
+        through requested_owner_id, which was None) → generators see
+        ``user_id=None`` → no owner filter.
+        """
+        from src.auth.security import get_password_hash
+
+        peer = User(
+            email="another-rep@example.com",
+            hashed_password=get_password_hash("rep123"),
+            full_name="Another Rep",
+            is_active=True,
+            is_superuser=False,
+        )
+        db_session.add(peer)
+        await db_session.commit()
+        await db_session.refresh(peer)
+
+        for i in range(2):
+            db_session.add(
+                Opportunity(
+                    name=f"A {i}",
+                    pipeline_stage_id=test_pipeline_stage.id,
+                    amount=10.0,
+                    owner_id=test_user.id,
+                    created_by_id=test_user.id,
+                )
+            )
+        for i in range(4):
+            db_session.add(
+                Opportunity(
+                    name=f"B {i}",
+                    pipeline_stage_id=test_pipeline_stage.id,
+                    amount=10.0,
+                    owner_id=peer.id,
+                    created_by_id=peer.id,
+                )
+            )
+        await db_session.commit()
+
+        response = await client.get("/api/dashboard/kpis", headers=admin_auth_headers)
+        assert response.status_code == 200
+        kpis = {k["id"]: k for k in response.json()}
+        opps = kpis.get("open_opportunities")
+        assert opps is not None
+        # Tenant-wide rollup includes the 6 we just inserted plus any
+        # admin-fixture-owned opps from upstream conftest. Asserting the
+        # lower bound keeps this test stable if the admin fixture later
+        # seeds its own sample data.
+        assert opps["value"] >= 6
+
+    @pytest.mark.asyncio
+    async def test_sales_rep_own_id_passes_through(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_pipeline_stage: PipelineStage,
+    ):
+        """Sales rep passing their OWN id as ``owner_id`` is a no-op.
+
+        Equivalent to omitting the param. Confirms the coercion in
+        ``effective_owner_id`` is symmetric — passing self.id doesn't
+        accidentally widen or narrow the scope.
+        """
+        for i in range(2):
+            db_session.add(
+                Opportunity(
+                    name=f"Self Deal {i}",
+                    pipeline_stage_id=test_pipeline_stage.id,
+                    amount=50.0,
+                    owner_id=test_user.id,
+                    created_by_id=test_user.id,
+                )
+            )
+        await db_session.commit()
+
+        response = await client.get(
+            f"/api/dashboard/kpis?owner_id={test_user.id}",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        kpis = {k["id"]: k for k in response.json()}
+        opps = kpis.get("open_opportunities")
+        assert opps is not None
+        assert opps["value"] == 2
+
+    @pytest.mark.asyncio
+    async def test_sales_kpis_admin_owner_id_pass_through(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_auth_headers: dict,
+        test_user: User,
+    ):
+        """Admin scoping /sales-kpis to a peer reflects that peer's
+        proposals/quotes/payments, not the admin's."""
+        from src.proposals.models import Proposal
+
+        for i in range(3):
+            db_session.add(
+                Proposal(
+                    proposal_number=f"PR-DASH-B-{i}",
+                    title=f"Dash B Proposal {i}",
+                    status="sent",
+                    owner_id=test_user.id,
+                    created_by_id=test_user.id,
+                )
+            )
+        await db_session.commit()
+
+        response = await client.get(
+            f"/api/dashboard/sales-kpis?owner_id={test_user.id}",
+            headers=admin_auth_headers,
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["proposals_sent"] == 3
