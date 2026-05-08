@@ -52,8 +52,8 @@ function CreateContractModal({
   const [contactId, setContactId] = useState<number | null>(null);
   const [companyId, setCompanyId] = useState<number | null>(null);
 
-  const { data: contactsData } = useContacts({ page_size: 200 });
-  const { data: companiesData } = useCompanies({ page_size: 200 });
+  const { data: contactsData } = useContacts({ page_size: 100 });
+  const { data: companiesData } = useCompanies({ page_size: 100 });
 
   const contactOptions = (contactsData?.items ?? []).map((c) => ({
     value: c.id,

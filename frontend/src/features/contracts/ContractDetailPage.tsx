@@ -53,8 +53,8 @@ function ContractDetailPage() {
   const [editCompanyId, setEditCompanyId] = useState<number | null>(null);
 
   // Fetch contacts + companies for the pickers
-  const { data: contactsData } = useContacts({ page_size: 200 });
-  const { data: companiesData } = useCompanies({ page_size: 200 });
+  const { data: contactsData } = useContacts({ page_size: 100 });
+  const { data: companiesData } = useCompanies({ page_size: 100 });
 
   const contactOptions = (contactsData?.items ?? []).map((c) => ({
     value: c.id,
