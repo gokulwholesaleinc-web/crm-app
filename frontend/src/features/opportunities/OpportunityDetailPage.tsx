@@ -69,6 +69,7 @@ function OpportunityDetailPage() {
   const { data: paymentsData, isLoading: isLoadingPayments } = usePayments(
     shouldFetchPayments ? { opportunity_id: opportunityId, page_size: 50 } : undefined
   );
+  const currentUser = useAuthStore((s) => s.user);
 
   const quotes = quotesData?.items ?? [];
   const proposals = proposalsData?.items ?? [];
@@ -149,7 +150,6 @@ function OpportunityDetailPage() {
 
   const stageName = opportunity.pipeline_stage?.name?.toLowerCase().replace(/\s+/g, '_') ?? '';
 
-  const currentUser = useAuthStore((s) => s.user);
   const canManageSharing =
     !!currentUser &&
     (currentUser.id === opportunity.owner_id ||

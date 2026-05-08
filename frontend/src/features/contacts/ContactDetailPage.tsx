@@ -105,6 +105,7 @@ function ContactDetailPage() {
   const { data: subscriptionsData } = useSubscriptions(
     contactId ? { contact_id: contactId, status: 'active', page_size: 1 } : undefined
   );
+  const currentUser = useAuthStore((s) => s.user);
   const quotes = quotesData?.items ?? [];
   const proposals = proposalsData?.items ?? [];
   const hasActiveSubscription = (subscriptionsData?.total ?? 0) > 0;
@@ -173,7 +174,6 @@ function ContactDetailPage() {
     );
   }
 
-  const currentUser = useAuthStore((s) => s.user);
   const canManageSharing =
     !!currentUser &&
     (currentUser.id === contact.owner_id ||

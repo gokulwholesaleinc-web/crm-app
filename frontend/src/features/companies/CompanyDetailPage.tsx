@@ -89,6 +89,7 @@ export function CompanyDetailPage() {
   const companyQuotes = quotesData?.items ?? [];
   const companyProposals = proposalsData?.items ?? [];
 
+  const currentUser = useAuthStore((s) => s.user);
   const updateCompany = useUpdateCompany();
   const deleteCompany = useDeleteCompany();
 
@@ -136,7 +137,6 @@ export function CompanyDetailPage() {
   const statusStyle = getStatusColor(company.status, 'company');
   const contacts = contactsData?.items || [];
 
-  const currentUser = useAuthStore((s) => s.user);
   const canManageSharing =
     !!currentUser &&
     (currentUser.id === company.owner_id ||

@@ -126,9 +126,7 @@ async def should_send_email(
             return False
         if prefs.email_digest == "off":
             return False
-        if not _matrix_allows(prefs.event_matrix, event_type, "email"):
-            return False
-        return True
+        return _matrix_allows(prefs.event_matrix, event_type, "email")
     except _GATE_RECOVERABLE:
         logger.warning(
             "notification_gate.should_send_email failed for user_id=%s event=%s; defaulting allow",

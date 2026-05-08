@@ -57,6 +57,7 @@ function LeadDetailPage() {
   const deleteLeadMutation = useDeleteLead();
   const convertLeadMutation = useConvertLead();
   const updateLeadMutation = useUpdateLead();
+  const currentUser = useAuthStore((s) => s.user);
 
   const handleEditSubmit = async (data: LeadFormData) => {
     if (!leadId) return;
@@ -177,7 +178,6 @@ function LeadDetailPage() {
   const isOrphanConverted =
     lead.status === 'converted' && !lead.converted_contact_id;
 
-  const currentUser = useAuthStore((s) => s.user);
   const canManageSharing =
     !!currentUser &&
     (currentUser.id === lead.owner_id ||

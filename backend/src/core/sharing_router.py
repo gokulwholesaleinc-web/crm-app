@@ -3,7 +3,7 @@
 
 import logging
 from datetime import datetime
-from typing import Annotated, Optional
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -244,10 +244,10 @@ class AdminShareListResponse(BaseModel):
 async def admin_list_shares(
     current_user: CurrentUser,
     db: DBSession,
-    entity_type: Optional[str] = Query(None),
-    shared_with_user_id: Optional[int] = Query(None),
-    shared_by_user_id: Optional[int] = Query(None),
-    permission_level: Optional[str] = Query(None),
+    entity_type: str | None = Query(None),
+    shared_with_user_id: int | None = Query(None),
+    shared_by_user_id: int | None = Query(None),
+    permission_level: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
 ):
