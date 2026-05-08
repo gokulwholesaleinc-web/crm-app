@@ -16,6 +16,15 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
 import { safeStorage } from '../utils/safeStorage';
+import { sanitizeHexColor } from '../utils/colorValidation';
+
+// Defaults used when the backend ships a malformed hex (or the tenant
+// has never been configured). Match `:root` in `index.css` and the
+// backend's `DEFAULT_*_COLOR` constants so all three layers agree.
+const DEFAULT_BG_LIGHT = '#f9fafb';
+const DEFAULT_BG_DARK = '#111827';
+const DEFAULT_SURFACE_LIGHT = '#ffffff';
+const DEFAULT_SURFACE_DARK = '#1f2937';
 
 // --- Types ---
 
@@ -127,12 +136,23 @@ function applyBrandingToDOM(config: TenantConfig | null) {
   root.style.setProperty('--brand-accent', config.accent_color);
 
   // Page + surface backgrounds, consumed by index.css for body and
-  // [data-bg-surface] elements. Setting both light + dark always lets
-  // the CSS pick the right one based on the `dark` class on <html>.
-  root.style.setProperty('--brand-bg-light', config.bg_color_light);
-  root.style.setProperty('--brand-bg-dark', config.bg_color_dark);
-  root.style.setProperty('--brand-surface-light', config.surface_color_light);
-  root.style.setProperty('--brand-surface-dark', config.surface_color_dark);
+  // .card. Sanitize before setProperty: the backend rejects non-hex on
+  // PATCH, but a corrupt-row fallback or a stale cached config could
+  // still ship garbage; setProperty silently accepts any string and the
+  // browser then drops the rule at paint time, so without this guard a
+  // bad value reads as "the new color I configured doesn't apply" with
+  // no error anywhere.
+  const setBg = (key: string, raw: string, fallback: string) => {
+    const sanitized = sanitizeHexColor(raw, fallback);
+    if (sanitized !== raw && import.meta.env.DEV) {
+      console.warn(`[branding] ${key} fell back from ${JSON.stringify(raw)} to ${fallback} (not a valid hex)`);
+    }
+    root.style.setProperty(key, sanitized);
+  };
+  setBg('--brand-bg-light', config.bg_color_light, DEFAULT_BG_LIGHT);
+  setBg('--brand-bg-dark', config.bg_color_dark, DEFAULT_BG_DARK);
+  setBg('--brand-surface-light', config.surface_color_light, DEFAULT_SURFACE_LIGHT);
+  setBg('--brand-surface-dark', config.surface_color_dark, DEFAULT_SURFACE_DARK);
 
   // Update document title
   if (config.company_name) {

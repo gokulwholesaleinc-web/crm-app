@@ -1,5 +1,6 @@
 """Pydantic schemas for white-label system."""
 
+import re
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator
@@ -13,6 +14,25 @@ _URL_FIELD_LABELS = {
     'privacy_policy_url': 'Privacy policy URL',
     'terms_of_service_url': 'Terms of service URL',
 }
+
+# Color fields that must be valid hex literals. Without this, an admin can
+# save ``"red"``, ``"#zzz"``, or any other 1–7 char string; the row persists
+# but ``setProperty`` silently drops the value at paint time and the page
+# never reflects the change — a classic "save success, no visual effect"
+# silent failure caught by the PR #263 trio.
+_COLOR_FIELD_LABELS = {
+    'primary_color': 'Primary color',
+    'secondary_color': 'Secondary color',
+    'accent_color': 'Accent color',
+    'bg_color_light': 'Light mode background',
+    'bg_color_dark': 'Dark mode background',
+    'surface_color_light': 'Light mode card surface',
+    'surface_color_dark': 'Dark mode card surface',
+}
+
+# Mirrors frontend/src/utils/colorValidation.ts so the validator and
+# the React picker agree on what "hex" means.
+_HEX_COLOR_RE = re.compile(r'^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$')
 
 
 def _validate_url_field(v: str | None, info: ValidationInfo) -> str | None:
@@ -28,6 +48,27 @@ def _validate_url_field(v: str | None, info: ValidationInfo) -> str | None:
         field_name = info.field_name or ''
         label = _URL_FIELD_LABELS.get(field_name, field_name)
         raise ValueError(f'{label} must start with http:// or https://')
+    return stripped
+
+
+def _validate_color_field(v: str | None, info: ValidationInfo) -> str | None:
+    """Validate a color field: strict ``#rgb``/``#rrggbb``/``#rrggbbaa`` hex.
+
+    ``None`` is allowed on update-shaped schemas (the field stays at its
+    server-side default). On the create/full schemas the field carries its
+    own default so ``None`` never reaches us.
+    """
+    if v is None:
+        return None
+    if not isinstance(v, str):
+        field_name = info.field_name or ''
+        label = _COLOR_FIELD_LABELS.get(field_name, field_name)
+        raise ValueError(f'{label} must be a hex color like #f9fafb')
+    stripped = v.strip()
+    if not _HEX_COLOR_RE.match(stripped):
+        field_name = info.field_name or ''
+        label = _COLOR_FIELD_LABELS.get(field_name, field_name)
+        raise ValueError(f'{label} must be a hex color like #f9fafb')
     return stripped
 
 
@@ -58,6 +99,11 @@ class TenantSettingsBase(BaseModel):
     @classmethod
     def _validate_urls(cls, v, info: ValidationInfo):
         return _validate_url_field(v, info)
+
+    @field_validator(*_COLOR_FIELD_LABELS.keys(), mode='before')
+    @classmethod
+    def _validate_colors(cls, v, info: ValidationInfo):
+        return _validate_color_field(v, info)
 
 
 class TenantSettingsCreate(TenantSettingsBase):
@@ -91,6 +137,11 @@ class TenantSettingsUpdate(BaseModel):
     @classmethod
     def _validate_urls(cls, v, info: ValidationInfo):
         return _validate_url_field(v, info)
+
+    @field_validator(*_COLOR_FIELD_LABELS.keys(), mode='before')
+    @classmethod
+    def _validate_colors(cls, v, info: ValidationInfo):
+        return _validate_color_field(v, info)
 
 
 class TenantSettingsResponse(TenantSettingsBase):

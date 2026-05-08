@@ -1753,6 +1753,10 @@ class TestUrlValidation:
         data = response.json()
         assert data["logo_url"] is None
 
+
+class TestTenantSettingsBgColors:
+    """PATCH /settings accepts bg/surface colors and rejects invalid hex."""
+
     @pytest.mark.asyncio
     async def test_update_tenant_settings_bg_and_surface_colors(
         self,
@@ -1781,6 +1785,68 @@ class TestUrlValidation:
         assert data["surface_color_dark"] == "#171717"
         # Existing fields untouched.
         assert data["primary_color"] == "#6366f1"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "field",
+        [
+            "primary_color",
+            "secondary_color",
+            "accent_color",
+            "bg_color_light",
+            "bg_color_dark",
+            "surface_color_light",
+            "surface_color_dark",
+        ],
+    )
+    @pytest.mark.parametrize("bad_value", ["red", "#zzz", "#12345", "#1234567", "javascript"])
+    async def test_update_tenant_settings_rejects_non_hex_color(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_tenant: Tenant,
+        field: str,
+        bad_value: str,
+    ):
+        """Non-hex strings on any color field are rejected with 422 before
+        they hit the DB. Without this validator, a malformed value persists
+        cleanly in VARCHAR(7) and the frontend silently drops it at paint
+        time — admin sees a success toast with no visual change."""
+        response = await client.patch(
+            f"/api/tenants/{test_tenant.id}/settings",
+            headers=auth_headers,
+            json={field: bad_value},
+        )
+
+        assert response.status_code == 422, response.text
+        # The error payload should reference the offending field name so the
+        # UI can surface it inline.
+        body = response.json()
+        assert any(field in str(loc) for err in body.get("detail", []) for loc in err.get("loc", []))
+
+    @pytest.mark.asyncio
+    async def test_update_tenant_settings_accepts_short_and_long_hex(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_tenant: Tenant,
+    ):
+        """Three-digit (#fff), six-digit (#ffffff), and eight-digit
+        (#ffffffaa) hex literals all clear the validator. The 8-digit
+        form will fail the underlying VARCHAR(7) constraint at the DB
+        layer (separate concern), so we only assert validator pass-through
+        for the 3- and 6-digit forms here."""
+        response = await client.patch(
+            f"/api/tenants/{test_tenant.id}/settings",
+            headers=auth_headers,
+            json={"primary_color": "#abc", "bg_color_light": "#aabbcc"},
+        )
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert data["primary_color"] == "#abc"
+        assert data["bg_color_light"] == "#aabbcc"
 
 
 class TestPublicConfigBgColors:

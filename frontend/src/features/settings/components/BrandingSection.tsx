@@ -138,6 +138,10 @@ interface ColorPickerProps {
 
 function ColorPicker({ field, label, value, onChange, hint }: ColorPickerProps) {
   const inputId = `branding-${field.replace(/_/g, '-')}`;
+  // Treat empty as "leave default" — only mark non-empty bad input as invalid
+  // so the field doesn't scream red the moment the user clears it.
+  const isInvalid = value.length > 0 && !isValidHexColor(value);
+  const errorId = `${inputId}-error`;
   return (
     <div>
       <label htmlFor={inputId} className="form-label">
@@ -148,21 +152,30 @@ function ColorPicker({ field, label, value, onChange, hint }: ColorPickerProps) 
           id={inputId}
           type="color"
           className="h-10 w-14 cursor-pointer rounded border border-gray-300 dark:border-gray-600"
-          value={value}
+          // <input type="color"> only accepts strict #rrggbb; feed it the
+          // backend default while the user is editing an invalid string so
+          // the swatch doesn't snap to black.
+          value={isInvalid ? COLOR_DEFAULTS[field] : value}
           onChange={(e) => onChange(e.target.value)}
         />
         <input
           type="text"
-          className="form-input flex-1"
+          className={`form-input flex-1 ${isInvalid ? 'border-red-500 dark:border-red-400 focus:ring-red-500 focus:border-red-500' : ''}`}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           aria-label={`${label} hex value`}
+          aria-invalid={isInvalid || undefined}
+          aria-describedby={isInvalid ? errorId : undefined}
           spellCheck={false}
           autoComplete="off"
           placeholder={COLOR_DEFAULTS[field]}
         />
       </div>
-      {hint ? (
+      {isInvalid ? (
+        <p id={errorId} className="mt-1 text-xs text-red-500 dark:text-red-400" aria-live="polite">
+          Invalid hex — must be #rgb, #rrggbb, or #rrggbbaa.
+        </p>
+      ) : hint ? (
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{hint}</p>
       ) : null}
     </div>
@@ -208,6 +221,18 @@ export function BrandingSection() {
 
   useUnsavedChangesWarning(isDirty);
 
+  // Block submission if any color field carries garbage. Backend rejects
+  // bad hex with a 422, but blocking here keeps the user in the editor
+  // with the offending field highlighted instead of bouncing through a
+  // toast and losing their other unsaved edits.
+  const invalidColorFields = useMemo<ColorField[]>(() => {
+    return (Object.keys(COLOR_DEFAULTS) as ColorField[]).filter((field) => {
+      const value = formData[field];
+      return value.length > 0 && !isValidHexColor(value);
+    });
+  }, [formData]);
+  const hasInvalidColor = invalidColorFields.length > 0;
+
   const startEditing = () => {
     setFormData(seededFromTenant);
     setLogoPreviewError(false);
@@ -243,6 +268,11 @@ export function BrandingSection() {
   });
 
   const handleSave = () => {
+    if (hasInvalidColor) {
+      const labels = invalidColorFields.map((f) => COLOR_LABELS[f]).join(', ');
+      toast.error(`Fix invalid hex in: ${labels}`);
+      return;
+    }
     // Strip empty strings so the backend keeps its defaults instead of
     // overwriting them with "". Object spread preserves explicit field
     // names for type-checking against TenantSettingsUpdate.
@@ -727,7 +757,8 @@ export function BrandingSection() {
                 variant="primary"
                 size="sm"
                 onClick={handleSave}
-                disabled={updateBranding.isPending}
+                disabled={updateBranding.isPending || hasInvalidColor}
+                title={hasInvalidColor ? 'Fix invalid hex colors before saving' : undefined}
               >
                 {updateBranding.isPending ? 'Saving...' : 'Save Branding'}
               </Button>
