@@ -317,26 +317,8 @@ async def sign_contract_public(
             detail=str(exc),
         ) from exc
 
-    if contract.owner_id:
-        signer_name = body.signer_name or "Someone"
-        try:
-            from src.notifications.service import NotificationService
-            notif_service = NotificationService(db)
-            await notif_service.create_notification(
-                user_id=contract.owner_id,
-                type="contract_signed",
-                title=f"Your contract was signed by {signer_name}",
-                message=f"Contract was signed by {signer_name}",
-                entity_type="contracts",
-                entity_id=contract.id,
-            )
-        except Exception:
-            # Notification is a side-effect; never roll back a successful signature.
-            logger.exception(
-                "contract_signed notification failed for contract_id=%s owner_id=%s",
-                contract.id,
-                contract.owner_id,
-            )
+    # contract_signed notification + email is dispatched by ContractService.sign_contract
+    # via notify_on_contract_signed (matrix-gated). Don't double-fire from the router.
 
     # Audit row for the sign event. user_id=None marks a public-token
     # action — the audit log shouldn't misattribute it to a CRM user.
