@@ -335,7 +335,8 @@ class TestProposalSignedNotification:
         )
         notif = result.scalar_one_or_none()
         assert notif is not None
-        assert "Jane Customer" in notif.title
+        assert notif.title == "Proposal signed"
+        assert "Jane Customer" in notif.message
         assert notif.entity_type == "proposals"
         assert notif.entity_id == proposal.id
 
@@ -433,7 +434,8 @@ class TestContractSignedNotification:
         )
         notif = result.scalar_one_or_none()
         assert notif is not None
-        assert "Bob Signer" in notif.title
+        assert notif.title == "Contract signed"
+        assert "Bob Signer" in notif.message
         assert notif.entity_type == "contracts"
         assert notif.entity_id == contract.id
 
