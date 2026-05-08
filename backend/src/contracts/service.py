@@ -635,7 +635,7 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
         email_service = EmailService(self.db)
         await email_service.queue_email(
             to_email=signer_email,
-            subject=f"Signed copy — {contract.title}",
+            subject=subject,
             body=body,
             sent_by_id=owner_id,
             entity_type=ENTITY_TYPE_CONTRACTS,

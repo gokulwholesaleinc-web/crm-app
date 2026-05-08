@@ -21,6 +21,19 @@ def _frontend_url() -> str:
     return os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 
+def _deep_link(entity_type: str, entity_id: int, *, suffix: str = "") -> str:
+    """Build a CRM-frontend deep link for the given entity row.
+
+    Accepts either a bare entity slug (``leads``) or a leading-slash
+    path (``/contacts``) — necessary because the existing dispatchers
+    are called with both shapes from different parts of the codebase.
+    ``suffix`` is appended verbatim (e.g. ``?tab=email``) for callers
+    that need a query string or hash fragment.
+    """
+    segment = entity_type if entity_type.startswith("/") else f"/{entity_type}"
+    return f"{_frontend_url()}{segment}/{entity_id}{suffix}"
+
+
 async def _user_email(db: AsyncSession, user_id: int) -> str | None:
     """Look up an authenticated user's primary email.
 
@@ -234,8 +247,7 @@ async def notify_on_assignment(
         )
 
         branding = await TenantBrandingHelper.get_branding_for_user(db, user_id)
-        path_segment = entity_type if entity_type.startswith("/") else f"/{entity_type}"
-        deep_link = f"{_frontend_url()}{path_segment}/{entity_id}"
+        deep_link = _deep_link(entity_type, entity_id)
         subject, body = render_lead_assigned_email(
             branding,
             {
@@ -325,8 +337,7 @@ async def notify_on_mention(
         branding = await TenantBrandingHelper.get_branding_for_user(
             db, mentioned_user_id,
         )
-        path_segment = entity_type if entity_type.startswith("/") else f"/{entity_type}"
-        deep_link = f"{_frontend_url()}{path_segment}/{entity_id}"
+        deep_link = _deep_link(entity_type, entity_id)
         subject, body = render_mention_email(
             branding,
             {
@@ -382,7 +393,7 @@ async def notify_on_activity_due(
         )
 
         branding = await TenantBrandingHelper.get_branding_for_user(db, user_id)
-        deep_link = f"{_frontend_url()}/activities/{activity_id}"
+        deep_link = _deep_link("activities", activity_id)
         subject, body = render_task_due_email(
             branding,
             {
@@ -447,7 +458,7 @@ async def notify_on_email_reply_received(
         branding = await TenantBrandingHelper.get_branding_for_user(
             db, recipient_user_id,
         )
-        deep_link = f"{_frontend_url()}/contacts/{contact_id}?tab=email"
+        deep_link = _deep_link("contacts", contact_id, suffix="?tab=email")
         subject, body = render_email_reply_email(
             branding,
             {
@@ -504,7 +515,7 @@ async def notify_on_proposal_signed(
         )
 
         branding = await TenantBrandingHelper.get_branding_for_user(db, owner_id)
-        deep_link = f"{_frontend_url()}/proposals/{proposal_id}"
+        deep_link = _deep_link("proposals", proposal_id)
         subject, body = render_proposal_signed_email(
             branding,
             {
@@ -560,7 +571,7 @@ async def notify_on_contract_signed(
         )
 
         branding = await TenantBrandingHelper.get_branding_for_user(db, owner_id)
-        deep_link = f"{_frontend_url()}/contracts/{contract_id}"
+        deep_link = _deep_link("contracts", contract_id)
         subject, body = render_contract_signed_email(
             branding,
             {

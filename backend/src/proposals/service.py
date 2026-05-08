@@ -418,19 +418,30 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
 
         await self._maybe_spawn_billing(proposal)
 
-        try:
+        # Owner-side proposal_signed notification — matrix-gated; signer
+        # already received their always-on signed copy above. Import is
+        # outside the try so an ImportError surfaces loudly rather than
+        # masquerading as a runtime swallow.
+        if proposal.owner_id:
             from src.notifications.service import notify_on_proposal_signed
-            if proposal.owner_id:
+
+            try:
                 await notify_on_proposal_signed(
                     db=self.db,
                     owner_id=proposal.owner_id,
                     proposal_id=proposal.id,
                     proposal_title=proposal.title,
                     signer_name=proposal.signer_name,
-                    signed_at=proposal.signed_at.strftime("%B %d, %Y · %H:%M UTC") if proposal.signed_at else None,
+                    signed_at=(
+                        proposal.signed_at.strftime("%B %d, %Y · %H:%M UTC")
+                        if proposal.signed_at
+                        else None
+                    ),
                 )
-        except Exception:
-            logger.exception("proposal_signed notify failed for proposal %s", proposal.id)
+            except Exception:
+                logger.exception(
+                    "proposal_signed notify failed for proposal %s", proposal.id,
+                )
 
         await self.db.refresh(proposal)
         return proposal
