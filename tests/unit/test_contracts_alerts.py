@@ -8,7 +8,6 @@ from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.account.models import UserNotificationPrefs
 from src.contracts.models import Contract
 from src.contracts.scheduler import ContractLifecycleService
@@ -164,6 +163,15 @@ class TestExpiringAlert:
         test_user.email = "owner2@example.com"
         await db_session.flush()
 
+        prefs = UserNotificationPrefs(
+            user_id=test_user.id,
+            in_app_enabled=True,
+            email_enabled=True,
+            event_matrix={"contract_expiring": {"in_app": True, "email": True}},
+        )
+        db_session.add(prefs)
+        await db_session.flush()
+
         contract = _make_contract(
             db_session,
             test_user,
@@ -195,6 +203,15 @@ class TestExpiringAlert:
     ):
         """Alert re-fires when expiring_notified_at is more than 30 days ago."""
         test_user.email = "owner3@example.com"
+        await db_session.flush()
+
+        prefs = UserNotificationPrefs(
+            user_id=test_user.id,
+            in_app_enabled=True,
+            email_enabled=True,
+            event_matrix={"contract_expiring": {"in_app": True, "email": True}},
+        )
+        db_session.add(prefs)
         await db_session.flush()
 
         old_notify = datetime.now(UTC) - timedelta(days=31)
@@ -325,7 +342,9 @@ class TestChannelAwareCooldown:
         test_user.email = "owner-cooldown@example.com"
         prefs = UserNotificationPrefs(
             user_id=test_user.id,
-            event_matrix={"contract_expiring": {"email": False}},
+            in_app_enabled=True,
+            email_enabled=False,
+            event_matrix={"contract_expiring": {"in_app": True, "email": False}},
         )
         db_session.add(prefs)
         await db_session.flush()
@@ -365,7 +384,9 @@ class TestChannelAwareCooldown:
         test_user.email = "owner-flip@example.com"
         prefs = UserNotificationPrefs(
             user_id=test_user.id,
-            event_matrix={"contract_expiring": {"email": False}},
+            in_app_enabled=True,
+            email_enabled=False,
+            event_matrix={"contract_expiring": {"in_app": True, "email": False}},
         )
         db_session.add(prefs)
         await db_session.flush()
@@ -389,7 +410,8 @@ class TestChannelAwareCooldown:
         assert contract.expiring_email_notified_at is None
 
         # User re-enables email for contract_expiring.
-        prefs.event_matrix = {"contract_expiring": {"email": True}}
+        prefs.email_enabled = True
+        prefs.event_matrix = {"contract_expiring": {"in_app": True, "email": True}}
         await db_session.flush()
         # JSON column isn't wrapped in MutableDict on this model, so a
         # whole-value rebind is enough in practice — flag_modified is
@@ -433,6 +455,15 @@ class TestChannelAwareCooldown:
     ):
         """Default prefs (both channels allowed) → both columns stamped."""
         test_user.email = "owner-both@example.com"
+        await db_session.flush()
+
+        prefs = UserNotificationPrefs(
+            user_id=test_user.id,
+            in_app_enabled=True,
+            email_enabled=True,
+            event_matrix={"contract_expiring": {"in_app": True, "email": True}},
+        )
+        db_session.add(prefs)
         await db_session.flush()
 
         contract = _make_contract(
