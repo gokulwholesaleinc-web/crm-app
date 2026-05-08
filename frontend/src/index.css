@@ -80,6 +80,25 @@
 
 /* Component styles */
 @layer components {
+  /* Tenant-themed background utilities. Use these instead of
+     `bg-gray-50 dark:bg-gray-900` (page) or `bg-white dark:bg-gray-800`
+     (surface/cards/sidebar/header) so the admin's branding choices
+     actually reach the chrome — Tailwind's gray utilities have higher
+     specificity than the body-level CSS var rule and would otherwise
+     paint over it. */
+  .bg-brand-page {
+    background-color: var(--brand-bg-light);
+  }
+  .dark .bg-brand-page {
+    background-color: var(--brand-bg-dark);
+  }
+  .bg-brand-surface {
+    background-color: var(--brand-surface-light);
+  }
+  .dark .bg-brand-surface {
+    background-color: var(--brand-surface-dark);
+  }
+
   /* Card component — surface color follows tenant branding */
   .card {
     @apply rounded-lg shadow-sm border border-gray-200 dark:border-gray-700;

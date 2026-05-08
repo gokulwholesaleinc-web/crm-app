@@ -273,7 +273,7 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
   return (
     <aside
       className={clsx(
-        'flex flex-col h-full bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-[width] duration-200',
+        'flex flex-col h-full bg-brand-surface border-r border-gray-200 dark:border-gray-700 transition-[width] duration-200',
         collapsed ? 'w-16' : 'w-64',
         className
       )}

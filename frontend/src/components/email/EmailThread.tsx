@@ -5,7 +5,12 @@ import { useEmailThread } from '../../hooks/useEmail';
 import type { ThreadEmailItem } from '../../types/email';
 import { EmailSearchModal } from './EmailSearchModal';
 import type { BadgeVariant } from '../ui/Badge';
-import { trimQuotedHtml, trimQuotedText } from '../../utils/emailBodyTrim';
+import {
+  trimQuotedHtml,
+  trimQuotedText,
+  trimToggleLabel,
+  type TrimResult,
+} from '../../utils/emailBodyTrim';
 
 // Force all sanitized anchors to open safely in a new tab.
 // Registered once at module scope so it runs only on first import.
@@ -151,24 +156,28 @@ function EmailBubble({
   const hasBody = Boolean(email.body_html || bodyContent);
   const rawHtml = email.body_html || (looksLikeHtml(bodyContent) ? bodyContent : null);
 
-  // Trim signatures + quoted reply history. The thread view already
-  // groups messages chronologically, so quoted history is duplication
-  // and signatures render poorly without inline `style` (which we strip
-  // for security). Cut at explicit Gmail/Outlook/Apple-Mail markers
-  // only — never guess at unmarked boundaries.
+  // Trim signatures + quoted reply history from inbound bodies. The
+  // thread view already groups messages chronologically, so quoted
+  // history is duplication and signatures render poorly without inline
+  // `style` (which we strip for security). Cut at explicit Gmail/
+  // Outlook/Apple-Mail markers only — never guess at unmarked
+  // boundaries. Outbound emails are our own branded HTML — never trim
+  // them; a future template could legitimately contain a testimonial
+  // <blockquote type="cite"> we'd otherwise erase silently.
   const [showOriginal, setShowOriginal] = useState(false);
-  const htmlTrim = useMemo(() => (rawHtml ? trimQuotedHtml(rawHtml) : null), [rawHtml]);
-  const textTrim = useMemo(
-    () => (rawHtml ? null : trimQuotedText(bodyContent)),
-    [rawHtml, bodyContent],
-  );
-  const wasTrimmed = Boolean(htmlTrim?.trimmed || textTrim?.trimmed);
-  const renderableHtml = rawHtml ? (showOriginal ? rawHtml : htmlTrim?.body ?? rawHtml) : null;
-  const renderableText = rawHtml
-    ? bodyContent
-    : showOriginal
-      ? bodyContent
-      : textTrim?.body ?? bodyContent;
+  const trim = useMemo<TrimResult>(() => {
+    if (isOutbound) return { body: rawHtml ?? bodyContent, trimmed: false, cut: 'none' };
+    try {
+      return rawHtml ? trimQuotedHtml(rawHtml) : trimQuotedText(bodyContent);
+    } catch {
+      // DOMParser is lenient and querySelector is well-trodden, but
+      // exotic input shouldn't crash the entire thread view. Fall back
+      // to the un-trimmed body so the user still sees the email.
+      return { body: rawHtml ?? bodyContent, trimmed: false, cut: 'none' };
+    }
+  }, [isOutbound, rawHtml, bodyContent]);
+  const renderableHtml = rawHtml ? (showOriginal ? rawHtml : trim.body) : null;
+  const renderableText = rawHtml ? bodyContent : showOriginal ? bodyContent : trim.body;
   // click_count may not yet exist on older records; safe-access via cast
   const clickCount = (email as ThreadEmailItem & { click_count?: number | null }).click_count;
   // `kind:id` matches the EmailSearchModal deep-link format so the
@@ -242,7 +251,7 @@ function EmailBubble({
             ) : (
               renderableText
             )}
-            {wasTrimmed && (
+            {trim.trimmed && (
               <button
                 type="button"
                 onClick={() => setShowOriginal((prev) => !prev)}
@@ -253,7 +262,7 @@ function EmailBubble({
                 }`}
                 aria-expanded={showOriginal}
               >
-                {showOriginal ? 'Hide quoted history' : 'Show quoted history & signature'}
+                {trimToggleLabel(trim.cut, showOriginal)}
               </button>
             )}
           </div>

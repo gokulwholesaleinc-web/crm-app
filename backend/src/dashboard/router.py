@@ -202,7 +202,10 @@ async def get_sales_kpis(
         select(func.count(Proposal.id)).where(*proposals_filters)
     )
 
-    payments_filters = [Payment.status == "succeeded"]
+    payments_filters = [
+        Payment.status == "succeeded",
+        Payment.owner_id == current_user.id,
+    ]
     if parsed_from:
         payments_filters.append(Payment.created_at >= datetime.combine(parsed_from, datetime.min.time()))
     if parsed_to:

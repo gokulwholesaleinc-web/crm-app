@@ -15,45 +15,69 @@
  * marked* boundaries from the major mail clients (Gmail, Outlook, Apple
  * Mail). Unmarked signatures pass through untouched; better to over-show
  * than to truncate a real message body.
- *
- * Returns the trimmed body and a flag so callers can render a
- * "Show original" affordance.
  */
 
 export interface TrimResult {
   body: string;
   trimmed: boolean;
+  /** What the trimmer cut. Lets the caller render an accurate label. */
+  cut: TrimCut;
 }
 
-/**
- * Selectors whose matching elements (and everything after them) are
- * dropped from the rendered HTML. Order doesn't matter — we cut at the
- * earliest match to avoid keeping the signature when only the quote was
- * marked.
- */
-const HTML_CUT_SELECTORS = [
-  // Gmail web compose — quoted reply history
+export type TrimCut = 'none' | 'quote' | 'signature' | 'both';
+
+/** Selectors that mark quoted reply history. */
+const QUOTE_SELECTORS = [
   'div.gmail_quote',
   'blockquote.gmail_quote',
-  // Gmail signature — explicit marker, otherwise we'd never know
-  'div.gmail_signature',
-  '[data-smartmail="gmail_signature"]',
-  // Apple Mail / generic — quoted reply
   'blockquote[type="cite"]',
-  // Outlook web — divider above quoted history
   'div#divRplyFwdMsg',
   'div#x_divRplyFwdMsg',
-  // Outlook desktop — "From: ... Sent: ..." header marker
   'div.OutlookMessageHeader',
 ];
 
-/** Remove every later sibling of `node` from its parent. */
-function removeFollowing(node: Node): void {
-  let next: Node | null = node.nextSibling;
-  while (next) {
-    const after = next.nextSibling;
-    next.parentNode?.removeChild(next);
-    next = after;
+/** Selectors that mark explicit signature wrappers. */
+const SIGNATURE_SELECTORS = [
+  'div.gmail_signature',
+  '[data-smartmail="gmail_signature"]',
+];
+
+/**
+ * Cut a node and everything that follows it (within `<body>`) using the
+ * Range API. The Range correctly preserves any wrapping ancestors that
+ * contain legitimate content before the marker — Gmail wraps both the
+ * new message and the quote in a single `<div dir="ltr">`, and a naive
+ * "remove cursor and walk up" would erase that wrapper. Returns true if
+ * a cut happened.
+ */
+function cutFromHere(doc: Document, node: Element): boolean {
+  const body = doc.body;
+  if (!body || !body.lastChild) return false;
+  const range = doc.createRange();
+  range.setStartBefore(node);
+  range.setEndAfter(body.lastChild);
+  range.deleteContents();
+  return true;
+}
+
+/**
+ * After cutting, the previous-sibling chain often ends with a stray
+ * Outlook `<hr>` divider, a trailing `<br>`, or pure-whitespace text
+ * nodes. They visually orphan once the content beneath them is gone.
+ * Walk back from `<body>`'s last child and drop them.
+ */
+function trimDanglingTrailers(body: HTMLElement): void {
+  let last = body.lastChild;
+  while (last) {
+    const isWhitespaceText =
+      last.nodeType === 3 /* TEXT_NODE */ && (last.textContent ?? '').trim() === '';
+    const isOrphanRule =
+      last.nodeType === 1 /* ELEMENT_NODE */ &&
+      ['HR', 'BR'].includes((last as Element).tagName);
+    if (!isWhitespaceText && !isOrphanRule) break;
+    const prev = last.previousSibling;
+    last.parentNode?.removeChild(last);
+    last = prev;
   }
 }
 
@@ -67,57 +91,52 @@ function removeFollowing(node: Node): void {
  * so the difference is invisible to the user.
  */
 export function trimQuotedHtml(html: string): TrimResult {
-  if (!html) return { body: html, trimmed: false };
+  if (!html) return { body: html, trimmed: false, cut: 'none' };
 
   // SSR / non-browser: no DOMParser. Skip — better than crashing.
-  if (typeof DOMParser === 'undefined') return { body: html, trimmed: false };
-
-  const doc = new DOMParser().parseFromString(html, 'text/html');
-  let trimmed = false;
-
-  // Gmail wraps replies in <blockquote>. Cut the *first* matching element
-  // and every later sibling at every ancestor level, since the quoted
-  // block is usually a single child of <body>.
-  for (const selector of HTML_CUT_SELECTORS) {
-    const node = doc.body.querySelector(selector);
-    if (!node) continue;
-
-    trimmed = true;
-
-    // Cut the marker + everything that follows it within its parent,
-    // then walk up and cut every later sibling at each ancestor up to
-    // (but not including) <body>. Removing the ancestors themselves
-    // would wipe legitimate new content that lives in the same wrapper
-    // — Gmail emits `<div dir="ltr">new text<br><div class="gmail_quote">…</div></div>`.
-    const markerParent: Node | null = node.parentNode;
-    removeFollowing(node);
-    node.parentNode?.removeChild(node);
-
-    let cursor: Node | null = markerParent;
-    while (cursor && cursor !== doc.body) {
-      removeFollowing(cursor);
-      cursor = cursor.parentNode;
-    }
+  if (typeof DOMParser === 'undefined') {
+    return { body: html, trimmed: false, cut: 'none' };
   }
 
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+
+  // Snapshot whether each marker type *existed in the original tree*,
+  // before any cut. If the quote sits before the signature, the first
+  // cut takes both with it — but the user will see both restored on
+  // toggle, so the label should be 'both'.
+  const hadQuote = QUOTE_SELECTORS.some((s) => doc.body.querySelector(s) !== null);
+  const hadSig = SIGNATURE_SELECTORS.some((s) => doc.body.querySelector(s) !== null);
+
+  let didCut = false;
+  for (const selector of [...QUOTE_SELECTORS, ...SIGNATURE_SELECTORS]) {
+    const node = doc.body.querySelector(selector);
+    if (!node) continue;
+    if (cutFromHere(doc, node)) didCut = true;
+  }
+
+  if (didCut) trimDanglingTrailers(doc.body);
+
+  const cut: TrimCut =
+    hadQuote && hadSig ? 'both' : hadQuote ? 'quote' : hadSig ? 'signature' : 'none';
+
   return {
-    body: trimmed ? doc.body.innerHTML : html,
-    trimmed,
+    body: didCut ? doc.body.innerHTML : html,
+    trimmed: didCut,
+    cut,
   };
 }
 
 /**
  * Trim a plain-text email body. RFC 3676 says a "-- " line on its own
- * ends the message; Gmail/Outlook also plant an "On <date>, X wrote:"
- * line immediately above the quoted reply.
+ * ends the message (signature); Gmail/Outlook also plant an
+ * "On <date>, X wrote:" line above the quoted reply.
  */
 export function trimQuotedText(text: string): TrimResult {
-  if (!text) return { body: text, trimmed: false };
+  if (!text) return { body: text, trimmed: false, cut: 'none' };
 
   const lines = text.split('\n');
-
-  // Find the earliest cut point.
   let cutAt = -1;
+  let cut: TrimCut = 'none';
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] ?? '';
@@ -125,6 +144,7 @@ export function trimQuotedText(text: string): TrimResult {
     // RFC 3676 signature delimiter: "-- " (with trailing space) on its own.
     if (line === '-- ' || line === '--') {
       cutAt = i;
+      cut = 'signature';
       break;
     }
 
@@ -133,6 +153,7 @@ export function trimQuotedText(text: string): TrimResult {
     // ("Last week I wrote my report.") don't trip the cut.
     if (/^\s*On\s+.+\s+wrote:\s*$/.test(line)) {
       cutAt = i;
+      cut = 'quote';
       break;
     }
 
@@ -140,11 +161,12 @@ export function trimQuotedText(text: string): TrimResult {
     const nextLine = lines[i + 1] ?? '';
     if (/^From:\s/.test(line) && /^Sent:\s|^Date:\s/.test(nextLine)) {
       cutAt = i;
+      cut = 'quote';
       break;
     }
   }
 
-  if (cutAt === -1) return { body: text, trimmed: false };
+  if (cutAt === -1) return { body: text, trimmed: false, cut: 'none' };
 
   // Strip trailing whitespace lines from the kept portion.
   let end = cutAt;
@@ -153,5 +175,18 @@ export function trimQuotedText(text: string): TrimResult {
   return {
     body: lines.slice(0, end).join('\n'),
     trimmed: true,
+    cut,
   };
+}
+
+/** Localized button label that names what was actually trimmed. */
+export function trimToggleLabel(cut: TrimCut, expanded: boolean): string {
+  if (cut === 'none') return '';
+  const noun =
+    cut === 'both'
+      ? 'quoted history & signature'
+      : cut === 'quote'
+        ? 'quoted history'
+        : 'signature';
+  return expanded ? `Hide ${noun}` : `Show ${noun}`;
 }
