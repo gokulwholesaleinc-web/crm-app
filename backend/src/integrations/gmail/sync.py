@@ -434,6 +434,43 @@ async def _store_inbound(
     db.add(row)
     await db.flush()
 
+    # Notify the contact owner when this is a reply to a thread we're on.
+    if (
+        entity_type == "contacts"
+        and entity_id is not None
+        and msg.get("in_reply_to")
+    ):
+        from src.contacts.models import Contact as _Contact
+        from src.notifications.service import notify_on_email_reply_received
+
+        owner_result = await db.execute(
+            select(_Contact.owner_id).where(_Contact.id == entity_id)
+        )
+        owner_id = owner_result.scalar_one_or_none()
+        if owner_id is not None:
+            try:
+                await notify_on_email_reply_received(
+                    db=db,
+                    recipient_user_id=owner_id,
+                    contact_id=entity_id,
+                    sender_email=from_addr,
+                    sender_name=_parse_name_from(msg["from"]),
+                    subject_line=msg.get("subject") or "",
+                    snippet=msg.get("body_text") or msg.get("body_html") or "",
+                )
+            except Exception:
+                logger.exception(
+                    "notify_on_email_reply_received failed for inbound %s",
+                    row.id,
+                )
+
+
+def _parse_name_from(addr_header: str) -> str:
+    """Extract display name from 'Name <email>' format; return '' for bare addresses."""
+    import re
+    m = re.match(r"^\s*(.+?)\s*<[^>]+>\s*$", addr_header or "")
+    return m.group(1).strip() if m else ""
+
 
 def _collect_recipients(msg: dict) -> list[str]:
     """Aggregate every address on a parsed Gmail message for contact match.
