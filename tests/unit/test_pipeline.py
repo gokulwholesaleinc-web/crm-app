@@ -211,6 +211,7 @@ class TestSalesKPIsEndpoint:
             status="succeeded",
             stripe_payment_intent_id="pi_test_001",
             customer_id=customer.id,
+            owner_id=test_user.id,
         )
         db_session.add(payment1)
 
@@ -220,6 +221,7 @@ class TestSalesKPIsEndpoint:
             status="succeeded",
             stripe_payment_intent_id="pi_test_002",
             customer_id=customer.id,
+            owner_id=test_user.id,
         )
         db_session.add(payment2)
 
@@ -230,6 +232,7 @@ class TestSalesKPIsEndpoint:
             status="failed",
             stripe_payment_intent_id="pi_test_003",
             customer_id=customer.id,
+            owner_id=test_user.id,
         )
         db_session.add(payment_failed)
 
