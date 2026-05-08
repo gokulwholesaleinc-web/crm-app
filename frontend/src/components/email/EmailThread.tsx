@@ -5,6 +5,7 @@ import { useEmailThread } from '../../hooks/useEmail';
 import type { ThreadEmailItem } from '../../types/email';
 import { EmailSearchModal } from './EmailSearchModal';
 import type { BadgeVariant } from '../ui/Badge';
+import { trimQuotedHtml, trimQuotedText } from '../../utils/emailBodyTrim';
 
 // Force all sanitized anchors to open safely in a new tab.
 // Registered once at module scope so it runs only on first import.
@@ -148,7 +149,26 @@ function EmailBubble({
   const badge = STATUS_BADGE[status] ?? { variant: 'gray' as BadgeVariant, label: status };
   const bodyContent = email.body || '';
   const hasBody = Boolean(email.body_html || bodyContent);
-  const renderableHtml = email.body_html || (looksLikeHtml(bodyContent) ? bodyContent : null);
+  const rawHtml = email.body_html || (looksLikeHtml(bodyContent) ? bodyContent : null);
+
+  // Trim signatures + quoted reply history. The thread view already
+  // groups messages chronologically, so quoted history is duplication
+  // and signatures render poorly without inline `style` (which we strip
+  // for security). Cut at explicit Gmail/Outlook/Apple-Mail markers
+  // only — never guess at unmarked boundaries.
+  const [showOriginal, setShowOriginal] = useState(false);
+  const htmlTrim = useMemo(() => (rawHtml ? trimQuotedHtml(rawHtml) : null), [rawHtml]);
+  const textTrim = useMemo(
+    () => (rawHtml ? null : trimQuotedText(bodyContent)),
+    [rawHtml, bodyContent],
+  );
+  const wasTrimmed = Boolean(htmlTrim?.trimmed || textTrim?.trimmed);
+  const renderableHtml = rawHtml ? (showOriginal ? rawHtml : htmlTrim?.body ?? rawHtml) : null;
+  const renderableText = rawHtml
+    ? bodyContent
+    : showOriginal
+      ? bodyContent
+      : textTrim?.body ?? bodyContent;
   // click_count may not yet exist on older records; safe-access via cast
   const clickCount = (email as ThreadEmailItem & { click_count?: number | null }).click_count;
   // `kind:id` matches the EmailSearchModal deep-link format so the
@@ -220,7 +240,21 @@ function EmailBubble({
                 }}
               />
             ) : (
-              bodyContent
+              renderableText
+            )}
+            {wasTrimmed && (
+              <button
+                type="button"
+                onClick={() => setShowOriginal((prev) => !prev)}
+                className={`mt-2 inline-flex items-center text-xs font-medium focus-visible:outline-none focus-visible:underline ${
+                  isOutbound
+                    ? 'text-white/80 hover:text-white'
+                    : 'text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300'
+                }`}
+                aria-expanded={showOriginal}
+              >
+                {showOriginal ? 'Hide quoted history' : 'Show quoted history & signature'}
+              </button>
             )}
           </div>
         )}
