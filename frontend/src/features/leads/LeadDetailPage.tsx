@@ -14,6 +14,7 @@ import { getStatusBadgeClasses, formatStatusLabel, getScoreColor } from '../../u
 import { showError } from '../../utils/toast';
 import { formatDate, formatPhoneNumber } from '../../utils/formatters';
 import { useLead, useDeleteLead, useConvertLead, useUpdateLead } from '../../hooks/useLeads';
+import { useAuthStore } from '../../store/authStore';
 import type { LeadUpdate } from '../../types';
 import clsx from 'clsx';
 
@@ -56,6 +57,7 @@ function LeadDetailPage() {
   const deleteLeadMutation = useDeleteLead();
   const convertLeadMutation = useConvertLead();
   const updateLeadMutation = useUpdateLead();
+  const currentUser = useAuthStore((s) => s.user);
 
   const handleEditSubmit = async (data: LeadFormData) => {
     if (!leadId) return;
@@ -175,6 +177,13 @@ function LeadDetailPage() {
   // user run conversion now and re-enable the Convert button below.
   const isOrphanConverted =
     lead.status === 'converted' && !lead.converted_contact_id;
+
+  const canManageSharing =
+    !!currentUser &&
+    (currentUser.id === lead.owner_id ||
+      currentUser.is_superuser ||
+      currentUser.role === 'admin' ||
+      currentUser.role === 'manager');
 
   return (
     <div className="space-y-6">
@@ -428,6 +437,7 @@ function LeadDetailPage() {
             entityType="leads"
             entityId={leadId}
             enabledTabs={['notes', 'attachments', 'history', 'sharing']}
+            canManage={canManageSharing}
           />
           {activeTab === 'comments' && (
             <Suspense fallback={<SuspenseFallback />}>

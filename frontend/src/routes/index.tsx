@@ -95,6 +95,7 @@ const OAuthCallbackPage = lazy(() => import('../features/settings/OAuthCallbackP
 // Admin
 const AdminDashboardPage = lazy(() => import('../features/admin/AdminDashboard'));
 const UserApprovalsPage = lazy(() => import('../features/admin/UserApprovalsPage'));
+const AdminSharingPage = lazy(() => import('../features/admin/AdminSharingPage'));
 
 // Help
 const HelpPage = lazy(() => import('../features/help/HelpPage'));
@@ -427,6 +428,16 @@ function AppRoutes() {
           <PrivateRoute>
             <ErrorBoundary>
               <UserApprovalsPage />
+            </ErrorBoundary>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/admin/sharing"
+        element={
+          <PrivateRoute>
+            <ErrorBoundary>
+              <AdminSharingPage />
             </ErrorBoundary>
           </PrivateRoute>
         }

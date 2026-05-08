@@ -3,7 +3,7 @@
 import logging
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
 
 from src.assignment.service import AssignmentDecision, AssignmentService
@@ -64,10 +64,18 @@ class LeadService(
         tag_ids: list[int] | None = None,
         filters: dict[str, Any] | None = None,
         shared_entity_ids: list[int] | None = None,
+        assignee_entity_ids: list[int] | None = None,
         order_by: str | None = None,
         order_dir: str | None = None,
     ) -> tuple[list[Lead], int]:
-        """Get paginated list of leads with filters."""
+        """Get paginated list of leads with filters.
+
+        When ``owner_id`` is set, the result includes records owned by that
+        user plus any records in ``shared_entity_ids`` or
+        ``assignee_entity_ids``. ``assignee_entity_ids`` is a distinct
+        parameter so callers that bypass DataScope can OR in just the
+        assignee shares without rebuilding the full shared-entity map.
+        """
         query = select(Lead).options(selectinload(Lead.source))
 
         if filters:
@@ -88,7 +96,15 @@ class LeadService(
         if source_id:
             query = query.where(Lead.source_id == source_id)
 
-        query = self.apply_owner_filter(query, owner_id, shared_entity_ids)
+        if owner_id is not None:
+            or_clauses = [Lead.owner_id == owner_id]
+            if shared_entity_ids:
+                or_clauses.append(Lead.id.in_(shared_entity_ids))
+            if assignee_entity_ids:
+                or_clauses.append(Lead.id.in_(assignee_entity_ids))
+            query = query.where(or_(*or_clauses))
+        else:
+            query = self.apply_owner_filter(query, owner_id, shared_entity_ids)
 
         if min_score is not None:
             query = query.where(Lead.score >= min_score)
@@ -103,6 +119,19 @@ class LeadService(
             default=[Lead.score.desc(), Lead.id.desc()],
         )
         return await self.paginate_query(query, page, page_size, order_by=order_clauses)
+
+    async def get_assignee_entity_ids(self, user_id: int) -> list[int]:
+        """Return lead IDs where this user holds an 'assignee' share."""
+        from src.core.models import EntityShare
+
+        result = await self.db.execute(
+            select(EntityShare.entity_id).where(
+                EntityShare.shared_with_user_id == user_id,
+                EntityShare.entity_type == ENTITY_TYPE_LEADS,
+                EntityShare.permission_level == "assignee",
+            )
+        )
+        return list(result.scalars().all())
 
     async def create(self, data: LeadCreate, user_id: int) -> Lead:
         """Create a new lead with auto-scoring.

@@ -15,6 +15,7 @@ import {
   type ContactFormData,
 } from './components/contactFormHelpers';
 import { useContact, useDeleteContact, useUpdateContact } from '../../hooks/useContacts';
+import { useAuthStore } from '../../store/authStore';
 import { useContactAliases, useAddAlias, useDeleteAlias } from '../../hooks/useContactAliases';
 import { showSuccess, showError } from '../../utils/toast';
 import { useQuotes } from '../../hooks/useQuotes';
@@ -104,6 +105,7 @@ function ContactDetailPage() {
   const { data: subscriptionsData } = useSubscriptions(
     contactId ? { contact_id: contactId, status: 'active', page_size: 1 } : undefined
   );
+  const currentUser = useAuthStore((s) => s.user);
   const quotes = quotesData?.items ?? [];
   const proposals = proposalsData?.items ?? [];
   const hasActiveSubscription = (subscriptionsData?.total ?? 0) > 0;
@@ -171,6 +173,13 @@ function ContactDetailPage() {
       </div>
     );
   }
+
+  const canManageSharing =
+    !!currentUser &&
+    (currentUser.id === contact.owner_id ||
+      currentUser.is_superuser ||
+      currentUser.role === 'admin' ||
+      currentUser.role === 'manager');
 
   return (
     <div className="space-y-6">
@@ -574,6 +583,7 @@ function ContactDetailPage() {
           entityType="contacts"
           entityId={contactId}
           enabledTabs={['notes', 'attachments', 'history', 'sharing']}
+          canManage={canManageSharing}
         />
       )}
 

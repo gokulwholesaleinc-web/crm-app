@@ -9,8 +9,12 @@ import {
   TrashIcon,
 } from '@heroicons/react/24/outline';
 import { Button, Modal, ConfirmDialog } from '../../components/ui';
+import { SearchableSelect } from '../../components/ui/SearchableSelect';
 import { StickyActionBar } from '../../components/shared/StickyActionBar';
 import { useContract, useUpdateContract, useDeleteContract, useSendContract } from '../../hooks/useContracts';
+import { useContacts } from '../../hooks/useContacts';
+import { useCompanies } from '../../hooks/useCompanies';
+import { useAuthStore } from '../../store/authStore';
 import { formatDate, formatCurrency } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { showSuccess, showError } from '../../utils/toast';
@@ -19,6 +23,7 @@ import type { ContractUpdate } from '../../types';
 
 import { ContractAttachmentsSection } from './ContractAttachmentsSection';
 import { ContractStatusBadge } from './statusBadge';
+import EntitySharing from '../../components/shared/EntitySharing';
 
 function ContractDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -26,6 +31,7 @@ function ContractDetailPage() {
   const handleBack = useSmartBack('/contracts');
   const contractId = id ? parseInt(id, 10) : undefined;
 
+  const { user: currentUser } = useAuthStore();
   const { data: contract, isLoading, error } = useContract(contractId);
   usePageTitle(contract ? `Contract - ${contract.title}` : 'Contract');
 
@@ -43,6 +49,22 @@ function ContractDetailPage() {
   const [editStartDate, setEditStartDate] = useState('');
   const [editEndDate, setEditEndDate] = useState('');
   const [editStatus, setEditStatus] = useState('draft');
+  const [editContactId, setEditContactId] = useState<number | null>(null);
+  const [editCompanyId, setEditCompanyId] = useState<number | null>(null);
+
+  // Fetch contacts + companies for the pickers
+  const { data: contactsData } = useContacts({ page_size: 200 });
+  const { data: companiesData } = useCompanies({ page_size: 200 });
+
+  const contactOptions = (contactsData?.items ?? []).map((c) => ({
+    value: c.id,
+    label: c.full_name ?? c.email ?? `Contact #${c.id}`,
+  }));
+
+  const companyOptions = (companiesData?.items ?? []).map((c) => ({
+    value: c.id,
+    label: c.name,
+  }));
 
   if (isLoading) {
     return (
@@ -73,14 +95,29 @@ function ContractDetailPage() {
   const canResend = isSent;
   const hasSignedPdf = isSigned && Boolean(contract.signed_pdf_r2_key);
 
+  // canManage: owner, admin/manager, or superuser
+  const canManage =
+    currentUser != null && (
+      currentUser.id === contract.owner_id ||
+      currentUser.is_superuser ||
+      currentUser.role === 'admin' ||
+      currentUser.role === 'manager'
+    );
+
+  const ownerName = contract.owner_id != null
+    ? (currentUser?.id === contract.owner_id ? currentUser.full_name : `User #${contract.owner_id}`)
+    : '';
+
   const openEditModal = () => {
     setEditTitle(contract.title);
     setEditScope(contract.scope ?? '');
-    setEditValue(contract.value?.toString() ?? '');
-    setEditCurrency(contract.currency);
+    setEditValue(contract.value != null ? String(contract.value) : '');
+    setEditCurrency(contract.currency ?? 'USD');
     setEditStartDate(contract.start_date ?? '');
     setEditEndDate(contract.end_date ?? '');
     setEditStatus(contract.status);
+    setEditContactId(contract.contact_id ?? contract.contact?.id ?? null);
+    setEditCompanyId(contract.company_id ?? contract.company?.id ?? null);
     setShowEditModal(true);
   };
 
@@ -95,6 +132,8 @@ function ContractDetailPage() {
         start_date: editStartDate || null,
         end_date: editEndDate || null,
         status: editStatus,
+        contact_id: editContactId,
+        company_id: editCompanyId,
       };
       await updateMutation.mutateAsync({ id: contract.id, data });
       setShowEditModal(false);
@@ -161,6 +200,30 @@ function ContractDetailPage() {
               </h1>
               <ContractStatusBadge status={contract.status} />
             </div>
+            {/* Contact / company headline beneath the title — mirrors ProposalDetail */}
+            {(contract.contact || contract.company) && (
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                {contract.contact && (
+                  <Link
+                    to={`/contacts/${contract.contact.id}`}
+                    className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300"
+                  >
+                    {contract.contact.full_name}
+                  </Link>
+                )}
+                {contract.contact && contract.company && (
+                  <span className="mx-1 text-gray-400">&middot;</span>
+                )}
+                {contract.company && (
+                  <Link
+                    to={`/companies/${contract.company.id}`}
+                    className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300"
+                  >
+                    {contract.company.name}
+                  </Link>
+                )}
+              </p>
+            )}
           </div>
         </div>
 
@@ -315,6 +378,13 @@ function ContractDetailPage() {
               )}
             </dl>
           </div>
+
+          <EntitySharing
+            entityType="contracts"
+            entityId={contract.id}
+            ownerName={ownerName}
+            canManage={canManage}
+          />
         </div>
       </div>
 
@@ -405,6 +475,24 @@ function ContractDetailPage() {
                 className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
               />
             </div>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <SearchableSelect
+              label="Contact"
+              id="edit-contact"
+              value={editContactId}
+              onChange={setEditContactId}
+              options={contactOptions}
+              placeholder="Search contacts..."
+            />
+            <SearchableSelect
+              label="Company"
+              id="edit-company"
+              value={editCompanyId}
+              onChange={setEditCompanyId}
+              options={companyOptions}
+              placeholder="Search companies..."
+            />
           </div>
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
             <Button type="button" variant="secondary" onClick={() => setShowEditModal(false)}>Cancel</Button>

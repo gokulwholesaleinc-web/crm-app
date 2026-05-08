@@ -18,6 +18,7 @@ import { QuotesTab } from './components/tabs/QuotesTab';
 import { ProposalsTab } from './components/tabs/ProposalsTab';
 import { CompanyForm } from './components/CompanyForm';
 import { useCompany, useUpdateCompany, useDeleteCompany } from '../../hooks/useCompanies';
+import { useAuthStore } from '../../store/authStore';
 import { useContacts } from '../../hooks/useContacts';
 import { useOpportunities } from '../../hooks/useOpportunities';
 import { useQuotes } from '../../hooks/useQuotes';
@@ -88,6 +89,7 @@ export function CompanyDetailPage() {
   const companyQuotes = quotesData?.items ?? [];
   const companyProposals = proposalsData?.items ?? [];
 
+  const currentUser = useAuthStore((s) => s.user);
   const updateCompany = useUpdateCompany();
   const deleteCompany = useDeleteCompany();
 
@@ -134,6 +136,13 @@ export function CompanyDetailPage() {
 
   const statusStyle = getStatusColor(company.status, 'company');
   const contacts = contactsData?.items || [];
+
+  const canManageSharing =
+    !!currentUser &&
+    (currentUser.id === company.owner_id ||
+      currentUser.is_superuser ||
+      currentUser.role === 'admin' ||
+      currentUser.role === 'manager');
 
   return (
     <div className="space-y-6">
@@ -275,6 +284,7 @@ export function CompanyDetailPage() {
           entityType="companies"
           entityId={companyId}
           enabledTabs={['notes', 'attachments', 'history', 'sharing']}
+          canManage={canManageSharing}
         />
       )}
 

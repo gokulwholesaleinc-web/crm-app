@@ -2,8 +2,9 @@
 
 import logging
 import os
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
 
 from src.audit.utils import (
@@ -25,7 +26,8 @@ from src.contracts.schemas import (
 )
 from src.contracts.service import ContractService
 from src.core.client_ip import get_client_ip
-from src.core.constants import HTTPStatus
+from src.core.constants import ENTITY_TYPE_CONTRACTS, HTTPStatus
+from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
 from src.core.rate_limit import limiter
 from src.core.router_utils import (
     CurrentUser,
@@ -46,6 +48,7 @@ ENTITY_NAME = "Contract"
 async def list_contracts(
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     contact_id: int | None = None,
@@ -57,6 +60,8 @@ async def list_contracts(
     order_dir: str | None = None,
 ):
     """List contracts with pagination, filters, search, and sort."""
+    effective_owner_id = owner_id if data_scope.can_see_all() else data_scope.owner_id
+
     service = ContractService(db)
 
     contracts, total = await service.get_list(
@@ -65,7 +70,8 @@ async def list_contracts(
         contact_id=contact_id,
         company_id=company_id,
         status=status,
-        owner_id=owner_id,
+        owner_id=effective_owner_id,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_CONTRACTS),
         search=search,
         order_by=order_by,
         order_dir=order_dir,
@@ -106,10 +112,15 @@ async def get_contract(
     contract_id: int,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Get a contract by ID."""
     service = ContractService(db)
     contract = await get_entity_or_404(service, contract_id, ENTITY_NAME)
+    check_record_access_or_shared(
+        contract, current_user, data_scope.role_name,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_CONTRACTS),
+    )
     return ContractResponse.model_validate(contract)
 
 
@@ -164,12 +175,17 @@ async def download_signed_pdf(
     contract_id: int,
     current_user: CurrentUser,
     db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Redirect to a short-lived presigned URL for the signed PDF stored in R2."""
     from src.attachments.object_storage import get_download_url
 
     service = ContractService(db)
     contract = await get_entity_or_404(service, contract_id, ENTITY_NAME)
+    check_record_access_or_shared(
+        contract, current_user, data_scope.role_name,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_CONTRACTS),
+    )
 
     if not contract.signed_pdf_r2_key:
         raise HTTPException(
@@ -300,6 +316,27 @@ async def sign_contract_public(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         ) from exc
+
+    if contract.owner_id:
+        signer_name = body.signer_name or "Someone"
+        try:
+            from src.notifications.service import NotificationService
+            notif_service = NotificationService(db)
+            await notif_service.create_notification(
+                user_id=contract.owner_id,
+                type="contract_signed",
+                title=f"Your contract was signed by {signer_name}",
+                message=f"Contract was signed by {signer_name}",
+                entity_type="contracts",
+                entity_id=contract.id,
+            )
+        except Exception:
+            # Notification is a side-effect; never roll back a successful signature.
+            logger.exception(
+                "contract_signed notification failed for contract_id=%s owner_id=%s",
+                contract.id,
+                contract.owner_id,
+            )
 
     # Audit row for the sign event. user_id=None marks a public-token
     # action — the audit log shouldn't misattribute it to a CRM user.

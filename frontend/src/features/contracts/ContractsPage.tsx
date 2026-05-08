@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { PlusIcon } from '@heroicons/react/24/outline';
 import { Button, EntityLink, Modal, ConfirmDialog, PaginationBar } from '../../components/ui';
+import { SearchableSelect } from '../../components/ui/SearchableSelect';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { SortableTh } from '../../components/shared/SortableTh';
 import {
@@ -9,6 +10,8 @@ import {
   useCreateContract,
   useDeleteContract,
 } from '../../hooks/useContracts';
+import { useContacts } from '../../hooks/useContacts';
+import { useCompanies } from '../../hooks/useCompanies';
 import {
   useListPageSizeState,
   useListSortPersistence,
@@ -46,6 +49,21 @@ function CreateContractModal({
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [scope, setScope] = useState('');
+  const [contactId, setContactId] = useState<number | null>(null);
+  const [companyId, setCompanyId] = useState<number | null>(null);
+
+  const { data: contactsData } = useContacts({ page_size: 200 });
+  const { data: companiesData } = useCompanies({ page_size: 200 });
+
+  const contactOptions = (contactsData?.items ?? []).map((c) => ({
+    value: c.id,
+    label: c.full_name ?? c.email ?? `Contact #${c.id}`,
+  }));
+
+  const companyOptions = (companiesData?.items ?? []).map((c) => ({
+    value: c.id,
+    label: c.name,
+  }));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,6 +76,8 @@ function CreateContractModal({
         start_date: startDate || null,
         end_date: endDate || null,
         scope: scope || null,
+        contact_id: contactId,
+        company_id: companyId,
       };
       const created = await createMutation.mutateAsync(data);
       showSuccess('Contract created');
@@ -81,6 +101,25 @@ function CreateContractModal({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm bg-white dark:bg-gray-700 dark:text-gray-100"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <SearchableSelect
+            label="Contact"
+            id="new-contact"
+            value={contactId}
+            onChange={setContactId}
+            options={contactOptions}
+            placeholder="Search contacts..."
+          />
+          <SearchableSelect
+            label="Company"
+            id="new-company"
+            value={companyId}
+            onChange={setCompanyId}
+            options={companyOptions}
+            placeholder="Search companies..."
           />
         </div>
 

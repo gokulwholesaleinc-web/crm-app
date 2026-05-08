@@ -290,6 +290,12 @@ async def list_opportunities(
     """List opportunities with pagination and filters."""
     service = OpportunityService(db)
 
+    assignee_ids = (
+        await service.get_assignee_entity_ids(current_user.id)
+        if data_scope.is_scoped
+        else None
+    )
+
     opportunities, total = await service.get_list(
         page=page,
         page_size=page_size,
@@ -301,6 +307,7 @@ async def list_opportunities(
         tag_ids=parse_tag_ids(tag_ids),
         filters=parse_json_filters(filters),
         shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_OPPORTUNITIES),
+        assignee_entity_ids=assignee_ids,
     )
 
     tags_map = await service.get_tags_for_entities([o.id for o in opportunities])

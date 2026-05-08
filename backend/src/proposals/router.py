@@ -625,6 +625,27 @@ async def accept_proposal_public(
             signer_user_agent=signer_user_agent,
         )
 
+    if proposal.owner_id:
+        signer_name = accept_data.signer_name or "Someone"
+        try:
+            from src.notifications.service import NotificationService
+            notif_service = NotificationService(db)
+            await notif_service.create_notification(
+                user_id=proposal.owner_id,
+                type="proposal_signed",
+                title=f"Your proposal was signed by {signer_name}",
+                message=f"Proposal was signed by {signer_name}",
+                entity_type="proposals",
+                entity_id=proposal.id,
+            )
+        except Exception:
+            # Notification is a side-effect; never fail a successful signature.
+            logger.exception(
+                "proposal_signed notification failed for proposal_id=%s owner_id=%s",
+                proposal.id,
+                proposal.owner_id,
+            )
+
     branding_data = await service.get_branding_for_proposal(proposal)
     response = ProposalPublicResponse.model_validate(proposal)
     response.branding = ProposalBranding(
