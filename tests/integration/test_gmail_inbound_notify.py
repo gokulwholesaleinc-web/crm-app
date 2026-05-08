@@ -141,22 +141,30 @@ class TestInboundReplyNotify:
         assert len(email_rows) == 0
 
     @pytest.mark.asyncio
-    async def test_reply_no_owner_no_notification(
+    async def test_reply_no_team_user_on_thread_no_notification(
         self, db_session: AsyncSession, test_user, gmail_connection
     ):
-        """Contact with no owner_id → no Notification, no EmailQueue."""
-        unowned = Contact(
-            email="unowned@client.com",
-            first_name="Unowned",
+        """No team user is a thread participant → no Notification, no EmailQueue.
+
+        Routing-by-participants invariant: if no address on the message matches
+        any GmailConnection, no team user gets pinged — even when the matched
+        contact has an owner. The prior owner_id-based dispatch would have
+        notified the contact owner regardless; this test guards against
+        re-introducing that leak.
+        """
+        contact = Contact(
+            email="external@client.com",
+            first_name="External",
             last_name="Contact",
-            owner_id=None,
+            owner_id=test_user.id,
         )
-        db_session.add(unowned)
+        db_session.add(contact)
         await db_session.flush()
 
+        # to= is an external address that no GmailConnection.email/aliases match
         msg = _make_msg(
-            from_="unowned@client.com",
-            to="owner@company.com",
+            from_="external@client.com",
+            to="other-external@nobody.com",
             in_reply_to="<original@example.com>",
             raw_id="gmailid002",
             message_id="<msg-002@example.com>",
