@@ -216,7 +216,11 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
             )
             raise ValueError(f"Could not queue contract email: {exc}") from exc
 
-        if email.status not in ("sent", "throttled"):
+        # Only revert on a terminal "failed" status. "retry" means the
+        # send is in the queue and the retry worker will pick it up;
+        # "throttled" means it'll go out at the next throttle window.
+        # The EmailQueue UI surfaces both for operator visibility.
+        if email.status == "failed":
             contract.sign_token = None
             contract.sign_token_expires_at = None
             contract.sent_at = None

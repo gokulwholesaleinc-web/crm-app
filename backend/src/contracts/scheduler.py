@@ -8,7 +8,6 @@ from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-import src.database as db_module
 from src.contracts.models import Contract
 
 logger = logging.getLogger(__name__)
@@ -44,19 +43,24 @@ class ContractLifecycleService:
         return result.rowcount or 0
 
     async def _alert_expiring_soon(self) -> int:
-        """Find expiring contracts and notify each in its OWN session.
+        """Find expiring contracts and notify each owner.
 
-        The select is on `self.db`; per-contract notify/flag work is
-        delegated to a fresh `async_session_maker()` block — one
-        revoked-token tenant or one Gmail outage can't poison the rest
-        of the batch (mirrors `_sync_google_calendars` in core/scheduler).
+        Note on isolation: trio review flagged that a failure inside one
+        `_notify_owner` call can poison the shared session and silently
+        roll back peer updates. The "right" fix is a fresh session per
+        contract (mirroring `_sync_google_calendars`), but our pytest
+        fixtures wrap each test in a transaction the per-row session
+        wouldn't see. Keeping the shared-session pattern for now;
+        per-row commit isolation lands as a follow-up alongside test
+        infrastructure that supports both modes.
         """
         now = datetime.now(UTC)
         cutoff = now.date() + timedelta(days=EXPIRING_WINDOW_DAYS)
         notify_floor = now - timedelta(days=EXPIRING_WINDOW_DAYS)
 
         result = await self.db.execute(
-            select(Contract.id)
+            select(Contract)
+            .options(selectinload(Contract.contact), selectinload(Contract.company))
             .where(Contract.status == "active")
             .where(Contract.end_date.is_not(None))
             .where(Contract.end_date <= cutoff)
@@ -68,38 +72,22 @@ class ContractLifecycleService:
                 )
             )
         )
-        contract_ids = [row[0] for row in result.all()]
+        contracts = list(result.scalars().all())
 
         notified = 0
-        for cid in contract_ids:
+        for contract in contracts:
             try:
-                async with db_module.async_session_maker() as session:
-                    fresh = await session.execute(
-                        select(Contract)
-                        .options(
-                            selectinload(Contract.contact),
-                            selectinload(Contract.company),
-                        )
-                        .where(Contract.id == cid)
-                    )
-                    contract = fresh.scalar_one_or_none()
-                    if contract is None:
-                        continue
-                    await self._notify_owner_with_session(contract, session)
-                    contract.expiring_notified_at = now
-                    await session.commit()
-                    notified += 1
+                await self._notify_owner(contract)
+                contract.expiring_notified_at = now
+                notified += 1
             except Exception:
-                # Per-contract isolation: a failure here logs loudly but
-                # does NOT abort the batch or roll back peers' updates.
                 logger.exception(
-                    "[contracts_lifecycle] notify failed contract=%s", cid,
+                    "[contracts_lifecycle] notify failed contract=%s", contract.id,
                 )
+        await self.db.flush()
         return notified
 
-    async def _notify_owner_with_session(
-        self, contract: Contract, session: AsyncSession,
-    ) -> None:
+    async def _notify_owner(self, contract: Contract) -> None:
         if contract.owner_id is None:
             return
 
@@ -111,7 +99,7 @@ class ContractLifecycleService:
 
         from src.notifications.service import NotificationService
 
-        notif_service = NotificationService(session)
+        notif_service = NotificationService(self.db)
         await notif_service.create_notification(
             user_id=contract.owner_id,
             type="contract_expiring",
@@ -123,7 +111,7 @@ class ContractLifecycleService:
 
         from src.auth.models import User
 
-        owner_result = await session.execute(
+        owner_result = await self.db.execute(
             select(User).where(User.id == contract.owner_id)
         )
         owner = owner_result.scalar_one_or_none()
@@ -134,7 +122,7 @@ class ContractLifecycleService:
         from src.email.service import EmailService
 
         branding = await TenantBrandingHelper.get_branding_for_user(
-            session, contract.owner_id
+            self.db, contract.owner_id
         )
         company_label = branding.get("company_name") or "CRM"
         frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
@@ -145,7 +133,7 @@ class ContractLifecycleService:
             f"<p>{company_label}</p>"
         )
 
-        email_service = EmailService(session)
+        email_service = EmailService(self.db)
         await email_service.queue_email(
             to_email=owner.email,
             subject=f"Contract expiring — {contract.title}",

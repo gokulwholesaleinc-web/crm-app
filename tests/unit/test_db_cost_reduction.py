@@ -172,7 +172,7 @@ class TestSchedulerConsolidation:
             start_scheduler()
         try:
             job_ids = {j.id for j in scheduler.get_jobs()}
-            assert job_ids == {"background_tick", "gmail_sync"}, (
+            assert job_ids == {"background_tick", "gmail_sync", "contract_lifecycle"}, (
                 f"unexpected scheduler jobs: {job_ids}"
             )
 
