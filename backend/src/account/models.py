@@ -3,7 +3,7 @@
 Both rows are 1:1 with `users` and lazy-created on first GET via
 ``AccountPrefsService.get_or_create_*``. The ``event_matrix`` JSONB
 holds the event×channel toggle map; see ``notification_gate`` for the
-opt-out semantics.
+opt-in semantics.
 """
 
 from datetime import datetime
@@ -49,10 +49,10 @@ class UserNotificationPrefs(Base):
     )
 
     in_app_enabled: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("true")
+        Boolean, nullable=False, server_default=text("false")
     )
     email_enabled: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("true")
+        Boolean, nullable=False, server_default=text("false")
     )
     email_digest: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default=text("'instant'")

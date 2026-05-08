@@ -89,7 +89,7 @@ async def owned_contact(db_session: AsyncSession, test_user) -> Contact:
 class TestInboundReplyNotify:
     @pytest.mark.asyncio
     async def test_reply_creates_inbound_notification_and_email(
-        self, db_session: AsyncSession, test_user, gmail_connection, owned_contact
+        self, db_session: AsyncSession, test_user, test_user_opted_in, gmail_connection, owned_contact
     ):
         """Inbound with in_reply_to set → InboundEmail + Notification + EmailQueue."""
         msg = _make_msg(
@@ -185,7 +185,7 @@ class TestInboundReplyNotify:
 
     @pytest.mark.asyncio
     async def test_display_name_extracted_from_raw_header(
-        self, db_session: AsyncSession, test_user, gmail_connection, owned_contact
+        self, db_session: AsyncSession, test_user, test_user_opted_in, gmail_connection, owned_contact
     ):
         """``from_header`` carries the RFC `Name <addr>` form so the notification email shows a real name.
 
@@ -220,7 +220,7 @@ class TestInboundReplyNotify:
             in_app_enabled=True,
             email_enabled=True,
             email_digest="instant",
-            event_matrix={"email_reply_received": {"email": False}},
+            event_matrix={"email_reply_received": {"in_app": True, "email": False}},
         )
         db_session.add(prefs)
         await db_session.flush()

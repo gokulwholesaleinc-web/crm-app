@@ -17,13 +17,13 @@ from sqlalchemy.pool import StaticPool
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "backend"))
 
-from src.database import Base
+from src.account.models import UserNotificationPrefs
 from src.auth.models import User
 from src.auth.security import get_password_hash
 from src.contacts.models import Contact
+from src.database import Base
 from src.integrations.gmail.models import GmailConnection
 from src.notifications.models import Notification
-
 
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -63,6 +63,17 @@ async def _make_user(db: AsyncSession, email: str, *, is_superuser: bool = False
     db.add(user)
     await db.flush()
     return user
+
+
+async def _enable_notifications(db: AsyncSession, user: User) -> None:
+    prefs = UserNotificationPrefs(
+        user_id=user.id,
+        in_app_enabled=True,
+        email_enabled=True,
+        event_matrix={"email_reply_received": {"in_app": True, "email": True}},
+    )
+    db.add(prefs)
+    await db.flush()
 
 
 async def _make_connection(db: AsyncSession, user_id: int, email: str) -> GmailConnection:
@@ -134,6 +145,8 @@ class TestEmailReplyNotificationRouting:
         db.add(contact)
         await db.flush()
 
+        # Only sales is opted in — admin is intentionally not opted in to prove they're excluded
+        await _enable_notifications(db, sales)
         await db.commit()
 
         from src.integrations.gmail.sync import _store_inbound
@@ -171,6 +184,8 @@ class TestEmailReplyNotificationRouting:
         db.add(contact)
         await db.flush()
 
+        await _enable_notifications(db, admin)
+        await _enable_notifications(db, sales)
         await db.commit()
 
         from src.integrations.gmail.sync import _store_inbound
@@ -206,6 +221,7 @@ class TestEmailReplyNotificationRouting:
         )
         db.add(contact)
         await db.flush()
+        await _enable_notifications(db, sales)
         await db.commit()
 
         from src.integrations.gmail.sync import _store_inbound
@@ -265,6 +281,7 @@ class TestNotificationGuardDirect:
         )
         db.add(contact)
         await db.flush()
+        await _enable_notifications(db, user)
         await db.commit()
 
         from src.notifications.service import notify_on_email_reply_received
@@ -340,6 +357,7 @@ class TestGuardEdgeCases:
     async def test_guard_skips_when_user_has_no_active_connection(self, db: AsyncSession):
         """Guard returns None when the recipient has no active Gmail connection."""
         from datetime import timezone
+
         from src.integrations.gmail.models import GmailConnection as _GC
 
         user = await _make_user(db, "noconn@crm.com")
@@ -400,10 +418,11 @@ class TestAliasParticipantPath:
         )
         db.add(contact)
         await db.flush()
+        await _enable_notifications(db, user)
         await db.commit()
 
-        from src.notifications.service import notify_on_email_reply_received
         from src.email.participants import get_user_connection_emails
+        from src.notifications.service import notify_on_email_reply_received
 
         # Verify the helper now returns both primary and alias
         addrs = await get_user_connection_emails(db, user.id)

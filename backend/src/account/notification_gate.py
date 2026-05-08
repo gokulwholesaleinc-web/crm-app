@@ -1,20 +1,21 @@
 """Pre-dispatch gate for notifications.
 
 Dispatchers call ``should_notify_in_app`` / ``should_send_email`` before
-queuing a notification or email. The matrix is opt-out: an event missing
-from ``event_matrix`` defaults to ON.
+queuing a notification or email. The matrix is opt-in: an event missing
+from ``event_matrix``, a missing prefs row, or an empty matrix all
+default to OFF. Users must explicitly enable notifications in
+Settings → Notifications.
 
-Defensive contract: any unexpected exception is logged and we return
-True. A silent-drop bug here would hide all notifications for a user
-without anything visible upstream — see the project's silent-failure
-hunter rule.
+Defensive contract: unexpected exceptions are logged and we fail-closed
+(return False) for both channels. A silent-drop here is the lesser evil
+compared to leaking notifications to users who haven't opted in.
 """
 
 from __future__ import annotations
 
 import logging
 from datetime import datetime
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -24,13 +25,11 @@ from src.account.models import UserNotificationPrefs, UserPreferences
 
 logger = logging.getLogger(__name__)
 
-# Errors we deliberately fall open on. Anything else (asyncio.CancelledError,
-# memory errors, etc.) propagates so the request fails loudly. The fail-open
-# choice covers shape errors on event_matrix (`TypeError`/`AttributeError` if
-# someone hand-edits the row to a non-dict) and DB blips (`SQLAlchemyError`)
-# — both are recoverable; silently dropping a notification a user wants is
-# the worse failure mode the project's silent-failure rule is meant to catch.
-_GATE_RECOVERABLE = (SQLAlchemyError, TypeError, AttributeError, KeyError, ValueError)
+# Errors we deliberately fail-closed on at the gate boundary (prefs load +
+# the outer gate_event try/except). KeyError and ValueError are intentionally
+# excluded: they indicate a programming error inside the gate itself and should
+# propagate so they're visible, not silently swallowed as "transient".
+_GATE_RECOVERABLE = (SQLAlchemyError, TypeError, AttributeError)
 
 
 async def _load_prefs(
@@ -56,13 +55,19 @@ async def _load_user_timezone(db: AsyncSession, user_id: int) -> str:
 def _matrix_allows(
     matrix: dict | None, event_type: str, channel: str
 ) -> bool:
+    """Return True only when the event+channel is explicitly enabled.
+
+    Opt-in contract: missing matrix, missing event entry, or missing
+    channel key all return False. The caller must have an explicit
+    ``{event_type: {channel: True}}`` entry to pass.
+    """
     if not matrix:
-        return True
+        return False
     entry = matrix.get(event_type)
     if not entry:
-        return True
+        return False
     val = entry.get(channel)
-    return True if val is None else bool(val)
+    return False if val is None else bool(val)
 
 
 def _in_quiet_window(now_hhmm: str, start: str, end: str) -> bool:
@@ -100,7 +105,12 @@ async def _resolve_in_app(
         tz_name = await _load_user_timezone(db, user_id)
         try:
             tz = ZoneInfo(tz_name)
-        except _GATE_RECOVERABLE:
+        except ZoneInfoNotFoundError:
+            logger.warning(
+                "Unknown timezone %r for user %s; falling back to America/Chicago",
+                tz_name,
+                user_id,
+            )
             tz = ZoneInfo("America/Chicago")
         now_hhmm = datetime.now(tz).strftime("%H:%M")
         if _in_quiet_window(
@@ -121,37 +131,33 @@ async def gate_event(
     back-to-back used to incur (one ``SELECT user_notification_prefs``
     round-trip each).
 
-    Preserves the asymmetric fail modes:
-    - in-app: fail-OPEN on recoverable errors (extra bell is benign)
-    - email: fail-CLOSED on recoverable errors (silent opt-out violation
-      is the worse failure mode, especially under cooldown stamping)
+    Opt-in contract: missing prefs row → (False, False). Fail-closed on
+    both channels for any recoverable error.
     """
     try:
         prefs = await _load_prefs(db, user_id)
     except _GATE_RECOVERABLE:
         logger.warning(
-            "notification_gate.gate_event prefs-load failed for user_id=%s event=%s; defaulting (allow_in_app=True, allow_email=False)",
+            "notification_gate.gate_event prefs-load failed for user_id=%s event=%s; defaulting (False, False)",
             user_id,
             event_type,
             exc_info=True,
         )
-        return (True, False)
+        return (False, False)
 
     if prefs is None:
-        # New users without a prefs row: allow both. Email default-allow
-        # mirrors the pre-refactor single-channel ``should_send_email``.
-        return (True, True)
+        return (False, False)
 
     try:
         in_app_allowed = await _resolve_in_app(db, prefs, user_id, event_type)
     except _GATE_RECOVERABLE:
         logger.warning(
-            "notification_gate.gate_event in-app resolve failed for user_id=%s event=%s; defaulting allow",
+            "notification_gate.gate_event in-app resolve failed for user_id=%s event=%s; defaulting suppress",
             user_id,
             event_type,
             exc_info=True,
         )
-        in_app_allowed = True
+        in_app_allowed = False
 
     email_allowed = (
         prefs.email_enabled

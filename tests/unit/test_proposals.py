@@ -13,6 +13,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
+from src.account.models import UserNotificationPrefs
 from src.auth.models import User
 from src.auth.security import get_password_hash, create_access_token
 from src.proposals.models import Proposal, ProposalView
@@ -746,6 +747,15 @@ class TestStatusTransitions:
         db_session.add(owner)
         await db_session.commit()
         await db_session.refresh(owner)
+
+        prefs = UserNotificationPrefs(
+            user_id=owner.id,
+            in_app_enabled=True,
+            email_enabled=True,
+            event_matrix={"proposal_signed": {"in_app": True, "email": True}},
+        )
+        db_session.add(prefs)
+        await db_session.commit()
 
         proposal = Proposal(
             proposal_number="PR-2026-ADMIN-ACCEPT",

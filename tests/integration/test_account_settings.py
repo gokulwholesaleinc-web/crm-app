@@ -37,14 +37,14 @@ class TestNotificationPrefsRoutes:
     async def test_get_creates_defaults_on_first_call(
         self, client: AsyncClient, test_user: User
     ):
-        """First GET lazy-creates the row with sane defaults."""
+        """First GET lazy-creates the row with opt-in defaults (all OFF)."""
         resp = await client.get(
             "/api/account/notifications", headers=_headers(test_user)
         )
         assert resp.status_code == 200
         body = resp.json()
-        assert body["in_app_enabled"] is True
-        assert body["email_enabled"] is True
+        assert body["in_app_enabled"] is False
+        assert body["email_enabled"] is False
         assert body["email_digest"] == "instant"
         assert body["quiet_hours_enabled"] is False
         assert body["event_matrix"] == {}
@@ -57,7 +57,7 @@ class TestNotificationPrefsRoutes:
     async def test_put_partial_update_persists(
         self, client: AsyncClient, test_user: User
     ):
-        """PUT with a subset of fields updates only those fields."""
+        """PUT with a subset of fields updates only those fields; untouched fields keep defaults."""
         resp = await client.put(
             "/api/account/notifications",
             json={"email_digest": "daily_8am", "in_app_enabled": False},
@@ -67,7 +67,7 @@ class TestNotificationPrefsRoutes:
         body = resp.json()
         assert body["email_digest"] == "daily_8am"
         assert body["in_app_enabled"] is False
-        assert body["email_enabled"] is True
+        assert body["email_enabled"] is False
 
     async def test_put_event_matrix_deep_merges(
         self, client: AsyncClient, test_user: User
@@ -183,13 +183,13 @@ class TestPreferencesRoutes:
 
 
 class TestNotificationGate:
-    async def test_default_allow_when_no_prefs_row(
+    async def test_default_block_when_no_prefs_row(
         self, db_session: AsyncSession, test_user: User
     ):
-        """A user who never opened settings still receives notifications."""
+        """A user who never opened settings receives no notifications (opt-in contract)."""
         assert (
             await should_notify_in_app(db_session, test_user.id, "lead_assigned")
-            is True
+            is False
         )
 
     async def test_master_switch_off_blocks_event(
@@ -205,38 +205,26 @@ class TestNotificationGate:
             is False
         )
 
-    async def test_event_toggled_off_blocks_specific_event(
+    async def test_per_event_opt_in_allows_only_that_event(
         self, db_session: AsyncSession, test_user: User
     ):
-        """Per-event opt-out blocks just that event, others still fire."""
+        """Per-event opt-in allows just that event; events absent from matrix stay silent."""
         service = AccountPrefsService(db_session)
         await service.update_notification_prefs(
             test_user.id,
             NotificationPrefsUpdate(
-                event_matrix={"payment_received": {"in_app": False}}
+                in_app_enabled=True,
+                event_matrix={"payment_received": {"in_app": True}},
             ),
         )
         assert (
             await should_notify_in_app(db_session, test_user.id, "payment_received")
-            is False
+            is True
         )
+        # lead_assigned is absent from the matrix → blocked under opt-in contract
         assert (
             await should_notify_in_app(db_session, test_user.id, "lead_assigned")
-            is True
-        )
-
-    async def test_event_not_in_matrix_defaults_on(
-        self, db_session: AsyncSession, test_user: User
-    ):
-        """Opt-out semantics: missing event keys default to on."""
-        service = AccountPrefsService(db_session)
-        await service.update_notification_prefs(
-            test_user.id,
-            NotificationPrefsUpdate(event_matrix={"mention": {"in_app": True}}),
-        )
-        assert (
-            await should_notify_in_app(db_session, test_user.id, "task_due")
-            is True
+            is False
         )
 
     async def test_quiet_hours_block_in_window(
