@@ -441,7 +441,7 @@ async def notify_on_email_reply_received(
     The deep link points at the contact detail page's email tab; the
     front-end will scroll to the latest message.
     """
-    if participant_emails is not None and participant_emails:
+    if participant_emails:
         from src.email.participants import get_user_connection_emails
 
         user_addrs = set(await get_user_connection_emails(db, recipient_user_id))

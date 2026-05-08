@@ -71,7 +71,10 @@ async def find_user_ids_by_addresses(
             pg_array(lowered, type_=Text)
         )
         where_clause = or_(primary_match, alias_match)
-    except Exception:  # SQLite / fallback
+    except (ImportError, AttributeError):
+        # AttributeError: _AliasArray degrades to JSON on SQLite so .overlap()
+        # is not available on the comparator. Primary-email match is sufficient
+        # for tests; prod Postgres gets the full alias coverage.
         where_clause = primary_match
 
     result = await db.execute(

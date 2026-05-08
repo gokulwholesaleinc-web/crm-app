@@ -77,7 +77,6 @@ async def _make_connection(db: AsyncSession, user_id: int, email: str) -> GmailC
     return conn
 
 
-
 def _make_inbound_msg(
     *,
     msg_id: str,
