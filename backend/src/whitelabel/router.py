@@ -9,10 +9,14 @@ from sqlalchemy import select
 from src.auth.dependencies import get_current_superuser
 from src.core.constants import (
     DEFAULT_ACCENT_COLOR,
+    DEFAULT_BG_COLOR_DARK,
+    DEFAULT_BG_COLOR_LIGHT,
     DEFAULT_DATE_FORMAT,
     DEFAULT_LANGUAGE,
     DEFAULT_PRIMARY_COLOR,
     DEFAULT_SECONDARY_COLOR,
+    DEFAULT_SURFACE_COLOR_DARK,
+    DEFAULT_SURFACE_COLOR_LIGHT,
     EntityNames,
     HTTPStatus,
 )
@@ -71,6 +75,10 @@ def _build_public_tenant_config(tenant: Tenant) -> PublicTenantConfig:
         primary_color=settings.primary_color if settings else DEFAULT_PRIMARY_COLOR,
         secondary_color=settings.secondary_color if settings else DEFAULT_SECONDARY_COLOR,
         accent_color=settings.accent_color if settings else DEFAULT_ACCENT_COLOR,
+        bg_color_light=settings.bg_color_light if settings else DEFAULT_BG_COLOR_LIGHT,
+        bg_color_dark=settings.bg_color_dark if settings else DEFAULT_BG_COLOR_DARK,
+        surface_color_light=settings.surface_color_light if settings else DEFAULT_SURFACE_COLOR_LIGHT,
+        surface_color_dark=settings.surface_color_dark if settings else DEFAULT_SURFACE_COLOR_DARK,
         footer_text=settings.footer_text if settings else None,
         privacy_policy_url=settings.privacy_policy_url if settings else None,
         terms_of_service_url=settings.terms_of_service_url if settings else None,

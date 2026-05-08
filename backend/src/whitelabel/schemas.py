@@ -38,6 +38,10 @@ class TenantSettingsBase(BaseModel):
     primary_color: str = "#6366f1"
     secondary_color: str = "#8b5cf6"
     accent_color: str = "#22c55e"
+    bg_color_light: str = "#f9fafb"
+    bg_color_dark: str = "#111827"
+    surface_color_light: str = "#ffffff"
+    surface_color_dark: str = "#1f2937"
     email_from_name: str | None = None
     email_from_address: str | None = None
     feature_flags: str | None = None
@@ -67,6 +71,10 @@ class TenantSettingsUpdate(BaseModel):
     primary_color: str | None = None
     secondary_color: str | None = None
     accent_color: str | None = None
+    bg_color_light: str | None = None
+    bg_color_dark: str | None = None
+    surface_color_light: str | None = None
+    surface_color_dark: str | None = None
     email_from_name: str | None = None
     email_from_address: str | None = None
     feature_flags: str | None = None
@@ -155,6 +163,10 @@ class PublicTenantConfig(BaseModel):
     primary_color: str
     secondary_color: str
     accent_color: str
+    bg_color_light: str
+    bg_color_dark: str
+    surface_color_light: str
+    surface_color_dark: str
     footer_text: str | None
     privacy_policy_url: str | None
     terms_of_service_url: str | None

@@ -1752,3 +1752,82 @@ class TestUrlValidation:
         assert response.status_code == 200
         data = response.json()
         assert data["logo_url"] is None
+
+    @pytest.mark.asyncio
+    async def test_update_tenant_settings_bg_and_surface_colors(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_tenant: Tenant,
+    ):
+        """Admin can set bg + surface colors for both light and dark mode."""
+        response = await client.patch(
+            f"/api/tenants/{test_tenant.id}/settings",
+            headers=auth_headers,
+            json={
+                "bg_color_light": "#fafafa",
+                "bg_color_dark": "#0a0a0a",
+                "surface_color_light": "#fefefe",
+                "surface_color_dark": "#171717",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["bg_color_light"] == "#fafafa"
+        assert data["bg_color_dark"] == "#0a0a0a"
+        assert data["surface_color_light"] == "#fefefe"
+        assert data["surface_color_dark"] == "#171717"
+        # Existing fields untouched.
+        assert data["primary_color"] == "#6366f1"
+
+
+class TestPublicConfigBgColors:
+    """Public branding endpoint exposes bg/surface colors with safe defaults."""
+
+    @pytest.mark.asyncio
+    async def test_public_config_returns_bg_color_defaults(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_tenant: Tenant,
+    ):
+        """An unconfigured tenant returns the documented default palette so
+        the frontend can render before an admin has touched branding."""
+        response = await client.get(f"/api/tenants/config/{test_tenant.slug}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["bg_color_light"] == "#f9fafb"
+        assert data["bg_color_dark"] == "#111827"
+        assert data["surface_color_light"] == "#ffffff"
+        assert data["surface_color_dark"] == "#1f2937"
+
+    @pytest.mark.asyncio
+    async def test_public_config_returns_admin_overrides(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_tenant: Tenant,
+    ):
+        """After an admin overrides the bg colors, the public branding
+        endpoint must surface the new values to unauthenticated visitors."""
+        await client.patch(
+            f"/api/tenants/{test_tenant.id}/settings",
+            headers=auth_headers,
+            json={
+                "bg_color_dark": "#000000",
+                "surface_color_dark": "#080808",
+            },
+        )
+
+        response = await client.get(f"/api/tenants/config/{test_tenant.slug}")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["bg_color_dark"] == "#000000"
+        assert data["surface_color_dark"] == "#080808"
+        # Untouched fields remain at defaults.
+        assert data["bg_color_light"] == "#f9fafb"
+        assert data["surface_color_light"] == "#ffffff"

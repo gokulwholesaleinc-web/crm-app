@@ -27,6 +27,10 @@ export interface TenantConfig {
   primary_color: string;
   secondary_color: string;
   accent_color: string;
+  bg_color_light: string;
+  bg_color_dark: string;
+  surface_color_light: string;
+  surface_color_dark: string;
   footer_text: string | null;
   privacy_policy_url: string | null;
   terms_of_service_url: string | null;
@@ -96,6 +100,10 @@ function applyBrandingToDOM(config: TenantConfig | null) {
     root.style.removeProperty('--brand-primary');
     root.style.removeProperty('--brand-secondary');
     root.style.removeProperty('--brand-accent');
+    root.style.removeProperty('--brand-bg-light');
+    root.style.removeProperty('--brand-bg-dark');
+    root.style.removeProperty('--brand-surface-light');
+    root.style.removeProperty('--brand-surface-dark');
     const existingStyle = document.getElementById('tenant-custom-css');
     if (existingStyle) existingStyle.remove();
     return;
@@ -117,6 +125,14 @@ function applyBrandingToDOM(config: TenantConfig | null) {
   root.style.setProperty('--brand-primary', config.primary_color);
   root.style.setProperty('--brand-secondary', config.secondary_color);
   root.style.setProperty('--brand-accent', config.accent_color);
+
+  // Page + surface backgrounds, consumed by index.css for body and
+  // [data-bg-surface] elements. Setting both light + dark always lets
+  // the CSS pick the right one based on the `dark` class on <html>.
+  root.style.setProperty('--brand-bg-light', config.bg_color_light);
+  root.style.setProperty('--brand-bg-dark', config.bg_color_dark);
+  root.style.setProperty('--brand-surface-light', config.surface_color_light);
+  root.style.setProperty('--brand-surface-dark', config.surface_color_dark);
 
   // Update document title
   if (config.company_name) {

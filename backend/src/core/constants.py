@@ -17,6 +17,14 @@ DEFAULT_PRIMARY_COLOR = "#6366f1"
 DEFAULT_SECONDARY_COLOR = "#8b5cf6"
 DEFAULT_ACCENT_COLOR = "#22c55e"
 
+# Default page + surface backgrounds. Match prior Tailwind hardcodes
+# (gray-50/gray-900 for body, white/gray-800 for cards) so tenants who
+# haven't customized see no change.
+DEFAULT_BG_COLOR_LIGHT = "#f9fafb"
+DEFAULT_BG_COLOR_DARK = "#111827"
+DEFAULT_SURFACE_COLOR_LIGHT = "#ffffff"
+DEFAULT_SURFACE_COLOR_DARK = "#1f2937"
+
 # Backwards compatibility alias
 DEFAULT_COLOR = DEFAULT_PRIMARY_COLOR
 
