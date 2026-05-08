@@ -1,7 +1,7 @@
 """Account-settings tables + assignment-rule fallback flag + assignment_log.
 
-Revision ID: 022_account_settings_and_assignment
-Revises: 021_proposal_attachment_views
+Revision ID: 023_account_settings_and_assignment
+Revises: 022_contracts_esign
 Create Date: 2026-05-07
 
 Single migration covers two adjacent feature areas:
@@ -17,12 +17,20 @@ Single migration covers two adjacent feature areas:
 
 Both tables key off `users.id` with `ON DELETE CASCADE` so user
 deletion drops the prefs without an orphan-row sweep job.
+
+Originally written as `022_account_settings_and_assignment` on PR #255
+but the contracts-expansion PR (#254) merged first and claimed slot
+022 with `022_contracts_esign`. Both files declared
+`down_revision = "021_proposal_attachment_views"` — alembic loaded the
+contracts head and silently skipped this one, so prod backend deployed
+with the new ORM models pointing at non-existent tables. Re-parented
+to 022_contracts_esign and renumbered to 023 as the recovery hotfix.
 """
 
 from alembic import op
 
-revision = "022_account_settings_and_assignment"
-down_revision = "021_proposal_attachment_views"
+revision = "023_account_settings_and_assignment"
+down_revision = "022_contracts_esign"
 branch_labels = None
 depends_on = None
 
