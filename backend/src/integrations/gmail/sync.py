@@ -456,6 +456,16 @@ async def _store_inbound(
     await db.flush()
 
     # Notify the contact owner when this is a reply to a thread we're on.
+    # Wrapped in a SAVEPOINT so a notification-side failure (DB blip,
+    # FK violation, model error) cannot poison the parent transaction
+    # and silently destroy the InboundEmail row we just flushed. Without
+    # the savepoint, an exception inside ``notify_on_email_reply_received``
+    # leaves the session in ROLLBACK_REQUIRED state — the outer
+    # ``sync_account.commit()`` then fails with PendingRollbackError and
+    # the inbound row is lost. ``msg["from"]`` is the bare address
+    # stripped by ``_first_address``; pass ``from_header`` (preserved
+    # in :func:`gmail.client._parse_message`) so the display name
+    # actually reaches the notification surface.
     if (
         entity_type == "contacts"
         and entity_id is not None
@@ -470,19 +480,22 @@ async def _store_inbound(
         owner_id = owner_result.scalar_one_or_none()
         if owner_id is not None:
             try:
-                await notify_on_email_reply_received(
-                    db=db,
-                    recipient_user_id=owner_id,
-                    contact_id=entity_id,
-                    sender_email=from_addr,
-                    sender_name=_parse_name_from(msg["from"]),
-                    subject_line=msg.get("subject") or "",
-                    snippet=(
-                        msg.get("body_text")
-                        or _strip_html_to_text(msg.get("body_html") or "")
-                        or ""
-                    ),
-                )
+                async with db.begin_nested():
+                    await notify_on_email_reply_received(
+                        db=db,
+                        recipient_user_id=owner_id,
+                        contact_id=entity_id,
+                        sender_email=from_addr,
+                        sender_name=_parse_name_from(
+                            msg.get("from_header") or msg.get("from") or ""
+                        ),
+                        subject_line=msg.get("subject") or "",
+                        snippet=(
+                            msg.get("body_text")
+                            or _strip_html_to_text(msg.get("body_html") or "")
+                            or ""
+                        ),
+                    )
             except Exception:
                 logger.exception(
                     "notify_on_email_reply_received failed for inbound %s",

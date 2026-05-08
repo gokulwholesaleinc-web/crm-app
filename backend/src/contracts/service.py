@@ -627,10 +627,11 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
             "audience": "signer",
             "contract_title": contract.title,
             "signer_name": contract.signed_by_name,
+            # Render the "PDF will follow" copy when the PDF render
+            # failed; the unattached "PDF copy is attached" line
+            # otherwise lies to the signer.
+            "pdf_pending": not attachments,
         })
-
-        if not attachments:
-            body = body + "<p>Your signed copy will be available shortly — we'll re-send it once the PDF is ready. Reply to this email if you need it sooner.</p>"
 
         email_service = EmailService(self.db)
         await email_service.queue_email(

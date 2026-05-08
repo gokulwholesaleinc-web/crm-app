@@ -29,10 +29,17 @@ def _make_msg(
     subject: str = "Re: Project Update",
     body_text: str = "Thanks for the update!",
     raw_id: str = "gmailid001",
+    from_header: str | None = None,
 ) -> dict:
-    """Build a minimal msg dict matching the shape that GmailClient.get_message produces."""
+    """Build a minimal msg dict matching the shape that GmailClient.get_message produces.
+
+    ``from_`` is the bare-address form (post ``_first_address`` strip);
+    ``from_header`` is the raw RFC From header (with display name) that
+    the notification surface uses to render ``Name <addr>`` correctly.
+    """
     return {
         "from": from_,
+        "from_header": from_header or from_,
         "to": to,
         "message_id": message_id,
         "thread_id": thread_id,
@@ -167,6 +174,33 @@ class TestInboundReplyNotify:
 
         email_rows = (await db_session.execute(select(EmailQueue))).scalars().all()
         assert len(email_rows) == 0
+
+    @pytest.mark.asyncio
+    async def test_display_name_extracted_from_raw_header(
+        self, db_session: AsyncSession, test_user, gmail_connection, owned_contact
+    ):
+        """``from_header`` carries the RFC `Name <addr>` form so the notification email shows a real name.
+
+        Regression guard: without ``from_header`` the GmailClient strips the
+        display name out via ``_first_address`` and notifications fall back to
+        a generic "A contact" sender label.
+        """
+        msg = _make_msg(
+            from_="sender@client.com",
+            from_header='"Jane Big Client" <sender@client.com>',
+            to="owner@company.com",
+            in_reply_to="<original@example.com>",
+        )
+        await _store_inbound(
+            msg, gmail_connection, db_session, datetime.now(timezone.utc)
+        )
+        await db_session.flush()
+
+        email_rows = (await db_session.execute(
+            select(EmailQueue).where(EmailQueue.sent_by_id == test_user.id)
+        )).scalars().all()
+        assert len(email_rows) == 1
+        assert "Jane Big Client" in email_rows[0].body
 
     @pytest.mark.asyncio
     async def test_reply_email_pref_off_notification_yes_email_no(

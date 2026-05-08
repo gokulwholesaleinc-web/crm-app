@@ -825,7 +825,16 @@ def render_contract_signed_email(
     company = escape(branding.get("company_name", "CRM"))
 
     if audience == "signer":
-        body_html = f"""\
+        # Distinct copy when the PDF couldn't be rendered — saying
+        # "attached for your records" while attaching nothing is
+        # actively misleading.
+        if data.get("pdf_pending"):
+            body_html = f"""\
+<p>Hi {signer_name or 'there'},</p>
+<p>Thank you for signing <strong>{title}</strong>. Your signed PDF copy will be sent once it's ready — usually within a few minutes. Reply to this email if you don't see it shortly.</p>
+<p>{company}</p>"""
+        else:
+            body_html = f"""\
 <p>Hi {signer_name or 'there'},</p>
 <p>Thank you for signing <strong>{title}</strong>. A signed PDF copy is attached for your records.</p>
 <p>{company}</p>"""

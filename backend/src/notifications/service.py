@@ -87,7 +87,12 @@ async def _queue_notification_email(
             entity_id=entity_id,
         )
     except Exception:
-        logger.warning(
+        # Bumped to ERROR (was WARNING): a failure here means the user
+        # gets no email despite the matrix gate saying they should.
+        # That covers both transport failures (Gmail outage) and
+        # programming errors (TypeError on EmailQueue, AttributeError
+        # from a future field rename). Either deserves a real alarm.
+        logger.error(
             "notification_email_dispatch_failed user_id=%s event=%s",
             user_id, event_type,
             exc_info=True,
