@@ -11,7 +11,11 @@ from src.payments.models import Payment
 
 async def generate_invoice_pdf(db: AsyncSession, payment_id: int) -> bytes:
     """Generate a branded invoice PDF (HTML-bytes) for a payment."""
-    from src.email.branded_templates import TenantBrandingHelper
+    # _safe_hex sanitizes color values before they hit the inline-CSS
+    # sinks below. Same defensive layer used in branded_templates.py
+    # for emails — see PR #269 trio review for the silent-failure bug
+    # this prevents (corrupt-row hex would render an unbranded invoice).
+    from src.email.branded_templates import TenantBrandingHelper, _safe_hex
 
     result = await db.execute(
         select(Payment)
@@ -31,12 +35,12 @@ async def generate_invoice_pdf(db: AsyncSession, payment_id: int) -> bytes:
         branding = await TenantBrandingHelper.get_branding_for_user(db, payment.owner_id)
 
     company = escape(branding.get("company_name", "CRM"))
-    primary = escape(branding.get("primary_color", "#6366f1"))
+    primary = escape(_safe_hex(branding.get("primary_color"), "#6366f1", field="primary_color"))
     # Page + table-header surface track tenant settings. Light-mode only;
     # invoices are paper documents and tenant_settings doesn't carry a
     # dark variant for printables.
-    bg_light = escape(branding.get("bg_color_light", "#f9fafb"))
-    surface_light = escape(branding.get("surface_color_light", "#ffffff"))
+    bg_light = escape(_safe_hex(branding.get("bg_color_light"), "#f9fafb", field="bg_color_light"))
+    surface_light = escape(_safe_hex(branding.get("surface_color_light"), "#ffffff", field="surface_color_light"))
     logo_url = branding.get("logo_url", "")
     footer_text = escape(branding.get("footer_text", ""))
 
