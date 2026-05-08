@@ -119,7 +119,11 @@ class ContractLifecycleService:
             entity_id=contract.id,
         )
 
+        from src.account.notification_gate import should_send_email
         from src.auth.models import User
+
+        if not await should_send_email(self.db, contract.owner_id, "contract_expiring"):
+            return
 
         owner_result = await self.db.execute(
             select(User).where(User.id == contract.owner_id)
@@ -128,26 +132,27 @@ class ContractLifecycleService:
         if owner is None or not owner.email:
             return
 
-        from src.email.branded_templates import TenantBrandingHelper
+        from src.email.branded_templates import TenantBrandingHelper, render_contract_expiring_email
         from src.email.service import EmailService
 
         branding = await TenantBrandingHelper.get_branding_for_user(
             self.db, contract.owner_id
         )
-        company_label = branding.get("company_name") or "CRM"
         frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
         view_url = f"{frontend_url}/contracts/{contract.id}"
-        html = (
-            f"<p>{body}</p>"
-            f'<p><a href="{view_url}">Open contract</a></p>'
-            f"<p>{company_label}</p>"
-        )
+        subject, body_html = render_contract_expiring_email(branding, {
+            "contract_title": contract.title,
+            "company_name": contract.company.name if contract.company else "",
+            "end_date": contract.end_date.strftime("%B %d, %Y") if contract.end_date else "",
+            "days_left": days_left,
+            "contract_url": view_url,
+        })
 
         email_service = EmailService(self.db)
         await email_service.queue_email(
             to_email=owner.email,
-            subject=f"Contract expiring — {contract.title}",
-            body=html,
+            subject=subject,
+            body=body_html,
             sent_by_id=contract.owner_id,
             entity_type="contracts",
             entity_id=contract.id,
