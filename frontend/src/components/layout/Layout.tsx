@@ -40,7 +40,7 @@ export function Layout({
   }, [navigate, location.pathname]);
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-900 overflow-hidden">
+    <div className="flex flex-col h-screen bg-brand-page overflow-hidden">
       {/* Skip Link */}
       <a href="#main-content" className="skip-link">Skip to main content</a>
 
