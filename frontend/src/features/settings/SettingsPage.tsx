@@ -14,9 +14,7 @@ import { Avatar } from '../../components/ui/Avatar';
 import { Spinner } from '../../components/ui/Spinner';
 import { Button } from '../../components/ui/Button';
 import {
-  Cog6ToothIcon,
-  BellIcon,
-  ShieldCheckIcon,
+  KeyIcon,
   PencilSquareIcon,
 } from '@heroicons/react/24/outline';
 import { EditProfileModal } from './components/EditProfileModal';
@@ -28,6 +26,8 @@ import { AssignmentRulesSection } from './components/AssignmentRulesSection';
 import { RolesSection } from './components/RolesSection';
 import { IntegrationsSection } from './components/IntegrationsSection';
 import { EmailSettingsSection } from './components/EmailSettingsSection';
+import { NotificationPreferencesSection } from './components/NotificationPreferencesSection';
+import { AccountPreferencesSection } from './components/AccountPreferencesSection';
 
 interface NavItem {
   id: string;
@@ -49,6 +49,8 @@ const NAV_ITEMS: readonly NavItem[] = [
   { id: 'roles', label: 'Roles & Permissions' },
   { id: 'assignment-rules', label: 'Auto-Assignment' },
   { id: 'account-settings', label: 'Account Settings' },
+  { id: 'notifications', label: 'Notifications' },
+  { id: 'preferences', label: 'Preferences' },
   { id: 'account-status', label: 'Account Status' },
 ] as const;
 
@@ -386,73 +388,53 @@ function SettingsPage() {
             <Card>
               <CardHeader
                 title="Account Settings"
-                description="Manage your account preferences"
+                description="Manage how you sign in and how the CRM behaves for you"
               />
               <CardBody className="p-4 sm:p-6">
-                <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {/* Notification Settings */}
-                  <div className="py-3 sm:py-4 first:pt-0 last:pb-0">
-                    <div className="flex items-start sm:items-center gap-3 sm:space-x-4">
-                      <div className="flex-shrink-0">
-                        <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                          <BellIcon className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 dark:text-blue-400" />
-                        </div>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                          Notifications
-                        </p>
-                        <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-                          Configure email and push notification preferences
-                        </p>
-                      </div>
-                      <div className="text-xs sm:text-sm text-gray-400 dark:text-gray-500 flex-shrink-0">Coming soon</div>
-                    </div>
-                  </div>
+                <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+                  Your account uses Google Sign-In. Notifications and display preferences are below.
+                </p>
 
-                  {/* Security Settings */}
-                  <div className="py-3 sm:py-4 first:pt-0 last:pb-0">
-                    <div className="flex items-start sm:items-center gap-3 sm:space-x-4">
-                      <div className="flex-shrink-0">
-                        <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                          <ShieldCheckIcon className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 dark:text-green-400" />
-                        </div>
+                {/* Sign-in method — static readout. The CRM is Google-OAuth-only,
+                    so there's no password, 2FA, or session management to expose. */}
+                <div className="mt-4 py-3 sm:py-4 border-t border-gray-200 dark:border-gray-700">
+                  <div className="flex items-start sm:items-center gap-3 sm:space-x-4">
+                    <div className="flex-shrink-0">
+                      <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                        <KeyIcon className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 dark:text-green-400" aria-hidden="true" />
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                          Security
-                        </p>
-                        <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-                          Password, two-factor authentication, and sessions
-                        </p>
-                      </div>
-                      <div className="text-xs sm:text-sm text-gray-400 dark:text-gray-500 flex-shrink-0">Coming soon</div>
                     </div>
-                  </div>
-
-                  {/* Preferences */}
-                  <div className="py-3 sm:py-4 first:pt-0 last:pb-0">
-                    <div className="flex items-start sm:items-center gap-3 sm:space-x-4">
-                      <div className="flex-shrink-0">
-                        <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-                          <Cog6ToothIcon className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600 dark:text-purple-400" />
-                        </div>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                          Preferences
-                        </p>
-                        <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-                          Language, timezone, and display settings
-                        </p>
-                      </div>
-                      <div className="text-xs sm:text-sm text-gray-400 dark:text-gray-500 flex-shrink-0">Coming soon</div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                        Sign-in method
+                      </p>
+                      <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 break-all">
+                        {user?.email || 'Not signed in'}
+                      </p>
                     </div>
+                    <span className="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900/30 px-2.5 py-0.5 text-xs font-medium text-green-800 dark:text-green-300 flex-shrink-0">
+                      Connected via Google
+                    </span>
                   </div>
-
                 </div>
               </CardBody>
             </Card>
+          </section>
+
+          <section
+            id="notifications"
+            ref={setSectionRef('notifications')}
+            className="scroll-mt-6"
+          >
+            <NotificationPreferencesSection />
+          </section>
+
+          <section
+            id="preferences"
+            ref={setSectionRef('preferences')}
+            className="scroll-mt-6"
+          >
+            <AccountPreferencesSection />
           </section>
 
           <section
