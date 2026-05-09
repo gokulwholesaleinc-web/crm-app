@@ -17,8 +17,8 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
 
     DEBUG: bool = False
-    # Comma-separated JSON array of allowed origins, e.g. '["https://app.example.com"]'.
-    # Must be set explicitly in production — no wildcard allowed when DEBUG=False.
+    # JSON array of allowed origins, e.g. '["https://app.example.com"]'.
+    # Must be set explicitly in production — wildcard is rejected at startup when DEBUG=False.
     BACKEND_CORS_ORIGINS: str = '["http://localhost:3000","http://localhost:5173"]'
 
     DATABASE_SSL_VERIFY: bool = False
@@ -33,9 +33,9 @@ class Settings(BaseSettings):
     STRIPE_PUBLISHABLE_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
 
-    # Public-facing frontend URL, used to build Stripe Checkout
-    # success_url/cancel_url and post-accept payment redirects for
-    # public proposal/quote pages. No trailing slash.
+    # Public-facing frontend origin used throughout the backend for deep-link
+    # generation (Stripe Checkout, e-sign, quotes, contracts, notifications,
+    # Gmail OAuth). No trailing slash. Required in production.
     FRONTEND_BASE_URL: str = ""
 
     META_ACCESS_TOKEN: str = ""
@@ -60,13 +60,7 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins(self) -> list[str]:
-        origins = json.loads(self.BACKEND_CORS_ORIGINS)
-        if not self.DEBUG and "*" in origins:
-            raise ValueError(
-                "BACKEND_CORS_ORIGINS may not contain '*' in production (DEBUG=False). "
-                "Set an explicit list of allowed origins."
-            )
-        return origins
+        return json.loads(self.BACKEND_CORS_ORIGINS)
 
     @property
     def db_url(self) -> str:

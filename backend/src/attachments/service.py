@@ -69,11 +69,16 @@ class AttachmentService:
                 f"Allowed: {', '.join(sorted(per_entity))}"
             )
 
-        # Reject oversized uploads before reading the body into memory.
-        declared_size = file.size  # populated by FastAPI from Content-Length
-        if declared_size is not None and declared_size > MAX_UPLOAD_SIZE:
+        # Reject uploads that omit Content-Length (chunked transfer encoding)
+        # or whose declared size already exceeds the cap — before reading body
+        # into memory. file.size is measured by Starlette during multipart
+        # parsing; it is None for raw body uploads or chunked transfer encoding.
+        actual_size = file.size
+        if actual_size is None:
+            raise ValueError("Upload rejected: Content-Length is required (chunked uploads not supported).")
+        if actual_size > MAX_UPLOAD_SIZE:
             raise ValueError(
-                f"File size {declared_size} bytes exceeds maximum of {MAX_UPLOAD_SIZE} bytes"
+                f"File size {actual_size} bytes exceeds maximum of {MAX_UPLOAD_SIZE} bytes"
             )
 
         content = await file.read()

@@ -13,6 +13,8 @@ from src.integrations.gmail.models import GmailConnection, GmailSyncState
 logger = logging.getLogger(__name__)
 
 # Strong references so GC doesn't collect tasks before they finish.
+# A parallel set in gmail/router.py guards the router-initiated path; this one
+# covers the service-layer path (schedule_backfill_if_needed).
 _BACKFILL_TASKS: set[asyncio.Task] = set()
 
 

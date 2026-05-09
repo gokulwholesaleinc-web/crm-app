@@ -159,8 +159,7 @@ class CRMActionTools:
         }
 
     async def create_and_send_quote(self, args: dict[str, Any], user_id: int) -> dict[str, Any]:
-        import os
-
+        from src.config import settings
         from src.quotes.schemas import QuoteCreate, QuoteLineItemCreate
         from src.quotes.service import QuoteService
 
@@ -187,7 +186,7 @@ class CRMActionTools:
         service = QuoteService(self.db)
         quote = await service.create(quote_data, user_id)
 
-        base_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        base_url = settings.FRONTEND_BASE_URL or "http://localhost:3000"
         public_url = f"{base_url}/quotes/public/{quote.quote_number}"
 
         result = {
@@ -210,7 +209,7 @@ class CRMActionTools:
         return result
 
     async def _send_quote_email(self, quote, user_id: int) -> dict[str, Any]:
-        import os
+        from src.config import settings
 
         if not quote.contact_id:
             return {"success": False, "error": "No contact associated with quote."}
@@ -227,7 +226,7 @@ class CRMActionTools:
 
         branding = await TenantBrandingHelper.get_branding_for_user(self.db, user_id)
 
-        base_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        base_url = settings.FRONTEND_BASE_URL or "http://localhost:3000"
         view_url = f"{base_url}/quotes/public/{quote.quote_number}"
 
         quote_data = {

@@ -127,11 +127,22 @@ async def lifespan(app: FastAPI):
     from src.core.scheduler import start_scheduler, stop_scheduler
 
     print("Starting up CRM application...")
-    if settings.SEED_ON_STARTUP and not settings.DEBUG:
-        raise RuntimeError(
-            "SEED_ON_STARTUP=True is not allowed in production (DEBUG=False). "
-            "Disable SEED_ON_STARTUP before deploying."
-        )
+    if not settings.DEBUG:
+        if settings.SEED_ON_STARTUP:
+            raise RuntimeError(
+                "SEED_ON_STARTUP=True is not allowed in production (DEBUG=False). "
+                "Disable SEED_ON_STARTUP before deploying."
+            )
+        if not settings.FRONTEND_BASE_URL:
+            raise RuntimeError(
+                "FRONTEND_BASE_URL must be set in production (DEBUG=False). "
+                "Deep links in emails and notifications will be broken without it."
+            )
+        if "*" in settings.cors_origins:
+            raise RuntimeError(
+                "BACKEND_CORS_ORIGINS may not contain '*' in production (DEBUG=False). "
+                "Set an explicit list of allowed origins."
+            )
     asyncio.create_task(_init_database())
     start_scheduler()
 

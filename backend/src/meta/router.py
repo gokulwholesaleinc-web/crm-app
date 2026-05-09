@@ -2,6 +2,7 @@
 
 import hashlib
 import hmac
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -25,6 +26,7 @@ from src.meta.schemas import (
 from src.meta.service import MetaService
 
 router = APIRouter(prefix="/api/meta", tags=["meta"])
+logger = logging.getLogger(__name__)
 
 
 async def _require_company_access(
@@ -203,11 +205,9 @@ async def receive_webhook(
     """Receive Meta Lead Ads webhook events with HMAC-SHA256 signature verification."""
     from src.config import settings
 
-    if settings.META_APP_SECRET and not settings.META_WEBHOOK_VERIFY_TOKEN:
-        raise HTTPException(
-            status_code=503,
-            detail="Meta webhook is misconfigured: META_APP_SECRET is set but META_WEBHOOK_VERIFY_TOKEN is empty",
-        )
+    if not settings.META_WEBHOOK_VERIFY_TOKEN:
+        logger.warning("Meta webhook POST received but META_WEBHOOK_VERIFY_TOKEN is not configured; rejecting.")
+        raise HTTPException(status_code=503, detail="Meta webhook is not configured")
 
     # Verify signature if app secret is configured
     raw_body = await request.body()
