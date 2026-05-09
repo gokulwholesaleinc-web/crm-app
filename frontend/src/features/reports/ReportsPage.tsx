@@ -1,5 +1,5 @@
 /**
- * Reports page with custom reports, templates, AI generation, and saved reports.
+ * Reports page with custom reports, templates, and saved reports.
  */
 
 import { useState } from 'react';
@@ -14,13 +14,11 @@ import {
   useSavedReports,
   useExecuteReport,
   useDeleteSavedReport,
-  useAIGenerateReport,
 } from '../../hooks/useReports';
 import { useContractStats } from '../../hooks/useContracts';
 import type { ReportDefinition, ReportResult, ReportTemplate, SavedReport } from '../../api/reports';
 import {
   PlusIcon,
-  SparklesIcon,
   TrashIcon,
   PlayIcon,
   ClockIcon,
@@ -108,8 +106,6 @@ type ViewMode = 'list' | 'builder' | 'viewing';
 
 function ReportsPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('list');
-  const [aiModalOpen, setAiModalOpen] = useState(false);
-  const [aiPrompt, setAiPrompt] = useState('');
   const [activeResult, setActiveResult] = useState<{ definition: ReportDefinition; result: ReportResult } | null>(null);
   const [builderInitial, setBuilderInitial] = useState<Partial<ReportDefinition> | undefined>(undefined);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
@@ -118,7 +114,6 @@ function ReportsPage() {
   const { data: savedReports, isLoading: reportsLoading } = useSavedReports();
   const executeReport = useExecuteReport();
   const deleteReport = useDeleteSavedReport();
-  const aiGenerate = useAIGenerateReport();
 
   const handleRunTemplate = async (template: ReportTemplate) => {
     const definition: ReportDefinition = {
@@ -152,19 +147,6 @@ function ReportsPage() {
     try {
       const result = await executeReport.mutateAsync(definition);
       setActiveResult({ definition, result });
-      setViewMode('viewing');
-    } catch {
-      // Error handled by mutation state
-    }
-  };
-
-  const handleAIGenerate = async () => {
-    if (!aiPrompt.trim()) return;
-    try {
-      const response = await aiGenerate.mutateAsync(aiPrompt);
-      setActiveResult({ definition: response.definition, result: response.result });
-      setAiModalOpen(false);
-      setAiPrompt('');
       setViewMode('viewing');
     } catch {
       // Error handled by mutation state
@@ -246,14 +228,10 @@ function ReportsPage() {
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Reports</h1>
           <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-            Analyze your CRM data with custom and AI-powered reports
+            Analyze your CRM data with custom reports and templates
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="secondary" size="sm" onClick={() => setAiModalOpen(true)}>
-            <SparklesIcon className="h-4 w-4 mr-1.5" />
-            Generate with AI
-          </Button>
           <Button size="sm" onClick={() => handleOpenBuilder()}>
             <PlusIcon className="h-4 w-4 mr-1.5" />
             Create Custom Report
@@ -277,7 +255,7 @@ function ReportsPage() {
         ) : !savedReports || savedReports.length === 0 ? (
           <Card>
             <CardBody className="p-6 text-center text-gray-500 dark:text-gray-400 text-sm">
-              No saved reports yet. Create one using the builder or AI generation.
+              No saved reports yet. Create one using the builder above.
             </CardBody>
           </Card>
         ) : (
@@ -376,45 +354,6 @@ function ReportsPage() {
           </div>
         )}
       </section>
-
-      {/* AI Generate Modal */}
-      <Modal
-        isOpen={aiModalOpen}
-        onClose={() => { setAiModalOpen(false); setAiPrompt(''); }}
-        title="Generate Report with AI"
-        description="Describe the report you want in plain language"
-        size="lg"
-      >
-        <div>
-          <textarea
-            aria-label="Report description"
-            value={aiPrompt}
-            onChange={(e) => setAiPrompt(e.target.value)}
-            placeholder="e.g., Show me monthly revenue for this year, or Count of leads by status..."
-            rows={4}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400 rounded-lg text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:border-primary-500 resize-none"
-            spellCheck={false}
-          />
-          {aiGenerate.isError && (
-            <p className="mt-2 text-sm text-red-600">
-              Failed to generate report. Please try rephrasing your request.
-            </p>
-          )}
-        </div>
-        <ModalFooter>
-          <Button variant="secondary" size="sm" onClick={() => { setAiModalOpen(false); setAiPrompt(''); }}>
-            Cancel
-          </Button>
-          <Button
-            size="sm"
-            onClick={handleAIGenerate}
-            disabled={!aiPrompt.trim() || aiGenerate.isPending}
-          >
-            {aiGenerate.isPending ? <Spinner size="sm" className="mr-2" /> : <SparklesIcon className="h-4 w-4 mr-1.5" />}
-            Generate
-          </Button>
-        </ModalFooter>
-      </Modal>
 
       {/* Delete Confirmation Modal */}
       <Modal

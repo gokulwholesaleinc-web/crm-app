@@ -3,22 +3,17 @@
 import io
 import json
 import logging
-import os
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from openai import AsyncOpenAI
 from sqlalchemy import or_, select
 
-from src.config import settings
 from src.core.constants import HTTPStatus
 from src.core.data_scope import DataScope, get_data_scope
 from src.core.router_utils import CurrentUser, DBSession
 from src.reports.models import SavedReport
 from src.reports.schemas import (
-    AIReportGenerateRequest,
-    AIReportGenerateResponse,
     ReportDefinition,
     ReportResult,
     ReportTemplate,
@@ -27,7 +22,7 @@ from src.reports.schemas import (
     SavedReportUpdate,
     ScheduleUpdateRequest,
 )
-from src.reports.service import ENTITY_MODEL_MAP, NUMERIC_FIELDS, REPORT_TEMPLATES, ReportExecutor
+from src.reports.service import REPORT_TEMPLATES, ReportExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -105,98 +100,6 @@ async def list_report_templates(
 ):
     """List pre-built report templates."""
     return [ReportTemplate(**t) for t in REPORT_TEMPLATES]
-
-
-@router.post("/ai-generate", response_model=AIReportGenerateResponse)
-async def ai_generate_report(
-    request: AIReportGenerateRequest,
-    current_user: CurrentUser,
-    db: DBSession,
-    data_scope: Annotated[DataScope, Depends(get_data_scope)],
-):
-    """Use AI to parse a natural language prompt into a report definition, execute it, and return results."""
-    api_key = settings.OPENAI_API_KEY or os.environ.get("OPENAI_API_KEY", "")
-    if not api_key:
-        raise HTTPException(status_code=400, detail="AI features are not configured. Set OPENAI_API_KEY.")
-
-    client = AsyncOpenAI(api_key=api_key)
-
-    entity_types = list(ENTITY_MODEL_MAP.keys())
-    numeric_fields_info = json.dumps(NUMERIC_FIELDS, indent=2)
-
-    system_prompt = f"""You are a CRM report generator. Parse the user's request into a JSON report definition.
-
-Available entity types: {entity_types}
-Available metrics: count, sum, avg, min, max
-Available date groupings: day, week, month, quarter, year
-Available chart types: bar, line, pie, table
-
-Numeric fields per entity (required for sum/avg/min/max):
-{numeric_fields_info}
-
-Respond ONLY with a JSON object matching this schema:
-{{
-    "entity_type": "<string>",
-    "metric": "<string>",
-    "metric_field": "<string or null>",
-    "group_by": "<string or null>",
-    "date_group": "<string or null>",
-    "filters": null,
-    "chart_type": "<string>"
-}}
-
-Choose the most appropriate entity_type, metric, grouping, and chart_type based on the user's request.
-If the user mentions "revenue" or "money", use opportunities with sum of amount.
-If the user mentions "payments", use payments with sum of amount.
-If the user mentions "contracts", use contracts entity.
-Default to count metric if no aggregation is implied.
-Default to bar chart if no chart preference is stated."""
-
-    try:
-        response = await client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": request.prompt},
-            ],
-            temperature=0,
-            response_format={"type": "json_object"},
-        )
-
-        content = response.choices[0].message.content
-        if not content:
-            raise HTTPException(status_code=502, detail="AI returned an empty response. Please try again.")
-        parsed = json.loads(content)
-
-        definition = ReportDefinition(
-            entity_type=parsed.get("entity_type", "opportunities"),
-            metric=parsed.get("metric", "count"),
-            metric_field=parsed.get("metric_field"),
-            group_by=parsed.get("group_by"),
-            date_group=parsed.get("date_group"),
-            filters=parsed.get("filters"),
-            chart_type=parsed.get("chart_type", "bar"),
-        )
-    except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=400, detail="AI returned invalid JSON. Please try rephrasing your request.") from exc
-    except Exception as exc:
-        logger.error(f"AI report generation error: {exc}")
-        raise HTTPException(status_code=400, detail=f"Failed to generate report: {str(exc)}") from exc
-
-    # Gate on entity scope before executing — avoids unnecessary DB work for a guaranteed 403.
-    entity_model = ENTITY_MODEL_MAP.get(definition.entity_type)
-    if entity_model and not hasattr(entity_model, "owner_id") and not data_scope.can_see_all():
-        raise HTTPException(status_code=HTTPStatus.FORBIDDEN, detail="Reports on this entity require admin role")
-
-    executor = ReportExecutor(db, user_id=current_user.id, is_admin=data_scope.can_see_all())
-    try:
-        result = await executor.execute(definition)
-    except PermissionError as exc:
-        raise HTTPException(status_code=HTTPStatus.FORBIDDEN, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    return AIReportGenerateResponse(definition=definition, result=result)
 
 
 # Saved report CRUD

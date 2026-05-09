@@ -76,11 +76,6 @@ export interface ReportTemplate {
   filters?: Record<string, unknown> | null;
 }
 
-export interface AIReportGenerateResponse {
-  definition: ReportDefinition;
-  result: ReportResult;
-}
-
 export interface ScheduleUpdateRequest {
   schedule?: string | null;
   recipients?: string[] | null;
@@ -130,11 +125,6 @@ export const deleteSavedReport = async (id: number): Promise<void> => {
   await apiClient.delete(`/api/reports/${id}`);
 };
 
-export const aiGenerateReport = async (prompt: string): Promise<AIReportGenerateResponse> => {
-  const { data } = await apiClient.post('/api/reports/ai-generate', { prompt });
-  return data;
-};
-
 export const updateReportSchedule = async (id: number, schedule: ScheduleUpdateRequest): Promise<SavedReport> => {
   const { data } = await apiClient.patch(`/api/reports/${id}/schedule`, schedule);
   return data;
@@ -149,6 +139,5 @@ export const reportsApi = {
   getSavedReport,
   updateSavedReport,
   deleteSavedReport,
-  aiGenerateReport,
   updateReportSchedule,
 };
