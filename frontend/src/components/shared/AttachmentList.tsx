@@ -8,7 +8,7 @@ import { Spinner, ConfirmDialog } from '../ui';
 import { useAttachments, useUploadAttachment, useDeleteAttachment } from '../../hooks/useAttachments';
 import { getDownloadUrl } from '../../api/attachments';
 import { getToken } from '../../api/client';
-import { useUIStore } from '../../store/uiStore';
+import { showSuccess, showError } from '../../utils/toast';
 
 interface AttachmentListProps {
   entityType: string;
@@ -51,8 +51,6 @@ export function AttachmentList({ entityType, entityId }: AttachmentListProps) {
   } | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const addToast = useUIStore((state) => state.addToast);
-
   const { data: attachmentData, isLoading, error } = useAttachments(entityType, entityId);
   const attachments = attachmentData?.items || [];
 
@@ -68,21 +66,13 @@ export function AttachmentList({ entityType, entityId }: AttachmentListProps) {
             entityType,
             entityId,
           });
-          addToast({
-            type: 'success',
-            title: 'File Uploaded',
-            message: `${file.name} uploaded successfully.`,
-          });
+          showSuccess(`${file.name} uploaded successfully.`);
         } catch {
-          addToast({
-            type: 'error',
-            title: 'Upload Failed',
-            message: `Failed to upload ${file.name}. Check file type and size.`,
-          });
+          showError(`Failed to upload ${file.name}. Check file type and size.`);
         }
       }
     },
-    [entityType, entityId, uploadMutation, addToast],
+    [entityType, entityId, uploadMutation],
   );
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -118,17 +108,9 @@ export function AttachmentList({ entityType, entityId }: AttachmentListProps) {
         entityId,
       });
       setAttachmentToDelete(null);
-      addToast({
-        type: 'success',
-        title: 'File Deleted',
-        message: 'Attachment deleted successfully.',
-      });
+      showSuccess('Attachment deleted successfully.');
     } catch {
-      addToast({
-        type: 'error',
-        title: 'Error',
-        message: 'Failed to delete attachment.',
-      });
+      showError('Failed to delete attachment.');
     }
   };
 
@@ -150,11 +132,7 @@ export function AttachmentList({ entityType, entityId }: AttachmentListProps) {
       document.body.removeChild(link);
       URL.revokeObjectURL(blobUrl);
     } catch {
-      addToast({
-        type: 'error',
-        title: 'Download Failed',
-        message: 'Failed to download the file.',
-      });
+      showError('Failed to download the file.');
     }
   };
 

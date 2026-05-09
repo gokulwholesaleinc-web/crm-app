@@ -8,7 +8,7 @@ import { Button, Spinner, ConfirmDialog } from '../ui';
 import { useEntityComments, useCreateComment, useDeleteComment } from '../../hooks/useComments';
 import { useUsers } from '../../hooks/useAuth';
 import { formatDate } from '../../utils/formatters';
-import { useUIStore } from '../../store/uiStore';
+import { showSuccess, showError } from '../../utils/toast';
 import { useAuthStore } from '../../store/authStore';
 import type { Comment as CommentType, User } from '../../types';
 import clsx from 'clsx';
@@ -271,7 +271,6 @@ function CommentItem({
 export function CommentSection({ entityType, entityId }: CommentSectionProps) {
   const [replyingTo, setReplyingTo] = useState<number | null>(null);
   const [commentToDelete, setCommentToDelete] = useState<number | null>(null);
-  const addToast = useUIStore((state) => state.addToast);
   const currentUser = useAuthStore((state) => state.user);
 
   const { data: commentsData, isLoading, error } = useEntityComments(
@@ -294,17 +293,9 @@ export function CommentSection({ entityType, entityId }: CommentSectionProps) {
         entity_id: entityId,
         is_internal: isInternal,
       });
-      addToast({
-        type: 'success',
-        title: 'Comment Added',
-        message: 'Your comment has been posted.',
-      });
+      showSuccess('Your comment has been posted.');
     } catch {
-      addToast({
-        type: 'error',
-        title: 'Error',
-        message: 'Failed to add comment. Please try again.',
-      });
+      showError('Failed to add comment. Please try again.');
     }
   };
 
@@ -319,17 +310,9 @@ export function CommentSection({ entityType, entityId }: CommentSectionProps) {
         is_internal: isInternal,
       });
       setReplyingTo(null);
-      addToast({
-        type: 'success',
-        title: 'Reply Added',
-        message: 'Your reply has been posted.',
-      });
+      showSuccess('Your reply has been posted.');
     } catch {
-      addToast({
-        type: 'error',
-        title: 'Error',
-        message: 'Failed to post reply. Please try again.',
-      });
+      showError('Failed to post reply. Please try again.');
     }
   };
 
@@ -342,17 +325,9 @@ export function CommentSection({ entityType, entityId }: CommentSectionProps) {
         entityId,
       });
       setCommentToDelete(null);
-      addToast({
-        type: 'success',
-        title: 'Comment Deleted',
-        message: 'The comment has been removed.',
-      });
+      showSuccess('The comment has been removed.');
     } catch {
-      addToast({
-        type: 'error',
-        title: 'Error',
-        message: 'Failed to delete comment. Please try again.',
-      });
+      showError('Failed to delete comment. Please try again.');
     }
   };
 

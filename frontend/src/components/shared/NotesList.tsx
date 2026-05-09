@@ -8,7 +8,7 @@ import { Button, Spinner, ConfirmDialog } from '../ui';
 import { useEntityNotes, useCreateNote, useDeleteNote } from '../../hooks/useNotes';
 import { useUsers } from '../../hooks/useAuth';
 import { formatDate } from '../../utils/formatters';
-import { useUIStore } from '../../store/uiStore';
+import { showSuccess, showError } from '../../utils/toast';
 import type { User } from '../../types';
 
 interface NotesListProps {
@@ -22,8 +22,6 @@ export function NotesList({ entityType, entityId }: NotesListProps) {
   const [showMentions, setShowMentions] = useState(false);
   const [mentionFilter, setMentionFilter] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const addToast = useUIStore((state) => state.addToast);
-
   // Fetch notes for the entity
   const { data: notesData, isLoading, error } = useEntityNotes(entityType, entityId);
   const notes = notesData?.items || [];
@@ -50,17 +48,9 @@ export function NotesList({ entityType, entityId }: NotesListProps) {
         entity_id: entityId,
       });
       setNewNote('');
-      addToast({
-        type: 'success',
-        title: 'Note Added',
-        message: 'Your note has been added successfully.',
-      });
+      showSuccess('Your note has been added successfully.');
     } catch {
-      addToast({
-        type: 'error',
-        title: 'Error',
-        message: 'Failed to add note. Please try again.',
-      });
+      showError('Failed to add note. Please try again.');
     }
   };
 
@@ -74,17 +64,9 @@ export function NotesList({ entityType, entityId }: NotesListProps) {
         entityId,
       });
       setNoteToDelete(null);
-      addToast({
-        type: 'success',
-        title: 'Note Deleted',
-        message: 'Your note has been deleted successfully.',
-      });
+      showSuccess('Your note has been deleted successfully.');
     } catch {
-      addToast({
-        type: 'error',
-        title: 'Error',
-        message: 'Failed to delete note. Please try again.',
-      });
+      showError('Failed to delete note. Please try again.');
     }
   };
 
