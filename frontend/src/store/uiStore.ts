@@ -11,14 +11,6 @@ interface ModalState {
   data?: Record<string, unknown>;
 }
 
-interface ToastMessage {
-  id: string;
-  type: 'success' | 'error' | 'warning' | 'info';
-  title: string;
-  message?: string;
-  duration?: number;
-}
-
 interface UIState {
   // Sidebar
   sidebarOpen: boolean;
@@ -26,9 +18,6 @@ interface UIState {
 
   // Modals
   modals: Record<string, ModalState>;
-
-  // Toasts
-  toasts: ToastMessage[];
 
   // Global loading state
   globalLoading: boolean;
@@ -47,11 +36,6 @@ interface UIState {
   closeModal: (modalId: string) => void;
   closeAllModals: () => void;
 
-  // Actions - Toasts
-  addToast: (toast: Omit<ToastMessage, 'id'>) => void;
-  removeToast: (id: string) => void;
-  clearToasts: () => void;
-
   // Actions - Global loading
   setGlobalLoading: (loading: boolean) => void;
 
@@ -60,9 +44,6 @@ interface UIState {
   setCommandPaletteOpen: (open: boolean) => void;
 }
 
-// Utility to generate unique IDs
-const generateId = () => Math.random().toString(36).substring(2, 9);
-
 export const useUIStore = create<UIState>()(
   persist(
     (set) => ({
@@ -70,7 +51,6 @@ export const useUIStore = create<UIState>()(
       sidebarOpen: true,
       sidebarCollapsed: false,
       modals: {},
-      toasts: [],
       globalLoading: false,
       commandPaletteOpen: false,
 
@@ -113,19 +93,6 @@ export const useUIStore = create<UIState>()(
             {}
           ),
         })),
-
-      // Toast actions
-      addToast: (toast) =>
-        set((state) => ({
-          toasts: [...state.toasts, { ...toast, id: generateId() }],
-        })),
-
-      removeToast: (id) =>
-        set((state) => ({
-          toasts: state.toasts.filter((t) => t.id !== id),
-        })),
-
-      clearToasts: () => set({ toasts: [] }),
 
       // Global loading actions
       setGlobalLoading: (globalLoading) => set({ globalLoading }),
