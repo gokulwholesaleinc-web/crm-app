@@ -34,8 +34,8 @@ See .env.example for required variables: DATABASE_URL
 ## Tech Stack
 - **Backend**: FastAPI (Python 3.11+)
 - **Frontend**: React 18 + TypeScript + Vite
-- **Database**: PostgreSQL 16 with pgvector extension
-- **AI**: Disabled — OpenAI SDK retained for ai/ module stubs (semantic embeddings on contacts/leads/opportunities; no-ops when OPENAI_API_KEY unset)
+- **Database**: PostgreSQL 16 (pgvector DB extension retained; pgvector pip package removed PR #281)
+- **AI**: Removed PR #281 — DB tables preserved; re-enable by restoring src/ai/ + remounting the router
 - **Deployment**: Docker Compose
 
 ## Project Structure

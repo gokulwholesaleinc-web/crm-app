@@ -7,11 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 from sqlalchemy import select, update
 
-from src.ai.embedding_hooks import (
-    build_lead_embedding_content,
-    delete_entity_embedding,
-    store_entity_embedding,
-)
+# Semantic-search embedding removed (PR #281); table preserved for future re-enable.
 from src.audit.utils import (
     audit_entity_create,
     audit_entity_delete,
@@ -150,13 +146,6 @@ async def create_lead(
         raise HTTPException(
             status_code=HTTPStatus.BAD_REQUEST, detail=str(exc),
         ) from exc
-
-    # Generate embedding for semantic search
-    try:
-        content = build_lead_embedding_content(lead)
-        await store_entity_embedding(db, "lead", lead.id, content)
-    except Exception as e:
-        logger.warning("Failed to store embedding: %s", e)
 
     ip_address = get_client_ip(request)
     await audit_entity_create(db, "lead", lead.id, current_user.id, ip_address)
@@ -537,13 +526,6 @@ async def update_lead(
             status_code=HTTPStatus.BAD_REQUEST, detail=str(exc),
         ) from exc
 
-    # Update embedding for semantic search
-    try:
-        content = build_lead_embedding_content(updated_lead)
-        await store_entity_embedding(db, "lead", updated_lead.id, content)
-    except Exception as e:
-        logger.warning("Failed to store embedding: %s", e)
-
     new_data = snapshot_entity(updated_lead, update_fields)
     ip_address = get_client_ip(request)
     await audit_entity_update(db, "lead", updated_lead.id, current_user.id, old_data, new_data, ip_address)
@@ -575,9 +557,6 @@ async def delete_lead(
 
     ip_address = get_client_ip(request)
     await audit_entity_delete(db, "lead", lead.id, current_user.id, ip_address)
-
-    # Delete embedding before deleting entity
-    await delete_entity_embedding(db, "lead", lead.id)
 
     await service.delete(lead)
 

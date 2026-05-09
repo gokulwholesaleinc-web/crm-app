@@ -373,7 +373,7 @@ class MetaService:
 
         Going through the service (not raw Lead(...)) is what gives us
         auto-assignment, audit log, scoring, pipeline-stage backfill,
-        the lead.created event, and embedding storage. A raw insert
+        the lead.created event. A raw insert
         bypasses every one of those.
 
         The webhook has no authenticated user, so we attribute the
@@ -448,29 +448,18 @@ class MetaService:
         lead = await LeadService(self.db).create(lead_data, user_id=actor_id)
 
         # The router's POST /api/leads endpoint fires several side
-        # effects after LeadService.create — audit row, embedding
-        # storage, lead.created event (which the notification
-        # event-handler subscribes to for in-app pings), and an
-        # assignment notification when the owner differs from the
-        # actor. We replicate the full set here so a Meta-captured
-        # lead is indistinguishable from a UI-created one downstream.
-        # The longer-term cleanup is to push these into LeadService
-        # itself; tracked separately so this PR stays scoped.
-        from src.ai.embedding_hooks import (
-            build_lead_embedding_content,
-            store_entity_embedding,
-        )
+        # effects after LeadService.create — audit row, lead.created
+        # event (which the notification event-handler subscribes to for
+        # in-app pings), and an assignment notification when the owner
+        # differs from the actor. We replicate the full set here so a
+        # Meta-captured lead is indistinguishable from a UI-created one
+        # downstream. The longer-term cleanup is to push these into
+        # LeadService itself; tracked separately so this PR stays scoped.
+
+        # Semantic-search embedding removed (PR #281); table preserved for future re-enable.
         from src.audit.utils import audit_entity_create
         from src.events.service import LEAD_CREATED, emit
         from src.notifications.service import notify_on_assignment
-
-        try:
-            await store_entity_embedding(
-                self.db, "lead", lead.id, build_lead_embedding_content(lead),
-            )
-        except Exception as e:  # parity with router which only warns
-            logger.warning("Meta capture %s: embedding store failed: %s",
-                           capture.leadgen_id, e)
 
         await audit_entity_create(
             self.db, "lead", lead.id, actor_id, ip_address=None,

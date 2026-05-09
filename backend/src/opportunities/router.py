@@ -7,11 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 from sqlalchemy import select
 
-from src.ai.embedding_hooks import (
-    build_opportunity_embedding_content,
-    delete_entity_embedding,
-    store_entity_embedding,
-)
+# Semantic-search embedding removed (PR #281); table preserved for future re-enable.
 from src.audit.utils import (
     audit_entity_create,
     audit_entity_delete,
@@ -350,13 +346,6 @@ async def create_opportunity(
     service = OpportunityService(db)
     opportunity = await service.create(opp_data, current_user.id)
 
-    # Generate embedding for semantic search
-    try:
-        content = build_opportunity_embedding_content(opportunity)
-        await store_entity_embedding(db, "opportunity", opportunity.id, content)
-    except Exception as e:
-        logger.warning("Failed to store embedding: %s", e)
-
     ip_address = get_client_ip(request)
     await audit_entity_create(db, "opportunity", opportunity.id, current_user.id, ip_address)
 
@@ -415,13 +404,6 @@ async def update_opportunity(
 
     updated_opp = await service.update(opportunity, opp_data, current_user.id)
 
-    # Update embedding for semantic search
-    try:
-        content = build_opportunity_embedding_content(updated_opp)
-        await store_entity_embedding(db, "opportunity", updated_opp.id, content)
-    except Exception as e:
-        logger.warning("Failed to store embedding: %s", e)
-
     new_data = snapshot_entity(updated_opp, update_fields)
     ip_address = get_client_ip(request)
     await audit_entity_update(db, "opportunity", updated_opp.id, current_user.id, old_data, new_data, ip_address)
@@ -467,8 +449,5 @@ async def delete_opportunity(
 
     ip_address = get_client_ip(request)
     await audit_entity_delete(db, "opportunity", opportunity.id, current_user.id, ip_address)
-
-    # Delete embedding before deleting entity
-    await delete_entity_embedding(db, "opportunity", opportunity.id)
 
     await service.delete(opportunity)

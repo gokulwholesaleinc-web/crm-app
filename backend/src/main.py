@@ -18,16 +18,9 @@ from sqlalchemy import text
 from src.account.router import router as account_router
 from src.activities.router import router as activities_router
 from src.admin.router import router as admin_router
-
-# AI assistant disabled 2026-05-07 pending Claude API rebuild — see
-# the commented include_router(ai_router) call below. Restore this
-# import alongside the mount when re-enabling.
-# from src.ai.router import router as ai_router
 from src.assignment.router import router as assignment_router
 from src.attachments.router import router as attachments_router
 from src.audit.router import router as audit_router
-
-# Import routers
 from src.auth.router import router as auth_router
 from src.campaigns.router import router as campaigns_router
 from src.comments.router import router as comments_router
@@ -79,8 +72,8 @@ async def _init_database():
         await _run_production_migrations()
 
         async with engine.begin() as conn:
+            # pgvector DB extension retained — AI tables preserved for future re-enable (PR #281).
             await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-
 
         skip_create_all = os.environ.get("SKIP_CREATE_ALL", "").lower() in ("true", "1")
         if not skip_create_all:
@@ -156,7 +149,7 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app
 app = FastAPI(
     title="CRM API",
-    description="Modern CRM with AI Assistant",
+    description="Modern CRM",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -186,9 +179,6 @@ app.include_router(opportunities_router)
 app.include_router(activities_router)
 app.include_router(campaigns_router)
 app.include_router(dashboard_router)
-# AI assistant disabled 2026-05-07 pending Claude API rebuild.
-# Re-enable by uncommenting both this line and the import at the top.
-# app.include_router(ai_router)
 app.include_router(whitelabel_router)
 app.include_router(import_export_router)
 app.include_router(notes_router)

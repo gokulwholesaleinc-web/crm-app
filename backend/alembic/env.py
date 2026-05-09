@@ -32,6 +32,24 @@ if config.config_file_name is not None:
 # Model's MetaData object for 'autogenerate' support
 target_metadata = Base.metadata
 
+# Tables preserved per PR #249 / PR #281 — Python models deleted, DB schema kept for future re-enable.
+# Without this guard, `alembic revision --autogenerate` would emit DROP TABLE for all 8 tables.
+_PRESERVED_AI_TABLES = {
+    "ai_embeddings",
+    "ai_conversations",
+    "ai_feedback",
+    "ai_knowledge_documents",
+    "ai_learnings",
+    "ai_interaction_logs",
+    "ai_action_logs",
+    "ai_user_preferences",
+}
+
+
+def _include_object(object_, name, type_, reflected, compare_to):
+    # Excluded tables have no Python model by design — preserved schema for future re-enable.
+    return not (type_ == "table" and name in _PRESERVED_AI_TABLES)
+
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
@@ -39,6 +57,7 @@ def run_migrations_offline() -> None:
     context.configure(
         url=url,
         target_metadata=target_metadata,
+        include_object=_include_object,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
     )
@@ -48,7 +67,7 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(connection=connection, target_metadata=target_metadata, include_object=_include_object)
 
     with context.begin_transaction():
         context.run_migrations()

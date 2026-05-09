@@ -95,5 +95,6 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 async def init_db():
     """Initialize database tables."""
     async with engine.begin() as conn:
+        # pgvector DB extension retained — AI tables preserved for future re-enable (PR #281).
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.create_all)
