@@ -34,7 +34,7 @@ import {
   CheckCircleIcon,
   EnvelopeIcon,
 } from '@heroicons/react/24/outline';
-import toast from 'react-hot-toast';
+import { showSuccess, showError } from '../../../utils/toast';
 import { useGoogleCalendarSync } from '../../../hooks/useGoogleCalendarSync';
 
 function ConnectionBadge({ connected }: { connected: boolean }) {
@@ -62,7 +62,7 @@ function GoogleCalendarCard({ onRequestDisconnect }: { onRequestDisconnect: () =
       window.location.href = data.auth_url;
     },
     onError: () => {
-      toast.error('Google Calendar integration is not configured. Contact your administrator.');
+      showError('Google Calendar integration is not configured. Contact your administrator.');
     },
   });
 
@@ -148,7 +148,7 @@ function MetaCard({ onRequestDisconnect }: { onRequestDisconnect: () => void }) 
       window.location.href = data.auth_url;
     },
     onError: () => {
-      toast.error('Meta integration is not configured. Contact your administrator.');
+      showError('Meta integration is not configured. Contact your administrator.');
     },
   });
 
@@ -254,7 +254,7 @@ function GmailCard({ onRequestDisconnect }: { onRequestDisconnect: () => void })
       window.location.href = data.auth_url;
     },
     onError: () => {
-      toast.error('Gmail integration is not configured. Contact your administrator.');
+      showError('Gmail integration is not configured. Contact your administrator.');
     },
   });
 
@@ -262,10 +262,10 @@ function GmailCard({ onRequestDisconnect }: { onRequestDisconnect: () => void })
     mutationFn: syncGmail,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['integrations', 'gmail'] });
-      toast.success('Gmail sync complete');
+      showSuccess('Gmail sync complete');
     },
     onError: () => {
-      toast.error('Gmail sync failed');
+      showError('Gmail sync failed');
     },
   });
 
@@ -273,10 +273,10 @@ function GmailCard({ onRequestDisconnect }: { onRequestDisconnect: () => void })
     mutationFn: () => backfillGmail(365),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['integrations', 'gmail', 'backfill-status'] });
-      toast.success('Backfill started');
+      showSuccess('Backfill started');
     },
     onError: () => {
-      toast.error('Failed to start backfill');
+      showError('Failed to start backfill');
     },
   });
 
@@ -419,7 +419,7 @@ export function IntegrationsSection() {
     mutationFn: disconnectCalendar,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['integrations', 'google-calendar'] });
-      toast.success('Google Calendar disconnected');
+      showSuccess('Google Calendar disconnected');
       setDisconnectingIntegration(null);
     },
   });
@@ -428,7 +428,7 @@ export function IntegrationsSection() {
     mutationFn: disconnectMeta,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['integrations', 'meta'] });
-      toast.success('Meta disconnected');
+      showSuccess('Meta disconnected');
       setDisconnectingIntegration(null);
     },
   });
@@ -437,7 +437,7 @@ export function IntegrationsSection() {
     mutationFn: disconnectGmail,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['integrations', 'gmail'] });
-      toast.success('Gmail disconnected');
+      showSuccess('Gmail disconnected');
       setDisconnectingIntegration(null);
     },
   });
@@ -446,7 +446,7 @@ export function IntegrationsSection() {
     mutationFn: disconnectMailchimp,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['integrations', 'mailchimp'] });
-      toast.success('Mailchimp disconnected');
+      showSuccess('Mailchimp disconnected');
       setDisconnectingIntegration(null);
     },
   });

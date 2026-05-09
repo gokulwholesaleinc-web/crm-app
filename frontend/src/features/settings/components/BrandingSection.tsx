@@ -5,7 +5,7 @@
 
 import { useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import toast from 'react-hot-toast';
+import { showSuccess, showError } from '../../../utils/toast';
 import { apiClient } from '../../../api/client';
 import { Card, CardHeader, CardBody } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
@@ -257,7 +257,7 @@ export function BrandingSection() {
       return response.data;
     },
     onSuccess: () => {
-      toast.success('Branding updated successfully');
+      showSuccess('Branding updated successfully');
       setIsEditing(false);
       refreshBranding();
       queryClient.invalidateQueries({ queryKey: ['tenant', 'config', tenantSlug] });
@@ -279,14 +279,14 @@ export function BrandingSection() {
         const msg = typeof first?.msg === 'string' ? first.msg : '';
         if (msg) message = loc ? `${loc}: ${msg}` : msg;
       }
-      toast.error(message);
+      showError(message);
     },
   });
 
   const handleSave = () => {
     if (hasInvalidColor) {
       const labels = invalidColorFields.map((f) => COLOR_LABELS[f]).join(', ');
-      toast.error(`Fix invalid hex in: ${labels}`);
+      showError(`Fix invalid hex in: ${labels}`);
       return;
     }
     // Strip empty strings so the backend keeps its defaults instead of
@@ -305,7 +305,7 @@ export function BrandingSection() {
   // reverts; only Save persists.
   const handleResetColors = () => {
     setFormData((prev) => ({ ...prev, ...COLOR_DEFAULTS }));
-    toast.success('Colors reset to defaults — click Save to apply');
+    showSuccess('Colors reset to defaults — click Save to apply');
   };
 
   // Show informational message when no tenant is configured.
