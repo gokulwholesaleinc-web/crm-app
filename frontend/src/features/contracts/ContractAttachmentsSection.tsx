@@ -3,7 +3,7 @@ import { Spinner, ConfirmDialog } from '../../components/ui';
 import { useAttachments, useUploadAttachment, useDeleteAttachment } from '../../hooks/useAttachments';
 import { getDownloadUrl } from '../../api/attachments';
 import { getToken } from '../../api/client';
-import { useUIStore } from '../../store/uiStore';
+import { showSuccess, showError } from '../../utils/toast';
 
 interface ContractAttachmentsSectionProps {
   contractId: number;
@@ -39,8 +39,6 @@ export function ContractAttachmentsSection({ contractId, canEdit }: ContractAtta
   const [isDragging, setIsDragging] = useState(false);
   const [attachmentToDelete, setAttachmentToDelete] = useState<{ id: number; name: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const addToast = useUIStore((state) => state.addToast);
-
   const { data: attachmentData, isLoading, error } = useAttachments('contracts', contractId);
   const allAttachments = attachmentData?.items || [];
 
@@ -52,22 +50,18 @@ export function ContractAttachmentsSection({ contractId, canEdit }: ContractAtta
       const fileArray = Array.from(files);
       const totalSize = fileArray.reduce((sum, f) => sum + f.size, 0);
       if (totalSize > MAX_TOTAL_BYTES) {
-        addToast({
-          type: 'error',
-          title: 'Upload Failed',
-          message: `Total file size exceeds 25 MB limit.`,
-        });
+        showError(`Total file size exceeds 25 MB limit.`);
         return;
       }
+      const invalid: string[] = [];
+      const succeeded: string[] = [];
+      const failed: string[] = [];
+
       for (const file of fileArray) {
         const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
         const validExts = new Set(['pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif']);
         if (!ACCEPTED_MIME.has(file.type) && !validExts.has(ext)) {
-          addToast({
-            type: 'error',
-            title: 'Invalid File Type',
-            message: `${file.name}: only PDF and images (PNG, JPG, WebP, GIF) are allowed.`,
-          });
+          invalid.push(file.name);
           continue;
         }
         try {
@@ -77,21 +71,18 @@ export function ContractAttachmentsSection({ contractId, canEdit }: ContractAtta
             entityId: contractId,
             category: 'contract',
           });
-          addToast({
-            type: 'success',
-            title: 'File Uploaded',
-            message: `${file.name} uploaded successfully.`,
-          });
+          succeeded.push(file.name);
         } catch {
-          addToast({
-            type: 'error',
-            title: 'Upload Failed',
-            message: `Failed to upload ${file.name}. Check file type and size.`,
-          });
+          failed.push(file.name);
         }
       }
+
+      if (invalid.length) showError(`${invalid.length} file${invalid.length > 1 ? 's were' : ' was'} rejected (unsupported type — PDF and images only)`);
+      if (succeeded.length) showSuccess(`${succeeded.length} file${succeeded.length > 1 ? 's' : ''} uploaded`);
+      if (failed.length) showError(`${failed.length} file${failed.length > 1 ? 's' : ''} failed to upload`);
+
     },
-    [contractId, uploadMutation, addToast],
+    [contractId, uploadMutation],
   );
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -125,9 +116,9 @@ export function ContractAttachmentsSection({ contractId, canEdit }: ContractAtta
         entityId: contractId,
       });
       setAttachmentToDelete(null);
-      addToast({ type: 'success', title: 'File Deleted', message: 'Attachment deleted successfully.' });
+      showSuccess('Attachment deleted successfully.');
     } catch {
-      addToast({ type: 'error', title: 'Error', message: 'Failed to delete attachment.' });
+      showError('Failed to delete attachment.');
     }
   };
 
@@ -149,7 +140,7 @@ export function ContractAttachmentsSection({ contractId, canEdit }: ContractAtta
       document.body.removeChild(link);
       URL.revokeObjectURL(blobUrl);
     } catch {
-      addToast({ type: 'error', title: 'Download Failed', message: 'Failed to download the file.' });
+      showError('Failed to download the file.');
     }
   };
 

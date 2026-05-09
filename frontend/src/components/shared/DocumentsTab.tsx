@@ -8,7 +8,7 @@ import { Spinner, ConfirmDialog } from '../ui';
 import { useAttachments, useUploadAttachment, useDeleteAttachment } from '../../hooks/useAttachments';
 import { getDownloadUrl } from '../../api/attachments';
 import { getToken } from '../../api/client';
-import { useUIStore } from '../../store/uiStore';
+import { showSuccess, showError } from '../../utils/toast';
 
 interface DocumentsTabProps {
   entityType: string;
@@ -67,8 +67,6 @@ export function DocumentsTab({ entityType, entityId }: DocumentsTabProps) {
     name: string;
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const addToast = useUIStore((state) => state.addToast);
-
   const { data: attachmentData, isLoading, error } = useAttachments(entityType, entityId);
   const allAttachments = attachmentData?.items || [];
 
@@ -81,6 +79,9 @@ export function DocumentsTab({ entityType, entityId }: DocumentsTabProps) {
 
   const handleUpload = useCallback(
     async (files: FileList | File[]) => {
+      const succeeded: string[] = [];
+      const failed: string[] = [];
+
       for (const file of Array.from(files)) {
         try {
           await uploadMutation.mutateAsync({
@@ -89,21 +90,17 @@ export function DocumentsTab({ entityType, entityId }: DocumentsTabProps) {
             entityId,
             category: uploadCategory,
           });
-          addToast({
-            type: 'success',
-            title: 'File Uploaded',
-            message: `${file.name} uploaded successfully.`,
-          });
+          succeeded.push(file.name);
         } catch {
-          addToast({
-            type: 'error',
-            title: 'Upload Failed',
-            message: `Failed to upload ${file.name}. Check file type and size.`,
-          });
+          failed.push(file.name);
         }
       }
+
+      if (succeeded.length) showSuccess(`${succeeded.length} file${succeeded.length > 1 ? 's' : ''} uploaded`);
+      if (failed.length) showError(`${failed.length} file${failed.length > 1 ? 's' : ''} failed to upload`);
+
     },
-    [entityType, entityId, uploadCategory, uploadMutation, addToast],
+    [entityType, entityId, uploadCategory, uploadMutation],
   );
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -122,17 +119,9 @@ export function DocumentsTab({ entityType, entityId }: DocumentsTabProps) {
         entityId,
       });
       setAttachmentToDelete(null);
-      addToast({
-        type: 'success',
-        title: 'File Deleted',
-        message: 'Attachment deleted successfully.',
-      });
+      showSuccess('Attachment deleted successfully.');
     } catch {
-      addToast({
-        type: 'error',
-        title: 'Error',
-        message: 'Failed to delete attachment.',
-      });
+      showError('Failed to delete attachment.');
     }
   };
 
@@ -154,11 +143,7 @@ export function DocumentsTab({ entityType, entityId }: DocumentsTabProps) {
       document.body.removeChild(link);
       URL.revokeObjectURL(blobUrl);
     } catch {
-      addToast({
-        type: 'error',
-        title: 'Download Failed',
-        message: 'Failed to download the file.',
-      });
+      showError('Failed to download the file.');
     }
   };
 

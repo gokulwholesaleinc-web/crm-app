@@ -31,8 +31,7 @@ import {
 } from '../../hooks/useActivities';
 import { useGoogleCalendarSync } from '../../hooks/useGoogleCalendarSync';
 import { usePushToGoogleCalendar } from '../../hooks/usePushToGoogleCalendar';
-import toast from 'react-hot-toast';
-import { showError } from '../../utils/toast';
+import { showSuccess, showError } from '../../utils/toast';
 import type { Activity, ActivityCreate, ActivityUpdate, ActivityFilters } from '../../types';
 
 type ViewMode = 'list' | 'timeline' | 'calendar';
@@ -195,12 +194,12 @@ export function ActivitiesPage() {
         if (pushAfterCreate && connected) {
           try {
             await pushActivityToCalendar(newActivity.id);
-            toast.success('Activity created and pushed to Google Calendar');
+            showSuccess('Activity created and pushed to Google Calendar');
           } catch (pushError) {
             const detail =
               (pushError as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
               'push failed';
-            toast.error(`Activity created, but push failed: ${detail}`);
+            showError(`Activity created, but push failed: ${detail}`);
           }
         }
         setPushAfterCreate(false);

@@ -9,7 +9,7 @@ import { useCheckDuplicates, useMergeEntities } from '../../hooks/useDedup';
 import { useContacts } from '../../hooks/useContacts';
 import { useCompanies } from '../../hooks/useCompanies';
 import { useLeads } from '../../hooks/useLeads';
-import { useUIStore } from '../../store/uiStore';
+import { showSuccess, showError } from '../../utils/toast';
 import type { DuplicateMatch } from '../../api/dedup';
 
 type EntityType = 'contacts' | 'companies' | 'leads';
@@ -21,7 +21,6 @@ interface DuplicateGroup {
 
 function DuplicatesPage() {
   const navigate = useNavigate();
-  const addToast = useUIStore((state) => state.addToast);
   const [selectedEntityType, setSelectedEntityType] = useState<EntityType>('contacts');
   const [scanning, setScanning] = useState(false);
   const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[]>([]);
@@ -119,18 +118,10 @@ function DuplicatesPage() {
 
       setDuplicateGroups(groups);
       if (groups.length === 0) {
-        addToast({
-          type: 'success',
-          title: 'No Duplicates',
-          message: `No duplicate ${selectedEntityType} found.`,
-        });
+        showSuccess(`No duplicate ${selectedEntityType} found.`);
       }
     } catch {
-      addToast({
-        type: 'error',
-        title: 'Scan Failed',
-        message: 'Failed to scan for duplicates.',
-      });
+      showError('Failed to scan for duplicates.');
     } finally {
       setScanning(false);
     }
@@ -146,19 +137,11 @@ function DuplicatesPage() {
         secondaryId: mergeConfirm.secondaryId,
       });
       setMergeConfirm(null);
-      addToast({
-        type: 'success',
-        title: 'Merge Complete',
-        message: `Successfully merged records.`,
-      });
+      showSuccess(`Successfully merged records.`);
       // Re-scan after merge
       handleScan();
     } catch {
-      addToast({
-        type: 'error',
-        title: 'Merge Failed',
-        message: 'Failed to merge records.',
-      });
+      showError('Failed to merge records.');
     }
   };
 

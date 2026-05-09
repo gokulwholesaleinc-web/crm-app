@@ -9,7 +9,7 @@ import { Modal, ModalFooter } from '../../components/ui/Modal';
 import { useAdminUsers, useUpdateAdminUser } from '../../hooks/useAdmin';
 import { useAuthStore } from '../../store/authStore';
 import { deleteUserPermanently } from '../../api/admin';
-import toast from 'react-hot-toast';
+import { showSuccess, showError } from '../../utils/toast';
 import type { AdminUser } from '../../types';
 import type { Column } from '../../components/ui/Table';
 import { PencilSquareIcon, TrashIcon } from '@heroicons/react/24/outline';
@@ -60,13 +60,13 @@ export default function UserManagement() {
   const deleteMutation = useMutation({
     mutationFn: (userId: number) => deleteUserPermanently(userId),
     onSuccess: () => {
-      toast.success(`User permanently deleted`);
+      showSuccess(`User permanently deleted`);
       setDeletingUser(null);
       queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
     },
     onError: (err: unknown) => {
       const msg = err && typeof err === 'object' && 'detail' in err ? String((err as { detail: string }).detail) : 'Failed to delete user';
-      toast.error(msg);
+      showError(msg);
     },
   });
 
@@ -91,7 +91,7 @@ export default function UserManagement() {
     }
     try {
       await updateUser.mutateAsync({ userId: editingUser.id, data: updates });
-      toast.success('User updated successfully');
+      showSuccess('User updated successfully');
       setEditingUser(null);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to update user';
@@ -120,14 +120,14 @@ export default function UserManagement() {
       { userId: pendingRoleChange.user.id, data: { role: pendingRoleChange.newRole } },
       {
         onSuccess: () => {
-          toast.success(
+          showSuccess(
             `${pendingRoleChange.user.full_name} is now ${ROLE_LABELS[pendingRoleChange.newRole] ?? pendingRoleChange.newRole}`
           );
           setPendingRoleChange(null);
         },
         onError: (err: unknown) => {
           const msg = err instanceof Error ? err.message : 'Failed to change role';
-          toast.error(msg);
+          showError(msg);
           setPendingRoleChange(null);
         },
       }
@@ -140,7 +140,7 @@ export default function UserManagement() {
       if (user.is_active && user.role === 'admin') {
         const activeAdmins = (users ?? []).filter((u) => u.role === 'admin' && u.is_active);
         if (activeAdmins.length === 1) {
-          toast.error('Cannot deactivate the last active admin.');
+          showError('Cannot deactivate the last active admin.');
           return;
         }
       }
@@ -155,14 +155,14 @@ export default function UserManagement() {
       { userId: pendingToggle.id, data: { is_active: !pendingToggle.is_active } },
       {
         onSuccess: () => {
-          toast.success(
+          showSuccess(
             `${pendingToggle.full_name} is now ${pendingToggle.is_active ? 'inactive' : 'active'}`
           );
           setPendingToggle(null);
         },
         onError: (err: unknown) => {
           const msg = err instanceof Error ? err.message : 'Failed to update status';
-          toast.error(msg);
+          showError(msg);
           setPendingToggle(null);
         },
       }

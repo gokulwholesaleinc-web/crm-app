@@ -16,7 +16,7 @@ import {
   EnvelopeIcon,
   FireIcon,
 } from '@heroicons/react/24/outline';
-import toast from 'react-hot-toast';
+import { showSuccess, showError } from '../../../utils/toast';
 
 function generateWarmupSchedule(targetDaily: number): { label: string; limit: number }[] {
   const schedule: { label: string; limit: number }[] = [];
@@ -65,10 +65,10 @@ export function EmailSettingsSection() {
         warmup_start_date: warmupEnabled && warmupStartDate ? warmupStartDate : null,
         warmup_target_daily: warmupTarget,
       });
-      toast.success('Email settings saved');
+      showSuccess('Email settings saved');
       setIsDirty(false);
     } catch {
-      toast.error('Failed to save email settings');
+      showError('Failed to save email settings');
     }
   };
 

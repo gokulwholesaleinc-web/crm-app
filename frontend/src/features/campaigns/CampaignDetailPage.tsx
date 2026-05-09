@@ -17,7 +17,7 @@ import {
   TrashIcon,
 } from '@heroicons/react/24/outline';
 import { useMutation } from '@tanstack/react-query';
-import toast from 'react-hot-toast';
+import { showSuccess, showError } from '../../utils/toast';
 import { syncMailchimpCampaignStats, type MailchimpStats } from '../../api/integrations';
 import { Button, EntityLink, HelpLink, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { CampaignForm } from './components/CampaignForm';
@@ -41,7 +41,6 @@ import {
 import { CampaignStepBuilder } from './components/CampaignStepBuilder';
 import { getStatusColor, formatStatusLabel } from '../../utils/statusColors';
 import { formatCurrency, formatDate } from '../../utils/formatters';
-import { showError } from '../../utils/toast';
 import type { CampaignUpdate, CampaignMember } from '../../types';
 
 // Member status colors (specific to campaign members, not part of centralized status colors)
@@ -93,9 +92,9 @@ function MailchimpStatsPanel({
     mutationFn: () => syncMailchimpCampaignStats(campaignId),
     onSuccess: (data) => {
       setStats(data);
-      toast.success(`Synced ${data.emails_sent} sends from Mailchimp`);
+      showSuccess(`Synced ${data.emails_sent} sends from Mailchimp`);
     },
-    onError: () => toast.error('Could not pull stats from Mailchimp'),
+    onError: () => showError('Could not pull stats from Mailchimp'),
   });
 
   return (

@@ -16,7 +16,7 @@ import {
   LinkIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
-import toast from 'react-hot-toast';
+import { showSuccess, showError } from '../../../utils/toast';
 
 import { Button } from '../../../components/ui/Button';
 import { Spinner } from '../../../components/ui/Spinner';
@@ -48,7 +48,7 @@ function ConnectForm({ onConnected }: { onConnected: () => void }) {
   const connectMutation = useMutation({
     mutationFn: connectMailchimp,
     onSuccess: () => {
-      toast.success('Mailchimp connected');
+      showSuccess('Mailchimp connected');
       setApiKey('');
       onConnected();
     },
@@ -58,7 +58,7 @@ function ConnectForm({ onConnected }: { onConnected: () => void }) {
           ? // axios-style error
             (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
           : null;
-      toast.error(detail ?? 'Mailchimp rejected the API key');
+      showError(detail ?? 'Mailchimp rejected the API key');
     },
   });
 
@@ -68,7 +68,7 @@ function ConnectForm({ onConnected }: { onConnected: () => void }) {
       onSubmit={(e) => {
         e.preventDefault();
         if (apiKey.trim().length < 10) {
-          toast.error('Paste your full Mailchimp API key (ends with -us19, -us21, etc.)');
+          showError('Paste your full Mailchimp API key (ends with -us19, -us21, etc.)');
           return;
         }
         connectMutation.mutate(apiKey.trim());
@@ -117,9 +117,9 @@ function AudiencePicker({ status }: { status: MailchimpStatus }) {
     mutationFn: setMailchimpAudience,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['integrations', 'mailchimp', 'status'] });
-      toast.success('Default audience updated');
+      showSuccess('Default audience updated');
     },
-    onError: () => toast.error('Could not update audience'),
+    onError: () => showError('Could not update audience'),
   });
 
   if (isLoading) {
