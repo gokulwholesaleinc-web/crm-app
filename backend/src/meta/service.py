@@ -373,7 +373,7 @@ class MetaService:
 
         Going through the service (not raw Lead(...)) is what gives us
         auto-assignment, audit log, scoring, pipeline-stage backfill,
-        the lead.created event, and embedding storage. A raw insert
+        the lead.created event. A raw insert
         bypasses every one of those.
 
         The webhook has no authenticated user, so we attribute the
@@ -455,7 +455,8 @@ class MetaService:
         # Meta-captured lead is indistinguishable from a UI-created one
         # downstream. The longer-term cleanup is to push these into
         # LeadService itself; tracked separately so this PR stays scoped.
-        # Semantic-search embedding removed (PR 2b); table preserved for future re-enable.
+
+        # Semantic-search embedding removed (PR #281); table preserved for future re-enable.
         from src.audit.utils import audit_entity_create
         from src.events.service import LEAD_CREATED, emit
         from src.notifications.service import notify_on_assignment

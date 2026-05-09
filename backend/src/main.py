@@ -72,8 +72,8 @@ async def _init_database():
         await _run_production_migrations()
 
         async with engine.begin() as conn:
+            # pgvector DB extension retained — AI tables preserved for future re-enable (PR #281).
             await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-
 
         skip_create_all = os.environ.get("SKIP_CREATE_ALL", "").lower() in ("true", "1")
         if not skip_create_all:
@@ -149,7 +149,7 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app
 app = FastAPI(
     title="CRM API",
-    description="Modern CRM with AI Assistant",
+    description="Modern CRM",
     version="1.0.0",
     lifespan=lifespan,
 )

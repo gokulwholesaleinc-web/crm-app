@@ -6,7 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 
-# Semantic-search embedding removed (PR 2b); table preserved for future re-enable.
+# Semantic-search embedding removed (PR #281); table preserved for future re-enable.
 from src.audit.utils import (
     audit_entity_create,
     audit_entity_delete,
