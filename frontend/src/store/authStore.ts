@@ -122,12 +122,13 @@ export const useAuthStore = create<AuthState>()(
         if (error) {
           console.warn('[auth] rehydrate failed', error);
         }
-        if (state) {
-          state.isAuthenticated = !!state.token && !!state.user;
-        }
-        // Must fire unconditionally — if state is undefined (e.g. safeStorage
-        // returned null), the loading spinner would hang forever without this.
+        // Always clear loading so PrivateRoute can resolve.
         useAuthStore.getState().setLoading(false);
+        // Mutating `state` directly is a no-op (snapshot); use setState to
+        // re-derive isAuthenticated from the rehydrated token + user.
+        if (state?.token && state?.user) {
+          useAuthStore.setState({ isAuthenticated: true });
+        }
       },
     }
   )

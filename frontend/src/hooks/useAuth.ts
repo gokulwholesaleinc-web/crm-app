@@ -27,7 +27,7 @@ export const authKeys = {
 };
 
 export function useUser() {
-  const { token } = useAuthStore();
+  const token = useAuthStore((s) => s.token);
 
   return useQuery({
     queryKey: authKeys.user(),
@@ -52,7 +52,7 @@ export function useLogout() {
 }
 
 export function useUpdateProfile() {
-  const { updateUser } = useAuthStore();
+  const updateUser = useAuthStore((s) => s.updateUser);
   const queryClient = useQueryClient();
 
   return useMutation({
