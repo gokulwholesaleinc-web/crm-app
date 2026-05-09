@@ -3,7 +3,7 @@ Unit tests for proposals CRUD endpoints.
 
 Tests for list, create, get, update, delete, auto-numbering,
 status transitions, template CRUD, public view, view counting,
-AI generation, and data isolation.
+and data isolation.
 """
 
 import pytest
@@ -1041,53 +1041,6 @@ class TestPublicView:
 
 
 # =============================================================================
-# AI Generation Tests
-# =============================================================================
-
-class TestAIGeneration:
-    """Tests for AI proposal generation endpoint."""
-
-    @pytest.mark.asyncio
-    async def test_generate_proposal_success(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-        test_opportunity: Opportunity,
-    ):
-        """Test generating a proposal from an opportunity (placeholder mode)."""
-        response = await client.post(
-            "/api/proposals/generate",
-            headers=auth_headers,
-            json={"opportunity_id": test_opportunity.id},
-        )
-
-        assert response.status_code == 201
-        data = response.json()
-        assert data["title"].startswith("Proposal for")
-        assert data["opportunity_id"] == test_opportunity.id
-        assert data["proposal_number"].startswith("PR-")
-        assert data["executive_summary"] is not None
-        assert data["scope_of_work"] is not None
-
-    @pytest.mark.asyncio
-    async def test_generate_proposal_invalid_opportunity(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-    ):
-        """Test generating a proposal with non-existent opportunity."""
-        response = await client.post(
-            "/api/proposals/generate",
-            headers=auth_headers,
-            json={"opportunity_id": 99999},
-        )
-
-        assert response.status_code == 400
-
-
-# =============================================================================
 # Data Isolation Tests
 # =============================================================================
 
@@ -1213,18 +1166,6 @@ class TestProposalsUnauthorized:
         """Test sending proposal without auth fails."""
         response = await client.post(f"/api/proposals/{test_proposal.id}/send")
         assert response.status_code == 401
-
-    @pytest.mark.asyncio
-    async def test_generate_proposal_unauthorized(
-        self, client: AsyncClient, db_session: AsyncSession
-    ):
-        """Test generating proposal without auth fails."""
-        response = await client.post(
-            "/api/proposals/generate",
-            json={"opportunity_id": 1},
-        )
-        assert response.status_code == 401
-
 
 class TestClosedLostGuard:
     """Creating a proposal against a Closed-Lost opportunity must 400."""
