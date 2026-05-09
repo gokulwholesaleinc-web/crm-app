@@ -228,6 +228,17 @@ class TestGoogleCalendarEndpoints:
 class TestMetaEndpoints:
     """Tests for Meta (Facebook/Instagram) integration endpoints."""
 
+    @pytest.fixture(autouse=True)
+    def _meta_token(self, monkeypatch):
+        """Ensure META_WEBHOOK_VERIFY_TOKEN is set for all tests in this class.
+
+        The POST /api/meta/webhook gate now rejects when the token is empty.
+        Tests that intentionally test the unconfigured-503 path set the token
+        to "" via their own monkeypatch call which overrides this fixture.
+        """
+        from src.config import settings
+        monkeypatch.setattr(settings, "META_WEBHOOK_VERIFY_TOKEN", "test-meta-token")
+
     async def test_get_connection_status(
         self, client: AsyncClient, auth_headers: dict
     ):
@@ -262,9 +273,11 @@ class TestMetaEndpoints:
         assert response.status_code == 404
 
     async def test_webhook_verification_fails(
-        self, client: AsyncClient
+        self, client: AsyncClient, monkeypatch
     ):
         """Should reject webhook verification with wrong token."""
+        from src.config import settings
+        monkeypatch.setattr(settings, "META_WEBHOOK_VERIFY_TOKEN", "correct_token")
         response = await client.get(
             "/api/meta/webhook",
             params={
@@ -275,15 +288,33 @@ class TestMetaEndpoints:
         )
         assert response.status_code == 403
 
-    async def test_webhook_verification_succeeds(
-        self, client: AsyncClient
+    async def test_webhook_verification_unconfigured(
+        self, client: AsyncClient, monkeypatch
     ):
-        """Should return challenge on correct verification."""
+        """Should return 503 when META_WEBHOOK_VERIFY_TOKEN is not configured."""
+        from src.config import settings
+        monkeypatch.setattr(settings, "META_WEBHOOK_VERIFY_TOKEN", "")
         response = await client.get(
             "/api/meta/webhook",
             params={
                 "hub.mode": "subscribe",
-                "hub.verify_token": "crm_meta_webhook",
+                "hub.verify_token": "some_token",
+                "hub.challenge": "test_challenge",
+            },
+        )
+        assert response.status_code == 503
+
+    async def test_webhook_verification_succeeds(
+        self, client: AsyncClient, monkeypatch
+    ):
+        """Should return challenge on correct verification."""
+        from src.config import settings
+        monkeypatch.setattr(settings, "META_WEBHOOK_VERIFY_TOKEN", "correct_token")
+        response = await client.get(
+            "/api/meta/webhook",
+            params={
+                "hub.mode": "subscribe",
+                "hub.verify_token": "correct_token",
                 "hub.challenge": "test_challenge_123",
             },
         )

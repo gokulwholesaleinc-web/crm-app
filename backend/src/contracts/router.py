@@ -1,7 +1,6 @@
 """Contract API routes."""
 
 import logging
-import os
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -13,6 +12,7 @@ from src.audit.utils import (
     audit_entity_update,
     snapshot_entity,
 )
+from src.config import settings
 from src.contracts.schemas import (
     ContractCreate,
     ContractListResponse,
@@ -252,7 +252,7 @@ async def send_contract_for_signature(
         {"status": old_status}, {"status": "sent"}, ip_address,
     )
 
-    base_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    base_url = settings.FRONTEND_BASE_URL or "http://localhost:3000"
     return ContractSendResponse(
         id=contract.id,
         status=contract.status,

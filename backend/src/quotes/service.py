@@ -1,7 +1,6 @@
 """Quote service layer."""
 
 import logging
-import os
 import secrets
 from datetime import UTC, datetime
 from typing import Any
@@ -9,6 +8,7 @@ from typing import Any
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
 
+from src.config import settings
 from src.core.base_service import BaseService, CRUDService, StatusTransitionMixin
 from src.core.constants import DEFAULT_PAGE_SIZE
 from src.core.filtering import build_token_search
@@ -323,7 +323,7 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
         if not quote.public_token:
             quote.public_token = secrets.token_urlsafe(32)
             await self.db.flush()
-        base_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        base_url = settings.FRONTEND_BASE_URL or "http://localhost:3000"
         view_url = f"{base_url}/quotes/public/{quote.public_token}"
 
         quote_data = {

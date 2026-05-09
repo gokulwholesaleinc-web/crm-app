@@ -1,24 +1,21 @@
 """Notification service layer."""
 
 import logging
-import os
 
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.account.notification_gate import gate_event
 from src.auth.models import User
+from src.config import settings
 from src.core.constants import DEFAULT_PAGE_SIZE
 from src.notifications.models import Notification
 
 logger = logging.getLogger(__name__)
 
 
-# Default front-end origin used when ``FRONTEND_URL`` isn't set (local
-# dev). All deep links in branded notification emails route through
-# this. Pulled out so workers don't drift on the env-var name.
 def _frontend_url() -> str:
-    return os.getenv("FRONTEND_URL", "http://localhost:3000")
+    return settings.FRONTEND_BASE_URL or "http://localhost:3000"
 
 
 def _deep_link(entity_type: str, entity_id: int, *, suffix: str = "") -> str:

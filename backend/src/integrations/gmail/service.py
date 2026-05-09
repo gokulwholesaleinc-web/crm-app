@@ -1,5 +1,6 @@
 """Gmail connection service."""
 
+import asyncio
 import logging
 from datetime import UTC, datetime
 
@@ -10,6 +11,11 @@ from src.integrations.gmail import oauth as gmail_oauth
 from src.integrations.gmail.models import GmailConnection, GmailSyncState
 
 logger = logging.getLogger(__name__)
+
+# Strong references so GC doesn't collect tasks before they finish.
+# A parallel set in gmail/router.py guards the router-initiated path; this one
+# covers the service-layer path (schedule_backfill_if_needed).
+_BACKFILL_TASKS: set[asyncio.Task] = set()
 
 
 class GmailConnectionService:
@@ -140,7 +146,9 @@ class GmailConnectionService:
                 except Exception:
                     logger.exception("[gmail_backfill] could not record failure state")
 
-        asyncio.create_task(_run())
+        task = asyncio.create_task(_run())
+        _BACKFILL_TASKS.add(task)
+        task.add_done_callback(_BACKFILL_TASKS.discard)
 
     async def seed_sync_cursor(self, connection: GmailConnection) -> None:
         """Seed last_history_id with the account's current historyId.

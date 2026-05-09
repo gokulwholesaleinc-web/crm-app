@@ -65,10 +65,10 @@ async def get_sequence(
 async def update_sequence(
     sequence_id: int,
     data: SequenceUpdate,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_manager_or_above)],
     db: DBSession,
 ):
-    """Update a sequence."""
+    """Update a sequence. Manager+ only — sequences are shared admin-managed resources."""
     service = SequenceService(db)
     seq = await service.get_by_id(sequence_id)
     if not seq:
@@ -80,10 +80,10 @@ async def update_sequence(
 @router.delete("/{sequence_id}", status_code=HTTPStatus.NO_CONTENT)
 async def delete_sequence(
     sequence_id: int,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_manager_or_above)],
     db: DBSession,
 ):
-    """Delete a sequence."""
+    """Delete a sequence. Manager+ only — sequences are shared admin-managed resources."""
     service = SequenceService(db)
     seq = await service.get_by_id(sequence_id)
     if not seq:
