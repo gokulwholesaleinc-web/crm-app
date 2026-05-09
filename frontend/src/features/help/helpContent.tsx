@@ -1145,11 +1145,11 @@ export const SECTIONS: Section[] = [
     title: 'Reports',
     icon: ChartBarIcon,
     searchText:
-      'reports custom builder templates ai natural language saved metrics count sum avg min max group by date day week month quarter year chart bar line pie table export csv schedule share',
+      'reports custom builder templates saved metrics count sum avg min max group by date day week month quarter year chart bar line pie table export csv schedule share',
     body: (
       <div className="space-y-3">
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          The Reports page is where you slice your CRM data. There are three ways to build a
+          The Reports page is where you slice your CRM data. There are two ways to build a
           report.
         </p>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">1. From a template</h4>
@@ -1163,11 +1163,6 @@ export const SECTIONS: Section[] = [
           Pick an entity, a metric (count, sum, avg, min, max), an optional metric field, an
           optional group-by field, an optional date grouping (day/week/month/quarter/year),
           filters, and a chart type (bar, line, pie, or table).
-        </p>
-        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">3. With AI</h4>
-        <p className="text-sm text-gray-700 dark:text-gray-300">
-          Click the <em>AI Generate</em> button and describe what you want in plain English. The
-          report definition is generated from your prompt — you can run, edit, or save it.
         </p>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Saved reports</h4>
         <ul className="space-y-1.5">

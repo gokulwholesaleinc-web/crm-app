@@ -35,7 +35,7 @@ See .env.example for required variables: DATABASE_URL
 - **Backend**: FastAPI (Python 3.11+)
 - **Frontend**: React 18 + TypeScript + Vite
 - **Database**: PostgreSQL 16 with pgvector extension
-- **AI**: OpenAI GPT-4 for assistant, text-embedding-3-small for RAG
+- **AI**: Disabled — OpenAI SDK retained for ai/ module stubs (semantic embeddings on contacts/leads/opportunities; no-ops when OPENAI_API_KEY unset)
 - **Deployment**: Docker Compose
 
 ## Project Structure

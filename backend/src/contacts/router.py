@@ -250,8 +250,7 @@ async def delete_contact(
     ip_address = get_client_ip(request)
     await audit_entity_delete(db, "contact", contact.id, current_user.id, ip_address)
 
-    # Remove the semantic-search embedding so archived contacts no longer
-    # surface in AI-assistant suggestions, but leave the row itself in place.
+    # Remove the semantic-search embedding to keep the vector table in sync with soft-deletes.
     await delete_entity_embedding(db, "contact", contact.id)
 
     await service.soft_delete(contact)

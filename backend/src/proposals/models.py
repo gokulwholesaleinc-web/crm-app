@@ -1,4 +1,4 @@
-"""Proposal models for AI-assisted sales proposals."""
+"""Proposal models for CRM sales proposals."""
 
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Optional
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 
 class Proposal(Base, AuditableMixin):
-    """Proposal model for AI-generated sales proposals."""
+    """Proposal model for CRM sales documents."""
     __tablename__ = "proposals"
 
     id: Mapped[int] = mapped_column(primary_key=True)

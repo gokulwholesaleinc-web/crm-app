@@ -98,17 +98,6 @@ class ReportTemplate(BaseModel):
     filters: dict[str, Any] | None = None
 
 
-class AIReportGenerateRequest(BaseModel):
-    """Request to generate a report from a natural language prompt."""
-    prompt: str
-
-
-class AIReportGenerateResponse(BaseModel):
-    """Response from AI report generation."""
-    definition: ReportDefinition
-    result: ReportResult
-
-
 class ScheduleUpdateRequest(BaseModel):
     """Request to update schedule on a saved report."""
     schedule: str | None = None  # daily/weekly/monthly or null to clear

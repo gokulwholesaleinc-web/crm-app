@@ -86,12 +86,6 @@ export function useDeleteSavedReport() {
   });
 }
 
-export function useAIGenerateReport() {
-  return useMutation({
-    mutationFn: (prompt: string) => reportsApi.aiGenerateReport(prompt),
-  });
-}
-
 export function useUpdateReportSchedule() {
   const queryClient = useQueryClient();
 
