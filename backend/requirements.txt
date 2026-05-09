@@ -7,7 +7,6 @@ python-multipart==0.0.6
 sqlalchemy[asyncio]==2.0.25
 asyncpg==0.29.0
 alembic==1.13.1
-pgvector==0.2.4
 
 # Authentication
 python-jose[cryptography]==3.3.0
@@ -21,9 +20,6 @@ slowapi==0.1.9
 pydantic==2.5.3
 pydantic-settings==2.1.0
 email-validator==2.1.0
-
-# OpenAI SDK — required by backend/src/ai/embeddings.py (active at request time for leads/contacts/opportunities; no-ops when OPENAI_API_KEY unset)
-openai==1.10.0
 
 # Stripe payments
 stripe==8.0.0

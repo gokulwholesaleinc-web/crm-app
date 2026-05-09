@@ -6,11 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 
-from src.ai.embedding_hooks import (
-    build_company_embedding_content,
-    delete_entity_embedding,
-    store_entity_embedding,
-)
+# Semantic-search embedding removed (PR 2b); table preserved for future re-enable.
 from src.audit.utils import (
     audit_entity_create,
     audit_entity_delete,
@@ -119,13 +115,6 @@ async def create_company(
     service = CompanyService(db)
     company = await service.create(company_data, current_user.id)
 
-    # Generate embedding for semantic search
-    try:
-        content = build_company_embedding_content(company)
-        await store_entity_embedding(db, "company", company.id, content)
-    except Exception as e:
-        logger.warning("Failed to store embedding: %s", e)
-
     ip_address = get_client_ip(request)
     await audit_entity_create(db, "company", company.id, current_user.id, ip_address)
 
@@ -179,13 +168,6 @@ async def update_company(
 
     updated_company = await service.update(company, company_data, current_user.id)
 
-    # Update embedding for semantic search
-    try:
-        content = build_company_embedding_content(updated_company)
-        await store_entity_embedding(db, "company", updated_company.id, content)
-    except Exception as e:
-        logger.warning("Failed to store embedding: %s", e)
-
     new_data = snapshot_entity(updated_company, update_fields)
     ip_address = get_client_ip(request)
     await audit_entity_update(db, "company", updated_company.id, current_user.id, old_data, new_data, ip_address)
@@ -226,8 +208,5 @@ async def delete_company(
 
     ip_address = get_client_ip(request)
     await audit_entity_delete(db, "company", company.id, current_user.id, ip_address)
-
-    # Delete embedding before deleting entity
-    await delete_entity_embedding(db, "company", company.id)
 
     await service.delete(company)
