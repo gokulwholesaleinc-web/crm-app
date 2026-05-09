@@ -71,7 +71,7 @@ export default function AdminSharingPage() {
   usePageTitle('Sharing — Admin');
 
   const navigate = useNavigate();
-  const { user } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
   const queryClient = useQueryClient();
 
   const isAuthorized =

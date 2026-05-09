@@ -204,7 +204,7 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
     applyOrder(DEFAULT_SECONDARY_NAVIGATION, readStoredOrder(STORAGE_KEY_SECONDARY))
   );
 
-  const { user } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
   const { prefs, setPref } = useUserPreferences();
   const isAdminUser = user?.is_superuser || user?.role === 'admin';
   const filteredSecondaryNav = isAdminUser

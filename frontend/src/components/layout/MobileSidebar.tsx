@@ -21,7 +21,7 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
   const location = useLocation();
   const { tenant } = useTenant();
   const [mobileLogoError, setMobileLogoError] = useState(false);
-  const { user: mobileUser } = useAuthStore();
+  const mobileUser = useAuthStore((s) => s.user);
 
   useEffect(() => {
     setMobileLogoError(false);

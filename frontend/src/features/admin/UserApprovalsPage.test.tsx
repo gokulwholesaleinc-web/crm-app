@@ -11,8 +11,10 @@ vi.mock('../../api/admin', () => ({
   unblockRejectedEmail: vi.fn(),
 }));
 
+const MOCK_AUTH_STATE = { user: { id: 1, role: 'admin', is_superuser: false } };
 vi.mock('../../store/authStore', () => ({
-  useAuthStore: () => ({ user: { id: 1, role: 'admin', is_superuser: false } }),
+  useAuthStore: (selector?: (s: typeof MOCK_AUTH_STATE) => unknown) =>
+    selector ? selector(MOCK_AUTH_STATE) : MOCK_AUTH_STATE,
 }));
 
 vi.mock('react-hot-toast', () => ({

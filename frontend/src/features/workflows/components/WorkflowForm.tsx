@@ -10,6 +10,7 @@ import { Select } from '../../../components/ui/Select';
 import { FormTextarea } from '../../../components/forms';
 import { useUnsavedChangesWarning } from '../../../hooks/useUnsavedChangesWarning';
 import type { WorkflowRule, WorkflowRuleCreate, WorkflowRuleUpdate } from '../../../types';
+import { useFormSubmitShortcut } from '../../../hooks/useSubmitShortcut';
 
 interface WorkflowFormProps {
   workflow?: WorkflowRule;
@@ -128,8 +129,10 @@ export function WorkflowForm({
     }
   };
 
+  const formRef = useFormSubmitShortcut();
+
   return (
-    <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-4">
+    <form ref={formRef} onSubmit={handleSubmit(onFormSubmit)} className="space-y-4">
       <Input
         {...register('name', { required: 'Workflow name is required' })}
         label="Workflow Name"

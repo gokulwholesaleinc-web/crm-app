@@ -14,8 +14,11 @@ vi.mock('../../providers/TenantProvider', () => ({
   useTenant: () => ({ tenant: null }),
 }));
 
+const MOCK_AUTH = { login: vi.fn() };
 vi.mock('../../store/authStore', () => ({
-  useAuthStore: () => ({ login: vi.fn() }),
+  useAuthStore: vi.fn((selector?: (s: typeof MOCK_AUTH) => unknown) =>
+    selector ? selector(MOCK_AUTH) : MOCK_AUTH
+  ),
 }));
 
 vi.mock('./GoogleSignInButton', () => ({

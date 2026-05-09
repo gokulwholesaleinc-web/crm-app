@@ -11,6 +11,7 @@ import { Select } from '../../../components/ui/Select';
 import { FormTextarea } from '../../../components/forms';
 import { useUnsavedChangesWarning } from '../../../hooks/useUnsavedChangesWarning';
 import type { Campaign, CampaignCreate, CampaignUpdate } from '../../../types';
+import { useFormSubmitShortcut } from '../../../hooks/useSubmitShortcut';
 
 interface CampaignFormProps {
   campaign?: Campaign;
@@ -156,8 +157,10 @@ export function CampaignForm({
     await onSubmit(formattedData);
   };
 
+  const formRef = useFormSubmitShortcut();
+
   return (
-    <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-4">
+    <form ref={formRef} onSubmit={handleSubmit(onFormSubmit)} className="space-y-4">
       <Input
         {...register('name', { required: 'Campaign name is required' })}
         label="Campaign Name"

@@ -17,7 +17,8 @@ export const adminKeys = {
 };
 
 export function useAdminUsers() {
-  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const authLoading = useAuthStore((s) => s.isLoading);
   return useQuery({
     queryKey: adminKeys.users(),
     queryFn: () => adminApi.getAdminUsers(),
@@ -27,7 +28,8 @@ export function useAdminUsers() {
 }
 
 export function useSystemStats() {
-  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const authLoading = useAuthStore((s) => s.isLoading);
   return useQuery({
     queryKey: adminKeys.stats(),
     queryFn: () => adminApi.getSystemStats(),
@@ -37,7 +39,8 @@ export function useSystemStats() {
 }
 
 export function useTeamOverview() {
-  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const authLoading = useAuthStore((s) => s.isLoading);
   return useQuery({
     queryKey: adminKeys.teamOverview(),
     queryFn: () => adminApi.getTeamOverview(),
@@ -47,7 +50,8 @@ export function useTeamOverview() {
 }
 
 export function useActivityFeed(limit = 50) {
-  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const authLoading = useAuthStore((s) => s.isLoading);
   return useQuery({
     queryKey: adminKeys.activityFeed(limit),
     queryFn: () => adminApi.getActivityFeed(limit),

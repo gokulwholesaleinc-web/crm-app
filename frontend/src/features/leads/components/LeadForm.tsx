@@ -6,6 +6,7 @@ import { useCompanies } from '../../../hooks/useCompanies';
 import { useLeadSources, useLeadPipelineStages } from '../../../hooks/useLeads';
 import { useUnsavedChangesWarning } from '../../../hooks/useUnsavedChangesWarning';
 import { normalizeEmail, normalizePhone } from '../../../utils/inputNormalize';
+import { useFormSubmitShortcut } from '../../../hooks/useSubmitShortcut';
 
 export interface LeadFormData {
   firstName?: string;
@@ -102,6 +103,7 @@ export function LeadForm({
   );
 
   const [formError, setFormError] = useState<string | null>(null);
+  const formRef = useFormSubmitShortcut();
 
   const onFormSubmit = (data: LeadFormData) => {
     const hasName = !!(data.firstName?.trim() || data.lastName?.trim());
@@ -115,7 +117,7 @@ export function LeadForm({
   };
 
   return (
-    <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-6">
+    <form ref={formRef} onSubmit={handleSubmit(onFormSubmit)} className="space-y-6">
       {formError && (
         <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-4" aria-live="polite">
           <p className="text-sm text-red-700 dark:text-red-400">{formError}</p>

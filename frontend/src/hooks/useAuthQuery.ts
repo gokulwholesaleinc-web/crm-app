@@ -10,7 +10,8 @@ import { useAuthStore } from '../store/authStore';
  * Use this in existing hooks that need to wait for authentication.
  */
 export function useAuthEnabled(): boolean {
-  const { isAuthenticated, isLoading } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isLoading = useAuthStore((s) => s.isLoading);
   return isAuthenticated && !isLoading;
 }
 

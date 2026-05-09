@@ -75,7 +75,7 @@ function RejectModal({
 
 export default function UserApprovalsPage() {
   const navigate = useNavigate();
-  const { user } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
   const queryClient = useQueryClient();
 
   const { data: pending, isLoading: loadingPending } = useQuery({

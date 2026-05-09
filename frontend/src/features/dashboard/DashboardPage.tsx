@@ -38,7 +38,8 @@ function findCardChange(cardMap: Map<string, NumberCardData>, id: string): numbe
 
 function ReportWidgetsSection() {
   const queryClient = useQueryClient();
-  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const authLoading = useAuthStore((s) => s.isLoading);
   const [showAddModal, setShowAddModal] = useState(false);
 
   const { data: widgets } = useQuery({

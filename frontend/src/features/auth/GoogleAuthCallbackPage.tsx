@@ -31,7 +31,7 @@ function GoogleAuthCallbackPage() {
   const [searchParams] = useSearchParams();
   const processed = useRef(false);
   const [state, setState] = useState<CallbackState>({ kind: 'loading' });
-  const { login: storeLogin } = useAuthStore();
+  const storeLogin = useAuthStore((s) => s.login);
 
   useEffect(() => {
     if (processed.current) return;

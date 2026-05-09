@@ -10,6 +10,25 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { registerAuthTokenGetter } from '../api/client';
 import { clearTenantSlugOnLogout } from '../providers/TenantProvider';
+import { safeStorage } from '../utils/safeStorage';
+
+const safeLocalStorage = {
+  getItem: (name: string): string | null => safeStorage.get(name),
+  setItem: (name: string, value: string): void => {
+    try {
+      localStorage.setItem(name, value);
+    } catch (error) {
+      console.warn('[auth] failed to persist', name, error);
+    }
+  },
+  removeItem: (name: string): void => {
+    try {
+      localStorage.removeItem(name);
+    } catch (error) {
+      console.warn('[auth] failed to remove', name, error);
+    }
+  },
+};
 
 export type RoleName = 'admin' | 'manager' | 'sales_rep' | 'viewer';
 
@@ -91,7 +110,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'crm-auth-storage',
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => safeLocalStorage),
       // isAuthenticated is intentionally NOT persisted — it's derived from
       // token + user on rehydration so a tampered storage slice cannot claim
       // authenticated without both halves present.
@@ -99,10 +118,16 @@ export const useAuthStore = create<AuthState>()(
         user: state.user,
         token: state.token,
       }),
-      onRehydrateStorage: () => (state) => {
-        if (state) {
-          state.isAuthenticated = !!state.token && !!state.user;
-          state.setLoading(false);
+      onRehydrateStorage: () => (state, error) => {
+        if (error) {
+          console.warn('[auth] rehydrate failed', error);
+        }
+        // Always clear loading so PrivateRoute can resolve.
+        useAuthStore.getState().setLoading(false);
+        // Mutating `state` directly is a no-op (snapshot); use setState to
+        // re-derive isAuthenticated from the rehydrated token + user.
+        if (state?.token && state?.user) {
+          useAuthStore.setState({ isAuthenticated: true });
         }
       },
     }

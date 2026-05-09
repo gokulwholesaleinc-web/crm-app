@@ -6,6 +6,7 @@ import { useCompanies } from '../../../hooks/useCompanies';
 import { useUnsavedChangesWarning } from '../../../hooks/useUnsavedChangesWarning';
 import { normalizeEmail, normalizePhone } from '../../../utils/inputNormalize';
 import type { ContactFormData } from './contactFormHelpers';
+import { useFormSubmitShortcut } from '../../../hooks/useSubmitShortcut';
 
 export interface ContactFormProps {
   initialData?: Partial<ContactFormData>;
@@ -56,12 +57,14 @@ export function ContactForm({
     [companiesData]
   );
 
+  const formRef = useFormSubmitShortcut();
+
   const onFormSubmit = (data: ContactFormData) => {
     return onSubmit({ ...data, company_id: companyId });
   };
 
   return (
-    <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-6">
+    <form ref={formRef} onSubmit={handleSubmit(onFormSubmit)} className="space-y-6">
       {/* Basic Information */}
       <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
         <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">

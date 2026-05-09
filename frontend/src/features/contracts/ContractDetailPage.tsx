@@ -31,7 +31,7 @@ function ContractDetailPage() {
   const handleBack = useSmartBack('/contracts');
   const contractId = id ? parseInt(id, 10) : undefined;
 
-  const { user: currentUser } = useAuthStore();
+  const currentUser = useAuthStore((s) => s.user);
   const { data: contract, isLoading, error } = useContract(contractId);
   usePageTitle(contract ? `Contract - ${contract.title}` : 'Contract');
 

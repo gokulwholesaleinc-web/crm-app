@@ -13,6 +13,7 @@ import axios, {
   AxiosResponse,
 } from 'axios';
 import type { ApiError } from '../types';
+import { safeStorage } from '../utils/safeStorage';
 
 const BASE_URL = import.meta.env.VITE_API_URL || '';
 
@@ -53,7 +54,7 @@ const createApiClient = (): AxiosInstance => {
       if (token && config.headers) {
         config.headers.Authorization = `Bearer ${token}`;
       }
-      const slug = localStorage.getItem(TENANT_SLUG_KEY);
+      const slug = safeStorage.get(TENANT_SLUG_KEY);
       if (slug && config.headers) {
         config.headers['X-Tenant-Slug'] = slug;
       }

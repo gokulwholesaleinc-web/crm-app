@@ -11,6 +11,7 @@ import { FormTextarea } from '../../../components/forms';
 import { useUnsavedChangesWarning } from '../../../hooks/useUnsavedChangesWarning';
 import { normalizeEmail, normalizePhone } from '../../../utils/inputNormalize';
 import type { Company, CompanyCreate, CompanyUpdate } from '../../../types';
+import { useFormSubmitShortcut } from '../../../hooks/useSubmitShortcut';
 
 interface CompanyFormProps {
   company?: Company;
@@ -198,8 +199,10 @@ export function CompanyForm({
     await onSubmit(formattedData);
   };
 
+  const formRef = useFormSubmitShortcut();
+
   return (
-    <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-4">
+    <form ref={formRef} onSubmit={handleSubmit(onFormSubmit)} className="space-y-4">
       {/* Basic Info */}
       <div className="grid grid-cols-2 gap-4">
         <Input

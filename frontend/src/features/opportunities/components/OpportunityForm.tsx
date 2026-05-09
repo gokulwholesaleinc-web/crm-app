@@ -3,6 +3,7 @@ import { Button } from '../../../components/ui/Button';
 import { FormInput, FormSelect, FormTextarea } from '../../../components/forms';
 import { usePipelineStages } from '../../../hooks/useOpportunities';
 import { useUnsavedChangesWarning } from '../../../hooks/useUnsavedChangesWarning';
+import { useFormSubmitShortcut } from '../../../hooks/useSubmitShortcut';
 
 export interface OpportunityFormData {
   name: string;
@@ -81,6 +82,7 @@ export function OpportunityForm({
     },
   });
 
+  const formRef = useFormSubmitShortcut();
   const selectedStage = watch('stage');
 
   useUnsavedChangesWarning(isDirty);
@@ -95,7 +97,7 @@ export function OpportunityForm({
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+    <form ref={formRef} onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       {/* Basic Information */}
       <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
         <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">

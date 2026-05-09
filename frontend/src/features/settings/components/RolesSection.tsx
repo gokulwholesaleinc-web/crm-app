@@ -43,7 +43,7 @@ function formatPermissions(permissions: Record<string, string[]>): string[] {
 }
 
 export function RolesSection() {
-  const { user } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
   const { data: roles, isLoading: rolesLoading } = useRoles();
   const { data: myPermissions, isLoading: permsLoading } = useMyPermissions();
   const { data: users } = useUsers();
