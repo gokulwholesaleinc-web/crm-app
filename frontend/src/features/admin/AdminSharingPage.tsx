@@ -6,7 +6,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import toast from 'react-hot-toast';
+import { showSuccess, showError } from '../../utils/toast';
 import {
   LockClosedIcon,
   ShareIcon,
@@ -115,12 +115,12 @@ export default function AdminSharingPage() {
   const revokeMutation = useMutation({
     mutationFn: (shareId: number) => revokeShare(shareId),
     onSuccess: () => {
-      toast.success('Share revoked');
+      showSuccess('Share revoked');
       setRevokeTarget(null);
       queryClient.invalidateQueries({ queryKey: ['admin', 'shares'] });
     },
     onError: () => {
-      toast.error('Failed to revoke share');
+      showError('Failed to revoke share');
     },
   });
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import toast from 'react-hot-toast';
+import { showSuccess, showError } from '../../utils/toast';
 import { Card, CardHeader, CardBody } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Spinner } from '../../components/ui/Spinner';
@@ -97,9 +97,9 @@ export default function UserApprovalsPage() {
     mutationFn: ({ id, role }: { id: number; role: ApprovalRole }) => approveUser(id, role),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'pending-users'] });
-      toast.success('User approved');
+      showSuccess('User approved');
     },
-    onError: () => toast.error('Failed to approve user'),
+    onError: () => showError('Failed to approve user'),
   });
 
   const rejectMutation = useMutation({
@@ -108,25 +108,25 @@ export default function UserApprovalsPage() {
       queryClient.invalidateQueries({ queryKey: ['admin', 'pending-users'] });
       queryClient.invalidateQueries({ queryKey: ['admin', 'rejected-emails'] });
       setRejectTarget(null);
-      toast.success('User rejected');
+      showSuccess('User rejected');
     },
-    onError: () => toast.error('Failed to reject user'),
+    onError: () => showError('Failed to reject user'),
   });
 
   const unblockMutation = useMutation({
     mutationFn: (id: number) => unblockRejectedEmail(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'rejected-emails'] });
-      toast.success('Email unblocked');
+      showSuccess('Email unblocked');
     },
-    onError: () => toast.error('Failed to unblock email'),
+    onError: () => showError('Failed to unblock email'),
   });
 
   const isAdmin = user?.is_superuser || user?.role === 'admin';
 
   useEffect(() => {
     if (!isAdmin) {
-      toast.error('Access denied');
+      showError('Access denied');
       navigate('/', { replace: true });
     }
   }, [isAdmin, navigate]);
