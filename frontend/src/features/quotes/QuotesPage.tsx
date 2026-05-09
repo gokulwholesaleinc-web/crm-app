@@ -5,7 +5,12 @@ import { Button, EntityLink, Modal, ConfirmDialog, StatusBadge, PaginationBar } 
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { QuoteForm } from './QuoteForm';
 import { BundleManager } from './BundleManager';
+import { SortableTh } from '../../components/shared/SortableTh';
 import { useQuotes, useCreateQuote, useDeleteQuote } from '../../hooks/useQuotes';
+import {
+  useListPageSizeState,
+  useListSortPersistence,
+} from '../../hooks/useListPageDefaults';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { showSuccess, showError } from '../../utils/toast';
@@ -24,17 +29,25 @@ const statusOptions = [
 function QuotesPage() {
   usePageTitle('Quotes');
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const searchQuery = searchParams.get('search') || '';
+  // Stale bookmarks with ?status=invalid silently fall back to "All"
+  // instead of 422'ing the page on every load.
+  const statusParam = searchParams.get('status') || '';
+  const statusFilter = statusOptions.some((o) => o.value === statusParam) ? statusParam : '';
+  const setSearchQuery = (q: string) =>
+    setSearchParams((prev) => { if (q) prev.set('search', q); else prev.delete('search'); return prev; }, { replace: true });
+  const setStatusFilter = (s: string) =>
+    setSearchParams((prev) => { if (s) prev.set('status', s); else prev.delete('status'); return prev; }, { replace: true });
   const [currentPage, setCurrentPage] = useState(1);
+  const { sortBy, sortDir, toggle: toggleSort } = useListSortPersistence('quotes');
   const [showForm, setShowForm] = useState(false);
   const [showBundles, setShowBundles] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; quote: Quote | null }>({
     isOpen: false,
     quote: null,
   });
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize, setPageSize] = useListPageSizeState('quotes');
 
   const {
     data: quotesData,
@@ -45,7 +58,14 @@ function QuotesPage() {
     page_size: pageSize,
     search: searchQuery || undefined,
     status: statusFilter || undefined,
+    ...(sortBy && { order_by: sortBy, order_dir: sortDir }),
   });
+
+  // Sorting changes ordering — drop back to page 1.
+  const handleSortToggle = (field: string) => {
+    setCurrentPage(1);
+    toggleSort(field);
+  };
 
   const createQuoteMutation = useCreateQuote();
   const deleteQuoteMutation = useDeleteQuote();
@@ -268,27 +288,19 @@ function QuotesPage() {
 
             {/* Desktop Table */}
             <div className="hidden md:block overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                <thead className="bg-gray-50 dark:bg-gray-900">
+              <table data-list-table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-900">
                   <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Quote
-                    </th>
+                    <SortableTh field="title" label="Quote" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Contact / Company
                     </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Total
-                    </th>
+                    <SortableTh field="status" label="Status" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
+                    <SortableTh field="total" label="Total" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} align="right" />
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Valid Until
                     </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Created
-                    </th>
+                    <SortableTh field="created_at" label="Created" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
                     <th scope="col" className="relative px-6 py-3">
                       <span className="sr-only">Actions</span>
                     </th>

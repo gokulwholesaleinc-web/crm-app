@@ -218,7 +218,7 @@ function EnrollModal({
 }) {
   const [contactId, setContactId] = useState<number | null>(null);
   const enrollMutation = useEnrollContact();
-  const { data: contactsData } = useContacts({ page_size: 200 });
+  const { data: contactsData } = useContacts({ page_size: 100 });
 
   const contactOptions = useMemo(
     () =>
@@ -298,7 +298,7 @@ function SequencesPage() {
   // navigating away+back doesn't re-fetch. Stopgap until enrollments
   // endpoint joins contact name.
   const { data: contactsData } = useContacts(
-    { page_size: 1000 },
+    { page_size: 100 },
     { enabled: (sequences?.length ?? 0) > 0, staleTime: 5 * 60 * 1000 }
   );
   const contactById = useMemo(

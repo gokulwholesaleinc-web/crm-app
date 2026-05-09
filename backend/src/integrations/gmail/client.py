@@ -1,7 +1,9 @@
 """Low-level Gmail API client — no FastAPI dependencies, no routes."""
 
+import asyncio
 import base64
 import logging
+import re
 from datetime import UTC, datetime, timedelta
 from email.utils import getaddresses, parsedate_to_datetime
 
@@ -131,10 +133,57 @@ class GmailClient:
 
         return records
 
+    async def get_attachment(
+        self,
+        message_id: str,
+        attachment_id: str,
+    ) -> str | None:
+        """Fetch a single attachment's bytes from Gmail.
+
+        Returns the base64url-encoded ``data`` field — same shape as the
+        inline ``body.data`` Gmail returns for small parts. Returns None
+        on 404. Raises GmailAuthError on 401.
+        """
+        await self._refresh_if_needed()
+        path = f"users/me/messages/{message_id}/attachments/{attachment_id}"
+        url = f"{_GMAIL_BASE}/{path}"
+        resp = await self._http.get(url, headers=self._auth_headers())
+        if resp.status_code == 401:
+            raise GmailAuthError(f"401 on GET {path}")
+        if resp.status_code == 404:
+            return None
+        resp.raise_for_status()
+        return resp.json().get("data")
+
     async def get_message(self, message_id: str) -> dict:
         """Fetch a full message and return a normalised dict."""
         data = await self._get(f"users/me/messages/{message_id}", format="full")
-        return _parse_message(data)
+        parsed = _parse_message(data)
+
+        # Hydrate any inline image parts that Gmail returned without inline
+        # data (attachment_id only). This happens for images above Gmail's
+        # ~2MB inline-embed threshold. After hydration, re-run CID substitution
+        # so the HTML body gets the data: URIs populated.
+        raw_attachments = _walk_attachments(data.get("payload", {}))
+        needs_hydration = any(
+            a["attachment_id"] and not a["data"] and (a["mime_type"] or "").startswith("image/")
+            for a in raw_attachments
+        )
+        if needs_hydration:
+            hydrated = await _hydrate_inline_attachments(self, message_id, raw_attachments)
+            if parsed.get("body_html"):
+                try:
+                    parsed["body_html"] = _inline_cid_images(
+                        parsed["body_html"], hydrated, gmail_msg_id=message_id,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "[gmail_get_message] post-hydration cid substitution failed "
+                        "gmail_msg_id=%s: %s",
+                        message_id, exc,
+                    )
+
+        return parsed
 
     async def get_profile(self) -> dict:
         """Return the authenticated user's Gmail profile (includes historyId)."""
@@ -204,6 +253,26 @@ def _parse_message(data: dict) -> dict:
     headers = {h["name"].lower(): h["value"] for h in payload.get("headers", [])}
 
     body_text, body_html = _extract_body(payload)
+    attachments = _walk_attachments(payload)
+
+    # Substitute Content-ID references in the HTML body with inline data URIs
+    # so the browser can actually render embedded images. Without this, the
+    # canonical Gmail HTML email — which references its inline logo/photo
+    # attachments via <img src="cid:..."> — renders as broken-image icons
+    # in the EmailThread view. Falls back to the original HTML on any
+    # decode error (we'd rather show the surrounding text than nothing).
+    if body_html:
+        try:
+            body_html = _inline_cid_images(
+                body_html, attachments, gmail_msg_id=data.get("id"),
+            )
+        except Exception as exc:
+            logger.warning(
+                "[gmail_parse] inline-cid substitution failed for message %s: %s",
+                data.get("id"),
+                exc,
+            )
+
     date_str = headers.get("date", "")
     parsed_date = _parse_date(date_str)
 
@@ -212,12 +281,35 @@ def _parse_message(data: dict) -> dict:
     bcc_header = headers.get("bcc", "")
     to_email = _first_address(to_header)
 
+    # Strip the inline-only image data from the persisted attachment list
+    # — once it's substituted into the HTML body we don't need to keep a
+    # second copy on the row. Non-inline attachments (cid is None) keep
+    # their metadata so a future "download attachment" UI has what it
+    # needs to fetch from Gmail on demand.
+    attachments_meta = [
+        {
+            "filename": a["filename"],
+            "mime_type": a["mime_type"],
+            "size": a["size"],
+            "attachment_id": a["attachment_id"],
+            "is_inline": a["cid"] is not None,
+        }
+        for a in attachments
+        if (a["filename"] or a["cid"]) and a["mime_type"]
+    ]
+
     return {
         "headers": headers,
         "body_text": body_text,
         "body_html": body_html,
         "subject": headers.get("subject", ""),
         "from": _first_address(headers.get("from", "")),
+        # Preserve the raw RFC From header (`Display Name <addr@host>`)
+        # so notification surfaces can render the sender's name.
+        # ``from`` above is stripped to a bare address by
+        # ``_first_address`` for contact matching, which loses the
+        # display name.
+        "from_header": headers.get("from", ""),
         "to": to_email,
         "to_list": _parse_address_list(to_header),
         "cc": cc_header,
@@ -230,7 +322,119 @@ def _parse_message(data: dict) -> dict:
         "date": parsed_date,
         "thread_id": data.get("threadId", ""),
         "raw_payload": data,
+        "attachments": attachments_meta,
     }
+
+
+_HYDRATE_CONCURRENCY = 5
+
+
+async def _hydrate_inline_attachments(
+    client: "GmailClient",
+    message_id: str,
+    attachments: list[dict],
+) -> list[dict]:
+    """Fetch data for image/* parts that have attachment_id but no inline data.
+
+    Skips parts that already have data, non-image parts, parts with no
+    attachment_id, parts with no Content-ID (regular file attachments
+    don't need cid: substitution; fetching them would just waste quota),
+    and parts whose declared size exceeds the 2.5MB cap.
+    Concurrency-capped at 5 to stay clear of Gmail's quota ceiling.
+    Returns a NEW list; does not mutate the input.
+
+    Token refresh contention: ``client._refresh_if_needed()`` runs once
+    up-front so the 5 concurrent ``get_attachment`` callers don't race
+    on an expired credential and stampede Google's token endpoint.
+
+    Per-fetch error handling distinguishes auth failure from transient
+    misses. ``GmailAuthError`` re-raises out of ``fetch_one`` so
+    ``asyncio.gather`` propagates and the caller can mark the
+    connection revoked instead of logging 5 generic warnings while the
+    real auth state goes invisible. Other exceptions stay swallowed-
+    and-logged so one 404 / network blip doesn't strand the rest.
+
+    Decoded-bytes cap: Gmail's declared ``body.size`` is *advisory*
+    (GUI uploads can mis-report). Re-checking the actual decoded
+    byte length after fetch keeps a 5 MB image from sneaking past
+    the declared cap and bloating the inbound_emails row before
+    ``_inline_cid_images`` silently drops it.
+    """
+    # Single up-front refresh; all the concurrent get_attachment calls
+    # below skip _refresh_if_needed because the token expiry is now
+    # well in the future. Without this, 5 parallel coroutines would
+    # each see an expired token and POST 5 refresh requests
+    # simultaneously — Google rate-limits that endpoint, and the
+    # collisions would each commit on the same SQLAlchemy session.
+    await client._refresh_if_needed()
+
+    sem = asyncio.Semaphore(_HYDRATE_CONCURRENCY)
+    n_fetched = 0
+    n_skipped_oversize = 0
+
+    async def fetch_one(att: dict) -> dict:
+        nonlocal n_fetched, n_skipped_oversize
+        mime = att.get("mime_type") or ""
+        attachment_id = att.get("attachment_id")
+        cid = att.get("cid")
+        if (
+            att.get("data")
+            or not mime.startswith("image/")
+            or not attachment_id
+            or not cid
+            or (att.get("size") or 0) > _MAX_INLINE_IMAGE_BYTES
+        ):
+            return att
+        async with sem:
+            try:
+                data = await client.get_attachment(message_id, attachment_id)
+            except GmailAuthError:
+                # Auth failure is connection-level, not message-level.
+                # Re-raise so the caller can mark the connection
+                # revoked; a swallow here would log 5 generic
+                # warnings while the real state silently rots.
+                raise
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "[hydrate_inline] fetch failed gmail_msg_id=%s attachment_id=%s cid=%s: %s",
+                    message_id, attachment_id, cid, exc,
+                )
+                return att
+        if data is None:
+            logger.warning(
+                "[hydrate_inline] 404 gmail_msg_id=%s attachment_id=%s cid=%s",
+                message_id, attachment_id, cid,
+            )
+            return att
+        # Re-validate against the cap with the actual decoded bytes —
+        # Gmail's declared size is advisory.
+        try:
+            decoded_len = len(base64.urlsafe_b64decode(data + "=="))
+        except Exception:  # noqa: BLE001 — defensive on hostile inputs
+            logger.warning(
+                "[hydrate_inline] decode failed gmail_msg_id=%s attachment_id=%s cid=%s",
+                message_id, attachment_id, cid,
+            )
+            return att
+        if decoded_len > _MAX_INLINE_IMAGE_BYTES:
+            logger.warning(
+                "[hydrate_inline] oversize gmail_msg_id=%s attachment_id=%s cid=%s "
+                "declared_size=%s actual_bytes=%s cap=%s",
+                message_id, attachment_id, cid,
+                att.get("size"), decoded_len, _MAX_INLINE_IMAGE_BYTES,
+            )
+            n_skipped_oversize += 1
+            return att
+        n_fetched += 1
+        return {**att, "data": data}
+
+    result = await asyncio.gather(*(fetch_one(a) for a in attachments))
+    if n_fetched or n_skipped_oversize:
+        logger.info(
+            "[hydrate_inline] gmail_msg_id=%s fetched=%d skipped_oversize=%d",
+            message_id, n_fetched, n_skipped_oversize,
+        )
+    return list(result)
 
 
 def _extract_body(payload: dict) -> tuple[str | None, str | None]:
@@ -252,6 +456,175 @@ def _extract_body(payload: dict) -> tuple[str | None, str | None]:
             html_body = h
 
     return plain, html_body
+
+
+# Cap individual inline images at ~2.5MB raw bytes to keep email rows
+# from ballooning past sane Postgres TOAST thresholds. Anything bigger
+# almost certainly came from a sender's photo attachment, not a
+# logo/banner — if we ever need those, we'll pull them on demand from
+# Gmail by attachment_id rather than embed.
+_MAX_INLINE_IMAGE_BYTES = 2_500_000
+
+
+def _walk_attachments(payload: dict) -> list[dict]:
+    """Walk every leaf MIME part and harvest attachment metadata.
+
+    Returns one entry per non-multipart, non-text part. Each entry has::
+
+        {
+            "mime_type": "image/png",
+            "filename": "logo.png" | "",
+            "cid":      "image001@1234.5678" | None,
+            "size":     12345,
+            "data":     "<base64url body>" | None,   # only for small,
+                                                     # inline payloads
+            "attachment_id": "ANGjdJ..." | None,     # for fetch-on-demand
+        }
+
+    Inline images (those with a Content-ID header) keep their decoded
+    bytes via the ``data`` field so the caller can substitute them
+    into the HTML body. Non-inline attachments have ``data=None`` and
+    rely on the ``attachment_id`` for a separate Gmail API call.
+    """
+    out: list[dict] = []
+
+    def visit(part: dict) -> None:
+        mime = part.get("mimeType", "") or ""
+        if mime.startswith("multipart/"):
+            for child in part.get("parts", []):
+                visit(child)
+            return
+        if mime.startswith("text/"):
+            # text/plain + text/html are handled by _extract_body; skip.
+            return
+        body = part.get("body", {}) or {}
+        if not (body.get("data") or body.get("attachmentId")):
+            return  # empty/structural part — nothing to harvest
+        headers = {
+            (h.get("name") or "").lower(): h.get("value") or ""
+            for h in (part.get("headers") or [])
+        }
+        cid_raw = headers.get("content-id", "").strip()
+        cid = cid_raw.strip("<>") or None
+        out.append(
+            {
+                "mime_type": mime,
+                "filename": part.get("filename") or "",
+                "cid": cid,
+                "size": int(body.get("size") or 0),
+                "data": body.get("data"),
+                "attachment_id": body.get("attachmentId"),
+            }
+        )
+
+    visit(payload)
+    return out
+
+
+# Two regexes because real-world senders emit BOTH quoted and unquoted
+# cid: refs:
+#   <img src="cid:logo">   ← Gmail web compose, most clients
+#   <img src=cid:logo>     ← Outlook on Windows + some Apple Mail variants
+# A single regex with optional quotes is hard to bound (the unquoted
+# terminator is `whitespace|>` rather than the same quote), so we keep
+# two simple patterns and run both through .sub.
+_CID_SRC_RE_QUOTED = re.compile(
+    r"""(src|background)\s*=\s*(['"])cid:([^'"]+)\2""",
+    re.IGNORECASE,
+)
+_CID_SRC_RE_UNQUOTED = re.compile(
+    r"""(src|background)\s*=\s*cid:([^\s>]+)""",
+    re.IGNORECASE,
+)
+
+
+def _inline_cid_images(
+    html: str,
+    attachments: list[dict],
+    *,
+    gmail_msg_id: str | None = None,
+) -> str:
+    """Replace ``<img src="cid:...">`` with embedded ``data:`` URIs.
+
+    Only inline images whose payload is already in the message (``data``
+    field set, image/* mime type, under the size cap) are substituted.
+    Everything else stays as ``cid:...`` — those references still won't
+    render, but at least the HTML structure is preserved and the broken-
+    image icon is honest.
+
+    Handles both quoted and unquoted ``src=cid:`` syntaxes — Outlook on
+    Windows and some Apple Mail variants emit the unquoted form, which
+    a quoted-only matcher would silently leave broken.
+
+    ``gmail_msg_id`` is woven into the per-cid log lines so an operator
+    chasing "Giancarlo's logo is broken on email X" can grep prod logs
+    by message id instead of paging through every duplicate
+    ``image001.png@…`` warning across the tenant.
+    """
+    if not html or not attachments:
+        return html
+
+    cid_to_data_uri: dict[str, str] = {}
+    for att in attachments:
+        cid = att.get("cid")
+        mime = att.get("mime_type") or ""
+        raw_b64 = att.get("data")
+        size = att.get("size") or 0
+        if not (cid and raw_b64 and mime.startswith("image/")):
+            continue
+        if size > _MAX_INLINE_IMAGE_BYTES:
+            continue
+        try:
+            decoded = base64.urlsafe_b64decode(raw_b64 + "==")
+        except Exception as exc:  # noqa: BLE001 — defensive on hostile inputs
+            logger.warning(
+                "[inline_cid] base64 decode failed gmail_msg_id=%s cid=%s mime=%s: %s",
+                gmail_msg_id, cid, mime, exc,
+            )
+            continue
+        if len(decoded) > _MAX_INLINE_IMAGE_BYTES:
+            continue
+        std_b64 = base64.b64encode(decoded).decode("ascii")
+        key = cid.lower()
+        # RFC 2392 forbids duplicate Content-IDs but real senders do it.
+        # Last-wins keeps the existing behavior; warning level (not info)
+        # so the line surfaces in default prod log filters when the next
+        # "wrong logo" report comes in. gmail_msg_id is the correlation
+        # key — without it, ``image001.png@…`` collisions across the
+        # tenant make the line useless to grep.
+        if key in cid_to_data_uri:
+            logger.warning(
+                "[inline_cid] duplicate cid gmail_msg_id=%s cid=%s — last-wins",
+                gmail_msg_id, cid,
+            )
+        cid_to_data_uri[key] = f"data:{mime};base64,{std_b64}"
+
+    if not cid_to_data_uri:
+        return html
+
+    def replace_quoted(match: re.Match[str]) -> str:
+        attr = match.group(1)
+        quote = match.group(2)
+        cid = match.group(3).strip().lower()
+        uri = cid_to_data_uri.get(cid)
+        if not uri:
+            return match.group(0)
+        return f"{attr}={quote}{uri}{quote}"
+
+    def replace_unquoted(match: re.Match[str]) -> str:
+        attr = match.group(1)
+        cid = match.group(2).strip().lower()
+        uri = cid_to_data_uri.get(cid)
+        if not uri:
+            return match.group(0)
+        # Re-emit as quoted form so downstream HTML stays well-formed
+        # even if the substituted data: URI contains an attribute-
+        # boundary char.
+        return f'{attr}="{uri}"'
+
+    html = _CID_SRC_RE_QUOTED.sub(replace_quoted, html)
+    html = _CID_SRC_RE_UNQUOTED.sub(replace_unquoted, html)
+    return html
 
 
 def _decode_body(part: dict) -> str | None:

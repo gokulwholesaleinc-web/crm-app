@@ -49,6 +49,7 @@ from src.whitelabel.models import Tenant, TenantSettings, TenantUser
 from src.attachments.models import Attachment
 from src.email.models import EmailQueue, InboundEmail, EmailSettings
 from src.notifications.models import Notification
+from src.account.models import UserNotificationPrefs, UserPreferences
 from src.filters.models import SavedFilter
 from src.reports.models import SavedReport
 from src.audit.models import AuditLog
@@ -181,6 +182,22 @@ async def auth_token(test_user: User) -> str:
 async def auth_headers(auth_token: str) -> dict:
     """Create authorization headers for API requests."""
     return {"Authorization": f"Bearer {auth_token}"}
+
+
+@pytest_asyncio.fixture(scope="function")
+async def superuser_token(test_superuser: User) -> str:
+    """Create authentication token for superuser (bypasses all role gates)."""
+    return create_access_token(data={"sub": str(test_superuser.id)})
+
+
+@pytest_asyncio.fixture(scope="function")
+async def admin_auth_headers(superuser_token: str) -> dict:
+    """Authorization headers for an admin/superuser. Use this for tests
+    that exercise privileged endpoints (bulk ops, sources/stages
+    config, admin tools) — the default ``auth_headers`` is a
+    sales_rep and will 403 against role-gated endpoints.
+    """
+    return {"Authorization": f"Bearer {superuser_token}"}
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -673,6 +690,38 @@ async def test_contract(
 # =============================================================================
 # Payment fixtures
 # =============================================================================
+
+@pytest_asyncio.fixture(scope="function")
+async def test_user_opted_in(db_session: AsyncSession, test_user: User) -> User:
+    """test_user with all notification channels and matrix entries enabled.
+
+    Use for tests that exercise notification dispatch and need the gate to pass.
+    For opt-in semantics tests (asserting silence), use test_user directly (no prefs row).
+    """
+    prefs = UserNotificationPrefs(
+        user_id=test_user.id,
+        in_app_enabled=True,
+        email_enabled=True,
+        event_matrix={
+            event: {"in_app": True, "email": True}
+            for event in (
+                "lead_assigned",
+                "task_due",
+                "mention",
+                "contract_expiring",
+                "contract_signed",
+                "proposal_signed",
+                "email_reply_received",
+                "payment_received",
+                "team_invitation",
+                "share_received",
+            )
+        },
+    )
+    db_session.add(prefs)
+    await db_session.commit()
+    return test_user
+
 
 @pytest_asyncio.fixture(scope="function")
 async def test_payment(

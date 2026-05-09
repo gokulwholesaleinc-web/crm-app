@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useSmartBack } from '../../hooks/useSmartBack';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeftIcon,
@@ -15,6 +16,9 @@ import {
   ClipboardDocumentIcon,
 } from '@heroicons/react/24/outline';
 import { Button, HelpLink, Modal, ConfirmDialog, StatusBadge } from '../../components/ui';
+import { StickyActionBar } from '../../components/shared/StickyActionBar';
+import { EntitySharing } from '../../components/shared/EntitySharing';
+import { useAuthStore } from '../../store/authStore';
 import {
   useProposal,
   useUpdateProposal,
@@ -31,6 +35,7 @@ import {
   listProposalAttachments,
   uploadProposalAttachment,
   deleteProposalAttachment,
+  openProposalAttachmentPreview,
 } from '../../api/proposals';
 import { formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
@@ -41,6 +46,7 @@ import type { ProposalUpdate, ProposalAttachment } from '../../types';
 function ProposalDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const handleBack = useSmartBack('/proposals');
   const proposalId = id ? parseInt(id, 10) : undefined;
 
   const { data: proposal, isLoading, error } = useProposal(proposalId);
@@ -56,6 +62,7 @@ function ProposalDetailPage() {
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const actionRowRef = useRef<HTMLDivElement>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editExecutiveSummary, setEditExecutiveSummary] = useState('');
   const [editScopeOfWork, setEditScopeOfWork] = useState('');
@@ -165,7 +172,7 @@ function ProposalDetailPage() {
         terms: editTerms || null,
       };
       await updateProposalMutation.mutateAsync({ id: proposal.id, data });
-      setShowEditModal(false);
+      closeEditModal();
       showSuccess('Proposal updated');
     } catch {
       showError('Failed to update proposal');
@@ -182,6 +189,16 @@ function ProposalDetailPage() {
     setShowEditModal(true);
   };
 
+  const closeEditModal = () => {
+    setShowEditModal(false);
+    setEditTitle(proposal.title);
+    setEditExecutiveSummary(proposal.executive_summary ?? '');
+    setEditScopeOfWork(proposal.scope_of_work ?? '');
+    setEditPricingSection(proposal.pricing_section ?? '');
+    setEditTimeline(proposal.timeline ?? '');
+    setEditTerms(proposal.terms ?? '');
+  };
+
   const handleCopyPublicLink = () => {
     // Use the SPA route — not the raw JSON API path — and key on the
     // unguessable public_token, not the enumerable proposal_number.
@@ -196,16 +213,20 @@ function ProposalDetailPage() {
     );
   };
 
+  const currentUser = useAuthStore.getState().user;
+  const canManageSharing =
+    !!currentUser &&
+    (currentUser.id === (proposal.owner?.id ?? proposal.owner_id) ||
+      currentUser.is_superuser ||
+      currentUser.role === 'admin' ||
+      currentUser.role === 'manager');
+
   const isDraft = proposal.status === 'draft';
   const proposalRecipient =
     proposal.designated_signer_email || proposal.contact?.email || '';
-  // Show Send whenever the proposal hasn't moved past the client's
-  // inbox — so the CRM user can resend if the first attempt got
-  // stuck (bad Gmail token, Resend sandbox rejection, etc.). The
-  // backend /send endpoint re-queues on every call. We also require
-  // a recipient (designated signer or linked contact email) — without
-  // one the backend would just 400, mirroring PR #205's pattern of
-  // surfacing the gap up front instead of through a generic toast.
+  // Show Send for draft/sent/viewed so the CRM user can resend if delivery
+  // failed (bad Gmail token, sandbox rejection). Require a recipient so the
+  // frontend gates the 400 the backend would return without one.
   const canSendStatus = ['draft', 'sent', 'viewed'].includes(proposal.status ?? '');
   const canSend = canSendStatus && Boolean(proposalRecipient);
   const showSendButton = canSendStatus;
@@ -227,16 +248,34 @@ function ProposalDetailPage() {
 
   return (
     <div className="space-y-6">
+      <StickyActionBar triggerRef={actionRowRef}>
+        {showSendButton && (
+          <Button
+            size="sm"
+            onClick={handleSend}
+            disabled={sendProposalMutation.isPending || !canSend}
+            variant={isDraft ? 'primary' : 'secondary'}
+          >
+            {sendProposalMutation.isPending ? 'Sending...' : sendLabel}
+          </Button>
+        )}
+        {canEdit && (
+          <Button variant="secondary" size="sm" onClick={openEditModal}>
+            Edit
+          </Button>
+        )}
+      </StickyActionBar>
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
-          <Link
-            to="/proposals"
-            className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
-            aria-label="Back to proposals"
+          <button
+            type="button"
+            onClick={handleBack}
+            className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+            aria-label="Go back"
           >
             <ArrowLeftIcon className="h-5 w-5" aria-hidden="true" />
-          </Link>
+          </button>
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">
@@ -253,7 +292,7 @@ function ProposalDetailPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div ref={actionRowRef} className="flex flex-wrap items-center gap-2">
           <HelpLink anchor="tutorial-esign" label="How clients sign and accept" />
           {canEdit && (
             <Button variant="secondary" onClick={openEditModal} leftIcon={<PencilIcon className="h-4 w-4" />}>
@@ -455,6 +494,14 @@ function ProposalDetailPage() {
               for forensics and billing disputes. */}
           <ProposalAuditCard proposal={proposal} />
 
+          {/* Sharing */}
+          <EntitySharing
+            entityType="proposals"
+            entityId={proposal.id}
+            ownerName={proposal.owner?.full_name ?? undefined}
+            canManage={canManageSharing}
+          />
+
           {/* Related Entities */}
           <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700">
             <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-4">Related</h2>
@@ -510,7 +557,7 @@ function ProposalDetailPage() {
       {/* Edit Proposal Modal */}
       <Modal
         isOpen={showEditModal}
-        onClose={() => setShowEditModal(false)}
+        onClose={closeEditModal}
         title="Edit Proposal"
         size="lg"
         fullScreenOnMobile
@@ -578,7 +625,7 @@ function ProposalDetailPage() {
             />
           </div>
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-            <Button type="button" variant="secondary" onClick={() => setShowEditModal(false)}>Cancel</Button>
+            <Button type="button" variant="secondary" onClick={closeEditModal}>Cancel</Button>
             <Button type="submit" disabled={updateProposalMutation.isPending || !editTitle.trim()}>
               {updateProposalMutation.isPending ? 'Saving...' : 'Save'}
             </Button>
@@ -777,15 +824,33 @@ function ProposalAttachmentsCard({ proposalId, isLocked }: ProposalAttachmentsCa
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                aria-label={`Delete ${attachment.original_filename}`}
-                onClick={() => setPendingDelete(attachment)}
-                disabled={isLocked || deleteMutation.isPending}
-                className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 rounded disabled:opacity-30 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-500"
-              >
-                <TrashIcon className="h-4 w-4" aria-hidden="true" />
-              </button>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <button
+                  type="button"
+                  aria-label={`View ${attachment.original_filename} in a new tab`}
+                  onClick={async () => {
+                    try {
+                      await openProposalAttachmentPreview(attachment.id);
+                    } catch (err) {
+                      showError(
+                        extractApiErrorDetail(err) ?? 'Failed to open attachment',
+                      );
+                    }
+                  }}
+                  className="p-1.5 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500"
+                >
+                  <EyeIcon className="h-4 w-4" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Delete ${attachment.original_filename}`}
+                  onClick={() => setPendingDelete(attachment)}
+                  disabled={isLocked || deleteMutation.isPending}
+                  className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 rounded disabled:opacity-30 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-500"
+                >
+                  <TrashIcon className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
             </li>
           ))}
         </ul>

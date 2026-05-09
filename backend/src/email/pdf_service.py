@@ -23,6 +23,7 @@ class BrandedPDFGenerator:
     @staticmethod
     def _header_html(branding: dict, document_type: str) -> str:
         primary = escape(branding.get("primary_color", "#6366f1"))
+        secondary = escape(branding.get("secondary_color", "#8b5cf6"))
         company = escape(branding.get("company_name", "CRM"))
         logo_url = branding.get("logo_url", "")
 
@@ -35,7 +36,7 @@ class BrandedPDFGenerator:
 
         return f"""\
 <div style="display:flex;justify-content:space-between;align-items:center;
-            border-bottom:3px solid {primary};padding-bottom:16px;margin-bottom:24px;">
+            border-bottom:3px solid {primary};padding-bottom:16px;">
   <div style="display:flex;align-items:center;">
     {logo}
     <span style="font-size:20px;font-weight:700;color:{primary};">{company}</span>
@@ -43,7 +44,8 @@ class BrandedPDFGenerator:
   <div style="font-size:24px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:2px;">
     {escape(document_type)}
   </div>
-</div>"""
+</div>
+<div style="height:2px;background-color:{secondary};margin-bottom:24px;"></div>"""
 
     @staticmethod
     def _footer_html(branding: dict, page_numbers: bool = False) -> str:
@@ -196,6 +198,7 @@ class BrandedPDFGenerator:
             (list of {title, content}), total, currency, terms
         """
         primary = escape(branding.get("primary_color", "#6366f1"))
+        secondary = escape(branding.get("secondary_color", "#8b5cf6"))
         company = escape(branding.get("company_name", "CRM"))
         title = escape(str(proposal_data.get("proposal_title", "Proposal")))
         client = escape(str(proposal_data.get("client_name", "")))
@@ -216,6 +219,7 @@ class BrandedPDFGenerator:
 <div style="text-align:center;padding:80px 24px 40px;page-break-after:always;">
   {logo}
   <h1 style="font-size:32px;color:{primary};margin:0 0 8px;">{title}</h1>
+  <div style="height:2px;width:80px;background-color:{secondary};margin:12px auto 16px;"></div>
   <p style="font-size:16px;color:#6b7280;margin:0 0 24px;">Prepared for {client}</p>
   <p style="font-size:14px;color:#9ca3af;">{company} &middot; {date_str}</p>
 </div>"""
@@ -231,7 +235,7 @@ class BrandedPDFGenerator:
 
         toc = f"""\
 <div style="margin-bottom:32px;page-break-after:always;">
-  <h2 style="font-size:18px;color:{primary};border-bottom:2px solid {primary};padding-bottom:8px;">
+  <h2 style="font-size:18px;color:{primary};border-bottom:1px solid {secondary};padding-bottom:8px;">
     Table of Contents</h2>
   {toc_items}
 </div>"""
@@ -241,7 +245,8 @@ class BrandedPDFGenerator:
         for i, sec in enumerate(sections, 1):
             sections_html += (
                 f'<div style="margin-bottom:24px;">'
-                f'<h2 style="font-size:18px;color:{primary};margin:0 0 8px;">'
+                f'<h2 style="font-size:18px;color:{primary};margin:0 0 8px;'
+                f'border-bottom:1px solid {secondary};padding-bottom:6px;">'
                 f'{i}. {escape(str(sec.get("title", "")))}</h2>'
                 f'<div style="font-size:14px;line-height:1.6;">'
                 f'{escape(str(sec.get("content", "")))}</div>'

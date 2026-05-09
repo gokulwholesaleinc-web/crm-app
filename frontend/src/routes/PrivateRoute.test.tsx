@@ -42,10 +42,6 @@ vi.mock('../components/layout/Layout', () => ({
   ),
 }));
 
-vi.mock('../components/ai/FloatingChatWidget', () => ({
-  FloatingChatWidget: () => <div data-testid="floating-chat-widget" />,
-}));
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { __setAuthState } = await import('../store/authStore') as any;
 

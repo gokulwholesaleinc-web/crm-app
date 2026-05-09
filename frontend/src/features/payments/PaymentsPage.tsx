@@ -1,8 +1,13 @@
 import { useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { StatusBadge, Button, EntityLink, HelpLink, PaginationBar } from '../../components/ui';
 import { SkeletonTable } from '../../components/ui/Skeleton';
+import { SortableTh } from '../../components/shared/SortableTh';
 import { usePayments, useSubscriptions, useCancelSubscription } from '../../hooks/usePayments';
+import {
+  useListPageSizeState,
+  useListSortPersistence,
+} from '../../hooks/useListPageDefaults';
 import { SendInvoiceModal } from './components/SendInvoiceModal';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
@@ -75,14 +80,23 @@ const statusOptions = [
 
 function PaymentsPage() {
   usePageTitle('Payments');
-  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<Tab>('All Payments');
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
-  const [statusFilter, setStatusFilter] = useState('');
-  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
+  // Stale bookmarks with ?status=invalid silently fall back to "All"
+  // instead of 422'ing the page on every load.
+  const statusParam = searchParams.get('status') || '';
+  const statusFilter = statusOptions.some((o) => o.value === statusParam) ? statusParam : '';
+  const searchQuery = searchParams.get('search') || '';
+  const setSearchQuery = (q: string) =>
+    setSearchParams((prev) => { if (q) prev.set('search', q); else prev.delete('search'); return prev; }, { replace: true });
+  const setStatusFilter = (s: string) =>
+    setSearchParams((prev) => { if (s) prev.set('status', s); else prev.delete('status'); return prev; }, { replace: true });
   const [currentPage, setCurrentPage] = useState(1);
   const [subPage, setSubPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const { sortBy, sortDir, toggle: toggleSort } = useListSortPersistence('payments');
+  const [pageSize, setPageSize] = useListPageSizeState('payments');
 
   const {
     data: paymentsData,
@@ -93,7 +107,14 @@ function PaymentsPage() {
     page_size: pageSize,
     status: statusFilter || undefined,
     search: searchQuery || undefined,
+    ...(sortBy && { order_by: sortBy, order_dir: sortDir }),
   });
+
+  // Sorting changes ordering — drop back to page 1.
+  const handleSortToggle = (field: string) => {
+    setCurrentPage(1);
+    toggleSort(field);
+  };
 
   const {
     data: subscriptionsData,
@@ -284,27 +305,19 @@ function PaymentsPage() {
 
               {/* Desktop Table */}
               <div className="hidden md:block overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead className="bg-gray-50 dark:bg-gray-900">
+                <table data-list-table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-900">
                     <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        ID
-                      </th>
+                      <SortableTh field="id" label="ID" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         Customer
                       </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         For
                       </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Amount
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Date
-                      </th>
+                      <SortableTh field="status" label="Status" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
+                      <SortableTh field="amount" label="Amount" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} align="right" />
+                      <SortableTh field="created_at" label="Date" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
                       <th scope="col" className="relative px-6 py-3">
                         <span className="sr-only">Actions</span>
                       </th>
@@ -312,7 +325,29 @@ function PaymentsPage() {
                   </thead>
                   <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                     {payments.map((payment: Payment) => (
-                      <tr key={payment.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                      <tr
+                        key={payment.id}
+                        role="button"
+                        tabIndex={0}
+                        className="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500"
+                        onClick={(e) => {
+                          if ((e.target as HTMLElement).closest('a, button')) return;
+                          if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+                          if (window.getSelection()?.toString()) return;
+                          navigate(`/payments/${payment.id}`, {
+                            state: { from: window.location.pathname + window.location.search },
+                          });
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.target !== e.currentTarget) return;
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            navigate(`/payments/${payment.id}`, {
+                              state: { from: window.location.pathname + window.location.search },
+                            });
+                          }
+                        }}
+                      >
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
                           <Link
                             to={`/payments/${payment.id}`}
@@ -434,8 +469,8 @@ function PaymentsPage() {
 
               {/* Desktop Table */}
               <div className="hidden md:block overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead className="bg-gray-50 dark:bg-gray-900">
+                <table data-list-table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-900">
                     <tr>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         Customer

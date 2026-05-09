@@ -3,6 +3,7 @@
  */
 
 import type { SalesFunnelResponse } from '../../../types';
+import { getBrandColor } from '../../../utils/chartPalette';
 
 interface SalesFunnelChartProps {
   data: SalesFunnelResponse;
@@ -40,7 +41,7 @@ export function SalesFunnelChart({ data }: SalesFunnelChartProps) {
                   className="h-8 rounded transition-[width] duration-500"
                   style={{
                     width: `${widthPct}%`,
-                    backgroundColor: stage.color || '#6366f1',
+                    backgroundColor: stage.color || getBrandColor('primary', '#6366f1'),
                     margin: '0 auto',
                     marginLeft: `${(100 - widthPct) / 2}%`,
                     opacity: 0.85,

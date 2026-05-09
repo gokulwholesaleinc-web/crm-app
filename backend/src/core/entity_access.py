@@ -30,7 +30,32 @@ _ENTITY_PLURALS = {
     "payment": "payments",
     "activity": "activities",
     "expense": "expenses",
+    "campaign": "campaigns",
 }
+
+# Reverse map: plural -> singular. Used to canonicalise inputs like
+# "opportunities" / "companies" — naive rstrip("s") would mangle these into
+# "opportunitie" / "companie" and silently fall through every if-branch.
+_ENTITY_SINGULARS = {plural: singular for singular, plural in _ENTITY_PLURALS.items()}
+
+
+def canonical_singular(entity_type: str) -> str:
+    """Return the canonical singular form of an entity type input.
+
+    Accepts either singular ("contact") or plural ("contacts") forms.
+    Unknown inputs are returned lowercased unchanged.
+    """
+    lower = entity_type.lower()
+    if lower in _ENTITY_PLURALS:
+        return lower
+    if lower in _ENTITY_SINGULARS:
+        return _ENTITY_SINGULARS[lower]
+    return lower
+
+
+# Backwards-compatible alias for the old private name. Internal callers in
+# this module continue to import it; remove once those are migrated.
+_canonical_singular = canonical_singular
 
 
 async def _resolve_entity(db: AsyncSession, entity_type: str, entity_id: int):
@@ -39,7 +64,7 @@ async def _resolve_entity(db: AsyncSession, entity_type: str, entity_id: int):
     Supports both singular and plural forms of entity_type so callers can
     pass either "contact" or "contacts".
     """
-    normalized = entity_type.lower().rstrip("s")
+    normalized = _canonical_singular(entity_type)
     plural = _ENTITY_PLURALS.get(normalized, normalized)
 
     # Lazy imports to avoid circular dependencies.
@@ -70,6 +95,9 @@ async def _resolve_entity(db: AsyncSession, entity_type: str, entity_id: int):
     elif normalized == "activity":
         from src.activities.models import Activity
         model = Activity
+    elif normalized == "campaign":
+        from src.campaigns.models import Campaign
+        model = Campaign
     elif normalized == "expense":
         # Expenses don't have owner_id; treat as 'parent is the company'.
         from src.expenses.models import Expense

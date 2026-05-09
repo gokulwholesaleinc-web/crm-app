@@ -5,6 +5,7 @@ import { FormInput, FormSelect, FormTextarea } from '../../../components/forms';
 import { useCompanies } from '../../../hooks/useCompanies';
 import { useLeadSources, useLeadPipelineStages } from '../../../hooks/useLeads';
 import { useUnsavedChangesWarning } from '../../../hooks/useUnsavedChangesWarning';
+import { normalizeEmail, normalizePhone } from '../../../utils/inputNormalize';
 
 export interface LeadFormData {
   firstName?: string;
@@ -52,6 +53,7 @@ export function LeadForm({
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors, isDirty },
   } = useForm<LeadFormData>({
     defaultValues: {
@@ -155,6 +157,15 @@ export function LeadForm({
               },
             })}
             error={errors.email?.message}
+            onBlur={(e) =>
+              setValue('email', normalizeEmail(e.target.value), { shouldDirty: true })
+            }
+            onPaste={(e) => {
+              e.preventDefault();
+              setValue('email', normalizeEmail(e.clipboardData.getData('text')), {
+                shouldDirty: true,
+              });
+            }}
           />
 
           <FormInput
@@ -164,6 +175,15 @@ export function LeadForm({
             autoComplete="tel"
             inputMode="tel"
             register={register('phone')}
+            onBlur={(e) =>
+              setValue('phone', normalizePhone(e.target.value), { shouldDirty: true })
+            }
+            onPaste={(e) => {
+              e.preventDefault();
+              setValue('phone', normalizePhone(e.clipboardData.getData('text')), {
+                shouldDirty: true,
+              });
+            }}
           />
         </div>
       </div>

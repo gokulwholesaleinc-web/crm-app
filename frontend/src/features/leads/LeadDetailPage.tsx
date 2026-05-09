@@ -1,16 +1,20 @@
-import { useState, Suspense } from 'react';
+import { useState, Suspense, useRef } from 'react';
 import { lazy } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Button, Spinner, Modal, ConfirmDialog } from '../../components/ui';
+import { useSmartBack } from '../../hooks/useSmartBack';
+import { useUrlTabState } from '../../hooks/useUrlTabState';
+import { useUserPreferences } from '../../hooks/useUserPreferences';
+import { Button, CopyButton, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { TabBar, ActivitiesTab, CommonTabContent, SuspenseFallback } from '../../components/shared/DetailPageShell';
+import { StickyActionBar } from '../../components/shared/StickyActionBar';
 import { EmailComposeModal, EmailHistory } from '../../components/email';
 import { ConvertLeadModal } from './components/ConvertLeadModal';
 import { LeadForm, LeadFormData } from './components/LeadForm';
-import { AIInsightsCard, NextBestActionCard } from '../../components/ai';
 import { getStatusBadgeClasses, formatStatusLabel, getScoreColor } from '../../utils';
 import { showError } from '../../utils/toast';
 import { formatDate, formatPhoneNumber } from '../../utils/formatters';
 import { useLead, useDeleteLead, useConvertLead, useUpdateLead } from '../../hooks/useLeads';
+import { useAuthStore } from '../../store/authStore';
 import type { LeadUpdate } from '../../types';
 import clsx from 'clsx';
 
@@ -29,20 +33,31 @@ const TABS: { id: TabType; name: string }[] = [
   { id: 'sharing', name: 'Sharing' },
 ];
 
+const TAB_IDS: ReadonlySet<TabType> = new Set(TABS.map((t) => t.id));
+
 function LeadDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const handleBack = useSmartBack('/leads');
   const leadId = id ? parseInt(id, 10) : undefined;
-  const [activeTab, setActiveTab] = useState<TabType>('details');
+  const { prefs } = useUserPreferences();
+  const [activeTab, handleTabChange] = useUrlTabState<TabType>(
+    TAB_IDS,
+    'details',
+    'tab',
+    () => prefs.tabDefaults?.lead ?? null,
+  );
   const [showConvertModal, setShowConvertModal] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEmailCompose, setShowEmailCompose] = useState(false);
+  const actionRowRef = useRef<HTMLDivElement>(null);
 
   const { data: lead, isLoading, error } = useLead(leadId);
   const deleteLeadMutation = useDeleteLead();
   const convertLeadMutation = useConvertLead();
   const updateLeadMutation = useUpdateLead();
+  const currentUser = useAuthStore((s) => s.user);
 
   const handleEditSubmit = async (data: LeadFormData) => {
     if (!leadId) return;
@@ -163,20 +178,51 @@ function LeadDetailPage() {
   const isOrphanConverted =
     lead.status === 'converted' && !lead.converted_contact_id;
 
+  const canManageSharing =
+    !!currentUser &&
+    (currentUser.id === lead.owner_id ||
+      currentUser.is_superuser ||
+      currentUser.role === 'admin' ||
+      currentUser.role === 'manager');
+
   return (
     <div className="space-y-6">
+      <StickyActionBar triggerRef={actionRowRef}>
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => setShowEmailCompose(true)}
+          disabled={!lead.email}
+        >
+          Send Email
+        </Button>
+        {(lead.status === 'qualified' || isOrphanConverted) && (
+          <Button size="sm" onClick={() => setShowConvertModal(true)}>
+            {isOrphanConverted ? 'Run Conversion' : 'Convert'}
+          </Button>
+        )}
+        <Button variant="secondary" size="sm" onClick={() => setShowEditForm(true)}>
+          Edit
+        </Button>
+      </StickyActionBar>
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center space-x-3 sm:space-x-4">
-          <Link to="/leads" className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 p-1 -ml-1" aria-label="Back to leads">
+          <button type="button" onClick={handleBack} className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 p-1 -ml-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded" aria-label="Go back">
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
-          </Link>
+          </button>
           <div className="min-w-0">
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">
-              {lead.full_name || 'Unnamed Lead'}
-            </h1>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">
+                {lead.full_name || 'Unnamed Lead'}
+              </h1>
+              <span className="inline-flex items-center gap-1">
+                <span className="text-xs font-mono text-gray-500 dark:text-gray-400">#{lead.id}</span>
+                <CopyButton value={String(lead.id)} label="ID" />
+              </span>
+            </div>
             {lead.job_title && lead.company_name && (
               <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
                 {lead.job_title} at {lead.company_name}
@@ -184,7 +230,7 @@ function LeadDetailPage() {
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div ref={actionRowRef} className="flex items-center gap-2 sm:gap-3">
           <Button
             variant="primary"
             onClick={() => setShowEmailCompose(true)}
@@ -194,7 +240,6 @@ function LeadDetailPage() {
           >
             Send Email
           </Button>
-          <AIInsightsCard entityType="lead" entityId={lead.id} entityName={lead.full_name || 'Lead'} />
           {(lead.status === 'qualified' || isOrphanConverted) && (
             <Button onClick={() => setShowConvertModal(true)} className="flex-1 sm:flex-none">
               <svg className="h-5 w-5 mr-1 sm:mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -233,9 +278,6 @@ function LeadDetailPage() {
           </p>
         </div>
       )}
-
-      {/* Next Best Action Suggestion */}
-      <NextBestActionCard entityType="lead" entityId={lead.id} />
 
       {/* Lead Score Card */}
       <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4 sm:p-6">
@@ -276,7 +318,7 @@ function LeadDetailPage() {
       </div>
 
       {/* Tabs */}
-      <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
+      <TabBar tabs={TABS} activeTab={activeTab} onTabChange={handleTabChange} />
 
       {/* Tab Content */}
       {activeTab === 'details' && (
@@ -286,19 +328,23 @@ function LeadDetailPage() {
             <dl className="grid grid-cols-1 gap-4 sm:gap-x-4 sm:gap-y-6 sm:grid-cols-2">
               <div>
                 <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Email</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100 break-all">
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100 break-all flex items-center gap-2">
                   <a href={`mailto:${lead.email}`} className="text-primary-600 hover:text-primary-500">
                     {lead.email}
                   </a>
+                  {lead.email && <CopyButton value={lead.email} label="email" />}
                 </dd>
               </div>
               <div>
                 <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Phone</dt>
-                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
+                <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100 flex items-center gap-2">
                   {lead.phone ? (
-                    <a href={`tel:${lead.phone}`} className="text-primary-600 hover:text-primary-500">
-                      {formatPhoneNumber(lead.phone)}
-                    </a>
+                    <>
+                      <a href={`tel:${lead.phone}`} className="text-primary-600 hover:text-primary-500">
+                        {formatPhoneNumber(lead.phone)}
+                      </a>
+                      <CopyButton value={lead.phone} label="phone" />
+                    </>
                   ) : '-'}
                 </dd>
               </div>
@@ -391,6 +437,7 @@ function LeadDetailPage() {
             entityType="leads"
             entityId={leadId}
             enabledTabs={['notes', 'attachments', 'history', 'sharing']}
+            canManage={canManageSharing}
           />
           {activeTab === 'comments' && (
             <Suspense fallback={<SuspenseFallback />}>

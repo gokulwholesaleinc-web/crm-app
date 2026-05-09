@@ -92,7 +92,12 @@ export function useCreatePaymentIntent() {
 /**
  * Hook to list Stripe customers
  */
-export function useStripeCustomers(params?: { page?: number; page_size?: number }) {
+export function useStripeCustomers(params?: {
+  page?: number;
+  page_size?: number;
+  contact_id?: number;
+  company_id?: number;
+}) {
   return useAuthQuery({
     queryKey: [customerQueryKey, 'list', params],
     queryFn: () => paymentsApi.listCustomers(params),

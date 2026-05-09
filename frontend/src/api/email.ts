@@ -88,6 +88,14 @@ export interface EmailSearchResponse {
   pages: number;
 }
 
+/**
+ * Email volume stats — re-exported from `api/campaigns` so the email
+ * surface owns the ``/api/email/volume-stats`` call site logically. The
+ * underlying function is identical; this avoids cross-feature imports
+ * (campaigns→inbox) when more callers wire up.
+ */
+export { getVolumeStats } from './campaigns';
+
 export const emailApi = {
   send: (data: SendEmailPayload) =>
     apiClient.post<EmailQueueItem>('/api/email/send', data).then((r) => r.data),
@@ -96,7 +104,7 @@ export const emailApi = {
     apiClient.post<EmailQueueItem>('/api/email/send-template', data).then((r) => r.data),
 
   sendCampaign: (data: SendCampaignEmailPayload) =>
-    apiClient.post<{ queued: number }>('/api/email/send-campaign', data).then((r) => r.data),
+    apiClient.post<{ sent: number; items: EmailQueueItem[] }>('/api/email/send-campaign', data).then((r) => r.data),
 
   list: (params?: { page?: number; page_size?: number; entity_type?: string; entity_id?: number; status?: string }) =>
     apiClient.get<EmailListResponse>('/api/email', { params }).then((r) => r.data),

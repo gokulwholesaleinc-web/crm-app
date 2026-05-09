@@ -159,6 +159,8 @@ class QuoteBranding(BaseModel):
     primary_color: str = "#6366f1"
     secondary_color: str = "#8b5cf6"
     accent_color: str = "#22c55e"
+    bg_color_light: str = "#f9fafb"
+    surface_color_light: str = "#ffffff"
     footer_text: str | None = None
 
 

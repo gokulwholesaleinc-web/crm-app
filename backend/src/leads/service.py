@@ -3,18 +3,31 @@
 import logging
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
 
+from src.assignment.service import AssignmentDecision, AssignmentService
 from src.core.base_service import CRUDService, TaggableServiceMixin
 from src.core.constants import DEFAULT_PAGE_SIZE, ENTITY_TYPE_LEADS
 from src.core.filtering import apply_filters_to_query, build_token_search
+from src.core.sorting import build_order_clauses
 from src.leads.models import Lead, LeadSource
 from src.leads.schemas import LeadCreate, LeadSourceCreate, LeadSourceUpdate, LeadUpdate
 from src.leads.scoring import calculate_lead_score
 from src.opportunities.models import PipelineStage
 
 logger = logging.getLogger(__name__)
+
+
+# `name` sorts by (last_name, first_name) — Lead.full_name is a Python property
+# (first/last with company_name fallback), not a column. Surname-first matches
+# the alphabetical convention users expect on a leads list.
+LEAD_SORTABLE_FIELDS: dict[str, Any] = {
+    "name": (Lead.last_name, Lead.first_name),
+    "status": Lead.status,
+    "score": Lead.score,
+    "created_at": Lead.created_at,
+}
 
 
 class LeadValidationError(ValueError):
@@ -51,8 +64,18 @@ class LeadService(
         tag_ids: list[int] | None = None,
         filters: dict[str, Any] | None = None,
         shared_entity_ids: list[int] | None = None,
+        assignee_entity_ids: list[int] | None = None,
+        order_by: str | None = None,
+        order_dir: str | None = None,
     ) -> tuple[list[Lead], int]:
-        """Get paginated list of leads with filters."""
+        """Get paginated list of leads with filters.
+
+        When ``owner_id`` is set, the result includes records owned by that
+        user plus any records in ``shared_entity_ids`` or
+        ``assignee_entity_ids``. ``assignee_entity_ids`` is a distinct
+        parameter so callers that bypass DataScope can OR in just the
+        assignee shares without rebuilding the full shared-entity map.
+        """
         query = select(Lead).options(selectinload(Lead.source))
 
         if filters:
@@ -73,7 +96,15 @@ class LeadService(
         if source_id:
             query = query.where(Lead.source_id == source_id)
 
-        query = self.apply_owner_filter(query, owner_id, shared_entity_ids)
+        if owner_id is not None:
+            or_clauses = [Lead.owner_id == owner_id]
+            if shared_entity_ids:
+                or_clauses.append(Lead.id.in_(shared_entity_ids))
+            if assignee_entity_ids:
+                or_clauses.append(Lead.id.in_(assignee_entity_ids))
+            query = query.where(or_(*or_clauses))
+        else:
+            query = self.apply_owner_filter(query, owner_id, shared_entity_ids)
 
         if min_score is not None:
             query = query.where(Lead.score >= min_score)
@@ -81,7 +112,26 @@ class LeadService(
         if tag_ids:
             query = await self._filter_by_tags(query, tag_ids)
 
-        return await self.paginate_query(query, page, page_size, order_by=Lead.score.desc())
+        order_clauses = build_order_clauses(
+            LEAD_SORTABLE_FIELDS,
+            order_by,
+            order_dir,
+            default=[Lead.score.desc(), Lead.id.desc()],
+        )
+        return await self.paginate_query(query, page, page_size, order_by=order_clauses)
+
+    async def get_assignee_entity_ids(self, user_id: int) -> list[int]:
+        """Return lead IDs where this user holds an 'assignee' share."""
+        from src.core.models import EntityShare
+
+        result = await self.db.execute(
+            select(EntityShare.entity_id).where(
+                EntityShare.shared_with_user_id == user_id,
+                EntityShare.entity_type == ENTITY_TYPE_LEADS,
+                EntityShare.permission_level == "assignee",
+            )
+        )
+        return list(result.scalars().all())
 
     async def create(self, data: LeadCreate, user_id: int) -> Lead:
         """Create a new lead with auto-scoring.
@@ -92,6 +142,15 @@ class LeadService(
         Refuses status='converted' on this path too — same reasoning as
         update; manual setting bypasses the Convert flow's contact +
         opportunity creation.
+
+        When the caller did not specify `owner_id`, the active assignment
+        rules are consulted and the lead is routed to the picked user.
+        Specifying `owner_id` explicitly (admin/manager assigning during
+        create) skips auto-assignment so the chosen owner is honored.
+        Each auto-routing decision writes an `assignment_log` row so the
+        per-rule stats panel and future reporting can attribute the
+        placement to a rule rather than guessing from `Lead.owner_id`
+        alone.
         """
         if data.status == "converted":
             raise LeadValidationError(
@@ -99,7 +158,17 @@ class LeadService(
                 "Convert action on a qualified lead so the contact and "
                 "opportunity are created.",
             )
-        lead = await super().create(data, user_id)
+        decision = await self._auto_assign(data)
+        try:
+            lead = await super().create(data, user_id)
+        except Exception:
+            # Don't leave the caller's LeadCreate dirty (owner_id mutated
+            # by _auto_assign) if persistence failed — they may retry.
+            if decision is not None:
+                data.owner_id = None
+            raise
+        if decision is not None:
+            await AssignmentService(self.db).log_decision(lead.id, decision)
         if lead.pipeline_stage_id is None:
             stage_id = await self._first_lead_stage_id()
             if stage_id is not None:
@@ -114,6 +183,26 @@ class LeadService(
                     lead.id,
                 )
         return await self._recalculate_score(lead)
+
+    async def _auto_assign(self, data: LeadCreate) -> AssignmentDecision | None:
+        """Resolve `data.owner_id` via active assignment rules when blank.
+
+        Returns the AssignmentDecision so the caller can write the audit
+        row once the lead row exists (we need the lead.id). If the
+        caller already chose an owner, or no rule produced a user, we
+        leave `data.owner_id` as-is and return None.
+        """
+        if data.owner_id is not None:
+            return None
+        decision = await AssignmentService(self.db).assign_lead({
+            "source_id": data.source_id,
+            "industry": data.industry,
+            "status": data.status,
+        })
+        if decision is None:
+            return None
+        data.owner_id = decision.user_id
+        return decision
 
     async def update(self, lead: Lead, data: LeadUpdate, user_id: int) -> Lead:
         """Update a lead and recalculate score.

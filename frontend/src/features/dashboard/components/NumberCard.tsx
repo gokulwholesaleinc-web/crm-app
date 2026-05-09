@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom';
 import clsx from 'clsx';
 
+export type NumberCardColor = 'primary' | 'secondary' | 'accent';
+
 export interface NumberCardProps {
   title: string;
   value: string | number;
@@ -12,7 +14,14 @@ export interface NumberCardProps {
   };
   href?: string;
   className?: string;
+  colorVariant?: NumberCardColor;
 }
+
+const brandVarByVariant: Record<NumberCardColor, string> = {
+  primary: '--brand-primary',
+  secondary: '--brand-secondary',
+  accent: '--brand-accent',
+};
 
 export function NumberCard({
   title,
@@ -22,7 +31,9 @@ export function NumberCard({
   trend,
   href,
   className,
+  colorVariant = 'primary',
 }: NumberCardProps) {
+  const brandColor = `var(${brandVarByVariant[colorVariant]})`;
   const cardContent = (
     <div className="flex items-center justify-between">
       <div className="flex-1 min-w-0">
@@ -46,8 +57,14 @@ export function NumberCard({
         )}
       </div>
       {icon && (
-        <div className="flex-shrink-0 p-3 bg-primary-50 dark:bg-primary-900/30 rounded-lg">
-          <span className="h-6 w-6 text-primary-600">{icon}</span>
+        <div
+          className="flex-shrink-0 p-3 rounded-lg"
+          style={{
+            backgroundColor: `color-mix(in srgb, ${brandColor} 15%, transparent)`,
+            color: brandColor,
+          }}
+        >
+          <span className="h-6 w-6">{icon}</span>
         </div>
       )}
     </div>

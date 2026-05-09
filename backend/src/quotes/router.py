@@ -24,7 +24,7 @@ from src.core.router_utils import (
     check_ownership,
     get_entity_or_404,
 )
-from src.events.service import QUOTE_ACCEPTED, QUOTE_SENT, emit
+from src.events.service import QUOTE_ACCEPTED, QUOTE_REJECTED, QUOTE_SENT, emit
 from src.quotes.schemas import (
     ProductBundleCreate,
     ProductBundleListResponse,
@@ -55,6 +55,8 @@ def _build_branded_response(branding_data: dict, quote) -> QuotePublicResponse:
         primary_color=branding_data.get("primary_color", "#6366f1"),
         secondary_color=branding_data.get("secondary_color", "#8b5cf6"),
         accent_color=branding_data.get("accent_color", "#22c55e"),
+        bg_color_light=branding_data.get("bg_color_light", "#f9fafb"),
+        surface_color_light=branding_data.get("surface_color_light", "#ffffff"),
         footer_text=branding_data.get("footer_text"),
     )
     response = QuotePublicResponse.model_validate(quote)
@@ -75,6 +77,8 @@ async def list_quotes(
     company_id: int | None = None,
     opportunity_id: int | None = None,
     owner_id: int | None = None,
+    order_by: str | None = None,
+    order_dir: str | None = None,
 ):
     """List quotes with pagination and filters."""
     effective_owner_id = owner_id if data_scope.can_see_all() else data_scope.owner_id
@@ -91,6 +95,8 @@ async def list_quotes(
         opportunity_id=opportunity_id,
         owner_id=effective_owner_id,
         shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_QUOTES),
+        order_by=order_by,
+        order_dir=order_dir,
     )
 
     return QuoteListResponse(
@@ -302,6 +308,21 @@ async def reject_quote_public(
     except ValueError as e:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e)) from e
 
+    # Public reject is the customer-facing path — owner needs the ping.
+    # user_id=None because the actor is unauthenticated; the handler
+    # resolves the recipient via the quote's owner_id.
+    await emit(QUOTE_REJECTED, {
+        "entity_id": quote.id,
+        "entity_type": "quote",
+        "user_id": None,
+        "data": {
+            "quote_number": quote.quote_number,
+            "status": quote.status,
+            "rejected_via": "public",
+            "reason": reject_data.reason,
+        },
+    })
+
     return _build_branded_response(await service.get_branding_for_quote(quote), quote)
 
 
@@ -463,6 +484,14 @@ async def reject_quote(
         quote = await service.mark_rejected(quote)
     except ValueError as e:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e)) from e
+
+    await emit(QUOTE_REJECTED, {
+        "entity_id": quote.id,
+        "entity_type": "quote",
+        "user_id": quote.owner_id,
+        "data": {"quote_number": quote.quote_number, "status": quote.status},
+    })
+
     return QuoteResponse.model_validate(quote)
 
 

@@ -1,7 +1,11 @@
 import { useState, useRef, lazy, Suspense } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { Button, HelpLink, Spinner, Modal, ConfirmDialog } from '../../components/ui';
+import { useSmartBack } from '../../hooks/useSmartBack';
+import { useUrlTabState } from '../../hooks/useUrlTabState';
+import { useUserPreferences } from '../../hooks/useUserPreferences';
+import { Button, CopyButton, HelpLink, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { TabBar, ActivitiesTab, CommonTabContent, SuspenseFallback } from '../../components/shared/DetailPageShell';
+import { StickyActionBar } from '../../components/shared/StickyActionBar';
 import { EmailComposeModal, EmailThread, GmailReconnectBanner } from '../../components/email';
 import { useGmailStatus } from '../../hooks/useGmailStatus';
 import { ContactForm } from './components/ContactForm';
@@ -10,8 +14,8 @@ import {
   contactToFormData,
   type ContactFormData,
 } from './components/contactFormHelpers';
-import { NextBestActionCard } from '../../components/ai';
 import { useContact, useDeleteContact, useUpdateContact } from '../../hooks/useContacts';
+import { useAuthStore } from '../../store/authStore';
 import { useContactAliases, useAddAlias, useDeleteAlias } from '../../hooks/useContactAliases';
 import { showSuccess, showError } from '../../utils/toast';
 import { useQuotes } from '../../hooks/useQuotes';
@@ -56,17 +60,18 @@ function ContactDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const handleBack = useSmartBack('/contacts');
   const contactId = id ? parseInt(id, 10) : undefined;
+  const { prefs } = useUserPreferences();
   // Honor `?tab=` so deep links from the email search modal land on
   // the right tab; `?email=` carries the kind:id deep-link target the
   // EmailThread will scroll to.
-  const initialTab = (() => {
-    const requested = searchParams.get('tab');
-    return requested && TAB_IDS.has(requested as TabType)
-      ? (requested as TabType)
-      : 'details';
-  })();
-  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
+  const [activeTab, handleTabChange] = useUrlTabState<TabType>(
+    TAB_IDS,
+    'details',
+    'tab',
+    () => prefs.tabDefaults?.contact ?? null,
+  );
   const targetEmail = searchParams.get('email');
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -76,6 +81,7 @@ function ContactDetailPage() {
   const [aliasInput, setAliasInput] = useState('');
   const [aliasError, setAliasError] = useState<string | null>(null);
   const aliasInputRef = useRef<HTMLInputElement>(null);
+  const actionRowRef = useRef<HTMLDivElement>(null);
 
   const { data: contact, isLoading, error } = useContact(contactId);
   const { data: gmailStatus } = useGmailStatus();
@@ -107,6 +113,7 @@ function ContactDetailPage() {
         }
       : undefined
   );
+  const currentUser = useAuthStore((s) => s.user);
   const quotes = quotesData?.items ?? [];
   const proposals = proposalsData?.items ?? [];
   const hasActiveSubscription = (subscriptionsData?.total ?? 0) > 0;
@@ -134,11 +141,6 @@ function ContactDetailPage() {
       const status = (err as { response?: { status?: number } })?.response?.status;
       setAliasError(status === 409 ? 'That address is already in use' : 'Failed to add alias');
     }
-  };
-
-  const getInitialFormData = (): Partial<ContactFormData> | undefined => {
-    if (!contact) return undefined;
-    return contactToFormData(contact);
   };
 
   const handleDeleteConfirm = async () => {
@@ -180,20 +182,40 @@ function ContactDetailPage() {
     );
   }
 
+  const canManageSharing =
+    !!currentUser &&
+    (currentUser.id === contact.owner_id ||
+      currentUser.is_superuser ||
+      currentUser.role === 'admin' ||
+      currentUser.role === 'manager');
+
   return (
     <div className="space-y-6">
-      {/* Header */}
+      <StickyActionBar triggerRef={actionRowRef}>
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => setShowEmailCompose(true)}
+          disabled={!contact.email}
+        >
+          Send Email
+        </Button>
+        <Button variant="secondary" size="sm" onClick={() => setShowEditForm(true)}>
+          Edit
+        </Button>
+      </StickyActionBar>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center space-x-4">
-          <Link
-            to="/contacts"
-            className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 flex-shrink-0"
-            aria-label="Back to contacts"
+          <button
+            type="button"
+            onClick={handleBack}
+            className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
+            aria-label="Go back"
           >
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
-          </Link>
+          </button>
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">
@@ -208,6 +230,10 @@ function ContactDetailPage() {
                   Subscriber
                 </span>
               )}
+              <span className="inline-flex items-center gap-1">
+                <span className="text-xs font-mono text-gray-500 dark:text-gray-400">#{contact.id}</span>
+                <CopyButton value={String(contact.id)} label="ID" />
+              </span>
             </div>
             {(contact.job_title || contact.company?.name) && (
               <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
@@ -225,7 +251,7 @@ function ContactDetailPage() {
             )}
           </div>
         </div>
-        <div className="flex items-center gap-3 w-full sm:w-auto">
+        <div ref={actionRowRef} className="flex items-center gap-3 w-full sm:w-auto">
           <Button
             variant="primary"
             onClick={() => setShowEmailCompose(true)}
@@ -265,13 +291,8 @@ function ContactDetailPage() {
         </div>
       </div>
 
-      {/* AI Suggestions */}
-      <NextBestActionCard entityType="contact" entityId={contact.id} />
+      <TabBar tabs={TABS} activeTab={activeTab} onTabChange={handleTabChange} />
 
-      {/* Tabs */}
-      <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
-
-      {/* Tab Content */}
       {activeTab === 'details' && contactId && (
         <>
           <Suspense fallback={<div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 animate-pulse"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" /><div className="h-20 bg-gray-200 dark:bg-gray-700 rounded" /></div>}>
@@ -285,10 +306,11 @@ function ContactDetailPage() {
               <dl className="grid grid-cols-1 gap-4 sm:gap-x-4 sm:gap-y-6 sm:grid-cols-2">
                 <div>
                   <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Email</dt>
-                  <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
+                  <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100 flex items-center gap-2">
                     <a href={`mailto:${contact.email}`} className="text-primary-600 hover:text-primary-500">
                       {contact.email}
                     </a>
+                    {contact.email && <CopyButton value={contact.email} label="email" />}
                   </dd>
                 </div>
                 <div className="sm:col-span-2">
@@ -331,14 +353,16 @@ function ContactDetailPage() {
                         autoComplete="off"
                         className="flex-1 min-w-0 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-2.5 py-1 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                       />
-                      <button
+                      <Button
                         type="button"
+                        size="sm"
                         onClick={handleAddAlias}
-                        disabled={addAliasMutation.isPending || !aliasInput.trim()}
-                        className="shrink-0 rounded-md bg-primary-600 px-3 py-1 text-sm font-medium text-white hover:bg-primary-500 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                        disabled={!aliasInput.trim()}
+                        isLoading={addAliasMutation.isPending}
+                        className="shrink-0"
                       >
-                        {addAliasMutation.isPending ? 'Adding...' : 'Add'}
-                      </button>
+                        Add
+                      </Button>
                     </div>
                     {aliasError && (
                       <p role="alert" aria-live="polite" className="mt-1 text-xs text-red-600 dark:text-red-400">{aliasError}</p>
@@ -347,11 +371,14 @@ function ContactDetailPage() {
                 </div>
                 <div>
                   <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Phone</dt>
-                  <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">
+                  <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100 flex items-center gap-2">
                     {contact.phone ? (
-                      <a href={`tel:${contact.phone}`} className="text-primary-600 hover:text-primary-500">
-                        {formatPhoneNumber(contact.phone)}
-                      </a>
+                      <>
+                        <a href={`tel:${contact.phone}`} className="text-primary-600 hover:text-primary-500">
+                          {formatPhoneNumber(contact.phone)}
+                        </a>
+                        <CopyButton value={contact.phone} label="phone" />
+                      </>
                     ) : '-'}
                   </dd>
                 </div>
@@ -564,10 +591,10 @@ function ContactDetailPage() {
           entityType="contacts"
           entityId={contactId}
           enabledTabs={['notes', 'attachments', 'history', 'sharing']}
+          canManage={canManageSharing}
         />
       )}
 
-      {/* Email Compose Modal */}
       <EmailComposeModal
         isOpen={showEmailCompose}
         onClose={() => { setShowEmailCompose(false); setReplyToEmail(null); }}
@@ -577,10 +604,9 @@ function ContactDetailPage() {
         replyTo={replyToEmail}
       />
 
-      {/* Edit Form Modal */}
       <Modal isOpen={showEditForm} onClose={() => setShowEditForm(false)} title="Edit Contact" size="lg">
         <ContactForm
-          initialData={getInitialFormData()}
+          initialData={contact ? contactToFormData(contact) : undefined}
           onSubmit={handleEditSubmit}
           onCancel={() => setShowEditForm(false)}
           isLoading={updateContactMutation.isPending}
@@ -588,7 +614,6 @@ function ContactDetailPage() {
         />
       </Modal>
 
-      {/* Delete Confirmation Dialog */}
       <ConfirmDialog
         isOpen={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
@@ -601,7 +626,6 @@ function ContactDetailPage() {
         isLoading={deleteContactMutation.isPending}
       />
 
-      {/* Send Invoice Modal */}
       <Suspense fallback={null}>
         <SendInvoiceModal
           isOpen={showInvoiceModal}

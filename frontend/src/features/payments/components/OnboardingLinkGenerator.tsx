@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button } from '../../../components/ui';
 import { useCreateOnboardingLink, useStripeCustomers } from '../../../hooks/usePayments';
 import { showSuccess, showError } from '../../../utils/toast';
+import { extractApiErrorDetail } from '../../../utils/errors';
 
 interface OnboardingLinkGeneratorProps {
   contactId?: number;
@@ -19,12 +20,23 @@ export function OnboardingLinkGenerator({
   const [generatedLink, setGeneratedLink] = useState('');
   const linkMutation = useCreateOnboardingLink();
 
-  // Check if this contact/company already has a Stripe customer
-  const { data: customersData } = useStripeCustomers({ page_size: 200 });
-  const customers = customersData?.items ?? [];
-  const hasPaymentMethod = customers.some(
-    (c) => (contactId && c.contact_id === contactId) || (companyId && c.company_id === companyId)
-  );
+  // Check if this contact/company already has a Stripe customer.
+  // Filtered server-side so we don't pull every customer in the
+  // tenant just to filter client-side — the previous page_size=200
+  // also exceeded the endpoint's hard cap of 100 and 422'd in prod.
+  //
+  // Send BOTH ids when present so the backend OR's them — a Stripe
+  // customer may be linked at the company level only, and a
+  // contact-only filter would miss an actually-onboarded business
+  // and falsely flash "no payment method" on the badge.
+  let lookupParams: { contact_id?: number; company_id?: number; page_size: number } | undefined;
+  if (contactId || companyId) {
+    lookupParams = { page_size: 1 };
+    if (contactId) lookupParams.contact_id = contactId;
+    if (companyId) lookupParams.company_id = companyId;
+  }
+  const { data: customersData } = useStripeCustomers(lookupParams);
+  const hasPaymentMethod = (customersData?.total ?? 0) > 0;
 
   const handleGenerateLink = async () => {
     try {
@@ -35,8 +47,12 @@ export function OnboardingLinkGenerator({
         cancel_url: `${window.location.origin}/payments?setup=canceled`,
       });
       setGeneratedLink(result.url);
-    } catch {
-      showError('Failed to generate payment setup link');
+    } catch (err) {
+      // Surface the backend reason instead of a generic toast — the
+      // mutation can fail for distinct reasons (403 access-denied,
+      // 400 missing-id, Stripe outage, rate limit) and they all need
+      // different remediation by the user.
+      showError(extractApiErrorDetail(err) ?? 'Failed to generate payment setup link');
     }
   };
 
@@ -44,8 +60,12 @@ export function OnboardingLinkGenerator({
     try {
       await navigator.clipboard.writeText(generatedLink);
       showSuccess('Link copied to clipboard');
-    } catch {
-      showError('Failed to copy link');
+    } catch (err) {
+      // Clipboard failures (permission denied, doc not focused,
+      // unsupported in iframes) are user-actionable; the underlying
+      // error name is enough context.
+      const detail = err instanceof Error ? err.message : null;
+      showError(detail ? `Failed to copy link: ${detail}` : 'Failed to copy link');
     }
   };
 

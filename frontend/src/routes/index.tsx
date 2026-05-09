@@ -56,6 +56,11 @@ const ProposalsPage = lazy(() => import('../features/proposals/ProposalsPage'));
 const ProposalDetailPage = lazy(() => import('../features/proposals/ProposalDetail'));
 const PublicProposalView = lazy(() => import('../features/proposals/PublicProposalView'));
 
+// Contracts
+const ContractsPage = lazy(() => import('../features/contracts/ContractsPage'));
+const ContractDetailPage = lazy(() => import('../features/contracts/ContractDetailPage'));
+const PublicContractView = lazy(() => import('../features/contracts/PublicContractView'));
+
 // Activities
 const ActivitiesPage = lazy(() => import('../features/activities/ActivitiesPage'));
 const CalendarPage = lazy(() => import('../features/calendar/CalendarPage'));
@@ -65,7 +70,6 @@ const CampaignsPage = lazy(() => import('../features/campaigns/CampaignsPage'));
 const CampaignDetailPage = lazy(() => import('../features/campaigns/CampaignDetailPage'));
 
 // AI Assistant
-const AIAssistantPage = lazy(() => import('../features/ai-assistant/AIAssistantPage'));
 
 // Reports
 const ReportsPage = lazy(() => import('../features/reports/ReportsPage'));
@@ -79,6 +83,9 @@ const ImportExportPage = lazy(() => import('../features/import-export/ImportExpo
 // Sequences
 const SequencesPage = lazy(() => import('../features/sequences/SequencesPage'));
 
+// Inbox
+const InboxPage = lazy(() => import('../features/inbox/InboxPage'));
+
 // Pipeline
 const PipelinePage = lazy(() => import('../features/pipeline/PipelinePage'));
 
@@ -91,6 +98,7 @@ const OAuthCallbackPage = lazy(() => import('../features/settings/OAuthCallbackP
 // Admin
 const AdminDashboardPage = lazy(() => import('../features/admin/AdminDashboard'));
 const UserApprovalsPage = lazy(() => import('../features/admin/UserApprovalsPage'));
+const AdminSharingPage = lazy(() => import('../features/admin/AdminSharingPage'));
 
 // Help
 const HelpPage = lazy(() => import('../features/help/HelpPage'));
@@ -106,6 +114,7 @@ function AppRoutes() {
       <Route path="/auth/google/callback" element={<GoogleAuthCallbackPage />} />
       <Route path="/proposals/public/:token" element={<PublicProposalView />} />
       <Route path="/quotes/public/:quoteNumber" element={<PublicQuoteView />} />
+      <Route path="/contracts/sign/:token" element={<PublicContractView />} />
 
       {/* Protected routes */}
       <Route
@@ -264,6 +273,28 @@ function AppRoutes() {
         }
       />
 
+      {/* Contracts */}
+      <Route
+        path="/contracts"
+        element={
+          <PrivateRoute>
+            <ErrorBoundary>
+              <ContractsPage />
+            </ErrorBoundary>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/contracts/:id"
+        element={
+          <PrivateRoute>
+            <ErrorBoundary>
+              <ContractDetailPage />
+            </ErrorBoundary>
+          </PrivateRoute>
+        }
+      />
+
       {/* Activities */}
       <Route
         path="/activities"
@@ -310,17 +341,6 @@ function AppRoutes() {
         }
       />
 
-      {/* AI Assistant */}
-      <Route
-        path="/ai-assistant"
-        element={
-          <PrivateRoute>
-            <ErrorBoundary>
-              <AIAssistantPage />
-            </ErrorBoundary>
-          </PrivateRoute>
-        }
-      />
 
       {/* Reports */}
       <Route
@@ -370,6 +390,18 @@ function AppRoutes() {
         }
       />
 
+      {/* Inbox */}
+      <Route
+        path="/inbox"
+        element={
+          <PrivateRoute>
+            <ErrorBoundary>
+              <InboxPage />
+            </ErrorBoundary>
+          </PrivateRoute>
+        }
+      />
+
       {/* Pipeline */}
       <Route
         path="/pipeline"
@@ -411,6 +443,16 @@ function AppRoutes() {
           <PrivateRoute>
             <ErrorBoundary>
               <UserApprovalsPage />
+            </ErrorBoundary>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/admin/sharing"
+        element={
+          <PrivateRoute>
+            <ErrorBoundary>
+              <AdminSharingPage />
             </ErrorBoundary>
           </PrivateRoute>
         }

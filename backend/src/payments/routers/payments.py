@@ -150,20 +150,56 @@ async def stripe_webhook(request: Request, db: DBSession):
             detail=str(e),
         ) from e
 
-    if result.get("event_type") in (
+    # Only fire PAYMENT_RECEIVED when the webhook actually transitioned a
+    # Payment to succeeded. The webhook processor returns payment=None for
+    # redeliveries / already-succeeded rows so we don't re-notify on every
+    # event Stripe sends for a single payment (checkout.session.completed
+    # AND payment_intent.succeeded routinely fire for the same row).
+    payment_ctx = result.get("payment") if result.get("status") == "processed" else None
+    if payment_ctx and result.get("event_type") in (
         "checkout.session.completed",
         "payment_intent.succeeded",
         "invoice.paid",
         "checkout.session.async_payment_succeeded",
     ):
+        user_id = payment_ctx.get("owner_id")
+
+        # Fallback chain: payment.owner -> quote.owner -> opportunity.owner.
+        if user_id is None and payment_ctx.get("quote_id"):
+            from src.quotes.models import Quote
+            user_id = await _resolve_owner(db, Quote, payment_ctx["quote_id"])
+        if user_id is None and payment_ctx.get("opportunity_id"):
+            from src.opportunities.models import Opportunity
+            user_id = await _resolve_owner(db, Opportunity, payment_ctx["opportunity_id"])
+
+        if user_id is None:
+            logger.warning(
+                "PAYMENT_RECEIVED with no resolvable owner: event_id=%s payment_id=%s quote_id=%s opportunity_id=%s",
+                result.get("event_id"),
+                payment_ctx.get("payment_id"),
+                payment_ctx.get("quote_id"),
+                payment_ctx.get("opportunity_id"),
+            )
+
         await emit(PAYMENT_RECEIVED, {
-            "entity_id": None,
+            "entity_id": payment_ctx.get("payment_id"),
             "entity_type": "payment",
-            "user_id": None,
-            "data": {"event_type": result["event_type"], "event_id": result.get("event_id")},
+            "user_id": user_id,
+            "data": {
+                "event_type": result["event_type"],
+                "event_id": result.get("event_id"),
+                "quote_id": payment_ctx.get("quote_id"),
+                "opportunity_id": payment_ctx.get("opportunity_id"),
+            },
         })
 
     return result
+
+
+async def _resolve_owner(db, model, entity_id):
+    """Look up owner_id on `model` by primary key. Returns None if not found."""
+    result = await db.execute(select(model.owner_id).where(model.id == entity_id))
+    return result.scalar_one_or_none()
 
 
 @router.get("/{payment_id}/invoice")

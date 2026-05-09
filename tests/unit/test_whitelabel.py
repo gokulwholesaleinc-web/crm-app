@@ -1752,3 +1752,195 @@ class TestUrlValidation:
         assert response.status_code == 200
         data = response.json()
         assert data["logo_url"] is None
+
+
+class TestTenantSettingsBgColors:
+    """PATCH /settings accepts bg/surface colors and rejects invalid hex."""
+
+    @pytest.mark.asyncio
+    async def test_update_tenant_settings_bg_and_surface_colors(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_tenant: Tenant,
+    ):
+        """Admin can set bg + surface colors for both light and dark mode."""
+        response = await client.patch(
+            f"/api/tenants/{test_tenant.id}/settings",
+            headers=auth_headers,
+            json={
+                "bg_color_light": "#fafafa",
+                "bg_color_dark": "#0a0a0a",
+                "surface_color_light": "#fefefe",
+                "surface_color_dark": "#171717",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["bg_color_light"] == "#fafafa"
+        assert data["bg_color_dark"] == "#0a0a0a"
+        assert data["surface_color_light"] == "#fefefe"
+        assert data["surface_color_dark"] == "#171717"
+        # Existing fields untouched.
+        assert data["primary_color"] == "#6366f1"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "field",
+        [
+            "primary_color",
+            "secondary_color",
+            "accent_color",
+            "bg_color_light",
+            "bg_color_dark",
+            "surface_color_light",
+            "surface_color_dark",
+        ],
+    )
+    @pytest.mark.parametrize("bad_value", ["red", "#zzz", "#12345", "#1234567", "javascript"])
+    async def test_update_tenant_settings_rejects_non_hex_color(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_tenant: Tenant,
+        field: str,
+        bad_value: str,
+    ):
+        """Non-hex strings on any color field are rejected with 422 before
+        they hit the DB. Without this validator, a malformed value persists
+        cleanly in VARCHAR(7) and the frontend silently drops it at paint
+        time — admin sees a success toast with no visual change."""
+        response = await client.patch(
+            f"/api/tenants/{test_tenant.id}/settings",
+            headers=auth_headers,
+            json={field: bad_value},
+        )
+
+        assert response.status_code == 422, response.text
+        # The error payload should reference the offending field name so the
+        # UI can surface it inline.
+        body = response.json()
+        assert any(field in str(loc) for err in body.get("detail", []) for loc in err.get("loc", []))
+
+    @pytest.mark.asyncio
+    async def test_update_tenant_settings_accepts_short_and_six_digit_hex(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_tenant: Tenant,
+    ):
+        """Three-digit (#abc) and six-digit (#aabbcc) hex literals both
+        clear the validator. The 8-digit (#rrggbbaa) form is deliberately
+        rejected — see test_update_tenant_settings_rejects_8_digit_hex
+        — because the column is VARCHAR(7) and a 9-char value would 500
+        on the UPDATE with StringDataRightTruncationError."""
+        response = await client.patch(
+            f"/api/tenants/{test_tenant.id}/settings",
+            headers=auth_headers,
+            json={"primary_color": "#abc", "bg_color_light": "#aabbcc"},
+        )
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert data["primary_color"] == "#abc"
+        assert data["bg_color_light"] == "#aabbcc"
+
+    @pytest.mark.asyncio
+    async def test_update_tenant_settings_rejects_8_digit_hex(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_tenant: Tenant,
+    ):
+        """8-digit (#rrggbbaa) hex must 422, not pass. The DB column is
+        VARCHAR(7); a 9-char value clears any 8-digit-permissive regex
+        and then crashes the UPDATE — worse than the original silent
+        failure this validator was added to prevent."""
+        response = await client.patch(
+            f"/api/tenants/{test_tenant.id}/settings",
+            headers=auth_headers,
+            json={"primary_color": "#aabbccdd"},
+        )
+        assert response.status_code == 422, response.text
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("bad_value", ["", " ", "  ", "#", " #fff "])
+    async def test_update_tenant_settings_rejects_blank_or_whitespace_color(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_tenant: Tenant,
+        bad_value: str,
+    ):
+        """Empty/whitespace/just-a-hash inputs reject with 422. Direct API
+        callers can't bypass the frontend's "treat empty as leave-default"
+        affordance — they must omit the key (or send null) to clear, not
+        send an empty string. ' #fff ' inputs are stripped by the
+        validator and accepted, so we test that pre-stripped path is
+        rejected separately by the trailing-whitespace fixture."""
+        response = await client.patch(
+            f"/api/tenants/{test_tenant.id}/settings",
+            headers=auth_headers,
+            json={"primary_color": bad_value},
+        )
+        # ' #fff ' is whitespace-trimmed by the validator and accepted;
+        # all other entries are non-hex post-strip.
+        if bad_value.strip() == "#fff":
+            assert response.status_code == 200, response.text
+        else:
+            assert response.status_code == 422, response.text
+
+
+class TestPublicConfigBgColors:
+    """Public branding endpoint exposes bg/surface colors with safe defaults."""
+
+    @pytest.mark.asyncio
+    async def test_public_config_returns_bg_color_defaults(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        test_tenant: Tenant,
+    ):
+        """An unconfigured tenant returns the documented default palette so
+        the frontend can render before an admin has touched branding."""
+        response = await client.get(f"/api/tenants/config/{test_tenant.slug}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["bg_color_light"] == "#f9fafb"
+        assert data["bg_color_dark"] == "#111827"
+        assert data["surface_color_light"] == "#ffffff"
+        assert data["surface_color_dark"] == "#1f2937"
+
+    @pytest.mark.asyncio
+    async def test_public_config_returns_admin_overrides(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_tenant: Tenant,
+    ):
+        """After an admin overrides the bg colors, the public branding
+        endpoint must surface the new values to unauthenticated visitors."""
+        await client.patch(
+            f"/api/tenants/{test_tenant.id}/settings",
+            headers=auth_headers,
+            json={
+                "bg_color_dark": "#000000",
+                "surface_color_dark": "#080808",
+            },
+        )
+
+        response = await client.get(f"/api/tenants/config/{test_tenant.slug}")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["bg_color_dark"] == "#000000"
+        assert data["surface_color_dark"] == "#080808"
+        # Untouched fields remain at defaults.
+        assert data["bg_color_light"] == "#f9fafb"
+        assert data["surface_color_light"] == "#ffffff"

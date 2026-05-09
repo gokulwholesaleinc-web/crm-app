@@ -22,7 +22,7 @@ MAX_UPLOAD_SIZE = int(os.getenv("MAX_UPLOAD_SIZE", str(10 * 1024 * 1024)))
 ALLOWED_EXTENSIONS = {
     "pdf", "docx", "xlsx", "csv",
     "png", "jpg", "jpeg", "gif",
-    "txt",
+    "txt", "webp",
 }
 
 # Per-entity-type narrowing of ALLOWED_EXTENSIONS. Defense in depth so a
@@ -31,6 +31,7 @@ ALLOWED_EXTENSIONS = {
 # proposal whose public-link recipient is supposed to read legal docs.
 PER_ENTITY_ALLOWED_EXTENSIONS: dict[str, set[str]] = {
     "proposals": {"pdf"},
+    "contracts": {"pdf", "png", "jpg", "jpeg", "webp", "gif"},
 }
 
 UPLOAD_DIR = Path(__file__).parent.parent.parent / "uploads"

@@ -18,6 +18,7 @@ from src.audit.utils import (
     audit_entity_update,
     snapshot_entity,
 )
+from src.auth.models import User
 from src.core.cache import (
     CACHE_PIPELINE_STAGES,
     cached_fetch,
@@ -26,6 +27,7 @@ from src.core.cache import (
 from src.core.client_ip import get_client_ip
 from src.core.constants import ENTITY_TYPE_OPPORTUNITIES, EntityNames, HTTPStatus
 from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
+from src.core.permissions import require_admin
 from src.core.router_utils import (
     CurrentUser,
     DBSession,
@@ -105,10 +107,12 @@ async def list_stages(
 @router.post("/stages", response_model=PipelineStageResponse, status_code=HTTPStatus.CREATED)
 async def create_stage(
     stage_data: PipelineStageCreate,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_admin)],
     db: DBSession,
 ):
-    """Create a new pipeline stage."""
+    """Create a new pipeline stage. Admin only — pipeline stages are
+    tenant-wide kanban configuration; allowing sales_reps to create
+    them means anyone can scramble the entire team's board."""
     service = PipelineStageService(db)
     stage = await service.create(stage_data)
     # Invalidate cache since we added a new stage
@@ -120,10 +124,10 @@ async def create_stage(
 async def update_stage(
     stage_id: int,
     stage_data: PipelineStageUpdate,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_admin)],
     db: DBSession,
 ):
-    """Update a pipeline stage."""
+    """Update a pipeline stage. Admin only — see create_stage."""
     service = PipelineStageService(db)
     stage = await get_entity_or_404(service, stage_id, EntityNames.PIPELINE_STAGE)
     updated_stage = await service.update(stage, stage_data)
@@ -135,10 +139,11 @@ async def update_stage(
 @router.delete("/stages/{stage_id}", status_code=HTTPStatus.NO_CONTENT)
 async def delete_stage(
     stage_id: int,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_admin)],
     db: DBSession,
 ):
-    """Delete a pipeline stage. Fails if opportunities still reference it."""
+    """Delete a pipeline stage. Admin only. Fails if opportunities
+    still reference it."""
     service = PipelineStageService(db)
     stage = await get_entity_or_404(service, stage_id, EntityNames.PIPELINE_STAGE)
 
@@ -154,17 +159,26 @@ async def delete_stage(
             detail=f"Cannot delete stage '{stage.name}': {count} opportunity(ies) still use it. Move them first.",
         )
 
-    await service.delete(stage)
+    # Same TOCTOU as delete_source: a concurrent opportunity insert against
+    # this stage between count + delete trips the FK; surface as 409 not 500.
+    from sqlalchemy.exc import IntegrityError
+    try:
+        await service.delete(stage)
+    except IntegrityError as exc:
+        raise HTTPException(
+            status_code=HTTPStatus.CONFLICT,
+            detail=f"Cannot delete stage '{stage.name}': it is still referenced by one or more opportunities. Move them first.",
+        ) from exc
     invalidate_pipeline_stages_cache()
 
 
 @router.post("/stages/reorder", response_model=list[PipelineStageResponse])
 async def reorder_stages(
     stage_orders: list[dict],  # [{id: int, order: int}, ...]
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_admin)],
     db: DBSession,
 ):
-    """Reorder pipeline stages."""
+    """Reorder pipeline stages. Admin only — same scope as create/update."""
     service = PipelineStageService(db)
     stages = await service.reorder(stage_orders)
     # Invalidate cache since we reordered stages
@@ -276,6 +290,12 @@ async def list_opportunities(
     """List opportunities with pagination and filters."""
     service = OpportunityService(db)
 
+    assignee_ids = (
+        await service.get_assignee_entity_ids(current_user.id)
+        if data_scope.is_scoped
+        else None
+    )
+
     opportunities, total = await service.get_list(
         page=page,
         page_size=page_size,
@@ -287,6 +307,7 @@ async def list_opportunities(
         tag_ids=parse_tag_ids(tag_ids),
         filters=parse_json_filters(filters),
         shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_OPPORTUNITIES),
+        assignee_entity_ids=assignee_ids,
     )
 
     tags_map = await service.get_tags_for_entities([o.id for o in opportunities])

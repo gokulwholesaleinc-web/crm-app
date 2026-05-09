@@ -7,6 +7,7 @@ import {
   ChevronDownIcon,
   UserCircleIcon,
   Cog6ToothIcon,
+  AdjustmentsHorizontalIcon,
   ArrowRightOnRectangleIcon,
   XMarkIcon,
   SunIcon,
@@ -16,6 +17,7 @@ import clsx from 'clsx';
 import { Avatar } from '../ui/Avatar';
 import { useTheme } from '../../hooks/useTheme';
 import { NotificationBell } from '../notifications/NotificationBell';
+import { UserPreferencesModal } from '../settings/UserPreferencesModal';
 
 export interface User {
   id: string;
@@ -43,6 +45,7 @@ export function Header({
   className,
 }: HeaderProps) {
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [prefsOpen, setPrefsOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const { toggleTheme, isDark } = useTheme();
 
@@ -67,7 +70,7 @@ export function Header({
   return (
     <header
       className={clsx(
-        'sticky top-0 z-30 flex items-center h-14 sm:h-16 px-3 sm:px-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700',
+        'sticky top-0 z-30 flex items-center h-14 sm:h-16 px-3 sm:px-4 bg-brand-surface border-b border-gray-200 dark:border-gray-700',
         className
       )}
     >
@@ -117,7 +120,7 @@ export function Header({
 
       {/* Mobile Search Overlay */}
       {showSearch && mobileSearchOpen && (
-        <div className="sm:hidden fixed inset-0 z-50 bg-white dark:bg-gray-800">
+        <div className="sm:hidden fixed inset-0 z-50 bg-brand-surface">
           <div className="flex items-center h-14 px-3 border-b border-gray-200 dark:border-gray-700">
             <div className="flex-1 relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -228,6 +231,24 @@ export function Header({
               </Menu.Item>
               <Menu.Item>
                 {({ active }) => (
+                  <button
+                    type="button"
+                    onClick={() => setPrefsOpen(true)}
+                    className={clsx(
+                      'flex items-center w-full px-4 py-3 sm:py-2 text-sm text-left touch-manipulation',
+                      active ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100' : 'text-gray-700 dark:text-gray-300'
+                    )}
+                  >
+                    <AdjustmentsHorizontalIcon
+                      className="mr-3 h-5 w-5 text-gray-400 dark:text-gray-500"
+                      aria-hidden="true"
+                    />
+                    Preferences
+                  </button>
+                )}
+              </Menu.Item>
+              <Menu.Item>
+                {({ active }) => (
                   <Link
                     to="/settings"
                     className={clsx(
@@ -265,6 +286,10 @@ export function Header({
           </Transition>
         </Menu>
       </div>
+      <UserPreferencesModal
+        isOpen={prefsOpen}
+        onClose={() => setPrefsOpen(false)}
+      />
     </header>
   );
 }

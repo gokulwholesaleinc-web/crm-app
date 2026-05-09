@@ -28,7 +28,7 @@ from src.core.cache import (
 from src.core.client_ip import get_client_ip
 from src.core.constants import ENTITY_TYPE_LEADS, EntityNames, ErrorMessages, HTTPStatus
 from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
-from src.core.permissions import require_permission
+from src.core.permissions import require_manager_or_above, require_permission
 from src.core.router_utils import (
     CurrentUser,
     DBSession,
@@ -91,6 +91,8 @@ async def list_leads(
     min_score: int | None = None,
     tag_ids: str | None = None,
     filters: str | None = None,
+    order_by: str | None = None,
+    order_dir: str | None = None,
 ):
     """List leads with pagination and filters.
 
@@ -99,6 +101,12 @@ async def list_leads(
     - Sales_rep/Viewer: see only own leads + shared leads
     """
     service = LeadService(db)
+
+    assignee_ids = (
+        await service.get_assignee_entity_ids(current_user.id)
+        if data_scope.is_scoped
+        else None
+    )
 
     leads, total = await service.get_list(
         page=page,
@@ -111,6 +119,9 @@ async def list_leads(
         tag_ids=parse_tag_ids(tag_ids),
         filters=parse_json_filters(filters),
         shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_LEADS),
+        assignee_entity_ids=assignee_ids,
+        order_by=order_by,
+        order_dir=order_dir,
     )
 
     tags_map = await service.get_tags_for_entities([l.id for l in leads])
@@ -710,10 +721,12 @@ async def list_sources(
 )
 async def create_source(
     source_data: LeadSourceCreate,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_manager_or_above)],
     db: DBSession,
 ):
-    """Create a new lead source."""
+    """Create a new lead source. Manager+ only — sources are
+    tenant-wide config and a sales_rep should not be able to seed
+    new ones."""
     service = LeadService(db)
     source = await service.create_source(source_data)
     # Invalidate cache since we added a new source
@@ -725,10 +738,10 @@ async def create_source(
 async def update_source(
     source_id: int,
     source_data: LeadSourceUpdate,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_manager_or_above)],
     db: DBSession,
 ):
-    """Update a lead source."""
+    """Update a lead source. Manager+ only."""
     service = LeadService(db)
     source = await service.update_source(source_id, source_data)
     if source is None:
@@ -742,10 +755,11 @@ async def update_source(
 @router.delete("/sources/{source_id}", status_code=HTTPStatus.NO_CONTENT)
 async def delete_source(
     source_id: int,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_manager_or_above)],
     db: DBSession,
 ):
-    """Delete a lead source. Fails with 409 if any leads still reference it."""
+    """Delete a lead source. Manager+ only. Fails with 409 if any leads
+    still reference it."""
     service = LeadService(db)
     source = await service.get_source_by_id(source_id)
     if source is None:
@@ -761,5 +775,11 @@ async def delete_source(
                 "reference it. Reassign or delete those leads first."
             ),
         )
+    # No IntegrityError race-guard here: Lead.source_id is ON DELETE
+    # SET NULL, so a concurrent INSERT racing the DELETE silently
+    # nullifies the new lead's source instead of raising. The count
+    # gate above is the correctness signal we have for non-racing
+    # callers; tightening the race window would require an advisory
+    # lock or a SELECT FOR UPDATE on the source row.
     await service.delete_source(source)
     invalidate_lead_sources_cache()

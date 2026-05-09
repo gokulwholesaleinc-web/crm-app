@@ -4,6 +4,7 @@
  */
 
 import type { ReportDataPoint } from '../../../api/reports';
+import { getBrandColor, getChartPalette } from '../../../utils/chartPalette';
 
 interface ReportChartProps {
   chartType: string;
@@ -12,13 +13,9 @@ interface ReportChartProps {
   compact?: boolean;
 }
 
-const CHART_COLORS = [
-  '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
-  '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1',
-];
-
 function BarChart({ data, compact }: { data: ReportDataPoint[]; compact?: boolean }) {
   const maxValue = Math.max(...data.map((d) => d.value), 1);
+  const palette = getChartPalette();
 
   return (
     <div className={compact ? 'space-y-1.5' : 'space-y-3'}>
@@ -33,7 +30,7 @@ function BarChart({ data, compact }: { data: ReportDataPoint[]; compact?: boolea
               <div className={`${compact ? 'h-4' : 'h-6'} bg-gray-100 rounded-full overflow-hidden`}>
                 <div
                   className="h-full rounded-full transition-[width] duration-300"
-                  style={{ width: `${Math.max(width, 1)}%`, backgroundColor: CHART_COLORS[idx % CHART_COLORS.length] }}
+                  style={{ width: `${Math.max(width, 1)}%`, backgroundColor: palette[idx % palette.length] }}
                 />
               </div>
             </div>
@@ -55,6 +52,7 @@ function LineChart({ data }: { data: ReportDataPoint[] }) {
   const range = maxValue - minValue || 1;
   const chartHeight = 200;
   const chartWidth = 100;
+  const lineColor = getBrandColor('primary', '#3b82f6');
 
   const points = data.map((d, i) => ({
     x: data.length > 1 ? (i / (data.length - 1)) * chartWidth : 50,
@@ -81,10 +79,10 @@ function LineChart({ data }: { data: ReportDataPoint[] }) {
           />
         ))}
         {/* Line */}
-        <path d={pathD} fill="none" stroke="#3b82f6" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+        <path d={pathD} fill="none" stroke={lineColor} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
         {/* Points */}
         {points.map((p, i) => (
-          <circle key={i} cx={p.x} cy={p.y} r={2} fill="#3b82f6" />
+          <circle key={i} cx={p.x} cy={p.y} r={2} fill={lineColor} />
         ))}
       </svg>
       <div className="flex justify-between mt-2 text-xs text-gray-500 overflow-hidden">
@@ -106,13 +104,14 @@ function LineChart({ data }: { data: ReportDataPoint[] }) {
 
 function PieChart({ data, total }: { data: ReportDataPoint[]; total?: number | null }) {
   const sum = total || data.reduce((s, d) => s + d.value, 0) || 1;
+  const palette = getChartPalette();
   let cumulativePercent = 0;
 
   const segments = data.map((d, i) => {
     const percent = d.value / sum;
     const start = cumulativePercent;
     cumulativePercent += percent;
-    return { ...d, percent, start, color: CHART_COLORS[i % CHART_COLORS.length] };
+    return { ...d, percent, start, color: palette[i % palette.length] };
   });
 
   const getCoordinatesForPercent = (percent: number) => {

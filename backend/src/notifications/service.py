@@ -1,15 +1,102 @@
 """Notification service layer."""
 
 import logging
+import os
 
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.account.notification_gate import gate_event
 from src.auth.models import User
 from src.core.constants import DEFAULT_PAGE_SIZE
 from src.notifications.models import Notification
 
 logger = logging.getLogger(__name__)
+
+
+# Default front-end origin used when ``FRONTEND_URL`` isn't set (local
+# dev). All deep links in branded notification emails route through
+# this. Pulled out so workers don't drift on the env-var name.
+def _frontend_url() -> str:
+    return os.getenv("FRONTEND_URL", "http://localhost:3000")
+
+
+def _deep_link(entity_type: str, entity_id: int, *, suffix: str = "") -> str:
+    """Build a CRM-frontend deep link for the given entity row.
+
+    Accepts either a bare entity slug (``leads``) or a leading-slash
+    path (``/contacts``) — necessary because the existing dispatchers
+    are called with both shapes from different parts of the codebase.
+    ``suffix`` is appended verbatim (e.g. ``?tab=email``) for callers
+    that need a query string or hash fragment.
+    """
+    segment = entity_type if entity_type.startswith("/") else f"/{entity_type}"
+    return f"{_frontend_url()}{segment}/{entity_id}{suffix}"
+
+
+async def _user_email(db: AsyncSession, user_id: int) -> str | None:
+    """Look up an authenticated user's primary email.
+
+    Returns ``None`` when the user is missing or has no email — the
+    caller treats that as "skip the email send" without raising, since
+    the in-app notification has already been written.
+    """
+    user = await db.get(User, user_id)
+    if not user or not user.email:
+        return None
+    return user.email
+
+
+async def _queue_notification_email(
+    db: AsyncSession,
+    *,
+    user_id: int,
+    event_type: str,
+    subject: str,
+    body_html: str,
+    entity_type: str | None,
+    entity_id: int | None,
+) -> None:
+    """Best-effort email send for a matrix-gated notification event.
+
+    Caller is expected to have already checked
+    :func:`should_send_email`; this helper resolves the user's email,
+    enqueues the message via :class:`EmailService`, and swallows transport
+    failures with a warning so the in-app notification stays delivered.
+    ``sent_by_id`` is the recipient — outbound rows are visible to the
+    recipient on their email log without leaking through participant
+    overlap to anyone else.
+    """
+    to_email = await _user_email(db, user_id)
+    if not to_email:
+        logger.debug(
+            "notif email skipped: user_id=%s has no email (event=%s)",
+            user_id, event_type,
+        )
+        return
+    try:
+        from src.email.service import EmailService
+
+        email_service = EmailService(db)
+        await email_service.queue_email(
+            to_email=to_email,
+            subject=subject,
+            body=body_html,
+            sent_by_id=user_id,
+            entity_type=entity_type,
+            entity_id=entity_id,
+        )
+    except Exception:
+        # Bumped to ERROR (was WARNING): a failure here means the user
+        # gets no email despite the matrix gate saying they should.
+        # That covers both transport failures (Gmail outage) and
+        # programming errors (TypeError on EmailQueue, AttributeError
+        # from a future field rename). Either deserves a real alarm.
+        logger.error(
+            "notification_email_dispatch_failed user_id=%s event=%s",
+            user_id, event_type,
+            exc_info=True,
+        )
 
 
 class NotificationService:
@@ -133,17 +220,60 @@ async def notify_on_assignment(
     entity_type: str,
     entity_id: int,
     entity_name: str,
-) -> Notification:
-    """Create a notification when an entity is assigned to a user."""
-    service = NotificationService(db)
-    return await service.create_notification(
-        user_id=user_id,
-        type="assignment",
-        title=f"{entity_type.rstrip('s').capitalize()} assigned to you",
-        message=f"You have been assigned {entity_name}",
-        entity_type=entity_type,
-        entity_id=entity_id,
-    )
+    *,
+    assigner_name: str | None = None,
+    entity_email: str | None = None,
+    entity_company: str | None = None,
+) -> Notification | None:
+    """Create a notification when an entity is assigned to a user.
+
+    The optional ``assigner_name``/``entity_email``/``entity_company``
+    keyword arguments populate the branded email; callers that haven't
+    been migrated yet still get the in-app notification (and an email
+    with whatever metadata is available, including just the entity
+    name).
+    """
+    notif: Notification | None = None
+    in_app_allowed, email_allowed = await gate_event(db, user_id, "lead_assigned")
+    if in_app_allowed:
+        service = NotificationService(db)
+        notif = await service.create_notification(
+            user_id=user_id,
+            type="assignment",
+            title=f"{entity_type.rstrip('s').capitalize()} assigned to you",
+            message=f"You have been assigned {entity_name}",
+            entity_type=entity_type,
+            entity_id=entity_id,
+        )
+
+    if email_allowed:
+        from src.email.branded_templates import (
+            TenantBrandingHelper,
+            render_lead_assigned_email,
+        )
+
+        branding = await TenantBrandingHelper.get_branding_for_user(db, user_id)
+        deep_link = _deep_link(entity_type, entity_id)
+        subject, body = render_lead_assigned_email(
+            branding,
+            {
+                "lead_full_name": entity_name,
+                "lead_email": entity_email or "",
+                "lead_company_name": entity_company or "",
+                "lead_url": deep_link,
+                "assigner_name": assigner_name or "",
+            },
+        )
+        await _queue_notification_email(
+            db,
+            user_id=user_id,
+            event_type="lead_assigned",
+            subject=subject,
+            body_html=body,
+            entity_type=entity_type,
+            entity_id=entity_id,
+        )
+    return notif
 
 
 async def notify_on_stage_change(
@@ -154,8 +284,16 @@ async def notify_on_stage_change(
     entity_name: str,
     old_stage: str,
     new_stage: str,
-) -> Notification:
-    """Create a notification when a pipeline stage changes."""
+) -> Notification | None:
+    """Create a notification when a pipeline stage changes.
+
+    NOT gated on user prefs in v1 — the Settings UI matrix doesn't
+    surface a `stage_change` toggle, and the parallel event-bus path
+    (`opportunity.stage_changed` via the notification_event_handler)
+    isn't in `_MATRIX_EVENT_NAMES` either, so gating only this path
+    would create a confusing asymmetry. When the UI gains a stage-
+    change toggle, gate both paths together.
+    """
     service = NotificationService(db)
     return await service.create_notification(
         user_id=user_id,
@@ -174,17 +312,58 @@ async def notify_on_mention(
     entity_type: str,
     entity_id: int,
     content_snippet: str,
-) -> Notification:
-    """Create a notification when a user is @mentioned."""
-    service = NotificationService(db)
-    return await service.create_notification(
-        user_id=mentioned_user_id,
-        type="mention",
-        title=f"{author_name} mentioned you",
-        message=content_snippet[:200],
-        entity_type=entity_type,
-        entity_id=entity_id,
-    )
+    *,
+    entity_label: str | None = None,
+) -> Notification | None:
+    """Create a notification when a user is @mentioned.
+
+    ``entity_label`` is the human-readable name of the host entity
+    (e.g. "Acme - Q3 Renewal" for an opportunity); when provided it
+    flows into the email subject and body for context. Falls back to
+    the entity_type slug when absent.
+    """
+    notif: Notification | None = None
+    in_app_allowed, email_allowed = await gate_event(db, mentioned_user_id, "mention")
+    if in_app_allowed:
+        service = NotificationService(db)
+        notif = await service.create_notification(
+            user_id=mentioned_user_id,
+            type="mention",
+            title=f"{author_name} mentioned you",
+            message=content_snippet[:200],
+            entity_type=entity_type,
+            entity_id=entity_id,
+        )
+
+    if email_allowed:
+        from src.email.branded_templates import (
+            TenantBrandingHelper,
+            render_mention_email,
+        )
+
+        branding = await TenantBrandingHelper.get_branding_for_user(
+            db, mentioned_user_id,
+        )
+        deep_link = _deep_link(entity_type, entity_id)
+        subject, body = render_mention_email(
+            branding,
+            {
+                "author_name": author_name,
+                "entity_label": entity_label or entity_type.rstrip("s"),
+                "entity_url": deep_link,
+                "content_snippet": content_snippet,
+            },
+        )
+        await _queue_notification_email(
+            db,
+            user_id=mentioned_user_id,
+            event_type="mention",
+            subject=subject,
+            body_html=body,
+            entity_type=entity_type,
+            entity_id=entity_id,
+        )
+    return notif
 
 
 async def notify_on_activity_due(
@@ -192,17 +371,264 @@ async def notify_on_activity_due(
     user_id: int,
     activity_id: int,
     activity_subject: str,
-) -> Notification:
-    """Create a notification when an activity is due."""
-    service = NotificationService(db)
-    return await service.create_notification(
-        user_id=user_id,
-        type="activity_due",
-        title="Activity due",
-        message=f'Activity "{activity_subject}" is due soon',
-        entity_type="activities",
-        entity_id=activity_id,
+    *,
+    activity_due_at: str | None = None,
+    entity_label: str | None = None,
+) -> Notification | None:
+    """Create a notification when an activity is due.
+
+    ``activity_due_at`` (preformatted) and ``entity_label`` populate the
+    email body when provided. Older callers that pass only the legacy
+    arguments still get the in-app notification and a slimmer email.
+    """
+    notif: Notification | None = None
+    in_app_allowed, email_allowed = await gate_event(db, user_id, "task_due")
+    if in_app_allowed:
+        service = NotificationService(db)
+        notif = await service.create_notification(
+            user_id=user_id,
+            type="activity_due",
+            title="Activity due",
+            message=f'Activity "{activity_subject}" is due soon',
+            entity_type="activities",
+            entity_id=activity_id,
+        )
+
+    if email_allowed:
+        from src.email.branded_templates import (
+            TenantBrandingHelper,
+            render_task_due_email,
+        )
+
+        branding = await TenantBrandingHelper.get_branding_for_user(db, user_id)
+        deep_link = _deep_link("activities", activity_id)
+        subject, body = render_task_due_email(
+            branding,
+            {
+                "activity_subject": activity_subject,
+                "activity_due_at": activity_due_at or "",
+                "activity_url": deep_link,
+                "entity_label": entity_label or "",
+            },
+        )
+        await _queue_notification_email(
+            db,
+            user_id=user_id,
+            event_type="task_due",
+            subject=subject,
+            body_html=body,
+            entity_type="activities",
+            entity_id=activity_id,
+        )
+    return notif
+
+
+async def notify_on_email_reply_received(
+    db: AsyncSession,
+    *,
+    recipient_user_id: int,
+    contact_id: int,
+    sender_email: str,
+    sender_name: str | None,
+    subject_line: str,
+    snippet: str,
+    participant_emails: list[str] | None = None,
+) -> Notification | None:
+    """Notify a participant user when an inbound email reply lands.
+
+    Fired by the Gmail sync worker after :func:`_store_inbound`
+    successfully links an inbound message to a CRM contact AND the
+    inbound carries a literal ``In-Reply-To`` header (so this is a
+    reply to a thread the CRM is on, not arbitrary cold inbound).
+
+    The deep link points at the contact detail page's email tab; the
+    front-end will scroll to the latest message.
+    """
+    if participant_emails is not None:
+        from src.email.participants import get_user_connection_emails
+
+        if not participant_emails:
+            logger.debug(
+                "notify_on_email_reply_received: participant_emails is empty for user %s — skipping",
+                recipient_user_id,
+            )
+            return None
+        user_addrs = set(await get_user_connection_emails(db, recipient_user_id))
+        if not user_addrs:
+            logger.debug(
+                "notify_on_email_reply_received: user %s has no active Gmail connection — skipping",
+                recipient_user_id,
+            )
+            return None
+        if not user_addrs.intersection(a.lower() for a in participant_emails):
+            logger.warning(
+                "notify_on_email_reply_received: user %s connection emails do not overlap participant_emails — skipping",
+                recipient_user_id,
+            )
+            return None
+
+    notif: Notification | None = None
+    in_app_allowed, email_allowed = await gate_event(
+        db, recipient_user_id, "email_reply_received"
     )
+    if in_app_allowed:
+        service = NotificationService(db)
+        display_name = sender_name or sender_email or "A contact"
+        truncated = snippet[:200] if snippet else ""
+        notif = await service.create_notification(
+            user_id=recipient_user_id,
+            type="email_reply",
+            title=f"Reply from {display_name}",
+            message=f'"{subject_line}" — {truncated}' if truncated else f'"{subject_line}"',
+            entity_type="contacts",
+            entity_id=contact_id,
+        )
+
+    if email_allowed:
+        from src.email.branded_templates import (
+            TenantBrandingHelper,
+            render_email_reply_email,
+        )
+
+        branding = await TenantBrandingHelper.get_branding_for_user(
+            db, recipient_user_id,
+        )
+        deep_link = _deep_link("contacts", contact_id, suffix="?tab=emails")
+        subject, body = render_email_reply_email(
+            branding,
+            {
+                "sender_email": sender_email,
+                "sender_name": sender_name or "",
+                "subject_line": subject_line,
+                "snippet": snippet,
+                "thread_url": deep_link,
+            },
+        )
+        await _queue_notification_email(
+            db,
+            user_id=recipient_user_id,
+            event_type="email_reply_received",
+            subject=subject,
+            body_html=body,
+            entity_type="contacts",
+            entity_id=contact_id,
+        )
+    return notif
+
+
+async def notify_on_proposal_signed(
+    db: AsyncSession,
+    *,
+    owner_id: int,
+    proposal_id: int,
+    proposal_title: str,
+    signer_name: str | None,
+    signed_at: str | None,
+) -> Notification | None:
+    """Notify the proposal owner when their proposal is countersigned.
+
+    Distinct from the always-on signer-side ``send_signed_copy_to_client``
+    which mails the signer their PDF — this is the matrix-gated
+    in-app + email notification to the internal owner.
+    """
+    notif: Notification | None = None
+    in_app_allowed, email_allowed = await gate_event(db, owner_id, "proposal_signed")
+    if in_app_allowed:
+        service = NotificationService(db)
+        notif = await service.create_notification(
+            user_id=owner_id,
+            type="proposal_signed",
+            title="Proposal signed",
+            message=f'"{proposal_title}" was signed by {signer_name or "the client"}',
+            entity_type="proposals",
+            entity_id=proposal_id,
+        )
+
+    if email_allowed:
+        from src.email.branded_templates import (
+            TenantBrandingHelper,
+            render_proposal_signed_email,
+        )
+
+        branding = await TenantBrandingHelper.get_branding_for_user(db, owner_id)
+        deep_link = _deep_link("proposals", proposal_id)
+        subject, body = render_proposal_signed_email(
+            branding,
+            {
+                "proposal_title": proposal_title,
+                "signer_name": signer_name or "",
+                "signed_at": signed_at or "",
+                "proposal_url": deep_link,
+            },
+        )
+        await _queue_notification_email(
+            db,
+            user_id=owner_id,
+            event_type="proposal_signed",
+            subject=subject,
+            body_html=body,
+            entity_type="proposals",
+            entity_id=proposal_id,
+        )
+    return notif
+
+
+async def notify_on_contract_signed(
+    db: AsyncSession,
+    *,
+    owner_id: int,
+    contract_id: int,
+    contract_title: str,
+    signer_name: str | None,
+    signed_at: str | None,
+) -> Notification | None:
+    """Notify the contract owner when their contract is countersigned.
+
+    Distinct from the always-on signer-side
+    :func:`ContractService._send_signed_copy` which mails the signer
+    their PDF — this is the matrix-gated owner-side notification.
+    """
+    notif: Notification | None = None
+    in_app_allowed, email_allowed = await gate_event(db, owner_id, "contract_signed")
+    if in_app_allowed:
+        service = NotificationService(db)
+        notif = await service.create_notification(
+            user_id=owner_id,
+            type="contract_signed",
+            title="Contract signed",
+            message=f'"{contract_title}" was signed by {signer_name or "the client"}',
+            entity_type="contracts",
+            entity_id=contract_id,
+        )
+
+    if email_allowed:
+        from src.email.branded_templates import (
+            TenantBrandingHelper,
+            render_contract_signed_email,
+        )
+
+        branding = await TenantBrandingHelper.get_branding_for_user(db, owner_id)
+        deep_link = _deep_link("contracts", contract_id)
+        subject, body = render_contract_signed_email(
+            branding,
+            {
+                "audience": "owner",
+                "contract_title": contract_title,
+                "signer_name": signer_name or "",
+                "signed_at": signed_at or "",
+                "contract_url": deep_link,
+            },
+        )
+        await _queue_notification_email(
+            db,
+            user_id=owner_id,
+            event_type="contract_signed",
+            subject=subject,
+            body_html=body,
+            entity_type="contracts",
+            entity_id=contract_id,
+        )
+    return notif
 
 
 async def notify_admins_of_pending_user(db: AsyncSession, user: User) -> None:

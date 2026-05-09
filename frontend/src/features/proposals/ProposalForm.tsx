@@ -6,6 +6,7 @@ import { useContacts } from '../../hooks/useContacts';
 import { useCompanies } from '../../hooks/useCompanies';
 import { useOpportunities, useOpportunity } from '../../hooks/useOpportunities';
 import { useQuotes } from '../../hooks/useQuotes';
+import { useFormSubmitShortcut } from '../../hooks/useSubmitShortcut';
 import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
 import type { ProposalCreate } from '../../types';
 
@@ -63,6 +64,16 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
   const [touched, setTouched] = useState(false);
   useUnsavedChangesWarning(touched);
 
+  // Today in user's LOCAL timezone (YYYY-MM-DD) for `min` on Valid Until.
+  // Only applied when creating a new proposal — see `min` site below.
+  const todayDate = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, []);
+  const isEditing = !!initialData;
+
+  const formRef = useFormSubmitShortcut();
+
   const updateField = <K extends keyof typeof formData>(field: K, value: typeof formData[K]) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
     setTouched(true);
@@ -112,6 +123,7 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoading) return;
 
     const amountTrimmed = billing.amount.trim();
     const amountValue = amountTrimmed === '' ? null : amountTrimmed;
@@ -146,7 +158,7 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
       <div className="space-y-4">
         <div>
           <label htmlFor="proposal-title" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -157,6 +169,7 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
             id="proposal-title"
             name="title"
             required
+            autoFocus
             value={formData.title}
             onChange={(e) => updateField('title', e.target.value)}
             className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
@@ -264,6 +277,7 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
               type="date"
               id="proposal-valid-until"
               name="valid_until"
+              min={isEditing ? undefined : todayDate}
               value={formData.validUntil}
               onChange={(e) => updateField('validUntil', e.target.value)}
               className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"

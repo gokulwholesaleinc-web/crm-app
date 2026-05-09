@@ -1,10 +1,14 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Button, EntityLink, Spinner, Modal, ConfirmDialog } from '../../components/ui';
+import { useSmartBack } from '../../hooks/useSmartBack';
+import { useUrlTabState } from '../../hooks/useUrlTabState';
+import { useUserPreferences } from '../../hooks/useUserPreferences';
+import { Button, CopyButton, EntityLink, Spinner, Modal, ConfirmDialog } from '../../components/ui';
 import { TabBar, ActivitiesTab, CommonTabContent } from '../../components/shared/DetailPageShell';
+import { StickyActionBar } from '../../components/shared/StickyActionBar';
 import { OpportunityForm, OpportunityFormData } from './components/OpportunityForm';
-import { AIInsightsCard, NextBestActionCard } from '../../components/ai';
 import { useOpportunity, useDeleteOpportunity, useUpdateOpportunity } from '../../hooks/useOpportunities';
+import { useAuthStore } from '../../store/authStore';
 import { useQuotes } from '../../hooks/useQuotes';
 import { useProposals } from '../../hooks/useProposals';
 import { usePayments } from '../../hooks/usePayments';
@@ -29,13 +33,23 @@ const TABS: { id: TabType; name: string }[] = [
   { id: 'sharing', name: 'Sharing' },
 ];
 
+const TAB_IDS: ReadonlySet<TabType> = new Set(TABS.map((t) => t.id));
+
 function OpportunityDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const handleBack = useSmartBack('/opportunities');
   const opportunityId = id ? parseInt(id, 10) : undefined;
-  const [activeTab, setActiveTab] = useState<TabType>('details');
+  const { prefs } = useUserPreferences();
+  const [activeTab, handleTabChange] = useUrlTabState<TabType>(
+    TAB_IDS,
+    'details',
+    'tab',
+    () => prefs.tabDefaults?.opportunity ?? null,
+  );
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const actionRowRef = useRef<HTMLDivElement>(null);
 
   const { data: opportunity, isLoading, error } = useOpportunity(opportunityId);
   const deleteOpportunityMutation = useDeleteOpportunity();
@@ -55,6 +69,7 @@ function OpportunityDetailPage() {
   const { data: paymentsData, isLoading: isLoadingPayments } = usePayments(
     shouldFetchPayments ? { opportunity_id: opportunityId, page_size: 50 } : undefined
   );
+  const currentUser = useAuthStore((s) => s.user);
 
   const quotes = quotesData?.items ?? [];
   const proposals = proposalsData?.items ?? [];
@@ -135,24 +150,49 @@ function OpportunityDetailPage() {
 
   const stageName = opportunity.pipeline_stage?.name?.toLowerCase().replace(/\s+/g, '_') ?? '';
 
+  const canManageSharing =
+    !!currentUser &&
+    (currentUser.id === opportunity.owner_id ||
+      currentUser.is_superuser ||
+      currentUser.role === 'admin' ||
+      currentUser.role === 'manager');
+
   return (
     <div className="space-y-6">
+      <StickyActionBar triggerRef={actionRowRef}>
+        <Button variant="secondary" size="sm" onClick={() => setShowEditForm(true)}>
+          Edit
+        </Button>
+        <Link to={`/quotes?opportunity_id=${opportunity.id}`}>
+          <Button variant="secondary" size="sm">Create Quote</Button>
+        </Link>
+        <Link to={`/proposals?opportunity_id=${opportunity.id}`}>
+          <Button variant="secondary" size="sm">Create Proposal</Button>
+        </Link>
+      </StickyActionBar>
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center space-x-4">
-          <Link
-            to="/opportunities"
-            className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 flex-shrink-0"
-            aria-label="Back to opportunities"
+          <button
+            type="button"
+            onClick={handleBack}
+            className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
+            aria-label="Go back"
           >
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
-          </Link>
+          </button>
           <div className="min-w-0">
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">
-              {opportunity.name}
-            </h1>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">
+                {opportunity.name}
+              </h1>
+              <span className="inline-flex items-center gap-1">
+                <span className="text-xs font-mono text-gray-500 dark:text-gray-400">#{opportunity.id}</span>
+                <CopyButton value={String(opportunity.id)} label="ID" />
+              </span>
+            </div>
             <div className="flex flex-wrap items-center gap-2 mt-1">
               <span className={getStatusBadgeClasses(stageName, 'opportunity')}>
                 {opportunity.pipeline_stage?.name || stageName}
@@ -167,7 +207,7 @@ function OpportunityDetailPage() {
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-3 w-full sm:w-auto">
+        <div ref={actionRowRef} className="flex items-center gap-3 w-full sm:w-auto">
           <Button variant="secondary" onClick={() => setShowEditForm(true)} className="flex-1 sm:flex-none">
             Edit
           </Button>
@@ -210,12 +250,8 @@ function OpportunityDetailPage() {
         </Link>
       </div>
 
-      {/* AI Suggestions */}
-      <NextBestActionCard entityType="opportunity" entityId={opportunity.id} />
-      <AIInsightsCard entityType="opportunity" entityId={opportunity.id} variant="inline" entityName={opportunity.name} />
-
       {/* Tabs */}
-      <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
+      <TabBar tabs={TABS} activeTab={activeTab} onTabChange={handleTabChange} />
 
       {/* Tab Content */}
       {activeTab === 'details' && (
@@ -439,6 +475,7 @@ function OpportunityDetailPage() {
           entityType="opportunities"
           entityId={opportunityId}
           enabledTabs={['notes', 'attachments', 'comments', 'history', 'sharing']}
+          canManage={canManageSharing}
         />
       )}
 

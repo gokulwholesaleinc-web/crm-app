@@ -76,6 +76,39 @@ async def test_stripe_mode_live_key(client: AsyncClient, plain_user: User, monke
 
 
 @pytest.mark.asyncio
+async def test_stripe_mode_restricted_test_key(client: AsyncClient, plain_user: User, monkeypatch):
+    """Returns mode='test' when STRIPE_SECRET_KEY is a restricted key (rk_test_).
+
+    Restricted keys are valid Stripe API credentials with scoped
+    permissions — `_get_stripe()` accepts them and real API calls
+    succeed, so the mode endpoint must not flag them as unconfigured.
+    """
+    import src.config as cfg
+    monkeypatch.setattr(cfg.settings, "STRIPE_SECRET_KEY", "rk_test_restricted123")
+    monkeypatch.setattr(cfg.settings, "STRIPE_PUBLISHABLE_KEY", "pk_test_xyz")
+
+    resp = await client.get("/api/payments/mode", headers=_token(plain_user))
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["mode"] == "test"
+    assert data["publishable_hint"] == "pk_test_"
+
+
+@pytest.mark.asyncio
+async def test_stripe_mode_restricted_live_key(client: AsyncClient, plain_user: User, monkeypatch):
+    """Returns mode='live' for restricted live keys (rk_live_)."""
+    import src.config as cfg
+    monkeypatch.setattr(cfg.settings, "STRIPE_SECRET_KEY", "rk_live_restricted456")
+    monkeypatch.setattr(cfg.settings, "STRIPE_PUBLISHABLE_KEY", "pk_live_abc")
+
+    resp = await client.get("/api/payments/mode", headers=_token(plain_user))
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["mode"] == "live"
+    assert data["publishable_hint"] == "pk_live_"
+
+
+@pytest.mark.asyncio
 async def test_stripe_mode_unauthorized(client: AsyncClient):
     """Returns 401 when no auth token is provided."""
     resp = await client.get("/api/payments/mode")

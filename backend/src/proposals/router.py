@@ -30,7 +30,7 @@ from src.core.router_utils import (
     raise_bad_request,
     raise_not_found,
 )
-from src.events.service import PROPOSAL_ACCEPTED, PROPOSAL_SENT, emit
+from src.events.service import PROPOSAL_ACCEPTED, PROPOSAL_REJECTED, PROPOSAL_SENT, emit
 from src.proposals.attachment_views import (
     ProposalAttachmentView,
     _hash_token,
@@ -74,6 +74,8 @@ async def list_proposals(
     opportunity_id: int | None = None,
     quote_id: int | None = None,
     owner_id: int | None = None,
+    order_by: str | None = None,
+    order_dir: str | None = None,
 ):
     """List proposals with pagination and filters."""
     effective_owner_id = owner_id if data_scope.can_see_all() else data_scope.owner_id
@@ -91,6 +93,8 @@ async def list_proposals(
         quote_id=quote_id,
         owner_id=effective_owner_id,
         shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_PROPOSALS),
+        order_by=order_by,
+        order_dir=order_dir,
     )
 
     return ProposalListResponse(
@@ -556,6 +560,8 @@ async def get_public_proposal(
         primary_color=branding_data.get("primary_color", "#6366f1"),
         secondary_color=branding_data.get("secondary_color", "#8b5cf6"),
         accent_color=branding_data.get("accent_color", "#22c55e"),
+        bg_color_light=branding_data.get("bg_color_light", "#f9fafb"),
+        surface_color_light=branding_data.get("surface_color_light", "#ffffff"),
         footer_text=branding_data.get("footer_text"),
         privacy_policy_url=branding_data.get("privacy_policy_url"),
         terms_of_service_url=branding_data.get("terms_of_service_url"),
@@ -621,6 +627,9 @@ async def accept_proposal_public(
             signer_user_agent=signer_user_agent,
         )
 
+    # proposal_signed notification + email is dispatched by ProposalService.accept_proposal_public
+    # via notify_on_proposal_signed (matrix-gated). Don't double-fire from the router.
+
     branding_data = await service.get_branding_for_proposal(proposal)
     response = ProposalPublicResponse.model_validate(proposal)
     response.branding = ProposalBranding(
@@ -629,6 +638,8 @@ async def accept_proposal_public(
         primary_color=branding_data.get("primary_color", "#6366f1"),
         secondary_color=branding_data.get("secondary_color", "#8b5cf6"),
         accent_color=branding_data.get("accent_color", "#22c55e"),
+        bg_color_light=branding_data.get("bg_color_light", "#f9fafb"),
+        surface_color_light=branding_data.get("surface_color_light", "#ffffff"),
         footer_text=branding_data.get("footer_text"),
         privacy_policy_url=branding_data.get("privacy_policy_url"),
         terms_of_service_url=branding_data.get("terms_of_service_url"),
@@ -668,6 +679,21 @@ async def reject_proposal_public(
             signer_email=reject_data.signer_email,
         )
 
+    # Public reject is the customer-facing path — owner needs the ping.
+    # user_id=None because the actor is unauthenticated; the handler
+    # resolves the recipient via the proposal's owner_id.
+    await emit(PROPOSAL_REJECTED, {
+        "entity_id": proposal.id,
+        "entity_type": "proposal",
+        "user_id": None,
+        "data": {
+            "proposal_number": proposal.proposal_number,
+            "status": proposal.status,
+            "rejected_via": "public",
+            "reason": reject_data.reason,
+        },
+    })
+
     branding_data = await service.get_branding_for_proposal(proposal)
     response = ProposalPublicResponse.model_validate(proposal)
     response.branding = ProposalBranding(
@@ -676,6 +702,8 @@ async def reject_proposal_public(
         primary_color=branding_data.get("primary_color", "#6366f1"),
         secondary_color=branding_data.get("secondary_color", "#8b5cf6"),
         accent_color=branding_data.get("accent_color", "#22c55e"),
+        bg_color_light=branding_data.get("bg_color_light", "#f9fafb"),
+        surface_color_light=branding_data.get("surface_color_light", "#ffffff"),
         footer_text=branding_data.get("footer_text"),
         privacy_policy_url=branding_data.get("privacy_policy_url"),
         terms_of_service_url=branding_data.get("terms_of_service_url"),
@@ -845,12 +873,46 @@ async def accept_proposal(
     current_user: CurrentUser,
     db: DBSession,
 ):
-    """Mark a proposal as accepted."""
+    """Mark a proposal as accepted (internal/admin path).
+
+    Distinct from the public e-sign path at ``/public/{token}/accept``:
+    that flow captures a real customer signature plus IP/UA, runs the
+    read-before-sign attachment gate, and verifies signer_email. This
+    endpoint is the rep-side "the customer accepted offline" action —
+    no signature, no e-sign payload. To keep KPIs/billing/notifications
+    consistent with the public path, it still spawns the implied Stripe
+    artifact and fires the owner-side proposal_signed notification.
+    A signed-copy email is intentionally NOT sent because there is no
+    countersigned PDF to attach.
+    """
     service = ProposalService(db)
     proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
     check_ownership(proposal, current_user, EntityNames.PROPOSAL)
     with value_error_as_400():
         proposal = await service.mark_accepted(proposal)
+
+    # Spawn the Stripe artifact the proposal's payment_type implies.
+    # Mirrors the public-accept flow; failures are logged inside the
+    # helper and don't unwind the acceptance.
+    await service._maybe_spawn_billing(proposal)
+
+    if proposal.owner_id and proposal.owner_id != current_user.id:
+        from src.notifications.service import notify_on_proposal_signed
+
+        try:
+            await notify_on_proposal_signed(
+                db=db,
+                owner_id=proposal.owner_id,
+                proposal_id=proposal.id,
+                proposal_title=proposal.title,
+                signer_name=None,
+                signed_at=None,
+            )
+        except Exception:
+            logger.exception(
+                "proposal_signed notify failed (admin-accept) for proposal %s",
+                proposal.id,
+            )
 
     await emit(PROPOSAL_ACCEPTED, {
         "entity_id": proposal.id,
@@ -874,4 +936,12 @@ async def reject_proposal(
     check_ownership(proposal, current_user, EntityNames.PROPOSAL)
     with value_error_as_400():
         proposal = await service.mark_rejected(proposal)
+
+    await emit(PROPOSAL_REJECTED, {
+        "entity_id": proposal.id,
+        "entity_type": "proposal",
+        "user_id": proposal.owner_id,
+        "data": {"proposal_number": proposal.proposal_number, "status": proposal.status},
+    })
+
     return ProposalResponse.model_validate(proposal)

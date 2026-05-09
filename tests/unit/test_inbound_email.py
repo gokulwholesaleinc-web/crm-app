@@ -241,8 +241,17 @@ class TestEnhancedEmailSending:
         client: AsyncClient,
         db_session: AsyncSession,
         auth_headers: dict,
+        monkeypatch,
     ):
-        """Should store custom from_email when sending email."""
+        """Should store custom from_email when sending email.
+
+        EmailService._validate_from_email enforces the same domain as
+        ``settings.EMAIL_FROM``. Pin both sides to ``example.com`` so the
+        test passes regardless of the local .env override (which may set
+        EMAIL_FROM to a real provider domain like resend.dev).
+        """
+        from src.email import service as _email_svc
+        monkeypatch.setattr(_email_svc.settings, "EMAIL_FROM", "no-reply@example.com")
         response = await client.post(
             "/api/email/send",
             headers=auth_headers,

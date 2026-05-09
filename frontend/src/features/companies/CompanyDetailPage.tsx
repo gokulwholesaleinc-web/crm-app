@@ -1,18 +1,24 @@
-import { useState, lazy, Suspense } from 'react';
+import { useState, useRef, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useSmartBack } from '../../hooks/useSmartBack';
+import { useUrlTabState } from '../../hooks/useUrlTabState';
+import { useUserPreferences } from '../../hooks/useUserPreferences';
 import clsx from 'clsx';
 import { BuildingOffice2Icon, ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { Button } from '../../components/ui/Button';
+import { CopyButton } from '../../components/ui/CopyButton';
 import { Spinner } from '../../components/ui/Spinner';
 import { Modal } from '../../components/ui/Modal';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { TabBar, ActivitiesTab, CommonTabContent, SuspenseFallback } from '../../components/shared/DetailPageShell';
+import { StickyActionBar } from '../../components/shared/StickyActionBar';
 import { OverviewTab } from './components/tabs/OverviewTab';
 import { OpportunitiesTab } from './components/tabs/OpportunitiesTab';
 import { QuotesTab } from './components/tabs/QuotesTab';
 import { ProposalsTab } from './components/tabs/ProposalsTab';
 import { CompanyForm } from './components/CompanyForm';
 import { useCompany, useUpdateCompany, useDeleteCompany } from '../../hooks/useCompanies';
+import { useAuthStore } from '../../store/authStore';
 import { useContacts } from '../../hooks/useContacts';
 import { useOpportunities } from '../../hooks/useOpportunities';
 import { useQuotes } from '../../hooks/useQuotes';
@@ -44,14 +50,24 @@ const TABS: { id: TabType; name: string }[] = [
   { id: 'sharing', name: 'Sharing' },
 ];
 
+const TAB_IDS: ReadonlySet<TabType> = new Set(TABS.map((t) => t.id));
+
 export function CompanyDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const handleBack = useSmartBack('/companies');
   const companyId = id ? parseInt(id, 10) : undefined;
 
-  const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const { prefs } = useUserPreferences();
+  const [activeTab, handleTabChange] = useUrlTabState<TabType>(
+    TAB_IDS,
+    'overview',
+    'tab',
+    () => prefs.tabDefaults?.company ?? null,
+  );
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const actionRowRef = useRef<HTMLDivElement>(null);
 
   const { data: company, isLoading: isLoadingCompany } = useCompany(companyId);
 
@@ -73,6 +89,7 @@ export function CompanyDetailPage() {
   const companyQuotes = quotesData?.items ?? [];
   const companyProposals = proposalsData?.items ?? [];
 
+  const currentUser = useAuthStore((s) => s.user);
   const updateCompany = useUpdateCompany();
   const deleteCompany = useDeleteCompany();
 
@@ -120,15 +137,35 @@ export function CompanyDetailPage() {
   const statusStyle = getStatusColor(company.status, 'company');
   const contacts = contactsData?.items || [];
 
+  const canManageSharing =
+    !!currentUser &&
+    (currentUser.id === company.owner_id ||
+      currentUser.is_superuser ||
+      currentUser.role === 'admin' ||
+      currentUser.role === 'manager');
+
   return (
     <div className="space-y-6">
+      <StickyActionBar triggerRef={actionRowRef}>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => navigate(`/proposals?action=new&company_id=${companyId}`)}
+        >
+          Create Proposal
+        </Button>
+        <Button variant="secondary" size="sm" onClick={() => setShowEditForm(true)}>
+          Edit
+        </Button>
+      </StickyActionBar>
       {/* Header */}
       <div className="flex flex-col gap-4">
         <div className="flex items-start gap-3 sm:gap-4">
           <button
-            onClick={() => navigate('/companies')}
-            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex-shrink-0"
-            aria-label="Back to companies"
+            type="button"
+            onClick={handleBack}
+            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+            aria-label="Go back"
           >
             <ArrowLeftIcon className="h-5 w-5 text-gray-500" />
           </button>
@@ -147,7 +184,13 @@ export function CompanyDetailPage() {
               </div>
             )}
             <div className="min-w-0">
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">{company.name}</h1>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">{company.name}</h1>
+                <span className="inline-flex items-center gap-1">
+                  <span className="text-xs font-mono text-gray-500 dark:text-gray-400">#{company.id}</span>
+                  <CopyButton value={String(company.id)} label="ID" />
+                </span>
+              </div>
               <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1">
                 <span
                   className={clsx(
@@ -165,7 +208,7 @@ export function CompanyDetailPage() {
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
+        <div ref={actionRowRef} className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
           <Button
             variant="secondary"
             onClick={() => navigate(`/proposals?action=new&company_id=${companyId}`)}
@@ -183,7 +226,7 @@ export function CompanyDetailPage() {
       </div>
 
       {/* Tabs */}
-      <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
+      <TabBar tabs={TABS} activeTab={activeTab} onTabChange={handleTabChange} />
 
       {/* Tab Content */}
       {activeTab === 'overview' && companyId && (
@@ -241,6 +284,7 @@ export function CompanyDetailPage() {
           entityType="companies"
           entityId={companyId}
           enabledTabs={['notes', 'attachments', 'history', 'sharing']}
+          canManage={canManageSharing}
         />
       )}
 

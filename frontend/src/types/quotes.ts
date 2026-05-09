@@ -101,6 +101,8 @@ export interface QuoteFilters {
   company_id?: number;
   opportunity_id?: number;
   owner_id?: number;
+  order_by?: string;
+  order_dir?: 'asc' | 'desc';
 }
 
 // Product Bundle Types

@@ -25,6 +25,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { useTenant } from '../../providers/TenantProvider';
 import { useAuthStore } from '../../store/authStore';
+import { useUserPreferences } from '../../hooks/useUserPreferences';
 import { safeStorage } from '../../utils/safeStorage';
 import {
   DEFAULT_MAIN_NAVIGATION,
@@ -204,10 +205,18 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
   );
 
   const { user } = useAuthStore();
+  const { prefs, setPref } = useUserPreferences();
   const isAdminUser = user?.is_superuser || user?.role === 'admin';
   const filteredSecondaryNav = isAdminUser
     ? secondaryNav
     : secondaryNav.filter(item => !ADMIN_ONLY_IDS.has(item.id));
+
+  const hidden = new Set(prefs.hiddenNavIds ?? []);
+  const visibleMainNav = mainNav.filter(i => !hidden.has(i.id));
+  // Settings stays visible regardless of hide pref so users can re-open
+  // Preferences. The Preferences UI also force-checks/disables the
+  // Settings checkbox; this filter exception is the runtime backstop.
+  const visibleSecondaryNav = filteredSecondaryNav.filter(i => !hidden.has(i.id) || i.id === 'settings');
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -255,15 +264,16 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
     setSecondaryNav([...DEFAULT_SECONDARY_NAVIGATION]);
     safeStorage.remove(STORAGE_KEY_MAIN);
     safeStorage.remove(STORAGE_KEY_SECONDARY);
-  }, []);
+    setPref('hiddenNavIds', []);
+  }, [setPref]);
 
-  const mainIds = mainNav.map(item => item.id);
-  const secondaryIds = filteredSecondaryNav.map(item => item.id);
+  const mainIds = visibleMainNav.map(item => item.id);
+  const secondaryIds = visibleSecondaryNav.map(item => item.id);
 
   return (
     <aside
       className={clsx(
-        'flex flex-col h-full bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-[width] duration-200',
+        'flex flex-col h-full bg-brand-surface border-r border-gray-200 dark:border-gray-700 transition-[width] duration-200',
         collapsed ? 'w-16' : 'w-64',
         className
       )}
@@ -280,9 +290,12 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
             <img
               src={tenant.logo_url}
               alt={tenant.company_name || 'Logo'}
-              width={32}
-              height={32}
-              className="h-8 w-8 rounded-lg object-contain flex-shrink-0"
+              width={collapsed ? 32 : 180}
+              height={collapsed ? 32 : 40}
+              className={clsx(
+                'object-contain flex-shrink-0',
+                collapsed ? 'h-8 w-auto max-w-[40px]' : 'h-10 w-auto max-w-[180px]'
+              )}
               onError={() => setLogoError(true)}
             />
           ) : (
@@ -298,7 +311,7 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
               </span>
             </div>
           )}
-          {!collapsed && (
+          {!collapsed && (!tenant?.logo_url || logoError) && (
             <span className="ml-2 text-xl font-bold text-gray-900 dark:text-gray-100 truncate">
               {tenant?.company_name || 'CRM'}
             </span>
@@ -317,7 +330,7 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
             >
               <SortableContext items={mainIds} strategy={verticalListSortingStrategy}>
                 <div className="space-y-1">
-                  {mainNav.map(item => (
+                  {visibleMainNav.map(item => (
                     <SortableNavItem
                       key={item.id}
                       item={item}
@@ -338,7 +351,7 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
             >
               <SortableContext items={secondaryIds} strategy={verticalListSortingStrategy}>
                 <div className="space-y-1">
-                  {filteredSecondaryNav.map(item => (
+                  {visibleSecondaryNav.map(item => (
                     <SortableNavItem
                       key={item.id}
                       item={item}
@@ -375,7 +388,7 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
         ) : (
           <>
             <div className="space-y-1">
-              {mainNav.map(item => (
+              {visibleMainNav.map(item => (
                 <StaticNavItem
                   key={item.id}
                   item={item}
@@ -388,7 +401,7 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
             <div className="my-4 border-t border-gray-200 dark:border-gray-700" />
 
             <div className="space-y-1">
-              {filteredSecondaryNav.map(item => (
+              {visibleSecondaryNav.map(item => (
                 <StaticNavItem
                   key={item.id}
                   item={item}
@@ -428,9 +441,11 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
               </>
             )}
           </button>
-          <p className="text-xs text-gray-400 dark:text-gray-500">
-            {tenant?.footer_text || 'CRM Application v1.0'}
-          </p>
+          {tenant?.footer_text && (
+            <p className="text-xs text-gray-400 dark:text-gray-500">
+              {tenant.footer_text}
+            </p>
+          )}
         </div>
       )}
     </aside>

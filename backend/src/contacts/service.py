@@ -12,8 +12,19 @@ from src.contacts.schemas import ContactCreate, ContactUpdate
 from src.core.base_service import CRUDService, TaggableServiceMixin
 from src.core.constants import DEFAULT_PAGE_SIZE, ENTITY_TYPE_CONTACTS
 from src.core.filtering import apply_filters_to_query, build_token_search
+from src.core.sorting import build_order_clauses
 
 logger = logging.getLogger(__name__)
+
+
+# `name` sorts by (last_name, first_name) because Contact.full_name is a Python
+# property, not a column — surname-first is the alphabetical convention users
+# expect on a contacts list.
+CONTACT_SORTABLE_FIELDS: dict[str, Any] = {
+    "name": (Contact.last_name, Contact.first_name),
+    "email": Contact.email,
+    "created_at": Contact.created_at,
+}
 
 
 class ContactService(
@@ -40,6 +51,8 @@ class ContactService(
         tag_ids: list[int] | None = None,
         filters: dict[str, Any] | None = None,
         shared_entity_ids: list[int] | None = None,
+        order_by: str | None = None,
+        order_dir: str | None = None,
     ) -> tuple[list[Contact], int]:
         """Get paginated list of contacts with filters.
 
@@ -72,7 +85,13 @@ class ContactService(
         if tag_ids:
             query = await self._filter_by_tags(query, tag_ids)
 
-        return await self.paginate_query(query, page, page_size)
+        order_clauses = build_order_clauses(
+            CONTACT_SORTABLE_FIELDS,
+            order_by,
+            order_dir,
+            default=[Contact.created_at.desc(), Contact.id.desc()],
+        )
+        return await self.paginate_query(query, page, page_size, order_by=order_clauses)
 
     async def update(
         self,

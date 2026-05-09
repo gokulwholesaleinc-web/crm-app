@@ -3,6 +3,7 @@
  */
 
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useContracts, useCreateContract, useUpdateContract, useDeleteContract } from '../../hooks/useContracts';
 import { Button, Spinner, Modal, ConfirmDialog } from '../ui';
 import { formatDate, formatCurrency } from '../../utils/formatters';
@@ -271,8 +272,13 @@ export default function ContractsList({ entityType, entityId }: ContractsListPro
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {contracts.map((contract: Contract) => (
                 <tr key={contract.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
-                    {contract.title}
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <Link
+                      to={`/contracts/${contract.id}`}
+                      className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300"
+                    >
+                      {contract.title}
+                    </Link>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <ContractStatusBadge status={contract.status} />
@@ -290,6 +296,12 @@ export default function ContractsList({ entityType, entityId }: ContractsListPro
                     {contract.scope ?? '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                    <Link
+                      to={`/contracts/${contract.id}`}
+                      className="text-primary-600 dark:text-primary-400 hover:text-primary-900 dark:hover:text-primary-300 mr-3"
+                    >
+                      View
+                    </Link>
                     <button
                       onClick={() => setEditingContract(contract)}
                       className="text-primary-600 dark:text-primary-400 hover:text-primary-900 dark:hover:text-primary-300 mr-3"

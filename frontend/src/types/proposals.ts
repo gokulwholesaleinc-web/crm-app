@@ -120,6 +120,8 @@ export interface ProposalFilters {
   contact_id?: number;
   company_id?: number;
   quote_id?: number;
+  order_by?: string;
+  order_dir?: 'asc' | 'desc';
 }
 
 export interface ProposalTemplate {

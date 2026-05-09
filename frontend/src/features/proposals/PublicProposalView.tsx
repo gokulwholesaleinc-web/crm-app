@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback, startTransition } fr
 import { useParams, useSearchParams } from 'react-router-dom';
 import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
-import { sanitizeHexColor } from '../../utils/colorValidation';
+import { sanitizeHexColor, withAlpha } from '../../utils/colorValidation';
 import { formatDate } from '../../utils/formatters';
 import { cadenceLabel, formatProposalMoney } from './billing';
 import { setPublicPageMeta } from '../quotes/publicMeta';
@@ -26,6 +26,8 @@ interface ProposalBranding {
   primary_color: string;
   secondary_color: string;
   accent_color: string;
+  bg_color_light: string;
+  surface_color_light: string;
   footer_text: string | null;
   privacy_policy_url: string | null;
   terms_of_service_url: string | null;
@@ -62,6 +64,8 @@ const DEFAULT_BRANDING: ProposalBranding = {
   primary_color: '#6366f1',
   secondary_color: '#8b5cf6',
   accent_color: '#22c55e',
+  bg_color_light: '#f9fafb',
+  surface_color_light: '#ffffff',
   footer_text: null,
   privacy_policy_url: null,
   terms_of_service_url: null,
@@ -335,9 +339,13 @@ function PublicProposalView() {
     primary_color: sanitizeHexColor(rawBranding.primary_color, DEFAULT_BRANDING.primary_color),
     secondary_color: sanitizeHexColor(rawBranding.secondary_color, DEFAULT_BRANDING.secondary_color),
     accent_color: sanitizeHexColor(rawBranding.accent_color, DEFAULT_BRANDING.accent_color),
+    bg_color_light: sanitizeHexColor(rawBranding.bg_color_light, DEFAULT_BRANDING.bg_color_light),
+    surface_color_light: sanitizeHexColor(rawBranding.surface_color_light, DEFAULT_BRANDING.surface_color_light),
   };
   const companyDisplayName = branding.company_name || proposal.company?.name || 'Proposal';
-  const accent = branding.primary_color;
+  const primary = branding.primary_color;
+  const secondary = branding.secondary_color;
+  const accent = branding.accent_color;
 
   const isExpired =
     proposal.valid_until &&
@@ -394,11 +402,22 @@ function PublicProposalView() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 antialiased">
+    // Customer-facing page bg from tenant settings; drop dark variants
+    // (`dark:bg-gray-950` was hardcoded outside the bg/surface palette
+    // anyway). Logged-in seller previews now match what the customer
+    // sees.
+    <div className="min-h-screen text-gray-900 antialiased" style={{ backgroundColor: branding.bg_color_light }}>
+      <div
+        aria-hidden="true"
+        style={{
+          height: 4,
+          backgroundImage: `linear-gradient(90deg, ${primary}, ${secondary}, ${accent})`,
+        }}
+      />
       {/* Letterhead — plain, light, business-document feel. Text label
           is dropped when a logo image is present to avoid the "logo
           wordmark + typed company name" duplication. */}
-      <header className="bg-white border-b border-gray-200">
+      <header className="border-b border-gray-200" style={{ backgroundColor: branding.surface_color_light }}>
         <div className="mx-auto max-w-3xl px-6 sm:px-10 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             {branding.logo_url && !logoError ? (
@@ -415,7 +434,7 @@ function PublicProposalView() {
               <>
                 <div
                   className="h-8 w-8 rounded flex items-center justify-center flex-shrink-0 text-white text-sm font-semibold"
-                  style={{ backgroundColor: accent }}
+                  style={{ backgroundColor: primary }}
                 >
                   {companyDisplayName[0]?.toUpperCase() || 'P'}
                 </div>
@@ -433,7 +452,7 @@ function PublicProposalView() {
                 style={
                   statusPill === 'rejected'
                     ? { color: '#b91c1c', backgroundColor: '#fef2f2', borderColor: '#fecaca' }
-                    : { color: accent, backgroundColor: `${accent}0f`, borderColor: `${accent}40` }
+                    : { color: accent, backgroundColor: withAlpha(accent, '0f'), borderColor: withAlpha(accent, '40') }
                 }
               >
                 {statusPill === 'paid' ? 'Paid' : statusPill === 'accepted' ? 'Accepted' : 'Declined'}
@@ -481,7 +500,7 @@ function PublicProposalView() {
 
         {contentSections.map((section) => (
           <section key={section.title} className="mt-10 sm:mt-12">
-            <PlainSectionHeader title={section.title} accent={accent} />
+            <PlainSectionHeader title={section.title} accent={primary} />
             <div className="prose-body">
               <p className="whitespace-pre-wrap text-pretty break-words">
                 {section.body}
@@ -494,7 +513,7 @@ function PublicProposalView() {
           <ProposalAttachmentsSection
             attachments={attachments}
             token={token}
-            accent={accent}
+            accent={primary}
             viewedIds={viewedIds}
             onViewed={handleAttachmentViewed}
             onReconcile={fetchProposal}
@@ -506,13 +525,13 @@ function PublicProposalView() {
           <section className="mt-10 sm:mt-12">
             <PlainSectionHeader
               title={proposal.payment_type === 'subscription' ? 'Engagement & Fees' : 'Fees'}
-              accent={accent}
+              accent={primary}
             />
 
             {formattedAmount && (
               <div
-                className="rounded border px-6 py-5 mb-4 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3"
-                style={{ borderColor: `${accent}40`, backgroundColor: `${accent}0a` }}
+                className="rounded-lg border p-5 mb-4 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3"
+                style={{ borderColor: withAlpha(secondary, '40'), backgroundColor: withAlpha(secondary, '14') }}
               >
                 <div>
                   <div className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
@@ -548,7 +567,7 @@ function PublicProposalView() {
           contentSections.length === 0 &&
           !hasPricingBlock && (
             <section className="mt-10 sm:mt-12">
-              <PlainSectionHeader title="Proposal" accent={accent} />
+              <PlainSectionHeader title="Proposal" accent={primary} />
               <div className="prose-body">
                 <p className="whitespace-pre-wrap text-pretty break-words">
                   {proposal.content}
@@ -562,14 +581,14 @@ function PublicProposalView() {
         {confirmingPayment && proposal.status !== 'paid' && (
           <section
             className="mt-10 sm:mt-12 rounded border px-5 py-4"
-            style={{ borderColor: `${accent}40`, backgroundColor: `${accent}0a` }}
+            style={{ borderColor: withAlpha(primary, '40'), backgroundColor: withAlpha(primary, '0a') }}
             role="status"
             aria-live="polite"
           >
             <div className="flex items-center gap-3">
               <span
                 className="inline-block h-4 w-4 rounded-full border-2 border-t-transparent animate-spin"
-                style={{ borderColor: accent, borderTopColor: 'transparent' }}
+                style={{ borderColor: primary, borderTopColor: 'transparent' }}
                 aria-hidden="true"
               />
               <div>
@@ -613,7 +632,7 @@ function PublicProposalView() {
           !confirmingPayment &&
           !paymentTimedOut && (
             <section className="mt-10 sm:mt-12" ref={paySectionRef}>
-              <PlainSectionHeader title="Payment" accent={accent} />
+              <PlainSectionHeader title="Payment" accent={primary} />
               <p className="prose-body mb-5">
                 {proposal.payment_type === 'subscription'
                   ? `Set up your payment method with ${companyDisplayName} via Stripe to activate your subscription. The first billing period will be charged upon checkout completion.`
@@ -667,7 +686,7 @@ function PublicProposalView() {
         {/* Accept / Decline form — standard business form layout */}
         {canRespond && (
           <section className="mt-10 sm:mt-12">
-            <PlainSectionHeader title="Your Response" accent={accent} />
+            <PlainSectionHeader title="Your Response" accent={primary} />
             <p className="prose-body mb-5">
               Please review the proposal above and accept or decline. Your typed name and
               email below constitute your legally binding electronic signature (full
@@ -690,7 +709,7 @@ function PublicProposalView() {
                   onChange={(e) => setSignerName(e.target.value)}
                   disabled={actionPending}
                   className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 px-3 py-2 shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 disabled:opacity-50"
-                  style={{ outlineColor: accent }}
+                  style={{ outlineColor: primary }}
                 />
               </div>
               <div>
@@ -710,7 +729,7 @@ function PublicProposalView() {
                   onChange={(e) => setSignerEmail(e.target.value)}
                   disabled={actionPending}
                   className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 px-3 py-2 shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 disabled:opacity-50"
-                  style={{ outlineColor: accent }}
+                  style={{ outlineColor: primary }}
                 />
               </div>
             </div>
@@ -789,8 +808,8 @@ function PublicProposalView() {
           with safe-area-inset-bottom so iPhone home indicator doesn't overlap
           the disclosure text (requires viewport-fit=cover in index.html). */}
       <footer
-        className="mt-16 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        className="mt-16 border-t border-gray-200"
+        style={{ backgroundColor: branding.surface_color_light, paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         <div className="mx-auto max-w-3xl px-6 sm:px-10 py-8 space-y-5">
           <details className="group text-sm">

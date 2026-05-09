@@ -301,11 +301,11 @@ export function CampaignDetailPage() {
   const hasContactMembers = (members ?? []).some((m) => m.member_type === 'contact');
   const hasLeadMembers = (members ?? []).some((m) => m.member_type === 'lead');
   const { data: contactsData } = useContacts(
-    { page_size: 1000 },
+    { page_size: 100 },
     { enabled: hasContactMembers, staleTime: 5 * 60 * 1000 }
   );
   const { data: leadsData } = useLeads(
-    { page_size: 1000 },
+    { page_size: 100 },
     { enabled: hasLeadMembers, staleTime: 5 * 60 * 1000 }
   );
 

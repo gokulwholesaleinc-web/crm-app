@@ -5,6 +5,12 @@ import { useEmailThread } from '../../hooks/useEmail';
 import type { ThreadEmailItem } from '../../types/email';
 import { EmailSearchModal } from './EmailSearchModal';
 import type { BadgeVariant } from '../ui/Badge';
+import {
+  trimQuotedHtml,
+  trimQuotedText,
+  trimToggleLabel,
+  type TrimResult,
+} from '../../utils/emailBodyTrim';
 
 // Force all sanitized anchors to open safely in a new tab.
 // Registered once at module scope so it runs only on first import.
@@ -44,6 +50,13 @@ function looksLikeHtml(value: string): boolean {
 // DOMPurify allowlist for thread-rendered email bodies. Outbound HTML
 // is ours, but inbound is hostile; deny iframes, embeds, JS-bearing
 // attrs, and inline `style` (history of CSS exfil bugs in mail clients).
+//
+// data: URIs on `<img>` are permitted by DOMPurify's default
+// DEFAULT_DATA_URI_TAGS set (img, audio, video, source, image, track),
+// so the inline-image substitution in the Gmail sync pipeline
+// (client.py::_inline_cid_images) is rendered without further config.
+// USE_PROFILES.html doesn't load the svg profile, so `<svg>` and
+// `<image>` are stripped entirely — no SVG-script-execution surface.
 const EMAIL_HTML_PURIFY_CONFIG = {
   USE_PROFILES: { html: true },
   FORBID_TAGS: ['form', 'script', 'iframe', 'object', 'embed', 'base', 'meta', 'link', 'style'],
@@ -141,7 +154,30 @@ function EmailBubble({
   const badge = STATUS_BADGE[status] ?? { variant: 'gray' as BadgeVariant, label: status };
   const bodyContent = email.body || '';
   const hasBody = Boolean(email.body_html || bodyContent);
-  const renderableHtml = email.body_html || (looksLikeHtml(bodyContent) ? bodyContent : null);
+  const rawHtml = email.body_html || (looksLikeHtml(bodyContent) ? bodyContent : null);
+
+  // Trim signatures + quoted reply history from inbound bodies. The
+  // thread view already groups messages chronologically, so quoted
+  // history is duplication and signatures render poorly without inline
+  // `style` (which we strip for security). Cut at explicit Gmail/
+  // Outlook/Apple-Mail markers only — never guess at unmarked
+  // boundaries. Outbound emails are our own branded HTML — never trim
+  // them; a future template could legitimately contain a testimonial
+  // <blockquote type="cite"> we'd otherwise erase silently.
+  const [showOriginal, setShowOriginal] = useState(false);
+  const trim = useMemo<TrimResult>(() => {
+    if (isOutbound) return { body: rawHtml ?? bodyContent, trimmed: false, cut: 'none' };
+    try {
+      return rawHtml ? trimQuotedHtml(rawHtml) : trimQuotedText(bodyContent);
+    } catch {
+      // DOMParser is lenient and querySelector is well-trodden, but
+      // exotic input shouldn't crash the entire thread view. Fall back
+      // to the un-trimmed body so the user still sees the email.
+      return { body: rawHtml ?? bodyContent, trimmed: false, cut: 'none' };
+    }
+  }, [isOutbound, rawHtml, bodyContent]);
+  const renderableHtml = rawHtml ? (showOriginal ? rawHtml : trim.body) : null;
+  const renderableText = rawHtml ? bodyContent : showOriginal ? bodyContent : trim.body;
   // click_count may not yet exist on older records; safe-access via cast
   const clickCount = (email as ThreadEmailItem & { click_count?: number | null }).click_count;
   // `kind:id` matches the EmailSearchModal deep-link format so the
@@ -213,7 +249,21 @@ function EmailBubble({
                 }}
               />
             ) : (
-              bodyContent
+              renderableText
+            )}
+            {trim.trimmed && (
+              <button
+                type="button"
+                onClick={() => setShowOriginal((prev) => !prev)}
+                className={`mt-2 inline-flex items-center text-xs font-medium focus-visible:outline-none focus-visible:underline ${
+                  isOutbound
+                    ? 'text-white/80 hover:text-white'
+                    : 'text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300'
+                }`}
+                aria-expanded={showOriginal}
+              >
+                {trimToggleLabel(trim.cut, showOriginal)}
+              </button>
             )}
           </div>
         )}

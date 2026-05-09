@@ -231,16 +231,16 @@ class TestRoundRobinAssignment:
         service = AssignmentService(db_session)
 
         # First assignment should go to first user (index 0)
-        user1 = await service.assign_lead({})
-        assert user1 == test_user.id
+        d1 = await service.assign_lead({})
+        assert d1 is not None and d1.user_id == test_user.id and d1.reason == "rule_match"
 
         # Second assignment should go to second user (index 1)
-        user2 = await service.assign_lead({})
-        assert user2 == second_user.id
+        d2 = await service.assign_lead({})
+        assert d2 is not None and d2.user_id == second_user.id
 
         # Third assignment should cycle back to first user (index 0)
-        user3 = await service.assign_lead({})
-        assert user3 == test_user.id
+        d3 = await service.assign_lead({})
+        assert d3 is not None and d3.user_id == test_user.id
 
     @pytest.mark.asyncio
     async def test_round_robin_updates_index(
@@ -307,10 +307,10 @@ class TestLoadBalanceAssignment:
         await db_session.commit()
 
         service = AssignmentService(db_session)
-        assigned = await service.assign_lead({})
+        decision = await service.assign_lead({})
 
         # Should assign to second_user who has fewer leads
-        assert assigned == second_user.id
+        assert decision is not None and decision.user_id == second_user.id
 
 
 class TestAssignmentFilterMatching:
@@ -338,7 +338,7 @@ class TestAssignmentFilterMatching:
 
         # Matching lead
         result = await service.assign_lead({"source_id": 5})
-        assert result == test_user.id
+        assert result is not None and result.user_id == test_user.id
 
     @pytest.mark.asyncio
     async def test_filter_by_source_id_no_match(
@@ -384,7 +384,8 @@ class TestAssignmentFilterMatching:
 
         service = AssignmentService(db_session)
 
-        assert await service.assign_lead({"industry": "Technology"}) == test_user.id
+        ok = await service.assign_lead({"industry": "Technology"})
+        assert ok is not None and ok.user_id == test_user.id
         assert await service.assign_lead({"industry": "Finance"}) is None
 
     @pytest.mark.asyncio
@@ -407,7 +408,7 @@ class TestAssignmentFilterMatching:
 
         service = AssignmentService(db_session)
         result = await service.assign_lead({"anything": "goes"})
-        assert result == test_user.id
+        assert result is not None and result.user_id == test_user.id
 
     @pytest.mark.asyncio
     async def test_no_active_rules_returns_none(

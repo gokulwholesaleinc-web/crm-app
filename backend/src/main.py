@@ -15,9 +15,14 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 
+from src.account.router import router as account_router
 from src.activities.router import router as activities_router
 from src.admin.router import router as admin_router
-from src.ai.router import router as ai_router
+
+# AI assistant disabled 2026-05-07 pending Claude API rebuild — see
+# the commented include_router(ai_router) call below. Restore this
+# import alongside the mount when re-enabling.
+# from src.ai.router import router as ai_router
 from src.assignment.router import router as assignment_router
 from src.attachments.router import router as attachments_router
 from src.audit.router import router as audit_router
@@ -30,7 +35,9 @@ from src.companies.router import router as companies_router
 from src.config import settings
 from src.contacts.router import router as contacts_router
 from src.contracts.router import router as contracts_router
+from src.contracts.stats_router import router as contracts_stats_router
 from src.core.constants import CACHE_IMMUTABLE_ASSETS_MAX_AGE_SECONDS
+from src.core.me_router import router as me_router
 from src.core.migrations import _run_production_migrations
 from src.core.permissions import require_manager_or_above
 from src.core.rate_limit import limiter
@@ -163,7 +170,9 @@ app.include_router(opportunities_router)
 app.include_router(activities_router)
 app.include_router(campaigns_router)
 app.include_router(dashboard_router)
-app.include_router(ai_router)
+# AI assistant disabled 2026-05-07 pending Claude API rebuild.
+# Re-enable by uncommenting both this line and the import at the top.
+# app.include_router(ai_router)
 app.include_router(whitelabel_router)
 app.include_router(import_export_router)
 app.include_router(notes_router)
@@ -172,6 +181,7 @@ app.include_router(attachments_router)
 app.include_router(dedup_router)
 app.include_router(email_router)
 app.include_router(notifications_router)
+app.include_router(account_router)
 app.include_router(filters_router)
 app.include_router(reports_router)
 app.include_router(audit_router)
@@ -180,10 +190,12 @@ app.include_router(roles_router)
 app.include_router(webhooks_router)
 app.include_router(assignment_router)
 app.include_router(sequences_router)
+app.include_router(me_router)
 app.include_router(sharing_router)
 app.include_router(quotes_router)
 app.include_router(payments_router)
 app.include_router(proposals_router)
+app.include_router(contracts_stats_router)
 app.include_router(contracts_router)
 app.include_router(admin_router)
 app.include_router(meta_router)
@@ -196,6 +208,7 @@ app.include_router(settings_router)
 
 # Register webhook event handler with event system
 from src.events.service import (
+    ACTIVITY_ASSIGNED,
     ACTIVITY_CREATED,
     COMPANY_CREATED,
     COMPANY_UPDATED,
@@ -208,8 +221,10 @@ from src.events.service import (
     OPPORTUNITY_UPDATED,
     PAYMENT_RECEIVED,
     PROPOSAL_ACCEPTED,
+    PROPOSAL_REJECTED,
     PROPOSAL_SENT,
     QUOTE_ACCEPTED,
+    QUOTE_REJECTED,
     QUOTE_SENT,
 )
 from src.events.service import on as event_on
@@ -220,16 +235,21 @@ for _evt in [
     LEAD_CREATED, LEAD_UPDATED,
     CONTACT_CREATED, CONTACT_UPDATED,
     OPPORTUNITY_CREATED, OPPORTUNITY_UPDATED, OPPORTUNITY_STAGE_CHANGED,
-    ACTIVITY_CREATED,
+    ACTIVITY_CREATED, ACTIVITY_ASSIGNED,
     COMPANY_CREATED, COMPANY_UPDATED,
-    QUOTE_SENT, QUOTE_ACCEPTED,
-    PROPOSAL_SENT, PROPOSAL_ACCEPTED,
+    QUOTE_SENT, QUOTE_ACCEPTED, QUOTE_REJECTED,
+    PROPOSAL_SENT, PROPOSAL_ACCEPTED, PROPOSAL_REJECTED,
     PAYMENT_RECEIVED,
 ]:
     event_on(_evt, webhook_event_handler)
 
 # Register notification event handler for key events
-for _evt in [LEAD_CREATED, CONTACT_CREATED, OPPORTUNITY_STAGE_CHANGED]:
+for _evt in [
+    LEAD_CREATED, CONTACT_CREATED, OPPORTUNITY_STAGE_CHANGED,
+    QUOTE_SENT, QUOTE_REJECTED,
+    PROPOSAL_SENT, PROPOSAL_REJECTED,
+    PAYMENT_RECEIVED,
+]:
     event_on(_evt, notification_event_handler)
 
 

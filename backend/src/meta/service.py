@@ -258,13 +258,27 @@ class MetaService:
 
         await self.db.flush()
 
-        # Auto-create CRM leads from captured data
+        # Auto-create CRM leads from captured data. Per-capture
+        # try/except so a single malformed payload doesn't abort the
+        # whole batch — the capture row already persisted at the flush
+        # above, so leaving processed=False is the right state for the
+        # bad row while the others still proceed.
         for capture in captures:
-            if capture.raw_data:
+            if not capture.raw_data:
+                continue
+            try:
                 lead_id = await self._create_lead_from_capture(capture)
-                if lead_id:
-                    capture.lead_id = lead_id
-                    capture.processed = True
+            except Exception as e:
+                logger.exception(
+                    "Meta capture %s: lead-create failed; capture row remains "
+                    "processed=False for manual triage: %s",
+                    capture.leadgen_id,
+                    e,
+                )
+                continue
+            if lead_id:
+                capture.lead_id = lead_id
+                capture.processed = True
 
         await self.db.flush()
         return captures
@@ -355,8 +369,20 @@ class MetaService:
             return response.json()
 
     async def _create_lead_from_capture(self, capture: MetaLeadCapture) -> int | None:
-        """Convert a MetaLeadCapture into a CRM Lead."""
-        from src.leads.models import Lead
+        """Convert a MetaLeadCapture into a CRM Lead via LeadService.create.
+
+        Going through the service (not raw Lead(...)) is what gives us
+        auto-assignment, audit log, scoring, pipeline-stage backfill,
+        the lead.created event, and embedding storage. A raw insert
+        bypasses every one of those.
+
+        The webhook has no authenticated user, so we attribute the
+        creation to the first active superuser. If there isn't one, we
+        leave the capture unprocessed and let a backfill pick it up
+        later — better than dropping the lead on the floor.
+        """
+        from src.leads.schemas import LeadCreate
+        from src.leads.service import LeadService
 
         if not capture.raw_data:
             return None
@@ -364,22 +390,145 @@ class MetaService:
         field_data = capture.raw_data.get("field_data", [])
         fields = {f["name"]: f["values"][0] if f.get("values") else "" for f in field_data}
 
-        # Map common Meta lead form fields
-        first_name = fields.get("first_name", fields.get("full_name", "Unknown"))
+        # Map common Meta lead form fields. Meta sends either
+        # first_name/last_name OR a single full_name field depending on
+        # the form template; split the latter on whitespace so we still
+        # populate both columns.
+        first_name = fields.get("first_name", "")
         last_name = fields.get("last_name", "")
+        if not first_name and not last_name and fields.get("full_name"):
+            parts = fields["full_name"].strip().split(maxsplit=1)
+            first_name = parts[0] if parts else ""
+            last_name = parts[1] if len(parts) > 1 else ""
         email = fields.get("email", "")
         phone = fields.get("phone_number", fields.get("phone", ""))
-        company = fields.get("company_name", fields.get("company", ""))
+        company_name = fields.get("company_name", fields.get("company", ""))
 
-        lead = Lead(
-            first_name=first_name,
-            last_name=last_name,
+        # LeadCreate requires *some* identifying field; fall back to a
+        # marker name so a malformed Meta payload still produces a row
+        # the sales team can triage.
+        if not (first_name or last_name or company_name):
+            first_name = "Unknown"
+
+        actor_id = await self._resolve_system_actor_id()
+        if actor_id is None:
+            # ERROR not WARNING: nothing currently re-drives unprocessed
+            # captures (no cron, no admin endpoint), so this is a hard
+            # drop until someone runs a manual backfill. Surface it.
+            logger.error(
+                "Meta lead capture %s dropped: no active superuser to "
+                "attribute the lead to. Capture stays processed=False but "
+                "will NOT be retried automatically — manual triage needed.",
+                capture.leadgen_id,
+            )
+            return None
+
+        source_id = await self._get_or_create_meta_lead_source()
+
+        description_parts = []
+        if capture.form_id:
+            description_parts.append(f"Meta Lead Ads form {capture.form_id}")
+        if capture.ad_id:
+            description_parts.append(f"ad {capture.ad_id}")
+        description = (
+            "From " + ", ".join(description_parts) if description_parts else None
+        )
+
+        lead_data = LeadCreate(
+            first_name=first_name or None,
+            last_name=last_name or None,
             email=email or None,
             phone=phone or None,
-            company=company or None,
-            source="meta_lead_ads",
+            company_name=company_name or None,
+            source_id=source_id,
             status="new",
+            description=description,
         )
-        self.db.add(lead)
-        await self.db.flush()
+
+        lead = await LeadService(self.db).create(lead_data, user_id=actor_id)
+
+        # The router's POST /api/leads endpoint fires several side
+        # effects after LeadService.create — audit row, embedding
+        # storage, lead.created event (which the notification
+        # event-handler subscribes to for in-app pings), and an
+        # assignment notification when the owner differs from the
+        # actor. We replicate the full set here so a Meta-captured
+        # lead is indistinguishable from a UI-created one downstream.
+        # The longer-term cleanup is to push these into LeadService
+        # itself; tracked separately so this PR stays scoped.
+        from src.ai.embedding_hooks import (
+            build_lead_embedding_content,
+            store_entity_embedding,
+        )
+        from src.audit.utils import audit_entity_create
+        from src.events.service import LEAD_CREATED, emit
+        from src.notifications.service import notify_on_assignment
+
+        try:
+            await store_entity_embedding(
+                self.db, "lead", lead.id, build_lead_embedding_content(lead),
+            )
+        except Exception as e:  # parity with router which only warns
+            logger.warning("Meta capture %s: embedding store failed: %s",
+                           capture.leadgen_id, e)
+
+        await audit_entity_create(
+            self.db, "lead", lead.id, actor_id, ip_address=None,
+        )
+
+        await emit(LEAD_CREATED, {
+            "entity_id": lead.id,
+            "entity_type": "lead",
+            "user_id": actor_id,
+            "data": {
+                "first_name": lead.first_name,
+                "last_name": lead.last_name,
+                "email": lead.email,
+                "status": lead.status,
+            },
+        })
+
+        if lead.owner_id and lead.owner_id != actor_id:
+            await notify_on_assignment(
+                self.db, lead.owner_id, "leads", lead.id, lead.full_name,
+            )
+
         return lead.id
+
+    async def _get_or_create_meta_lead_source(self) -> int:
+        """Lazy-create the canonical 'Meta Lead Ads' LeadSource row."""
+        from src.leads.models import LeadSource
+
+        result = await self.db.execute(
+            select(LeadSource).where(LeadSource.name == "Meta Lead Ads")
+        )
+        source = result.scalar_one_or_none()
+        if source is not None:
+            return source.id
+
+        source = LeadSource(
+            name="Meta Lead Ads",
+            description="Auto-captured from Meta (Facebook/Instagram) Lead Ads webhooks",
+            is_active=True,
+        )
+        self.db.add(source)
+        await self.db.flush()
+        return source.id
+
+    async def _resolve_system_actor_id(self) -> int | None:
+        """Pick a system user to attribute webhook-created records to.
+
+        First active superuser ordered by id. There's no authenticated
+        user on a webhook callback, but `created_by_id` is FK-not-null
+        downstream (audit log) so we need *some* attribution.
+        """
+        from src.auth.models import User
+
+        result = await self.db.execute(
+            select(User.id)
+            .where(User.is_superuser.is_(True))
+            .where(User.is_active.is_(True))
+            .order_by(User.id)
+            .limit(1)
+        )
+        return result.scalar_one_or_none()

@@ -16,14 +16,32 @@ def _is_privileged(current_user) -> bool:
 
 
 async def _verify_contact_access(db, contact_id: int | None, current_user) -> None:
-    """Raise 403 if the caller cannot access the referenced contact."""
-    if contact_id is None or _is_privileged(current_user):
+    """Raise 403/404 if the caller cannot access the referenced contact.
+
+    Soft-deleted rows (``deleted_at IS NOT NULL``) are treated as missing
+    for ALL callers — including admins/managers/superusers. Without this
+    filter on the privileged path, an admin can sync_customer or
+    create_onboarding_link against a tombstoned contact, producing
+    StripeCustomer rows that point at deleted CRM entities (referential
+    integrity hole the audit's fix didn't cover).
+
+    The OWNERSHIP check still short-circuits for privileged callers; the
+    SOFT-DELETE check does not.
+    """
+    if contact_id is None:
         return
     from src.contacts.models import Contact
-    result = await db.execute(select(Contact).where(Contact.id == contact_id))
+    result = await db.execute(
+        select(Contact).where(
+            Contact.id == contact_id,
+            Contact.deleted_at.is_(None),
+        )
+    )
     contact = result.scalar_one_or_none()
     if contact is None:
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Contact not found")
+    if _is_privileged(current_user):
+        return
     if contact.owner_id != current_user.id:
         raise_forbidden("You do not have permission to reference this contact")
 

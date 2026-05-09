@@ -25,16 +25,56 @@ def collect_participants(*headers: str | None) -> list[str]:
 async def get_user_connection_emails(db: AsyncSession, user_id: int) -> list[str]:
     """Return all active Gmail connection addresses for a user, lowercased.
 
-    Used as the membership set for participant-overlap visibility queries.
-    A user with no connection sees nothing scoped this way; outbound rows
-    they composed themselves remain visible via the ``sent_by_id`` branch.
+    Includes primary email AND send-as aliases so the participant-overlap guard
+    in notify_on_email_reply_received doesn't drop users matched via an alias.
+    Mirrors GmailConnection.self_addresses but as a DB query rather than a
+    property on an already-loaded object.
     """
     from src.integrations.gmail.models import GmailConnection
 
     result = await db.execute(
-        select(GmailConnection.email).where(
+        select(GmailConnection.email, GmailConnection.aliases).where(
             GmailConnection.user_id == user_id,
             GmailConnection.revoked_at.is_(None),
         )
     )
-    return [e.lower() for e in result.scalars()]
+    out: list[str] = []
+    for row in result:
+        if row.email:
+            out.append(row.email.lower())
+        for a in (row.aliases or []):
+            if a:
+                out.append(a.lower())
+    return out
+
+
+async def find_user_ids_by_addresses(
+    db: AsyncSession, addresses: list[str]
+) -> list[int]:
+    """Return distinct user_ids whose active Gmail connection (primary or alias) matches any address.
+
+    Filters in Python on the model's ``self_addresses`` property so we don't depend
+    on dialect-specific ARRAY operators. ``_AliasArray.impl=JSON`` binds the Python-side
+    comparator to JSON regardless of dialect, so ``.overlap()`` raises AttributeError on
+    every dialect — including Postgres prod. Connections are bounded (~tens per tenant)
+    so loading them all for the per-inbound notify path is fine.
+
+    Match is case-insensitive. Users with revoked connections are excluded.
+    """
+    if not addresses:
+        return []
+
+    from src.integrations.gmail.models import GmailConnection
+
+    lowered = {a.strip().lower() for a in addresses if a}
+    if not lowered:
+        return []
+
+    result = await db.execute(
+        select(GmailConnection).where(GmailConnection.revoked_at.is_(None))
+    )
+    matched: set[int] = set()
+    for conn in result.scalars():
+        if conn.self_addresses & lowered:
+            matched.add(conn.user_id)
+    return list(matched)

@@ -201,14 +201,33 @@ export const downloadProposalPDF = async (proposalId: number): Promise<Blob> => 
 
 /**
  * List attachments for a proposal (staff side).
+ *
+ * The backend returns a paginated envelope ``{items: [...], total: N}``
+ * (FastAPI's AttachmentListResponse), not a bare array — unwrap to the
+ * shape the caller expects. Without this, the React Query cache
+ * resolves to the envelope object and ``attachments.length`` returns
+ * undefined, so neither the empty-state nor the file list ever
+ * renders even though the upload mutation succeeded.
+ *
+ * Shape validation (instead of a defensive ``?? []`` fallback): if
+ * the backend ever serves a 200 with a different envelope (legacy
+ * shape, misrouted endpoint, auth-redirect HTML 200, schema rename),
+ * throw with a clear message so React Query exposes it via the
+ * ``error`` branch in ProposalAttachmentsCard. ``?? []`` would mask
+ * the regression as "empty list" indistinguishably from the real
+ * empty case — exactly the failure mode the original bug had.
  */
 export const listProposalAttachments = async (
   proposalId: number,
 ): Promise<ProposalAttachment[]> => {
-  const response = await apiClient.get<ProposalAttachment[]>(
+  const response = await apiClient.get<{ items?: unknown; total?: unknown }>(
     `${PROPOSALS_BASE}/${proposalId}/attachments`,
   );
-  return response.data;
+  const data = response.data;
+  if (!data || typeof data !== 'object' || !Array.isArray(data.items)) {
+    throw new Error('Unexpected proposal attachments response shape');
+  }
+  return data.items as ProposalAttachment[];
 };
 
 /**
@@ -238,6 +257,35 @@ export const deleteProposalAttachment = async (
   await apiClient.delete(
     `${PROPOSALS_BASE}/${proposalId}/attachments/${attachmentId}`,
   );
+};
+
+/**
+ * Open a staff-side preview of a proposal attachment in a new browser tab.
+ *
+ * The attachment download endpoint requires bearer auth, so a plain
+ * ``window.open(url)`` of the API URL would 401 — the bearer header
+ * never reaches the new tab. Fetch the file as a blob through the
+ * authenticated apiClient, mint an object URL, then open that. The
+ * URL is revoked after a short delay so memory doesn't leak when the
+ * user opens many attachments in a single session, and long enough
+ * for the new tab's PDF viewer to actually load the bytes.
+ *
+ * Returns a promise that resolves once the new tab has been opened.
+ */
+export const openProposalAttachmentPreview = async (
+  attachmentId: number,
+): Promise<void> => {
+  const response = await apiClient.get<Blob>(
+    `/api/attachments/${attachmentId}/download`,
+    { responseType: 'blob' },
+  );
+  const blobUrl = URL.createObjectURL(response.data);
+  // noopener/noreferrer keeps the new tab from accessing window.opener
+  // (the staff CRM session). Per OWASP guidance for any user-content link.
+  window.open(blobUrl, '_blank', 'noopener,noreferrer');
+  // 60s is enough for the new tab's PDF.js / built-in viewer to fetch
+  // the blob URL contents; revoking too early aborts the load.
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
 };
 
 /**

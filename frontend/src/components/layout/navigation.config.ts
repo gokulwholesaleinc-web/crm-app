@@ -6,6 +6,7 @@ import {
   FunnelIcon,
   DocumentTextIcon,
   DocumentDuplicateIcon,
+  ScaleIcon,
   CreditCardIcon,
   CalendarIcon,
   CalendarDaysIcon,
@@ -13,7 +14,6 @@ import {
   BoltIcon,
   ArrowsRightLeftIcon,
   ChartBarIcon,
-  SparklesIcon,
   Cog6ToothIcon,
   QueueListIcon,
   ViewColumnsIcon,
@@ -21,6 +21,8 @@ import {
   ShieldCheckIcon,
   QuestionMarkCircleIcon,
   UserPlusIcon,
+  ShareIcon,
+  InboxIcon,
 } from '@heroicons/react/24/outline';
 
 export interface NavItem {
@@ -37,8 +39,10 @@ export const DEFAULT_MAIN_NAVIGATION: NavItem[] = [
   { id: 'companies', name: 'Companies', href: '/companies', icon: BuildingOfficeIcon },
   { id: 'leads', name: 'Leads', href: '/leads', icon: FunnelIcon },
   { id: 'pipeline', name: 'Pipeline', href: '/pipeline', icon: ViewColumnsIcon },
+  { id: 'inbox', name: 'Inbox', href: '/inbox', icon: InboxIcon },
   { id: 'quotes', name: 'Quotes', href: '/quotes', icon: DocumentTextIcon },
   { id: 'proposals', name: 'Proposals', href: '/proposals', icon: DocumentDuplicateIcon },
+  { id: 'contracts', name: 'Contracts', href: '/contracts', icon: ScaleIcon },
   { id: 'payments', name: 'Payments', href: '/payments', icon: CreditCardIcon },
   { id: 'activities', name: 'Activities', href: '/activities', icon: CalendarIcon },
   { id: 'calendar', name: 'Calendar', href: '/calendar', icon: CalendarDaysIcon },
@@ -51,17 +55,17 @@ export const DEFAULT_SECONDARY_NAVIGATION: NavItem[] = [
   { id: 'duplicates', name: 'Duplicates', href: '/duplicates', icon: DocumentMagnifyingGlassIcon },
   { id: 'import-export', name: 'Import/Export', href: '/import-export', icon: ArrowsRightLeftIcon },
   { id: 'reports', name: 'Reports', href: '/reports', icon: ChartBarIcon },
-  { id: 'ai-assistant', name: 'AI Assistant', href: '/ai-assistant', icon: SparklesIcon },
   { id: 'settings', name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
   { id: 'help', name: 'Help', href: '/help', icon: QuestionMarkCircleIcon },
   { id: 'admin', name: 'Admin', href: '/admin', icon: ShieldCheckIcon },
   { id: 'approvals', name: 'User Approvals', href: '/admin/user-approvals', icon: UserPlusIcon },
+  { id: 'admin-sharing', name: 'Sharing', href: '/admin/sharing', icon: ShareIcon },
 ];
 
 export const STORAGE_KEY_MAIN = 'crm-sidebar-order:v1';
 export const STORAGE_KEY_SECONDARY = 'crm-sidebar-secondary-order:v1';
 
-export const ADMIN_ONLY_IDS = new Set(['admin', 'approvals']);
+export const ADMIN_ONLY_IDS = new Set(['admin', 'approvals', 'admin-sharing']);
 
 export function readStoredOrder(key: string): string[] | null {
   const parsed = safeStorage.getJson<unknown>(key);

@@ -16,6 +16,15 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
 import { safeStorage } from '../utils/safeStorage';
+import { sanitizeHexColor } from '../utils/colorValidation';
+
+// Defaults used when the backend ships a malformed hex (or the tenant
+// has never been configured). Match `:root` in `index.css` and the
+// backend's `DEFAULT_*_COLOR` constants so all three layers agree.
+const DEFAULT_BG_LIGHT = '#f9fafb';
+const DEFAULT_BG_DARK = '#111827';
+const DEFAULT_SURFACE_LIGHT = '#ffffff';
+const DEFAULT_SURFACE_DARK = '#1f2937';
 
 // --- Types ---
 
@@ -27,6 +36,10 @@ export interface TenantConfig {
   primary_color: string;
   secondary_color: string;
   accent_color: string;
+  bg_color_light: string;
+  bg_color_dark: string;
+  surface_color_light: string;
+  surface_color_dark: string;
   footer_text: string | null;
   privacy_policy_url: string | null;
   terms_of_service_url: string | null;
@@ -96,6 +109,10 @@ function applyBrandingToDOM(config: TenantConfig | null) {
     root.style.removeProperty('--brand-primary');
     root.style.removeProperty('--brand-secondary');
     root.style.removeProperty('--brand-accent');
+    root.style.removeProperty('--brand-bg-light');
+    root.style.removeProperty('--brand-bg-dark');
+    root.style.removeProperty('--brand-surface-light');
+    root.style.removeProperty('--brand-surface-dark');
     const existingStyle = document.getElementById('tenant-custom-css');
     if (existingStyle) existingStyle.remove();
     return;
@@ -118,12 +135,40 @@ function applyBrandingToDOM(config: TenantConfig | null) {
   root.style.setProperty('--brand-secondary', config.secondary_color);
   root.style.setProperty('--brand-accent', config.accent_color);
 
+  // Page + surface backgrounds, consumed by index.css for body and
+  // .card. Sanitize before setProperty: the backend rejects non-hex on
+  // PATCH, but a corrupt-row fallback or a stale cached config could
+  // still ship garbage; setProperty silently accepts any string and the
+  // browser then drops the rule at paint time, so without this guard a
+  // bad value reads as "the new color I configured doesn't apply" with
+  // no error anywhere.
+  const setBg = (key: string, raw: string, fallback: string) => {
+    const sanitized = sanitizeHexColor(raw, fallback);
+    if (sanitized !== raw) {
+      // Always warn — a tenant whose stored hex doesn't round-trip is a
+      // data-integrity event we want visibility on in prod, not just DEV.
+      // (The validator rejects bad input on PATCH; reaching this branch
+      // means a stale cache or a row that bypassed the validator.)
+      console.warn(
+        `[branding] ${key} fell back from ${JSON.stringify(raw)} to ${fallback} (not a valid hex)`,
+      );
+    }
+    root.style.setProperty(key, sanitized);
+  };
+  setBg('--brand-bg-light', config.bg_color_light, DEFAULT_BG_LIGHT);
+  setBg('--brand-bg-dark', config.bg_color_dark, DEFAULT_BG_DARK);
+  setBg('--brand-surface-light', config.surface_color_light, DEFAULT_SURFACE_LIGHT);
+  setBg('--brand-surface-dark', config.surface_color_dark, DEFAULT_SURFACE_DARK);
+
   // Update document title
   if (config.company_name) {
     document.title = `${config.company_name} - CRM`;
   }
 
-  // Update favicon — fall back to /favicon.svg if the tenant URL 404s
+  // Update favicon — fall back to /favicon.ico (the in-tree fallback,
+  // matching index.html). The legacy /favicon.svg was deleted in
+  // PR #247; pointing back at it produces a 404 in the console every
+  // time a tenant favicon URL fails to load.
   if (config.favicon_url) {
     let link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
     if (!link) {
@@ -133,7 +178,7 @@ function applyBrandingToDOM(config: TenantConfig | null) {
     }
     const img = new Image();
     img.onload = () => { link!.href = config.favicon_url!; };
-    img.onerror = () => { link!.href = '/favicon.svg'; };
+    img.onerror = () => { link!.href = '/favicon.ico'; };
     img.src = config.favicon_url;
   }
 

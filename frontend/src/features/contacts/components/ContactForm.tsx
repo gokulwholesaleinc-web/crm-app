@@ -4,6 +4,7 @@ import { Button, SearchableSelect } from '../../../components/ui';
 import { FormInput, FormTextarea } from '../../../components/forms';
 import { useCompanies } from '../../../hooks/useCompanies';
 import { useUnsavedChangesWarning } from '../../../hooks/useUnsavedChangesWarning';
+import { normalizeEmail, normalizePhone } from '../../../utils/inputNormalize';
 import type { ContactFormData } from './contactFormHelpers';
 
 export interface ContactFormProps {
@@ -24,6 +25,7 @@ export function ContactForm({
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors, isDirty },
   } = useForm<ContactFormData>({
     defaultValues: {
@@ -104,6 +106,15 @@ export function ContactForm({
               },
             })}
             error={errors.email?.message}
+            onBlur={(e) =>
+              setValue('email', normalizeEmail(e.target.value), { shouldDirty: true })
+            }
+            onPaste={(e) => {
+              e.preventDefault();
+              setValue('email', normalizeEmail(e.clipboardData.getData('text')), {
+                shouldDirty: true,
+              });
+            }}
           />
 
           <FormInput
@@ -113,6 +124,15 @@ export function ContactForm({
             autoComplete="tel"
             inputMode="tel"
             register={register('phone')}
+            onBlur={(e) =>
+              setValue('phone', normalizePhone(e.target.value), { shouldDirty: true })
+            }
+            onPaste={(e) => {
+              e.preventDefault();
+              setValue('phone', normalizePhone(e.clipboardData.getData('text')), {
+                shouldDirty: true,
+              });
+            }}
           />
         </div>
       </div>

@@ -9,7 +9,6 @@ Create Date: 2026-05-05
 """
 
 from alembic import op
-import sqlalchemy as sa
 
 revision = "014_gmail_backfill_state"
 down_revision = "013_payment_checkout_unique"

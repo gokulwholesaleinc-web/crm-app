@@ -1,5 +1,6 @@
 """Pydantic schemas for white-label system."""
 
+import re
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator
@@ -13,6 +14,30 @@ _URL_FIELD_LABELS = {
     'privacy_policy_url': 'Privacy policy URL',
     'terms_of_service_url': 'Terms of service URL',
 }
+
+# Color fields that must be valid hex literals. Without this, an admin can
+# save ``"red"``, ``"#zzz"``, or any other 1–7 char string; the row persists
+# but ``setProperty`` silently drops the value at paint time and the page
+# never reflects the change — a classic "save success, no visual effect"
+# silent failure caught by the PR #263 trio.
+_COLOR_FIELD_LABELS = {
+    'primary_color': 'Primary color',
+    'secondary_color': 'Secondary color',
+    'accent_color': 'Accent color',
+    'bg_color_light': 'Light mode background',
+    'bg_color_dark': 'Dark mode background',
+    'surface_color_light': 'Light mode card surface',
+    'surface_color_dark': 'Dark mode card surface',
+}
+
+# Mirrors frontend/src/utils/colorValidation.ts so the validator and
+# the React picker agree on what "hex" means. Deliberately rejects the
+# 8-digit (#rrggbbaa) form: every color column is VARCHAR(7), so a
+# 9-char value clears the regex but then 500s on UPDATE with
+# StringDataRightTruncationError. The native <input type="color">
+# only emits 6-digit anyway; alpha compositing is handled by the
+# `withAlpha` helper on the consumer side.
+_HEX_COLOR_RE = re.compile(r'^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$')
 
 
 def _validate_url_field(v: str | None, info: ValidationInfo) -> str | None:
@@ -31,6 +56,27 @@ def _validate_url_field(v: str | None, info: ValidationInfo) -> str | None:
     return stripped
 
 
+def _validate_color_field(v: str | None, info: ValidationInfo) -> str | None:
+    """Validate a color field: strict ``#rgb``/``#rrggbb``/``#rrggbbaa`` hex.
+
+    ``None`` is allowed on update-shaped schemas (the field stays at its
+    server-side default). On the create/full schemas the field carries its
+    own default so ``None`` never reaches us.
+    """
+    if v is None:
+        return None
+    if not isinstance(v, str):
+        field_name = info.field_name or ''
+        label = _COLOR_FIELD_LABELS.get(field_name, field_name)
+        raise ValueError(f'{label} must be a hex color like #f9fafb')
+    stripped = v.strip()
+    if not _HEX_COLOR_RE.match(stripped):
+        field_name = info.field_name or ''
+        label = _COLOR_FIELD_LABELS.get(field_name, field_name)
+        raise ValueError(f'{label} must be a hex color like #f9fafb')
+    return stripped
+
+
 class TenantSettingsBase(BaseModel):
     company_name: str | None = None
     logo_url: str | None = None
@@ -38,6 +84,10 @@ class TenantSettingsBase(BaseModel):
     primary_color: str = "#6366f1"
     secondary_color: str = "#8b5cf6"
     accent_color: str = "#22c55e"
+    bg_color_light: str = "#f9fafb"
+    bg_color_dark: str = "#111827"
+    surface_color_light: str = "#ffffff"
+    surface_color_dark: str = "#1f2937"
     email_from_name: str | None = None
     email_from_address: str | None = None
     feature_flags: str | None = None
@@ -55,6 +105,11 @@ class TenantSettingsBase(BaseModel):
     def _validate_urls(cls, v, info: ValidationInfo):
         return _validate_url_field(v, info)
 
+    @field_validator(*_COLOR_FIELD_LABELS.keys(), mode='before')
+    @classmethod
+    def _validate_colors(cls, v, info: ValidationInfo):
+        return _validate_color_field(v, info)
+
 
 class TenantSettingsCreate(TenantSettingsBase):
     pass
@@ -67,6 +122,10 @@ class TenantSettingsUpdate(BaseModel):
     primary_color: str | None = None
     secondary_color: str | None = None
     accent_color: str | None = None
+    bg_color_light: str | None = None
+    bg_color_dark: str | None = None
+    surface_color_light: str | None = None
+    surface_color_dark: str | None = None
     email_from_name: str | None = None
     email_from_address: str | None = None
     feature_flags: str | None = None
@@ -83,6 +142,11 @@ class TenantSettingsUpdate(BaseModel):
     @classmethod
     def _validate_urls(cls, v, info: ValidationInfo):
         return _validate_url_field(v, info)
+
+    @field_validator(*_COLOR_FIELD_LABELS.keys(), mode='before')
+    @classmethod
+    def _validate_colors(cls, v, info: ValidationInfo):
+        return _validate_color_field(v, info)
 
 
 class TenantSettingsResponse(TenantSettingsBase):
@@ -155,6 +219,10 @@ class PublicTenantConfig(BaseModel):
     primary_color: str
     secondary_color: str
     accent_color: str
+    bg_color_light: str
+    bg_color_dark: str
+    surface_color_light: str
+    surface_color_dark: str
     footer_text: str | None
     privacy_policy_url: str | None
     terms_of_service_url: str | None

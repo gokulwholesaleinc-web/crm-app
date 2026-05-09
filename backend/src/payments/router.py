@@ -27,6 +27,8 @@ async def list_payments(
     company_id: int | None = None,
     owner_id: int | None = None,
     search: str | None = None,
+    order_by: str | None = None,
+    order_dir: str | None = None,
 ):
     """List payments with pagination and filters.
 
@@ -48,6 +50,8 @@ async def list_payments(
         owner_id=effective_owner_id,
         shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_PAYMENTS),
         search=search,
+        order_by=order_by,
+        order_dir=order_dir,
     )
 
     await service.attach_proposals(payments_list)

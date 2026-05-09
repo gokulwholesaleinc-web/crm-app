@@ -59,6 +59,9 @@ export type { EntityType } from './EntityLink.utils';
 // HelpLink
 export { HelpLink } from './HelpLink';
 
+// CopyButton
+export { CopyButton } from './CopyButton';
+
 // Skeleton
 export {
   Skeleton,

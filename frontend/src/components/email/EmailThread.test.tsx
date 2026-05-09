@@ -131,4 +131,112 @@ describe('EmailThread', () => {
     // Header remains expanded because Reply click does not propagate to the toggle.
     expect(header).toHaveAttribute('aria-expanded', 'true');
   });
+
+  it('renders inline data: image URIs through DOMPurify (regression for Giancarlo)', () => {
+    // 1x1 transparent PNG as a real, browser-renderable data URI. The
+    // backend Gmail sync substitutes cid: refs with these before we
+    // ever see the body. DOMPurify's default data-URI allowlist
+    // already includes <img>, so the URI passes through to the
+    // rendered DOM without any extra config.
+    const tinyPng =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+    const html =
+      '<p>Logo: <img src="' +
+      tinyPng +
+      '" alt="brand-logo" data-testid="inline-img"></p>';
+    mockUseEmailThread.mockReturnValue({
+      data: threadResponse([makeEmail({ id: 1, body_html: html })]),
+      isLoading: false,
+    });
+
+    renderWithProviders(<EmailThread entityType="contacts" entityId={1883} />);
+
+    const img = screen.getByAltText('brand-logo') as HTMLImageElement;
+    expect(img.getAttribute('src')).toBe(tinyPng);
+  });
+
+  it('trims gmail_quote + gmail_signature from inbound HTML by default and exposes a toggle', async () => {
+    const html =
+      '<p>Approved — please proceed.</p>' +
+      '<div class="gmail_quote">' +
+      '<div>On Mon, Apr 28 Daisy &lt;daisy@example.com&gt; wrote:</div>' +
+      '<blockquote>can you confirm?</blockquote>' +
+      '</div>' +
+      '<div class="gmail_signature">' +
+      '<table><tr><td>Giancarlo · CEO · Link Creative</td></tr></table>' +
+      '</div>';
+    mockUseEmailThread.mockReturnValue({
+      data: threadResponse([
+        makeEmail({
+          id: 1,
+          direction: 'inbound',
+          from_email: 'them@example.com',
+          to_email: 'me@example.com',
+          body_html: html,
+        }),
+      ]),
+      isLoading: false,
+    });
+
+    renderWithProviders(<EmailThread entityType="contacts" entityId={1883} />);
+
+    const body = document.querySelector('.email-html-content');
+    expect(body).not.toBeNull();
+    expect(body!.textContent).toContain('Approved');
+    expect(body!.textContent).not.toContain('can you confirm?');
+    expect(body!.textContent).not.toContain('Giancarlo');
+
+    // Toggle label names *both* cuts since the body had a quote AND a sig.
+    const toggle = screen.getByRole('button', { name: /Show quoted history & signature/i });
+    fireEvent.click(toggle);
+
+    const expanded = document.querySelector('.email-html-content');
+    expect(expanded!.textContent).toContain('can you confirm?');
+    expect(expanded!.textContent).toContain('Giancarlo');
+  });
+
+  it('does NOT trim outbound HTML (our own branded templates pass through untouched)', () => {
+    // A future branded template could legitimately quote a customer
+    // testimonial in a <blockquote type="cite">; trimming it would
+    // silently erase the marketing payload. Outbound bypasses trim.
+    const html =
+      '<p>Thanks for your purchase!</p>' +
+      '<blockquote type="cite">"Their service is amazing." — Jane</blockquote>';
+    mockUseEmailThread.mockReturnValue({
+      data: threadResponse([makeEmail({ id: 1, direction: 'outbound', body_html: html })]),
+      isLoading: false,
+    });
+
+    renderWithProviders(<EmailThread entityType="contacts" entityId={1883} />);
+
+    const body = document.querySelector('.email-html-content');
+    expect(body!.textContent).toContain('Their service is amazing');
+    expect(screen.queryByRole('button', { name: /Show quoted history/i })).not.toBeInTheDocument();
+  });
+
+  it('strips <svg> and <image> from inbound HTML (no profile escape)', () => {
+    // Adversarial inbound: USE_PROFILES.html doesn't load the SVG
+    // profile, so <svg> and <image> are stripped entirely — no
+    // SVG-script-execution surface even though data: URIs are
+    // permitted on real <img>. Regression guard so future config
+    // tweaks don't accidentally widen the surface.
+    const html =
+      '<p>safe</p>' +
+      '<svg><image href="data:image/svg+xml,<svg onload=alert(1)></svg>" data-testid="svg-image"></svg>';
+    mockUseEmailThread.mockReturnValue({
+      data: threadResponse([makeEmail({ id: 1, body_html: html })]),
+      isLoading: false,
+    });
+
+    renderWithProviders(<EmailThread entityType="contacts" entityId={1883} />);
+
+    // The page itself renders chrome SVGs (Reply icon, etc.), so the
+    // assertion is scoped to the .email-html-content wrapper holding
+    // the sanitized inbound body.
+    const bodyContainer = document.querySelector('.email-html-content');
+    expect(bodyContainer).not.toBeNull();
+    expect(bodyContainer!.querySelector('svg')).toBeNull();
+    expect(bodyContainer!.querySelector('image')).toBeNull();
+    expect(screen.getByText('safe')).toBeInTheDocument();
+  });
 });

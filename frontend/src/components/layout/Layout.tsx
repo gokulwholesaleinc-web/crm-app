@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import clsx from 'clsx';
 import { Sidebar, MobileSidebar } from './Sidebar';
 import { Header, User } from './Header';
+import { useDensity } from '../../hooks/useDensity';
 
 export interface LayoutProps {
   children: ReactNode;
@@ -28,6 +29,7 @@ export function Layout({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  useDensity();
 
   const handleGlobalSearch = useCallback((query: string) => {
     const searchableRoutes = ['/contacts', '/companies', '/leads', '/quotes', '/proposals', '/payments'];
@@ -38,50 +40,62 @@ export function Layout({
   }, [navigate, location.pathname]);
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-gray-900 overflow-hidden">
+    <div className="flex flex-col h-screen bg-brand-page overflow-hidden">
       {/* Skip Link */}
       <a href="#main-content" className="skip-link">Skip to main content</a>
 
-      {/* Desktop Sidebar - hidden on mobile/tablet, visible on lg+ */}
-      <div className="hidden lg:flex lg:flex-shrink-0">
-        <Sidebar
-          collapsed={sidebarCollapsed}
-          onCollapse={onSidebarCollapse}
-        />
-      </div>
-
-      {/* Mobile Sidebar Overlay - only renders on mobile/tablet */}
-      <MobileSidebar
-        isOpen={mobileMenuOpen}
-        onClose={() => setMobileMenuOpen(false)}
+      <div
+        aria-hidden="true"
+        className="flex-shrink-0"
+        style={{
+          height: 3,
+          backgroundImage:
+            'linear-gradient(90deg, var(--brand-primary), var(--brand-secondary), var(--brand-accent))',
+        }}
       />
 
-      {/* Main Content Area - takes full width on mobile */}
-      <div className="flex flex-col flex-1 min-w-0 overflow-hidden w-full">
-        <Header
-          user={user}
-          onMenuClick={() => setMobileMenuOpen(true)}
-          onSearch={handleGlobalSearch}
-          onLogout={onLogout}
-          showSearch={showSearch}
-          notifications={notifications}
+      <div className="flex flex-1 min-h-0">
+        {/* Desktop Sidebar - hidden on mobile/tablet, visible on lg+ */}
+        <div className="hidden lg:flex lg:flex-shrink-0">
+          <Sidebar
+            collapsed={sidebarCollapsed}
+            onCollapse={onSidebarCollapse}
+          />
+        </div>
+
+        {/* Mobile Sidebar Overlay - only renders on mobile/tablet */}
+        <MobileSidebar
+          isOpen={mobileMenuOpen}
+          onClose={() => setMobileMenuOpen(false)}
         />
 
-        {/* Page Content - responsive padding */}
-        <main
-          id="main-content"
-          className={clsx(
-            'flex-1 overflow-y-auto focus-visible:outline-none',
-            className
-          )}
-        >
-          <div className="py-4 sm:py-6">
-            {/* Full width on mobile, constrained with responsive padding on larger screens */}
-            <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-              {children}
+        {/* Main Content Area - takes full width on mobile */}
+        <div className="flex flex-col flex-1 min-w-0 overflow-hidden w-full">
+          <Header
+            user={user}
+            onMenuClick={() => setMobileMenuOpen(true)}
+            onSearch={handleGlobalSearch}
+            onLogout={onLogout}
+            showSearch={showSearch}
+            notifications={notifications}
+          />
+
+          {/* Page Content - responsive padding */}
+          <main
+            id="main-content"
+            className={clsx(
+              'flex-1 overflow-y-auto focus-visible:outline-none',
+              className
+            )}
+          >
+            <div className="py-4 sm:py-6">
+              {/* Full width on mobile, constrained with responsive padding on larger screens */}
+              <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+                {children}
+              </div>
             </div>
-          </div>
-        </main>
+          </main>
+        </div>
       </div>
     </div>
   );
@@ -134,15 +148,22 @@ export function PageHeader({
 
       {/* Title and Actions - stacks on mobile, inline on larger screens */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-        <div className="min-w-0 flex-1">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">
-            {title}
-          </h1>
-          {description && (
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 line-clamp-2 sm:line-clamp-1">
-              {description}
-            </p>
-          )}
+        <div className="min-w-0 flex-1 flex gap-3">
+          <div
+            aria-hidden="true"
+            className="flex-shrink-0 rounded-full"
+            style={{ width: 3, backgroundColor: 'var(--brand-accent)' }}
+          />
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">
+              {title}
+            </h1>
+            {description && (
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 line-clamp-2 sm:line-clamp-1">
+                {description}
+              </p>
+            )}
+          </div>
         </div>
         {actions && (
           <div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0">

@@ -105,33 +105,18 @@ async def store_entity_embedding(
     entity_id: int,
     content: str,
 ) -> None:
-    """Store embedding for an entity. Fails silently if OpenAI key not set.
+    """No-op while the AI assistant is disabled.
 
-    This function is designed to be non-blocking - it will not raise exceptions
-    that would disrupt the main CRUD operation.
+    The 28 call-sites scattered across leads/contacts/opportunities/etc.
+    routers were left in place intentionally so re-enabling the AI
+    assistant in the future just requires reverting this body. With the
+    function as a no-op, no OpenAI calls fire on every CRUD write —
+    eliminating recurring spend during the AI-overhaul gap.
+
+    Original implementation lives in git history; restore by reverting
+    the commit that disabled it.
     """
-    import os
-    api_key = settings.OPENAI_API_KEY or os.environ.get("OPENAI_API_KEY", "")
-    if not api_key:
-        logger.debug(f"Skipping embedding for {entity_type}:{entity_id} - no OpenAI API key")
-        return
-
-    if not content or not content.strip():
-        logger.debug(f"Skipping embedding for {entity_type}:{entity_id} - empty content")
-        return
-
-    try:
-        embedding_service = EmbeddingService(db)
-        await embedding_service.store_embedding(
-            entity_type=entity_type,
-            entity_id=entity_id,
-            content=content,
-            content_type="summary",
-        )
-        logger.debug(f"Stored embedding for {entity_type}:{entity_id}")
-    except Exception as e:
-        # Log but don't fail the main operation
-        logger.warning(f"Failed to store embedding for {entity_type}:{entity_id}: {e}")
+    return
 
 
 async def delete_entity_embedding(

@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import selectinload
 
 from src.core.base_service import BaseService, CRUDService, TaggableServiceMixin
@@ -46,8 +46,16 @@ class OpportunityService(
         tag_ids: list[int] | None = None,
         filters: dict[str, Any] | None = None,
         shared_entity_ids: list[int] | None = None,
+        assignee_entity_ids: list[int] | None = None,
     ) -> tuple[list[Opportunity], int]:
-        """Get paginated list of opportunities with filters."""
+        """Get paginated list of opportunities with filters.
+
+        When ``owner_id`` is set, the result includes records owned by that
+        user plus any records in ``shared_entity_ids`` or
+        ``assignee_entity_ids``. ``assignee_entity_ids`` is a distinct
+        parameter so callers that bypass DataScope can OR in just the
+        assignee shares without rebuilding the full shared-entity map.
+        """
         query = (
             select(Opportunity)
             .options(
@@ -74,12 +82,35 @@ class OpportunityService(
         if company_id:
             query = query.where(Opportunity.company_id == company_id)
 
-        query = self.apply_owner_filter(query, owner_id, shared_entity_ids)
+        if owner_id is not None:
+            or_clauses = [Opportunity.owner_id == owner_id]
+            if shared_entity_ids:
+                or_clauses.append(Opportunity.id.in_(shared_entity_ids))
+            if assignee_entity_ids:
+                or_clauses.append(Opportunity.id.in_(assignee_entity_ids))
+            query = query.where(or_(*or_clauses))
+        else:
+            # No owner filter — fall back to base helper which is a no-op when
+            # owner_id is None (admin / manager "see all" path).
+            query = self.apply_owner_filter(query, owner_id, shared_entity_ids)
 
         if tag_ids:
             query = await self._filter_by_tags(query, tag_ids)
 
         return await self.paginate_query(query, page, page_size)
+
+    async def get_assignee_entity_ids(self, user_id: int) -> list[int]:
+        """Return opportunity IDs where this user holds an 'assignee' share."""
+        from src.core.models import EntityShare
+
+        result = await self.db.execute(
+            select(EntityShare.entity_id).where(
+                EntityShare.shared_with_user_id == user_id,
+                EntityShare.entity_type == ENTITY_TYPE_OPPORTUNITIES,
+                EntityShare.permission_level == "assignee",
+            )
+        )
+        return list(result.scalars().all())
 
 
 

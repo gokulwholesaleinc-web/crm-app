@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { emailApi, type EmailSearchResult } from '../../api/email';
 import { Spinner } from '../ui';
+import { Modal } from '../ui/Modal';
 
 interface EmailSearchModalProps {
   isOpen: boolean;
@@ -82,14 +83,6 @@ export function EmailSearchModal({ isOpen, onClose, entityType, entityId }: Emai
     }
   }, [isOpen, entityType, entityId]);
 
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [onClose]);
-
   const handleResultClick = (item: EmailSearchResult) => {
     if (item.entity_type && item.entity_id != null) {
       // `kind:id` deep-link so the entity page opens the Emails tab
@@ -101,145 +94,132 @@ export function EmailSearchModal({ isOpen, onClose, entityType, entityId }: Emai
     }
   };
 
-  if (!isOpen) return null;
-
   const hasEntityFilter = Boolean(entityType && entityId);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-16 px-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Search emails"
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      size="xl"
+      showCloseButton={false}
+      closeOnOverlayClick={true}
     >
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-black/40 dark:bg-black/60"
-        onClick={onClose}
-        aria-hidden="true"
-      />
+      <div className="-mx-4 -mt-4 sm:-mx-6 sm:-mt-6 flex items-center gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+        {SEARCH_ICON}
+        <input
+          ref={inputRef}
+          type="search"
+          className="flex-1 bg-transparent text-gray-900 dark:text-gray-100 placeholder-gray-400 outline-none text-sm"
+          placeholder="Search emails by subject, body, sender, or recipient..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          spellCheck={false}
+          autoComplete="off"
+        />
+        {loading && <Spinner size="sm" />}
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
+          aria-label="Close search"
+        >
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
 
-      <div className="relative w-full max-w-2xl bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-        {/* Search input */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-          {SEARCH_ICON}
-          <input
-            ref={inputRef}
-            type="search"
-            className="flex-1 bg-transparent text-gray-900 dark:text-gray-100 placeholder-gray-400 outline-none text-sm"
-            placeholder="Search emails by subject, body, sender, or recipient..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            spellCheck={false}
-            autoComplete="off"
-          />
-          {loading && <Spinner size="sm" />}
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
-            aria-label="Close search"
-          >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+      {hasEntityFilter && (
+        <div className="-mx-4 sm:-mx-6 px-4 py-2 border-b border-gray-100 dark:border-gray-700 flex items-center gap-2">
+          <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-gray-600 dark:text-gray-400">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              checked={!scopedToEntity}
+              onChange={(e) => setScopedToEntity(!e.target.checked)}
+            />
+            Search across all emails
+          </label>
+          {scopedToEntity && (
+            <span className="text-xs text-gray-400 dark:text-gray-500">
+              (scoped to current {entityType?.replace(/s$/, '')})
+            </span>
+          )}
         </div>
+      )}
 
-        {/* Scope toggle */}
-        {hasEntityFilter && (
-          <div className="px-4 py-2 border-b border-gray-100 dark:border-gray-700 flex items-center gap-2">
-            <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-gray-600 dark:text-gray-400">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                checked={!scopedToEntity}
-                onChange={(e) => setScopedToEntity(!e.target.checked)}
-              />
-              Search across all emails
-            </label>
-            {scopedToEntity && (
-              <span className="text-xs text-gray-400 dark:text-gray-500">
-                (scoped to current {entityType?.replace(/s$/, '')})
-              </span>
-            )}
-          </div>
+      <div className="-mx-4 sm:-mx-6 max-h-[60vh] overflow-y-auto">
+        {error && (
+          <p className="px-4 py-3 text-sm text-red-600 dark:text-red-400">{error}</p>
         )}
 
-        {/* Results */}
-        <div className="max-h-[60vh] overflow-y-auto">
-          {error && (
-            <p className="px-4 py-3 text-sm text-red-600 dark:text-red-400">{error}</p>
-          )}
+        {!loading && !error && query.trim() && results.length === 0 && (
+          <p className="px-4 py-6 text-sm text-center text-gray-500 dark:text-gray-400">
+            No emails found for &ldquo;{query}&rdquo;
+          </p>
+        )}
 
-          {!loading && !error && query.trim() && results.length === 0 && (
-            <p className="px-4 py-6 text-sm text-center text-gray-500 dark:text-gray-400">
-              No emails found for &ldquo;{query}&rdquo;
+        {!query.trim() && (
+          <p className="px-4 py-6 text-sm text-center text-gray-400 dark:text-gray-500">
+            Type to search across your emails...
+          </p>
+        )}
+
+        {results.length > 0 && (
+          <>
+            <p className="px-4 py-2 text-xs text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-700">
+              {total} result{total !== 1 ? 's' : ''}
+              {total > 25 ? ' (showing first 25)' : ''}
             </p>
-          )}
-
-          {!query.trim() && (
-            <p className="px-4 py-6 text-sm text-center text-gray-400 dark:text-gray-500">
-              Type to search across your emails...
-            </p>
-          )}
-
-          {results.length > 0 && (
-            <>
-              <p className="px-4 py-2 text-xs text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-700">
-                {total} result{total !== 1 ? 's' : ''}
-                {total > 25 ? ' (showing first 25)' : ''}
-              </p>
-              <ul role="listbox">
-                {results.map((item) => (
-                  <li key={`${item.kind}-${item.id}`}>
-                    <button
-                      type="button"
-                      className="w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/60 focus-visible:outline-none focus-visible:bg-gray-50 dark:focus-visible:bg-gray-700/60 border-b border-gray-100 dark:border-gray-700/50 last:border-0"
-                      onClick={() => handleResultClick(item)}
-                      aria-label={`${item.kind === 'sent' ? 'Sent' : 'Received'}: ${item.subject}`}
-                    >
-                      <div className="flex items-start justify-between gap-3 min-w-0">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 mb-0.5">
-                            <span
-                              className={`shrink-0 inline-block text-xs font-medium px-1.5 py-0.5 rounded ${
-                                item.kind === 'sent'
-                                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
-                                  : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
-                              }`}
-                            >
-                              {item.kind === 'sent' ? 'Sent' : 'Received'}
-                            </span>
-                            <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                              {item.subject || '(No subject)'}
-                            </span>
-                          </div>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                            {item.kind === 'sent'
-                              ? `To: ${item.to_email}`
-                              : `From: ${item.from_email || 'Unknown'}`}
-                          </p>
-                          {item.snippet && (
-                            <p className="text-xs text-gray-400 dark:text-gray-500 truncate mt-0.5">
-                              {item.snippet}
-                            </p>
-                          )}
-                        </div>
-                        {item.sent_at && (
-                          <span className="shrink-0 text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap">
-                            {formatDate(item.sent_at)}
+            <ul role="listbox">
+              {results.map((item) => (
+                <li key={`${item.kind}-${item.id}`}>
+                  <button
+                    type="button"
+                    className="w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/60 focus-visible:outline-none focus-visible:bg-gray-50 dark:focus-visible:bg-gray-700/60 border-b border-gray-100 dark:border-gray-700/50 last:border-0"
+                    onClick={() => handleResultClick(item)}
+                    aria-label={`${item.kind === 'sent' ? 'Sent' : 'Received'}: ${item.subject}`}
+                  >
+                    <div className="flex items-start justify-between gap-3 min-w-0">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span
+                            className={`shrink-0 inline-block text-xs font-medium px-1.5 py-0.5 rounded ${
+                              item.kind === 'sent'
+                                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                                : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+                            }`}
+                          >
+                            {item.kind === 'sent' ? 'Sent' : 'Received'}
                           </span>
+                          <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                            {item.subject || '(No subject)'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                          {item.kind === 'sent'
+                            ? `To: ${item.to_email}`
+                            : `From: ${item.from_email || 'Unknown'}`}
+                        </p>
+                        {item.snippet && (
+                          <p className="text-xs text-gray-400 dark:text-gray-500 truncate mt-0.5">
+                            {item.snippet}
+                          </p>
                         )}
                       </div>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-        </div>
+                      {item.sent_at && (
+                        <span className="shrink-0 text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap">
+                          {formatDate(item.sent_at)}
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
       </div>
-    </div>
+    </Modal>
   );
 }

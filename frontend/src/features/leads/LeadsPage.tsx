@@ -1,16 +1,21 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { PlusIcon, ViewColumnsIcon } from '@heroicons/react/24/outline';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button, Modal, ConfirmDialog, PaginationBar } from '../../components/ui';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { DuplicateWarningModal } from '../../components/shared/DuplicateWarningModal';
+import { SortableTh } from '../../components/shared/SortableTh';
 import { LeadForm, LeadFormData } from './components/LeadForm';
 import { BulkActionToolbar } from './components/BulkActionToolbar';
 import { LeadEmailCampaignModal } from './components/LeadEmailCampaignModal';
 import { AddToCampaignModal } from './components/AddToCampaignModal';
 import { useLeads, useCreateLead, useUpdateLead, useDeleteLead, leadKeys } from '../../hooks/useLeads';
 import { useCheckDuplicates } from '../../hooks/useDedup';
+import {
+  useListPageDefaults,
+  useListSortPersistence,
+} from '../../hooks/useListPageDefaults';
 import { useUsers } from '../../hooks/useAuth';
 import { bulkUpdate, bulkAssign } from '../../api/importExport';
 import { getStatusBadgeClasses, formatStatusLabel, getScoreColor } from '../../utils';
@@ -61,12 +66,54 @@ function LeadsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
+  const { savedPageSize, recordPageSize } = useListPageDefaults('leads');
+
   const searchQuery = searchParams.get('search') || '';
   const statusFilter = searchParams.get('status') || '';
   const currentPage = Number(searchParams.get('page') || '1');
-  const pageSize = Number(searchParams.get('per_page') || '25');
+  // URL wins; saved pref seeds when URL is bare. Both come from
+  // user-controllable surfaces, so guard against NaN/0/negative — a
+  // garbage `?per_page=abc` or a corrupted localStorage value would
+  // otherwise ship `NaN` to the API and the user gets an empty list
+  // with no error.
+  const urlPerPage = Number(searchParams.get('per_page') || '');
+  const candidatePageSize =
+    Number.isFinite(urlPerPage) && urlPerPage > 0
+      ? urlPerPage
+      : (savedPageSize ?? 25);
+  const pageSize =
+    Number.isFinite(candidatePageSize) && candidatePageSize > 0
+      ? candidatePageSize
+      : 25;
 
   const debouncedSearch = useDebouncedValue(searchQuery, 300);
+  const { sortBy, sortDir, toggle: toggleSort } = useListSortPersistence('leads');
+
+  // Seed `per_page` URL from saved pref on first mount when URL is bare,
+  // so back/forward + share-link stay correct after the saved size is
+  // applied. We wait until `savedPageSize` is known (auth-store
+  // rehydrating async would otherwise leave it `undefined` on first
+  // render, the one-shot fires immediately, and the user's saved size
+  // never seeds the URL on this navigation).
+  const hasSeededPageSize = useRef(false);
+  useEffect(() => {
+    if (hasSeededPageSize.current) return;
+    if (savedPageSize === undefined) return; // wait for prefs hydrate
+    hasSeededPageSize.current = true;
+    if (!searchParams.has('per_page') && savedPageSize !== 25) {
+      setSearchParams(
+        (prev) => {
+          prev.set('per_page', String(savedPageSize));
+          return prev;
+        },
+        { replace: true },
+      );
+    }
+    // Re-evaluate when savedPageSize transitions from undefined → number.
+    // After the ref locks, later prefs changes don't re-seed (URL wins
+    // mid-session; the new saved size is honored on next mount).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedPageSize]);
 
   const setSearchQuery = (q: string) =>
     setSearchParams((prev) => { if (q) prev.set('search', q); else prev.delete('search'); prev.delete('page'); return prev; }, { replace: true });
@@ -74,8 +121,10 @@ function LeadsPage() {
     setSearchParams((prev) => { if (s) prev.set('status', s); else prev.delete('status'); prev.delete('page'); return prev; }, { replace: true });
   const setCurrentPage = (p: number) =>
     setSearchParams((prev) => { if (p === 1) prev.delete('page'); else prev.set('page', String(p)); return prev; }, { replace: true });
-  const setPageSize = (n: number) =>
+  const setPageSize = (n: number) => {
+    recordPageSize(n);
     setSearchParams((prev) => { if (n === 25) prev.delete('per_page'); else prev.set('per_page', String(n)); prev.delete('page'); return prev; }, { replace: true });
+  };
 
   const [showForm, setShowForm] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
@@ -97,7 +146,21 @@ function LeadsPage() {
     page_size: pageSize,
     search: debouncedSearch || undefined,
     status: statusFilter || undefined,
+    ...(sortBy && { order_by: sortBy, order_dir: sortDir }),
   });
+
+  // Sorting changes ordering — drop back to page 1 so we don't land on an
+  // offset that no longer corresponds to where the user expected to be.
+  const handleSortToggle = (field: string) => {
+    setSearchParams(
+      (prev) => {
+        prev.delete('page');
+        return prev;
+      },
+      { replace: true },
+    );
+    toggleSort(field);
+  };
 
   const createLeadMutation = useCreateLead();
   const updateLeadMutation = useUpdateLead();
@@ -491,8 +554,8 @@ function LeadsPage() {
 
             {/* Desktop Table View */}
             <div className="hidden md:block overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                <thead className="bg-gray-50 dark:bg-gray-900">
+              <table data-list-table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-900">
                   <tr>
                     <th scope="col" className="px-4 py-3 w-10">
                       <input
@@ -503,42 +566,22 @@ function LeadsPage() {
                         className="rounded border-gray-300 text-primary-600 focus-visible:ring-primary-500"
                       />
                     </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
-                    >
-                      Name
-                    </th>
+                    <SortableTh field="name" label="Name" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
                     <th
                       scope="col"
                       className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                     >
                       Company
                     </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
-                    >
-                      Status
-                    </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
-                    >
-                      Score
-                    </th>
+                    <SortableTh field="status" label="Status" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
+                    <SortableTh field="score" label="Score" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
                     <th
                       scope="col"
                       className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                     >
                       Source
                     </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
-                    >
-                      Created
-                    </th>
+                    <SortableTh field="created_at" label="Created" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
                     <th scope="col" className="relative px-6 py-3">
                       <span className="sr-only">Actions</span>
                     </th>

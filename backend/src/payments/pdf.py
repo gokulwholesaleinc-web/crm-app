@@ -11,7 +11,11 @@ from src.payments.models import Payment
 
 async def generate_invoice_pdf(db: AsyncSession, payment_id: int) -> bytes:
     """Generate a branded invoice PDF (HTML-bytes) for a payment."""
-    from src.email.branded_templates import TenantBrandingHelper
+    # _safe_hex sanitizes color values before they hit the inline-CSS
+    # sinks below. Same defensive layer used in branded_templates.py
+    # for emails — see PR #269 trio review for the silent-failure bug
+    # this prevents (corrupt-row hex would render an unbranded invoice).
+    from src.email.branded_templates import TenantBrandingHelper, _safe_hex
 
     result = await db.execute(
         select(Payment)
@@ -31,7 +35,12 @@ async def generate_invoice_pdf(db: AsyncSession, payment_id: int) -> bytes:
         branding = await TenantBrandingHelper.get_branding_for_user(db, payment.owner_id)
 
     company = escape(branding.get("company_name", "CRM"))
-    primary = escape(branding.get("primary_color", "#6366f1"))
+    primary = escape(_safe_hex(branding.get("primary_color"), "#6366f1", field="primary_color"))
+    # Page + table-header surface track tenant settings. Light-mode only;
+    # invoices are paper documents and tenant_settings doesn't carry a
+    # dark variant for printables.
+    bg_light = escape(_safe_hex(branding.get("bg_color_light"), "#f9fafb", field="bg_color_light"))
+    surface_light = escape(_safe_hex(branding.get("surface_color_light"), "#ffffff", field="surface_color_light"))
     logo_url = branding.get("logo_url", "")
     footer_text = escape(branding.get("footer_text", ""))
 
@@ -59,7 +68,7 @@ async def generate_invoice_pdf(db: AsyncSession, payment_id: int) -> bytes:
 <meta charset="utf-8"/>
 <title>Invoice #{payment.id}</title>
 <style>
-body {{ font-family: Arial, Helvetica, sans-serif; margin: 40px; color: #111827; }}
+body {{ font-family: Arial, Helvetica, sans-serif; margin: 40px; color: #111827; background-color: {surface_light}; }}
 .header {{ display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid {primary}; padding-bottom: 16px; margin-bottom: 24px; }}
 .company {{ font-size: 20px; font-weight: 700; color: {primary}; }}
 .invoice-title {{ font-size: 28px; font-weight: 700; color: #111827; margin-bottom: 4px; }}
@@ -67,7 +76,7 @@ body {{ font-family: Arial, Helvetica, sans-serif; margin: 40px; color: #111827;
 .meta-table td {{ padding: 4px 8px; font-size: 14px; }}
 .meta-label {{ color: #6b7280; font-weight: 600; width: 140px; }}
 .items-table {{ width: 100%; border-collapse: collapse; margin-bottom: 24px; }}
-.items-table th {{ background-color: #f9fafb; padding: 10px 12px; text-align: left; font-size: 13px; font-weight: 600; color: #6b7280; border-bottom: 2px solid #e5e7eb; }}
+.items-table th {{ background-color: {bg_light}; padding: 10px 12px; text-align: left; font-size: 13px; font-weight: 600; color: #6b7280; border-bottom: 2px solid #e5e7eb; }}
 .items-table td {{ padding: 10px 12px; border-bottom: 1px solid #e5e7eb; font-size: 14px; }}
 .total-row td {{ font-weight: 700; font-size: 16px; border-top: 2px solid #111827; }}
 .amount-col {{ text-align: right; font-variant-numeric: tabular-nums; }}

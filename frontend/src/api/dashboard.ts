@@ -17,12 +17,27 @@ const DASHBOARD_BASE = '/api/dashboard';
 export interface DateRangeParams {
   dateFrom?: string | null;
   dateTo?: string | null;
+  /**
+   * Admin/manager only. When set, scopes the dashboard query to this
+   * user's data instead of the caller's. Sales reps' values are
+   * silently coerced back to themselves by the backend.
+   */
+  ownerId?: number | null;
 }
 
 function buildDateParams(dateRange?: DateRangeParams): Record<string, string> {
   const params: Record<string, string> = {};
   if (dateRange?.dateFrom) params.date_from = dateRange.dateFrom;
   if (dateRange?.dateTo) params.date_to = dateRange.dateTo;
+  // Defense-in-depth: only emit owner_id when it's a finite integer.
+  // Today the producers are <select> (numeric option values) and
+  // localStorage (Number.isFinite-guarded), but a stray NaN/Infinity
+  // would otherwise serialize as "NaN" and 422 on the backend with no
+  // visible error toast wired up.
+  const owner = dateRange?.ownerId;
+  if (typeof owner === 'number' && Number.isInteger(owner)) {
+    params.owner_id = String(owner);
+  }
   return params;
 }
 

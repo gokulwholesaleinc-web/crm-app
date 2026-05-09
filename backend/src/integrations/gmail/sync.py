@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import re
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
@@ -10,6 +11,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.integrations.gmail.client import GmailAuthError, GmailClient
 from src.integrations.gmail.models import GmailBackfillState, GmailConnection, GmailSyncState
+
+# Strips HTML tags so a body_html-only message produces a readable snippet
+# instead of escaped <p>/<div>/<br> text in the notification email.
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+_WHITESPACE_RE = re.compile(r"\s+")
+
+
+def _strip_html_to_text(html: str) -> str:
+    """Best-effort HTML → plain text for inbound email body snippets.
+
+    Intentionally crude — full HTML parsing isn't worth the dep for a
+    280-char preview. Drops every tag, collapses whitespace, returns the
+    first chunk. The notification template still escapes the result, so
+    this is purely a UX improvement: stops the user from seeing literal
+    ``<p>Looks great</p>`` when the inbound was HTML-only.
+    """
+    if not html:
+        return ""
+    no_tags = _HTML_TAG_RE.sub(" ", html)
+    return _WHITESPACE_RE.sub(" ", no_tags).strip()
 
 # Backfill loop is deliberately sequential (per-message awaits in a for-
 # loop) so we don't bombard Gmail's per-account rate limits. Removed a
@@ -424,9 +445,65 @@ async def _store_inbound(
         entity_type=entity_type,
         entity_id=entity_id,
         participant_emails=recipients,
+        # Non-inline attachments (filenames + sizes + Gmail attachment_id
+        # so a future "download" UI can fetch them on demand). Inline
+        # images that already got embedded into body_html as data URIs
+        # ARE included here too, marked is_inline=True, so the metadata
+        # is symmetric and audit-traceable.
+        attachments={"items": msg.get("attachments") or []} if msg.get("attachments") else None,
     )
     db.add(row)
     await db.flush()
+
+    # Notify users who are actual participants (To/CC) when an inbound reply
+    # lands. Routing by Contact.owner_id would ping whoever imported the
+    # contact even when they're not on the thread — a privacy leak.
+    # Wrapped in per-user SAVEPOINTs so a failure on one recipient cannot
+    # poison the parent transaction and silently destroy the InboundEmail row
+    # we just flushed (without the savepoint an exception leaves the session
+    # in ROLLBACK_REQUIRED state and the outer commit fails with
+    # PendingRollbackError). Pass ``from_header`` so the display name reaches
+    # the notification surface.
+    if (
+        entity_type == "contacts"
+        and entity_id is not None
+        and msg.get("in_reply_to")
+    ):
+        from src.email.participants import find_user_ids_by_addresses
+        from src.notifications.service import notify_on_email_reply_received
+
+        recipient_user_ids = await find_user_ids_by_addresses(db, recipients)
+        sender_name = _parse_name_from(msg.get("from_header") or msg.get("from") or "")
+        snippet = (
+            msg.get("body_text")
+            or _strip_html_to_text(msg.get("body_html") or "")
+            or ""
+        )
+        for user_id in recipient_user_ids:
+            try:
+                async with db.begin_nested():
+                    await notify_on_email_reply_received(
+                        db=db,
+                        recipient_user_id=user_id,
+                        contact_id=entity_id,
+                        sender_email=from_addr,
+                        sender_name=sender_name,
+                        subject_line=msg.get("subject") or "",
+                        snippet=snippet,
+                        participant_emails=recipients,
+                    )
+            except Exception:
+                logger.exception(
+                    "notify_on_email_reply_received failed for user %s inbound %s",
+                    user_id,
+                    row.id,
+                )
+
+
+def _parse_name_from(addr_header: str) -> str:
+    """Extract display name from 'Name <email>' format; return '' for bare addresses."""
+    m = re.match(r"^\s*(.+?)\s*<[^>]+>\s*$", addr_header or "")
+    return m.group(1).strip() if m else ""
 
 
 def _collect_recipients(msg: dict) -> list[str]:

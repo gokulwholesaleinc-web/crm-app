@@ -5,6 +5,8 @@ company info from TenantSettings so every outbound email matches the
 tenant's brand.
 """
 
+import logging
+import re
 from html import escape
 
 from sqlalchemy import select
@@ -13,10 +15,43 @@ from sqlalchemy.orm import selectinload
 
 from src.whitelabel.models import Tenant, TenantSettings, TenantUser
 
+logger = logging.getLogger(__name__)
+
 # Schemes allowed in outbound email links. ``html.escape`` does not block
 # ``javascript:``/``data:`` URLs inside ``href``/``src`` attributes, so every
 # externally-sourced URL that lands in an email must also pass this filter.
 _SAFE_URL_SCHEMES = ("https://", "http://", "mailto:")
+
+# Mirrors the ``_HEX_COLOR_RE`` in ``whitelabel/schemas.py`` and the
+# frontend ``HEX_COLOR_RE`` in ``utils/colorValidation.ts``. Three- and
+# six-digit hex only — eight-digit is rejected because the underlying
+# ``tenant_settings`` columns are ``VARCHAR(7)``.
+_HEX_COLOR_RE = re.compile(r"^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+
+
+def _safe_hex(value: str | None, fallback: str, *, field: str = "color") -> str:
+    """Return ``value`` if it's a valid hex color, else ``fallback``.
+
+    Defensive second layer for the email/PDF render path. ``TenantSettings``
+    has a Pydantic ``_validate_color_field`` that rejects bad hex on PATCH
+    (PR #263 trio fix), but ``TenantBrandingHelper.get_branding_for_user``
+    reads straight from the ORM — it can't catch a row that pre-dates the
+    validator, was inserted via raw SQL, or made it through a buggy
+    migration. Without this guard, a malformed value flows verbatim into
+    a ``style="background-color:zzz;"`` declaration that email clients
+    silently drop, and the customer sees an unbranded rendering with no
+    log entry to diagnose from.
+
+    Logs at WARNING when fallback fires so Sentry can surface corrupt
+    rows; otherwise this would replace one silent failure with another.
+    """
+    if isinstance(value, str) and _HEX_COLOR_RE.match(value.strip()):
+        return value.strip()
+    if value not in (None, ""):
+        logger.warning(
+            "branding %s fell back to %s (invalid hex: %r)", field, fallback, value
+        )
+    return fallback
 
 
 def _safe_url(url: str | None) -> str:
@@ -50,6 +85,13 @@ _DEFAULT_BRANDING = {
     "primary_color": "#6366f1",
     "secondary_color": "#8b5cf6",
     "accent_color": "#22c55e",
+    # Page + surface backgrounds (light mode only on customer-facing
+    # surfaces — public quote/contract/proposal pages and emails
+    # render light by default; the app's dark mode is for authenticated
+    # sellers and lives on its own CSS-var path). Defaults match the
+    # `tenant_settings` column defaults.
+    "bg_color_light": "#f9fafb",
+    "surface_color_light": "#ffffff",
     "footer_text": "",
     "privacy_policy_url": "",
     "terms_of_service_url": "",
@@ -105,6 +147,8 @@ class TenantBrandingHelper:
             "primary_color": s.primary_color or _DEFAULT_BRANDING["primary_color"],
             "secondary_color": s.secondary_color or _DEFAULT_BRANDING["secondary_color"],
             "accent_color": s.accent_color or _DEFAULT_BRANDING["accent_color"],
+            "bg_color_light": s.bg_color_light or _DEFAULT_BRANDING["bg_color_light"],
+            "surface_color_light": s.surface_color_light or _DEFAULT_BRANDING["surface_color_light"],
             "footer_text": s.footer_text or "",
             "privacy_policy_url": s.privacy_policy_url or "",
             "terms_of_service_url": s.terms_of_service_url or "",
@@ -134,9 +178,23 @@ def _base_email_html(
     Uses inline CSS for maximum email-client compatibility (Gmail,
     Outlook, Apple Mail).  Includes dark-mode media query support.
     """
-    primary = escape(branding.get("primary_color", "#6366f1"))
-    escape(branding.get("secondary_color", "#8b5cf6"))
-    accent = escape(branding.get("accent_color", "#22c55e"))
+    # _safe_hex sanitizes each color before it reaches the inline-CSS
+    # sinks below. ``escape`` is HTML-escaping, not hex validation; a
+    # corrupt-row payload of "red" or "#zzz" would otherwise produce
+    # ``background-color:red;`` (which clients quietly drop) and the
+    # customer would see a white email with no diagnostic trace. See
+    # _safe_hex docstring for why ORM-level reads bypass the schema
+    # validator.
+    primary = escape(_safe_hex(branding.get("primary_color"), "#6366f1", field="primary_color"))
+    secondary = escape(_safe_hex(branding.get("secondary_color"), "#8b5cf6", field="secondary_color"))
+    accent = escape(_safe_hex(branding.get("accent_color"), "#22c55e", field="accent_color"))
+    # Light-mode page + card surface colors. The email's dark-mode media
+    # query keeps its hardcoded #1f2937 / #111827 — those approximate
+    # the tenant_settings dark defaults and refactoring them through
+    # tenant settings risks regressions in finicky email clients
+    # (Outlook desktop especially) for marginal gain.
+    bg_light = escape(_safe_hex(branding.get("bg_color_light"), "#f9fafb", field="bg_color_light"))
+    surface_light = escape(_safe_hex(branding.get("surface_color_light"), "#ffffff", field="surface_color_light"))
     company = escape(branding.get("company_name", "CRM"))
     logo_url = _safe_url(branding.get("logo_url", ""))
     footer_text = escape(branding.get("footer_text", ""))
@@ -153,11 +211,23 @@ def _base_email_html(
     # company wordmark and suppress the text company name next to it —
     # otherwise you get "LINKCREATIVE  Link Creative" side-by-side.
     if logo_url:
+        # White pill wraps the logo so it stays visible regardless of header
+        # primary color (e.g. a white logo on a white header would disappear).
+        # width="224" on the table (200px logo + 12px×2 padding) is required by
+        # Outlook 2013-2021's Word rendering engine, which ignores display:inline-table
+        # and CSS max-width on tables — without it the pill expands to full 600px.
+        # width="200" on the img caps natural pixel width in Outlook the same way.
         logo_html = (
+            f'<table role="presentation" cellpadding="0" cellspacing="0" '
+            f'width="224" '
+            f'style="display:inline-table;vertical-align:middle;margin-right:12px;'
+            f'background-color:#ffffff;border-radius:6px;">'
+            f'<tr><td style="padding:8px 12px;">'
             f'<img src="{escape(logo_url)}" alt="{company}" '
-            f'height="40" '
-            f'style="display:inline-block;vertical-align:middle;margin-right:12px;'
-            f'height:40px;width:auto;max-width:200px;border-radius:6px;" />'
+            f'width="200" height="40" '
+            f'style="display:inline-block;vertical-align:middle;'
+            f'height:40px;width:200px;max-width:200px;" />'
+            f'</td></tr></table>'
         )
         company_label = ""
     else:
@@ -220,24 +290,25 @@ def _base_email_html(
 }}
 </style>
 </head>
-<body style="margin:0;padding:0;background-color:#f3f4f6;font-family:Arial,Helvetica,sans-serif;">
-<table role="presentation" class="email-bg" cellpadding="0" cellspacing="0" width="100%" style="background-color:#f3f4f6;">
+<body style="margin:0;padding:0;background-color:{bg_light};font-family:Arial,Helvetica,sans-serif;">
+<table role="presentation" class="email-bg" cellpadding="0" cellspacing="0" width="100%" style="background-color:{bg_light};">
 <tr><td align="center" style="padding:24px 16px;">
 
 <!-- Header -->
 <table role="presentation" cellpadding="0" cellspacing="0" width="600" style="max-width:600px;width:100%;">
-<tr><td style="background-color:{primary};padding:20px 24px;border-radius:8px 8px 0 0;">
+<tr><td style="background-color:{primary};padding:24px 32px;border-radius:8px 8px 0 0;">
   <table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr>
     <td style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:18px;font-weight:700;">
       {logo_html}{company_label}
     </td>
   </tr></table>
 </td></tr>
+<tr><td style="height:3px;line-height:3px;font-size:0;background-color:{secondary};">&nbsp;</td></tr>
 </table>
 
 <!-- Body -->
-<table role="presentation" class="email-card" cellpadding="0" cellspacing="0" width="600" style="max-width:600px;width:100%;background-color:#ffffff;">
-<tr><td style="padding:32px 24px;">
+<table role="presentation" class="email-card" cellpadding="0" cellspacing="0" width="600" style="max-width:600px;width:100%;background-color:{surface_light};">
+<tr><td style="padding:32px 32px;">
   <h1 class="email-headline" style="margin:0 0 16px;font-family:Arial,Helvetica,sans-serif;font-size:22px;font-weight:700;color:#111827;">{escape(headline)}</h1>
   <div class="email-text" style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;color:#374151;">
     {body_html}
@@ -430,7 +501,7 @@ def render_payment_receipt_email(branding: dict, payment_data: dict) -> tuple[st
     currency = escape(str(payment_data.get("currency", "USD")))
     pay_date = escape(str(payment_data.get("payment_date", "")))
     pay_method = escape(str(payment_data.get("payment_method", "")))
-    accent = escape(branding.get("accent_color", "#22c55e"))
+    accent = escape(_safe_hex(branding.get("accent_color"), "#22c55e", field="accent_color"))
 
     items = payment_data.get("items", [])
     items_html = ""
@@ -502,7 +573,7 @@ def render_payment_invoice_email(branding: dict, payment_data: dict) -> tuple[st
     amount = escape(str(payment_data.get("amount", "0.00")))
     currency = escape(str(payment_data.get("currency", "USD")))
     due_date = escape(str(payment_data.get("due_date", "")))
-    accent = escape(branding.get("accent_color", "#22c55e"))
+    accent = escape(_safe_hex(branding.get("accent_color"), "#22c55e", field="accent_color"))
     pay_url = _safe_url(payment_data.get("payment_url", ""))
 
     pay_button = ""
@@ -543,6 +614,389 @@ def render_payment_invoice_email(branding: dict, payment_data: dict) -> tuple[st
         subject=subject,
         headline=f"Invoice #{invoice_no}",
         body_html=body_html,
+    )
+    return subject, html
+
+
+# ---------------------------------------------------------------------------
+# Notification matrix templates
+# ---------------------------------------------------------------------------
+#
+# These mirror the user-facing event keys exposed in the Settings →
+# Notifications matrix (see ``frontend/src/api/account.ts``
+# ``NOTIFICATION_EVENT_TYPES``). Each renderer returns ``(subject,
+# html_body)`` so the dispatcher can pass both straight through to
+# ``EmailService.queue_email``.
+
+_TRUNCATE_SNIPPET_CHARS = 280
+
+
+def _truncate(text: str, limit: int) -> str:
+    """Trim ``text`` to ``limit`` chars with a trailing ellipsis when cut."""
+    s = (text or "").strip()
+    if len(s) <= limit:
+        return s
+    # Use the typographic ellipsis per CLAUDE.md.
+    return s[: limit - 1].rstrip() + "…"
+
+
+def render_lead_assigned_email(
+    branding: dict, data: dict
+) -> tuple[str, str]:
+    """Returns (subject, html_body) for a "lead assigned to you" email.
+
+    Expected ``data`` keys: ``lead_full_name``, ``lead_email`` (optional),
+    ``lead_company_name`` (optional), ``lead_url`` (deep link), and
+    ``assigner_name`` (optional). The assigner falls back to the
+    branding company name when not provided.
+    """
+    lead_name = escape(str(data.get("lead_full_name") or "a new lead"))
+    lead_email = escape(str(data.get("lead_email") or ""))
+    lead_company = escape(str(data.get("lead_company_name") or ""))
+    assigner = escape(str(
+        data.get("assigner_name") or branding.get("company_name") or "CRM"
+    ))
+    lead_url = data.get("lead_url")
+
+    rows = [f'<tr><td style="padding:4px 0;color:#6b7280;width:120px;">Lead</td>'
+            f'<td style="padding:4px 0;font-weight:600;color:#111827;">{lead_name}</td></tr>']
+    if lead_company:
+        rows.append(
+            f'<tr><td style="padding:4px 0;color:#6b7280;">Company</td>'
+            f'<td style="padding:4px 0;color:#111827;">{lead_company}</td></tr>'
+        )
+    if lead_email:
+        rows.append(
+            f'<tr><td style="padding:4px 0;color:#6b7280;">Email</td>'
+            f'<td style="padding:4px 0;color:#111827;">{lead_email}</td></tr>'
+        )
+
+    body_html = f"""\
+<p>{assigner} has assigned a new lead to you.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color:#f9fafb;border-radius:6px;padding:16px;margin:16px 0;font-size:14px;">
+<tbody>
+{''.join(rows)}
+</tbody>
+</table>
+<p style="color:#6b7280;font-size:13px;">Open the lead to add an activity, qualify it, or hand it off.</p>"""
+
+    subject = f"New lead assigned: {data.get('lead_full_name') or 'unnamed lead'}"
+    html = render_branded_email(
+        branding=branding,
+        subject=subject,
+        headline="New lead assigned to you",
+        body_html=body_html,
+        cta_text="Open lead" if lead_url else None,
+        cta_url=lead_url,
+    )
+    return subject, html
+
+
+def render_task_due_email(branding: dict, data: dict) -> tuple[str, str]:
+    """Returns (subject, html_body) for a "task due soon" email.
+
+    Expected ``data`` keys: ``activity_subject``, ``activity_due_at``
+    (preformatted string), ``activity_url`` (deep link), ``entity_label``
+    (optional — e.g. "Acme Inc · John Doe").
+    """
+    activity_subject = escape(str(data.get("activity_subject") or "Untitled task"))
+    due_at = escape(str(data.get("activity_due_at") or ""))
+    entity_label = escape(str(data.get("entity_label") or ""))
+    activity_url = data.get("activity_url")
+
+    rows = [f'<tr><td style="padding:4px 0;color:#6b7280;width:120px;">Task</td>'
+            f'<td style="padding:4px 0;font-weight:600;color:#111827;">{activity_subject}</td></tr>']
+    if due_at:
+        rows.append(
+            f'<tr><td style="padding:4px 0;color:#6b7280;">Due</td>'
+            f'<td style="padding:4px 0;color:#111827;">{due_at}</td></tr>'
+        )
+    if entity_label:
+        rows.append(
+            f'<tr><td style="padding:4px 0;color:#6b7280;">Linked to</td>'
+            f'<td style="padding:4px 0;color:#111827;">{entity_label}</td></tr>'
+        )
+
+    body_html = f"""\
+<p>You have a task coming due in your CRM.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color:#f9fafb;border-radius:6px;padding:16px;margin:16px 0;font-size:14px;">
+<tbody>
+{''.join(rows)}
+</tbody>
+</table>"""
+
+    subject = f"Task due — {data.get('activity_subject') or 'Untitled task'}"
+    html = render_branded_email(
+        branding=branding,
+        subject=subject,
+        headline="Task due soon",
+        body_html=body_html,
+        cta_text="Open task" if activity_url else None,
+        cta_url=activity_url,
+    )
+    return subject, html
+
+
+def render_mention_email(branding: dict, data: dict) -> tuple[str, str]:
+    """Returns (subject, html_body) for an "@mention" email.
+
+    Expected ``data`` keys: ``author_name``, ``entity_label`` (e.g. the
+    contact / lead / opportunity title), ``entity_url`` (deep link), and
+    ``content_snippet`` (the comment body — truncated to 280 chars before
+    rendering so a long thread doesn't blow out the email layout).
+    """
+    author = escape(str(data.get("author_name") or "Someone"))
+    entity_label = escape(str(data.get("entity_label") or "an item"))
+    entity_url = data.get("entity_url")
+    snippet_raw = _truncate(str(data.get("content_snippet") or ""), _TRUNCATE_SNIPPET_CHARS)
+    snippet = escape(snippet_raw) if snippet_raw else ""
+
+    snippet_block = (
+        f'<blockquote style="margin:16px 0;padding:12px 16px;border-left:3px solid '
+        f'{escape(_safe_hex(branding.get("primary_color"), "#6366f1", field="primary_color"))};background-color:#f9fafb;'
+        f'font-size:14px;color:#374151;white-space:pre-wrap;">{snippet}</blockquote>'
+        if snippet else ""
+    )
+
+    body_html = f"""\
+<p><strong>{author}</strong> mentioned you on <strong>{entity_label}</strong>.</p>
+{snippet_block}"""
+
+    subject = f"{data.get('author_name') or 'Someone'} mentioned you on {data.get('entity_label') or 'an item'}"
+    html = render_branded_email(
+        branding=branding,
+        subject=subject,
+        headline=f"{data.get('author_name') or 'Someone'} mentioned you",
+        body_html=body_html,
+        cta_text="View thread" if entity_url else None,
+        cta_url=entity_url,
+    )
+    return subject, html
+
+
+def render_email_reply_email(branding: dict, data: dict) -> tuple[str, str]:
+    """Returns (subject, html_body) for an "inbound email reply" notification.
+
+    Expected ``data`` keys: ``sender_email``, ``sender_name`` (optional),
+    ``subject_line`` (the inbound message's subject), ``snippet`` (body
+    preview — truncated to 280 chars), and ``thread_url`` (deep link to
+    the CRM thread view).
+    """
+    sender_email = escape(str(data.get("sender_email") or ""))
+    sender_name = escape(str(data.get("sender_name") or "")) or sender_email or "A contact"
+    raw_subject = str(data.get("subject_line") or "(no subject)")
+    subject_line = escape(raw_subject)
+    snippet_raw = _truncate(str(data.get("snippet") or ""), _TRUNCATE_SNIPPET_CHARS)
+    snippet = escape(snippet_raw) if snippet_raw else ""
+    thread_url = data.get("thread_url")
+
+    sender_block = (
+        f'<p style="margin:0 0 12px;color:#374151;">'
+        f'<strong>{sender_name}</strong>'
+        + (f' &lt;{sender_email}&gt;' if sender_email and sender_name != sender_email else '')
+        + '</p>'
+    )
+    snippet_block = (
+        f'<blockquote style="margin:0;padding:12px 16px;border-left:3px solid '
+        f'{escape(_safe_hex(branding.get("primary_color"), "#6366f1", field="primary_color"))};background-color:#f9fafb;'
+        f'font-size:14px;color:#374151;white-space:pre-wrap;">{snippet}</blockquote>'
+        if snippet else ""
+    )
+
+    body_html = f"""\
+<p>You have a new email reply on a thread you own.</p>
+{sender_block}
+<p style="margin:0 0 16px;font-size:15px;color:#374151;"><strong style="color:#6b7280;">Subject:</strong> <span style="font-weight:600;color:#111827;">{subject_line}</span></p>
+{snippet_block}"""
+
+    subject = f"Reply received — {raw_subject}"
+    html = render_branded_email(
+        branding=branding,
+        subject=subject,
+        headline="Email reply received",
+        body_html=body_html,
+        cta_text="Open thread" if thread_url else None,
+        cta_url=thread_url,
+    )
+    return subject, html
+
+
+def render_contract_expiring_email(
+    branding: dict, data: dict
+) -> tuple[str, str]:
+    """Returns (subject, html_body) for the daily "contract expiring" alert.
+
+    Expected ``data`` keys: ``contract_title``, ``company_name``
+    (optional), ``end_date`` (preformatted string), ``days_left`` (int),
+    ``contract_url`` (deep link).
+    """
+    title = escape(str(data.get("contract_title") or "Contract"))
+    company = escape(str(data.get("company_name") or ""))
+    end_date = escape(str(data.get("end_date") or ""))
+    days_left = int(data.get("days_left") or 0)
+    contract_url = data.get("contract_url")
+
+    plural = "" if days_left == 1 else "s"
+    rows = [f'<tr><td style="padding:4px 0;color:#6b7280;width:120px;">Contract</td>'
+            f'<td style="padding:4px 0;font-weight:600;color:#111827;">{title}</td></tr>']
+    if company:
+        rows.append(
+            f'<tr><td style="padding:4px 0;color:#6b7280;">Company</td>'
+            f'<td style="padding:4px 0;color:#111827;">{company}</td></tr>'
+        )
+    if end_date:
+        rows.append(
+            f'<tr><td style="padding:4px 0;color:#6b7280;">Expires</td>'
+            f'<td style="padding:4px 0;color:#111827;">{end_date}</td></tr>'
+        )
+
+    body_html = f"""\
+<p>The contract below expires in <strong>{days_left} day{plural}</strong>. Renewal usually takes a few business days — start the conversation now to avoid a service gap.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color:#f9fafb;border-radius:6px;padding:16px;margin:16px 0;font-size:14px;">
+<tbody>
+{''.join(rows)}
+</tbody>
+</table>"""
+
+    subject = f"Contract expiring in {days_left} day{plural} — {data.get('contract_title') or 'Contract'}"
+    html = render_branded_email(
+        branding=branding,
+        subject=subject,
+        headline=f"Contract expiring in {days_left} day{plural}",
+        body_html=body_html,
+        cta_text="Open contract" if contract_url else None,
+        cta_url=contract_url,
+    )
+    return subject, html
+
+
+def render_contract_signed_email(
+    branding: dict, data: dict
+) -> tuple[str, str]:
+    """Returns (subject, html_body) for the "contract signed" notification.
+
+    Used for **two distinct flows**:
+      1. signer-side transactional copy — caller supplies ``audience='signer'``,
+         ``signer_name``. Always-on, never matrix-gated.
+      2. owner-side notification — caller supplies ``audience='owner'``,
+         ``signer_name``, ``signed_at``, ``contract_url``. Matrix-gated on
+         ``contract_signed``.
+
+    Expected ``data`` keys: ``audience`` ('signer' | 'owner'),
+    ``contract_title``, ``signer_name``, ``signed_at`` (preformatted str,
+    optional), ``contract_url`` (optional — owner only).
+    """
+    title = escape(str(data.get("contract_title") or "Contract"))
+    signer_name = escape(str(data.get("signer_name") or ""))
+    signed_at = escape(str(data.get("signed_at") or ""))
+    contract_url = data.get("contract_url")
+    audience = (data.get("audience") or "owner").lower()
+    company = escape(branding.get("company_name", "CRM"))
+
+    if audience == "signer":
+        # Distinct copy when the PDF couldn't be rendered — saying
+        # "attached for your records" while attaching nothing is
+        # actively misleading.
+        if data.get("pdf_pending"):
+            body_html = f"""\
+<p>Hi {signer_name or 'there'},</p>
+<p>Thank you for signing <strong>{title}</strong>. Your signed PDF copy will be sent once it's ready — usually within a few minutes. Reply to this email if you don't see it shortly.</p>
+<p>{company}</p>"""
+        else:
+            body_html = f"""\
+<p>Hi {signer_name or 'there'},</p>
+<p>Thank you for signing <strong>{title}</strong>. A signed PDF copy is attached for your records.</p>
+<p>{company}</p>"""
+        subject = f"Signed copy — {data.get('contract_title') or 'Contract'}"
+        headline = "Thank you for signing"
+        cta_text = None
+        cta_url = None
+    else:
+        rows = [f'<tr><td style="padding:4px 0;color:#6b7280;width:120px;">Contract</td>'
+                f'<td style="padding:4px 0;font-weight:600;color:#111827;">{title}</td></tr>']
+        if signer_name:
+            rows.append(
+                f'<tr><td style="padding:4px 0;color:#6b7280;">Signed by</td>'
+                f'<td style="padding:4px 0;color:#111827;">{signer_name}</td></tr>'
+            )
+        if signed_at:
+            rows.append(
+                f'<tr><td style="padding:4px 0;color:#6b7280;">Signed at</td>'
+                f'<td style="padding:4px 0;color:#111827;">{signed_at}</td></tr>'
+            )
+        body_html = f"""\
+<p>Your contract has been electronically signed.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color:#f9fafb;border-radius:6px;padding:16px;margin:16px 0;font-size:14px;">
+<tbody>
+{''.join(rows)}
+</tbody>
+</table>"""
+        subject = f"Contract signed — {data.get('contract_title') or 'Contract'}"
+        headline = "Contract signed"
+        cta_text = "Open contract" if contract_url else None
+        cta_url = contract_url
+
+    html = render_branded_email(
+        branding=branding,
+        subject=subject,
+        headline=headline,
+        body_html=body_html,
+        cta_text=cta_text,
+        cta_url=cta_url,
+    )
+    return subject, html
+
+
+def render_proposal_signed_email(
+    branding: dict, data: dict
+) -> tuple[str, str]:
+    """Returns (subject, html_body) for the OWNER-side "proposal signed" notification.
+
+    Distinct from :func:`render_proposal_email` — that one is the
+    send-for-signature email to the signer; this is the post-acceptance
+    notification to the internal owner. Signer-side post-acceptance copy
+    (with the signed PDF attached) stays in proposals/service.py and is
+    not template-ified to keep the attachment-heavy logic local.
+
+    Expected ``data`` keys: ``proposal_title``, ``signer_name`` (signer
+    of the e-sign), ``signed_at`` (preformatted str, optional),
+    ``proposal_url`` (deep link).
+    """
+    title = escape(str(data.get("proposal_title") or "Proposal"))
+    signer_name = escape(str(data.get("signer_name") or ""))
+    signed_at = escape(str(data.get("signed_at") or ""))
+    proposal_url = data.get("proposal_url")
+
+    rows = [f'<tr><td style="padding:4px 0;color:#6b7280;width:120px;">Proposal</td>'
+            f'<td style="padding:4px 0;font-weight:600;color:#111827;">{title}</td></tr>']
+    if signer_name:
+        rows.append(
+            f'<tr><td style="padding:4px 0;color:#6b7280;">Signed by</td>'
+            f'<td style="padding:4px 0;color:#111827;">{signer_name}</td></tr>'
+        )
+    if signed_at:
+        rows.append(
+            f'<tr><td style="padding:4px 0;color:#6b7280;">Signed at</td>'
+            f'<td style="padding:4px 0;color:#111827;">{signed_at}</td></tr>'
+        )
+
+    body_html = f"""\
+<p>Your proposal has been accepted and electronically signed.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color:#f9fafb;border-radius:6px;padding:16px;margin:16px 0;font-size:14px;">
+<tbody>
+{''.join(rows)}
+</tbody>
+</table>
+<p style="color:#6b7280;font-size:13px;">If billing is configured the next step (Stripe invoice or checkout) is automatically queued.</p>"""
+
+    subject = f"Proposal signed — {data.get('proposal_title') or 'Proposal'}"
+    html = render_branded_email(
+        branding=branding,
+        subject=subject,
+        headline="Proposal signed",
+        body_html=body_html,
+        cta_text="Open proposal" if proposal_url else None,
+        cta_url=proposal_url,
     )
     return subject, html
 

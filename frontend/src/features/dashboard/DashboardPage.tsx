@@ -1,15 +1,17 @@
-import { lazy, Suspense, useState } from 'react';
+import { useState } from 'react';
 import { Modal } from '../../components/ui/Modal';
+import { ViewingAsSelector } from './components/ViewingAsSelector';
+import { loadStoredViewingAs, type ViewingAsValue } from './components/viewingAsStorage';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { NumberCard } from './components/NumberCard';
 import { ChartCard } from './components/ChartCard';
 import { SalesFunnelChart } from './components/SalesFunnelChart';
 import { ReportWidgetCard } from './components/ReportWidgetCard';
+import { SharedWithMeWidget } from './SharedWithMeWidget';
 import { SkeletonCard, SkeletonChart } from '../../components/ui/Skeleton';
 import { ErrorEmptyState } from '../../components/ui/EmptyState';
 import { DateRangePicker } from '../../components/ui/DateRangePicker';
 import type { DateRange } from '../../components/ui/DateRangePicker';
-const DashboardRecommendations = lazy(() => import('../../components/ai/DashboardRecommendations').then(m => ({ default: m.DashboardRecommendations })));
 import { formatCurrency, formatDate } from '../../utils';
 import { useKPIs, usePipelineFunnelChart, useLeadsBySourceChart, useSalesFunnel, useSalesKpis } from '../../hooks/useDashboard';
 import { useUserTimeline } from '../../hooks/useActivities';
@@ -18,6 +20,7 @@ import { useSavedReports } from '../../hooks/useReports';
 import { listDashboardWidgets, createDashboardWidget } from '../../api/dashboard';
 import { useAuthStore } from '../../store/authStore';
 import type { NumberCardData, ChartDataPoint } from '../../types';
+import { getBrandColor } from '../../utils/chartPalette';
 
 function buildCardMap(cards: NumberCardData[]): Map<string, NumberCardData> {
   return new Map(cards.map(c => [c.id, c]));
@@ -171,13 +174,18 @@ function DashboardPage() {
   usePageTitle('Dashboard');
 
   const [dateRange, setDateRange] = useState<DateRange>({ dateFrom: null, dateTo: null });
+  const [viewingAs, setViewingAs] = useState<ViewingAsValue>(() => loadStoredViewingAs());
 
-  const { data: kpiCards, isLoading: isLoadingKpis, error: dashboardError } = useKPIs(dateRange);
-  const { data: pipelineData } = usePipelineFunnelChart(dateRange);
-  const { data: leadsBySourceData } = useLeadsBySourceChart(dateRange);
+  // ownerId is null for sales reps and for admins viewing the tenant
+  // rollup; non-null when an admin has selected a peer.
+  const dashboardParams = { ...dateRange, ownerId: viewingAs };
+
+  const { data: kpiCards, isLoading: isLoadingKpis, error: dashboardError } = useKPIs(dashboardParams);
+  const { data: pipelineData } = usePipelineFunnelChart(dashboardParams);
+  const { data: leadsBySourceData } = useLeadsBySourceChart(dashboardParams);
   const { data: timelineData } = useUserTimeline();
-  const { data: funnelData } = useSalesFunnel(dateRange);
-  const { data: salesKpis } = useSalesKpis(dateRange);
+  const { data: funnelData } = useSalesFunnel(dashboardParams);
+  const { data: salesKpis } = useSalesKpis(dashboardParams);
 
   const error = dashboardError instanceof Error ? dashboardError.message : dashboardError ? String(dashboardError) : null;
 
@@ -214,7 +222,10 @@ function DashboardPage() {
             Overview of your CRM performance
           </p>
         </div>
-        <DateRangePicker onChange={(range) => setDateRange(range)} />
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+          <ViewingAsSelector value={viewingAs} onChange={setViewingAs} />
+          <DateRangePicker onChange={(range) => setDateRange(range)} />
+        </div>
       </div>
 
       {/* KPI Cards */}
@@ -232,6 +243,7 @@ function DashboardPage() {
               title="Total Contacts"
               value={data?.totalContacts ?? 0}
               href="/contacts"
+              colorVariant="primary"
               trend={{
                 value: data?.contactsTrend ?? 0,
                 isPositive: (data?.contactsTrend ?? 0) >= 0,
@@ -257,6 +269,7 @@ function DashboardPage() {
               title="Total Leads"
               value={data?.totalLeads ?? 0}
               href="/leads"
+              colorVariant="secondary"
               trend={{
                 value: data?.leadsTrend ?? 0,
                 isPositive: (data?.leadsTrend ?? 0) >= 0,
@@ -282,6 +295,7 @@ function DashboardPage() {
               title="Open Opportunities"
               value={data?.totalOpportunities ?? 0}
               href="/pipeline"
+              colorVariant="accent"
               trend={{
                 value: data?.opportunitiesTrend ?? 0,
                 isPositive: (data?.opportunitiesTrend ?? 0) >= 0,
@@ -307,6 +321,7 @@ function DashboardPage() {
               title="Total Revenue"
               value={formatCurrency(data?.totalRevenue ?? 0, 'USD')}
               href="/payments"
+              colorVariant="primary"
               trend={{
                 value: data?.revenueTrend ?? 0,
                 isPositive: (data?.revenueTrend ?? 0) >= 0,
@@ -345,6 +360,7 @@ function DashboardPage() {
             title="Quotes Sent"
             value={salesKpis.quotes_sent}
             href="/quotes"
+            colorVariant="primary"
             icon={
               <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -355,6 +371,7 @@ function DashboardPage() {
             title="Proposals Sent"
             value={salesKpis.proposals_sent}
             href="/proposals"
+            colorVariant="secondary"
             icon={
               <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -365,6 +382,7 @@ function DashboardPage() {
             title="Payments Collected"
             value={formatCurrency(salesKpis.payments_collected_total, 'USD')}
             href="/payments"
+            colorVariant="accent"
             icon={
               <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -374,6 +392,7 @@ function DashboardPage() {
           <NumberCard
             title="Quote Conversion"
             value={`${salesKpis.quote_to_payment_conversion_rate}%`}
+            colorVariant="primary"
             icon={
               <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
@@ -383,10 +402,8 @@ function DashboardPage() {
         </div>
       )}
 
-      {/* AI Suggestions */}
-      <Suspense fallback={null}>
-        <DashboardRecommendations maxItems={3} />
-      </Suspense>
+      {/* Shared with me */}
+      <SharedWithMeWidget />
 
       {/* Report Widgets */}
       <ReportWidgetsSection />
@@ -415,9 +432,10 @@ function DashboardPage() {
                     <div className="flex-1 sm:ml-4">
                       <div className="relative h-3 sm:h-4 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                         <div
-                          className="absolute h-full bg-primary-500 rounded-full"
+                          className="absolute h-full rounded-full"
                           style={{
                             width: `${Math.min((count / maxCount) * 100, 100)}%`,
+                            backgroundColor: getBrandColor('primary', '#6366f1'),
                           }}
                         />
                       </div>
@@ -454,9 +472,10 @@ function DashboardPage() {
                     <div className="flex-1 sm:ml-4">
                       <div className="relative h-3 sm:h-4 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                         <div
-                          className="absolute h-full bg-green-500 rounded-full"
+                          className="absolute h-full rounded-full"
                           style={{
                             width: `${Math.min((count / maxCount) * 100, 100)}%`,
+                            backgroundColor: getBrandColor('secondary', '#22c55e'),
                           }}
                         />
                       </div>

@@ -1,12 +1,16 @@
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { PlusIcon, SparklesIcon, DocumentDuplicateIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, DocumentDuplicateIcon } from '@heroicons/react/24/outline';
 import { Button, EntityLink, Modal, ConfirmDialog, StatusBadge, PaginationBar } from '../../components/ui';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { ProposalForm } from './ProposalForm';
-import { AIProposalGenerator } from './AIProposalGenerator';
 import { TemplateGallery } from './TemplateGallery';
+import { SortableTh } from '../../components/shared/SortableTh';
 import { useProposals, useCreateProposal, useDeleteProposal } from '../../hooks/useProposals';
+import {
+  useListPageSizeState,
+  useListSortPersistence,
+} from '../../hooks/useListPageDefaults';
 import { formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { showSuccess, showError } from '../../utils/toast';
@@ -26,22 +30,29 @@ type TabType = 'proposals' | 'templates';
 function ProposalsPage() {
   usePageTitle('Proposals');
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<TabType>('proposals');
-  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
-  const [statusFilter, setStatusFilter] = useState('');
+  const searchQuery = searchParams.get('search') || '';
+  // Stale bookmarks with ?status=invalid silently fall back to "All"
+  // instead of 422'ing the page on every load.
+  const statusParam = searchParams.get('status') || '';
+  const statusFilter = statusOptions.some((o) => o.value === statusParam) ? statusParam : '';
+  const setSearchQuery = (q: string) =>
+    setSearchParams((prev) => { if (q) prev.set('search', q); else prev.delete('search'); return prev; }, { replace: true });
+  const setStatusFilter = (s: string) =>
+    setSearchParams((prev) => { if (s) prev.set('status', s); else prev.delete('status'); return prev; }, { replace: true });
   const [currentPage, setCurrentPage] = useState(1);
   // Open the create form automatically when arriving with `?action=new`
   // from a contact / company / quote / opportunity detail page. The
   // ProposalForm reads the rest of the query string to prefill the
   // Related Records dropdowns.
   const [showForm, setShowForm] = useState(searchParams.get('action') === 'new');
-  const [showAIGenerator, setShowAIGenerator] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; proposal: Proposal | null }>({
     isOpen: false,
     proposal: null,
   });
-  const [pageSize, setPageSize] = useState(25);
+  const { sortBy, sortDir, toggle: toggleSort } = useListSortPersistence('proposals');
+  const [pageSize, setPageSize] = useListPageSizeState('proposals');
 
   const {
     data: proposalsData,
@@ -52,7 +63,14 @@ function ProposalsPage() {
     page_size: pageSize,
     search: searchQuery || undefined,
     status: statusFilter || undefined,
+    ...(sortBy && { order_by: sortBy, order_dir: sortDir }),
   });
+
+  // Sorting changes ordering — drop back to page 1.
+  const handleSortToggle = (field: string) => {
+    setCurrentPage(1);
+    toggleSort(field);
+  };
 
   const createProposalMutation = useCreateProposal();
   const deleteProposalMutation = useDeleteProposal();
@@ -102,18 +120,10 @@ function ProposalsPage() {
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Proposals</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Create and manage sales proposals with AI assistance
+            Create and manage sales proposals
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2">
-          <Button
-            variant="secondary"
-            leftIcon={<SparklesIcon className="h-5 w-5" />}
-            onClick={() => setShowAIGenerator(true)}
-            className="w-full sm:w-auto"
-          >
-            AI Generate
-          </Button>
           <Button
             leftIcon={<PlusIcon className="h-5 w-5" />}
             onClick={() => setShowForm(true)}
@@ -256,16 +266,9 @@ function ProposalsPage() {
             </svg>
             <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">No proposals</h3>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              Get started by creating a new proposal or using the AI generator.
+              Get started by creating a new proposal.
             </p>
-            <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
-              <Button
-                variant="secondary"
-                onClick={() => setShowAIGenerator(true)}
-                leftIcon={<SparklesIcon className="h-5 w-5" />}
-              >
-                AI Generate
-              </Button>
+            <div className="mt-6 flex justify-center">
               <Button onClick={() => setShowForm(true)}>Create Proposal</Button>
             </div>
           </div>
@@ -330,27 +333,19 @@ function ProposalsPage() {
 
             {/* Desktop Table */}
             <div className="hidden md:block overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                <thead className="bg-gray-50 dark:bg-gray-900">
+              <table data-list-table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-900">
                   <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Proposal
-                    </th>
+                    <SortableTh field="title" label="Proposal" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Contact / Company
                     </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                      Views
-                    </th>
+                    <SortableTh field="status" label="Status" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
+                    <SortableTh field="view_count" label="Views" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} align="right" />
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Created by
                     </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Created
-                    </th>
+                    <SortableTh field="created_at" label="Created" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
                     <th scope="col" className="relative px-6 py-3">
                       <span className="sr-only">Actions</span>
                     </th>
@@ -358,7 +353,29 @@ function ProposalsPage() {
                 </thead>
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                   {proposals.map((proposal: Proposal) => (
-                    <tr key={proposal.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <tr
+                      key={proposal.id}
+                      role="button"
+                      tabIndex={0}
+                      className="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500"
+                      onClick={(e) => {
+                        if ((e.target as HTMLElement).closest('a, button')) return;
+                        if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+                        if (window.getSelection()?.toString()) return;
+                        navigate(`/proposals/${proposal.id}`, {
+                          state: { from: window.location.pathname + window.location.search },
+                        });
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.target !== e.currentTarget) return;
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          navigate(`/proposals/${proposal.id}`, {
+                            state: { from: window.location.pathname + window.location.search },
+                          });
+                        }
+                      }}
+                    >
                       <td className="px-6 py-4 whitespace-nowrap">
                         <Link
                           to={`/proposals/${proposal.id}`}
@@ -464,16 +481,6 @@ function ProposalsPage() {
           onCancel={handleFormCancel}
           isLoading={createProposalMutation.isPending}
         />
-      </Modal>
-
-      {/* AI Generator Modal */}
-      <Modal
-        isOpen={showAIGenerator}
-        onClose={() => setShowAIGenerator(false)}
-        title="Generate Proposal with AI"
-        size="md"
-      >
-        <AIProposalGenerator onClose={() => setShowAIGenerator(false)} />
       </Modal>
 
       {/* Delete Confirmation */}
