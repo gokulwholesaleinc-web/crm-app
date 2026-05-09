@@ -12,12 +12,14 @@ class Settings(BaseSettings):
 
     SECRET_KEY: str  # Required — no default, fails at startup if missing
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 hours
 
     OPENAI_API_KEY: str = ""
 
     DEBUG: bool = False
-    BACKEND_CORS_ORIGINS: str = '["*"]'
+    # Comma-separated JSON array of allowed origins, e.g. '["https://app.example.com"]'.
+    # Must be set explicitly in production — no wildcard allowed when DEBUG=False.
+    BACKEND_CORS_ORIGINS: str = '["http://localhost:3000","http://localhost:5173"]'
 
     DATABASE_SSL_VERIFY: bool = False
 
@@ -39,7 +41,9 @@ class Settings(BaseSettings):
     META_ACCESS_TOKEN: str = ""
     META_APP_ID: str = ""
     META_APP_SECRET: str = ""
-    META_WEBHOOK_VERIFY_TOKEN: str = "crm_meta_webhook"
+    # Required when META_APP_SECRET is set; must be a secret random string
+    # configured in the Meta developer dashboard as the webhook verify token.
+    META_WEBHOOK_VERIFY_TOKEN: str = ""
 
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
@@ -57,8 +61,11 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         origins = json.loads(self.BACKEND_CORS_ORIGINS)
-        if "*" in origins:
-            return ["*"]
+        if not self.DEBUG and "*" in origins:
+            raise ValueError(
+                "BACKEND_CORS_ORIGINS may not contain '*' in production (DEBUG=False). "
+                "Set an explicit list of allowed origins."
+            )
         return origins
 
     @property

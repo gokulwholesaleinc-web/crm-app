@@ -182,14 +182,15 @@ async def verify_webhook(
     request: Request,
 ):
     """Meta webhook verification (hub.challenge handshake)."""
+    from src.config import settings
+    if not settings.META_WEBHOOK_VERIFY_TOKEN:
+        raise HTTPException(status_code=503, detail="Meta webhook is not configured")
+
     mode = request.query_params.get("hub.mode")
     token = request.query_params.get("hub.verify_token")
     challenge = request.query_params.get("hub.challenge")
 
-    from src.config import settings
-    verify_token = getattr(settings, "META_WEBHOOK_VERIFY_TOKEN", "crm_meta_webhook")
-
-    if mode == "subscribe" and token == verify_token:
+    if mode == "subscribe" and token == settings.META_WEBHOOK_VERIFY_TOKEN:
         return Response(content=challenge, media_type="text/plain")
     raise HTTPException(status_code=403, detail="Verification failed")
 
@@ -201,6 +202,12 @@ async def receive_webhook(
 ):
     """Receive Meta Lead Ads webhook events with HMAC-SHA256 signature verification."""
     from src.config import settings
+
+    if settings.META_APP_SECRET and not settings.META_WEBHOOK_VERIFY_TOKEN:
+        raise HTTPException(
+            status_code=503,
+            detail="Meta webhook is misconfigured: META_APP_SECRET is set but META_WEBHOOK_VERIFY_TOKEN is empty",
+        )
 
     # Verify signature if app secret is configured
     raw_body = await request.body()

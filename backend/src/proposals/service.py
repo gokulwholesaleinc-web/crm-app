@@ -2,7 +2,6 @@
 
 import hashlib
 import logging
-import os
 import re
 import secrets
 from datetime import UTC, datetime
@@ -896,7 +895,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         if not proposal.public_token:
             proposal.public_token = secrets.token_urlsafe(32)
             await self.db.flush()
-        base_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        base_url = settings.FRONTEND_BASE_URL or "http://localhost:3000"
         view_url = f"{base_url}/proposals/public/{proposal.public_token}"
 
         proposal_data = {

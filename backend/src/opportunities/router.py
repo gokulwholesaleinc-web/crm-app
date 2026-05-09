@@ -217,6 +217,10 @@ async def move_opportunity(
     db: DBSession,
 ):
     """Move an opportunity to a different pipeline stage."""
+    opp_service = OpportunityService(db)
+    opportunity = await get_entity_or_404(opp_service, opportunity_id, EntityNames.OPPORTUNITY)
+    check_ownership(opportunity, current_user, EntityNames.OPPORTUNITY)
+
     manager = PipelineManager(db)
 
     try:
@@ -230,7 +234,6 @@ async def move_opportunity(
             detail=str(e),
         ) from e
 
-    opp_service = OpportunityService(db)
     return await _build_opportunity_response(opp_service, opportunity)
 
 

@@ -69,6 +69,13 @@ class AttachmentService:
                 f"Allowed: {', '.join(sorted(per_entity))}"
             )
 
+        # Reject oversized uploads before reading the body into memory.
+        declared_size = file.size  # populated by FastAPI from Content-Length
+        if declared_size is not None and declared_size > MAX_UPLOAD_SIZE:
+            raise ValueError(
+                f"File size {declared_size} bytes exceeds maximum of {MAX_UPLOAD_SIZE} bytes"
+            )
+
         content = await file.read()
         file_size = len(content)
 

@@ -127,6 +127,11 @@ async def lifespan(app: FastAPI):
     from src.core.scheduler import start_scheduler, stop_scheduler
 
     print("Starting up CRM application...")
+    if settings.SEED_ON_STARTUP and not settings.DEBUG:
+        raise RuntimeError(
+            "SEED_ON_STARTUP=True is not allowed in production (DEBUG=False). "
+            "Disable SEED_ON_STARTUP before deploying."
+        )
     asyncio.create_task(_init_database())
     start_scheduler()
 
@@ -154,8 +159,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
 )
 
 # Tenant resolution middleware (runs after CORS)

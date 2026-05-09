@@ -1,13 +1,13 @@
 """Daily contract-lifecycle job: signed→active auto-flip + expiring alerts."""
 
 import logging
-import os
 from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from src.config import settings
 from src.contracts.models import Contract
 
 logger = logging.getLogger(__name__)
@@ -192,7 +192,7 @@ class ContractLifecycleService:
         branding = await TenantBrandingHelper.get_branding_for_user(
             self.db, contract.owner_id
         )
-        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        frontend_url = settings.FRONTEND_BASE_URL or "http://localhost:3000"
         view_url = f"{frontend_url}/contracts/{contract.id}"
         subject, body_html = render_contract_expiring_email(branding, {
             "contract_title": contract.title,

@@ -5,11 +5,12 @@ Injectable HttpClientFactory keeps Google HTTP calls out of tests.
 
 import base64
 import json
-import os
 from collections.abc import Callable
 from urllib.parse import urlencode
 
 import httpx
+
+from src.config import settings
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -32,7 +33,7 @@ def default_client_factory() -> httpx.AsyncClient:
 
 
 def get_redirect_uri() -> str:
-    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    frontend_url = settings.FRONTEND_BASE_URL or "http://localhost:3000"
     return f"{frontend_url}/settings/integrations/gmail/callback"
 
 

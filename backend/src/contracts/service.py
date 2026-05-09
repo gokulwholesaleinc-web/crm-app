@@ -1,7 +1,6 @@
 """Contract service layer."""
 
 import logging
-import os
 import secrets
 from datetime import UTC, datetime, timedelta
 from html import escape
@@ -10,6 +9,7 @@ from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import selectinload
 
 from src.attachments.object_storage import upload_file_bytes
+from src.config import settings
 from src.contracts.models import Contract
 from src.contracts.schemas import ContractCreate, ContractUpdate
 from src.core.base_service import CRUDService
@@ -181,7 +181,7 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
         await self.db.refresh(contract)
 
         owner_id = contract.owner_id or user_id
-        base_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        base_url = settings.FRONTEND_BASE_URL or "http://localhost:3000"
         sign_url = f"{base_url}/contracts/sign/{contract.sign_token}"
 
         branding = await TenantBrandingHelper.get_branding_for_user(self.db, owner_id)
