@@ -14,8 +14,20 @@ import { safeStorage } from '../utils/safeStorage';
 
 const safeLocalStorage = {
   getItem: (name: string): string | null => safeStorage.get(name),
-  setItem: (name: string, value: string): void => safeStorage.set(name, value),
-  removeItem: (name: string): void => safeStorage.remove(name),
+  setItem: (name: string, value: string): void => {
+    try {
+      localStorage.setItem(name, value);
+    } catch (error) {
+      console.warn('[auth] failed to persist', name, error);
+    }
+  },
+  removeItem: (name: string): void => {
+    try {
+      localStorage.removeItem(name);
+    } catch (error) {
+      console.warn('[auth] failed to remove', name, error);
+    }
+  },
 };
 
 export type RoleName = 'admin' | 'manager' | 'sales_rep' | 'viewer';
@@ -106,11 +118,16 @@ export const useAuthStore = create<AuthState>()(
         user: state.user,
         token: state.token,
       }),
-      onRehydrateStorage: () => (state) => {
+      onRehydrateStorage: () => (state, error) => {
+        if (error) {
+          console.warn('[auth] rehydrate failed', error);
+        }
         if (state) {
           state.isAuthenticated = !!state.token && !!state.user;
-          state.setLoading(false);
         }
+        // Must fire unconditionally — if state is undefined (e.g. safeStorage
+        // returned null), the loading spinner would hang forever without this.
+        useAuthStore.getState().setLoading(false);
       },
     }
   )

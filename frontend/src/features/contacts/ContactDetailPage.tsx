@@ -149,7 +149,8 @@ function ContactDetailPage() {
       await deleteContactMutation.mutateAsync(contactId);
       navigate('/contacts');
     } catch {
-      showError('Failed to delete contact');
+      showError('Failed to delete contact. Please try again.');
+      setShowDeleteConfirm(false);
     }
   };
 

@@ -26,7 +26,8 @@ export const dashboardKeys = {
  * Hook to fetch the full dashboard data (KPIs + charts)
  */
 export function useDashboard(dateRange?: DateRangeParams) {
-  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const authLoading = useAuthStore((s) => s.isLoading);
   return useQuery({
     queryKey: dashboardKeys.full(dateRange),
     queryFn: () => dashboardApi.getDashboard(dateRange),
@@ -39,7 +40,8 @@ export function useDashboard(dateRange?: DateRangeParams) {
  * Hook to fetch only KPIs
  */
 export function useKPIs(dateRange?: DateRangeParams) {
-  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const authLoading = useAuthStore((s) => s.isLoading);
   return useQuery({
     queryKey: dashboardKeys.kpis(dateRange),
     queryFn: () => dashboardApi.getKpis(dateRange),
@@ -52,7 +54,8 @@ export function useKPIs(dateRange?: DateRangeParams) {
  * Hook to fetch pipeline funnel chart
  */
 export function usePipelineFunnelChart(dateRange?: DateRangeParams) {
-  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const authLoading = useAuthStore((s) => s.isLoading);
   return useQuery({
     queryKey: dashboardKeys.chart('pipeline-funnel', { dateFrom: dateRange?.dateFrom, dateTo: dateRange?.dateTo, ownerId: dateRange?.ownerId ?? null }),
     queryFn: () => dashboardApi.getPipelineFunnelChart(dateRange),
@@ -65,7 +68,8 @@ export function usePipelineFunnelChart(dateRange?: DateRangeParams) {
  * Hook to fetch leads by status chart
  */
 export function useLeadsByStatusChart(dateRange?: DateRangeParams) {
-  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const authLoading = useAuthStore((s) => s.isLoading);
   return useQuery({
     queryKey: dashboardKeys.chart('leads-by-status', { dateFrom: dateRange?.dateFrom, dateTo: dateRange?.dateTo, ownerId: dateRange?.ownerId ?? null }),
     queryFn: () => dashboardApi.getLeadsByStatusChart(dateRange),
@@ -78,7 +82,8 @@ export function useLeadsByStatusChart(dateRange?: DateRangeParams) {
  * Hook to fetch leads by source chart
  */
 export function useLeadsBySourceChart(dateRange?: DateRangeParams) {
-  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const authLoading = useAuthStore((s) => s.isLoading);
   return useQuery({
     queryKey: dashboardKeys.chart('leads-by-source', { dateFrom: dateRange?.dateFrom, dateTo: dateRange?.dateTo, ownerId: dateRange?.ownerId ?? null }),
     queryFn: () => dashboardApi.getLeadsBySourceChart(dateRange),
@@ -91,7 +96,8 @@ export function useLeadsBySourceChart(dateRange?: DateRangeParams) {
  * Hook to fetch revenue trend chart
  */
 export function useRevenueTrendChart(months = 6, dateRange?: DateRangeParams) {
-  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const authLoading = useAuthStore((s) => s.isLoading);
   return useQuery({
     queryKey: dashboardKeys.chart('revenue-trend', { months, dateFrom: dateRange?.dateFrom, dateTo: dateRange?.dateTo, ownerId: dateRange?.ownerId ?? null }),
     queryFn: () => dashboardApi.getRevenueTrendChart(months, dateRange),
@@ -104,7 +110,8 @@ export function useRevenueTrendChart(months = 6, dateRange?: DateRangeParams) {
  * Hook to fetch activities by type chart
  */
 export function useActivitiesChart(days = 30, dateRange?: DateRangeParams) {
-  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const authLoading = useAuthStore((s) => s.isLoading);
   return useQuery({
     queryKey: dashboardKeys.chart('activities', { days, dateFrom: dateRange?.dateFrom, dateTo: dateRange?.dateTo, ownerId: dateRange?.ownerId ?? null }),
     queryFn: () => dashboardApi.getActivitiesChart(days, dateRange),
@@ -117,7 +124,8 @@ export function useActivitiesChart(days = 30, dateRange?: DateRangeParams) {
  * Hook to fetch new leads trend chart
  */
 export function useNewLeadsTrendChart(weeks = 8, dateRange?: DateRangeParams) {
-  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const authLoading = useAuthStore((s) => s.isLoading);
   return useQuery({
     queryKey: dashboardKeys.chart('new-leads-trend', { weeks, dateFrom: dateRange?.dateFrom, dateTo: dateRange?.dateTo, ownerId: dateRange?.ownerId ?? null }),
     queryFn: () => dashboardApi.getNewLeadsTrendChart(weeks, dateRange),
@@ -130,7 +138,8 @@ export function useNewLeadsTrendChart(weeks = 8, dateRange?: DateRangeParams) {
  * Hook to fetch conversion rates chart
  */
 export function useConversionRatesChart(dateRange?: DateRangeParams) {
-  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const authLoading = useAuthStore((s) => s.isLoading);
   return useQuery({
     queryKey: dashboardKeys.chart('conversion-rates', { dateFrom: dateRange?.dateFrom, dateTo: dateRange?.dateTo, ownerId: dateRange?.ownerId ?? null }),
     queryFn: () => dashboardApi.getConversionRatesChart(dateRange),
@@ -143,7 +152,8 @@ export function useConversionRatesChart(dateRange?: DateRangeParams) {
  * Hook to fetch sales funnel data
  */
 export function useSalesFunnel(dateRange?: DateRangeParams) {
-  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const authLoading = useAuthStore((s) => s.isLoading);
   return useQuery({
     queryKey: dashboardKeys.chart('sales-funnel', { dateFrom: dateRange?.dateFrom, dateTo: dateRange?.dateTo, ownerId: dateRange?.ownerId ?? null }),
     queryFn: () => dashboardApi.getSalesFunnel(dateRange),
@@ -156,7 +166,8 @@ export function useSalesFunnel(dateRange?: DateRangeParams) {
  * Hook to fetch sales pipeline KPIs
  */
 export function useSalesKpis(dateRange?: DateRangeParams) {
-  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const authLoading = useAuthStore((s) => s.isLoading);
   return useQuery({
     queryKey: dashboardKeys.chart('sales-kpis', { dateFrom: dateRange?.dateFrom, dateTo: dateRange?.dateTo, ownerId: dateRange?.ownerId ?? null }),
     queryFn: () => dashboardApi.getSalesKpis(dateRange),

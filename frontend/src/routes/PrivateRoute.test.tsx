@@ -16,7 +16,8 @@ vi.mock('../store/authStore', () => {
     logout: vi.fn(),
   };
   return {
-    useAuthStore: () => _state,
+    useAuthStore: (selector?: (s: typeof _state) => unknown) =>
+      selector ? selector(_state) : _state,
     __setAuthState: (s: typeof _state) => {
       _state = s;
     },

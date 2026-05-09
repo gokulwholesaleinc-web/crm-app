@@ -115,7 +115,8 @@ function OpportunityDetailPage() {
       await deleteOpportunityMutation.mutateAsync(opportunityId);
       navigate('/opportunities');
     } catch {
-      showError('Failed to delete opportunity');
+      showError('Failed to delete opportunity. Please try again.');
+      setShowDeleteConfirm(false);
     }
   };
 
