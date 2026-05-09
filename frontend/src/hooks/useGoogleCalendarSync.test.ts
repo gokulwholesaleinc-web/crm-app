@@ -9,12 +9,13 @@ vi.mock('../api/integrations', () => ({
   syncCalendar: vi.fn(),
 }));
 
-vi.mock('react-hot-toast', () => ({
-  default: { success: vi.fn(), error: vi.fn() },
+vi.mock('../utils/toast', () => ({
+  showSuccess: vi.fn(),
+  showError: vi.fn(),
 }));
 
 import { getCalendarStatus, syncCalendar } from '../api/integrations';
-import toast from 'react-hot-toast';
+import { showSuccess } from '../utils/toast';
 
 function makeWrapper() {
   const client = new QueryClient({
@@ -96,6 +97,6 @@ describe('useGoogleCalendarSync', () => {
     expect(invalidateSpy).toHaveBeenCalledWith(
       expect.objectContaining({ queryKey: ['calendar'] })
     );
-    expect(toast.success).toHaveBeenCalledWith('Synced 5 events from Google Calendar');
+    expect(showSuccess).toHaveBeenCalledWith('Synced 5 events from Google Calendar');
   });
 });

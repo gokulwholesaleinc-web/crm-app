@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import toast from 'react-hot-toast';
+import { showSuccess, showError } from '../utils/toast';
 import { getCalendarStatus, syncCalendar } from '../api/integrations';
 import type { CalendarSyncStatus } from '../api/integrations';
 
@@ -22,10 +22,10 @@ export function useGoogleCalendarSync(): {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['integrations', 'google-calendar'] });
       queryClient.invalidateQueries({ queryKey: ['calendar'] });
-      toast.success(`Synced ${data.synced} events from Google Calendar`);
+      showSuccess(`Synced ${data.synced} events from Google Calendar`);
     },
     onError: () => {
-      toast.error('Failed to sync calendar');
+      showError('Failed to sync calendar');
     },
   });
 

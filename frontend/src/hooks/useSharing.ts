@@ -3,7 +3,7 @@
  */
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import toast from 'react-hot-toast';
+import { showError } from '../utils/toast';
 import { useAuthQuery } from './useAuthQuery';
 import { sharingApi, ShareRequest } from '../api/sharing';
 
@@ -32,7 +32,7 @@ export function useShareEntity() {
       });
     },
     onError: () => {
-      toast.error('Could not share record. Please try again.');
+      showError('Could not share record. Please try again.');
     },
   });
 }
@@ -54,7 +54,7 @@ export function useRevokeShare() {
       });
     },
     onError: () => {
-      toast.error('Could not revoke access. Please try again.');
+      showError('Could not revoke access. Please try again.');
     },
   });
 }

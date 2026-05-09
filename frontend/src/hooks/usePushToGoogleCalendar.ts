@@ -1,5 +1,5 @@
 import { useMutation } from '@tanstack/react-query';
-import toast from 'react-hot-toast';
+import { showSuccess, showError } from '../utils/toast';
 import { pushToCalendar } from '../api/integrations';
 
 export interface UsePushToGoogleCalendarOptions {
@@ -13,7 +13,7 @@ export function usePushToGoogleCalendar(options?: UsePushToGoogleCalendarOptions
     mutationFn: (activityId: number) => pushToCalendar(activityId),
     onSuccess: (_data, activityId) => {
       if (!options?.silent) {
-        toast.success('Pushed to Google Calendar');
+        showSuccess('Pushed to Google Calendar');
       }
       options?.onSuccess?.(activityId);
     },
@@ -22,7 +22,7 @@ export function usePushToGoogleCalendar(options?: UsePushToGoogleCalendarOptions
         const detail =
           (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
           'Failed to push';
-        toast.error(detail);
+        showError(detail);
       }
     },
   });
