@@ -79,6 +79,9 @@ export function DocumentsTab({ entityType, entityId }: DocumentsTabProps) {
 
   const handleUpload = useCallback(
     async (files: FileList | File[]) => {
+      const succeeded: string[] = [];
+      const failed: string[] = [];
+
       for (const file of Array.from(files)) {
         try {
           await uploadMutation.mutateAsync({
@@ -87,11 +90,15 @@ export function DocumentsTab({ entityType, entityId }: DocumentsTabProps) {
             entityId,
             category: uploadCategory,
           });
-          showSuccess(`${file.name} uploaded successfully.`);
+          succeeded.push(file.name);
         } catch {
-          showError(`Failed to upload ${file.name}. Check file type and size.`);
+          failed.push(file.name);
         }
       }
+
+      if (succeeded.length) showSuccess(`${succeeded.length} file${succeeded.length > 1 ? 's' : ''} uploaded`);
+      if (failed.length) showError(`${failed.length} file${failed.length > 1 ? 's' : ''} failed to upload`);
+
     },
     [entityType, entityId, uploadCategory, uploadMutation],
   );

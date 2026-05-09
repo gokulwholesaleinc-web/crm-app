@@ -53,11 +53,15 @@ export function ContractAttachmentsSection({ contractId, canEdit }: ContractAtta
         showError(`Total file size exceeds 25 MB limit.`);
         return;
       }
+      const invalid: string[] = [];
+      const succeeded: string[] = [];
+      const failed: string[] = [];
+
       for (const file of fileArray) {
         const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
         const validExts = new Set(['pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif']);
         if (!ACCEPTED_MIME.has(file.type) && !validExts.has(ext)) {
-          showError(`${file.name}: only PDF and images (PNG, JPG, WebP, GIF) are allowed.`);
+          invalid.push(file.name);
           continue;
         }
         try {
@@ -67,11 +71,16 @@ export function ContractAttachmentsSection({ contractId, canEdit }: ContractAtta
             entityId: contractId,
             category: 'contract',
           });
-          showSuccess(`${file.name} uploaded successfully.`);
+          succeeded.push(file.name);
         } catch {
-          showError(`Failed to upload ${file.name}. Check file type and size.`);
+          failed.push(file.name);
         }
       }
+
+      if (invalid.length) showError(`${invalid.length} file${invalid.length > 1 ? 's were' : ' was'} rejected (unsupported type — PDF and images only)`);
+      if (succeeded.length) showSuccess(`${succeeded.length} file${succeeded.length > 1 ? 's' : ''} uploaded`);
+      if (failed.length) showError(`${failed.length} file${failed.length > 1 ? 's' : ''} failed to upload`);
+
     },
     [contractId, uploadMutation],
   );

@@ -59,6 +59,9 @@ export function AttachmentList({ entityType, entityId }: AttachmentListProps) {
 
   const handleUpload = useCallback(
     async (files: FileList | File[]) => {
+      const succeeded: string[] = [];
+      const failed: string[] = [];
+
       for (const file of Array.from(files)) {
         try {
           await uploadMutation.mutateAsync({
@@ -66,11 +69,15 @@ export function AttachmentList({ entityType, entityId }: AttachmentListProps) {
             entityType,
             entityId,
           });
-          showSuccess(`${file.name} uploaded successfully.`);
+          succeeded.push(file.name);
         } catch {
-          showError(`Failed to upload ${file.name}. Check file type and size.`);
+          failed.push(file.name);
         }
       }
+
+      if (succeeded.length) showSuccess(`${succeeded.length} file${succeeded.length > 1 ? 's' : ''} uploaded`);
+      if (failed.length) showError(`${failed.length} file${failed.length > 1 ? 's' : ''} failed to upload`);
+
     },
     [entityType, entityId, uploadMutation],
   );
