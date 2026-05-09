@@ -22,7 +22,8 @@ pydantic==2.5.3
 pydantic-settings==2.1.0
 email-validator==2.1.0
 
-# OpenAI for AI assistant
+# OpenAI (used by ai/ module stubs — see backend/src/ai/ — kept until that
+# directory is cleaned up separately)
 openai==1.10.0
 
 # Stripe payments

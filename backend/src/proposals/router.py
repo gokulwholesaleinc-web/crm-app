@@ -37,7 +37,6 @@ from src.proposals.attachment_views import (
     record_attachment_view,
 )
 from src.proposals.schemas import (
-    AIGenerateRequest,
     CreateFromTemplateRequest,
     ProposalAcceptRequest,
     ProposalAttachmentPublicItem,
@@ -294,20 +293,6 @@ async def create_proposal_from_template(
     ip_address = get_client_ip(request)
     await audit_entity_create(db, "proposal", proposal.id, current_user.id, ip_address)
 
-    return ProposalResponse.model_validate(proposal)
-
-
-@router.post("/generate", response_model=ProposalResponse, status_code=HTTPStatus.CREATED)
-async def generate_proposal(
-    request_data: AIGenerateRequest,
-    current_user: CurrentUser,
-    db: DBSession,
-):
-    """Generate a proposal using AI based on an opportunity."""
-    from src.proposals.ai_generator import generate_proposal as ai_generate
-
-    with value_error_as_400():
-        proposal = await ai_generate(db, request_data.opportunity_id, current_user.id)
     return ProposalResponse.model_validate(proposal)
 
 

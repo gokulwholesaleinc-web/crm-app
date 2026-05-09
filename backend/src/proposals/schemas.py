@@ -279,12 +279,6 @@ class ProposalSendRequest(BaseModel):
     attach_pdf: bool = False
 
 
-# AI Generation Request
-
-class AIGenerateRequest(BaseModel):
-    opportunity_id: int
-
-
 # Template Schemas
 
 class ProposalTemplateCreate(BaseModel):

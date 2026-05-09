@@ -162,10 +162,6 @@ export interface CreateFromTemplateRequest {
   custom_variables?: Record<string, string>;
 }
 
-export interface AIGenerateProposalRequest {
-  opportunity_id: number;
-}
-
 export interface ProposalAttachment {
   id: number;
   original_filename: string;

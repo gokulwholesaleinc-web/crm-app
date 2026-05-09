@@ -14,7 +14,6 @@ import type {
   ProposalTemplateCreate,
   ProposalTemplateUpdate,
   CreateFromTemplateRequest,
-  AIGenerateProposalRequest,
 } from '../types';
 
 // Query Keys
@@ -153,22 +152,6 @@ export function useRetryProposalBilling() {
     onSuccess: (_data, proposalId) => {
       queryClient.invalidateQueries({ queryKey: proposalKeys.lists() });
       queryClient.invalidateQueries({ queryKey: proposalKeys.detail(proposalId) });
-    },
-  });
-}
-
-// AI Generation Hook
-
-/**
- * Hook to generate a proposal using AI
- */
-export function useGenerateProposal() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (data: AIGenerateProposalRequest) => proposalsApi.generate(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: proposalKeys.lists() });
     },
   });
 }

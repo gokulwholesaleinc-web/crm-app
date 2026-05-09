@@ -13,7 +13,6 @@ import type {
   ProposalTemplateCreate,
   ProposalTemplateUpdate,
   CreateFromTemplateRequest,
-  AIGenerateProposalRequest,
   ProposalAttachment,
 } from '../types';
 
@@ -112,14 +111,6 @@ export const retryProposalBilling = async (proposalId: number): Promise<Proposal
   const response = await apiClient.post<Proposal>(
     `${PROPOSALS_BASE}/${proposalId}/retry-billing`,
   );
-  return response.data;
-};
-
-/**
- * Generate a proposal using AI
- */
-export const generateProposal = async (data: AIGenerateProposalRequest): Promise<Proposal> => {
-  const response = await apiClient.post<Proposal>(`${PROPOSALS_BASE}/generate`, data);
   return response.data;
 };
 
@@ -319,7 +310,6 @@ export const proposalsApi = {
   reject: rejectProposal,
   resendPaymentLink: resendProposalPaymentLink,
   retryBilling: retryProposalBilling,
-  generate: generateProposal,
   listTemplates: listProposalTemplates,
   createTemplate: createProposalTemplate,
   getTemplate: getProposalTemplate,
