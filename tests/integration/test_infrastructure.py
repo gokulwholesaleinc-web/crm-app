@@ -228,6 +228,17 @@ class TestGoogleCalendarEndpoints:
 class TestMetaEndpoints:
     """Tests for Meta (Facebook/Instagram) integration endpoints."""
 
+    @pytest.fixture(autouse=True)
+    def _meta_token(self, monkeypatch):
+        """Ensure META_WEBHOOK_VERIFY_TOKEN is set for all tests in this class.
+
+        The POST /api/meta/webhook gate now rejects when the token is empty.
+        Tests that intentionally test the unconfigured-503 path set the token
+        to "" via their own monkeypatch call which overrides this fixture.
+        """
+        from src.config import settings
+        monkeypatch.setattr(settings, "META_WEBHOOK_VERIFY_TOKEN", "test-meta-token")
+
     async def test_get_connection_status(
         self, client: AsyncClient, auth_headers: dict
     ):

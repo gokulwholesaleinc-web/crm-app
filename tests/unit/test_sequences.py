@@ -173,13 +173,14 @@ class TestSequenceCRUD:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        manager_auth_headers: dict,
+        seed_roles: list,
         test_sequence: Sequence,
     ):
-        """Test updating a sequence."""
+        """Test updating a sequence (manager+ required)."""
         response = await client.put(
             f"/api/sequences/{test_sequence.id}",
-            headers=auth_headers,
+            headers=manager_auth_headers,
             json={
                 "name": "Updated Sequence",
                 "is_active": False,
@@ -196,10 +197,11 @@ class TestSequenceCRUD:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        manager_auth_headers: dict,
+        seed_roles: list,
         test_user: User,
     ):
-        """Test deleting a sequence."""
+        """Test deleting a sequence (manager+ required)."""
         seq = Sequence(
             name="To Delete",
             steps=[],
@@ -211,7 +213,7 @@ class TestSequenceCRUD:
 
         response = await client.delete(
             f"/api/sequences/{seq.id}",
-            headers=auth_headers,
+            headers=manager_auth_headers,
         )
         assert response.status_code == 204
 
