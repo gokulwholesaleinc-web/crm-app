@@ -276,9 +276,10 @@ function InboxPage() {
 
       <div className="rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
         <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-          <label className="flex-1 flex items-center gap-3" aria-label="Search emails">
+          <label className="flex-1 flex items-center gap-3" htmlFor="inbox-search">
             {SEARCH_ICON}
             <input
+              id="inbox-search"
               type="search"
               className="flex-1 bg-transparent text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 outline-none"
               placeholder="Search emails by subject, body, sender, or recipient..."

@@ -149,7 +149,7 @@ function ContactDetailPage() {
       await deleteContactMutation.mutateAsync(contactId);
       navigate('/contacts');
     } catch {
-      // Error is handled by the mutation
+      showError('Failed to delete contact');
     }
   };
 

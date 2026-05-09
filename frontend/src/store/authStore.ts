@@ -10,6 +10,13 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { registerAuthTokenGetter } from '../api/client';
 import { clearTenantSlugOnLogout } from '../providers/TenantProvider';
+import { safeStorage } from '../utils/safeStorage';
+
+const safeLocalStorage = {
+  getItem: (name: string): string | null => safeStorage.get(name),
+  setItem: (name: string, value: string): void => safeStorage.set(name, value),
+  removeItem: (name: string): void => safeStorage.remove(name),
+};
 
 export type RoleName = 'admin' | 'manager' | 'sales_rep' | 'viewer';
 
@@ -91,7 +98,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'crm-auth-storage',
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => safeLocalStorage),
       // isAuthenticated is intentionally NOT persisted — it's derived from
       // token + user on rehydration so a tampered storage slice cannot claim
       // authenticated without both halves present.

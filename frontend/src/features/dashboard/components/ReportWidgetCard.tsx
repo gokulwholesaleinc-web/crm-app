@@ -27,7 +27,7 @@ interface ReportWidgetCardProps {
 
 export function ReportWidgetCard({ widget }: ReportWidgetCardProps) {
   const queryClient = useQueryClient();
-  const { isAuthenticated } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const [showMenu, setShowMenu] = useState(false);
 
   const { data, isLoading, error } = useQuery({

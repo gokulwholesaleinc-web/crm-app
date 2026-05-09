@@ -109,7 +109,8 @@ function SharedItemRow({ item }: { item: SharedWithMeItem }) {
 // ---------------------------------------------------------------------------
 
 export function SharedWithMeWidget() {
-  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const authLoading = useAuthStore((s) => s.isLoading);
 
   const { data, isLoading } = useQuery({
     queryKey: ['me', 'shared'],

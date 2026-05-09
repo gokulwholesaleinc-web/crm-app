@@ -55,7 +55,8 @@ const NAV_ITEMS: readonly NavItem[] = [
 ] as const;
 
 function SettingsPage() {
-  const { user, isLoading } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
+  const isLoading = useAuthStore((s) => s.isLoading);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const { hash } = useLocation();
   // NAV_ITEMS is a non-empty `as const` literal, so [0] is statically
