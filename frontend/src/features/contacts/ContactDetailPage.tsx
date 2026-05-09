@@ -100,10 +100,18 @@ function ContactDetailPage() {
   );
   // Header badge — surface that this contact has a recurring billing
   // arrangement so Giancarlo doesn't have to dig into the Payments tab
-  // to see it. Only fetch once we have a contactId; status='active'
-  // filter narrows to subs Stripe is currently charging on.
+  // to see it. We count any Stripe state where billing is ongoing
+  // (active / trialing / past_due) — narrowing to active=='active' would
+  // hide trial customers and let a past_due card silently flip the
+  // pill off when Stripe is still trying to charge.
   const { data: subscriptionsData } = useSubscriptions(
-    contactId ? { contact_id: contactId, status: 'active', page_size: 1 } : undefined
+    contactId
+      ? {
+          contact_id: contactId,
+          status_in: ['active', 'trialing', 'past_due'],
+          page_size: 1,
+        }
+      : undefined
   );
   const currentUser = useAuthStore((s) => s.user);
   const quotes = quotesData?.items ?? [];

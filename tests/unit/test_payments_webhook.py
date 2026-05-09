@@ -983,6 +983,143 @@ class TestChargeRefundedCascadesToProposal:
         assert "Refunded on" in comments[0].content
         assert "ch_refund_xyz" in comments[0].content
 
+    @pytest.mark.asyncio
+    async def test_partial_refunds_each_leave_their_own_audit_row(
+        self,
+        db_session: AsyncSession,
+        payment_service: PaymentService,
+        test_user: User,
+    ):
+        """Two partial refunds on the same charge arrive as separate
+        Stripe events with the same ``charge.id`` but different
+        ``refunds.data[-1].id`` values. The dedup must key on the refund
+        id so each one writes its own audit row — the previous
+        (charge_id, date) key collapsed both into a single comment.
+        """
+        import secrets
+
+        from src.comments.models import Comment
+        from src.proposals.models import Proposal
+
+        invoice_id = "in_partial_001"
+        intent_id = "pi_partial_001"
+        proposal = Proposal(
+            proposal_number="PR-2026-PARTIAL-001",
+            public_token=secrets.token_urlsafe(32),
+            title="Partial refund target",
+            status="paid",
+            paid_at=datetime(2026, 4, 5, tzinfo=UTC),
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+            amount=Decimal("500.00"),
+            currency="USD",
+            payment_type="one_time",
+            stripe_invoice_id=invoice_id,
+        )
+        payment = Payment(
+            stripe_invoice_id=invoice_id,
+            stripe_payment_intent_id=intent_id,
+            amount=Decimal("500.00"),
+            currency="USD",
+            status="succeeded",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add_all([proposal, payment])
+        await db_session.commit()
+
+        # First partial refund — refund.id = re_part_a
+        await payment_service._handle_charge_refunded({
+            "id": "ch_partial_001",
+            "payment_intent": intent_id,
+            "refunds": {"data": [{"id": "re_part_a"}]},
+        })
+        # Second partial refund — same charge id, different refund id.
+        # Stripe's refunds.data list grows; data[-1] is the new one.
+        await payment_service._handle_charge_refunded({
+            "id": "ch_partial_001",
+            "payment_intent": intent_id,
+            "refunds": {
+                "data": [{"id": "re_part_a"}, {"id": "re_part_b"}],
+            },
+        })
+
+        comments = (
+            await db_session.execute(
+                select(Comment).where(
+                    Comment.entity_type == "proposals",
+                    Comment.entity_id == proposal.id,
+                )
+            )
+        ).scalars().all()
+        assert len(comments) == 2
+        bodies = sorted(c.content for c in comments)
+        assert "re_part_a" in bodies[0]
+        assert "re_part_b" in bodies[1]
+
+    @pytest.mark.asyncio
+    async def test_redelivered_refund_event_dedups_on_refund_id(
+        self,
+        db_session: AsyncSession,
+        payment_service: PaymentService,
+        test_user: User,
+    ):
+        """Stripe re-delivers webhooks. The global event_id dedup catches
+        most replays, but if it ever doesn't, the local (proposal, body)
+        check must also collapse the duplicate. Same charge + same refund
+        id should yield exactly one comment, not two.
+        """
+        import secrets
+
+        from src.comments.models import Comment
+        from src.proposals.models import Proposal
+
+        invoice_id = "in_replay_001"
+        intent_id = "pi_replay_001"
+        proposal = Proposal(
+            proposal_number="PR-2026-REPLAY-001",
+            public_token=secrets.token_urlsafe(32),
+            title="Replay target",
+            status="paid",
+            paid_at=datetime(2026, 4, 5, tzinfo=UTC),
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+            amount=Decimal("500.00"),
+            currency="USD",
+            payment_type="one_time",
+            stripe_invoice_id=invoice_id,
+        )
+        payment = Payment(
+            stripe_invoice_id=invoice_id,
+            stripe_payment_intent_id=intent_id,
+            amount=Decimal("500.00"),
+            currency="USD",
+            status="succeeded",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add_all([proposal, payment])
+        await db_session.commit()
+
+        event = {
+            "id": "ch_replay_001",
+            "payment_intent": intent_id,
+            "refunds": {"data": [{"id": "re_replay_only"}]},
+        }
+        await payment_service._handle_charge_refunded(event)
+        await payment_service._handle_charge_refunded(event)
+
+        comments = (
+            await db_session.execute(
+                select(Comment).where(
+                    Comment.entity_type == "proposals",
+                    Comment.entity_id == proposal.id,
+                )
+            )
+        ).scalars().all()
+        assert len(comments) == 1
+        assert "re_replay_only" in comments[0].content
+
 
 # ---------------------------------------------------------------------------
 # Cascade: subscription renewal Payment links to the original proposal/quote

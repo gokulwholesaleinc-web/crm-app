@@ -32,6 +32,7 @@ async def list_subscriptions(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     status: str | None = None,
+    status_in: Annotated[list[str] | None, Query()] = None,
     customer_id: int | None = None,
     contact_id: int | None = None,
     company_id: int | None = None,
@@ -41,6 +42,10 @@ async def list_subscriptions(
     ``contact_id`` / ``company_id`` filter by the CRM record linked to the
     Stripe customer — the Payments tab on contact/company detail pages
     pairs this with the payments list to show recurring billing too.
+
+    ``status_in`` accepts repeated values (``?status_in=active&status_in=trialing``)
+    so the contact "Subscriber" badge can count any Stripe state where
+    billing is ongoing.
     """
     effective_owner_id = None
     if not data_scope.can_see_all():
@@ -51,6 +56,7 @@ async def list_subscriptions(
         page=page,
         page_size=page_size,
         status=status,
+        status_in=status_in,
         customer_id=customer_id,
         contact_id=contact_id,
         company_id=company_id,
