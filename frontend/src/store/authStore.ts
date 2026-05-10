@@ -122,13 +122,18 @@ export const useAuthStore = create<AuthState>()(
         if (error) {
           console.warn('[auth] rehydrate failed', error);
         }
-        // Always clear loading so PrivateRoute can resolve.
-        useAuthStore.getState().setLoading(false);
-        // Mutating `state` directly is a no-op (snapshot); use setState to
-        // re-derive isAuthenticated from the rehydrated token + user.
-        if (state?.token && state?.user) {
-          useAuthStore.setState({ isAuthenticated: true });
-        }
+        // Defer to a microtask so the `useAuthStore` const binding has
+        // finished assigning. With synchronous localStorage, persist can
+        // fire this callback during the same `create()` call that's
+        // initializing the binding, which would TDZ on `useAuthStore`.
+        queueMicrotask(() => {
+          // Re-derive isAuthenticated BEFORE clearing loading so PrivateRoute
+          // sees the final state in one render pass.
+          if (state?.token && state?.user) {
+            useAuthStore.setState({ isAuthenticated: true });
+          }
+          useAuthStore.getState().setLoading(false);
+        });
       },
     }
   )
