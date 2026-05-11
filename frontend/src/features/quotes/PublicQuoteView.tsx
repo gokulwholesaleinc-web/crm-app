@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import { sanitizeHexColor } from '../../utils/colorValidation';
+import { useForceLightMode } from '../../hooks/useForceLightMode';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { setPublicPageMeta, pickReadableText } from './publicMeta';
 import { Modal, ModalFooter } from '../../components/ui/Modal';
@@ -89,6 +90,8 @@ function PublicQuoteView() {
   const [signerName, setSignerName] = useState('');
   const [signerEmail, setSignerEmail] = useState('');
   const [esignError, setEsignError] = useState<string | null>(null);
+
+  useForceLightMode();
 
   useEffect(() => {
     setLogoError(false);

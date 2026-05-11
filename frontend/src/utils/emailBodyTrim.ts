@@ -43,6 +43,18 @@ const SIGNATURE_SELECTORS = [
 ];
 
 /**
+ * Heuristic sign-off line patterns. When a single line (or the first
+ * non-empty line of a top-level block element) matches this regex, we
+ * treat it as the start of an unmarked signature and cut from there.
+ *
+ * Anchored to start/end-of-line so "Best laid plans..." or "thanks again
+ * for sending" mid-sentence don't trip it. The trailing punctuation is
+ * optional to catch "Thanks" / "Regards" without a comma.
+ */
+const SIGNOFF_REGEX =
+  /^(?:best(?:\s+regards)?|kind\s+regards|warm\s+regards|regards|thanks(?:\s+again)?|thank\s+you|cheers|sincerely|talk\s+soon|sent\s+from\s+my\s+[a-z]+(?:\s+[a-z]+)?|get\s+outlook\s+for\s+[a-z]+)[,.!]?\s*$/i;
+
+/**
  * Cut a node and everything that follows it (within `<body>`) using the
  * Range API. The Range correctly preserves any wrapping ancestors that
  * contain legitimate content before the marker — Gmail wraps both the
@@ -105,13 +117,23 @@ export function trimQuotedHtml(html: string): TrimResult {
   // cut takes both with it — but the user will see both restored on
   // toggle, so the label should be 'both'.
   const hadQuote = QUOTE_SELECTORS.some((s) => doc.body.querySelector(s) !== null);
-  const hadSig = SIGNATURE_SELECTORS.some((s) => doc.body.querySelector(s) !== null);
+  const heuristicSigNode = findHeuristicSignatureNode(doc.body);
+  const hadSig =
+    SIGNATURE_SELECTORS.some((s) => doc.body.querySelector(s) !== null) ||
+    heuristicSigNode !== null;
 
   let didCut = false;
   for (const selector of [...QUOTE_SELECTORS, ...SIGNATURE_SELECTORS]) {
     const node = doc.body.querySelector(selector);
     if (!node) continue;
     if (cutFromHere(doc, node)) didCut = true;
+  }
+  // Heuristic sign-off cut runs last so an explicit selector match takes
+  // precedence — if a gmail_signature wrapper already swallowed the
+  // sign-off line, the node is gone from the tree and findHeuristic…
+  // won't fire a second cut.
+  if (heuristicSigNode?.isConnected && cutFromHere(doc, heuristicSigNode)) {
+    didCut = true;
   }
 
   if (didCut) trimDanglingTrailers(doc.body);
@@ -124,6 +146,38 @@ export function trimQuotedHtml(html: string): TrimResult {
     trimmed: didCut,
     cut,
   };
+}
+
+/**
+ * Find a top-level child of <body> whose visible text starts with a
+ * known sign-off line ("Best,", "Thanks,", "Sent from my iPhone", …).
+ * Returns null when no candidate is found.
+ *
+ * Requires at least one earlier top-level child with non-empty content,
+ * so a one-paragraph reply like ``<div>Thanks,</div>`` (a common one-word
+ * acknowledgement) doesn't get cut to an empty body. The "trimmed" toggle
+ * would restore it, but the default render would otherwise show nothing
+ * and the user would assume the email arrived empty.
+ *
+ * Only top-level children are scanned to avoid cutting inside a quoted
+ * reply that itself ended with a sign-off ("…Best, Daisy" inside the
+ * <blockquote>). The quote-selector cut runs first and removes the
+ * <blockquote>, so by the time we get here the only remaining sign-off
+ * candidates are in the new message.
+ */
+function findHeuristicSignatureNode(body: HTMLElement): Element | null {
+  let seenContent = false;
+  for (const child of Array.from(body.children)) {
+    const firstLine = firstNonEmptyLine(child.textContent ?? '');
+    if (firstLine === '') continue;
+    if (seenContent && SIGNOFF_REGEX.test(firstLine)) return child;
+    seenContent = true;
+  }
+  return null;
+}
+
+function firstNonEmptyLine(text: string): string {
+  return text.split('\n').find((line) => line.trim() !== '')?.trim() ?? '';
 }
 
 /**
@@ -143,6 +197,22 @@ export function trimQuotedText(text: string): TrimResult {
 
     // RFC 3676 signature delimiter: "-- " (with trailing space) on its own.
     if (line === '-- ' || line === '--') {
+      cutAt = i;
+      cut = 'signature';
+      break;
+    }
+
+    // Heuristic sign-off: "Best,", "Thanks,", "Sent from my iPhone",
+    // etc. on a line by itself. Requires (a) an earlier non-empty
+    // content line — so a one-word reply "Thanks!" doesn't get cut to
+    // an empty body — AND (b) the immediately preceding line to be
+    // blank, so "Best regards always" mid-paragraph doesn't trip.
+    if (
+      i > 0 &&
+      SIGNOFF_REGEX.test(line) &&
+      (lines[i - 1] ?? '').trim() === '' &&
+      lines.slice(0, i).some((l) => l.trim() !== '')
+    ) {
       cutAt = i;
       cut = 'signature';
       break;

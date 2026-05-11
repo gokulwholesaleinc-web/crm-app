@@ -41,10 +41,20 @@ export function useProposals(filters?: ProposalFilters) {
 }
 
 /**
- * Hook to fetch a single proposal by ID
+ * Hook to fetch a single proposal by ID.
+ *
+ * While the proposal is awaiting customer action (``sent`` or ``viewed``)
+ * we poll every 20 s so the CRM detail view auto-flips to "Accepted" the
+ * moment the signer signs, with no manual refresh. Polling pauses
+ * automatically once the status moves out of those two states.
  */
 export function useProposal(id: number | undefined) {
-  return proposalEntityHooks.useOne(id);
+  return proposalEntityHooks.useOne(id, {
+    refetchInterval: (query) => {
+      const status = (query.state.data as Proposal | undefined)?.status;
+      return status === 'sent' || status === 'viewed' ? 20_000 : false;
+    },
+  });
 }
 
 /**

@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { CheckIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import { sanitizeHexColor } from '../../utils/colorValidation';
+import { useForceLightMode } from '../../hooks/useForceLightMode';
 import { formatDate } from '../../utils/formatters';
 
 // Bare axios instance for public (unauthenticated) contract endpoints.
@@ -128,6 +129,8 @@ export default function PublicContractView() {
   const [actionDone, setActionDone] = useState(false);
   const [logoError, setLogoError] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useForceLightMode();
 
   useEffect(() => { setLogoError(false); }, [contract?.branding?.logo_url]);
 
