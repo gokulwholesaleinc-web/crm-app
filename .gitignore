@@ -63,3 +63,4 @@ backend/uploads/
 ---
 # Local audit artifacts (not for commit)
 .audit-findings/
+.claude/

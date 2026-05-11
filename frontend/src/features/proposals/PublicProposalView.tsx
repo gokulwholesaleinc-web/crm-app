@@ -3,6 +3,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import { sanitizeHexColor, withAlpha } from '../../utils/colorValidation';
+import { useForceLightMode } from '../../hooks/useForceLightMode';
 import { formatDate } from '../../utils/formatters';
 import { cadenceLabel, formatProposalMoney } from './billing';
 import { setPublicPageMeta } from '../quotes/publicMeta';
@@ -102,6 +103,8 @@ function PublicProposalView() {
   const [viewedIds, setViewedIds] = useState<Set<number>>(() => new Set());
   const seededViewedIdsRef = useRef(false);
   const paySectionRef = useRef<HTMLElement | null>(null);
+
+  useForceLightMode();
 
   useEffect(() => {
     setLogoError(false);

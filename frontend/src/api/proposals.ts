@@ -266,17 +266,29 @@ export const deleteProposalAttachment = async (
 export const openProposalAttachmentPreview = async (
   attachmentId: number,
 ): Promise<void> => {
-  const response = await apiClient.get<Blob>(
+  // Ask the backend for the presigned R2 URL as JSON instead of letting
+  // XHR follow the 307 redirect to R2 — Cloudflare R2 doesn't return CORS
+  // headers, so the browser blocks the redirect in the XHR path even
+  // though it works fine for top-level navigation. Open the URL directly
+  // with window.open below; the new tab navigates to R2 as a top-level
+  // request and CORS doesn't apply.
+  const response = await apiClient.get<{ download_url?: string }>(
     `/api/attachments/${attachmentId}/download`,
-    { responseType: 'blob' },
+    { params: { as_json: 1 } },
   );
-  const blobUrl = URL.createObjectURL(response.data);
+  const url = response.data?.download_url;
+  if (!url) {
+    // Empty response means the backend couldn't presign (R2 outage /
+    // mis-config / unexpected boto3 exception) — without this guard
+    // window.open('') silently pops about:blank with no diagnostic.
+    throw new Error('Preview unavailable — could not load attachment URL');
+  }
   // noopener/noreferrer keeps the new tab from accessing window.opener
   // (the staff CRM session). Per OWASP guidance for any user-content link.
-  window.open(blobUrl, '_blank', 'noopener,noreferrer');
-  // 60s is enough for the new tab's PDF.js / built-in viewer to fetch
-  // the blob URL contents; revoking too early aborts the load.
-  setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+  const opened = window.open(url, '_blank', 'noopener,noreferrer');
+  if (!opened) {
+    throw new Error('Popup blocked — allow popups to preview attachments');
+  }
 };
 
 /**

@@ -121,6 +121,54 @@ describe('trimQuotedHtml', () => {
     expect(result.body).not.toContain('Giancarlo');
   });
 
+  it('cuts at an unmarked "Best," sign-off block (heuristic)', () => {
+    const html =
+      '<p>Sounds great.</p>' +
+      '<p>Best,</p>' +
+      '<p>Giancarlo</p>' +
+      '<p>CEO · Link Creative</p>';
+    const result = trimQuotedHtml(html);
+    expect(result.trimmed).toBe(true);
+    expect(result.cut).toBe('signature');
+    expect(result.body).toContain('Sounds great');
+    expect(result.body).not.toContain('Giancarlo');
+    expect(result.body).not.toContain('Link Creative');
+  });
+
+  it('cuts at "Sent from my iPhone" auto-signature (heuristic)', () => {
+    const html =
+      '<div>Sounds good — moving forward.</div>' +
+      '<div>Sent from my iPhone</div>';
+    const result = trimQuotedHtml(html);
+    expect(result.trimmed).toBe(true);
+    expect(result.cut).toBe('signature');
+    expect(result.body).toContain('Sounds good');
+    expect(result.body).not.toContain('Sent from my iPhone');
+  });
+
+  it('does NOT trip on "best laid plans" mid-sentence', () => {
+    const html = '<p>The best laid plans of mice and men go awry.</p>';
+    const result = trimQuotedHtml(html);
+    expect(result.trimmed).toBe(false);
+    expect(result.cut).toBe('none');
+    expect(result.body).toBe(html);
+  });
+
+  it('does NOT delete a single-paragraph "Thanks," reply', () => {
+    const html = '<div>Thanks,</div>';
+    const result = trimQuotedHtml(html);
+    expect(result.trimmed).toBe(false);
+    expect(result.body).toContain('Thanks');
+  });
+
+  it('does NOT delete a "Thanks" then name only', () => {
+    const html = '<div>Thanks</div><div>Giancarlo</div>';
+    const result = trimQuotedHtml(html);
+    expect(result.trimmed).toBe(false);
+    expect(result.body).toContain('Thanks');
+    expect(result.body).toContain('Giancarlo');
+  });
+
   it('handles empty input safely', () => {
     expect(trimQuotedHtml('')).toEqual({ body: '', trimmed: false, cut: 'none' });
   });
@@ -155,6 +203,39 @@ describe('trimQuotedText', () => {
     expect(result.cut).toBe('quote');
     expect(result.body).toContain('Approved');
     expect(result.body).not.toContain('Original body');
+  });
+
+  it('cuts at unmarked "Best regards," sign-off (heuristic)', () => {
+    const text = 'Sounds great.\n\nBest regards,\nGiancarlo\nLink Creative\n+1 555 1234';
+    const result = trimQuotedText(text);
+    expect(result.trimmed).toBe(true);
+    expect(result.cut).toBe('signature');
+    expect(result.body).toContain('Sounds great');
+    expect(result.body).not.toContain('Giancarlo');
+    expect(result.body).not.toContain('555 1234');
+  });
+
+  it('cuts at "Sent from my iPhone" plain-text auto-sig', () => {
+    const text = 'Looks good.\n\nSent from my iPhone';
+    const result = trimQuotedText(text);
+    expect(result.trimmed).toBe(true);
+    expect(result.cut).toBe('signature');
+    expect(result.body).toBe('Looks good.');
+  });
+
+  it('does NOT delete a single-line "Thanks!" reply', () => {
+    // Without the earlier-content guard, cutAt=0 → body becomes empty.
+    const text = 'Thanks!';
+    const result = trimQuotedText(text);
+    expect(result.trimmed).toBe(false);
+    expect(result.body).toBe('Thanks!');
+  });
+
+  it('does NOT cut when "Thanks" is mid-paragraph', () => {
+    const text = 'Thanks for the proposal — looks great.\nFollow-up notes inline.';
+    const result = trimQuotedText(text);
+    expect(result.trimmed).toBe(false);
+    expect(result.body).toBe(text);
   });
 
   it('does NOT cut on inline references to "wrote"', () => {

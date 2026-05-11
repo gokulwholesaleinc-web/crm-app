@@ -3,7 +3,7 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse
 
 from src.attachments.schemas import AttachmentListResponse, AttachmentResponse
@@ -62,8 +62,22 @@ async def download_attachment(
     current_user: CurrentUser,
     db: DBSession,
     data_scope: Annotated[DataScope, Depends(get_data_scope)],
+    as_json: bool = Query(False, alias="as_json"),
 ):
-    """Download an attachment file."""
+    """Download an attachment file.
+
+    Default behavior is a 307 redirect to a short-lived R2 presigned URL
+    (or a FileResponse when object storage isn't configured). The browser
+    follows the redirect as a top-level navigation when the frontend uses
+    ``window.open`` on this URL, so no CORS preflight is needed.
+
+    XHR-based fetch flows (the staff preview path) must pass
+    ``?as_json=1`` to receive ``{"download_url": "..."}`` instead. axios
+    cannot intercept a cross-origin redirect — the browser auto-follows it
+    and R2 doesn't return CORS headers, so the redirect path 502s in the
+    browser console even though the underlying request would have worked
+    via navigation.
+    """
     service = AttachmentService(db)
     attachment = await service.get_attachment(attachment_id)
     if not attachment:
@@ -75,15 +89,34 @@ async def download_attachment(
 
     try:
         download_url = await service.get_download_url(attachment)
-    except Exception as exc:
-        logger.info("Failed to get download URL for attachment %s: %s", attachment_id, exc)
+    except Exception:
+        # logger.exception so Sentry / log aggregator see the stack — R2
+        # outages, expired creds, or unexpected boto3 errors otherwise
+        # collapse to a generic "File not found" on the fallback path and
+        # the real cause stays invisible. Local-disk fallback still runs
+        # below for dev/test where R2 isn't configured.
+        logger.exception(
+            "Failed to get presigned download URL for attachment %s",
+            attachment_id,
+        )
         download_url = None
 
     if download_url:
+        if as_json:
+            return {"download_url": download_url}
         return RedirectResponse(url=download_url, status_code=307)
 
     file_path = service.get_file_path(attachment)
     if not file_path or not file_path.exists():
+        # On the JSON path, surface a distinct 503 instead of a 404 when
+        # object storage is configured but the presign failed — a 404
+        # would tell the frontend "this attachment doesn't exist," which
+        # is misleading during an R2 outage.
+        if as_json:
+            raise HTTPException(
+                status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+                detail="Attachment storage temporarily unavailable",
+            )
         raise_not_found("File", attachment_id)
 
     return FileResponse(

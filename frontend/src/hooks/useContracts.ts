@@ -38,10 +38,20 @@ export function useContracts(filters?: ContractFilters) {
 }
 
 /**
- * Hook to fetch a single contract by ID
+ * Hook to fetch a single contract by ID.
+ *
+ * While the contract is ``sent`` (awaiting signer action) we poll every
+ * 20 s so the CRM detail view auto-flips to "Signed" the moment the
+ * customer signs, with no manual refresh. Polling pauses automatically
+ * once the status moves out of ``sent``.
  */
 export function useContract(id: number | undefined) {
-  return contractEntityHooks.useOne(id);
+  return contractEntityHooks.useOne(id, {
+    refetchInterval: (query) => {
+      const status = (query.state.data as Contract | undefined)?.status;
+      return status === 'sent' ? 20_000 : false;
+    },
+  });
 }
 
 /**
