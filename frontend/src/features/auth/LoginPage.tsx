@@ -22,14 +22,16 @@ function LoginPage() {
         <div>
           {tenant?.logo_url && !logoError ? (
             <div className="flex justify-center mb-4">
-              <img
-                src={tenant.logo_url}
-                alt={tenant.company_name || 'Company logo'}
-                width={64}
-                height={64}
-                className="h-16 w-auto object-contain"
-                onError={() => setLogoError(true)}
-              />
+              <div className="dark:bg-white/95 dark:rounded-lg dark:px-4 dark:py-2 dark:ring-1 dark:ring-white/10 dark:shadow-sm">
+                <img
+                  src={tenant.logo_url}
+                  alt={tenant.company_name || 'Company logo'}
+                  width={64}
+                  height={64}
+                  className="h-16 w-auto object-contain"
+                  onError={() => setLogoError(true)}
+                />
+              </div>
             </div>
           ) : (
             <div className="flex justify-center mb-4">
