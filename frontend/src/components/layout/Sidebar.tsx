@@ -287,17 +287,24 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
       >
         <div className="flex items-center min-w-0">
           {tenant?.logo_url && !logoError ? (
-            <img
-              src={tenant.logo_url}
-              alt={tenant.company_name || 'Logo'}
-              width={collapsed ? 32 : 180}
-              height={collapsed ? 32 : 40}
+            <div
               className={clsx(
-                'object-contain flex-shrink-0',
-                collapsed ? 'h-8 w-auto max-w-[40px]' : 'h-10 w-auto max-w-[180px]'
+                'flex items-center justify-center flex-shrink-0 dark:rounded-md dark:bg-white/95 dark:ring-1 dark:ring-white/10 dark:shadow-sm',
+                collapsed ? 'h-10 w-10 dark:p-1' : 'h-12 dark:px-2 dark:py-1'
               )}
-              onError={() => setLogoError(true)}
-            />
+            >
+              <img
+                src={tenant.logo_url}
+                alt={tenant.company_name || 'Logo'}
+                width={collapsed ? 32 : 180}
+                height={collapsed ? 32 : 40}
+                className={clsx(
+                  'object-contain',
+                  collapsed ? 'h-8 w-auto max-w-[32px]' : 'h-10 w-auto max-w-[176px]'
+                )}
+                onError={() => setLogoError(true)}
+              />
+            </div>
           ) : (
             <div
               className={clsx(
