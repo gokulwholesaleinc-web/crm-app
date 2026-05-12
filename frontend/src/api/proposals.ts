@@ -310,6 +310,16 @@ export const publicProposalAttachmentDownloadUrl = (
   return `${baseUrl}${PROPOSALS_BASE}/public/${token}/attachments/${attachmentId}/download`;
 };
 
+/**
+ * Refresh a proposal's billing fields from its linked quote.
+ */
+export const refreshProposalFromQuote = async (proposalId: number): Promise<Proposal> => {
+  const response = await apiClient.post<Proposal>(
+    `${PROPOSALS_BASE}/${proposalId}/refresh-from-quote`,
+  );
+  return response.data;
+};
+
 export const proposalsApi = {
   list: listProposals,
   get: getProposal,
@@ -333,5 +343,6 @@ export const proposalsApi = {
   uploadAttachment: uploadProposalAttachment,
   deleteAttachment: deleteProposalAttachment,
   publicAttachmentDownloadUrl: publicProposalAttachmentDownloadUrl,
+  refreshFromQuote: refreshProposalFromQuote,
 };
 
