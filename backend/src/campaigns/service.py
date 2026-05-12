@@ -155,13 +155,9 @@ class CampaignService(CRUDService[Campaign, CampaignCreate, CampaignUpdate]):
     ) -> int:
         """Send one campaign step via the channel configured on the campaign.
 
-        Returns the count of emails sent. Mutates ``campaign.num_sent`` and
-        member statuses for the Gmail branch; the Mailchimp branch lets the
-        Mailchimp service own those side effects.
-
-        Shared by both the manual-execute endpoint and the worker-mode
-        `_execute_campaign_step` so the `send_via` flag is honored in both
-        paths — previously the manual path always went through Gmail.
+        Returns the number of emails sent. For the Gmail branch, increments
+        ``campaign.num_sent`` and updates member statuses; the Mailchimp
+        service owns those side effects on its own branch.
         """
         if campaign.send_via == "mailchimp":
             from src.integrations.mailchimp.service import (
@@ -179,7 +175,7 @@ class CampaignService(CRUDService[Campaign, CampaignCreate, CampaignUpdate]):
             mc_summary = await mc_service.send_campaign_step(
                 campaign=campaign,
                 template_id=step.template_id,
-                sent_by_id=campaign.owner_id or sent_by_id,
+                sent_by_id=sent_by_id or campaign.owner_id,
                 tenant_id=tenant_id,
             )
             return mc_summary["emails_sent"]

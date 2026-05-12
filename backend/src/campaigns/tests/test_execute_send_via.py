@@ -1,11 +1,7 @@
-"""Integration tests for the campaign execute → send_via routing fix.
+"""Integration tests for campaign execute -> send_via routing.
 
-Verifies that POST /api/campaigns/{id}/execute and the underlying
-CampaignService._send_step honor the `campaign.send_via` flag — before
-the fix, the manual-trigger path always went through Gmail regardless
-of how the campaign was configured.
-
-Uses a real in-memory SQLite DB. No mocks per CRM CLAUDE.md.
+Asserts POST /api/campaigns/{id}/execute and CampaignService._send_step
+honor `campaign.send_via`. Real in-memory SQLite, no mocks.
 """
 
 from __future__ import annotations
@@ -18,71 +14,67 @@ from collections.abc import AsyncGenerator
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../../../"))
 
-from src.account.models import UserNotificationPrefs, UserPreferences  # noqa: F401, E402
-from src.activities.models import Activity  # noqa: F401, E402
-from src.assignment.models import AssignmentRule  # noqa: F401, E402
-from src.attachments.models import Attachment  # noqa: F401, E402
-from src.audit.models import AuditLog  # noqa: F401, E402
-from src.auth.models import User  # noqa: E402
-from src.auth.security import create_access_token, get_password_hash  # noqa: E402
-from src.campaigns.models import (  # noqa: E402
+# Import all models so create_all picks them up
+from src.account.models import UserNotificationPrefs, UserPreferences  # noqa: F401
+from src.activities.models import Activity  # noqa: F401
+from src.assignment.models import AssignmentRule  # noqa: F401
+from src.attachments.models import Attachment  # noqa: F401
+from src.audit.models import AuditLog  # noqa: F401
+from src.auth.models import User
+from src.auth.security import create_access_token, get_password_hash
+from src.campaigns.models import (
     Campaign,
     CampaignMember,
     EmailCampaignStep,
     EmailTemplate,
 )
-from src.campaigns.service import CampaignService  # noqa: E402
-from src.comments.models import Comment  # noqa: F401, E402
-from src.companies.models import Company  # noqa: F401, E402
-from src.contacts.models import Contact  # noqa: E402
-from src.contracts.models import Contract  # noqa: F401, E402
-from src.core.models import EntityShare, EntityTag, Note, Tag  # noqa: F401, E402
-from src.dashboard.models import (  # noqa: F401, E402
+from src.campaigns.service import CampaignService, EmailCampaignStepService
+from src.comments.models import Comment  # noqa: F401
+from src.companies.models import Company  # noqa: F401
+from src.contacts.models import Contact
+from src.contracts.models import Contract  # noqa: F401
+from src.core.models import EntityShare, EntityTag, Note, Tag  # noqa: F401
+from src.dashboard.models import (  # noqa: F401
     DashboardChart,
     DashboardNumberCard,
     DashboardReportWidget,
 )
-from src.database import Base, get_db  # noqa: E402
-from src.email.models import EmailQueue, EmailSettings, InboundEmail  # noqa: F401, E402
-from src.expenses.models import Expense  # noqa: F401, E402
-from src.filters.models import SavedFilter  # noqa: F401, E402
-from src.integrations.gmail.models import GmailConnection, GmailSyncState  # noqa: F401, E402
-from src.integrations.google_calendar.models import (  # noqa: F401, E402
+from src.database import Base, get_db
+from src.email.models import EmailQueue, EmailSettings, InboundEmail  # noqa: F401
+from src.expenses.models import Expense  # noqa: F401
+from src.filters.models import SavedFilter  # noqa: F401
+from src.integrations.gmail.models import GmailConnection, GmailSyncState  # noqa: F401
+from src.integrations.google_calendar.models import (  # noqa: F401
     CalendarSyncEvent,
     GoogleCalendarCredential,
 )
-from src.integrations.mailchimp.models import MailchimpConnection  # noqa: F401, E402
-from src.integrations.mailchimp.service import MailchimpNotConnected  # noqa: E402
-from src.leads.models import Lead, LeadSource  # noqa: F401, E402
-from src.meta.models import CompanyMetaData, MetaCredential, MetaLeadCapture  # noqa: F401, E402
-from src.notifications.models import Notification  # noqa: F401, E402
-from src.opportunities.models import Opportunity, PipelineStage  # noqa: F401, E402
-from src.payments.models import (  # noqa: F401, E402
-    Payment,
-    Price,
-    Product,
-    StripeCustomer,
-    Subscription,
-)
-from src.proposals.models import Proposal  # noqa: F401, E402
-from src.quotes.models import (  # noqa: F401, E402
+from src.integrations.mailchimp.models import MailchimpConnection  # noqa: F401
+from src.integrations.mailchimp.service import MailchimpNotConnected
+from src.leads.models import Lead, LeadSource  # noqa: F401
+from src.meta.models import CompanyMetaData, MetaCredential, MetaLeadCapture  # noqa: F401
+from src.notifications.models import Notification  # noqa: F401
+from src.opportunities.models import Opportunity, PipelineStage  # noqa: F401
+from src.payments.models import Payment, Price, Product, StripeCustomer, Subscription  # noqa: F401
+from src.proposals.models import Proposal  # noqa: F401
+from src.quotes.models import (  # noqa: F401
     ProductBundle,
     ProductBundleItem,
     Quote,
     QuoteLineItem,
     QuoteTemplate,
 )
-from src.reports.models import SavedReport  # noqa: F401, E402
-from src.roles.models import DEFAULT_PERMISSIONS, Role, RoleName, UserRole  # noqa: F401, E402
-from src.sequences.models import Sequence, SequenceEnrollment  # noqa: F401, E402
-from src.webhooks.models import Webhook, WebhookDelivery  # noqa: F401, E402
-from src.whitelabel.models import Tenant, TenantSettings, TenantUser  # noqa: F401, E402
-from src.workflows.models import WorkflowExecution, WorkflowRule  # noqa: F401, E402
+from src.reports.models import SavedReport  # noqa: F401
+from src.roles.models import DEFAULT_PERMISSIONS, Role, RoleName, UserRole  # noqa: F401
+from src.sequences.models import Sequence, SequenceEnrollment  # noqa: F401
+from src.webhooks.models import Webhook, WebhookDelivery  # noqa: F401
+from src.whitelabel.models import Tenant, TenantSettings, TenantUser  # noqa: F401
+from src.workflows.models import WorkflowExecution, WorkflowRule  # noqa: F401
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -181,12 +173,13 @@ async def _make_campaign_with_step(
     db.add(step)
 
     if member_contact is not None:
-        member = CampaignMember(
-            campaign_id=campaign.id,
-            member_type="contact",
-            member_id=member_contact.id,
+        db.add(
+            CampaignMember(
+                campaign_id=campaign.id,
+                member_type="contact",
+                member_id=member_contact.id,
+            )
         )
-        db.add(member)
 
     await db.commit()
     await db.refresh(campaign)
@@ -208,15 +201,6 @@ async def _make_contact(db: AsyncSession, owner: User, *, email: str | None) -> 
 
 
 class TestExecuteSendViaRouting:
-    """The fix: manual /execute must honor campaign.send_via.
-
-    Pre-fix, the endpoint always called EmailService.send_campaign_emails
-    (the Gmail path). A Mailchimp-configured campaign sent nothing if
-    Mailchimp was the only connected provider, and ignored explicit user
-    intent. These tests assert routing — they don't assert delivery,
-    since neither Gmail nor Mailchimp credentials exist in the test env.
-    """
-
     async def test_mailchimp_path_taken_when_send_via_is_mailchimp(
         self,
         client: AsyncClient,
@@ -233,17 +217,12 @@ class TestExecuteSendViaRouting:
             f"/api/campaigns/{campaign.id}/execute", headers=auth_headers,
         )
 
-        # Without a tenant association or Mailchimp connection, the
-        # Mailchimp path can't complete — the endpoint catches the
-        # exception, pauses the campaign, and surfaces the failure.
-        # The fact that we hit *that* error (and not "Gmail not
-        # connected") is what proves the routing branched correctly.
+        # Mailchimp branch raises MailchimpNotConnected (no tenant/connection
+        # in test env); the endpoint catches it and pauses. The error text
+        # identifies which branch ran — Gmail would say "active Gmail connection".
         assert resp.status_code == 200
         body = resp.json()
         assert "execution failed" in body["message"].lower()
-        # The Mailchimp branch raises MailchimpNotConnected with this
-        # specific text; the Gmail branch raises GmailNotConnectedError
-        # with "sender has no active Gmail connection".
         assert "mailchimp" in body["message"].lower()
 
         await db_session.refresh(campaign)
@@ -266,18 +245,13 @@ class TestExecuteSendViaRouting:
             f"/api/campaigns/{campaign.id}/execute", headers=auth_headers,
         )
 
-        # Gmail branch queues an EmailQueue row per member, then
-        # _attempt_send fails (no GmailConnection) and the row is
-        # marked failed/retry. The campaign itself stays active.
         assert resp.status_code == 200
         body = resp.json()
         assert body["send_via"] == "gmail"
         assert body["emails_sent"] == 1
 
-        # A queued row proves the Gmail branch ran (Mailchimp branch
-        # never creates EmailQueue rows — it goes through the Mailchimp
-        # API directly).
-        from sqlalchemy import select
+        # Mailchimp branch never writes to EmailQueue, so a queued row proves
+        # the Gmail branch ran.
         queued = await db_session.execute(
             select(EmailQueue).where(EmailQueue.campaign_id == campaign.id)
         )
@@ -288,21 +262,14 @@ class TestExecuteSendViaRouting:
     async def test_send_via_unit_routes_on_campaign_flag(
         self, db_session: AsyncSession, admin_user: User,
     ):
-        """Direct service-level test of _send_step routing decision.
-
-        Easier to reason about than going through the HTTP layer for the
-        future maintainer who reads this — failing in one of these two
-        cases instantly localizes the regression to _send_step.
-        """
         contact = await _make_contact(db_session, admin_user, email="z@example.com")
+        service = CampaignService(db_session)
+        step_service = EmailCampaignStepService(db_session)
 
         mc_campaign = await _make_campaign_with_step(
             db_session, admin_user, send_via="mailchimp", member_contact=contact,
         )
-        from src.campaigns.service import EmailCampaignStepService
-        mc_steps = await EmailCampaignStepService(db_session).get_steps(mc_campaign.id)
-
-        service = CampaignService(db_session)
+        mc_steps = await step_service.get_steps(mc_campaign.id)
         with pytest.raises(MailchimpNotConnected):
             await service._send_step(
                 campaign=mc_campaign, step=mc_steps[0], sent_by_id=admin_user.id,
@@ -311,13 +278,80 @@ class TestExecuteSendViaRouting:
         gmail_campaign = await _make_campaign_with_step(
             db_session, admin_user, send_via="gmail", member_contact=contact,
         )
-        gmail_steps = await EmailCampaignStepService(db_session).get_steps(
-            gmail_campaign.id
-        )
+        gmail_steps = await step_service.get_steps(gmail_campaign.id)
         emails_sent = await service._send_step(
             campaign=gmail_campaign, step=gmail_steps[0], sent_by_id=admin_user.id,
         )
-        # Gmail branch queues the email even though the send fails — the
-        # row exists, num_sent is incremented; that's the routing proof.
         assert emails_sent == 1
         assert gmail_campaign.num_sent == 1
+
+    async def test_gmail_send_attributes_to_manual_clicker_not_owner(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_user: User,
+        auth_headers: dict,
+    ):
+        # Campaign owned by a *different* user; the clicker (admin_user) is
+        # the one we want recorded on the queued mail.
+        owner = User(
+            email=f"owner-{secrets.token_hex(3)}@test.com",
+            hashed_password=get_password_hash("password"),
+            full_name="Owner User",
+            is_active=True,
+            is_approved=True,
+            is_superuser=True,
+        )
+        db_session.add(owner)
+        await db_session.commit()
+        await db_session.refresh(owner)
+
+        contact = await _make_contact(db_session, owner, email="w@example.com")
+        campaign = await _make_campaign_with_step(
+            db_session, owner, send_via="gmail", member_contact=contact,
+        )
+
+        resp = await client.post(
+            f"/api/campaigns/{campaign.id}/execute", headers=auth_headers,
+        )
+        assert resp.status_code == 200
+
+        queued = await db_session.execute(
+            select(EmailQueue).where(EmailQueue.campaign_id == campaign.id)
+        )
+        rows = queued.scalars().all()
+        assert len(rows) == 1
+        # The queued row's sent_by_id is the clicker, not the owner —
+        # otherwise a manager triggering someone else's campaign would
+        # attribute the mail to the wrong inbox / signature.
+        assert rows[0].sent_by_id == admin_user.id
+
+    async def test_is_executing_flag_resets_on_failure(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_user: User,
+        auth_headers: dict,
+    ):
+        # Mailchimp path with no tenant → MailchimpNotConnected → endpoint
+        # catches in the except branch. The finally block must reset
+        # is_executing so a re-trigger isn't permanently blocked.
+        contact = await _make_contact(db_session, admin_user, email="r@example.com")
+        campaign = await _make_campaign_with_step(
+            db_session, admin_user, send_via="mailchimp", member_contact=contact,
+        )
+
+        resp = await client.post(
+            f"/api/campaigns/{campaign.id}/execute", headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        await db_session.refresh(campaign)
+        assert campaign.is_executing is False
+        assert campaign.status == "paused"
+
+        # Re-trigger: must NOT short-circuit on "already executing".
+        resp2 = await client.post(
+            f"/api/campaigns/{campaign.id}/execute", headers=auth_headers,
+        )
+        assert resp2.status_code == 200
+        assert "already executing" not in resp2.json()["message"].lower()

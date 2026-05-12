@@ -1,5 +1,6 @@
 """Campaign API routes."""
 
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -43,6 +44,8 @@ from src.core.router_utils import (
     raise_forbidden,
     raise_not_found,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/campaigns", tags=["campaigns"])
 
@@ -537,10 +540,7 @@ async def execute_campaign(
 ):
     """Execute a campaign: send step 1 immediately, schedule remaining steps.
 
-    Routes through Mailchimp or Gmail based on ``campaign.send_via`` —
-    the worker-mode `_execute_campaign_step` honors the same flag, so
-    keeping the manual-trigger path in sync prevents the "I set it to
-    Mailchimp but it sent via Gmail" footgun.
+    Routes through Mailchimp or Gmail based on ``campaign.send_via``.
     """
     service = CampaignService(db)
     campaign = await get_entity_or_404(service, campaign_id, EntityNames.CAMPAIGN)
@@ -554,23 +554,40 @@ async def execute_campaign(
     if not steps:
         return {"message": "No steps configured for this campaign", "status": campaign.status}
 
-    # Send step 1 immediately
+    from src.email.service import GmailNotConnectedError
+    from src.integrations.mailchimp.service import MailchimpNotConnected
+
     campaign.status = "active"
     campaign.is_executing = True
     campaign.current_step = 0
     await db.flush()
 
+    emails_sent = 0
+    send_succeeded = False
     try:
         emails_sent = await service._send_step(
             campaign=campaign,
             step=steps[0],
             sent_by_id=current_user.id,
         )
-    except Exception as exc:
+        send_succeeded = True
+    except (MailchimpNotConnected, GmailNotConnectedError, ValueError) as exc:
+        # Known provider/configuration errors — surface as a paused
+        # campaign with the cause. ValueError covers "Template not found".
+        logger.warning("Campaign %s execution paused: %s", campaign_id, exc)
         campaign.status = "paused"
-        campaign.is_executing = False
-        await db.flush()
-        return {"message": f"Campaign execution failed: {str(exc)}", "status": campaign.status, "emails_sent": 0}
+        return {
+            "message": f"Campaign execution failed: {exc}",
+            "status": campaign.status,
+            "emails_sent": 0,
+        }
+    finally:
+        if not send_succeeded:
+            # Reset the in-flight flag on any exit that didn't complete a
+            # send — including BaseException paths (cancellation, kill)
+            # — so the campaign isn't permanently stuck "executing".
+            campaign.is_executing = False
+            await db.flush()
 
     campaign.current_step = 1
     service._advance_to_next_step(campaign, steps)
