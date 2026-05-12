@@ -191,6 +191,42 @@ class TestReportTemplatesAPI:
         ids = [t["id"] for t in data]
         assert "pipeline_by_stage" in ids
 
+    @pytest.mark.asyncio
+    async def test_templates_endpoint_pins_all_known_ids(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+    ):
+        """The full set of template IDs is part of the public API surface.
+
+        These IDs are referenced by the frontend (filter chips, deep links,
+        admin saved-report defaults). A rename here is a breaking change
+        and must show up as a failing test, not as a silent UI regression.
+        """
+        response = await client.get(
+            "/api/reports/templates",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        actual = {t["id"] for t in response.json()}
+        expected = {
+            "pipeline_by_stage",
+            "revenue_by_month",
+            "lead_conversion",
+            "activity_by_rep",
+            "campaign_performance",
+            "deals_won_lost",
+            "payment_summary_by_month",
+            "contracts_by_status",
+            "revenue_by_source",
+            "pipeline_value_by_owner",
+        }
+        assert actual == expected, (
+            f"Template ID set changed. Missing: {expected - actual}; "
+            f"Unexpected: {actual - expected}"
+        )
+
 
 class TestSavedReportCRUDAPI:
     """Tests for saved report CRUD via HTTP API endpoints."""
