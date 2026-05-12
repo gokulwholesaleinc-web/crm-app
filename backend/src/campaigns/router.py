@@ -1,5 +1,6 @@
 """Campaign API routes."""
 
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -43,6 +44,8 @@ from src.core.router_utils import (
     raise_forbidden,
     raise_not_found,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/campaigns", tags=["campaigns"])
 
@@ -535,9 +538,10 @@ async def execute_campaign(
     current_user: Annotated[User, Depends(require_permission("campaigns", "update"))],
     db: DBSession,
 ):
-    """Execute a campaign: send step 1 immediately, schedule remaining steps."""
-    from src.email.service import EmailService
+    """Execute a campaign: send step 1 immediately, schedule remaining steps.
 
+    Routes through Mailchimp or Gmail based on ``campaign.send_via``.
+    """
     service = CampaignService(db)
     campaign = await get_entity_or_404(service, campaign_id, EntityNames.CAMPAIGN)
     check_ownership(campaign, current_user, EntityNames.CAMPAIGN)
@@ -550,27 +554,40 @@ async def execute_campaign(
     if not steps:
         return {"message": "No steps configured for this campaign", "status": campaign.status}
 
-    # Send step 1 immediately
+    from src.email.service import GmailNotConnectedError
+    from src.integrations.mailchimp.service import MailchimpNotConnected
+
     campaign.status = "active"
     campaign.is_executing = True
     campaign.current_step = 0
     await db.flush()
 
-    email_service = EmailService(db)
+    emails_sent = 0
+    send_succeeded = False
     try:
-        sent_emails = await email_service.send_campaign_emails(
-            campaign_id=campaign_id,
-            template_id=steps[0].template_id,
+        emails_sent = await service._send_step(
+            campaign=campaign,
+            step=steps[0],
             sent_by_id=current_user.id,
         )
-    except Exception as exc:
+        send_succeeded = True
+    except (MailchimpNotConnected, GmailNotConnectedError, ValueError) as exc:
+        # Known provider/configuration errors — surface as a paused
+        # campaign with the cause. ValueError covers "Template not found".
+        logger.warning("Campaign %s execution paused: %s", campaign_id, exc)
         campaign.status = "paused"
-        campaign.is_executing = False
-        await db.flush()
-        return {"message": f"Campaign execution failed: {str(exc)}", "status": campaign.status, "emails_sent": 0}
-
-    campaign.num_sent = len(sent_emails)
-    await service._update_member_statuses(campaign_id, sent_emails)
+        return {
+            "message": f"Campaign execution failed: {exc}",
+            "status": campaign.status,
+            "emails_sent": 0,
+        }
+    finally:
+        if not send_succeeded:
+            # Reset the in-flight flag on any exit that didn't complete a
+            # send — including BaseException paths (cancellation, kill)
+            # — so the campaign isn't permanently stuck "executing".
+            campaign.is_executing = False
+            await db.flush()
 
     campaign.current_step = 1
     service._advance_to_next_step(campaign, steps)
@@ -579,9 +596,10 @@ async def execute_campaign(
     await db.refresh(campaign)
 
     return {
-        "message": f"Campaign started: {len(sent_emails)} emails sent for step 1",
+        "message": f"Campaign started: {emails_sent} emails sent for step 1",
         "status": campaign.status,
-        "emails_sent": len(sent_emails),
+        "emails_sent": emails_sent,
+        "send_via": campaign.send_via,
         "total_steps": len(steps),
         "next_step_at": campaign.next_step_at.isoformat() if campaign.next_step_at else None,
     }
