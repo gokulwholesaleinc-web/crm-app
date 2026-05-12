@@ -4,6 +4,9 @@
 
 import { apiClient } from './client';
 import type { ThreadResponse } from '../types/email';
+import type { VolumeStats } from '../types';
+
+export type { VolumeStats };
 
 export interface InlineAttachmentPayload {
   filename: string;
@@ -88,13 +91,10 @@ export interface EmailSearchResponse {
   pages: number;
 }
 
-/**
- * Email volume stats — re-exported from `api/campaigns` so the email
- * surface owns the ``/api/email/volume-stats`` call site logically. The
- * underlying function is identical; this avoids cross-feature imports
- * (campaigns→inbox) when more callers wire up.
- */
-export { getVolumeStats } from './campaigns';
+export const getVolumeStats = async (): Promise<VolumeStats> => {
+  const response = await apiClient.get<VolumeStats>('/api/email/volume-stats');
+  return response.data;
+};
 
 export const emailApi = {
   send: (data: SendEmailPayload) =>

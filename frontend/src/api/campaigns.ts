@@ -21,7 +21,6 @@ import type {
   EmailCampaignStep,
   EmailCampaignStepCreate,
   EmailCampaignStepUpdate,
-  VolumeStats,
   EmailSettings,
   EmailSettingsUpdate,
   CreateCampaignFromImportRequest,
@@ -259,13 +258,6 @@ export const createCampaignFromImport = async (
   return response.data;
 };
 
-// Email Volume Stats
-
-export const getVolumeStats = async (): Promise<VolumeStats> => {
-  const response = await apiClient.get<VolumeStats>('/api/email/volume-stats');
-  return response.data;
-};
-
 // Email Settings
 
 export const getEmailSettings = async (): Promise<EmailSettings> => {
@@ -311,8 +303,7 @@ export const campaignsApi = {
   execute: executeCampaign,
   // LinkedIn / Import
   createFromImport: createCampaignFromImport,
-  // Volume & Settings
-  getVolumeStats,
+  // Settings
   getEmailSettings,
   updateEmailSettings,
 };

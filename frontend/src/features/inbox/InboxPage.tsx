@@ -19,24 +19,24 @@
  * Gmail rate-limit don't have to dig into Settings.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import {
   emailApi,
-  getVolumeStats,
   type EmailQueueItem,
   type EmailSearchResult,
 } from '../../api/email';
-import { Spinner } from '../../components/ui';
+import { useVolumeStats } from '../../hooks/useEmail';
+import { useDebouncedValue } from '../../hooks/useDebouncedValue';
+import { Button, Spinner } from '../../components/ui';
 import { ErrorEmptyState } from '../../components/ui/EmptyState';
+import { PaginationBar } from '../../components/ui/Pagination';
 import { usePageTitle } from '../../hooks/usePageTitle';
+import { formatDateTime } from '../../utils/formatters';
 
-const SEARCH_ICON = (
-  <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-  </svg>
-);
+const PAGE_SIZE = 25;
 
 const STATUS_FILTERS = [
   { value: '', label: 'All' },
@@ -45,19 +45,37 @@ const STATUS_FILTERS = [
   { value: 'failed', label: 'Failed' },
 ] as const;
 
-function formatTimestamp(value: string | null): string {
-  if (!value) return '';
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(
-    new Date(value),
-  );
+type StatusValue = (typeof STATUS_FILTERS)[number]['value'];
+
+function isStatusValue(value: string): value is StatusValue {
+  return STATUS_FILTERS.some((f) => f.value === value);
+}
+
+function getErrorDetail(error: unknown): string | undefined {
+  // apiClient rejects with ApiError ({ detail: string }); axios pre-interceptor
+  // and unexpected throws surface as Error instances. FastAPI 422 responses
+  // arrive here with `detail` as an array of {loc, msg, type} — the apiClient
+  // only flattens that for blob bodies, so we flatten the JSON shape here.
+  if (error && typeof error === 'object' && 'detail' in error) {
+    const detail = (error as { detail: unknown }).detail;
+    if (typeof detail === 'string' && detail.trim()) return detail;
+    if (Array.isArray(detail)) {
+      const msgs = detail
+        .map((d) =>
+          typeof d === 'object' && d !== null && typeof (d as { msg?: unknown }).msg === 'string'
+            ? (d as { msg: string }).msg
+            : null,
+        )
+        .filter((m): m is string => m !== null);
+      if (msgs.length > 0) return msgs.join('; ');
+    }
+  }
+  if (error instanceof Error && error.message) return error.message;
+  return undefined;
 }
 
 function VolumeTile() {
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['email', 'volume-stats'] as const,
-    queryFn: getVolumeStats,
-    staleTime: 60 * 1000,
-  });
+  const { data, isLoading, isError } = useVolumeStats();
 
   if (isLoading) {
     return (
@@ -80,7 +98,10 @@ function VolumeTile() {
     );
   }
 
-  const limit = data.warmup_enabled && data.warmup_current_limit > 0 ? data.warmup_current_limit : data.daily_limit;
+  const limit =
+    data.warmup_enabled && data.warmup_current_limit > 0
+      ? data.warmup_current_limit
+      : data.daily_limit;
   const ratio = limit > 0 ? Math.min(data.sent_today / limit, 1) : 0;
 
   return (
@@ -159,12 +180,7 @@ function listToRow(item: EmailQueueItem): RecentRow {
   };
 }
 
-interface RowContentProps {
-  row: RecentRow;
-  navigable: boolean;
-}
-
-function RowContent({ row, navigable }: RowContentProps) {
+function RowContent({ row, navigable }: { row: RecentRow; navigable: boolean }) {
   const kindClass =
     row.kind === 'sent'
       ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
@@ -197,7 +213,7 @@ function RowContent({ row, navigable }: RowContentProps) {
       </div>
       {row.timestamp && (
         <span className="shrink-0 text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap">
-          {formatTimestamp(row.timestamp)}
+          {formatDateTime(row.timestamp)}
         </span>
       )}
     </div>
@@ -207,35 +223,76 @@ function RowContent({ row, navigable }: RowContentProps) {
 function InboxPage() {
   usePageTitle('Inbox');
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [query, setQuery] = useState('');
-  const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('');
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const urlQuery = searchParams.get('q') ?? '';
+  const urlStatus = searchParams.get('status') ?? '';
+  const urlPage = Math.max(1, Number(searchParams.get('page') ?? '1') || 1);
 
+  // Local typing state — debounced into the URL so the address bar
+  // doesn't churn on every keystroke. URL is the source of truth for the
+  // fetch (shareable + back-button friendly).
+  const [query, setQuery] = useState(urlQuery);
+  const debouncedQuery = useDebouncedValue(query, 300);
+
+  const statusFilter: StatusValue = isStatusValue(urlStatus) ? urlStatus : '';
+
+  // Set-or-delete a single URL param. Filter/query changes also clear
+  // ?page= since the old offset is meaningless against the new result set.
+  const updateParam = (key: 'q' | 'status' | 'page', value: string) => {
+    setSearchParams(
+      (prev) => {
+        if (value) prev.set(key, value);
+        else prev.delete(key);
+        if (key !== 'page') prev.delete('page');
+        return prev;
+      },
+      { replace: true },
+    );
+  };
+
+  // Sync debounced query → URL ?q=.
   useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => setDebouncedQuery(query.trim()), 300);
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [query]);
+    if (debouncedQuery === urlQuery) return;
+    setSearchParams(
+      (prev) => {
+        if (debouncedQuery) prev.set('q', debouncedQuery);
+        else prev.delete('q');
+        prev.delete('page');
+        return prev;
+      },
+      { replace: true },
+    );
+  }, [debouncedQuery, urlQuery, setSearchParams]);
+
+  const setStatus = (value: StatusValue) => updateParam('status', value);
+  const setPage = (page: number) => updateParam('page', page > 1 ? String(page) : '');
 
   const isSearching = debouncedQuery.length > 0;
 
-  // Default view: recent outbound (the only feed currently exposed
-  // server-side that isn't entity-scoped). Search view: unified hits.
   const recentList = useQuery({
-    queryKey: ['email', 'inbox-recent', statusFilter] as const,
-    queryFn: () => emailApi.list({ page_size: 50, status: statusFilter || undefined }),
+    queryKey: ['email', 'inbox-recent', statusFilter, urlPage] as const,
+    queryFn: () =>
+      emailApi.list({
+        page: urlPage,
+        page_size: PAGE_SIZE,
+        status: statusFilter || undefined,
+      }),
     enabled: !isSearching,
   });
 
   const searchResults = useQuery({
-    queryKey: ['email', 'inbox-search', debouncedQuery] as const,
-    queryFn: () => emailApi.search({ q: debouncedQuery, page_size: 50 }),
+    queryKey: ['email', 'inbox-search', debouncedQuery, urlPage] as const,
+    queryFn: () =>
+      emailApi.search({
+        q: debouncedQuery,
+        page: urlPage,
+        page_size: PAGE_SIZE,
+      }),
     enabled: isSearching,
   });
+
+  const active = isSearching ? searchResults : recentList;
 
   const rows: RecentRow[] = useMemo(() => {
     if (isSearching) {
@@ -244,9 +301,8 @@ function InboxPage() {
     return (recentList.data?.items ?? []).map(listToRow);
   }, [isSearching, recentList.data, searchResults.data]);
 
-  const total = isSearching ? searchResults.data?.total ?? 0 : recentList.data?.total ?? 0;
-  const isLoading = isSearching ? searchResults.isLoading : recentList.isLoading;
-  const error = isSearching ? searchResults.error : recentList.error;
+  const total = active.data?.total ?? 0;
+  const pages = active.data?.pages ?? 1;
 
   const handleRowClick = (row: RecentRow) => {
     if (row.entityType && row.entityId != null) {
@@ -255,12 +311,13 @@ function InboxPage() {
     }
   };
 
-  const handleRowKeyDown = (e: React.KeyboardEvent, row: RecentRow) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      handleRowClick(row);
-    }
-  };
+  const errorDetail = active.error ? getErrorDetail(active.error) : undefined;
+  const statusLabel = STATUS_FILTERS.find((f) => f.value === statusFilter)?.label;
+  const emptyMessage = isSearching
+    ? `No emails found for "${debouncedQuery}"`
+    : statusFilter
+      ? `No emails matching ${statusLabel}.`
+      : 'No emails to show yet.';
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -277,7 +334,7 @@ function InboxPage() {
       <div className="rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
         <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
           <label className="flex-1 flex items-center gap-3" htmlFor="inbox-search">
-            {SEARCH_ICON}
+            <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
             <input
               id="inbox-search"
               type="search"
@@ -287,8 +344,9 @@ function InboxPage() {
               onChange={(e) => setQuery(e.target.value)}
               spellCheck={false}
               autoComplete="off"
+              maxLength={200}
             />
-            {(searchResults.isFetching || recentList.isFetching) && <Spinner size="sm" />}
+            {active.isFetching && <Spinner size="sm" />}
           </label>
         </div>
 
@@ -296,18 +354,18 @@ function InboxPage() {
           <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-gray-100 dark:border-gray-700">
             <span className="text-xs text-gray-500 dark:text-gray-400 mr-1">Status:</span>
             {STATUS_FILTERS.map((f) => {
-              const active = statusFilter === f.value;
+              const isActive = statusFilter === f.value;
               return (
                 <button
                   key={f.value || 'all'}
                   type="button"
-                  onClick={() => setStatusFilter(f.value)}
+                  onClick={() => setStatus(f.value)}
                   className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
-                    active
+                    isActive
                       ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 border-primary-200 dark:border-primary-700'
                       : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50'
                   }`}
-                  aria-pressed={active}
+                  aria-pressed={isActive}
                 >
                   {f.label}
                 </button>
@@ -316,21 +374,30 @@ function InboxPage() {
           </div>
         )}
 
-        {error ? (
-          <ErrorEmptyState onRetry={() => (isSearching ? searchResults.refetch() : recentList.refetch())} />
-        ) : isLoading ? (
+        {active.error ? (
+          <div className="px-4 py-8">
+            <ErrorEmptyState description={errorDetail} onRetry={() => active.refetch()} />
+          </div>
+        ) : active.isLoading ? (
           <div className="px-4 py-12 flex justify-center">
             <Spinner />
           </div>
         ) : rows.length === 0 ? (
-          <p className="px-4 py-12 text-sm text-center text-gray-500 dark:text-gray-400">
-            {isSearching ? `No emails found for "${debouncedQuery}"` : 'No emails to show yet.'}
-          </p>
+          <div
+            className="px-4 py-12 flex flex-col items-center gap-2"
+            aria-live="polite"
+          >
+            <p className="text-sm text-center text-gray-500 dark:text-gray-400">{emptyMessage}</p>
+            {!isSearching && statusFilter && (
+              <Button variant="secondary" size="sm" onClick={() => setStatus('')}>
+                Clear filter
+              </Button>
+            )}
+          </div>
         ) : (
           <>
             <p className="px-4 py-2 text-xs text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-700">
               {total} {isSearching ? 'result' : 'email'}{total !== 1 ? 's' : ''}
-              {total > rows.length ? ` (showing first ${rows.length})` : ''}
             </p>
             <ul role="list">
               {rows.map((row) => {
@@ -343,7 +410,6 @@ function InboxPage() {
                       <button
                         type="button"
                         onClick={() => handleRowClick(row)}
-                        onKeyDown={(e) => handleRowKeyDown(e, row)}
                         aria-label={`${row.kind === 'sent' ? 'Sent' : 'Received'}: ${row.subject}`}
                         className={`${baseClass} hover:bg-gray-50 dark:hover:bg-gray-700/60 focus-visible:outline-none focus-visible:bg-gray-50 dark:focus-visible:bg-gray-700/60 cursor-pointer`}
                       >
@@ -358,6 +424,13 @@ function InboxPage() {
                 );
               })}
             </ul>
+            <PaginationBar
+              page={urlPage}
+              pages={pages}
+              total={total}
+              pageSize={PAGE_SIZE}
+              onPageChange={setPage}
+            />
           </>
         )}
       </div>
