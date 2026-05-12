@@ -35,6 +35,7 @@ import { ProposalForm } from './ProposalForm';
 import { StatusTimeline } from '../../components/shared/StatusTimeline';
 import { SendChecklist, isChecklistReady } from '../../components/shared/SendChecklist';
 import { InlineSectionEditor } from '../../components/shared/InlineSectionEditor';
+import { RefreshFromQuoteButton } from '../../components/shared/RefreshFromQuoteButton';
 import {
   buildProposalTimelineSteps,
   buildProposalSendChecklist,
@@ -630,6 +631,19 @@ function ProposalDetailPage() {
                     <Link to={`/quotes/${proposal.quote.id}`} className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300">
                       {proposal.quote.title} ({proposal.quote.quote_number})
                     </Link>
+                  </dd>
+                  {/* Refresh-from-quote sync — only meaningful when a
+                      quote is linked and the proposal isn't locked. If
+                      the customer changed the quote's line items after
+                      the proposal was spawned, the structured amount on
+                      this proposal can drift. The button is no-op when
+                      it would overwrite an accepted/paid commitment. */}
+                  <dd className="mt-2">
+                    <RefreshFromQuoteButton
+                      proposalId={proposal.id}
+                      hasQuoteLink
+                      isLocked={['signed', 'accepted', 'awaiting_payment', 'paid'].includes(proposal.status ?? '')}
+                    />
                   </dd>
                 </div>
               )}
