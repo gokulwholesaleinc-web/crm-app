@@ -5,6 +5,8 @@ import { Button, EntityLink, Modal, ConfirmDialog, PaginationBar } from '../../c
 import { SearchableSelect } from '../../components/ui/SearchableSelect';
 import { SkeletonTable } from '../../components/ui/Skeleton';
 import { SortableTh } from '../../components/shared/SortableTh';
+import { MissingRelationDialog } from '../../components/shared/MissingRelationDialog';
+import { useMissingRelationConfirm } from '../../hooks/useMissingRelationConfirm';
 import {
   useContracts,
   useCreateContract,
@@ -67,28 +69,48 @@ function CreateContractModal({
     label: c.name,
   }));
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const doCreate = async (data: ContractCreate) => {
     try {
-      const data: ContractCreate = {
-        title,
-        contract_number: contractNumber.trim() || null,
-        status,
-        value: value ? parseFloat(value) : null,
-        currency,
-        start_date: startDate || null,
-        end_date: endDate || null,
-        scope: scope || null,
-        contact_id: contactId,
-        company_id: companyId,
-        designated_signer_email: designatedSignerEmail.trim() || null,
-      };
       const created = await createMutation.mutateAsync(data);
       showSuccess('Contract created');
       onCreated(created.id);
     } catch {
       showError('Failed to create contract');
     }
+  };
+
+  const missingRelation = useMissingRelationConfirm<ContractCreate>((data) => {
+    void doCreate(data);
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const data: ContractCreate = {
+      title,
+      contract_number: contractNumber.trim() || null,
+      status,
+      value: value ? parseFloat(value) : null,
+      currency,
+      start_date: startDate || null,
+      end_date: endDate || null,
+      scope: scope || null,
+      contact_id: contactId,
+      company_id: companyId,
+      designated_signer_email: designatedSignerEmail.trim() || null,
+    };
+
+    // designated_signer_email is enough to send a contract on its own —
+    // only nag if NONE of the three recipient hooks are present.
+    if (
+      data.contact_id == null &&
+      data.company_id == null &&
+      !data.designated_signer_email
+    ) {
+      missingRelation.request(data);
+      return;
+    }
+
+    void doCreate(data);
   };
 
   return (
@@ -239,6 +261,13 @@ function CreateContractModal({
           <Button type="submit" isLoading={createMutation.isPending} disabled={!title.trim()}>Create</Button>
         </div>
       </form>
+      <MissingRelationDialog
+        isOpen={missingRelation.isOpen}
+        entityType="contract"
+        onCancel={missingRelation.onCancel}
+        onConfirm={missingRelation.onConfirm}
+        isLoading={createMutation.isPending}
+      />
     </Modal>
   );
 }

@@ -3,6 +3,8 @@ import { useSearchParams } from 'react-router-dom';
 import { TrashIcon, PlusIcon, CubeIcon } from '@heroicons/react/24/outline';
 import { Button, SearchableSelect } from '../../components/ui';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
+import { MissingRelationDialog } from '../../components/shared/MissingRelationDialog';
+import { useMissingRelationConfirm } from '../../hooks/useMissingRelationConfirm';
 import BillingTermsField, { type BillingTermsValue } from '../../components/forms/BillingTermsField';
 import { useContacts } from '../../hooks/useContacts';
 import { useCompanies } from '../../hooks/useCompanies';
@@ -222,6 +224,8 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
     [formData.currency]
   );
 
+  const missingRelation = useMissingRelationConfirm<QuoteCreate>(onSubmit);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (isLoading) return;
@@ -245,6 +249,11 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
       recurring_interval_count: billing.payment_type === 'subscription' ? billing.recurring_interval_count : null,
       line_items: lineItems.filter((item) => item.description.trim() !== ''),
     };
+
+    if (!isEditing && data.contact_id == null && data.company_id == null) {
+      missingRelation.request(data);
+      return;
+    }
 
     onSubmit(data);
   };
@@ -648,6 +657,13 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
         }
         confirmLabel="Remove"
         variant="danger"
+      />
+      <MissingRelationDialog
+        isOpen={missingRelation.isOpen}
+        entityType="quote"
+        onCancel={missingRelation.onCancel}
+        onConfirm={missingRelation.onConfirm}
+        isLoading={isLoading}
       />
     </form>
   );

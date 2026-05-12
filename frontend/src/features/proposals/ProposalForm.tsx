@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button, SearchableSelect } from '../../components/ui';
+import { MissingRelationDialog } from '../../components/shared/MissingRelationDialog';
+import { useMissingRelationConfirm } from '../../hooks/useMissingRelationConfirm';
 import BillingTermsField, { type BillingTermsValue } from '../../components/forms/BillingTermsField';
 import { useContacts } from '../../hooks/useContacts';
 import { useCompanies } from '../../hooks/useCompanies';
@@ -121,13 +123,13 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
     }
   }, [urlOpportunity]);
 
+  const missingRelation = useMissingRelationConfirm<ProposalCreate>(onSubmit);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (isLoading) return;
 
     const amountTrimmed = billing.amount.trim();
-    const amountValue = amountTrimmed === '' ? null : amountTrimmed;
-
     const data: ProposalCreate = {
       title: formData.title,
       content: formData.content || null,
@@ -145,9 +147,16 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
       payment_type: billing.payment_type,
       recurring_interval: billing.recurring_interval,
       recurring_interval_count: billing.recurring_interval_count,
-      amount: amountValue,
+      amount: amountTrimmed === '' ? null : amountTrimmed,
       currency: billing.currency,
     };
+
+    // Only nag on create; edit mode pre-selects the proposal's existing
+    // relations and the user has already been through this prompt once.
+    if (!isEditing && data.contact_id == null && data.company_id == null) {
+      missingRelation.request(data);
+      return;
+    }
 
     onSubmit(data);
   };
@@ -364,6 +373,13 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
           {isEditing ? 'Save' : 'Create Proposal'}
         </Button>
       </div>
+      <MissingRelationDialog
+        isOpen={missingRelation.isOpen}
+        entityType="proposal"
+        onCancel={missingRelation.onCancel}
+        onConfirm={missingRelation.onConfirm}
+        isLoading={isLoading}
+      />
     </form>
   );
 }
