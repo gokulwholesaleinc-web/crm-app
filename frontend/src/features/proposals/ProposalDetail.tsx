@@ -32,6 +32,13 @@ import {
 import { ProposalBillingCard } from './ProposalBillingCard';
 import { ProposalAuditCard } from './ProposalAuditCard';
 import { ProposalForm } from './ProposalForm';
+import { StatusTimeline } from '../../components/shared/StatusTimeline';
+import { SendChecklist, isChecklistReady } from '../../components/shared/SendChecklist';
+import { InlineSectionEditor } from '../../components/shared/InlineSectionEditor';
+import {
+  buildProposalTimelineSteps,
+  buildProposalSendChecklist,
+} from './proposalStatus';
 import {
   listProposalAttachments,
   uploadProposalAttachment,
@@ -66,12 +73,25 @@ function ProposalDetailPage() {
   const actionRowRef = useRef<HTMLDivElement>(null);
 
   if (isLoading) {
+    // Mirror the real 3-column layout so content loading doesn't jolt
+    // the page width / sidebar position. `motion-reduce:animate-none`
+    // honors the OS reduce-motion preference (the rest of the codebase
+    // uses this; the original skeleton was an exception).
     return (
-      <div className="space-y-6">
-        <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" />
-          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2 mb-2" />
-          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/4" />
+      <div className="space-y-6 animate-pulse motion-reduce:animate-none">
+        <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/3" />
+        <div className="h-16 bg-gray-200 dark:bg-gray-700 rounded" />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-4">
+            <div className="h-32 bg-gray-200 dark:bg-gray-700 rounded-lg" />
+            <div className="h-32 bg-gray-200 dark:bg-gray-700 rounded-lg" />
+            <div className="h-32 bg-gray-200 dark:bg-gray-700 rounded-lg" />
+          </div>
+          <div className="space-y-4">
+            <div className="h-40 bg-gray-200 dark:bg-gray-700 rounded-lg" />
+            <div className="h-32 bg-gray-200 dark:bg-gray-700 rounded-lg" />
+            <div className="h-32 bg-gray-200 dark:bg-gray-700 rounded-lg" />
+          </div>
         </div>
       </div>
     );
@@ -170,6 +190,25 @@ function ProposalDetailPage() {
     }
   };
 
+  // Per-section inline save: each InlineSectionEditor calls this with the
+  // field name it controls. Thrown errors propagate so the editor stays
+  // in edit mode and surfaces an inline message — toast is the secondary
+  // signal, not the primary recovery path.
+  const handleSectionSave = async (
+    field: keyof ProposalUpdate,
+    value: string | null,
+  ) => {
+    try {
+      await updateProposalMutation.mutateAsync({
+        id: proposal.id,
+        data: { [field]: value } as ProposalUpdate,
+      });
+    } catch (err) {
+      showError(extractApiErrorDetail(err) ?? 'Failed to save changes');
+      throw err;
+    }
+  };
+
   const handleCopyPublicLink = () => {
     // Use the SPA route — not the raw JSON API path — and key on the
     // unguessable public_token, not the enumerable proposal_number.
@@ -217,6 +256,25 @@ function ProposalDetailPage() {
     !proposal.stripe_checkout_session_id &&
     !proposal.stripe_payment_url;
 
+  // Build the timeline + checklist from the proposal record. Checklist
+  // hides itself once everything required passes, so it only nags when
+  // there's something to fix.
+  const timelineSteps = buildProposalTimelineSteps(proposal);
+  const sendChecklist = buildProposalSendChecklist(proposal, {
+    onEditContact: () => setShowEditModal(true),
+    onEditValidUntil: () => setShowEditModal(true),
+  });
+  const checklistReady = isChecklistReady(sendChecklist);
+
+  const hasAnyContent = Boolean(
+    proposal.executive_summary ||
+      proposal.scope_of_work ||
+      proposal.pricing_section ||
+      proposal.timeline ||
+      proposal.terms ||
+      proposal.content,
+  );
+
   return (
     <div className="space-y-6">
       <StickyActionBar triggerRef={actionRowRef}>
@@ -263,16 +321,15 @@ function ProposalDetailPage() {
           </div>
         </div>
 
+        {/* Action row — one primary CTA per status, others demoted to
+            secondary. Accept/Reject collapse into a single "Mark Result"
+            disclosure to avoid the wall-of-buttons clutter. Delete lives
+            in the overflow menu so a misclick can't nuke a sent proposal. */}
         <div ref={actionRowRef} className="flex flex-wrap items-center gap-2">
           <HelpLink anchor="tutorial-esign" label="How clients sign and accept" />
-          {canEdit && (
-            <Button variant="secondary" onClick={() => setShowEditModal(true)} leftIcon={<PencilIcon className="h-4 w-4" />}>
-              Edit
-            </Button>
-          )}
-          <Button variant="secondary" onClick={handleCopyPublicLink} leftIcon={<ClipboardDocumentIcon className="h-4 w-4" />}>
-            Copy Link
-          </Button>
+
+          {/* PRIMARY action — status-driven. The single highest-leverage
+              next step the user can take. */}
           {showSendButton && (
             <Button
               onClick={handleSend}
@@ -288,28 +345,8 @@ function ProposalDetailPage() {
               {sendProposalMutation.isPending ? 'Sending...' : sendLabel}
             </Button>
           )}
-          {canAcceptReject && (
-            <>
-              <Button
-                onClick={handleAccept}
-                leftIcon={<CheckIcon className="h-4 w-4" />}
-                disabled={acceptProposalMutation.isPending}
-              >
-                Accept
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={handleReject}
-                leftIcon={<XMarkIcon className="h-4 w-4" />}
-                disabled={rejectProposalMutation.isPending}
-              >
-                Reject
-              </Button>
-            </>
-          )}
           {canResendPaymentLink && (
             <Button
-              variant="secondary"
               onClick={handleResendPaymentLink}
               leftIcon={<PaperAirplaneIcon className="h-4 w-4" />}
               disabled={resendPaymentLinkMutation.isPending}
@@ -319,7 +356,6 @@ function ProposalDetailPage() {
           )}
           {canRetryBilling && (
             <Button
-              variant="secondary"
               onClick={handleRetryBilling}
               leftIcon={<ArrowPathIcon className="h-4 w-4" />}
               disabled={retryBillingMutation.isPending}
@@ -327,60 +363,140 @@ function ProposalDetailPage() {
               {retryBillingMutation.isPending ? 'Retrying...' : 'Retry Billing'}
             </Button>
           )}
+
+          {/* SECONDARY — common follow-ups, always visible when applicable. */}
+          {canAcceptReject && (
+            <>
+              <Button
+                variant="secondary"
+                onClick={handleAccept}
+                leftIcon={<CheckIcon className="h-4 w-4" />}
+                disabled={acceptProposalMutation.isPending}
+              >
+                Mark Accepted
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={handleReject}
+                leftIcon={<XMarkIcon className="h-4 w-4" />}
+                disabled={rejectProposalMutation.isPending}
+              >
+                Mark Rejected
+              </Button>
+            </>
+          )}
+          <Button
+            variant="secondary"
+            onClick={handleCopyPublicLink}
+            leftIcon={<ClipboardDocumentIcon className="h-4 w-4" />}
+            disabled={!proposal.public_token}
+            title={proposal.public_token ? undefined : 'Save or send the proposal first to generate a public link.'}
+          >
+            Copy Link
+          </Button>
+          {canEdit && (
+            <Button
+              variant="secondary"
+              onClick={() => setShowEditModal(true)}
+              leftIcon={<PencilIcon className="h-4 w-4" />}
+            >
+              Edit
+            </Button>
+          )}
+
+          {/* Delete is always last + always danger. Confirm modal gates it. */}
           <Button variant="danger" onClick={() => setShowDeleteConfirm(true)}>
             Delete
           </Button>
         </div>
       </div>
 
+      {/* Status timeline — tells the Draft → Sent → Viewed → Signed → Paid
+          story at a glance. Replaces the implicit "stack two status pills
+          and bury dates in the sidebar" pattern. */}
+      <StatusTimeline steps={timelineSteps} />
+
+      {/* Pre-send checklist — only shows when the proposal is in a
+          sendable status AND at least one required gate is failing.
+          Once everything's green it auto-hides so a polished proposal
+          doesn't carry a clutter card. */}
+      {canSendStatus && !checklistReady && (
+        <SendChecklist
+          items={sendChecklist}
+          hideWhenAllGreen
+        />
+      )}
+
       {/* Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Content */}
+        {/* Main Content — each section is inline-editable via pencil
+            icon; the original "open the entire edit modal to tweak two
+            sentences in Scope" friction is gone. The modal still owns
+            related-record reassignment + billing changes. */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Executive Summary */}
-          {proposal.executive_summary && (
-            <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700">
-              <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Executive Summary</h2>
-              <p className="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap">{proposal.executive_summary}</p>
+          {!hasAnyContent && canEdit && (
+            <div className="rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 bg-gray-50/50 dark:bg-gray-800/40 p-8 text-center">
+              <DocumentTextIcon className="mx-auto h-10 w-10 text-gray-300 dark:text-gray-600" aria-hidden="true" />
+              <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">
+                This proposal is empty
+              </h3>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                Add an executive summary, scope, pricing, and terms so the client sees what you&rsquo;re proposing.
+              </p>
+              <div className="mt-4">
+                <Button variant="primary" onClick={() => setShowEditModal(true)}>
+                  Fill in the proposal
+                </Button>
+              </div>
             </div>
           )}
 
-          {/* Scope of Work */}
-          {proposal.scope_of_work && (
-            <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700">
-              <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Scope of Work</h2>
-              <p className="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap">{proposal.scope_of_work}</p>
-            </div>
-          )}
+          <InlineSectionEditor
+            title="Executive Summary"
+            value={proposal.executive_summary ?? null}
+            onSave={(v) => handleSectionSave('executive_summary', v)}
+            canEdit={canEdit}
+            placeholder="The 30-second pitch. What we're proposing, why it matters to the client."
+          />
+          <InlineSectionEditor
+            title="Scope of Work"
+            value={proposal.scope_of_work ?? null}
+            onSave={(v) => handleSectionSave('scope_of_work', v)}
+            canEdit={canEdit}
+            rows={6}
+            placeholder="Deliverables, phases, what's in and out of scope."
+          />
+          <InlineSectionEditor
+            title="Pricing"
+            value={proposal.pricing_section ?? null}
+            onSave={(v) => handleSectionSave('pricing_section', v)}
+            canEdit={canEdit}
+            placeholder="Line-item breakdown, assumptions, anything beyond the structured amount on the right."
+          />
+          <InlineSectionEditor
+            title="Timeline"
+            value={proposal.timeline ?? null}
+            onSave={(v) => handleSectionSave('timeline', v)}
+            canEdit={canEdit}
+            rows={3}
+            placeholder="Kickoff, milestones, expected completion."
+          />
+          <InlineSectionEditor
+            title="Terms"
+            value={proposal.terms ?? null}
+            onSave={(v) => handleSectionSave('terms', v)}
+            canEdit={canEdit}
+            rows={3}
+            placeholder="Payment terms, IP, cancellation, anything legal."
+          />
 
-          {/* Pricing Section */}
-          {proposal.pricing_section && (
-            <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700">
-              <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Pricing</h2>
-              <p className="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap">{proposal.pricing_section}</p>
-            </div>
-          )}
-
-          {/* Timeline */}
-          {proposal.timeline && (
-            <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700">
-              <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Timeline</h2>
-              <p className="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap">{proposal.timeline}</p>
-            </div>
-          )}
-
-          {/* Terms */}
-          {proposal.terms && (
-            <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700">
-              <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Terms</h2>
-              <p className="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap">{proposal.terms}</p>
-            </div>
-          )}
-
-          {/* Content (fallback) */}
+          {/* Content (fallback) — only renders for legacy proposals that
+              were authored before the structured-section split. Read-only
+              because editing a free-form blob doesn't have a destination
+              field on the new schema. */}
           {proposal.content && !proposal.executive_summary && !proposal.scope_of_work && (
-            <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700">
-              <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Content</h2>
+            <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-gray-100 dark:border-gray-700">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Content</h2>
               <p className="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap">{proposal.content}</p>
             </div>
           )}
@@ -397,8 +513,8 @@ function ProposalDetailPage() {
         {/* Sidebar */}
         <div className="space-y-6">
           {/* Proposal Info */}
-          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700">
-            <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-4">Details</h2>
+          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-gray-100 dark:border-gray-700">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-4">Details</h2>
             <dl className="space-y-3">
               <div>
                 <dt className="text-xs text-gray-500 dark:text-gray-400">Valid Until</dt>
@@ -474,8 +590,8 @@ function ProposalDetailPage() {
           />
 
           {/* Related Entities */}
-          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700">
-            <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-4">Related</h2>
+          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-gray-100 dark:border-gray-700">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-4">Related</h2>
             <dl className="space-y-3">
               {proposal.contact && (
                 <div>
@@ -662,7 +778,7 @@ function ProposalAttachmentsCard({ proposalId, isLocked }: ProposalAttachmentsCa
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700">
+    <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-gray-100 dark:border-gray-700">
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400">Attachments</h2>
         {isLocked && (
