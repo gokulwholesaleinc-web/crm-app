@@ -100,6 +100,7 @@ describe('OnboardingLinkGenerator', () => {
     await waitFor(() =>
       expect(toast.showError).toHaveBeenCalledWith('Stripe is down')
     );
+    expect(toast.showError).toHaveBeenCalledTimes(1);
   });
 
   it('falls back to a generic message when the rejection has no extractable detail', async () => {
@@ -112,6 +113,7 @@ describe('OnboardingLinkGenerator', () => {
     await waitFor(() =>
       expect(toast.showError).toHaveBeenCalledWith('Failed to generate payment setup link')
     );
+    expect(toast.showError).toHaveBeenCalledTimes(1);
   });
 
   it('copy button calls navigator.clipboard.writeText and shows success toast', async () => {
