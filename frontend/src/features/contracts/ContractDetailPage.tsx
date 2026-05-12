@@ -25,7 +25,8 @@ import { ContractAttachmentsSection } from './ContractAttachmentsSection';
 import { ContractStatusBadge } from './statusBadge';
 import EntitySharing from '../../components/shared/EntitySharing';
 import { StatusTimeline } from '../../components/shared/StatusTimeline';
-import { SendChecklist, isChecklistReady } from '../../components/shared/SendChecklist';
+import { SendChecklist } from '../../components/shared/SendChecklist';
+import { isChecklistReady } from '../../components/shared/checklist';
 import { InlineSectionEditor } from '../../components/shared/InlineSectionEditor';
 import {
   buildContractTimelineSteps,

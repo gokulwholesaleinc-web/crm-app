@@ -33,7 +33,8 @@ import { ProposalBillingCard } from './ProposalBillingCard';
 import { ProposalAuditCard } from './ProposalAuditCard';
 import { ProposalForm } from './ProposalForm';
 import { StatusTimeline } from '../../components/shared/StatusTimeline';
-import { SendChecklist, isChecklistReady } from '../../components/shared/SendChecklist';
+import { SendChecklist } from '../../components/shared/SendChecklist';
+import { isChecklistReady } from '../../components/shared/checklist';
 import { InlineSectionEditor } from '../../components/shared/InlineSectionEditor';
 import { RefreshFromQuoteButton } from '../../components/shared/RefreshFromQuoteButton';
 import {

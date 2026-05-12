@@ -5,7 +5,7 @@
 
 import type { Contract } from '../../types';
 import type { TimelineStep } from '../../components/shared/StatusTimeline';
-import type { ChecklistItem } from '../../components/shared/SendChecklist';
+import type { ChecklistItem } from '../../components/shared/checklist';
 
 // Status flow: draft → sent → signed → active → expired/terminated.
 // Contracts don't carry payment so there's no Paid step.

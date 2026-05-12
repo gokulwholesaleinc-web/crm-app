@@ -6,7 +6,7 @@
 
 import type { Proposal } from '../../types';
 import type { TimelineStep } from '../../components/shared/StatusTimeline';
-import type { ChecklistItem } from '../../components/shared/SendChecklist';
+import type { ChecklistItem } from '../../components/shared/checklist';
 
 const STATUS_ORDER = ['draft', 'sent', 'viewed', 'accepted', 'awaiting_payment', 'paid'];
 

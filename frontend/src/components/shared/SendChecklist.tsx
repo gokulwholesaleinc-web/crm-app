@@ -1,34 +1,12 @@
 import clsx from 'clsx';
 import { Button } from '../ui/Button';
+import { ChecklistItem, isChecklistReady } from './checklist';
 
-export interface ChecklistItem {
-  /** Stable key for React. */
-  key: string;
-  /** Short label, e.g., "Recipient set", "Contact has email". */
-  label: string;
-  /** true = pass (green check), false = fail (red x), 'optional' = info dot only. */
-  state: boolean | 'optional';
-  /** Optional helper text shown when failing. */
-  hint?: string;
-  /** Optional action to remediate (deep-link to the right edit field). */
-  action?: { label: string; onClick: () => void };
-}
-
-export interface SendChecklistProps {
-  /** Title above the list. Defaults to "Ready to send". */
+interface SendChecklistProps {
   title?: string;
   items: ChecklistItem[];
-  /**
-   * When true, the entire checklist is hidden once every required item passes.
-   * Prevents cluttering the page after all gates are cleared.
-   */
   hideWhenAllGreen?: boolean;
   className?: string;
-}
-
-/** Returns true iff every non-optional item has state === true. */
-export function isChecklistReady(items: ChecklistItem[]): boolean {
-  return items.every((item) => item.state === true || item.state === 'optional');
 }
 
 function CheckIcon() {

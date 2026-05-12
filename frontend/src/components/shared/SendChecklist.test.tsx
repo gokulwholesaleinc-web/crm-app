@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { SendChecklist, isChecklistReady, ChecklistItem } from './SendChecklist';
+import { SendChecklist } from './SendChecklist';
+import { ChecklistItem, isChecklistReady } from './checklist';
 
 const passedItem: ChecklistItem = { key: 'recipient', label: 'Recipient set', state: true };
 const failedItem: ChecklistItem = {
