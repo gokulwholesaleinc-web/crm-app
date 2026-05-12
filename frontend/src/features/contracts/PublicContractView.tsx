@@ -128,6 +128,7 @@ export default function PublicContractView() {
   const [actionPending, setActionPending] = useState(false);
   const [actionDone, setActionDone] = useState(false);
   const [logoError, setLogoError] = useState(false);
+  const [agreeChecked, setAgreeChecked] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useForceLightMode();
@@ -215,7 +216,7 @@ export default function PublicContractView() {
   if (loading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
-        <div role="status" aria-label="Loading contract…" className="animate-pulse text-center">
+        <div role="status" aria-label="Loading contract…" className="animate-pulse motion-reduce:animate-none text-center">
           <div className="h-7 w-40 bg-gray-200 rounded mx-auto mb-3" />
           <div className="h-3 w-24 bg-gray-200 rounded mx-auto" />
         </div>
@@ -424,6 +425,22 @@ export default function PublicContractView() {
               </div>
             )}
 
+            <div className="mb-5">
+              <div className="flex items-start gap-2.5">
+                <input
+                  type="checkbox"
+                  id="agree-terms"
+                  checked={agreeChecked}
+                  onChange={(e) => setAgreeChecked(e.target.checked)}
+                  disabled={actionPending}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus-visible:outline focus-visible:outline-2"
+                />
+                <label htmlFor="agree-terms" className="text-sm text-gray-700 leading-snug cursor-pointer">
+                  I have read and agree to the terms and conditions above
+                </label>
+              </div>
+            </div>
+
             <div className="mb-2">
               <p className="text-sm font-medium text-gray-700 mb-2">Signature</p>
               <div
@@ -451,7 +468,7 @@ export default function PublicContractView() {
             <button
               type="button"
               onClick={handleSign}
-              disabled={actionPending}
+              disabled={actionPending || !agreeChecked}
               className="mt-4 inline-flex items-center justify-center gap-2 rounded px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50 transition-opacity"
               style={{ backgroundColor: accent, outlineColor: accent }}
             >
