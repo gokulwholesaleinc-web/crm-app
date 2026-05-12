@@ -49,6 +49,60 @@ def names_are_similar(name1: str, name2: str) -> bool:
     return n1 == n2
 
 
+ALLOWED_CLUSTER_ENTITIES: tuple[str, ...] = ("contacts", "companies", "leads")
+ALLOWED_CLUSTER_KEYS_BY_ENTITY: dict[str, tuple[str, ...]] = {
+    "contacts": ("email", "phone", "name"),
+    "companies": ("email", "phone", "name"),
+    "leads": ("email", "phone"),
+}
+
+
+def _classify_merge_failure(reason: str) -> str:
+    """Map a free-form ``ValueError`` text into a coarse code the UI can branch on.
+
+    ``_load_merge_pair`` produces three distinct messages:
+    * ``"Cannot merge a record into itself"`` → ``self_merge``
+    * ``"Primary <model> <id> not found"`` → ``not_found_primary``
+    * ``"Secondary <model> <id> not found"`` → ``stale_cluster`` (the row
+      vanished between cluster render and merge — operator should refresh)
+
+    Anything else falls through to ``other`` so a future reason still
+    appears in the response without breaking the schema.
+    """
+    lower = reason.lower()
+    if "cannot merge a record into itself" in lower:
+        return "self_merge"
+    if "secondary" in lower and "not found" in lower:
+        return "stale_cluster"
+    if "primary" in lower and "not found" in lower:
+        return "not_found_primary"
+    return "other"
+
+
+def _cluster_key_for(entity: Any, key: str) -> str | None:
+    """Compute the bucket key for grouping. ``None`` means the row is not
+    a candidate (no value at all)."""
+    if key == "email":
+        email = getattr(entity, "email", None)
+        return email.lower().strip() if isinstance(email, str) and email.strip() else None
+    if key == "phone":
+        phone = getattr(entity, "phone", None)
+        normalized = normalize_phone(phone) if isinstance(phone, str) else ""
+        return normalized or None
+    if key == "name":
+        # For companies use the normalized name (strips suffixes); for
+        # contacts/leads collapse first+last lowercased.
+        company_name = getattr(entity, "name", None)
+        if isinstance(company_name, str) and company_name.strip():
+            return normalize_company_name(company_name)
+        first = (getattr(entity, "first_name", "") or "").strip().lower()
+        last = (getattr(entity, "last_name", "") or "").strip().lower()
+        if first or last:
+            return f"{first} {last}".strip()
+        return None
+    return None
+
+
 class DedupService:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -538,3 +592,238 @@ class DedupService:
                 et.entity_id = to_id
 
         await self.db.flush()
+
+    # ------------------------------------------------------------------
+    # Cluster discovery — used by /api/dedup/clusters (admin tool)
+    # ------------------------------------------------------------------
+
+    async def find_duplicate_clusters(
+        self,
+        entity_type: str,
+        key: str,
+    ) -> dict[str, Any]:
+        """Group live rows of an entity by the chosen match key.
+
+        Returns ``{"clusters": [...], "skipped_no_key": int}`` — each
+        cluster dict has the matched key value, the member count, and
+        the list of members. Each member carries id, display label,
+        ``created_at``, ``last_activity_at`` (max(activities.created_at)),
+        and the polymorphic activity count — enough for the admin UI to
+        pick the "winner" without round-tripping per row.
+
+        ``skipped_no_key`` is the count of live rows that lacked a value
+        for the chosen match key (e.g. a contact with no phone when
+        ``key="phone"``). Surfacing it tells the operator how much of
+        the dataset the current match key actually evaluates — a small
+        cluster count next to a big skipped count is usually a hint to
+        switch keys.
+
+        Soft-deleted and already-merged rows are excluded so the operator
+        only sees clusters they can actually act on.
+
+        Today this reads the full live table for the entity into memory.
+        TODO: paginate or stream when a tenant grows past ~25k rows; the
+        normalize-in-Python branch (name match) is the bottleneck.
+        """
+        if entity_type not in ALLOWED_CLUSTER_ENTITIES:
+            raise ValueError(
+                f"Invalid entity_type '{entity_type}'. Allowed: {', '.join(ALLOWED_CLUSTER_ENTITIES)}"
+            )
+        allowed_keys = ALLOWED_CLUSTER_KEYS_BY_ENTITY[entity_type]
+        if key not in allowed_keys:
+            raise ValueError(
+                f"Invalid key '{key}' for {entity_type}. Allowed: {', '.join(allowed_keys)}"
+            )
+
+        model = {"contacts": Contact, "companies": Company, "leads": Lead}[entity_type]
+
+        query = select(model)
+        if hasattr(model, "deleted_at"):
+            query = query.where(model.deleted_at.is_(None))
+        if hasattr(model, "merged_into_id"):
+            query = query.where(model.merged_into_id.is_(None))
+        result = await self.db.execute(query)
+        rows = list(result.scalars().all())
+
+        # Bucket rows by key. One pass; rows with no value land in
+        # `skipped_no_key` so the UI can surface "412 records had no
+        # phone, switch to email if you expected coverage there".
+        buckets: dict[str, list[Any]] = {}
+        skipped_no_key = 0
+        for row in rows:
+            bucket_key = _cluster_key_for(row, key)
+            if bucket_key is None:
+                skipped_no_key += 1
+                continue
+            buckets.setdefault(bucket_key, []).append(row)
+
+        # Only buckets with >= 2 members are actual duplicate clusters.
+        dup_ids: list[int] = [r.id for members in buckets.values() if len(members) >= 2 for r in members]
+        try:
+            activity_meta = await self._activity_meta_for(entity_type, dup_ids)
+        except Exception:
+            # Bubble the underlying error after capturing context — the
+            # cluster meta lookup failing leaves us unable to render a
+            # trustworthy "winner" recommendation, so we'd rather fail
+            # loudly than serve zeros that look like real data.
+            logger.exception(
+                "dedup cluster meta lookup failed",
+                extra={"entity_type": entity_type, "dup_id_count": len(dup_ids)},
+            )
+            raise
+
+        clusters: list[dict[str, Any]] = []
+        for bucket_key, members in buckets.items():
+            if len(members) < 2:
+                continue
+            cluster_members = [
+                self._render_cluster_member(entity_type, m, activity_meta)
+                for m in members
+            ]
+            # Sort members so the most-recently-active appears first — the
+            # operator usually wants to keep the most-touched record as
+            # the winner.
+            cluster_members.sort(
+                key=lambda m: (m.get("last_activity_at") or m.get("created_at") or ""),
+                reverse=True,
+            )
+            clusters.append({
+                "key": key,
+                "key_value": bucket_key,
+                "member_count": len(cluster_members),
+                "members": cluster_members,
+            })
+
+        # Stable order: biggest clusters first; ties broken by key_value
+        # so a deterministic order shows up in tests and the UI.
+        clusters.sort(key=lambda c: (-c["member_count"], c["key_value"]))
+        return {"clusters": clusters, "skipped_no_key": skipped_no_key}
+
+    async def _activity_meta_for(
+        self,
+        entity_type: str,
+        entity_ids: list[int],
+    ) -> dict[int, dict[str, Any]]:
+        """Fetch (count, max(created_at)) per entity_id in a single query."""
+        if not entity_ids:
+            return {}
+        result = await self.db.execute(
+            select(
+                Activity.entity_id,
+                func.count(Activity.id).label("activity_count"),
+                func.max(Activity.created_at).label("last_activity_at"),
+            )
+            .where(Activity.entity_type == entity_type)
+            .where(Activity.entity_id.in_(entity_ids))
+            .group_by(Activity.entity_id)
+        )
+        meta: dict[int, dict[str, Any]] = {}
+        for row in result.all():
+            meta[row.entity_id] = {
+                "activity_count": int(row.activity_count or 0),
+                "last_activity_at": row.last_activity_at,
+            }
+        return meta
+
+    @staticmethod
+    def _render_cluster_member(
+        entity_type: str,
+        entity: Any,
+        activity_meta: dict[int, dict[str, Any]],
+    ) -> dict[str, Any]:
+        info = activity_meta.get(entity.id, {})
+        last_activity = info.get("last_activity_at")
+        created_at = getattr(entity, "created_at", None)
+
+        if entity_type == "companies":
+            label = getattr(entity, "name", None) or "(no name)"
+        else:
+            first = (getattr(entity, "first_name", "") or "").strip()
+            last = (getattr(entity, "last_name", "") or "").strip()
+            label = f"{first} {last}".strip() or "(no name)"
+
+        return {
+            "id": entity.id,
+            "label": label,
+            "email": getattr(entity, "email", None),
+            "phone": getattr(entity, "phone", None),
+            "company_id": getattr(entity, "company_id", None),
+            "owner_id": getattr(entity, "owner_id", None),
+            "created_at": created_at.isoformat() if created_at else None,
+            "last_activity_at": last_activity.isoformat() if last_activity else None,
+            "activity_count": info.get("activity_count", 0),
+        }
+
+    # ------------------------------------------------------------------
+    # Bulk merge for the admin cluster tool
+    # ------------------------------------------------------------------
+
+    async def merge_cluster(
+        self,
+        *,
+        entity_type: str,
+        winner_id: int,
+        loser_ids: list[int],
+        user_id: int | None = None,
+    ) -> dict[str, Any]:
+        """Merge every loser_id into the winner_id for the chosen entity.
+
+        Delegates to the existing single-pair merge primitives so the
+        FK fanout, polymorphic link transfer, tag dedup, audit log, and
+        soft-delete behavior all stay in one place. Returns a summary
+        dict shaped for the API response.
+
+        Per-loser ``ValueError`` (bad id, already-merged tombstone) is
+        caught and recorded in ``failures`` with a coarse ``reason_code``
+        so the UI can distinguish "stale cluster, refresh" from "bad
+        input". SQLAlchemy errors deliberately propagate — they signal
+        session state that the caller cannot reason about, and
+        ``get_db`` will roll the whole request transaction back including
+        any earlier successful pair-merges.
+        """
+        if entity_type not in ALLOWED_CLUSTER_ENTITIES:
+            raise ValueError(
+                f"Invalid entity_type '{entity_type}'. Allowed: {', '.join(ALLOWED_CLUSTER_ENTITIES)}"
+            )
+        if winner_id in loser_ids:
+            raise ValueError("winner_id must not appear in loser_ids")
+        if not loser_ids:
+            raise ValueError("loser_ids must contain at least one id")
+
+        merge_fn = {
+            "contacts": self.merge_contacts,
+            "companies": self.merge_companies,
+            "leads": self.merge_leads,
+        }[entity_type]
+
+        merged: list[int] = []
+        failures: list[dict[str, Any]] = []
+        for loser_id in loser_ids:
+            try:
+                await merge_fn(winner_id, loser_id, user_id=user_id)
+                merged.append(loser_id)
+            except ValueError as exc:
+                reason_str = str(exc)
+                reason_code = _classify_merge_failure(reason_str)
+                logger.warning(
+                    "dedup cluster merge failed for one loser",
+                    extra={
+                        "entity_type": entity_type,
+                        "winner_id": winner_id,
+                        "loser_id": loser_id,
+                        "user_id": user_id,
+                        "reason_code": reason_code,
+                        "reason": reason_str,
+                    },
+                )
+                failures.append({
+                    "id": loser_id,
+                    "reason": reason_str,
+                    "reason_code": reason_code,
+                })
+
+        return {
+            "winner_id": winner_id,
+            "merged_ids": merged,
+            "failures": failures,
+        }

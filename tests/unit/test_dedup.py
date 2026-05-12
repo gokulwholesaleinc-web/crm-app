@@ -1029,3 +1029,315 @@ class TestDedupMergeSoftDelete:
         ids = [l.id for l in items]
         assert primary.id in ids
         assert secondary.id not in ids
+
+
+class TestClustersEndpoint:
+    """Admin /api/dedup/clusters endpoint + cluster discovery."""
+
+    @pytest.mark.asyncio
+    async def test_clusters_groups_contacts_by_phone(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager_auth_headers: dict,
+        test_user: User,
+    ):
+        """Three contacts sharing a normalized phone show up as one cluster of 3."""
+        db_session.add_all([
+            Contact(
+                first_name="One", last_name="Cluster", phone="(312) 555-1111",
+                owner_id=test_user.id, created_by_id=test_user.id,
+            ),
+            Contact(
+                first_name="Two", last_name="Cluster", phone="3125551111",
+                owner_id=test_user.id, created_by_id=test_user.id,
+            ),
+            Contact(
+                first_name="Three", last_name="Cluster", phone="312.555.1111",
+                owner_id=test_user.id, created_by_id=test_user.id,
+            ),
+            # Decoy: different phone, must not appear.
+            Contact(
+                first_name="Solo", last_name="Decoy", phone="3125559999",
+                owner_id=test_user.id, created_by_id=test_user.id,
+            ),
+        ])
+        await db_session.commit()
+
+        resp = await client.get(
+            "/api/dedup/clusters?entity_type=contacts&key=phone",
+            headers=manager_auth_headers,
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["entity_type"] == "contacts"
+        assert body["key"] == "phone"
+        # Solo contact is not in any cluster — only the 3 should be returned.
+        assert len(body["clusters"]) == 1
+        cluster = body["clusters"][0]
+        assert cluster["member_count"] == 3
+        labels = {m["label"] for m in cluster["members"]}
+        assert labels == {"One Cluster", "Two Cluster", "Three Cluster"}
+
+    @pytest.mark.asyncio
+    async def test_clusters_excludes_soft_deleted(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager_auth_headers: dict,
+        test_user: User,
+    ):
+        """Soft-deleted + merged-away rows must not appear in any cluster."""
+        from datetime import datetime, timezone
+
+        live = Contact(
+            first_name="Live", last_name="Twin", phone="3125557000",
+            owner_id=test_user.id, created_by_id=test_user.id,
+        )
+        soft = Contact(
+            first_name="Soft", last_name="Twin", phone="3125557000",
+            owner_id=test_user.id, created_by_id=test_user.id,
+        )
+        db_session.add_all([live, soft])
+        await db_session.commit()
+        await db_session.refresh(live)
+        await db_session.refresh(soft)
+        # Soft-delete one of the twins; cluster should disappear because
+        # the live count drops to 1.
+        soft.deleted_at = datetime.now(timezone.utc)
+        await db_session.commit()
+
+        resp = await client.get(
+            "/api/dedup/clusters?entity_type=contacts&key=phone",
+            headers=manager_auth_headers,
+        )
+        assert resp.status_code == 200
+        for c in resp.json()["clusters"]:
+            for m in c["members"]:
+                assert m["id"] != soft.id
+
+    @pytest.mark.asyncio
+    async def test_clusters_member_count_meta(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager_auth_headers: dict,
+        test_user: User,
+    ):
+        """Each cluster member carries activity_count + last_activity_at."""
+        c1 = Contact(
+            first_name="MetaA", last_name="Pair", phone="3125556500",
+            owner_id=test_user.id, created_by_id=test_user.id,
+        )
+        c2 = Contact(
+            first_name="MetaB", last_name="Pair", phone="3125556500",
+            owner_id=test_user.id, created_by_id=test_user.id,
+        )
+        db_session.add_all([c1, c2])
+        await db_session.commit()
+        await db_session.refresh(c1)
+        await db_session.refresh(c2)
+
+        # 2 activities on c1, none on c2 — winner-pick UI should sort c1 first.
+        from src.activities.models import ActivityType
+        db_session.add_all([
+            Activity(
+                entity_type="contacts", entity_id=c1.id, activity_type=ActivityType.NOTE,
+                subject="touch1", owner_id=test_user.id, created_by_id=test_user.id,
+            ),
+            Activity(
+                entity_type="contacts", entity_id=c1.id, activity_type=ActivityType.NOTE,
+                subject="touch2", owner_id=test_user.id, created_by_id=test_user.id,
+            ),
+        ])
+        await db_session.commit()
+
+        resp = await client.get(
+            "/api/dedup/clusters?entity_type=contacts&key=phone",
+            headers=manager_auth_headers,
+        )
+        body = resp.json()
+        cluster = next(c for c in body["clusters"] if c["key_value"] == "3125556500")
+        # Sorted by last_activity_at desc — c1 comes first.
+        first, second = cluster["members"]
+        assert first["id"] == c1.id
+        assert first["activity_count"] == 2
+        assert second["id"] == c2.id
+        assert second["activity_count"] == 0
+
+    @pytest.mark.asyncio
+    async def test_clusters_reports_skipped_no_key(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager_auth_headers: dict,
+        test_user: User,
+    ):
+        """Contacts with no value for the chosen match key get counted as skipped_no_key."""
+        # Two contacts with phone (one cluster of 2), 3 with no phone at all.
+        db_session.add_all([
+            Contact(
+                first_name="Skip", last_name="ContactA", phone="3125558081",
+                owner_id=test_user.id, created_by_id=test_user.id,
+            ),
+            Contact(
+                first_name="Skip", last_name="ContactB", phone="3125558081",
+                owner_id=test_user.id, created_by_id=test_user.id,
+            ),
+            Contact(
+                first_name="NoPhone", last_name="One", email="np1@example.com",
+                owner_id=test_user.id, created_by_id=test_user.id,
+            ),
+            Contact(
+                first_name="NoPhone", last_name="Two", email="np2@example.com",
+                owner_id=test_user.id, created_by_id=test_user.id,
+            ),
+            Contact(
+                first_name="NoPhone", last_name="Three", email="np3@example.com",
+                owner_id=test_user.id, created_by_id=test_user.id,
+            ),
+        ])
+        await db_session.commit()
+
+        resp = await client.get(
+            "/api/dedup/clusters?entity_type=contacts&key=phone",
+            headers=manager_auth_headers,
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["skipped_no_key"] >= 3  # at minimum the 3 phone-less ones
+
+    @pytest.mark.asyncio
+    async def test_clusters_invalid_entity_returns_400(
+        self,
+        client: AsyncClient,
+        manager_auth_headers: dict,
+    ):
+        resp = await client.get(
+            "/api/dedup/clusters?entity_type=invoices&key=email",
+            headers=manager_auth_headers,
+        )
+        assert resp.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_clusters_invalid_key_returns_400(
+        self,
+        client: AsyncClient,
+        manager_auth_headers: dict,
+    ):
+        resp = await client.get(
+            "/api/dedup/clusters?entity_type=leads&key=name",
+            headers=manager_auth_headers,
+        )
+        # leads doesn't support name-key (no canonical name normalization)
+        assert resp.status_code == 400
+
+
+class TestMergeCluster:
+    """POST /api/dedup/merge-cluster — winner_id + list of loser_ids."""
+
+    @pytest.mark.asyncio
+    async def test_merge_cluster_collapses_three_into_one(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager_auth_headers: dict,
+        test_user: User,
+    ):
+        """Merging 2 losers into a winner soft-deletes the losers and keeps the winner."""
+        winner = Contact(
+            first_name="Winner", last_name="Keep", email="merge.cluster@example.com",
+            owner_id=test_user.id, created_by_id=test_user.id,
+        )
+        loser_a = Contact(
+            first_name="Loser", last_name="A", phone="3125550000",
+            owner_id=test_user.id, created_by_id=test_user.id,
+        )
+        loser_b = Contact(
+            first_name="Loser", last_name="B", phone="3125550000",
+            owner_id=test_user.id, created_by_id=test_user.id,
+        )
+        db_session.add_all([winner, loser_a, loser_b])
+        await db_session.commit()
+        await db_session.refresh(winner)
+        await db_session.refresh(loser_a)
+        await db_session.refresh(loser_b)
+
+        resp = await client.post(
+            "/api/dedup/merge-cluster",
+            headers=manager_auth_headers,
+            json={
+                "entity_type": "contacts",
+                "winner_id": winner.id,
+                "loser_ids": [loser_a.id, loser_b.id],
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["success"] is True
+        assert body["winner_id"] == winner.id
+        assert set(body["merged_ids"]) == {loser_a.id, loser_b.id}
+        assert body["failures"] == []
+
+        # Winner alive; losers soft-deleted with merged_into_id pointing at winner.
+        await db_session.refresh(winner)
+        await db_session.refresh(loser_a)
+        await db_session.refresh(loser_b)
+        assert winner.deleted_at is None
+        assert loser_a.deleted_at is not None
+        assert loser_b.deleted_at is not None
+        assert loser_a.merged_into_id == winner.id
+        assert loser_b.merged_into_id == winner.id
+
+    @pytest.mark.asyncio
+    async def test_merge_cluster_winner_in_losers_is_400(
+        self,
+        client: AsyncClient,
+        manager_auth_headers: dict,
+    ):
+        resp = await client.post(
+            "/api/dedup/merge-cluster",
+            headers=manager_auth_headers,
+            json={"entity_type": "contacts", "winner_id": 1, "loser_ids": [1, 2]},
+        )
+        assert resp.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_merge_cluster_partial_failure_continues(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager_auth_headers: dict,
+        test_user: User,
+    ):
+        """Bad loser id is reported in `failures`; valid losers still merge."""
+        winner = Contact(
+            first_name="Winner2", last_name="OK", email="winner2@example.com",
+            owner_id=test_user.id, created_by_id=test_user.id,
+        )
+        good_loser = Contact(
+            first_name="Good", last_name="Loser", email="good@example.com",
+            owner_id=test_user.id, created_by_id=test_user.id,
+        )
+        db_session.add_all([winner, good_loser])
+        await db_session.commit()
+        await db_session.refresh(winner)
+        await db_session.refresh(good_loser)
+
+        # 999999 will not exist.
+        resp = await client.post(
+            "/api/dedup/merge-cluster",
+            headers=manager_auth_headers,
+            json={
+                "entity_type": "contacts",
+                "winner_id": winner.id,
+                "loser_ids": [good_loser.id, 999999],
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert good_loser.id in body["merged_ids"]
+        bad = next((f for f in body["failures"] if f["id"] == 999999), None)
+        assert bad is not None
+        # Reason is classified so the UI can show "refresh and retry" not raw SQL.
+        assert bad["reason_code"] == "stale_cluster"
