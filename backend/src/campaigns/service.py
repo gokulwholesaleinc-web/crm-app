@@ -146,20 +146,23 @@ class CampaignService(CRUDService[Campaign, CampaignCreate, CampaignUpdate]):
         primary = await TenantUserService(self.db).get_primary_tenant(owner_id)
         return primary.tenant_id if primary else None
 
-    async def _execute_campaign_step(self, campaign: Campaign) -> dict:
-        """Execute the current step for a campaign and schedule the next one."""
-        from src.email.service import EmailService
+    async def _send_step(
+        self,
+        *,
+        campaign: Campaign,
+        step,
+        sent_by_id: int | None,
+    ) -> int:
+        """Send one campaign step via the channel configured on the campaign.
 
-        step_service = EmailCampaignStepService(self.db)
-        steps = await step_service.get_steps(campaign.id)
+        Returns the count of emails sent. Mutates ``campaign.num_sent`` and
+        member statuses for the Gmail branch; the Mailchimp branch lets the
+        Mailchimp service own those side effects.
 
-        if campaign.current_step >= len(steps):
-            self._advance_to_next_step(campaign, steps)
-            await self._notify_campaign_completed(campaign)
-            return {"campaign_id": campaign.id, "status": "completed", "reason": "all_steps_done"}
-
-        step = steps[campaign.current_step]
-
+        Shared by both the manual-execute endpoint and the worker-mode
+        `_execute_campaign_step` so the `send_via` flag is honored in both
+        paths — previously the manual path always went through Gmail.
+        """
         if campaign.send_via == "mailchimp":
             from src.integrations.mailchimp.service import (
                 MailchimpNotConnected,
@@ -176,20 +179,39 @@ class CampaignService(CRUDService[Campaign, CampaignCreate, CampaignUpdate]):
             mc_summary = await mc_service.send_campaign_step(
                 campaign=campaign,
                 template_id=step.template_id,
-                sent_by_id=campaign.owner_id,
+                sent_by_id=campaign.owner_id or sent_by_id,
                 tenant_id=tenant_id,
             )
-            emails_sent = mc_summary["emails_sent"]
-        else:
-            email_service = EmailService(self.db)
-            sent_emails = await email_service.send_campaign_emails(
-                campaign_id=campaign.id,
-                template_id=step.template_id,
-                sent_by_id=campaign.owner_id,
-            )
-            campaign.num_sent = (campaign.num_sent or 0) + len(sent_emails)
-            await self._update_member_statuses(campaign.id, sent_emails)
-            emails_sent = len(sent_emails)
+            return mc_summary["emails_sent"]
+
+        from src.email.service import EmailService
+
+        email_service = EmailService(self.db)
+        sent_emails = await email_service.send_campaign_emails(
+            campaign_id=campaign.id,
+            template_id=step.template_id,
+            sent_by_id=sent_by_id,
+        )
+        campaign.num_sent = (campaign.num_sent or 0) + len(sent_emails)
+        await self._update_member_statuses(campaign.id, sent_emails)
+        return len(sent_emails)
+
+    async def _execute_campaign_step(self, campaign: Campaign) -> dict:
+        """Execute the current step for a campaign and schedule the next one."""
+        step_service = EmailCampaignStepService(self.db)
+        steps = await step_service.get_steps(campaign.id)
+
+        if campaign.current_step >= len(steps):
+            self._advance_to_next_step(campaign, steps)
+            await self._notify_campaign_completed(campaign)
+            return {"campaign_id": campaign.id, "status": "completed", "reason": "all_steps_done"}
+
+        step = steps[campaign.current_step]
+        emails_sent = await self._send_step(
+            campaign=campaign,
+            step=step,
+            sent_by_id=campaign.owner_id,
+        )
 
         campaign.current_step += 1
         self._advance_to_next_step(campaign, steps)

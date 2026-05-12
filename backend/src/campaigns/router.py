@@ -535,9 +535,13 @@ async def execute_campaign(
     current_user: Annotated[User, Depends(require_permission("campaigns", "update"))],
     db: DBSession,
 ):
-    """Execute a campaign: send step 1 immediately, schedule remaining steps."""
-    from src.email.service import EmailService
+    """Execute a campaign: send step 1 immediately, schedule remaining steps.
 
+    Routes through Mailchimp or Gmail based on ``campaign.send_via`` —
+    the worker-mode `_execute_campaign_step` honors the same flag, so
+    keeping the manual-trigger path in sync prevents the "I set it to
+    Mailchimp but it sent via Gmail" footgun.
+    """
     service = CampaignService(db)
     campaign = await get_entity_or_404(service, campaign_id, EntityNames.CAMPAIGN)
     check_ownership(campaign, current_user, EntityNames.CAMPAIGN)
@@ -556,11 +560,10 @@ async def execute_campaign(
     campaign.current_step = 0
     await db.flush()
 
-    email_service = EmailService(db)
     try:
-        sent_emails = await email_service.send_campaign_emails(
-            campaign_id=campaign_id,
-            template_id=steps[0].template_id,
+        emails_sent = await service._send_step(
+            campaign=campaign,
+            step=steps[0],
             sent_by_id=current_user.id,
         )
     except Exception as exc:
@@ -569,9 +572,6 @@ async def execute_campaign(
         await db.flush()
         return {"message": f"Campaign execution failed: {str(exc)}", "status": campaign.status, "emails_sent": 0}
 
-    campaign.num_sent = len(sent_emails)
-    await service._update_member_statuses(campaign_id, sent_emails)
-
     campaign.current_step = 1
     service._advance_to_next_step(campaign, steps)
 
@@ -579,9 +579,10 @@ async def execute_campaign(
     await db.refresh(campaign)
 
     return {
-        "message": f"Campaign started: {len(sent_emails)} emails sent for step 1",
+        "message": f"Campaign started: {emails_sent} emails sent for step 1",
         "status": campaign.status,
-        "emails_sent": len(sent_emails),
+        "emails_sent": emails_sent,
+        "send_via": campaign.send_via,
         "total_steps": len(steps),
         "next_step_at": campaign.next_step_at.isoformat() if campaign.next_step_at else None,
     }
