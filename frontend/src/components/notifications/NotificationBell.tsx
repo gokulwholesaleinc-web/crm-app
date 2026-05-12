@@ -12,27 +12,6 @@ import {
 } from '../../hooks/useNotifications';
 import { Spinner } from '../ui/Spinner';
 
-function getEntityRoute(entityType: string | null, entityId: number | null): string | null {
-  if (!entityType || !entityId) return null;
-  // Handle both singular and plural entity types (notes use singular, assignments use plural)
-  const routes: Record<string, string> = {
-    contact: `/contacts/${entityId}`,
-    contacts: `/contacts/${entityId}`,
-    lead: `/leads/${entityId}`,
-    leads: `/leads/${entityId}`,
-    opportunity: `/opportunities/${entityId}`,
-    opportunities: `/opportunities/${entityId}`,
-    company: `/companies/${entityId}`,
-    companies: `/companies/${entityId}`,
-    activity: `/activities`,
-    activities: `/activities`,
-    quote: `/quotes/${entityId}`,
-    quotes: `/quotes/${entityId}`,
-    proposal: `/proposals/${entityId}`,
-    proposals: `/proposals/${entityId}`,
-  };
-  return routes[entityType] ?? null;
-}
 
 function formatTimeAgo(dateString: string): string {
   const date = new Date(dateString);
@@ -101,16 +80,13 @@ export function NotificationBell() {
   const handleNotificationClick = (notification: {
     id: number;
     is_read: boolean;
-    entity_type: string | null;
-    entity_id: number | null;
+    entity_link: string | null;
   }) => {
     if (!notification.is_read) {
       markReadMutation.mutate(notification.id);
     }
-
-    const route = getEntityRoute(notification.entity_type, notification.entity_id);
-    if (route) {
-      navigate(route);
+    if (notification.entity_link) {
+      navigate(notification.entity_link);
       setIsOpen(false);
     }
   };
@@ -224,9 +200,19 @@ export function NotificationBell() {
                           <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
                             {notification.message}
                           </p>
-                          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                            {formatTimeAgo(notification.created_at)}
-                          </p>
+                          <div className="mt-1 flex items-center gap-2 text-xs">
+                            {notification.entity_label && (
+                              <span
+                                className="inline-flex items-center gap-1 rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-gray-700 dark:text-gray-300 max-w-[60%] truncate"
+                                title={notification.entity_label}
+                              >
+                                {notification.entity_label}
+                              </span>
+                            )}
+                            <span className="text-gray-400 dark:text-gray-500">
+                              {formatTimeAgo(notification.created_at)}
+                            </span>
+                          </div>
                         </div>
                       </button>
                       <button

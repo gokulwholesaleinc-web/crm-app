@@ -12,6 +12,10 @@ export interface NotificationItem {
   message: string;
   entity_type: string | null;
   entity_id: number | null;
+  /** Display label resolved server-side from (entity_type, entity_id). */
+  entity_label: string | null;
+  /** Frontend URL prefix + id (e.g. "/contacts/42"); null when unroutable. */
+  entity_link: string | null;
   is_read: boolean;
   created_at: string;
 }
