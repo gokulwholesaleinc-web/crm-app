@@ -68,6 +68,89 @@ class TestVisualDefaults:
         html = _base_email_html(_default_branding(), "Test", "<p>body</p>")
         assert "sender_title" not in html
 
+    # -- Responsive v2: header structure + mobile media query --------------
+
+    def test_mobile_media_query_present(self):
+        html = _base_email_html(_default_branding(), "Test", "<p>body</p>")
+        assert "@media only screen and (max-width:480px)" in html
+
+    def test_mobile_media_query_stacks_header_cells(self):
+        html = _base_email_html(_default_branding(), "Test", "<p>body</p>")
+        assert ".email-header-logo,.email-header-sender" in html
+        assert "display:block!important" in html
+        assert "width:100%!important" in html
+
+    def test_mobile_media_query_full_width_cta(self):
+        html = _base_email_html(
+            _default_branding(), "Test", "<p>body</p>",
+            cta_text="Sign", cta_url="https://example.com/sign",
+        )
+        assert ".email-cta-wrap{width:100%!important" in html
+        assert ".email-cta-link{display:block!important" in html
+        assert 'class="email-cta-wrap"' in html
+        assert 'class="email-cta-link"' in html
+
+    def test_mobile_media_query_scales_headline_and_body(self):
+        html = _base_email_html(_default_branding(), "Test", "<p>body</p>")
+        assert ".email-headline{font-size:19px!important" in html
+        assert ".email-text{font-size:14px!important" in html
+
+    def test_dark_mode_media_query_still_present(self):
+        # Responsive v2 must not regress the existing dark-mode support.
+        html = _base_email_html(_default_branding(), "Test", "<p>body</p>")
+        assert "@media (prefers-color-scheme:dark)" in html
+
+    def test_header_renders_sender_name_in_right_column(self):
+        html = _base_email_html(
+            _default_branding(), "Test", "<p>body</p>",
+            sender_name="Jane Smith",
+        )
+        assert "Jane Smith" in html
+        assert 'class="email-header-sender"' in html
+        assert 'align="right"' in html
+
+    def test_header_renders_sender_name_and_title_together(self):
+        html = _base_email_html(
+            _default_branding(), "Test", "<p>body</p>",
+            sender_name="Jane Smith",
+            sender_title="Senior Account Manager",
+        )
+        sender_cell_start = html.find('class="email-header-sender"')
+        assert sender_cell_start != -1
+        sender_cell_end = html.find("</td>", sender_cell_start)
+        sender_cell = html[sender_cell_start:sender_cell_end]
+        assert "Jane Smith" in sender_cell
+        assert "Senior Account Manager" in sender_cell
+
+    def test_header_omits_sender_cell_when_no_sender_info(self):
+        # Without sender info the right cell is dropped entirely so the
+        # logo cell stays flush-left on a single column.
+        html = _base_email_html(_default_branding(), "Test", "<p>body</p>")
+        assert 'class="email-header-sender"' not in html
+        assert 'class="email-header-logo"' in html
+
+    def test_responsive_class_hooks_on_outer_cells(self):
+        # Layout cells get class hooks so the mobile media query can
+        # override paddings without fighting per-element inline styles.
+        html = _base_email_html(_default_branding(), "Test", "<p>body</p>")
+        assert 'class="email-outer-cell"' in html
+        assert 'class="email-header-cell"' in html
+        assert 'class="email-body-cell"' in html
+        assert 'class="email-footer-cell"' in html
+
+    def test_render_branded_email_plumbs_sender_name(self):
+        from src.email.branded_templates import render_branded_email
+        html = render_branded_email(
+            _default_branding(), "Subject", "Headline", "<p>body</p>",
+            sender_name="Jane Smith", sender_title="AE",
+        )
+        sender_cell_start = html.find('class="email-header-sender"')
+        assert sender_cell_start != -1
+        sender_cell_end = html.find("</td>", sender_cell_start)
+        sender_cell = html[sender_cell_start:sender_cell_end]
+        assert "Jane Smith" in sender_cell
+        assert "AE" in sender_cell
+
     def test_tenant_primary_color_overrides_default(self):
         branding = _default_branding(primary_color="#ff0000")
         html = _base_email_html(branding, "Test", "<p>body</p>")
