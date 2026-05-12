@@ -25,6 +25,7 @@ import {
   useUpdateCampaign,
   useDeleteCampaign,
 } from '../../hooks/useCampaigns';
+import { usePermissions } from '../../hooks/usePermissions';
 import {
   formatCurrency,
   formatDate,
@@ -233,6 +234,8 @@ const INITIAL_DELETE_CONFIRM = { isOpen: false, campaign: null } as const;
 
 export function CampaignsPage() {
   const navigate = useNavigate();
+  const { canCreate } = usePermissions();
+  const canCreateCampaigns = canCreate('campaigns');
   const [searchParams, setSearchParams] = useSearchParams();
   const [showFilters, setShowFilters] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -327,15 +330,17 @@ export function CampaignsPage() {
             Manage marketing campaigns and track their performance
           </p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-          <Button
-            leftIcon={<PlusIcon className="h-5 w-5" />}
-            onClick={() => setShowForm(true)}
-            className="w-full sm:w-auto"
-          >
-            New Campaign
-          </Button>
-        </div>
+        {canCreateCampaigns && (
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <Button
+              leftIcon={<PlusIcon className="h-5 w-5" />}
+              onClick={() => setShowForm(true)}
+              className="w-full sm:w-auto"
+            >
+              New Campaign
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Volume Stats Dashboard */}
@@ -390,14 +395,18 @@ export function CampaignsPage() {
           <MegaphoneIcon className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">No campaigns</h3>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Get started by creating a new campaign.
+            {canCreateCampaigns
+              ? 'Get started by creating a new campaign.'
+              : 'No campaigns yet. Ask an admin or manager to create one.'}
           </p>
+          {canCreateCampaigns && (
           <div className="mt-6">
             <Button onClick={() => setShowForm(true)}>
               <PlusIcon className="h-5 w-5 mr-2" />
               New Campaign
             </Button>
           </div>
+          )}
         </div>
       ) : (
         <>

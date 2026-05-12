@@ -36,6 +36,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { showSuccess, showError } from '../../../utils/toast';
 import { useGoogleCalendarSync } from '../../../hooks/useGoogleCalendarSync';
+import { usePermissions } from '../../../hooks/usePermissions';
 
 function ConnectionBadge({ connected }: { connected: boolean }) {
   return connected ? (
@@ -134,6 +135,7 @@ function GoogleCalendarCard({ onRequestDisconnect }: { onRequestDisconnect: () =
 }
 
 function MetaCard({ onRequestDisconnect }: { onRequestDisconnect: () => void }) {
+  const { isAdmin } = usePermissions();
   const { data: status, isLoading } = useQuery<MetaConnectionStatus>({
     queryKey: ['integrations', 'meta', 'status'],
     queryFn: getMetaStatus,
@@ -194,7 +196,9 @@ function MetaCard({ onRequestDisconnect }: { onRequestDisconnect: () => void }) 
         )}
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
-        {connected ? (
+        {!isAdmin ? (
+          <span className="text-xs text-gray-400 dark:text-gray-500">Admin only</span>
+        ) : connected ? (
           <Button
             variant="danger"
             size="sm"

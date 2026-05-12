@@ -28,6 +28,7 @@ import {
   listMailchimpAudiences,
   setMailchimpAudience,
 } from '../../../api/integrations';
+import { usePermissions } from '../../../hooks/usePermissions';
 
 function StatusPill({ connected }: { connected: boolean }) {
   return connected ? (
@@ -173,6 +174,7 @@ export function MailchimpCard({
 }: {
   onRequestDisconnect: () => void;
 }) {
+  const { isAdmin } = usePermissions();
   const queryClient = useQueryClient();
   const { data: status, isLoading, refetch } = useQuery<MailchimpStatus>({
     queryKey: ['integrations', 'mailchimp', 'status'],
@@ -205,7 +207,7 @@ export function MailchimpCard({
             ? `${status?.account_email ?? 'connected'} · server ${status?.server_prefix ?? ''} · campaigns send through your audiences`
             : 'Connect a Mailchimp account to send marketing campaigns through an existing audience.'}
         </p>
-        {connected && status && (
+        {connected && status && isAdmin && (
           <>
             <AudiencePicker status={status} />
             <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
@@ -213,7 +215,12 @@ export function MailchimpCard({
             </p>
           </>
         )}
-        {!connected && (
+        {connected && status && !isAdmin && (
+          <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
+            Default audience: {status.default_audience_name ?? 'not set'}
+          </p>
+        )}
+        {!connected && isAdmin && (
           <ConnectForm
             onConnected={() => {
               queryClient.invalidateQueries({ queryKey: ['integrations', 'mailchimp'] });
@@ -221,9 +228,17 @@ export function MailchimpCard({
             }}
           />
         )}
+        {!connected && !isAdmin && (
+          <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+            Ask an admin to connect Mailchimp from Settings → Integrations.
+          </p>
+        )}
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
-        {connected && (
+        {!isAdmin && (
+          <span className="text-xs text-gray-400 dark:text-gray-500">Admin only</span>
+        )}
+        {connected && isAdmin && (
           <>
             <Button
               variant="secondary"

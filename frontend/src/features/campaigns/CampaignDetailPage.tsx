@@ -38,6 +38,7 @@ import {
   useExecuteCampaign,
   useEmailTemplates,
 } from '../../hooks/useCampaigns';
+import { usePermissions } from '../../hooks/usePermissions';
 import { CampaignStepBuilder } from './components/CampaignStepBuilder';
 import { getStatusColor, formatStatusLabel } from '../../utils/statusColors';
 import { formatCurrency, formatDate } from '../../utils/formatters';
@@ -279,6 +280,9 @@ export function CampaignDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const campaignId = id ? parseInt(id, 10) : undefined;
+  const { canUpdate, canDelete } = usePermissions();
+  const canManageCampaign = canUpdate('campaigns');
+  const canDeleteCampaign = canDelete('campaigns');
 
   const [showEditForm, setShowEditForm] = useState(false);
   const [showAddMembersModal, setShowAddMembersModal] = useState(false);
@@ -474,7 +478,7 @@ export function CampaignDetailPage() {
           {campaign.campaign_type === 'email' && (
             <HelpLink anchor="tutorial-email-campaign" label="How email campaigns work" />
           )}
-          {campaign.campaign_type === 'email' && !campaign.is_executing && campaign.status !== 'completed' && (
+          {canManageCampaign && campaign.campaign_type === 'email' && !campaign.is_executing && campaign.status !== 'completed' && (
             <Button
               onClick={handleExecute}
               isLoading={executeCampaign.isPending}
@@ -483,12 +487,16 @@ export function CampaignDetailPage() {
               Send Campaign
             </Button>
           )}
-          <Button variant="secondary" onClick={() => setShowEditForm(true)} className="flex-1 sm:flex-none">
-            Edit
-          </Button>
-          <Button variant="danger" onClick={() => setShowDeleteConfirm(true)} className="flex-1 sm:flex-none">
-            Delete
-          </Button>
+          {canManageCampaign && (
+            <Button variant="secondary" onClick={() => setShowEditForm(true)} className="flex-1 sm:flex-none">
+              Edit
+            </Button>
+          )}
+          {canDeleteCampaign && (
+            <Button variant="danger" onClick={() => setShowDeleteConfirm(true)} className="flex-1 sm:flex-none">
+              Delete
+            </Button>
+          )}
         </div>
       </div>
 
