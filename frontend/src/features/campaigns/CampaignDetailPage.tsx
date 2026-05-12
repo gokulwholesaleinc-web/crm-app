@@ -164,7 +164,7 @@ function MemberRow({
   leadById,
 }: {
   member: CampaignMember;
-  onRemove: () => void;
+  onRemove?: () => void;
   contactById: Map<number, { full_name: string; email?: string | null }>;
   leadById: Map<number, { full_name: string; email?: string | null }>;
 }) {
@@ -199,13 +199,15 @@ function MemberRow({
       <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">{formatDate(member.responded_at, 'short')}</td>
       <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">{formatDate(member.converted_at, 'short')}</td>
       <td className="px-4 py-3 text-right">
-        <button
-          onClick={onRemove}
-          className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-          title="Remove member"
-        >
-          <TrashIcon className="h-4 w-4" />
-        </button>
+        {onRemove && (
+          <button
+            onClick={onRemove}
+            className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+            title="Remove member"
+          >
+            <TrashIcon className="h-4 w-4" />
+          </button>
+        )}
       </td>
     </tr>
   );
@@ -218,7 +220,7 @@ function MemberCard({
   leadById,
 }: {
   member: CampaignMember;
-  onRemove: () => void;
+  onRemove?: () => void;
   contactById: Map<number, { full_name: string; email?: string | null }>;
   leadById: Map<number, { full_name: string; email?: string | null }>;
 }) {
@@ -250,13 +252,15 @@ function MemberCard({
             {member.status.charAt(0).toUpperCase() + member.status.slice(1)}
           </span>
         </div>
-        <button
-          onClick={onRemove}
-          className="p-1.5 text-gray-400 hover:text-red-500 transition-colors flex-shrink-0"
-          title="Remove member"
-        >
-          <TrashIcon className="h-4 w-4" />
-        </button>
+        {onRemove && (
+          <button
+            onClick={onRemove}
+            className="p-1.5 text-gray-400 hover:text-red-500 transition-colors flex-shrink-0"
+            title="Remove member"
+          >
+            <TrashIcon className="h-4 w-4" />
+          </button>
+        )}
       </div>
       <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
         <div>
@@ -500,8 +504,10 @@ export function CampaignDetailPage() {
         </div>
       </div>
 
-      {/* Setup wizard card — only for new email campaigns with no steps and no members */}
-      {campaign.campaign_type === 'email' && steps.length === 0 && (!members || members.length === 0) && (
+      {/* Setup wizard card — only shown for users who can actually take the
+          actions it advertises (canManageCampaign), and only on fresh email
+          campaigns with no steps and no members. */}
+      {canManageCampaign && campaign.campaign_type === 'email' && steps.length === 0 && (!members || members.length === 0) && (
         <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-4 sm:p-5">
           <h2 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-3">
             Get this campaign live in 3 steps
@@ -663,8 +669,9 @@ export function CampaignDetailPage() {
         </div>
       )}
 
-      {/* Campaign Steps */}
-      {campaign.campaign_type === 'email' && campaignId && (
+      {/* Campaign Steps — only operators who can update campaigns can
+          add/reorder/delete steps; backend gates the underlying endpoints. */}
+      {canManageCampaign && campaign.campaign_type === 'email' && campaignId && (
         <div ref={stepBuilderRef} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
           <CampaignStepBuilder
             steps={steps}
@@ -691,14 +698,16 @@ export function CampaignDetailPage() {
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
         <div className="px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">Campaign Members</h3>
-          <Button
-            size="sm"
-            leftIcon={<PlusIcon className="h-4 w-4" />}
-            onClick={() => setShowAddMembersModal(true)}
-            className="w-full sm:w-auto"
-          >
-            Add Members
-          </Button>
+          {canManageCampaign && (
+            <Button
+              size="sm"
+              leftIcon={<PlusIcon className="h-4 w-4" />}
+              onClick={() => setShowAddMembersModal(true)}
+              className="w-full sm:w-auto"
+            >
+              Add Members
+            </Button>
+          )}
         </div>
         {isLoadingMembers ? (
           <div className="flex items-center justify-center py-12">
@@ -717,7 +726,7 @@ export function CampaignDetailPage() {
                 <MemberCard
                   key={member.id}
                   member={member}
-                  onRemove={() => handleRemoveMemberClick(member.id)}
+                  onRemove={canManageCampaign ? () => handleRemoveMemberClick(member.id) : undefined}
                   contactById={contactById}
                   leadById={leadById}
                 />
@@ -751,7 +760,7 @@ export function CampaignDetailPage() {
                     <MemberRow
                       key={member.id}
                       member={member}
-                      onRemove={() => handleRemoveMemberClick(member.id)}
+                      onRemove={canManageCampaign ? () => handleRemoveMemberClick(member.id) : undefined}
                       contactById={contactById}
                       leadById={leadById}
                     />

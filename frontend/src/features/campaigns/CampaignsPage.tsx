@@ -97,8 +97,8 @@ function CampaignCard({
 }: {
   campaign: Campaign;
   onClick: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
 }) {
   const statusStyle = getStatusColor(campaign.status, 'campaign');
   const setupStatus = getSetupStatus(campaign);
@@ -143,42 +143,48 @@ function CampaignCard({
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">{campaign.description}</p>
           )}
         </div>
-        <div className="flex items-center gap-1 ml-4">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onEdit();
-            }}
-            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-            aria-label="Edit campaign"
-          >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-              />
-            </svg>
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-red-500"
-            aria-label="Delete campaign"
-          >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-              />
-            </svg>
-          </button>
-        </div>
+        {(onEdit || onDelete) && (
+          <div className="flex items-center gap-1 ml-4">
+            {onEdit && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit();
+                }}
+                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                aria-label="Edit campaign"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                  />
+                </svg>
+              </button>
+            )}
+            {onDelete && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-red-500"
+                aria-label="Delete campaign"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                  />
+                </svg>
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Dates */}
@@ -234,8 +240,10 @@ const INITIAL_DELETE_CONFIRM = { isOpen: false, campaign: null } as const;
 
 export function CampaignsPage() {
   const navigate = useNavigate();
-  const { canCreate } = usePermissions();
+  const { canCreate, canUpdate, canDelete } = usePermissions();
   const canCreateCampaigns = canCreate('campaigns');
+  const canEditCampaigns = canUpdate('campaigns');
+  const canDeleteCampaigns = canDelete('campaigns');
   const [searchParams, setSearchParams] = useSearchParams();
   const [showFilters, setShowFilters] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -400,12 +408,12 @@ export function CampaignsPage() {
               : 'No campaigns yet. Ask an admin or manager to create one.'}
           </p>
           {canCreateCampaigns && (
-          <div className="mt-6">
-            <Button onClick={() => setShowForm(true)}>
-              <PlusIcon className="h-5 w-5 mr-2" />
-              New Campaign
-            </Button>
-          </div>
+            <div className="mt-6">
+              <Button onClick={() => setShowForm(true)}>
+                <PlusIcon className="h-5 w-5 mr-2" />
+                New Campaign
+              </Button>
+            </div>
           )}
         </div>
       ) : (
@@ -416,8 +424,8 @@ export function CampaignsPage() {
                 key={campaign.id}
                 campaign={campaign}
                 onClick={() => navigate(`/campaigns/${campaign.id}`)}
-                onEdit={() => handleEdit(campaign)}
-                onDelete={() => handleDeleteClick(campaign)}
+                onEdit={canEditCampaigns ? () => handleEdit(campaign) : undefined}
+                onDelete={canDeleteCampaigns ? () => handleDeleteClick(campaign) : undefined}
               />
             ))}
           </div>

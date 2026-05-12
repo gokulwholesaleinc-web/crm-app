@@ -207,18 +207,13 @@ export function MailchimpCard({
             ? `${status?.account_email ?? 'connected'} · server ${status?.server_prefix ?? ''} · campaigns send through your audiences`
             : 'Connect a Mailchimp account to send marketing campaigns through an existing audience.'}
         </p>
-        {connected && status && isAdmin && (
+        {connected && status && (
           <>
-            <AudiencePicker status={status} />
+            {isAdmin && <AudiencePicker status={status} />}
             <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
               Default audience: {status.default_audience_name ?? 'not set'}
             </p>
           </>
-        )}
-        {connected && status && !isAdmin && (
-          <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
-            Default audience: {status.default_audience_name ?? 'not set'}
-          </p>
         )}
         {!connected && isAdmin && (
           <ConnectForm
