@@ -9,9 +9,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 from sqlalchemy import select
 
+from src.auth.models import User
 from src.companies.models import Company
 from src.core.constants import ENTITY_TYPE_COMPANIES, HTTPStatus
 from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
+from src.core.permissions import require_admin
 from src.core.router_utils import CurrentUser, DBSession
 from src.meta.schemas import (
     CompanyMetaDataResponse,
@@ -61,10 +63,11 @@ async def get_connection_status(
 @router.post("/connect")
 async def get_auth_url(
     data: MetaConnectRequest,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_admin)],
     db: DBSession,
 ):
-    """Get Meta OAuth2 authorization URL."""
+    """Get Meta OAuth2 authorization URL. Admin only — Meta credentials are
+    tenant-scoped, so a normal user shouldn't be able to swap them."""
     from src.config import settings
     if not settings.META_APP_ID:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail="Meta integration is not configured")
@@ -78,10 +81,10 @@ async def get_auth_url(
 @router.post("/callback", response_model=MetaCredentialResponse)
 async def handle_callback(
     data: MetaCallbackRequest,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_admin)],
     db: DBSession,
 ):
-    """Handle OAuth2 callback and store credentials."""
+    """Handle OAuth2 callback and store credentials. Admin only."""
     service = MetaService(db)
     redirect_uri = data.redirect_uri or ""
     try:
@@ -93,10 +96,10 @@ async def handle_callback(
 
 @router.delete("/disconnect", status_code=HTTPStatus.NO_CONTENT)
 async def disconnect(
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_admin)],
     db: DBSession,
 ):
-    """Disconnect Meta integration."""
+    """Disconnect Meta integration. Admin only."""
     service = MetaService(db)
     removed = await service.disconnect(current_user.id)
     if not removed:

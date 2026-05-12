@@ -7,9 +7,13 @@ settings router uses.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from typing import Annotated
 
+from fastapi import APIRouter, Depends, HTTPException
+
+from src.auth.models import User
 from src.core.constants import HTTPStatus
+from src.core.permissions import require_admin
 from src.core.router_utils import CurrentUser, DBSession
 from src.integrations.mailchimp.client import MailchimpError
 from src.integrations.mailchimp.schemas import (
@@ -60,7 +64,7 @@ async def get_status(db: DBSession, current_user: CurrentUser) -> MailchimpStatu
 async def connect(
     payload: MailchimpConnectRequest,
     db: DBSession,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_admin)],
 ) -> MailchimpStatus:
     tenant_id = await _user_tenant_id(db, current_user.id)
     try:
@@ -91,7 +95,10 @@ async def connect(
 
 
 @router.delete("/disconnect")
-async def disconnect(db: DBSession, current_user: CurrentUser) -> dict:
+async def disconnect(
+    db: DBSession,
+    current_user: Annotated[User, Depends(require_admin)],
+) -> dict:
     tenant_id = await _user_tenant_id(db, current_user.id)
     revoked = await MailchimpService(db).disconnect(tenant_id)
     await db.commit()
@@ -116,7 +123,7 @@ async def list_audiences(
 async def set_default_audience(
     payload: MailchimpSetAudienceRequest,
     db: DBSession,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_admin)],
 ) -> MailchimpStatus:
     tenant_id = await _user_tenant_id(db, current_user.id)
     try:
