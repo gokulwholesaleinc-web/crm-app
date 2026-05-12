@@ -73,6 +73,7 @@ function initialBillingValue(initialData?: Partial<QuoteCreate>): BillingTermsVa
 }
 
 export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteFormProps) {
+  const isEditing = !!initialData;
   const [searchParams] = useSearchParams();
   const urlOpportunityId = searchParams.get('opportunity_id');
 
@@ -611,7 +612,7 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
           Cancel
         </Button>
         <Button type="submit" disabled={!formData.title.trim()} isLoading={isLoading}>
-          Create Quote
+          {isEditing ? 'Save' : 'Create Quote'}
         </Button>
       </div>
 

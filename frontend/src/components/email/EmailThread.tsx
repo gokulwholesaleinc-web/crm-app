@@ -156,17 +156,19 @@ function EmailBubble({
   const hasBody = Boolean(email.body_html || bodyContent);
   const rawHtml = email.body_html || (looksLikeHtml(bodyContent) ? bodyContent : null);
 
-  // Trim signatures + quoted reply history from inbound bodies. The
-  // thread view already groups messages chronologically, so quoted
-  // history is duplication and signatures render poorly without inline
-  // `style` (which we strip for security). Cut at explicit Gmail/
-  // Outlook/Apple-Mail markers only — never guess at unmarked
-  // boundaries. Outbound emails are our own branded HTML — never trim
-  // them; a future template could legitimately contain a testimonial
-  // <blockquote type="cite"> we'd otherwise erase silently.
+  // Trim signatures + quoted reply history before render. The thread
+  // view groups messages chronologically, so quoted history is pure
+  // duplication and signatures render poorly without inline `style`.
+  // Applies to BOTH directions — outbound emails synced from Gmail's
+  // Sent folder (user replied from phone/Gmail web → CRM history sync
+  // wrote an EmailQueue row) carry the same Gmail/Outlook quote +
+  // signature blocks as inbound. Cut at explicit markers only
+  // (`gmail_quote`, `blockquote[type="cite"]`, RFC 3676 `-- `,
+  // `On X wrote:`, etc.) — a CRM-composed branded template (proposal
+  // send, quote send) wouldn't contain those markers, so it passes
+  // through untouched.
   const [showOriginal, setShowOriginal] = useState(false);
   const trim = useMemo<TrimResult>(() => {
-    if (isOutbound) return { body: rawHtml ?? bodyContent, trimmed: false, cut: 'none' };
     try {
       return rawHtml ? trimQuotedHtml(rawHtml) : trimQuotedText(bodyContent);
     } catch {
@@ -175,7 +177,7 @@ function EmailBubble({
       // to the un-trimmed body so the user still sees the email.
       return { body: rawHtml ?? bodyContent, trimmed: false, cut: 'none' };
     }
-  }, [isOutbound, rawHtml, bodyContent]);
+  }, [rawHtml, bodyContent]);
   const renderableHtml = rawHtml ? (showOriginal ? rawHtml : trim.body) : null;
   const renderableText = rawHtml ? bodyContent : showOriginal ? bodyContent : trim.body;
   // click_count may not yet exist on older records; safe-access via cast

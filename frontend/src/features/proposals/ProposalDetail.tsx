@@ -31,6 +31,7 @@ import {
 } from '../../hooks/useProposals';
 import { ProposalBillingCard } from './ProposalBillingCard';
 import { ProposalAuditCard } from './ProposalAuditCard';
+import { ProposalForm } from './ProposalForm';
 import {
   listProposalAttachments,
   uploadProposalAttachment,
@@ -41,7 +42,7 @@ import { formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { showSuccess, showError } from '../../utils/toast';
 import { extractApiErrorDetail } from '../../utils/errors';
-import type { ProposalUpdate, ProposalAttachment } from '../../types';
+import type { ProposalCreate, ProposalUpdate, ProposalAttachment } from '../../types';
 
 function ProposalDetailPage() {
   const { id } = useParams();
@@ -63,12 +64,6 @@ function ProposalDetailPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const actionRowRef = useRef<HTMLDivElement>(null);
-  const [editTitle, setEditTitle] = useState('');
-  const [editExecutiveSummary, setEditExecutiveSummary] = useState('');
-  const [editScopeOfWork, setEditScopeOfWork] = useState('');
-  const [editPricingSection, setEditPricingSection] = useState('');
-  const [editTimeline, setEditTimeline] = useState('');
-  const [editTerms, setEditTerms] = useState('');
 
   if (isLoading) {
     return (
@@ -160,43 +155,19 @@ function ProposalDetailPage() {
     }
   };
 
-  const handleEditSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // ProposalForm emits a ProposalCreate. ProposalUpdate is a strict subset
+  // (no `status`), so we forward every field the backend update schema
+  // accepts and drop the create-only `status` field.
+  const handleEditSubmit = async (formData: ProposalCreate) => {
+    const { status: _status, ...rest } = formData;
+    const data: ProposalUpdate = rest;
     try {
-      const data: ProposalUpdate = {
-        title: editTitle,
-        executive_summary: editExecutiveSummary || null,
-        scope_of_work: editScopeOfWork || null,
-        pricing_section: editPricingSection || null,
-        timeline: editTimeline || null,
-        terms: editTerms || null,
-      };
       await updateProposalMutation.mutateAsync({ id: proposal.id, data });
-      closeEditModal();
+      setShowEditModal(false);
       showSuccess('Proposal updated');
     } catch {
       showError('Failed to update proposal');
     }
-  };
-
-  const openEditModal = () => {
-    setEditTitle(proposal.title);
-    setEditExecutiveSummary(proposal.executive_summary ?? '');
-    setEditScopeOfWork(proposal.scope_of_work ?? '');
-    setEditPricingSection(proposal.pricing_section ?? '');
-    setEditTimeline(proposal.timeline ?? '');
-    setEditTerms(proposal.terms ?? '');
-    setShowEditModal(true);
-  };
-
-  const closeEditModal = () => {
-    setShowEditModal(false);
-    setEditTitle(proposal.title);
-    setEditExecutiveSummary(proposal.executive_summary ?? '');
-    setEditScopeOfWork(proposal.scope_of_work ?? '');
-    setEditPricingSection(proposal.pricing_section ?? '');
-    setEditTimeline(proposal.timeline ?? '');
-    setEditTerms(proposal.terms ?? '');
   };
 
   const handleCopyPublicLink = () => {
@@ -260,7 +231,7 @@ function ProposalDetailPage() {
           </Button>
         )}
         {canEdit && (
-          <Button variant="secondary" size="sm" onClick={openEditModal}>
+          <Button variant="secondary" size="sm" onClick={() => setShowEditModal(true)}>
             Edit
           </Button>
         )}
@@ -295,7 +266,7 @@ function ProposalDetailPage() {
         <div ref={actionRowRef} className="flex flex-wrap items-center gap-2">
           <HelpLink anchor="tutorial-esign" label="How clients sign and accept" />
           {canEdit && (
-            <Button variant="secondary" onClick={openEditModal} leftIcon={<PencilIcon className="h-4 w-4" />}>
+            <Button variant="secondary" onClick={() => setShowEditModal(true)} leftIcon={<PencilIcon className="h-4 w-4" />}>
               Edit
             </Button>
           )}
@@ -554,83 +525,42 @@ function ProposalDetailPage() {
         </div>
       </div>
 
-      {/* Edit Proposal Modal */}
+      {/* Edit Proposal Modal — reuses ProposalForm so edit exposes every
+          field create does (related records, billing, valid_until, etc.).
+          `key` forces a remount per proposal version so the form picks
+          up server-side mutations (e.g. signed_at landing). */}
       <Modal
         isOpen={showEditModal}
-        onClose={closeEditModal}
+        onClose={() => setShowEditModal(false)}
         title="Edit Proposal"
         size="lg"
         fullScreenOnMobile
       >
-        <form onSubmit={handleEditSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="edit-proposal-title" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Title *</label>
-            <input
-              type="text"
-              id="edit-proposal-title"
-              required
-              value={editTitle}
-              onChange={(e) => setEditTitle(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
-            />
-          </div>
-          <div>
-            <label htmlFor="edit-exec-summary" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Executive Summary</label>
-            <textarea
-              id="edit-exec-summary"
-              rows={3}
-              value={editExecutiveSummary}
-              onChange={(e) => setEditExecutiveSummary(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
-            />
-          </div>
-          <div>
-            <label htmlFor="edit-scope" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Scope of Work</label>
-            <textarea
-              id="edit-scope"
-              rows={3}
-              value={editScopeOfWork}
-              onChange={(e) => setEditScopeOfWork(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
-            />
-          </div>
-          <div>
-            <label htmlFor="edit-pricing" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Pricing</label>
-            <textarea
-              id="edit-pricing"
-              rows={3}
-              value={editPricingSection}
-              onChange={(e) => setEditPricingSection(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
-            />
-          </div>
-          <div>
-            <label htmlFor="edit-timeline" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Timeline</label>
-            <textarea
-              id="edit-timeline"
-              rows={2}
-              value={editTimeline}
-              onChange={(e) => setEditTimeline(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
-            />
-          </div>
-          <div>
-            <label htmlFor="edit-terms" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Terms</label>
-            <textarea
-              id="edit-terms"
-              rows={2}
-              value={editTerms}
-              onChange={(e) => setEditTerms(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
-            />
-          </div>
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-            <Button type="button" variant="secondary" onClick={closeEditModal}>Cancel</Button>
-            <Button type="submit" disabled={updateProposalMutation.isPending || !editTitle.trim()}>
-              {updateProposalMutation.isPending ? 'Saving...' : 'Save'}
-            </Button>
-          </div>
-        </form>
+        <ProposalForm
+          key={`${proposal.id}-${proposal.updated_at ?? ''}`}
+          initialData={{
+            title: proposal.title,
+            content: proposal.content ?? null,
+            executive_summary: proposal.executive_summary ?? null,
+            scope_of_work: proposal.scope_of_work ?? null,
+            pricing_section: proposal.pricing_section ?? null,
+            timeline: proposal.timeline ?? null,
+            terms: proposal.terms ?? null,
+            valid_until: proposal.valid_until ?? null,
+            opportunity_id: proposal.opportunity?.id ?? null,
+            contact_id: proposal.contact?.id ?? null,
+            company_id: proposal.company?.id ?? null,
+            quote_id: proposal.quote?.id ?? null,
+            payment_type: proposal.payment_type,
+            recurring_interval: proposal.recurring_interval,
+            recurring_interval_count: proposal.recurring_interval_count,
+            amount: proposal.amount,
+            currency: proposal.currency,
+          }}
+          onSubmit={handleEditSubmit}
+          onCancel={() => setShowEditModal(false)}
+          isLoading={updateProposalMutation.isPending}
+        />
       </Modal>
 
       {/* Delete Confirmation */}

@@ -361,7 +361,7 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
           Cancel
         </Button>
         <Button type="submit" disabled={!formData.title.trim()} isLoading={isLoading}>
-          Create Proposal
+          {isEditing ? 'Save' : 'Create Proposal'}
         </Button>
       </div>
     </form>
