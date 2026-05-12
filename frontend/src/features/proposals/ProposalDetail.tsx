@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useSmartBack } from '../../hooks/useSmartBack';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -14,6 +14,7 @@ import {
   PencilIcon,
   EyeIcon,
   ClipboardDocumentIcon,
+  TrophyIcon,
 } from '@heroicons/react/24/outline';
 import { Button, HelpLink, Modal, ConfirmDialog, StatusBadge } from '../../components/ui';
 import { StickyActionBar } from '../../components/shared/StickyActionBar';
@@ -73,7 +74,28 @@ function ProposalDetailPage() {
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showDealWonBanner, setShowDealWonBanner] = useState(false);
   const actionRowRef = useRef<HTMLDivElement>(null);
+  const prevStatusRef = useRef<string | undefined>(undefined);
+
+  const currentStatus = proposal?.status;
+
+  // Show a celebratory banner the first time we observe status flip to
+  // 'accepted' within this session (polling from sent/viewed → accepted).
+  useEffect(() => {
+    const prev = prevStatusRef.current;
+    if (
+      currentStatus !== undefined &&
+      prev !== undefined &&
+      prev !== 'accepted' &&
+      currentStatus === 'accepted'
+    ) {
+      setShowDealWonBanner(true);
+    }
+    if (currentStatus !== undefined) {
+      prevStatusRef.current = currentStatus;
+    }
+  }, [currentStatus]);
 
   if (isLoading) {
     // Mirror the real 3-column layout so content loading doesn't jolt
@@ -412,6 +434,32 @@ function ProposalDetailPage() {
           </Button>
         </div>
       </div>
+
+      {/* Deal Won banner — appears when polling detects accepted status
+          during the current session. Dismissible, no auto-toast spam. */}
+      {showDealWonBanner && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex items-center justify-between gap-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 px-4 py-3"
+        >
+          <div className="flex items-center gap-3">
+            <TrophyIcon className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" aria-hidden="true" />
+            <div>
+              <p className="text-sm font-semibold text-green-800 dark:text-green-300">Deal won!</p>
+              <p className="text-xs text-green-700 dark:text-green-400">The proposal was just accepted.</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowDealWonBanner(false)}
+            aria-label="Dismiss deal won banner"
+            className="p-1 text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+          >
+            <XMarkIcon className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+      )}
 
       {/* Status timeline — tells the Draft → Sent → Viewed → Signed → Paid
           story at a glance. Replaces the implicit "stack two status pills
