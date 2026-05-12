@@ -10,10 +10,24 @@ import type { ChecklistItem } from '../../components/shared/SendChecklist';
 
 const STATUS_ORDER = ['draft', 'sent', 'viewed', 'accepted', 'awaiting_payment', 'paid'];
 
+// Once a proposal hits any of these states, edits/refresh-from-quote would
+// mutate something the customer has already committed to. The backend
+// refuses these on /refresh-from-quote — keep the frontend in sync.
+const LOCKED_STATUSES = new Set(['signed', 'accepted', 'awaiting_payment', 'paid']);
+
 function rankStatus(status: string | undefined): number {
   if (!status) return 0;
   const idx = STATUS_ORDER.indexOf(status);
   return idx === -1 ? 0 : idx;
+}
+
+/** True when the proposal can no longer be safely refreshed from its quote. */
+export function isProposalLocked(proposal: Proposal): boolean {
+  return LOCKED_STATUSES.has(proposal.status ?? '');
+}
+
+function hasBillingAmount(proposal: Proposal): boolean {
+  return Boolean(proposal.amount && Number(proposal.amount) > 0);
 }
 
 /**
@@ -55,7 +69,7 @@ export function buildProposalTimelineSteps(proposal: Proposal): TimelineStep[] {
   // amount — a one-time $0 proposal still goes Draft → Sent → Viewed →
   // Signed and stops there. Mark Paid as skipped in that case so the
   // timeline doesn't look unfinished forever.
-  const hasBilling = Boolean(proposal.amount && Number(proposal.amount) > 0);
+  const hasBilling = hasBillingAmount(proposal);
 
   return [
     { key: 'draft', label: 'Draft', at: proposal.created_at, state: stepState(0) },
@@ -133,7 +147,7 @@ export function buildProposalSendChecklist(
 
   // Billing is optional — a free strategy doc proposal doesn't need it.
   // Marked optional so it surfaces as a hint without blocking send.
-  const hasBilling = Boolean(proposal.amount && Number(proposal.amount) > 0);
+  const hasBilling = hasBillingAmount(proposal);
   items.push({
     key: 'billing',
     label: hasBilling
@@ -155,7 +169,7 @@ export function buildProposalSendChecklist(
       label: isExpired
         ? `Expired (valid until ${proposal.valid_until})`
         : `Valid until ${proposal.valid_until}`,
-      state: isExpired ? false : true,
+      state: !isExpired,
       hint: isExpired
         ? 'The proposal lists a past expiration date. Update it before sending.'
         : undefined,

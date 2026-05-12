@@ -39,6 +39,7 @@ import { RefreshFromQuoteButton } from '../../components/shared/RefreshFromQuote
 import {
   buildProposalTimelineSteps,
   buildProposalSendChecklist,
+  isProposalLocked,
 } from './proposalStatus';
 import {
   listProposalAttachments,
@@ -240,7 +241,6 @@ function ProposalDetailPage() {
   // frontend gates the 400 the backend would return without one.
   const canSendStatus = ['draft', 'sent', 'viewed'].includes(proposal.status ?? '');
   const canSend = canSendStatus && Boolean(proposalRecipient);
-  const showSendButton = canSendStatus;
   const sendLabel = isDraft ? 'Send' : 'Resend';
   const canAcceptReject = proposal.status === 'sent' || proposal.status === 'viewed';
   const canEdit = ['draft', 'sent', 'viewed'].includes(proposal.status ?? '');
@@ -279,7 +279,7 @@ function ProposalDetailPage() {
   return (
     <div className="space-y-6">
       <StickyActionBar triggerRef={actionRowRef}>
-        {showSendButton && (
+        {canSendStatus && (
           <Button
             size="sm"
             onClick={handleSend}
@@ -331,7 +331,7 @@ function ProposalDetailPage() {
 
           {/* PRIMARY action — status-driven. The single highest-leverage
               next step the user can take. */}
-          {showSendButton && (
+          {canSendStatus && (
             <Button
               onClick={handleSend}
               leftIcon={<PaperAirplaneIcon className="h-4 w-4" />}
@@ -642,7 +642,7 @@ function ProposalDetailPage() {
                     <RefreshFromQuoteButton
                       proposalId={proposal.id}
                       hasQuoteLink
-                      isLocked={['signed', 'accepted', 'awaiting_payment', 'paid'].includes(proposal.status ?? '')}
+                      isLocked={isProposalLocked(proposal)}
                     />
                   </dd>
                 </div>

@@ -106,30 +106,31 @@ export function SendChecklist({
           const isFailed = item.state === false;
           const isOptional = item.state === 'optional';
 
+          let icon: JSX.Element;
+          if (isOptional) {
+            icon = <InfoDot />;
+          } else if (isFailed) {
+            icon = <XIcon />;
+          } else {
+            icon = <CheckIcon />;
+          }
+
+          let labelTone: string;
+          if (isFailed) {
+            labelTone = 'font-medium text-red-600 dark:text-red-400';
+          } else if (isOptional) {
+            labelTone = 'text-gray-500 dark:text-gray-400';
+          } else {
+            labelTone = 'text-gray-700 dark:text-gray-300';
+          }
+
           return (
             <li key={item.key}>
               <div className="flex items-start gap-2">
-                <span className="mt-0.5">
-                  {isOptional ? (
-                    <InfoDot />
-                  ) : isFailed ? (
-                    <XIcon />
-                  ) : (
-                    <CheckIcon />
-                  )}
-                </span>
+                <span className="mt-0.5">{icon}</span>
                 <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
                   <div className="min-w-0">
-                    <span
-                      className={clsx(
-                        'text-sm',
-                        isFailed
-                          ? 'font-medium text-red-600 dark:text-red-400'
-                          : isOptional
-                          ? 'text-gray-500 dark:text-gray-400'
-                          : 'text-gray-700 dark:text-gray-300'
-                      )}
-                    >
+                    <span className={clsx('text-sm', labelTone)}>
                       {item.label}
                     </span>
                     {isFailed && item.hint && (

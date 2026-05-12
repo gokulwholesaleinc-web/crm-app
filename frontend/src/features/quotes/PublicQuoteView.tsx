@@ -516,45 +516,44 @@ function PublicQuoteView() {
         )}
 
         {/* Action Confirmation */}
-        {actionDone && (
-          <section
-            role="status"
-            aria-live="polite"
-            className={`rounded-lg p-6 sm:p-8 ${
-              actionDone === 'accepted'
-                ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
-                : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              {actionDone === 'accepted' ? (
-                <CheckIcon className="h-6 w-6 text-green-600 dark:text-green-400" aria-hidden="true" />
-              ) : (
-                <XMarkIcon className="h-6 w-6 text-red-600 dark:text-red-400" aria-hidden="true" />
-              )}
-              <div>
-                <h3
-                  className={`font-semibold ${
-                    actionDone === 'accepted' ? 'text-green-800 dark:text-green-300' : 'text-red-800 dark:text-red-300'
-                  }`}
-                >
-                  {actionDone === 'accepted'
-                    ? 'Quote Accepted'
-                    : 'Quote Rejected'}
-                </h3>
-                <p
-                  className={`text-sm mt-1 ${
-                    actionDone === 'accepted' ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'
-                  }`}
-                >
-                  {actionDone === 'accepted'
-                    ? 'A signed copy will be emailed to the address you provided. You can safely close this page.'
-                    : 'Thank you for your response. We appreciate your time.'}
-                </p>
+        {actionDone && (() => {
+          const accepted = actionDone === 'accepted';
+          const tone = accepted
+            ? {
+                section: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800',
+                heading: 'text-green-800 dark:text-green-300',
+                body: 'text-green-700 dark:text-green-400',
+                title: 'Quote Accepted',
+                message: 'A signed copy will be emailed to the address you provided. You can safely close this page.',
+              }
+            : {
+                section: 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800',
+                heading: 'text-red-800 dark:text-red-300',
+                body: 'text-red-700 dark:text-red-400',
+                title: 'Quote Rejected',
+                message: 'Thank you for your response. We appreciate your time.',
+              };
+
+          return (
+            <section
+              role="status"
+              aria-live="polite"
+              className={`rounded-lg p-6 sm:p-8 border ${tone.section}`}
+            >
+              <div className="flex items-center gap-3">
+                {accepted ? (
+                  <CheckIcon className="h-6 w-6 text-green-600 dark:text-green-400" aria-hidden="true" />
+                ) : (
+                  <XMarkIcon className="h-6 w-6 text-red-600 dark:text-red-400" aria-hidden="true" />
+                )}
+                <div>
+                  <h3 className={`font-semibold ${tone.heading}`}>{tone.title}</h3>
+                  <p className={`text-sm mt-1 ${tone.body}`}>{tone.message}</p>
+                </div>
               </div>
-            </div>
-          </section>
-        )}
+            </section>
+          );
+        })()}
       </main>
 
       {/* Branded Footer — pads with safe-area-inset-bottom so iPhone home
