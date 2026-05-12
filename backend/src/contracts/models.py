@@ -24,6 +24,16 @@ class Contract(Base, AuditableMixin):
     # Basic info
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     scope: Mapped[str | None] = mapped_column(Text)
+    # Operator-facing reference shown on the list + detail header.
+    # Optional, indexed so list-page filters scale without a table scan.
+    contract_number: Mapped[str | None] = mapped_column(
+        String(64), index=True
+    )
+    # Default recipient for the send/resend signature email. Mirrors
+    # Proposal.designated_signer_email; the send modal pre-fills its
+    # `to_email` from this value before falling back to the linked
+    # contact's primary email.
+    designated_signer_email: Mapped[str | None] = mapped_column(String(255))
 
     # Financials
     value: Mapped[float | None] = mapped_column(Float)

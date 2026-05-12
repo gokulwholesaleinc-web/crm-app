@@ -31,11 +31,54 @@ SIGN_TOKEN_TTL = timedelta(days=7)
 
 CONTRACT_SORTABLE_FIELDS = {
     "title": Contract.title,
+    "contract_number": Contract.contract_number,
     "status": Contract.status,
     "value": Contract.value,
     "end_date": Contract.end_date,
     "created_at": Contract.created_at,
 }
+
+
+def _designated_email_for(contract: Contract) -> str:
+    """Lowercased email authorized to sign this contract.
+
+    Explicit ``designated_signer_email`` wins; otherwise falls back to
+    the linked contact's email. Returns ``""`` when neither is set.
+
+    Mirrors ``proposals.service._designated_email_for`` so the two
+    e-sign flows agree on who's allowed to sign. ``.strip()`` is
+    applied before lowercase because the column is a plain
+    ``String(255)`` — write-time EmailStr on the schemas catches typos
+    through the Create/Update API, but a future bulk-import or raw ORM
+    write could still land whitespace-padded values and we don't want
+    a leading-space to silently make the recipient unmatchable.
+    """
+    if contract.designated_signer_email:
+        stripped = contract.designated_signer_email.strip()
+        if stripped:
+            return stripped.lower()
+    if contract.contact and contract.contact.email:
+        return contract.contact.email.strip().lower()
+    return ""
+
+
+def _assert_signer_matches(contract: Contract, signer_email: str | None) -> None:
+    """Guard: the supplied signer_email must match the contract's
+    designated recipient (case-insensitive).
+
+    Without this, a contract that routes its send link to
+    ``designated_signer_email`` (set differently from the contact
+    email) can't be signed — the contact-only check would reject the
+    designated signer's own address. Mirrors ``proposals.service``.
+    """
+    expected = _designated_email_for(contract)
+    given = (signer_email or "").strip().lower()
+    if not expected:
+        raise ValueError("Contract has no recipient email on file")
+    if not given or given != expected:
+        raise ValueError(
+            "Signer email does not match the expected contact email"
+        )
 
 
 class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
@@ -154,9 +197,21 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
         ``SELECT … FOR UPDATE`` pattern in
         ``proposals/service.resend_payment_link``.)
         """
-        recipient = to_email or (contract.contact.email if contract.contact else None)
+        # Resolution order: explicit request override > the contract's
+        # designated signer > the linked contact's primary email. The
+        # send modal's `to_email` is the operator's last-mile override
+        # and always wins; the designated_signer_email beats the
+        # contact fallback so a contract can override the contact's
+        # default destination without touching the contact record.
+        # ``_designated_email_for`` already strips + lowercases its
+        # output; the explicit ``to_email`` override comes from
+        # ``EmailStr`` so it's already validated.
+        recipient = (to_email or "").strip() or _designated_email_for(contract)
         if not recipient:
-            raise ValueError("No recipient email — provide to_email or link a contact with an email address")
+            raise ValueError(
+                "No recipient email — provide to_email, set "
+                "designated_signer_email, or link a contact with an email address"
+            )
 
         # Lock the contract row for the rest of the transaction. Postgres
         # serializes; SQLite (test) treats it as a no-op which is fine
@@ -300,12 +355,16 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
         if expires < now:
             raise ValueError("Sign link has expired")
 
-        # Email check: if a contact with email is linked, the signer must match.
-        if contract.contact and contract.contact.email:
-            if signer_email.lower() != contract.contact.email.lower():
-                raise ValueError(
-                    "Signer email does not match the expected contact email"
-                )
+        # Identity guard: the submitted signer_email must match the
+        # contract's designated recipient — the operator's
+        # designated_signer_email if set, else the linked contact's
+        # email. Without the designated branch a contract that routes
+        # the sign link to an external signer (different from the
+        # contact) could never actually be signed by them.
+        if contract.designated_signer_email or (
+            contract.contact and contract.contact.email
+        ):
+            _assert_signer_matches(contract, signer_email)
 
         # Atomic transition: guarded by status == "sent" so concurrent
         # sign requests can't both succeed.
@@ -435,6 +494,13 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
 
         # Value / dates block
         meta_rows = []
+        # Contract number leads the meta block when set so the signed
+        # PDF (the legal artifact archived in R2) carries the same
+        # human-readable reference operators + clients use in
+        # correspondence. Without this, "CO-2026-0001" exists only in
+        # the CRM and can't be matched back to the executed document.
+        if contract.contract_number:
+            meta_rows.append(("Contract number", contract.contract_number))
         if contract.value is not None:
             symbol = {"USD": "$", "EUR": "€", "GBP": "£", "CAD": "$", "AUD": "$"}.get(
                 (contract.currency or "USD").upper(), ""
