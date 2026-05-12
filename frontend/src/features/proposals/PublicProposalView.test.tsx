@@ -78,13 +78,14 @@ describe('PublicProposalView', () => {
     );
   });
 
-  it('uses DEFAULT_BRANDING when proposal.branding is null — header stays bg-white', async () => {
+  it('uses DEFAULT_BRANDING when proposal.branding is null — header renders with surface bg', async () => {
     mockGet.mockResolvedValue({ data: { ...baseProposal, branding: null } });
     renderAt();
     await waitFor(() => screen.getByRole('heading', { level: 1 }));
-    // Header is intentionally static bg-white (not branded) — confirm class present
+    // Header renders with tenant surface_color_light via inline style (default #ffffff)
     const header = document.querySelector('header');
-    expect(header).toHaveClass('bg-white');
+    expect(header).toBeTruthy();
+    expect(header?.getAttribute('style')).toContain('background-color');
   });
 
   it('uses provided branding colors when branding is present', async () => {
@@ -101,9 +102,9 @@ describe('PublicProposalView', () => {
     // 'Custom Co' renders both as the header company label and (if differing
     // from proposal.company.name) as the "Prepared for ... · Custom Co" tail.
     await waitFor(() => expect(screen.getAllByText('Custom Co').length).toBeGreaterThan(0));
-    // Header stays bg-white — branding accent is applied to avatar + inline-style accents
+    // Header uses inline style (surface_color_light from branding, not a Tailwind bg class)
     const header = document.querySelector('header');
-    expect(header).toHaveClass('bg-white');
+    expect(header).toBeTruthy();
     expect(screen.getByText('Custom footer')).toBeInTheDocument();
   });
 
@@ -187,7 +188,7 @@ describe('PublicProposalView', () => {
       signer_name: 'Jane Doe',
       signer_email: 'jane@example.com',
     });
-    expect(screen.getByText(/will be in touch shortly/)).toBeInTheDocument();
+    expect(screen.getByText(/signed copy will be emailed to you/)).toBeInTheDocument();
   });
 
   it('calls POST reject and shows rejected confirmation', async () => {

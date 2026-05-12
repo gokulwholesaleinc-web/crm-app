@@ -96,8 +96,10 @@ describe('PublicQuoteView', () => {
         screen.getByRole('heading', { level: 1, name: 'Annual Software License' })
       ).toBeInTheDocument()
     );
-    expect(screen.getByText('QUO-2024-001')).toBeInTheDocument();
-    expect(screen.getByText(/Prepared for Jane Doe/)).toBeInTheDocument();
+    expect(screen.getAllByText('QUO-2024-001').length).toBeGreaterThan(0);
+    expect(
+      screen.getByText((_, el) => el?.tagName === 'P' && (el?.textContent?.includes('Prepared for Jane Doe') ?? false))
+    ).toBeInTheDocument();
     expect(screen.getByText('Widget Pro')).toBeInTheDocument();
     expect(screen.getAllByText('$1,000.00').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Acme Corp').length).toBeGreaterThan(0);
@@ -125,6 +127,8 @@ describe('PublicQuoteView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Accept this quote' }));
     await waitFor(() => screen.getByRole('dialog', { name: 'Confirm Acceptance' }));
 
+    // Must check the agreement checkbox before the Sign button is enabled
+    fireEvent.click(screen.getByLabelText('I have read and agree to the terms and conditions above'));
     fireEvent.click(screen.getByRole('button', { name: 'Confirm and sign acceptance' }));
 
     await waitFor(() =>
@@ -150,6 +154,8 @@ describe('PublicQuoteView', () => {
     fireEvent.change(screen.getByLabelText('Email Address'), {
       target: { value: 'jane@example.com' },
     });
+    // Check the agreement checkbox before signing (required gate)
+    fireEvent.click(screen.getByLabelText('I have read and agree to the terms and conditions above'));
     fireEvent.click(screen.getByRole('button', { name: 'Confirm and sign acceptance' }));
 
     await waitFor(() =>
@@ -159,8 +165,9 @@ describe('PublicQuoteView', () => {
       '/api/quotes/public/test-token-abc/accept',
       { signer_name: 'Jane Doe', signer_email: 'jane@example.com' }
     );
+    // Post-sign copy: signed copy will be emailed
     expect(
-      screen.getByText(/Thank you for accepting this quote/)
+      screen.getByText(/signed copy will be emailed to the address you provided/)
     ).toBeInTheDocument();
   });
 
@@ -182,6 +189,7 @@ describe('PublicQuoteView', () => {
     fireEvent.change(screen.getByLabelText('Email Address'), {
       target: { value: 'wrong@other.com' },
     });
+    fireEvent.click(screen.getByLabelText('I have read and agree to the terms and conditions above'));
     fireEvent.click(screen.getByRole('button', { name: 'Confirm and sign acceptance' }));
 
     await waitFor(() =>
@@ -206,6 +214,7 @@ describe('PublicQuoteView', () => {
     fireEvent.change(screen.getByLabelText('Email Address'), {
       target: { value: 'jane@example.com' },
     });
+    fireEvent.click(screen.getByLabelText('I have read and agree to the terms and conditions above'));
     fireEvent.click(screen.getByRole('button', { name: 'Confirm and sign acceptance' }));
 
     await waitFor(() =>
@@ -275,6 +284,22 @@ describe('PublicQuoteView', () => {
     expect(
       screen.queryByRole('button', { name: 'Reject this quote' })
     ).not.toBeInTheDocument();
+  });
+
+  it('Sign button is disabled in e-sign modal until agreement checkbox is checked', async () => {
+    mockGet.mockResolvedValue({ data: baseQuote });
+    renderAt();
+    await waitFor(() => screen.getByRole('button', { name: 'Accept this quote' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Accept this quote' }));
+    await waitFor(() => screen.getByRole('dialog', { name: 'Confirm Acceptance' }));
+
+    // Button starts disabled (checkbox unchecked)
+    expect(screen.getByRole('button', { name: 'Confirm and sign acceptance' })).toBeDisabled();
+
+    // After checking, button becomes enabled
+    fireEvent.click(screen.getByLabelText('I have read and agree to the terms and conditions above'));
+    expect(screen.getByRole('button', { name: 'Confirm and sign acceptance' })).not.toBeDisabled();
   });
 
   it('cancels e-sign modal when Cancel button is clicked', async () => {

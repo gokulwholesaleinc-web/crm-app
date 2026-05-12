@@ -315,7 +315,7 @@ function PublicProposalView() {
   if (loading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
-        <div role="status" aria-label="Loading proposal…" className="animate-pulse text-center">
+        <div role="status" aria-label="Loading proposal…" className="animate-pulse motion-reduce:animate-none text-center">
           <div className="h-7 w-40 bg-gray-200 rounded mx-auto mb-3" />
           <div className="h-3 w-24 bg-gray-200 rounded mx-auto" />
         </div>
@@ -798,7 +798,7 @@ function PublicProposalView() {
                   {actionDone === 'accepted'
                     ? proposal.stripe_payment_url
                       ? 'Thanks — please complete payment above to finalize this engagement.'
-                      : `Thank you. ${companyDisplayName} will be in touch shortly with next steps.`
+                      : 'A signed copy will be emailed to you shortly. You can safely close this page.'
                     : 'Thank you for your response. We appreciate your consideration.'}
                 </p>
               </div>
