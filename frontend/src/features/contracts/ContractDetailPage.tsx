@@ -24,6 +24,13 @@ import type { ContractUpdate } from '../../types';
 import { ContractAttachmentsSection } from './ContractAttachmentsSection';
 import { ContractStatusBadge } from './statusBadge';
 import EntitySharing from '../../components/shared/EntitySharing';
+import { StatusTimeline } from '../../components/shared/StatusTimeline';
+import { SendChecklist, isChecklistReady } from '../../components/shared/SendChecklist';
+import { InlineSectionEditor } from '../../components/shared/InlineSectionEditor';
+import {
+  buildContractTimelineSteps,
+  buildContractSendChecklist,
+} from './contractStatus';
 
 function ContractDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -68,10 +75,19 @@ function ContractDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6 animate-pulse">
-        <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" />
-        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2 mb-2" />
-        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/4" />
+      <div className="space-y-6 animate-pulse motion-reduce:animate-none">
+        <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/3" />
+        <div className="h-16 bg-gray-200 dark:bg-gray-700 rounded" />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-4">
+            <div className="h-32 bg-gray-200 dark:bg-gray-700 rounded-lg" />
+            <div className="h-32 bg-gray-200 dark:bg-gray-700 rounded-lg" />
+          </div>
+          <div className="space-y-4">
+            <div className="h-40 bg-gray-200 dark:bg-gray-700 rounded-lg" />
+            <div className="h-32 bg-gray-200 dark:bg-gray-700 rounded-lg" />
+          </div>
+        </div>
       </div>
     );
   }
@@ -162,6 +178,31 @@ function ContractDetailPage() {
     }
   };
 
+  // Per-section inline save: throws so the editor stays in edit mode
+  // on failure with an inline error. Toast is the secondary signal.
+  const handleSectionSave = async (
+    field: keyof ContractUpdate,
+    value: string | null,
+  ) => {
+    try {
+      await updateMutation.mutateAsync({
+        id: contract.id,
+        data: { [field]: value } as ContractUpdate,
+      });
+    } catch (err) {
+      showError(extractApiErrorDetail(err) ?? 'Failed to save changes');
+      throw err;
+    }
+  };
+
+  // Build timeline + send checklist from the contract record.
+  const timelineSteps = buildContractTimelineSteps(contract);
+  const sendChecklist = buildContractSendChecklist(contract, {
+    onEditContact: openEditModal,
+  });
+  const checklistReady = isChecklistReady(sendChecklist);
+  const canSendStatus = canSend || canResend;
+
   return (
     <div className="space-y-6">
       <StickyActionBar triggerRef={actionRowRef}>
@@ -227,12 +268,11 @@ function ContractDetailPage() {
           </div>
         </div>
 
+        {/* Action row — one primary CTA per status, secondary follows.
+            Removed disabled "Cancel Send — coming soon" stub (placeholders
+            in production UI confuse users about what's actually shipping). */}
         <div ref={actionRowRef} className="flex flex-wrap items-center gap-2">
-          {canEdit && (
-            <Button variant="secondary" onClick={openEditModal} leftIcon={<PencilIcon className="h-4 w-4" />}>
-              Edit
-            </Button>
-          )}
+          {/* PRIMARY action — the highest-leverage next step per status. */}
           {canSend && (
             <Button
               onClick={handleSend}
@@ -243,24 +283,17 @@ function ContractDetailPage() {
             </Button>
           )}
           {canResend && (
-            <>
-              <Button
-                variant="secondary"
-                onClick={handleSend}
-                leftIcon={<PaperAirplaneIcon className="h-4 w-4" />}
-                disabled={sendMutation.isPending}
-              >
-                {sendMutation.isPending ? 'Resending...' : 'Resend'}
-              </Button>
-              <Button
-                variant="secondary"
-                disabled
-                title="Cancel send — coming soon"
-              >
-                Cancel Send
-              </Button>
-            </>
+            <Button
+              variant="secondary"
+              onClick={handleSend}
+              leftIcon={<PaperAirplaneIcon className="h-4 w-4" />}
+              disabled={sendMutation.isPending}
+            >
+              {sendMutation.isPending ? 'Resending...' : 'Resend'}
+            </Button>
           )}
+
+          {/* SECONDARY — common follow-ups when applicable. */}
           {hasSignedPdf && (
             <Button
               variant="secondary"
@@ -272,28 +305,43 @@ function ContractDetailPage() {
               Download Signed PDF
             </Button>
           )}
+          {canEdit && (
+            <Button variant="secondary" onClick={openEditModal} leftIcon={<PencilIcon className="h-4 w-4" />}>
+              Edit
+            </Button>
+          )}
+
+          {/* Delete always last + always danger variant. */}
           <Button variant="danger" onClick={() => setShowDeleteConfirm(true)} leftIcon={<TrashIcon className="h-4 w-4" />}>
             Delete
           </Button>
         </div>
       </div>
 
+      {/* Status timeline — Draft → Sent → Signed → Active (→ Expired
+          when end_date is set). Tells the lifecycle story at a glance
+          and mirrors the proposal surface so the two flows feel like
+          one product. */}
+      <StatusTimeline steps={timelineSteps} />
+
+      {/* Pre-send checklist — auto-hides when every required gate
+          passes so a polished contract doesn't carry the gate card. */}
+      {canSendStatus && !checklistReady && (
+        <SendChecklist items={sendChecklist} hideWhenAllGreen />
+      )}
+
       {/* Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Scope */}
-          {contract.scope ? (
-            <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700">
-              <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Scope</h2>
-              <p className="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap">{contract.scope}</p>
-            </div>
-          ) : (
-            <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700">
-              <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Scope</h2>
-              <p className="text-sm text-gray-400 dark:text-gray-500 italic">No scope defined yet.</p>
-            </div>
-          )}
+          <InlineSectionEditor
+            title="Scope"
+            value={contract.scope ?? null}
+            onSave={(v) => handleSectionSave('scope', v)}
+            canEdit={canEdit}
+            rows={8}
+            placeholder="Deliverables, terms, what each party is committing to. This is the body of what gets signed."
+          />
 
           <ContractAttachmentsSection contractId={contract.id} canEdit={canEdit} />
         </div>
@@ -301,8 +349,8 @@ function ContractDetailPage() {
         {/* Sidebar */}
         <div className="space-y-6">
           {/* Details */}
-          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700">
-            <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-4">Details</h2>
+          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-gray-100 dark:border-gray-700">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-4">Details</h2>
             <dl className="space-y-3">
               {contract.value != null && (
                 <div>
@@ -350,8 +398,8 @@ function ContractDetailPage() {
           </div>
 
           {/* Related */}
-          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700">
-            <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-4">Related</h2>
+          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-gray-100 dark:border-gray-700">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-4">Related</h2>
             <dl className="space-y-3">
               {contract.contact && (
                 <div>
