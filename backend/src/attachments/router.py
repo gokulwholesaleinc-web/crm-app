@@ -81,7 +81,7 @@ async def download_attachment(
     service = AttachmentService(db)
     attachment = await service.get_attachment(attachment_id)
     if not attachment:
-        raise_not_found(EntityNames.NOTE, attachment_id)
+        raise_not_found("Attachment", attachment_id)
 
     await require_entity_access(
         db, attachment.entity_type, attachment.entity_id, current_user, data_scope,
@@ -106,17 +106,20 @@ async def download_attachment(
             return {"download_url": download_url}
         return RedirectResponse(url=download_url, status_code=307)
 
+    # No presigned URL available (object storage not configured, or presign
+    # failed). The JSON path cannot serve binary bytes — the frontend
+    # expects {"download_url": "..."} and silently gets undefined when it
+    # receives raw PDF content, surfacing the misleading "Preview
+    # unavailable" toast. Always 503 on the JSON path so the error is
+    # explicit regardless of whether a local disk copy exists.
+    if as_json:
+        raise HTTPException(
+            status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+            detail="Attachment storage temporarily unavailable",
+        )
+
     file_path = service.get_file_path(attachment)
     if not file_path or not file_path.exists():
-        # On the JSON path, surface a distinct 503 instead of a 404 when
-        # object storage is configured but the presign failed — a 404
-        # would tell the frontend "this attachment doesn't exist," which
-        # is misleading during an R2 outage.
-        if as_json:
-            raise HTTPException(
-                status_code=HTTPStatus.SERVICE_UNAVAILABLE,
-                detail="Attachment storage temporarily unavailable",
-            )
         raise_not_found("File", attachment_id)
 
     return FileResponse(

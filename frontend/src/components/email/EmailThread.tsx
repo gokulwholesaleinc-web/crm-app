@@ -200,12 +200,36 @@ function EmailBubble({
             : 'bg-gray-100 text-gray-900 dark:bg-gray-700 dark:text-gray-100'
         }`}
       >
-        {/* Header: from/to + status */}
+        {/* Header: from/to + status. On outbound we surface BOTH From
+            and To — with Gmail send-as aliases the sender address can
+            differ from the connected user's default, and that matters
+            for audit + reply-routing. Inbound also surfaces To when
+            present so multi-recipient threads stay legible. */}
         <div className="flex items-start justify-between gap-2 mb-1">
           <div className="min-w-0 flex-1">
-            <p className={`text-xs truncate ${isOutbound ? 'text-white/90' : 'text-gray-500 dark:text-gray-400'}`}>
-              {isOutbound ? `To: ${email.to_email}` : `From: ${email.from_email || 'Unknown'}`}
-            </p>
+            {isOutbound ? (
+              <>
+                {email.from_email && (
+                  <p className="text-xs truncate text-white/90">
+                    From: {email.from_email}
+                  </p>
+                )}
+                <p className={`text-xs truncate ${email.from_email ? 'text-white/80' : 'text-white/90'}`}>
+                  To: {email.to_email}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-xs truncate text-gray-500 dark:text-gray-400">
+                  From: {email.from_email || 'Unknown'}
+                </p>
+                {email.to_email && (
+                  <p className="text-xs truncate text-gray-400 dark:text-gray-500">
+                    To: {email.to_email}
+                  </p>
+                )}
+              </>
+            )}
             {email.cc && (
               <p className={`text-xs truncate ${isOutbound ? 'text-white/80' : 'text-gray-400 dark:text-gray-500'}`}>
                 CC: {email.cc}
