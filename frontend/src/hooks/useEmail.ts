@@ -3,7 +3,12 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { emailApi, SendEmailPayload, SendTemplateEmailPayload } from '../api/email';
+import {
+  emailApi,
+  getVolumeStats,
+  SendEmailPayload,
+  SendTemplateEmailPayload,
+} from '../api/email';
 
 export const emailKeys = {
   all: ['emails'] as const,
@@ -61,5 +66,14 @@ export function useEmailThread(entityType: string, entityId: number, page = 1, p
     queryKey: emailKeys.thread(entityType, entityId, page),
     queryFn: () => emailApi.thread({ entity_type: entityType, entity_id: entityId, page, page_size: pageSize }),
     enabled: !!entityType && !!entityId,
+  });
+}
+
+export function useVolumeStats() {
+  return useQuery({
+    queryKey: ['email', 'volume-stats'] as const,
+    queryFn: getVolumeStats,
+    refetchInterval: 5 * 60 * 1000,
+    refetchIntervalInBackground: false,
   });
 }

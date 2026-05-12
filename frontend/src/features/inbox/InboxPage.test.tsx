@@ -3,15 +3,17 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-vi.mock('../../api/email', () => ({
-  emailApi: {
-    list: vi.fn(),
-    search: vi.fn(),
-  },
-  // Re-exported by api/email; the inbox imports both from one module so
-  // the mock has to cover both surfaces.
-  getVolumeStats: vi.fn(),
-}));
+vi.mock('../../api/email', async () => {
+  const actual = await vi.importActual<typeof import('../../api/email')>('../../api/email');
+  return {
+    ...actual,
+    emailApi: {
+      list: vi.fn(),
+      search: vi.fn(),
+    },
+    getVolumeStats: vi.fn(),
+  };
+});
 
 import { emailApi, getVolumeStats } from '../../api/email';
 import InboxPage from './InboxPage';
@@ -74,11 +76,11 @@ const SEARCH_FIXTURES = [
   },
 ];
 
-function renderPage() {
+function renderPage(initialEntry: string = '/inbox') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={['/inbox']}>
+      <MemoryRouter initialEntries={[initialEntry]}>
         <InboxPage />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -91,14 +93,14 @@ beforeEach(() => {
     items: RECENT_FIXTURES,
     total: RECENT_FIXTURES.length,
     page: 1,
-    page_size: 50,
+    page_size: 25,
     pages: 1,
   });
   vi.mocked(emailApi.search).mockResolvedValue({
     items: SEARCH_FIXTURES,
     total: SEARCH_FIXTURES.length,
     page: 1,
-    page_size: 50,
+    page_size: 25,
     pages: 1,
   });
   vi.mocked(getVolumeStats).mockResolvedValue({
@@ -116,18 +118,15 @@ describe('InboxPage', () => {
     renderPage();
 
     await screen.findByText('Quote follow-up');
-    // HTML stripped — paragraph tags gone, content preserved.
     expect(
       screen.getByText(/Following up on the quote we sent last week/),
     ).toBeInTheDocument();
-    // Volume tile populated.
     await screen.findByText('12 / 100');
   });
 
   it('marks orphan rows (no entity) as not navigable', async () => {
     renderPage();
     await screen.findByText('Untethered email');
-    // The orphan row warns the user and is rendered as a non-button.
     expect(screen.getByText('Not linked to a contact yet')).toBeInTheDocument();
   });
 
@@ -140,7 +139,6 @@ describe('InboxPage', () => {
     );
     fireEvent.change(searchBox, { target: { value: 'follow-up' } });
 
-    // Debounce window is 300ms; wait for the search call + render.
     await waitFor(() => {
       expect(vi.mocked(emailApi.search)).toHaveBeenCalledWith(
         expect.objectContaining({ q: 'follow-up' }),
@@ -149,8 +147,6 @@ describe('InboxPage', () => {
 
     await screen.findByText('RE: Quote follow-up');
     expect(screen.getByText('Sounds good, let us schedule a call.')).toBeInTheDocument();
-
-    // Status filter pills disappear once searching (search is unified).
     expect(screen.queryByRole('button', { name: 'Failed' })).not.toBeInTheDocument();
   });
 
@@ -159,7 +155,7 @@ describe('InboxPage', () => {
       items: [],
       total: 0,
       page: 1,
-      page_size: 50,
+      page_size: 25,
       pages: 0,
     });
 
@@ -172,5 +168,60 @@ describe('InboxPage', () => {
     fireEvent.change(searchBox, { target: { value: 'nothing-matches' } });
 
     await screen.findByText(/No emails found for "nothing-matches"/);
+  });
+
+  it('seeds query + status from URL search params', async () => {
+    renderPage('/inbox?q=quote&status=sent');
+
+    await waitFor(() => {
+      expect(vi.mocked(emailApi.search)).toHaveBeenCalledWith(
+        expect.objectContaining({ q: 'quote', page: 1 }),
+      );
+    });
+
+    const searchBox = screen.getByPlaceholderText(
+      /Search emails by subject, body, sender, or recipient/i,
+    ) as HTMLInputElement;
+    expect(searchBox.value).toBe('quote');
+  });
+
+  it('shows Clear-filter affordance when a non-default status returns empty', async () => {
+    vi.mocked(emailApi.list).mockResolvedValueOnce({
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 25,
+      pages: 0,
+    });
+
+    renderPage('/inbox?status=failed');
+
+    await screen.findByText(/No emails matching Failed/);
+    expect(screen.getByRole('button', { name: /Clear filter/i })).toBeInTheDocument();
+  });
+
+  it('renders an inline error with the backend detail and a retry control', async () => {
+    vi.mocked(emailApi.list).mockRejectedValueOnce({
+      detail: 'Gmail token expired — reconnect in Settings.',
+      status_code: 401,
+    });
+
+    renderPage();
+
+    await screen.findByText(/Gmail token expired/);
+    expect(screen.getByRole('button', { name: /Try again/i })).toBeInTheDocument();
+  });
+
+  it('flattens FastAPI 422 validation arrays into the error description', async () => {
+    vi.mocked(emailApi.search).mockRejectedValueOnce({
+      detail: [
+        { loc: ['query', 'q'], msg: 'ensure this value has at most 200 characters', type: 'value_error.any_str.max_length' },
+      ],
+      status_code: 422,
+    });
+
+    renderPage('/inbox?q=overflow');
+
+    await screen.findByText(/ensure this value has at most 200 characters/);
   });
 });

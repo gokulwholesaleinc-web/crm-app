@@ -5,7 +5,7 @@
 
 import clsx from 'clsx';
 import { Spinner } from '../../../components/ui/Spinner';
-import { useVolumeStats } from '../../../hooks/useCampaigns';
+import { useVolumeStats } from '../../../hooks/useEmail';
 import {
   EnvelopeIcon,
   FireIcon,

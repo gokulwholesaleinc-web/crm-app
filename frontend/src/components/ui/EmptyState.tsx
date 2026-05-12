@@ -112,16 +112,18 @@ export function NoResultsEmptyState({
 
 export function ErrorEmptyState({
   onRetry,
+  description,
   className,
 }: {
   onRetry?: () => void;
+  description?: string;
   className?: string;
 }) {
   return (
     <EmptyState
       variant="error"
       title="Something went wrong"
-      description="We encountered an error while loading this content. Please try again."
+      description={description || 'We encountered an error while loading this content. Please try again.'}
       action={onRetry ? { label: 'Try again', onClick: onRetry } : undefined}
       className={className}
     />

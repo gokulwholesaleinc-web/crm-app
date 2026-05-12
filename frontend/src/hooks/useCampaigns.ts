@@ -159,16 +159,7 @@ export function useRemoveCampaignMember() {
   });
 }
 
-// Volume Stats & Email Settings Hooks
-
-export function useVolumeStats() {
-  return useQuery({
-    queryKey: ['email', 'volume-stats'] as const,
-    queryFn: () => campaignsApi.getVolumeStats(),
-    refetchInterval: 5 * 60 * 1000,
-    refetchIntervalInBackground: false,
-  });
-}
+// Email Settings Hook
 
 export function useEmailSettings() {
   return useQuery({

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { emailApi, type EmailSearchResult } from '../../api/email';
 import { Spinner } from '../ui';
 import { Modal } from '../ui/Modal';
+import { formatDateTime } from '../../utils/formatters';
 
 interface EmailSearchModalProps {
   isOpen: boolean;
@@ -11,20 +13,6 @@ interface EmailSearchModalProps {
   entityType?: string;
   entityId?: number;
 }
-
-function formatDate(value: string | null): string {
-  if (!value) return '';
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value));
-}
-
-const SEARCH_ICON = (
-  <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-  </svg>
-);
 
 export function EmailSearchModal({ isOpen, onClose, entityType, entityId }: EmailSearchModalProps) {
   const [query, setQuery] = useState('');
@@ -105,7 +93,7 @@ export function EmailSearchModal({ isOpen, onClose, entityType, entityId }: Emai
       closeOnOverlayClick={true}
     >
       <div className="-mx-4 -mt-4 sm:-mx-6 sm:-mt-6 flex items-center gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-        {SEARCH_ICON}
+        <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
         <input
           ref={inputRef}
           type="search"
@@ -209,7 +197,7 @@ export function EmailSearchModal({ isOpen, onClose, entityType, entityId }: Emai
                       </div>
                       {item.sent_at && (
                         <span className="shrink-0 text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap">
-                          {formatDate(item.sent_at)}
+                          {formatDateTime(item.sent_at)}
                         </span>
                       )}
                     </div>
