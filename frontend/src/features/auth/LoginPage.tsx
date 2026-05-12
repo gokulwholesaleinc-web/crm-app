@@ -28,7 +28,7 @@ function LoginPage() {
                   alt={tenant.company_name || 'Company logo'}
                   width={64}
                   height={64}
-                  className="h-16 w-auto object-contain [filter:drop-shadow(0_0_2px_rgba(255,255,255,0.85))_drop-shadow(0_0_8px_rgba(255,255,255,0.5))]"
+                  className="h-16 w-auto object-contain [filter:drop-shadow(0_0_1.5px_rgba(255,255,255,0.65))_drop-shadow(0_0_4px_rgba(255,255,255,0.3))]"
                   onError={() => setLogoError(true)}
                 />
               </div>

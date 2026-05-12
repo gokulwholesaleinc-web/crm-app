@@ -299,7 +299,7 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
                 width={collapsed ? 32 : 180}
                 height={collapsed ? 32 : 40}
                 className={clsx(
-                  'object-contain [filter:drop-shadow(0_0_2px_rgba(255,255,255,0.85))_drop-shadow(0_0_8px_rgba(255,255,255,0.5))]',
+                  'object-contain [filter:drop-shadow(0_0_1.5px_rgba(255,255,255,0.65))_drop-shadow(0_0_4px_rgba(255,255,255,0.3))]',
                   collapsed ? 'h-8 w-auto max-w-[32px]' : 'h-10 w-auto max-w-[176px]'
                 )}
                 onError={() => setLogoError(true)}
