@@ -834,7 +834,7 @@ def render_mention_email(branding: dict, data: dict) -> tuple[str, str]:
 
     snippet_block = (
         f'<blockquote style="margin:16px 0;padding:12px 16px;border-left:3px solid '
-        f'{escape(_safe_hex(branding.get("primary_color"), "#6366f1", field="primary_color"))};background-color:#f9fafb;'
+        f'{escape(_safe_hex(branding.get("primary_color"), "#1e293b", field="primary_color"))};background-color:#f9fafb;'
         f'font-size:14px;color:#374151;white-space:pre-wrap;">{snippet}</blockquote>'
         if snippet else ""
     )
@@ -879,7 +879,7 @@ def render_email_reply_email(branding: dict, data: dict) -> tuple[str, str]:
     )
     snippet_block = (
         f'<blockquote style="margin:0;padding:12px 16px;border-left:3px solid '
-        f'{escape(_safe_hex(branding.get("primary_color"), "#6366f1", field="primary_color"))};background-color:#f9fafb;'
+        f'{escape(_safe_hex(branding.get("primary_color"), "#1e293b", field="primary_color"))};background-color:#f9fafb;'
         f'font-size:14px;color:#374151;white-space:pre-wrap;">{snippet}</blockquote>'
         if snippet else ""
     )
