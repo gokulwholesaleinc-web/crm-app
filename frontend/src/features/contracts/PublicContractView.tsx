@@ -5,6 +5,7 @@ import axios from 'axios';
 import { sanitizeHexColor } from '../../utils/colorValidation';
 import { useForceLightMode } from '../../hooks/useForceLightMode';
 import { formatDate } from '../../utils/formatters';
+import { ScrollToSignIndicator } from '../../components/ui/ScrollToSignIndicator';
 
 // Bare axios instance for public (unauthenticated) contract endpoints.
 // Deliberately does NOT attach the CRM Bearer token — customers clicking
@@ -67,49 +68,136 @@ function formatContractValue(value: number | null, currency: string): string | n
 }
 
 // Inline signature canvas — native canvas + pointer events; no extra deps.
+// Strokes are stored as normalised [0,1] coords so they survive canvas resize
+// (landscape/portrait rotation). The containerRef parent drives width; height
+// is always 1/3 of the rendered width (capped at 160px).
 function SignatureCanvas({
   canvasRef,
+  containerRef,
   disabled,
 }: {
   canvasRef: React.RefObject<HTMLCanvasElement>;
+  containerRef: React.RefObject<HTMLDivElement>;
   disabled: boolean;
 }) {
   const drawing = useRef(false);
+  // Each stroke is an array of {x, y} normalised to [0,1] relative to canvas dimensions.
+  const strokes = useRef<Array<Array<{ x: number; y: number }>>>([]);
+  const currentStroke = useRef<Array<{ x: number; y: number }>>([]);
 
-  const getPos = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const rect = canvasRef.current!.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  const applyCtxStyle = (ctx: CanvasRenderingContext2D) => {
+    ctx.strokeStyle = '#111827';
+    ctx.lineWidth = 1.8;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+  };
+
+  const redraw = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    applyCtxStyle(ctx);
+    for (const stroke of strokes.current) {
+      if (stroke.length < 2) continue;
+      const first = stroke[0];
+      if (!first) continue;
+      ctx.beginPath();
+      ctx.moveTo(first.x * canvas.width, first.y * canvas.height);
+      for (let i = 1; i < stroke.length; i++) {
+        const pt = stroke[i];
+        if (!pt) continue;
+        ctx.lineTo(pt.x * canvas.width, pt.y * canvas.height);
+      }
+      ctx.stroke();
+    }
+  }, [canvasRef]);
+
+  // Resize canvas to fill its container; preserve strokes via normalised coords.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const width = Math.floor(entry.contentRect.width);
+      const height = Math.min(Math.floor(width / 3), 160);
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      canvas.width = width;
+      canvas.height = height;
+      const ctx2 = canvas.getContext('2d');
+      if (ctx2) applyCtxStyle(ctx2);
+      redraw();
+    });
+    observer.observe(container);
+    return () => { observer.disconnect(); };
+  }, [canvasRef, containerRef, redraw]);
+
+  const getNormPos = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current!;
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left) / canvas.width,
+      y: (e.clientY - rect.top) / canvas.height,
+    };
   };
 
   const onDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (disabled) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     drawing.current = true;
+    currentStroke.current = [];
+    const pos = getNormPos(e);
+    currentStroke.current.push(pos);
     const ctx = canvasRef.current?.getContext('2d');
     if (!ctx) return;
-    const { x, y } = getPos(e);
+    applyCtxStyle(ctx);
     ctx.beginPath();
-    ctx.moveTo(x, y);
+    ctx.moveTo(pos.x * canvasRef.current!.width, pos.y * canvasRef.current!.height);
   };
 
   const onMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!drawing.current || disabled) return;
+    const pos = getNormPos(e);
+    currentStroke.current.push(pos);
     const ctx = canvasRef.current?.getContext('2d');
     if (!ctx) return;
-    const { x, y } = getPos(e);
-    ctx.lineTo(x, y);
+    ctx.lineTo(pos.x * canvasRef.current!.width, pos.y * canvasRef.current!.height);
     ctx.stroke();
   };
 
-  const onUp = () => { drawing.current = false; };
+  const onUp = () => {
+    if (!drawing.current) return;
+    drawing.current = false;
+    if (currentStroke.current.length > 0) {
+      strokes.current.push([...currentStroke.current]);
+      currentStroke.current = [];
+    }
+  };
+
+  // Expose clear method via an effect that attaches to canvas data attribute
+  // so the parent can call clearCanvas without needing to reach into this component.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    // Attach clear handler as a custom event so parent's clearCanvas() works.
+    const handler = () => {
+      strokes.current = [];
+      currentStroke.current = [];
+      const ctx = canvas.getContext('2d');
+      ctx?.clearRect(0, 0, canvas.width, canvas.height);
+    };
+    canvas.addEventListener('clear-strokes', handler);
+    return () => { canvas.removeEventListener('clear-strokes', handler); };
+  }, [canvasRef]);
 
   return (
     <canvas
       ref={canvasRef}
-      width={480}
-      height={160}
       aria-label="Signature pad — draw your signature"
-      style={{ display: 'block', touchAction: 'none', cursor: disabled ? 'default' : 'crosshair' }}
+      style={{ display: 'block', touchAction: 'none', cursor: disabled ? 'default' : 'crosshair', width: '100%' }}
       onPointerDown={onDown}
       onPointerMove={onMove}
       onPointerUp={onUp}
@@ -130,28 +218,34 @@ export default function PublicContractView() {
   const [logoError, setLogoError] = useState(false);
   const [agreeChecked, setAgreeChecked] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const signSectionElRef = useRef<HTMLElement | null>(null);
+  const signObserverRef = useRef<IntersectionObserver | null>(null);
+  const [showScrollIndicator, setShowScrollIndicator] = useState(false);
+
+  // Callback ref: attaches IntersectionObserver when sign section mounts.
+  const signSectionRef = useCallback((el: HTMLElement | null) => {
+    signSectionElRef.current = el;
+    signObserverRef.current?.disconnect();
+    if (!el) { setShowScrollIndicator(false); return; }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry) setShowScrollIndicator(!entry.isIntersecting);
+      },
+      { threshold: 0.1 },
+    );
+    observer.observe(el);
+    signObserverRef.current = observer;
+    setShowScrollIndicator(el.getBoundingClientRect().top > window.innerHeight * 0.9);
+  }, []);
 
   useForceLightMode();
 
   useEffect(() => { setLogoError(false); }, [contract?.branding?.logo_url]);
 
-  // Initialise canvas context once mounted
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.strokeStyle = '#111827';
-    ctx.lineWidth = 1.8;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-  }, []);
-
   const clearCanvas = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    ctx?.clearRect(0, 0, canvas.width, canvas.height);
+    canvasRef.current?.dispatchEvent(new CustomEvent('clear-strokes'));
   };
 
   const isCanvasEmpty = (): boolean => {
@@ -261,13 +355,14 @@ export default function PublicContractView() {
   const signedDate = contract.signed_at ? formatDate(contract.signed_at, 'long') : null;
 
   return (
-    <div className="min-h-screen text-gray-900 antialiased" style={{ backgroundColor: branding.bg_color_light }}>
+    <div className="min-h-screen text-gray-900 antialiased print:bg-white" style={{ backgroundColor: branding.bg_color_light }}>
       <div
         aria-hidden="true"
+        className="print:hidden"
         style={{ height: 4, backgroundImage: `linear-gradient(90deg, ${primary}, ${accent})` }}
       />
 
-      <header className="border-b border-gray-200" style={{ backgroundColor: branding.surface_color_light }}>
+      <header className="border-b border-gray-200 print:border-b-2" style={{ backgroundColor: branding.surface_color_light }}>
         <div className="mx-auto max-w-3xl px-6 sm:px-10 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             {branding.logo_url && !logoError ? (
@@ -306,7 +401,7 @@ export default function PublicContractView() {
             {contract.title}
           </h1>
           {contract.contact_name && (
-            <p className="mt-3 text-[15px] text-gray-600">
+            <p role="doc-subtitle" aria-label="Recipient" className="mt-3 text-[15px] text-gray-600">
               Prepared for{' '}
               <span className="font-medium text-gray-900">{contract.contact_name}</span>
               {contract.company_name && (
@@ -386,7 +481,7 @@ export default function PublicContractView() {
 
         {/* Signature form */}
         {canSign && (
-          <section className="mt-10 sm:mt-12">
+          <section className="mt-10 sm:mt-12 print:hidden" ref={signSectionRef}>
             <PlainSectionHeader title="Sign Contract" accent={primary} />
             <p className="text-[15px] leading-[1.7] text-gray-700 mb-6 max-w-[62ch]">
               Please review the contract above, then enter your full name and draw your
@@ -444,10 +539,11 @@ export default function PublicContractView() {
             <div className="mb-2">
               <p className="text-sm font-medium text-gray-700 mb-2">Signature</p>
               <div
-                className="rounded border border-gray-300 bg-white overflow-hidden"
+                ref={canvasContainerRef}
+                className="rounded border border-gray-300 bg-white overflow-hidden w-full"
                 style={{ maxWidth: 480 }}
               >
-                <SignatureCanvas canvasRef={canvasRef} disabled={actionPending} />
+                <SignatureCanvas canvasRef={canvasRef} containerRef={canvasContainerRef} disabled={actionPending} />
               </div>
               <button
                 type="button"
@@ -533,6 +629,10 @@ export default function PublicContractView() {
           </div>
         </div>
       </footer>
+
+      {showScrollIndicator && canSign && (
+        <ScrollToSignIndicator onClick={() => signSectionElRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })} />
+      )}
 
       <style>{`details > summary::-webkit-details-marker { display: none; }`}</style>
     </div>

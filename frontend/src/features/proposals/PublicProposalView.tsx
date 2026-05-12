@@ -9,6 +9,7 @@ import { cadenceLabel, formatProposalMoney } from './billing';
 import { setPublicPageMeta } from '../quotes/publicMeta';
 import { ProposalAttachmentsSection } from './ProposalAttachmentsSection';
 import type { ProposalAttachmentPublic } from '../../types';
+import { ScrollToSignIndicator } from '../../components/ui/ScrollToSignIndicator';
 
 // Bare axios instance for public (unauthenticated) proposal endpoints.
 // Deliberately does NOT attach the CRM Bearer token or X-Tenant-Slug
@@ -103,6 +104,27 @@ function PublicProposalView() {
   const [viewedIds, setViewedIds] = useState<Set<number>>(() => new Set());
   const seededViewedIdsRef = useRef(false);
   const paySectionRef = useRef<HTMLElement | null>(null);
+  const signSectionElRef = useRef<HTMLElement | null>(null);
+  const signObserverRef = useRef<IntersectionObserver | null>(null);
+  const [showScrollIndicator, setShowScrollIndicator] = useState(false);
+
+  // Callback ref so the IntersectionObserver attaches the moment the element
+  // mounts (useEffect([ref.current]) doesn't re-run on ref assignment).
+  const signSectionRef = useCallback((el: HTMLElement | null) => {
+    signSectionElRef.current = el;
+    signObserverRef.current?.disconnect();
+    if (!el) { setShowScrollIndicator(false); return; }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry) setShowScrollIndicator(!entry.isIntersecting);
+      },
+      { threshold: 0.1 },
+    );
+    observer.observe(el);
+    signObserverRef.current = observer;
+    setShowScrollIndicator(el.getBoundingClientRect().top > window.innerHeight * 0.9);
+  }, []);
 
   useForceLightMode();
 
@@ -409,9 +431,10 @@ function PublicProposalView() {
     // (`dark:bg-gray-950` was hardcoded outside the bg/surface palette
     // anyway). Logged-in seller previews now match what the customer
     // sees.
-    <div className="min-h-screen text-gray-900 antialiased" style={{ backgroundColor: branding.bg_color_light }}>
+    <div className="min-h-screen text-gray-900 antialiased print:bg-white" style={{ backgroundColor: branding.bg_color_light }}>
       <div
         aria-hidden="true"
+        className="print:hidden"
         style={{
           height: 4,
           backgroundImage: `linear-gradient(90deg, ${primary}, ${secondary}, ${accent})`,
@@ -420,7 +443,7 @@ function PublicProposalView() {
       {/* Letterhead — plain, light, business-document feel. Text label
           is dropped when a logo image is present to avoid the "logo
           wordmark + typed company name" duplication. */}
-      <header className="border-b border-gray-200" style={{ backgroundColor: branding.surface_color_light }}>
+      <header className="border-b border-gray-200 print:border-b-2" style={{ backgroundColor: branding.surface_color_light }}>
         <div className="mx-auto max-w-3xl px-6 sm:px-10 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             {branding.logo_url && !logoError ? (
@@ -477,7 +500,7 @@ function PublicProposalView() {
             {proposal.title}
           </h1>
           {proposal.contact && (
-            <p className="mt-3 text-[15px] text-gray-600 dark:text-gray-300">
+            <p role="doc-subtitle" aria-label="Recipient" className="mt-3 text-[15px] text-gray-600 dark:text-gray-300">
               Prepared for <span className="font-medium text-gray-900 dark:text-gray-100">{proposal.contact.full_name}</span>
               {proposal.company && proposal.company.name !== companyDisplayName && (
                 <span className="text-gray-500 dark:text-gray-400"> · {proposal.company.name}</span>
@@ -634,7 +657,7 @@ function PublicProposalView() {
           proposal.status !== 'paid' &&
           !confirmingPayment &&
           !paymentTimedOut && (
-            <section className="mt-10 sm:mt-12" ref={paySectionRef}>
+            <section className="mt-10 sm:mt-12 print:hidden" ref={paySectionRef}>
               <PlainSectionHeader title="Payment" accent={primary} />
               <p className="prose-body mb-5">
                 {proposal.payment_type === 'subscription'
@@ -676,7 +699,7 @@ function PublicProposalView() {
             allAttachmentsViewed). */}
         {showAttachmentGateNotice && (
           <section
-            className="mt-10 sm:mt-12 rounded border border-amber-200 bg-amber-50 px-5 py-4"
+            className="mt-10 sm:mt-12 rounded border border-amber-200 bg-amber-50 px-5 py-4 print:hidden"
             role="status"
             aria-live="polite"
           >
@@ -688,7 +711,7 @@ function PublicProposalView() {
 
         {/* Accept / Decline form — standard business form layout */}
         {canRespond && (
-          <section className="mt-10 sm:mt-12">
+          <section className="mt-10 sm:mt-12 print:hidden" ref={signSectionRef}>
             <PlainSectionHeader title="Your Response" accent={primary} />
             <p className="prose-body mb-5">
               Please review the proposal above and accept or decline. Your typed name and
@@ -902,6 +925,10 @@ function PublicProposalView() {
         </div>
       </footer>
 
+      {showScrollIndicator && canRespond && (
+        <ScrollToSignIndicator onClick={() => signSectionElRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })} />
+      )}
+
       <style>{`
         .prose-body {
           font-size: 15px;
@@ -914,6 +941,9 @@ function PublicProposalView() {
         }
         .prose-body p { margin: 0; }
         details > summary::-webkit-details-marker { display: none; }
+        @media print {
+          .prose-body { color: rgb(17 24 39); }
+        }
       `}</style>
     </div>
   );

@@ -319,4 +319,21 @@ describe('PublicQuoteView', () => {
     );
     expect(mockPost).not.toHaveBeenCalled();
   });
+
+  it('renders "Prepared for" line with role="doc-subtitle" and aria-label="Recipient"', async () => {
+    mockGet.mockResolvedValue({ data: baseQuote });
+    renderAt();
+    await waitFor(() => screen.getByRole('heading', { level: 1 }));
+    const subtitle = document.querySelector('[role="doc-subtitle"]');
+    expect(subtitle).toBeTruthy();
+    expect(subtitle?.getAttribute('aria-label')).toBe('Recipient');
+    expect(subtitle?.textContent).toContain('Jane Doe');
+  });
+
+  it('does not render "Prepared for" subtitle when contact is null', async () => {
+    mockGet.mockResolvedValue({ data: { ...baseQuote, contact: null } });
+    renderAt();
+    await waitFor(() => screen.getByRole('heading', { level: 1 }));
+    expect(document.querySelector('[role="doc-subtitle"]')).toBeNull();
+  });
 });

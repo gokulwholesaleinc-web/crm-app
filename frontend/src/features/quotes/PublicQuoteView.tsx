@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
@@ -7,6 +7,7 @@ import { useForceLightMode } from '../../hooks/useForceLightMode';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { setPublicPageMeta } from './publicMeta';
 import { Modal, ModalFooter } from '../../components/ui/Modal';
+import { ScrollToSignIndicator } from '../../components/ui/ScrollToSignIndicator';
 
 // Bare axios for public (unauthenticated) quote endpoints. Does NOT
 // attach CRM Bearer token or X-Tenant-Slug header so a CRM staff user
@@ -91,6 +92,26 @@ function PublicQuoteView() {
   const [signerEmail, setSignerEmail] = useState('');
   const [esignError, setEsignError] = useState<string | null>(null);
   const [esignChecked, setEsignChecked] = useState(false);
+  const signSectionElRef = useRef<HTMLElement | null>(null);
+  const signObserverRef = useRef<IntersectionObserver | null>(null);
+  const [showScrollIndicator, setShowScrollIndicator] = useState(false);
+
+  // Callback ref: attaches IntersectionObserver when sign section mounts.
+  const signSectionRef = useCallback((el: HTMLElement | null) => {
+    signSectionElRef.current = el;
+    signObserverRef.current?.disconnect();
+    if (!el) { setShowScrollIndicator(false); return; }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry) setShowScrollIndicator(!entry.isIntersecting);
+      },
+      { threshold: 0.1 },
+    );
+    observer.observe(el);
+    signObserverRef.current = observer;
+    setShowScrollIndicator(el.getBoundingClientRect().top > window.innerHeight * 0.9);
+  }, []);
 
   useForceLightMode();
 
@@ -260,15 +281,16 @@ function PublicQuoteView() {
   const accent = branding.accent_color;
 
   return (
-    <div className="min-h-screen text-gray-900 antialiased" style={{ backgroundColor: branding.bg_color_light }}>
+    <div className="min-h-screen text-gray-900 antialiased print:bg-white" style={{ backgroundColor: branding.bg_color_light }}>
       <div
         aria-hidden="true"
+        className="print:hidden"
         style={{
           height: 4,
           backgroundImage: `linear-gradient(90deg, ${primary}, ${branding.secondary_color}, ${accent})`,
         }}
       />
-      <header className="border-b border-gray-200" style={{ backgroundColor: branding.surface_color_light }}>
+      <header className="border-b border-gray-200 print:border-b-2" style={{ backgroundColor: branding.surface_color_light }}>
         <div className="mx-auto max-w-3xl px-6 sm:px-10 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             {branding.logo_url && !logoError ? (
@@ -327,7 +349,7 @@ function PublicQuoteView() {
             {quote.title}
           </h1>
           {quote.contact && (
-            <p className="mt-3 text-[15px] text-gray-600">
+            <p role="doc-subtitle" aria-label="Recipient" className="mt-3 text-[15px] text-gray-600">
               Prepared for <span className="font-medium text-gray-900">{quote.contact.full_name}</span>
               {quote.company?.name && (
                 <span className="text-gray-500"> · {quote.company.name}</span>
@@ -482,7 +504,7 @@ function PublicQuoteView() {
 
         {/* Accept / Reject Actions */}
         {canRespond && (
-          <section className="rounded-lg shadow-sm border border-gray-200 p-6 sm:p-8" style={{ backgroundColor: branding.surface_color_light }}>
+          <section ref={signSectionRef} className="rounded-lg shadow-sm border border-gray-200 p-6 sm:p-8 print:hidden" style={{ backgroundColor: branding.surface_color_light }}>
             <h2 className="text-lg font-semibold mb-2 text-gray-900">
               Your Response
             </h2>
@@ -575,6 +597,10 @@ function PublicQuoteView() {
           </div>
         </div>
       </footer>
+
+      {showScrollIndicator && canRespond && (
+        <ScrollToSignIndicator onClick={() => signSectionElRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })} />
+      )}
 
       {/* E-Sign Modal */}
       <Modal
