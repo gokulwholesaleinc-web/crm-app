@@ -184,6 +184,9 @@ def _base_email_html(
     query support: on phones the header logo/sender cells stack,
     paddings tighten, the headline + body scale down, and the CTA
     pill goes full-width so the touch target is comfortable.
+
+    Note: ``sender_title`` renders in the header right column (paired
+    with ``sender_name``) — it no longer appears in the footer.
     """
     # _safe_hex sanitizes each color before it reaches the inline-CSS
     # sinks below. ``escape`` is HTML-escaping, not hex validation; a
@@ -284,35 +287,51 @@ def _base_email_html(
     # Lives in the header (not the footer) so the recipient sees who the
     # email is from before any body content. The right cell is dropped
     # entirely when neither field is set so single-cell emails still
-    # render flush-left.
-    has_sender = bool(sender_name or sender_title)
+    # render flush-left and the mobile stacking rule doesn't leave a
+    # phantom 8px gap below a lone logo cell.
+    #
+    # Whitespace-only values (`" "`) are treated as absent: otherwise
+    # `bool(" ")` would flip on the two-cell layout and emit a blank
+    # right column with no visible content.
+    #
+    # Explicit width="62%"/"38%" on the two cells gives Outlook desktop's
+    # Word renderer fixed guidance — without them the engine splits 50/50
+    # and a long sender title wraps awkwardly into the logo column when
+    # Outlook is in a narrow reading pane.
+    sn = (sender_name or "").strip()
+    st = (sender_title or "").strip()
     sender_name_html = (
         f'<div style="color:#ffffff;font-size:14px;font-weight:600;line-height:1.3;">'
-        f'{escape(sender_name)}</div>'
-        if sender_name
+        f'{escape(sn)}</div>'
+        if sn
         else ""
     )
     sender_title_html = (
-        f'<div style="color:#cbd5e1;font-size:12px;font-weight:400;line-height:1.3;margin-top:2px;">'
-        f'{escape(sender_title)}</div>'
-        if sender_title
+        f'<div style="color:#cbd5e1;font-size:12px;font-weight:400;line-height:1.3;'
+        f'{"margin-top:2px;" if sn else ""}">'
+        f'{escape(st)}</div>'
+        if st
         else ""
     )
-    if has_sender:
-        header_row_html = (
-            f'<td class="email-header-logo" align="left" valign="middle" '
-            f'style="color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;'
-            f'font-size:18px;font-weight:700;">{logo_html}{company_label}</td>'
-            f'<td class="email-header-sender" align="right" valign="middle" '
-            f'style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;'
-            f'text-align:right;">{sender_name_html}{sender_title_html}</td>'
-        )
-    else:
-        header_row_html = (
-            f'<td class="email-header-logo" align="left" valign="middle" '
-            f'style="color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;'
-            f'font-size:18px;font-weight:700;">{logo_html}{company_label}</td>'
-        )
+    has_sender = bool(sn or st)
+    # Solo cell uses a distinct class so the mobile stacking rule (which
+    # adds padding-bottom:8px for stacked-row spacing) doesn't apply when
+    # there's nothing stacked beneath it.
+    logo_class = "email-header-logo" if has_sender else "email-header-logo-solo"
+    logo_width_attr = ' width="62%"' if has_sender else ""
+    logo_cell = (
+        f'<td class="{logo_class}"{logo_width_attr} valign="middle" '
+        f'style="color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;'
+        f'font-size:18px;font-weight:700;">{logo_html}{company_label}</td>'
+    )
+    sender_cell = (
+        f'<td class="email-header-sender" width="38%" valign="middle" '
+        f'style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;'
+        f'text-align:right;">{sender_name_html}{sender_title_html}</td>'
+        if has_sender
+        else ""
+    )
+    header_row_html = logo_cell + sender_cell
 
     return f"""\
 <!DOCTYPE html>

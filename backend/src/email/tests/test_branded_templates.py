@@ -100,15 +100,6 @@ class TestVisualDefaults:
         html = _base_email_html(_default_branding(), "Test", "<p>body</p>")
         assert "@media (prefers-color-scheme:dark)" in html
 
-    def test_header_renders_sender_name_in_right_column(self):
-        html = _base_email_html(
-            _default_branding(), "Test", "<p>body</p>",
-            sender_name="Jane Smith",
-        )
-        assert "Jane Smith" in html
-        assert 'class="email-header-sender"' in html
-        assert 'align="right"' in html
-
     def test_header_renders_sender_name_and_title_together(self):
         html = _base_email_html(
             _default_branding(), "Test", "<p>body</p>",
@@ -127,7 +118,50 @@ class TestVisualDefaults:
         # logo cell stays flush-left on a single column.
         html = _base_email_html(_default_branding(), "Test", "<p>body</p>")
         assert 'class="email-header-sender"' not in html
-        assert 'class="email-header-logo"' in html
+        # Solo cell uses a distinct class so the mobile stacking rule
+        # doesn't add an 8px ghost gap below it.
+        assert 'class="email-header-logo-solo"' in html
+        # The shared ``email-header-logo`` class is reserved for the
+        # two-cell case so the stacking selector only matches when there
+        # is actually something to stack.
+        assert 'class="email-header-logo"' not in html
+
+    def test_header_whitespace_sender_treated_as_absent(self):
+        # bool(" ") is True, but a whitespace-only string must not flip
+        # on the two-cell layout — that would render a blank right
+        # column and leave the logo no longer flush-left.
+        html = _base_email_html(
+            _default_branding(), "Test", "<p>body</p>",
+            sender_name="   ", sender_title="\t",
+        )
+        assert 'class="email-header-sender"' not in html
+        assert 'class="email-header-logo-solo"' in html
+
+    def test_header_two_cell_layout_has_explicit_widths(self):
+        # Outlook desktop's Word renderer splits unwidthed cells 50/50,
+        # which wraps long sender titles into the logo column. Explicit
+        # width attributes give the renderer fixed guidance.
+        html = _base_email_html(
+            _default_branding(), "Test", "<p>body</p>",
+            sender_name="Jane",
+        )
+        assert 'width="62%"' in html
+        assert 'width="38%"' in html
+
+    def test_header_only_sender_title_renders_without_extra_top_margin(self):
+        # When sender_name is absent the title is the only line in the
+        # cell — the 2px top margin (which exists to space it under the
+        # name) must not be applied or it visibly pushes the title down.
+        html = _base_email_html(
+            _default_branding(), "Test", "<p>body</p>",
+            sender_title="Senior Account Manager",
+        )
+        sender_cell_start = html.find('class="email-header-sender"')
+        assert sender_cell_start != -1
+        sender_cell_end = html.find("</td>", sender_cell_start)
+        sender_cell = html[sender_cell_start:sender_cell_end]
+        assert "Senior Account Manager" in sender_cell
+        assert "margin-top:2px" not in sender_cell
 
     def test_responsive_class_hooks_on_outer_cells(self):
         # Layout cells get class hooks so the mobile media query can
