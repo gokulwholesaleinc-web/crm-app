@@ -68,6 +68,123 @@ class TestVisualDefaults:
         html = _base_email_html(_default_branding(), "Test", "<p>body</p>")
         assert "sender_title" not in html
 
+    # -- Responsive v2: header structure + mobile media query --------------
+
+    def test_mobile_media_query_present(self):
+        html = _base_email_html(_default_branding(), "Test", "<p>body</p>")
+        assert "@media only screen and (max-width:480px)" in html
+
+    def test_mobile_media_query_stacks_header_cells(self):
+        html = _base_email_html(_default_branding(), "Test", "<p>body</p>")
+        assert ".email-header-logo,.email-header-sender" in html
+        assert "display:block!important" in html
+        assert "width:100%!important" in html
+
+    def test_mobile_media_query_full_width_cta(self):
+        html = _base_email_html(
+            _default_branding(), "Test", "<p>body</p>",
+            cta_text="Sign", cta_url="https://example.com/sign",
+        )
+        assert ".email-cta-wrap{width:100%!important" in html
+        assert ".email-cta-link{display:block!important" in html
+        assert 'class="email-cta-wrap"' in html
+        assert 'class="email-cta-link"' in html
+
+    def test_mobile_media_query_scales_headline_and_body(self):
+        html = _base_email_html(_default_branding(), "Test", "<p>body</p>")
+        assert ".email-headline{font-size:19px!important" in html
+        assert ".email-text{font-size:14px!important" in html
+
+    def test_dark_mode_media_query_still_present(self):
+        # Responsive v2 must not regress the existing dark-mode support.
+        html = _base_email_html(_default_branding(), "Test", "<p>body</p>")
+        assert "@media (prefers-color-scheme:dark)" in html
+
+    def test_header_renders_sender_name_and_title_together(self):
+        html = _base_email_html(
+            _default_branding(), "Test", "<p>body</p>",
+            sender_name="Jane Smith",
+            sender_title="Senior Account Manager",
+        )
+        sender_cell_start = html.find('class="email-header-sender"')
+        assert sender_cell_start != -1
+        sender_cell_end = html.find("</td>", sender_cell_start)
+        sender_cell = html[sender_cell_start:sender_cell_end]
+        assert "Jane Smith" in sender_cell
+        assert "Senior Account Manager" in sender_cell
+
+    def test_header_omits_sender_cell_when_no_sender_info(self):
+        # Without sender info the right cell is dropped entirely so the
+        # logo cell stays flush-left on a single column.
+        html = _base_email_html(_default_branding(), "Test", "<p>body</p>")
+        assert 'class="email-header-sender"' not in html
+        # Solo cell uses a distinct class so the mobile stacking rule
+        # doesn't add an 8px ghost gap below it.
+        assert 'class="email-header-logo-solo"' in html
+        # The shared ``email-header-logo`` class is reserved for the
+        # two-cell case so the stacking selector only matches when there
+        # is actually something to stack.
+        assert 'class="email-header-logo"' not in html
+
+    def test_header_whitespace_sender_treated_as_absent(self):
+        # bool(" ") is True, but a whitespace-only string must not flip
+        # on the two-cell layout — that would render a blank right
+        # column and leave the logo no longer flush-left.
+        html = _base_email_html(
+            _default_branding(), "Test", "<p>body</p>",
+            sender_name="   ", sender_title="\t",
+        )
+        assert 'class="email-header-sender"' not in html
+        assert 'class="email-header-logo-solo"' in html
+
+    def test_header_two_cell_layout_has_explicit_widths(self):
+        # Outlook desktop's Word renderer splits unwidthed cells 50/50,
+        # which wraps long sender titles into the logo column. Explicit
+        # width attributes give the renderer fixed guidance.
+        html = _base_email_html(
+            _default_branding(), "Test", "<p>body</p>",
+            sender_name="Jane",
+        )
+        assert 'width="62%"' in html
+        assert 'width="38%"' in html
+
+    def test_header_only_sender_title_renders_without_extra_top_margin(self):
+        # When sender_name is absent the title is the only line in the
+        # cell — the 2px top margin (which exists to space it under the
+        # name) must not be applied or it visibly pushes the title down.
+        html = _base_email_html(
+            _default_branding(), "Test", "<p>body</p>",
+            sender_title="Senior Account Manager",
+        )
+        sender_cell_start = html.find('class="email-header-sender"')
+        assert sender_cell_start != -1
+        sender_cell_end = html.find("</td>", sender_cell_start)
+        sender_cell = html[sender_cell_start:sender_cell_end]
+        assert "Senior Account Manager" in sender_cell
+        assert "margin-top:2px" not in sender_cell
+
+    def test_responsive_class_hooks_on_outer_cells(self):
+        # Layout cells get class hooks so the mobile media query can
+        # override paddings without fighting per-element inline styles.
+        html = _base_email_html(_default_branding(), "Test", "<p>body</p>")
+        assert 'class="email-outer-cell"' in html
+        assert 'class="email-header-cell"' in html
+        assert 'class="email-body-cell"' in html
+        assert 'class="email-footer-cell"' in html
+
+    def test_render_branded_email_plumbs_sender_name(self):
+        from src.email.branded_templates import render_branded_email
+        html = render_branded_email(
+            _default_branding(), "Subject", "Headline", "<p>body</p>",
+            sender_name="Jane Smith", sender_title="AE",
+        )
+        sender_cell_start = html.find('class="email-header-sender"')
+        assert sender_cell_start != -1
+        sender_cell_end = html.find("</td>", sender_cell_start)
+        sender_cell = html[sender_cell_start:sender_cell_end]
+        assert "Jane Smith" in sender_cell
+        assert "AE" in sender_cell
+
     def test_tenant_primary_color_overrides_default(self):
         branding = _default_branding(primary_color="#ff0000")
         html = _base_email_html(branding, "Test", "<p>body</p>")

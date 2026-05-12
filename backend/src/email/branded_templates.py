@@ -175,11 +175,18 @@ def _base_email_html(
     cta_text: str | None = None,
     cta_url: str | None = None,
     sender_title: str | None = None,
+    sender_name: str | None = None,
 ) -> str:
     """Render content into a branded, responsive HTML email wrapper.
 
     Uses inline CSS for maximum email-client compatibility (Gmail,
-    Outlook, Apple Mail).  Includes dark-mode media query support.
+    Outlook, Apple Mail). Includes dark-mode + <480px mobile media
+    query support: on phones the header logo/sender cells stack,
+    paddings tighten, the headline + body scale down, and the CTA
+    pill goes full-width so the touch target is comfortable.
+
+    Note: ``sender_title`` renders in the header right column (paired
+    with ``sender_name``) — it no longer appears in the footer.
     """
     # _safe_hex sanitizes each color before it reaches the inline-CSS
     # sinks below. ``escape`` is HTML-escaping, not hex validation; a
@@ -238,13 +245,16 @@ def _base_email_html(
         company_label = company
 
     # CTA button — only render if the URL passed the scheme allowlist.
+    # email-cta-wrap / email-cta-link classes drive the <480px mobile
+    # media-query override that snaps the pill to full container width
+    # so the tap target is comfortable on phones.
     if cta_text and safe_cta_url:
         cta_html = (
-            f'<table role="presentation" cellpadding="0" cellspacing="0" '
+            f'<table role="presentation" class="email-cta-wrap" cellpadding="0" cellspacing="0" '
             f'style="margin:24px auto 0;">'
             f'<tr><td style="background-color:{accent};border-radius:24px;'
             f'text-align:center;">'
-            f'<a href="{escape(safe_cta_url)}" target="_blank" '
+            f'<a class="email-cta-link" href="{escape(safe_cta_url)}" target="_blank" '
             f'style="display:inline-block;padding:12px 28px;color:#ffffff;'
             f"font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:15px;"
             f'font-weight:600;text-decoration:none;text-transform:uppercase;letter-spacing:0.5px;">{escape(cta_text)}</a>'
@@ -272,11 +282,56 @@ def _base_email_html(
         if footer_text
         else ""
     )
-    sender_title_block = (
-        f'<p style="margin:0 0 8px;color:#94a3b8;font-size:12px;">{escape(sender_title)}</p>'
-        if sender_title
+
+    # Right-side header sender column — name on top, title underneath.
+    # Lives in the header (not the footer) so the recipient sees who the
+    # email is from before any body content. The right cell is dropped
+    # entirely when neither field is set so single-cell emails still
+    # render flush-left and the mobile stacking rule doesn't leave a
+    # phantom 8px gap below a lone logo cell.
+    #
+    # Whitespace-only values (`" "`) are treated as absent: otherwise
+    # `bool(" ")` would flip on the two-cell layout and emit a blank
+    # right column with no visible content.
+    #
+    # Explicit width="62%"/"38%" on the two cells gives Outlook desktop's
+    # Word renderer fixed guidance — without them the engine splits 50/50
+    # and a long sender title wraps awkwardly into the logo column when
+    # Outlook is in a narrow reading pane.
+    sn = (sender_name or "").strip()
+    st = (sender_title or "").strip()
+    sender_name_html = (
+        f'<div style="color:#ffffff;font-size:14px;font-weight:600;line-height:1.3;">'
+        f'{escape(sn)}</div>'
+        if sn
         else ""
     )
+    sender_title_html = (
+        f'<div style="color:#cbd5e1;font-size:12px;font-weight:400;line-height:1.3;'
+        f'{"margin-top:2px;" if sn else ""}">'
+        f'{escape(st)}</div>'
+        if st
+        else ""
+    )
+    has_sender = bool(sn or st)
+    # Solo cell uses a distinct class so the mobile stacking rule (which
+    # adds padding-bottom:8px for stacked-row spacing) doesn't apply when
+    # there's nothing stacked beneath it.
+    logo_class = "email-header-logo" if has_sender else "email-header-logo-solo"
+    logo_width_attr = ' width="62%"' if has_sender else ""
+    logo_cell = (
+        f'<td class="{logo_class}"{logo_width_attr} valign="middle" '
+        f'style="color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;'
+        f'font-size:18px;font-weight:700;">{logo_html}{company_label}</td>'
+    )
+    sender_cell = (
+        f'<td class="email-header-sender" width="38%" valign="middle" '
+        f'style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;'
+        f'text-align:right;">{sender_name_html}{sender_title_html}</td>'
+        if has_sender
+        else ""
+    )
+    header_row_html = logo_cell + sender_cell
 
     return f"""\
 <!DOCTYPE html>
@@ -296,19 +351,32 @@ def _base_email_html(
   .email-headline{{color:#f9fafb!important;}}
   .email-footer{{background-color:#111827!important;}}
 }}
+@media only screen and (max-width:480px){{
+  .email-outer-cell{{padding:12px 8px!important;}}
+  .email-header-cell{{padding:18px 18px!important;}}
+  .email-body-cell{{padding:24px 18px!important;}}
+  .email-footer-cell{{padding:18px 16px!important;}}
+  .email-header-logo,.email-header-sender{{
+    display:block!important;width:100%!important;
+    text-align:left!important;padding-bottom:8px!important;
+  }}
+  .email-header-sender{{padding-bottom:0!important;}}
+  .email-headline{{font-size:19px!important;line-height:1.3!important;}}
+  .email-text{{font-size:14px!important;}}
+  .email-cta-wrap{{width:100%!important;margin:20px 0 0!important;}}
+  .email-cta-link{{display:block!important;padding:14px 20px!important;}}
+}}
 </style>
 </head>
 <body style="margin:0;padding:0;background-color:{bg_light};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
 <table role="presentation" class="email-bg" cellpadding="0" cellspacing="0" width="100%" style="background-color:{bg_light};">
-<tr><td align="center" style="padding:24px 16px;">
+<tr><td class="email-outer-cell" align="center" style="padding:24px 16px;">
 
 <!-- Header -->
 <table role="presentation" cellpadding="0" cellspacing="0" width="600" style="max-width:600px;width:100%;">
-<tr><td style="background-color:{primary};padding:24px 32px;border-radius:8px 8px 0 0;">
+<tr><td class="email-header-cell" style="background-color:{primary};padding:24px 32px;border-radius:8px 8px 0 0;">
   <table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr>
-    <td style="color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:18px;font-weight:700;">
-      {logo_html}{company_label}
-    </td>
+    {header_row_html}
   </tr></table>
 </td></tr>
 <tr><td style="height:3px;line-height:3px;font-size:0;background-color:{secondary};">&nbsp;</td></tr>
@@ -316,7 +384,7 @@ def _base_email_html(
 
 <!-- Body -->
 <table role="presentation" class="email-card" cellpadding="0" cellspacing="0" width="600" style="max-width:600px;width:100%;background-color:{surface_light};">
-<tr><td style="padding:32px 32px;">
+<tr><td class="email-body-cell" style="padding:32px 32px;">
   <h1 class="email-headline" style="margin:0 0 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:22px;font-weight:700;color:#111827;">{escape(headline)}</h1>
   <div class="email-text" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:15px;line-height:1.6;color:#334155;">
     {body_html}
@@ -327,9 +395,8 @@ def _base_email_html(
 
 <!-- Footer -->
 <table role="presentation" class="email-footer" cellpadding="0" cellspacing="0" width="600" style="max-width:600px;width:100%;background-color:#f9fafb;">
-<tr><td style="padding:20px 24px;border-radius:0 0 8px 8px;text-align:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+<tr><td class="email-footer-cell" style="padding:20px 24px;border-radius:0 0 8px 8px;text-align:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
   <p style="margin:0 0 4px;color:#6b7280;font-size:13px;font-weight:600;">{company}</p>
-  {sender_title_block}
   {footer_text_block}
   <p style="margin:0;font-size:12px;">{footer_links}</p>
 </td></tr>
@@ -353,6 +420,7 @@ def render_branded_email(
     cta_text: str | None = None,
     cta_url: str | None = None,
     sender_title: str | None = None,
+    sender_name: str | None = None,
 ) -> str:
     """Render any content into the branded email wrapper."""
     return _base_email_html(
@@ -362,6 +430,7 @@ def render_branded_email(
         cta_text=cta_text,
         cta_url=cta_url,
         sender_title=sender_title,
+        sender_name=sender_name,
     )
 
 
