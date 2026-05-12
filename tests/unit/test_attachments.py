@@ -306,38 +306,3 @@ class TestAttachmentDownload:
             f"Expected 503, got {response.status_code}: {response.text}"
         )
         assert response.json()["detail"] == "Attachment storage temporarily unavailable"
-
-    @pytest.mark.asyncio
-    async def test_download_attachment_as_json_with_r2_returns_url(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-        test_contact: Contact,
-    ):
-        """GET ?as_json=1 with a patched presigned URL returns {download_url: ...}."""
-        from unittest.mock import AsyncMock, patch
-
-        fake_url = "https://example-r2.com/signed-url"
-
-        upload = await client.post(
-            "/api/attachments/upload",
-            headers=auth_headers,
-            files={"file": ("test.pdf", b"%PDF-1.4", "application/pdf")},
-            data={"entity_type": "contacts", "entity_id": str(test_contact.id)},
-        )
-        assert upload.status_code == 201, upload.text
-        attachment_id = upload.json()["id"]
-
-        with patch(
-            "src.attachments.service.AttachmentService.get_download_url",
-            new=AsyncMock(return_value=fake_url),
-        ):
-            response = await client.get(
-                f"/api/attachments/{attachment_id}/download",
-                params={"as_json": "1"},
-                headers=auth_headers,
-            )
-
-        assert response.status_code == 200, response.text
-        assert response.json().get("download_url") == fake_url

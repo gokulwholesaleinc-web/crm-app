@@ -37,6 +37,10 @@ export function InlineSectionEditor({
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Snapshot the value at the moment the user enters edit mode so we
+  // can detect remote updates landing mid-edit (parent query refetch,
+  // teammate save, etc.) and warn before the user clobbers them.
+  const valueAtEditStartRef = useRef<string | null>(value);
 
   useEffect(() => {
     if (isEditing && textareaRef.current) {
@@ -46,10 +50,23 @@ export function InlineSectionEditor({
     }
   }, [isEditing]);
 
+  // External update detection: when isEditing is true and the current
+  // value prop differs from the snapshot taken at edit-start, the
+  // field changed under the user. Toggled into a warning banner; the
+  // user can dismiss by overwriting or accept the remote value.
+  const hasRemoteChange =
+    isEditing && (value ?? '') !== (valueAtEditStartRef.current ?? '');
+
   function enterEdit() {
+    valueAtEditStartRef.current = value;
     setDraft(value ?? '');
     setError(null);
     setIsEditing(true);
+  }
+
+  function acceptRemote() {
+    valueAtEditStartRef.current = value;
+    setDraft(value ?? '');
   }
 
   function cancelEdit() {
@@ -147,6 +164,24 @@ export function InlineSectionEditor({
   return (
     <div className={clsx(cardBase, className)}>
       <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">{title}</h2>
+      {hasRemoteChange && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="mb-2 rounded-md border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 px-3 py-2 text-xs text-amber-900 dark:text-amber-100 flex items-start justify-between gap-2"
+        >
+          <span>
+            This field was updated elsewhere while you were editing. Saving now will overwrite the new value.
+          </span>
+          <button
+            type="button"
+            onClick={acceptRemote}
+            className="shrink-0 font-medium underline hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded"
+          >
+            Use latest
+          </button>
+        </div>
+      )}
       <textarea
         ref={textareaRef}
         rows={rows}

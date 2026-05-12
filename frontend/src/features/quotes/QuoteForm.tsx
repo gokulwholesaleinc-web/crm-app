@@ -375,7 +375,18 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
         </div>
       </div>
 
-      {/* Line Items */}
+      {/* Line Items — only shown on create. In edit mode the form
+          doesn't receive the persisted lineItems (they have dedicated
+          add/remove endpoints on the detail page), so rendering this
+          section would show an empty row and a $0 totals preview that
+          contradicts the real quote. The notice below tells the user
+          where to go instead. */}
+      {isEditing && (
+        <div className="rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/40 px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+          Line items, discount, and tax are managed from the quote detail page after saving.
+        </div>
+      )}
+      {!isEditing && (
       <div>
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Line Items</h3>
@@ -499,6 +510,7 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
           ))}
         </div>
       </div>
+      )}
 
       {/* Discount & Tax */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -552,7 +564,9 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
         </div>
       </div>
 
-      {/* Totals Preview */}
+      {/* Totals Preview — depends on line items, which aren't loaded
+          into the form in edit mode. Hide rather than display $0 totals. */}
+      {!isEditing && (
       <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 space-y-1 text-sm" style={{ fontVariantNumeric: 'tabular-nums' }}>
         <div className="flex justify-between text-gray-600 dark:text-gray-400">
           <span>Subtotal</span>
@@ -575,6 +589,7 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
           <span>{fmt.format(total)}</span>
         </div>
       </div>
+      )}
 
       {/* Terms & Notes */}
       <div className="space-y-4">
