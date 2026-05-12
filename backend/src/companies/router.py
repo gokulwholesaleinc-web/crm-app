@@ -13,6 +13,7 @@ from src.audit.utils import (
     audit_entity_update,
     snapshot_entity,
 )
+from src.auth.models import User
 from src.companies.schemas import (
     CompanyCreate,
     CompanyListResponse,
@@ -25,6 +26,7 @@ from src.contacts.models import Contact
 from src.core.client_ip import get_client_ip
 from src.core.constants import ENTITY_TYPE_COMPANIES, EntityNames, HTTPStatus
 from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
+from src.core.permissions import require_permission
 from src.core.router_utils import (
     CurrentUser,
     DBSession,
@@ -108,7 +110,7 @@ async def list_companies(
 async def create_company(
     company_data: CompanyCreate,
     request: Request,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("companies", "create"))],
     db: DBSession,
 ):
     """Create a new company."""
@@ -155,7 +157,7 @@ async def update_company(
     company_id: int,
     company_data: CompanyUpdate,
     request: Request,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("companies", "update"))],
     db: DBSession,
 ):
     """Update a company."""
@@ -186,7 +188,7 @@ async def update_company(
 async def delete_company(
     company_id: int,
     request: Request,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("companies", "delete"))],
     db: DBSession,
 ):
     """Delete a company."""

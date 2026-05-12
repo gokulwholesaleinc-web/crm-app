@@ -14,6 +14,7 @@ from src.audit.utils import (
     audit_entity_update,
     snapshot_entity,
 )
+from src.auth.models import User
 from src.contacts.models import ContactEmailAlias
 from src.contacts.schemas import (
     ContactCreate,
@@ -28,6 +29,7 @@ from src.contacts.service import ContactService
 from src.core.client_ip import get_client_ip
 from src.core.constants import ENTITY_TYPE_CONTACTS, EntityNames, HTTPStatus
 from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
+from src.core.permissions import require_permission
 from src.core.router_utils import (
     CurrentUser,
     DBSession,
@@ -101,7 +103,7 @@ async def list_contacts(
 async def create_contact(
     contact_data: ContactCreate,
     request: Request,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("contacts", "create"))],
     db: DBSession,
 ):
     """Create a new contact."""
@@ -163,7 +165,7 @@ async def update_contact(
     contact_id: int,
     contact_data: ContactUpdate,
     request: Request,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("contacts", "update"))],
     db: DBSession,
 ):
     """Update a contact."""
@@ -199,7 +201,7 @@ async def update_contact(
 async def delete_contact(
     contact_id: int,
     request: Request,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("contacts", "delete"))],
     db: DBSession,
 ):
     """Soft-delete a contact.
@@ -259,7 +261,7 @@ async def list_aliases(
 async def add_alias(
     contact_id: int,
     body: ContactEmailAliasCreate,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("contacts", "update"))],
     db: DBSession,
 ):
     """Add an email alias to a contact. 409 if the address is already claimed."""
@@ -293,7 +295,7 @@ async def add_alias(
 async def delete_alias(
     contact_id: int,
     alias_id: int,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("contacts", "update"))],
     db: DBSession,
 ):
     """Remove an email alias from a contact."""

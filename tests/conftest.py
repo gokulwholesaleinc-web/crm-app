@@ -141,7 +141,14 @@ async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
 
 @pytest_asyncio.fixture(scope="function")
 async def test_user(db_session: AsyncSession) -> User:
-    """Create a test user."""
+    """Create a test user (role defaults to sales_rep via User.role column).
+
+    Many tests use ``auth_headers`` to assert *non-admin* forbidden paths
+    (bulk ops, pipeline-stage config, admin endpoints), so this fixture
+    deliberately stays at sales_rep. CRUD tests against endpoints that
+    require manager/admin (campaigns, saved reports, role assignment)
+    should use ``manager_auth_headers`` or ``admin_auth_headers``.
+    """
     user = User(
         email="testuser@example.com",
         hashed_password=get_password_hash("testpassword123"),
@@ -554,6 +561,7 @@ async def test_admin_user(db_session: AsyncSession, seed_roles: list) -> User:
         full_name="Role Admin User",
         is_active=True,
         is_superuser=True,
+        role="admin",
     )
     db_session.add(user)
     await db_session.flush()
@@ -581,6 +589,7 @@ async def _viewer_user(db_session: AsyncSession, seed_roles: list) -> User:
         full_name="Viewer User",
         is_active=True,
         is_superuser=False,
+        role="viewer",
     )
     db_session.add(user)
     await db_session.flush()
@@ -608,6 +617,7 @@ async def _sales_rep_user(db_session: AsyncSession, seed_roles: list) -> User:
         full_name="Sales Rep User",
         is_active=True,
         is_superuser=False,
+        role="sales_rep",
     )
     db_session.add(user)
     await db_session.flush()
@@ -635,6 +645,7 @@ async def _manager_user(db_session: AsyncSession, seed_roles: list) -> User:
         full_name="Manager User",
         is_active=True,
         is_superuser=False,
+        role="manager",
     )
     db_session.add(user)
     await db_session.flush()

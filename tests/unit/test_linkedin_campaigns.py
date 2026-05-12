@@ -59,7 +59,7 @@ class TestLinkedInCSVPreview:
     """Tests for LinkedIn CSV preview with source detection."""
 
     @pytest.mark.asyncio
-    async def test_preview_linkedin_csv(self, client: AsyncClient, auth_headers: dict):
+    async def test_preview_linkedin_csv(self, client: AsyncClient, admin_auth_headers: dict):
         """Should detect linkedin_sales_navigator in preview."""
         csv_content = (
             "First Name,Last Name,Company,Title,LinkedIn Profile URL,Email,Geography,Industry\n"
@@ -69,7 +69,7 @@ class TestLinkedInCSVPreview:
         files = {"file": ("test.csv", io.BytesIO(csv_content.encode()), "text/csv")}
         response = await client.post(
             "/api/import-export/preview/contacts",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             files=files,
         )
         assert response.status_code == 200
@@ -77,7 +77,7 @@ class TestLinkedInCSVPreview:
         assert data["source_detected"] == "linkedin_sales_navigator"
 
     @pytest.mark.asyncio
-    async def test_preview_leads_linkedin_csv(self, client: AsyncClient, auth_headers: dict):
+    async def test_preview_leads_linkedin_csv(self, client: AsyncClient, admin_auth_headers: dict):
         """Should detect LinkedIn format for leads preview."""
         csv_content = (
             "First Name,Last Name,Company,Title,Email,Geography,Industry,LinkedIn Profile URL\n"
@@ -87,21 +87,21 @@ class TestLinkedInCSVPreview:
         files = {"file": ("test.csv", io.BytesIO(csv_content.encode()), "text/csv")}
         response = await client.post(
             "/api/import-export/preview/leads",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             files=files,
         )
         assert response.status_code == 200
         assert response.json()["source_detected"] == "linkedin_sales_navigator"
 
     @pytest.mark.asyncio
-    async def test_preview_non_linkedin_csv(self, client: AsyncClient, auth_headers: dict):
+    async def test_preview_non_linkedin_csv(self, client: AsyncClient, admin_auth_headers: dict):
         """Should return None source for generic CSV."""
         csv_content = "first_name,last_name,email,phone\nJohn,Doe,john@test.com,555-1234\n"
         import io
         files = {"file": ("test.csv", io.BytesIO(csv_content.encode()), "text/csv")}
         response = await client.post(
             "/api/import-export/preview/contacts",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             files=files,
         )
         assert response.status_code == 200
@@ -116,7 +116,7 @@ class TestLinkedInCSVImport:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_user: User,
         test_lead_source: LeadSource,
     ):
@@ -129,7 +129,7 @@ class TestLinkedInCSVImport:
         files = {"file": ("leads.csv", io.BytesIO(csv_content.encode()), "text/csv")}
         response = await client.post(
             "/api/import-export/import/leads",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             files=files,
         )
         assert response.status_code == 200
@@ -156,14 +156,14 @@ class TestCreateFromImport:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_user: User,
         test_contact: Contact,
     ):
         """Should create a campaign with members from import IDs."""
         response = await client.post(
             "/api/campaigns/create-from-import",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "name": "LinkedIn Outreach Q2",
                 "member_ids": [test_contact.id],
@@ -190,7 +190,7 @@ class TestCreateFromImport:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_user: User,
         test_contact: Contact,
     ):
@@ -206,7 +206,7 @@ class TestCreateFromImport:
 
         response = await client.post(
             "/api/campaigns/create-from-import",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "name": "LinkedIn Outreach with Template",
                 "member_ids": [test_contact.id],
@@ -233,14 +233,14 @@ class TestCreateFromImport:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_user: User,
         test_lead: Lead,
     ):
         """Should work with lead member_type."""
         response = await client.post(
             "/api/campaigns/create-from-import",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "name": "Lead Nurture Campaign",
                 "member_ids": [test_lead.id],
@@ -262,12 +262,12 @@ class TestCreateFromImport:
     async def test_create_campaign_empty_members(
         self,
         client: AsyncClient,
-        auth_headers: dict,
+        admin_auth_headers: dict,
     ):
         """Should create campaign with zero members when list is empty."""
         response = await client.post(
             "/api/campaigns/create-from-import",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "name": "Empty Campaign",
                 "member_ids": [],
@@ -409,9 +409,9 @@ class TestVolumeStatsEndpoint:
     """Tests for GET /api/email/volume-stats."""
 
     @pytest.mark.asyncio
-    async def test_get_volume_stats(self, client: AsyncClient, auth_headers: dict):
+    async def test_get_volume_stats(self, client: AsyncClient, admin_auth_headers: dict):
         """Should return volume stats."""
-        response = await client.get("/api/email/volume-stats", headers=auth_headers)
+        response = await client.get("/api/email/volume-stats", headers=admin_auth_headers)
         assert response.status_code == 200
         data = response.json()
         assert "sent_today" in data
@@ -421,7 +421,7 @@ class TestVolumeStatsEndpoint:
 
     @pytest.mark.asyncio
     async def test_volume_stats_with_warmup(
-        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict,
+        self, client: AsyncClient, db_session: AsyncSession, admin_auth_headers: dict,
     ):
         """Should show warmup info when warmup is enabled."""
         settings = EmailSettings(
@@ -432,7 +432,7 @@ class TestVolumeStatsEndpoint:
         db_session.add(settings)
         await db_session.flush()
 
-        response = await client.get("/api/email/volume-stats", headers=auth_headers)
+        response = await client.get("/api/email/volume-stats", headers=admin_auth_headers)
         assert response.status_code == 200
         data = response.json()
         assert data["warmup_enabled"] is True

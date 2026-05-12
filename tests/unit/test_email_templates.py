@@ -51,12 +51,12 @@ class TestEmailTemplatesCRUD:
 
     @pytest.mark.asyncio
     async def test_create_email_template(
-        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+        self, client: AsyncClient, db_session: AsyncSession, admin_auth_headers: dict
     ):
         """Test creating a new email template."""
         response = await client.post(
             "/api/campaigns/templates",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "name": "Follow Up Template",
                 "subject_template": "Following up on our conversation",
@@ -74,12 +74,12 @@ class TestEmailTemplatesCRUD:
 
     @pytest.mark.asyncio
     async def test_create_email_template_minimal(
-        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+        self, client: AsyncClient, db_session: AsyncSession, admin_auth_headers: dict
     ):
         """Test creating template with only required fields."""
         response = await client.post(
             "/api/campaigns/templates",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "name": "Simple Template",
                 "subject_template": "Hello",
@@ -97,13 +97,13 @@ class TestEmailTemplatesCRUD:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_email_template: EmailTemplate,
     ):
         """Test listing email templates."""
         response = await client.get(
             "/api/campaigns/templates",
-            headers=auth_headers,
+            headers=admin_auth_headers,
         )
 
         assert response.status_code == 200
@@ -116,13 +116,13 @@ class TestEmailTemplatesCRUD:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_email_template: EmailTemplate,
     ):
         """Test filtering templates by category."""
         response = await client.get(
             "/api/campaigns/templates",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             params={"category": "onboarding"},
         )
 
@@ -135,13 +135,13 @@ class TestEmailTemplatesCRUD:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_email_template: EmailTemplate,
     ):
         """Test getting an email template by ID."""
         response = await client.get(
             f"/api/campaigns/templates/{test_email_template.id}",
-            headers=auth_headers,
+            headers=admin_auth_headers,
         )
 
         assert response.status_code == 200
@@ -151,12 +151,12 @@ class TestEmailTemplatesCRUD:
 
     @pytest.mark.asyncio
     async def test_get_email_template_not_found(
-        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+        self, client: AsyncClient, db_session: AsyncSession, admin_auth_headers: dict
     ):
         """Test getting non-existent template returns 404."""
         response = await client.get(
             "/api/campaigns/templates/99999",
-            headers=auth_headers,
+            headers=admin_auth_headers,
         )
 
         assert response.status_code == 404
@@ -166,13 +166,13 @@ class TestEmailTemplatesCRUD:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_email_template: EmailTemplate,
     ):
         """Test updating an email template."""
         response = await client.put(
             f"/api/campaigns/templates/{test_email_template.id}",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "name": "Updated Welcome Email",
                 "subject_template": "Welcome back!",
@@ -191,7 +191,7 @@ class TestEmailTemplatesCRUD:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_user: User,
     ):
         """Test deleting an email template."""
@@ -208,7 +208,7 @@ class TestEmailTemplatesCRUD:
 
         response = await client.delete(
             f"/api/campaigns/templates/{template_id}",
-            headers=auth_headers,
+            headers=admin_auth_headers,
         )
 
         assert response.status_code == 204
@@ -220,12 +220,12 @@ class TestEmailTemplatesCRUD:
 
     @pytest.mark.asyncio
     async def test_delete_template_not_found(
-        self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
+        self, client: AsyncClient, db_session: AsyncSession, admin_auth_headers: dict
     ):
         """Test deleting non-existent template returns 404."""
         response = await client.delete(
             "/api/campaigns/templates/99999",
-            headers=auth_headers,
+            headers=admin_auth_headers,
         )
 
         assert response.status_code == 404
@@ -262,14 +262,14 @@ class TestCampaignSteps:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_campaign: Campaign,
         test_email_template: EmailTemplate,
     ):
         """Test adding a step to a campaign."""
         response = await client.post(
             f"/api/campaigns/{test_campaign.id}/steps",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "template_id": test_email_template.id,
                 "delay_days": 0,
@@ -289,7 +289,7 @@ class TestCampaignSteps:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_campaign: Campaign,
         test_email_template: EmailTemplate,
     ):
@@ -312,7 +312,7 @@ class TestCampaignSteps:
 
         response = await client.get(
             f"/api/campaigns/{test_campaign.id}/steps",
-            headers=auth_headers,
+            headers=admin_auth_headers,
         )
 
         assert response.status_code == 200
@@ -326,7 +326,7 @@ class TestCampaignSteps:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_campaign: Campaign,
         test_email_template: EmailTemplate,
     ):
@@ -343,7 +343,7 @@ class TestCampaignSteps:
 
         response = await client.put(
             f"/api/campaigns/{test_campaign.id}/steps/{step.id}",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={"delay_days": 5, "step_order": 2},
         )
 
@@ -357,7 +357,7 @@ class TestCampaignSteps:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_campaign: Campaign,
         test_email_template: EmailTemplate,
     ):
@@ -375,7 +375,7 @@ class TestCampaignSteps:
 
         response = await client.delete(
             f"/api/campaigns/{test_campaign.id}/steps/{step_id}",
-            headers=auth_headers,
+            headers=admin_auth_headers,
         )
 
         assert response.status_code == 204
@@ -390,13 +390,13 @@ class TestCampaignSteps:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_email_template: EmailTemplate,
     ):
         """Test adding step to non-existent campaign."""
         response = await client.post(
             "/api/campaigns/99999/steps",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "template_id": test_email_template.id,
                 "delay_days": 0,

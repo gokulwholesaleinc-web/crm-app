@@ -400,7 +400,7 @@ class TestSavedReportSchedule:
 class TestReportsAPI:
     """Integration tests for report API endpoints."""
 
-    async def test_execute_report_endpoint(self, client, auth_headers, test_lead):
+    async def test_execute_report_endpoint(self, client, admin_auth_headers, test_lead):
         """Test POST /api/reports/execute."""
         response = await client.post(
             "/api/reports/execute",
@@ -410,7 +410,7 @@ class TestReportsAPI:
                 "group_by": "status",
                 "chart_type": "bar",
             },
-            headers=auth_headers,
+            headers=admin_auth_headers,
         )
         assert response.status_code == 200
         data = response.json()
@@ -418,7 +418,7 @@ class TestReportsAPI:
         assert "total" in data
         assert data["total"] >= 1
 
-    async def test_export_csv_endpoint(self, client, auth_headers, test_lead):
+    async def test_export_csv_endpoint(self, client, admin_auth_headers, test_lead):
         """Test POST /api/reports/export-csv."""
         response = await client.post(
             "/api/reports/export-csv",
@@ -428,22 +428,22 @@ class TestReportsAPI:
                 "group_by": "status",
                 "chart_type": "bar",
             },
-            headers=auth_headers,
+            headers=admin_auth_headers,
         )
         assert response.status_code == 200
         assert "text/csv" in response.headers.get("content-type", "")
 
-    async def test_list_templates_endpoint(self, client, auth_headers):
+    async def test_list_templates_endpoint(self, client, admin_auth_headers):
         """Test GET /api/reports/templates."""
         response = await client.get(
             "/api/reports/templates",
-            headers=auth_headers,
+            headers=admin_auth_headers,
         )
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 10
 
-    async def test_saved_report_crud_endpoints(self, client, auth_headers):
+    async def test_saved_report_crud_endpoints(self, client, admin_auth_headers):
         """Test full CRUD lifecycle for saved reports via API."""
         # Create
         response = await client.post(
@@ -455,7 +455,7 @@ class TestReportsAPI:
                 "group_by": "status",
                 "chart_type": "bar",
             },
-            headers=auth_headers,
+            headers=admin_auth_headers,
         )
         assert response.status_code == 201
         report = response.json()
@@ -463,13 +463,13 @@ class TestReportsAPI:
         assert report["name"] == "API Test Report"
 
         # List
-        response = await client.get("/api/reports", headers=auth_headers)
+        response = await client.get("/api/reports", headers=admin_auth_headers)
         assert response.status_code == 200
         reports = response.json()
         assert any(r["id"] == report_id for r in reports)
 
         # Get by ID
-        response = await client.get(f"/api/reports/{report_id}", headers=auth_headers)
+        response = await client.get(f"/api/reports/{report_id}", headers=admin_auth_headers)
         assert response.status_code == 200
         assert response.json()["id"] == report_id
 
@@ -477,17 +477,17 @@ class TestReportsAPI:
         response = await client.patch(
             f"/api/reports/{report_id}",
             json={"name": "Updated Report Name"},
-            headers=auth_headers,
+            headers=admin_auth_headers,
         )
         assert response.status_code == 200
         assert response.json()["name"] == "Updated Report Name"
 
         # Delete
-        response = await client.delete(f"/api/reports/{report_id}", headers=auth_headers)
+        response = await client.delete(f"/api/reports/{report_id}", headers=admin_auth_headers)
         assert response.status_code == 204
 
         # Verify deleted
-        response = await client.get(f"/api/reports/{report_id}", headers=auth_headers)
+        response = await client.get(f"/api/reports/{report_id}", headers=admin_auth_headers)
         assert response.status_code == 404
 
     async def test_unauthenticated_report_access(self, client):
@@ -495,7 +495,7 @@ class TestReportsAPI:
         response = await client.get("/api/reports/templates")
         assert response.status_code in (401, 403)
 
-    async def test_execute_payments_report_endpoint(self, client, auth_headers, test_payment):
+    async def test_execute_payments_report_endpoint(self, client, admin_auth_headers, test_payment):
         """Test executing a report on payments entity type."""
         response = await client.post(
             "/api/reports/execute",
@@ -505,13 +505,13 @@ class TestReportsAPI:
                 "metric_field": "amount",
                 "chart_type": "bar",
             },
-            headers=auth_headers,
+            headers=admin_auth_headers,
         )
         assert response.status_code == 200
         data = response.json()
         assert data["total"] >= 5000.0
 
-    async def test_execute_contracts_report_endpoint(self, client, auth_headers, test_contract):
+    async def test_execute_contracts_report_endpoint(self, client, admin_auth_headers, test_contract):
         """Test executing a report on contracts entity type."""
         response = await client.post(
             "/api/reports/execute",
@@ -521,14 +521,14 @@ class TestReportsAPI:
                 "group_by": "status",
                 "chart_type": "pie",
             },
-            headers=auth_headers,
+            headers=admin_auth_headers,
         )
         assert response.status_code == 200
         data = response.json()
         assert data["total"] >= 1
         assert len(data["data"]) >= 1
 
-    async def test_create_report_with_schedule(self, client, auth_headers):
+    async def test_create_report_with_schedule(self, client, admin_auth_headers):
         """Test creating a saved report with schedule and recipients."""
         response = await client.post(
             "/api/reports",
@@ -541,14 +541,14 @@ class TestReportsAPI:
                 "schedule": "weekly",
                 "recipients": ["user@example.com"],
             },
-            headers=auth_headers,
+            headers=admin_auth_headers,
         )
         assert response.status_code == 201
         data = response.json()
         assert data["schedule"] == "weekly"
         assert data["recipients"] == ["user@example.com"]
 
-    async def test_update_report_schedule_endpoint(self, client, auth_headers):
+    async def test_update_report_schedule_endpoint(self, client, admin_auth_headers):
         """Test PATCH /api/reports/{id}/schedule."""
         # Create a report first
         create_response = await client.post(
@@ -559,7 +559,7 @@ class TestReportsAPI:
                 "metric": "count",
                 "chart_type": "bar",
             },
-            headers=auth_headers,
+            headers=admin_auth_headers,
         )
         report_id = create_response.json()["id"]
 
@@ -570,18 +570,18 @@ class TestReportsAPI:
                 "schedule": "monthly",
                 "recipients": ["report@example.com", "admin@example.com"],
             },
-            headers=auth_headers,
+            headers=admin_auth_headers,
         )
         assert response.status_code == 200
         data = response.json()
         assert data["schedule"] == "monthly"
         assert len(data["recipients"]) == 2
 
-    async def test_templates_include_new_entity_types(self, client, auth_headers):
+    async def test_templates_include_new_entity_types(self, client, admin_auth_headers):
         """Test that templates include payment and contract templates."""
         response = await client.get(
             "/api/reports/templates",
-            headers=auth_headers,
+            headers=admin_auth_headers,
         )
         data = response.json()
         ids = [t["id"] for t in data]

@@ -105,7 +105,10 @@ class TimelineItem(BaseModel):
     priority: str
     created_at: str
     owner_id: int | None
+    owner_name: str | None = None
     assigned_to_id: int | None
+    entity_label: str | None = None
+    entity_link: str | None = None
     call_duration_minutes: int | None
     call_outcome: str | None
     meeting_location: str | None

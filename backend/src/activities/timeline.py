@@ -1,5 +1,6 @@
 """Activity timeline utilities."""
 
+from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -7,6 +8,42 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.activities.models import Activity
+
+# Entity types the frontend has a detail-page route for. Used to decide
+# whether the dashboard "Recent Activities" row should render a link;
+# unrouteable types still get an entity_label but no entity_link.
+# Keep in sync with frontend/src/routes/index.tsx.
+_ROUTABLE_ENTITY_PLURALS: dict[str, str] = {
+    "contacts": "/contacts",
+    "companies": "/companies",
+    "leads": "/leads",
+    "opportunities": "/opportunities",
+    "quotes": "/quotes",
+    "proposals": "/proposals",
+    "contracts": "/contracts",
+    "payments": "/payments",
+}
+
+# Tolerant alias map covering historical singular spellings the activity
+# table may have stored. Resolves to the canonical plural used above.
+_ENTITY_ALIASES: dict[str, str] = {
+    "contact": "contacts",
+    "company": "companies",
+    "lead": "leads",
+    "opportunity": "opportunities",
+    "quote": "quotes",
+    "proposal": "proposals",
+    "contract": "contracts",
+    "payment": "payments",
+}
+
+
+def _canonical_plural(entity_type: str | None) -> str | None:
+    if not entity_type:
+        return None
+    if entity_type in _ROUTABLE_ENTITY_PLURALS:
+        return entity_type
+    return _ENTITY_ALIASES.get(entity_type)
 
 
 class ActivityTimeline:
@@ -41,7 +78,9 @@ class ActivityTimeline:
         result = await self.db.execute(query)
         activities = result.scalars().all()
 
-        return [self._format_activity(a) for a in activities]
+        formatted = [self._format_activity(a) for a in activities]
+        await self._enrich_with_owner_and_entity(formatted)
+        return formatted
 
     async def get_user_timeline(
         self,
@@ -67,7 +106,9 @@ class ActivityTimeline:
         result = await self.db.execute(query)
         activities = result.scalars().all()
 
-        return [self._format_activity(a) for a in activities]
+        formatted = [self._format_activity(a) for a in activities]
+        await self._enrich_with_owner_and_entity(formatted)
+        return formatted
 
     async def get_upcoming_activities(
         self,
@@ -111,7 +152,9 @@ class ActivityTimeline:
         result = await self.db.execute(query)
         activities = result.scalars().all()
 
-        return [self._format_activity(a) for a in activities]
+        formatted = [self._format_activity(a) for a in activities]
+        await self._enrich_with_owner_and_entity(formatted)
+        return formatted
 
     async def get_overdue_tasks(
         self,
@@ -140,7 +183,9 @@ class ActivityTimeline:
         result = await self.db.execute(query)
         activities = result.scalars().all()
 
-        return [self._format_activity(a) for a in activities]
+        formatted = [self._format_activity(a) for a in activities]
+        await self._enrich_with_owner_and_entity(formatted)
+        return formatted
 
     async def get_unified_timeline(
         self,
@@ -272,8 +317,135 @@ class ActivityTimeline:
             "created_at": activity.created_at.isoformat(),
             "owner_id": activity.owner_id,
             "assigned_to_id": activity.assigned_to_id,
+            "owner_name": None,
+            "entity_label": None,
+            "entity_link": None,
             # Type-specific fields
             "call_duration_minutes": activity.call_duration_minutes,
             "call_outcome": activity.call_outcome,
             "meeting_location": activity.meeting_location,
         }
+
+    async def _enrich_with_owner_and_entity(self, items: list[dict[str, Any]]) -> None:
+        """Populate ``owner_name`` and ``entity_label`` on already-formatted items.
+
+        Batches lookups by entity_type so a 50-item timeline costs ~5 SELECTs
+        regardless of mix. Unknown entity_type rows get a "{Type} #{id}"
+        fallback so the UI can still render a link.
+        """
+        if not items:
+            return
+
+        await self._fill_owner_names(items)
+        await self._fill_entity_labels(items)
+
+    async def _fill_owner_names(self, items: list[dict[str, Any]]) -> None:
+        from src.auth.models import User
+
+        owner_ids = {i["owner_id"] for i in items if i.get("owner_id")}
+        if not owner_ids:
+            return
+        result = await self.db.execute(
+            select(User.id, User.full_name).where(User.id.in_(owner_ids))
+        )
+        name_by_id = {row[0]: row[1] for row in result.all()}
+        for item in items:
+            owner_id = item.get("owner_id")
+            if owner_id is not None:
+                item["owner_name"] = name_by_id.get(owner_id)
+
+    async def _fill_entity_labels(self, items: list[dict[str, Any]]) -> None:
+        """Resolve display label + URL path for each row's polymorphic entity.
+
+        Only entity types the frontend has a detail route for get a label
+        and link. Unrouteable types are left as None so the UI shows the
+        activity subject without a broken-link "→ Foo #42" affordance.
+        """
+        ids_by_type: dict[str, set[int]] = defaultdict(set)
+        for item in items:
+            plural = _canonical_plural(item.get("entity_type"))
+            eid = item.get("entity_id")
+            if plural and eid:
+                ids_by_type[plural].add(eid)
+
+        label_lookup: dict[tuple[str, int], str] = {}
+        for plural, ids in ids_by_type.items():
+            label_lookup.update(await self._labels_for(plural, ids))
+
+        for item in items:
+            plural = _canonical_plural(item.get("entity_type"))
+            eid = item.get("entity_id")
+            if not (plural and eid):
+                continue
+            url_prefix = _ROUTABLE_ENTITY_PLURALS[plural]
+            item["entity_label"] = label_lookup.get((plural, eid)) or self._fallback_label(plural, eid)
+            item["entity_link"] = f"{url_prefix}/{eid}"
+
+    async def _labels_for(
+        self, entity_type: str, ids: set[int]
+    ) -> dict[tuple[str, int], str]:
+        """Return {(entity_type, id): label} for one entity_type in one query.
+
+        ``entity_type`` is the canonical plural (e.g. "contacts"). Each
+        branch is a single batched SELECT; types without a branch fall
+        through to :meth:`_fallback_label` via the caller.
+        """
+        if not ids:
+            return {}
+
+        if entity_type == "contacts":
+            from src.contacts.models import Contact
+            rows = await self.db.execute(
+                select(Contact.id, Contact.first_name, Contact.last_name).where(
+                    Contact.id.in_(ids)
+                )
+            )
+            return {
+                (entity_type, row[0]): f"{row[1] or ''} {row[2] or ''}".strip() or f"Contact #{row[0]}"
+                for row in rows.all()
+            }
+        if entity_type == "leads":
+            from src.leads.models import Lead
+            rows = await self.db.execute(
+                select(Lead.id, Lead.first_name, Lead.last_name).where(Lead.id.in_(ids))
+            )
+            return {
+                (entity_type, row[0]): f"{row[1] or ''} {row[2] or ''}".strip() or f"Lead #{row[0]}"
+                for row in rows.all()
+            }
+        if entity_type == "opportunities":
+            from src.opportunities.models import Opportunity
+            rows = await self.db.execute(
+                select(Opportunity.id, Opportunity.name).where(Opportunity.id.in_(ids))
+            )
+            return {(entity_type, row[0]): row[1] for row in rows.all()}
+        if entity_type == "companies":
+            from src.companies.models import Company
+            rows = await self.db.execute(
+                select(Company.id, Company.name).where(Company.id.in_(ids))
+            )
+            return {(entity_type, row[0]): row[1] for row in rows.all()}
+        if entity_type == "quotes":
+            from src.quotes.models import Quote
+            rows = await self.db.execute(
+                select(Quote.id, Quote.quote_number).where(Quote.id.in_(ids))
+            )
+            return {(entity_type, row[0]): row[1] for row in rows.all()}
+        if entity_type == "proposals":
+            from src.proposals.models import Proposal
+            rows = await self.db.execute(
+                select(Proposal.id, Proposal.title).where(Proposal.id.in_(ids))
+            )
+            return {(entity_type, row[0]): row[1] for row in rows.all()}
+        if entity_type == "contracts":
+            from src.contracts.models import Contract
+            rows = await self.db.execute(
+                select(Contract.id, Contract.title).where(Contract.id.in_(ids))
+            )
+            return {(entity_type, row[0]): row[1] for row in rows.all()}
+
+        return {}
+
+    @staticmethod
+    def _fallback_label(entity_type: str, entity_id: int) -> str:
+        return f"{entity_type.rstrip('s').capitalize()} #{entity_id}"

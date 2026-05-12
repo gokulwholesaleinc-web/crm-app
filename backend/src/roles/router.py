@@ -14,7 +14,7 @@ from src.roles.schemas import (
     UserRoleAssign,
     UserRoleResponse,
 )
-from src.roles.service import RoleService
+from src.roles.service import LastAdminError, RoleService
 
 router = APIRouter(prefix="/api/roles", tags=["roles"])
 
@@ -138,9 +138,15 @@ async def assign_role(
     if not role:
         raise_not_found("Role", assignment.role_id)
 
-    user_role = await service.assign_role_to_user(
-        assignment.user_id, assignment.role_id
-    )
+    try:
+        user_role = await service.assign_role_to_user(
+            assignment.user_id, assignment.role_id
+        )
+    except LastAdminError as exc:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
     return user_role
 
 
