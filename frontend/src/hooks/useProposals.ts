@@ -166,6 +166,18 @@ export function useRetryProposalBilling() {
   });
 }
 
+export function useRefreshProposalFromQuote() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (proposalId: number) => proposalsApi.refreshFromQuote(proposalId),
+    onSuccess: (_data, proposalId) => {
+      queryClient.invalidateQueries({ queryKey: proposalKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: proposalKeys.detail(proposalId) });
+    },
+  });
+}
+
 // Template Hooks
 
 /**
