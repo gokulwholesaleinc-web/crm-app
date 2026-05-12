@@ -6,15 +6,11 @@ without standing up a database.
 """
 from __future__ import annotations
 
-import pytest
-
 from src.email.branded_templates import (
     _DEFAULT_BRANDING,
     _base_email_html,
-    render_branded_email,
     render_contract_send_email,
     render_lead_assigned_email,
-    render_payment_invoice_email,
     render_payment_receipt_email,
     render_proposal_email,
     render_task_due_email,

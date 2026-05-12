@@ -36,6 +36,7 @@ from src.proposals.attachment_views import (
     _hash_token,
     record_attachment_view,
 )
+from src.proposals.refresh import refresh_proposal_from_quote
 from src.proposals.schemas import (
     CreateFromTemplateRequest,
     ProposalAcceptRequest,
@@ -53,7 +54,6 @@ from src.proposals.schemas import (
     ProposalUpdate,
 )
 from src.proposals.service import ProposalService, ProposalTemplateService
-from src.proposals.refresh import refresh_proposal_from_quote
 
 logger = logging.getLogger(__name__)
 

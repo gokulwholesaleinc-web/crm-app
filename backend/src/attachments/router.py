@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 
 from src.attachments.schemas import AttachmentListResponse, AttachmentResponse
 from src.attachments.service import AttachmentService
-from src.core.constants import EntityNames, HTTPStatus
+from src.core.constants import HTTPStatus
 from src.core.data_scope import DataScope, get_data_scope
 from src.core.entity_access import require_entity_access
 from src.core.router_utils import CurrentUser, DBSession, raise_bad_request, raise_not_found

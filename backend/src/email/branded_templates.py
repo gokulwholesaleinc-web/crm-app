@@ -903,7 +903,6 @@ def render_contract_signed_email(
     signed_at = escape(str(data.get("signed_at") or ""))
     contract_url = data.get("contract_url")
     audience = (data.get("audience") or "owner").lower()
-    company = escape(branding.get("company_name", "CRM"))
 
     if audience == "signer":
         # Distinct copy when the PDF couldn't be rendered — saying
