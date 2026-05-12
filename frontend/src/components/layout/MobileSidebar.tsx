@@ -143,7 +143,7 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
         <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center min-w-0">
             {tenant?.logo_url && !mobileLogoError ? (
-              <div className="flex items-center justify-center flex-shrink-0 h-12 dark:px-2 dark:py-1 dark:rounded-md dark:bg-white/95 dark:ring-1 dark:ring-white/10 dark:shadow-sm">
+              <div className="flex items-center justify-center flex-shrink-0 h-12">
                 <img
                   src={tenant.logo_url}
                   alt={tenant.company_name || 'Logo'}

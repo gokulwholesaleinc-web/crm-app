@@ -1,4 +1,4 @@
-import { Fragment, useState, useRef, useEffect } from 'react';
+import { Fragment, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Menu, Transition } from '@headlessui/react';
 import {
@@ -18,6 +18,7 @@ import { Avatar } from '../ui/Avatar';
 import { useTheme } from '../../hooks/useTheme';
 import { NotificationBell } from '../notifications/NotificationBell';
 import { UserPreferencesModal } from '../settings/UserPreferencesModal';
+import { GlobalSearch } from './GlobalSearch';
 
 export interface User {
   id: string;
@@ -39,24 +40,15 @@ export interface HeaderProps {
 export function Header({
   user,
   onMenuClick,
-  onSearch,
   onLogout,
   showSearch = true,
   className,
 }: HeaderProps) {
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [prefsOpen, setPrefsOpen] = useState(false);
-  const searchInputRef = useRef<HTMLInputElement>(null);
   const { toggleTheme, isDark } = useTheme();
 
-  // Focus search input when mobile search opens
-  useEffect(() => {
-    if (mobileSearchOpen && searchInputRef.current) {
-      searchInputRef.current.focus();
-    }
-  }, [mobileSearchOpen]);
-
-  // Close mobile search on escape
+  // Close mobile search on escape (GlobalSearch handles its own focus)
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && mobileSearchOpen) {
@@ -87,22 +79,10 @@ export function Header({
       {/* Desktop Search */}
       {showSearch && (
         <div className="hidden sm:flex flex-1 max-w-md lg:max-w-lg ml-4 lg:ml-0">
-          <div className="relative w-full">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <MagnifyingGlassIcon
-                className="h-5 w-5 text-gray-400 dark:text-gray-500"
-                aria-hidden="true"
-              />
-            </div>
-            <label htmlFor="desktop-search" className="sr-only">Search contacts, companies, deals</label>
-            <input
-              id="desktop-search"
-              type="search"
-              placeholder="Search contacts, companies, deals..."
-              className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg leading-5 bg-white dark:bg-gray-700 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:border-primary-500"
-              onChange={(e) => onSearch?.(e.target.value)}
-            />
-          </div>
+          <label htmlFor="desktop-search" className="sr-only">
+            Search contacts, companies, leads, opportunities, quotes, and proposals
+          </label>
+          <GlobalSearch inputId="desktop-search" className="relative w-full" />
         </div>
       )}
 
@@ -122,23 +102,13 @@ export function Header({
       {showSearch && mobileSearchOpen && (
         <div className="sm:hidden fixed inset-0 z-50 bg-brand-surface">
           <div className="flex items-center h-14 px-3 border-b border-gray-200 dark:border-gray-700">
-            <div className="flex-1 relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <MagnifyingGlassIcon
-                  className="h-5 w-5 text-gray-400 dark:text-gray-500"
-                  aria-hidden="true"
-                />
-              </div>
-              <label htmlFor="mobile-search" className="sr-only">Search</label>
-              <input
-                ref={searchInputRef}
-                id="mobile-search"
-                type="search"
-                placeholder="Search..."
-                className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg leading-5 bg-white dark:bg-gray-700 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:border-primary-500"
-                onChange={(e) => onSearch?.(e.target.value)}
-              />
-            </div>
+            <label htmlFor="mobile-search" className="sr-only">Search</label>
+            <GlobalSearch
+              inputId="mobile-search"
+              className="relative flex-1"
+              focusOnMount
+              onNavigated={() => setMobileSearchOpen(false)}
+            />
             <button
               type="button"
               onClick={() => setMobileSearchOpen(false)}
