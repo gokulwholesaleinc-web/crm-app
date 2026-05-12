@@ -213,6 +213,59 @@ class TestContractsCreate:
         assert data["status"] == "active"
 
     @pytest.mark.asyncio
+    async def test_create_contract_with_number_and_signer(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_contact: Contact,
+    ):
+        """`contract_number` and `designated_signer_email` round-trip on POST."""
+        response = await client.post(
+            "/api/contracts",
+            headers=auth_headers,
+            json={
+                "title": "Numbered Contract",
+                "contract_number": "CO-2026-0001",
+                "contact_id": test_contact.id,
+                "designated_signer_email": "signer@client.com",
+            },
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["contract_number"] == "CO-2026-0001"
+        assert data["designated_signer_email"] == "signer@client.com"
+
+        # GET must surface both fields so the list page + detail header
+        # have data without a second round-trip.
+        get_resp = await client.get(
+            f"/api/contracts/{data['id']}", headers=auth_headers
+        )
+        assert get_resp.status_code == 200
+        get_data = get_resp.json()
+        assert get_data["contract_number"] == "CO-2026-0001"
+        assert get_data["designated_signer_email"] == "signer@client.com"
+
+    @pytest.mark.asyncio
+    async def test_create_contract_rejects_invalid_signer_email(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+    ):
+        """EmailStr catches typos at write time, before the queue."""
+        response = await client.post(
+            "/api/contracts",
+            headers=auth_headers,
+            json={
+                "title": "Bad Email Contract",
+                "designated_signer_email": "not-an-email",
+            },
+        )
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
     async def test_create_contract_missing_title(
         self,
         client: AsyncClient,

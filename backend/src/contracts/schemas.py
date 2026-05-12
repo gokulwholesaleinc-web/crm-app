@@ -16,6 +16,7 @@ ContractStatus = Literal[
 
 class ContractCreate(BaseModel):
     title: str
+    contract_number: str | None = None
     contact_id: int | None = None
     company_id: int | None = None
     start_date: date | None = None
@@ -25,10 +26,15 @@ class ContractCreate(BaseModel):
     currency: str = "USD"
     status: ContractStatus = "draft"
     owner_id: int | None = None
+    # Default recipient for the signature request — the send modal
+    # pre-fills its ``to_email`` from this value. EmailStr catches
+    # typos at write time so the queue isn't fed a bad address.
+    designated_signer_email: EmailStr | None = None
 
 
 class ContractUpdate(BaseModel):
     title: str | None = None
+    contract_number: str | None = None
     contact_id: int | None = None
     company_id: int | None = None
     start_date: date | None = None
@@ -38,6 +44,7 @@ class ContractUpdate(BaseModel):
     currency: str | None = None
     status: ContractStatus | None = None
     owner_id: int | None = None
+    designated_signer_email: EmailStr | None = None
 
 
 class ContactBrief(BaseModel):
@@ -57,6 +64,7 @@ class CompanyBrief(BaseModel):
 class ContractResponse(BaseModel):
     id: int
     title: str
+    contract_number: str | None = None
     contact_id: int | None = None
     company_id: int | None = None
     start_date: date | None = None
@@ -66,6 +74,7 @@ class ContractResponse(BaseModel):
     currency: str = "USD"
     status: str = "draft"
     owner_id: int | None = None
+    designated_signer_email: str | None = None
     created_at: datetime
     updated_at: datetime
     contact: ContactBrief | None = None

@@ -43,6 +43,7 @@ function CreateContractModal({
 }) {
   const createMutation = useCreateContract();
   const [title, setTitle] = useState('');
+  const [contractNumber, setContractNumber] = useState('');
   const [status, setStatus] = useState('draft');
   const [value, setValue] = useState('');
   const [currency, setCurrency] = useState('USD');
@@ -51,6 +52,7 @@ function CreateContractModal({
   const [scope, setScope] = useState('');
   const [contactId, setContactId] = useState<number | null>(null);
   const [companyId, setCompanyId] = useState<number | null>(null);
+  const [designatedSignerEmail, setDesignatedSignerEmail] = useState('');
 
   const { data: contactsData } = useContacts({ page_size: 100 });
   const { data: companiesData } = useCompanies({ page_size: 100 });
@@ -70,6 +72,7 @@ function CreateContractModal({
     try {
       const data: ContractCreate = {
         title,
+        contract_number: contractNumber.trim() || null,
         status,
         value: value ? parseFloat(value) : null,
         currency,
@@ -78,6 +81,7 @@ function CreateContractModal({
         scope: scope || null,
         contact_id: contactId,
         company_id: companyId,
+        designated_signer_email: designatedSignerEmail.trim() || null,
       };
       const created = await createMutation.mutateAsync(data);
       showSuccess('Contract created');
@@ -102,6 +106,38 @@ function CreateContractModal({
             onChange={(e) => setTitle(e.target.value)}
             className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm bg-white dark:bg-gray-700 dark:text-gray-100"
           />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label htmlFor="new-contract-number" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Contract number
+            </label>
+            <input
+              id="new-contract-number"
+              type="text"
+              value={contractNumber}
+              onChange={(e) => setContractNumber(e.target.value)}
+              placeholder="e.g. CO-2026-0001"
+              spellCheck={false}
+              className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm bg-white dark:bg-gray-700 dark:text-gray-100 font-mono"
+            />
+          </div>
+          <div>
+            <label htmlFor="new-designated-signer-email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Designated signer email
+            </label>
+            <input
+              id="new-designated-signer-email"
+              type="email"
+              value={designatedSignerEmail}
+              onChange={(e) => setDesignatedSignerEmail(e.target.value)}
+              placeholder="signer@company.com"
+              autoComplete="email"
+              spellCheck={false}
+              className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm bg-white dark:bg-gray-700 dark:text-gray-100"
+            />
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -406,6 +442,7 @@ function ContractsPage() {
                 <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-900">
                   <tr>
                     <SortableTh field="title" label="Title" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
+                    <SortableTh field="contract_number" label="Number" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Contact / Company
                     </th>
@@ -448,6 +485,9 @@ function ContractsPage() {
                         >
                           {contract.title}
                         </Link>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-xs font-mono text-gray-600 dark:text-gray-300" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                        {contract.contract_number || <span className="text-gray-300 dark:text-gray-600">—</span>}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         <div>

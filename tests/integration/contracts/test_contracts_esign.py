@@ -130,6 +130,89 @@ class TestSendForSignature:
         )
         assert result.status == "sent"
 
+    async def test_send_uses_designated_signer_email_when_no_explicit_to(
+        self, db_session: AsyncSession, test_user: User, test_contact: Contact
+    ):
+        """designated_signer_email overrides the contact's email when set.
+
+        Routes to the designated signer, not the contact, when the
+        operator hasn't supplied a per-send override on the modal.
+        """
+        contract = await _make_contract(db_session, test_user, contact=test_contact)
+        contract.designated_signer_email = "designated@client.com"
+        await db_session.commit()
+        svc = ContractService(db_session)
+
+        await svc.send_for_signature(contract, user_id=test_user.id)
+
+        from sqlalchemy import select
+        result = await db_session.execute(
+            select(EmailQueue)
+            .where(EmailQueue.entity_type == "contracts")
+            .where(EmailQueue.entity_id == contract.id)
+        )
+        rows = list(result.scalars().all())
+        assert len(rows) == 1
+        # Designated address wins; contact email is unused on this send.
+        assert "designated@client.com" in rows[0].to_email
+        assert test_contact.email not in rows[0].to_email
+
+    async def test_send_strips_whitespace_on_designated_signer(
+        self, db_session: AsyncSession, test_user: User, test_contact: Contact
+    ):
+        """A non-schema mutator (raw ORM write, bulk import) can land
+        a whitespace-padded address in the column. The recipient
+        resolver must strip before queueing so the SMTP/Gmail send
+        doesn't silently fail on a malformed To header.
+        """
+        contract = await _make_contract(db_session, test_user, contact=test_contact)
+        # Simulate a raw ORM write — EmailStr on the API schemas would
+        # normally reject this, but the column itself is plain String.
+        contract.designated_signer_email = "  designated@client.com  "
+        await db_session.commit()
+        svc = ContractService(db_session)
+
+        await svc.send_for_signature(contract, user_id=test_user.id)
+
+        from sqlalchemy import select
+        result = await db_session.execute(
+            select(EmailQueue)
+            .where(EmailQueue.entity_type == "contracts")
+            .where(EmailQueue.entity_id == contract.id)
+        )
+        rows = list(result.scalars().all())
+        assert len(rows) == 1
+        # No leading/trailing whitespace on the queued address.
+        assert rows[0].to_email == "designated@client.com"
+
+    async def test_send_explicit_to_email_beats_designated(
+        self, db_session: AsyncSession, test_user: User, test_contact: Contact
+    ):
+        """The send-modal override is the operator's last word.
+
+        Even with both a designated signer AND a linked contact set,
+        the explicit `to_email` from the request body wins so a one-off
+        send to a different address doesn't require editing the row.
+        """
+        contract = await _make_contract(db_session, test_user, contact=test_contact)
+        contract.designated_signer_email = "designated@client.com"
+        await db_session.commit()
+        svc = ContractService(db_session)
+
+        await svc.send_for_signature(
+            contract, user_id=test_user.id, to_email="oneoff@client.com"
+        )
+
+        from sqlalchemy import select
+        result = await db_session.execute(
+            select(EmailQueue)
+            .where(EmailQueue.entity_type == "contracts")
+            .where(EmailQueue.entity_id == contract.id)
+        )
+        rows = list(result.scalars().all())
+        assert len(rows) == 1
+        assert "oneoff@client.com" in rows[0].to_email
+
     async def test_send_remints_token_on_resend(
         self, db_session: AsyncSession, test_user: User, test_contact: Contact
     ):
@@ -250,6 +333,53 @@ class TestSignContract:
                 contract,
                 signer_name="Evil",
                 signer_email="wrong@attacker.com",
+                signature_data_url=self.DUMMY_SIGNATURE,
+            )
+
+    async def test_sign_accepts_designated_signer_distinct_from_contact(
+        self, db_session: AsyncSession, test_user: User, test_contact: Contact
+    ):
+        """When designated_signer_email is set and differs from the
+        contact's email, the designated signer must be able to sign.
+
+        Regression for the bug where send_for_signature routed the
+        sign link to the designated address but sign_contract still
+        only validated against the contact's email — making the
+        contract unsignable for any flow that overrode the recipient.
+        """
+        contract = await _make_contract(db_session, test_user, contact=test_contact)
+        contract.designated_signer_email = "external@partner.com"
+        await db_session.commit()
+        svc = ContractService(db_session)
+        await svc.send_for_signature(contract, user_id=test_user.id)
+
+        result = await svc.sign_contract(
+            contract,
+            signer_name="External Signer",
+            signer_email="external@partner.com",
+            signature_data_url=self.DUMMY_SIGNATURE,
+            signer_ip="127.0.0.1",
+            signer_user_agent="ExternalBrowser/1.0",
+        )
+        assert result.status == "signed"
+        assert result.signer_email == "external@partner.com"
+
+    async def test_sign_rejects_contact_email_when_designated_is_set(
+        self, db_session: AsyncSession, test_user: User, test_contact: Contact
+    ):
+        """Designated signer overrides contact — the contact's own
+        email is no longer a valid signer once designated is set."""
+        contract = await _make_contract(db_session, test_user, contact=test_contact)
+        contract.designated_signer_email = "external@partner.com"
+        await db_session.commit()
+        svc = ContractService(db_session)
+        await svc.send_for_signature(contract, user_id=test_user.id)
+
+        with pytest.raises(ValueError, match="email"):
+            await svc.sign_contract(
+                contract,
+                signer_name=test_contact.first_name or "Contact",
+                signer_email=test_contact.email,
                 signature_data_url=self.DUMMY_SIGNATURE,
             )
 

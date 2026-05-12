@@ -55,6 +55,7 @@ function ContractDetailPage() {
   const [sendMessage, setSendMessage] = useState('');
   const [showEditModal, setShowEditModal] = useState(false);
   const [editTitle, setEditTitle] = useState('');
+  const [editContractNumber, setEditContractNumber] = useState('');
   const [editScope, setEditScope] = useState('');
   const [editValue, setEditValue] = useState('');
   const [editCurrency, setEditCurrency] = useState('USD');
@@ -63,6 +64,7 @@ function ContractDetailPage() {
   const [editStatus, setEditStatus] = useState('draft');
   const [editContactId, setEditContactId] = useState<number | null>(null);
   const [editCompanyId, setEditCompanyId] = useState<number | null>(null);
+  const [editDesignatedSignerEmail, setEditDesignatedSignerEmail] = useState('');
 
   // Fetch contacts + companies for the pickers
   const { data: contactsData } = useContacts({ page_size: 100 });
@@ -131,6 +133,7 @@ function ContractDetailPage() {
 
   const openEditModal = () => {
     setEditTitle(contract.title);
+    setEditContractNumber(contract.contract_number ?? '');
     setEditScope(contract.scope ?? '');
     setEditValue(contract.value != null ? String(contract.value) : '');
     setEditCurrency(contract.currency ?? 'USD');
@@ -139,6 +142,7 @@ function ContractDetailPage() {
     setEditStatus(contract.status);
     setEditContactId(contract.contact_id ?? contract.contact?.id ?? null);
     setEditCompanyId(contract.company_id ?? contract.company?.id ?? null);
+    setEditDesignatedSignerEmail(contract.designated_signer_email ?? '');
     setShowEditModal(true);
   };
 
@@ -147,6 +151,7 @@ function ContractDetailPage() {
     try {
       const data: ContractUpdate = {
         title: editTitle,
+        contract_number: editContractNumber.trim() || null,
         scope: editScope || null,
         value: editValue ? parseFloat(editValue) : null,
         currency: editCurrency,
@@ -155,6 +160,7 @@ function ContractDetailPage() {
         status: editStatus,
         contact_id: editContactId,
         company_id: editCompanyId,
+        designated_signer_email: editDesignatedSignerEmail.trim() || null,
       };
       await updateMutation.mutateAsync({ id: contract.id, data });
       setShowEditModal(false);
@@ -175,7 +181,11 @@ function ContractDetailPage() {
   };
 
   const openSendModal = () => {
-    setSendToEmail('');
+    // Pre-fill the recipient from the contract's designated signer
+    // when set; the contact email remains the backend fallback when
+    // this is blank, mirroring `ContractService.send_for_signature`.
+    // Mirrors the inline pattern in ProposalDetail.openSendModal.
+    setSendToEmail(contract.designated_signer_email?.trim() ?? '');
     setSendMessage('');
     setShowSendModal(true);
   };
@@ -258,6 +268,15 @@ function ContractDetailPage() {
                 {contract.title}
               </h1>
               <ContractStatusBadge status={contract.status} />
+              {contract.contract_number && (
+                <span
+                  className="inline-flex items-center rounded-md bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-mono font-medium text-gray-700 dark:text-gray-300"
+                  title="Contract number"
+                  style={{ fontVariantNumeric: 'tabular-nums' }}
+                >
+                  {contract.contract_number}
+                </span>
+              )}
             </div>
             {/* Contact / company headline beneath the title — mirrors ProposalDetail */}
             {(contract.contact || contract.company) && (
@@ -523,6 +542,37 @@ function ContractDetailPage() {
               onChange={(e) => setEditTitle(e.target.value)}
               className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
             />
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="edit-contract-number" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Contract number
+              </label>
+              <input
+                type="text"
+                id="edit-contract-number"
+                value={editContractNumber}
+                onChange={(e) => setEditContractNumber(e.target.value)}
+                placeholder="e.g. CO-2026-0001"
+                spellCheck={false}
+                className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm font-mono"
+              />
+            </div>
+            <div>
+              <label htmlFor="edit-designated-signer-email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Designated signer email
+              </label>
+              <input
+                type="email"
+                id="edit-designated-signer-email"
+                value={editDesignatedSignerEmail}
+                onChange={(e) => setEditDesignatedSignerEmail(e.target.value)}
+                placeholder="signer@company.com"
+                autoComplete="email"
+                spellCheck={false}
+                className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
+              />
+            </div>
           </div>
           <div>
             <label htmlFor="edit-scope" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Scope</label>

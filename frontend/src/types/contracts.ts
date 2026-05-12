@@ -4,6 +4,7 @@ import type { PaginatedResponse, ContactBrief, CompanyBrief } from './common';
 
 export interface ContractCreate {
   title: string;
+  contract_number?: string | null;
   contact_id?: number | null;
   company_id?: number | null;
   start_date?: string | null;
@@ -13,10 +14,12 @@ export interface ContractCreate {
   currency?: string;
   status?: string;
   owner_id?: number | null;
+  designated_signer_email?: string | null;
 }
 
 export interface ContractUpdate {
   title?: string | null;
+  contract_number?: string | null;
   contact_id?: number | null;
   company_id?: number | null;
   start_date?: string | null;
@@ -26,11 +29,13 @@ export interface ContractUpdate {
   currency?: string | null;
   status?: string | null;
   owner_id?: number | null;
+  designated_signer_email?: string | null;
 }
 
 export interface Contract {
   id: number;
   title: string;
+  contract_number?: string | null;
   contact_id?: number | null;
   company_id?: number | null;
   start_date?: string | null;
@@ -40,6 +45,7 @@ export interface Contract {
   currency: string;
   status: string;
   owner_id?: number | null;
+  designated_signer_email?: string | null;
   created_at: string;
   updated_at: string;
   contact?: ContactBrief | null;
@@ -48,6 +54,9 @@ export interface Contract {
   sent_at?: string | null;
   signed_at?: string | null;
   signed_by_name?: string | null;
+  signer_email?: string | null;
+  signer_ip?: string | null;
+  signer_user_agent?: string | null;
   signed_pdf_r2_key?: string | null;
 }
 
