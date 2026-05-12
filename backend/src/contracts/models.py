@@ -68,8 +68,14 @@ class Contract(Base, AuditableMixin):
     signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     signed_by_name: Mapped[str | None] = mapped_column(String(255))
     signed_signature_b64: Mapped[str | None] = mapped_column(Text)
-    signed_ip: Mapped[str | None] = mapped_column(String(45))
-    signed_ua: Mapped[str | None] = mapped_column(Text)
+    # Audit-trail fields — parity with Proposal so the ContractAuditCard
+    # surfaces the same e-sign provenance for both entity types.
+    # `signer_email` is captured from the public-sign request body;
+    # `signer_ip` and `signer_user_agent` are derived from request
+    # headers at sign time. See migration 031_contract_signer_audit.
+    signer_email: Mapped[str | None] = mapped_column(String(255))
+    signer_ip: Mapped[str | None] = mapped_column(String(45))
+    signer_user_agent: Mapped[str | None] = mapped_column(Text)
     signed_pdf_r2_key: Mapped[str | None] = mapped_column(String(255))
 
     # Per-channel expiring-soon cooldown stamps. The daily lifecycle

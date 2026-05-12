@@ -74,6 +74,11 @@ class ContractResponse(BaseModel):
     sent_at: datetime | None = None
     signed_at: datetime | None = None
     signed_by_name: str | None = None
+    # Audit-trail fields — parity with ProposalResponse. ContractAuditCard
+    # (added in #290) reads these defensively; #292 wires them through.
+    signer_email: str | None = None
+    signer_ip: str | None = None
+    signer_user_agent: str | None = None
     signed_pdf_r2_key: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
