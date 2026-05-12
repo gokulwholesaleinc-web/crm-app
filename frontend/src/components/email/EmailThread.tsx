@@ -281,10 +281,10 @@ function EmailBubble({
               <button
                 type="button"
                 onClick={() => setShowOriginal((prev) => !prev)}
-                className={`mt-2 inline-flex items-center text-xs font-medium focus-visible:outline-none focus-visible:underline ${
+                className={`mt-2 inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${
                   isOutbound
-                    ? 'text-white/80 hover:text-white'
-                    : 'text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300'
+                    ? 'bg-white/15 text-white hover:bg-white/25 focus-visible:ring-white/70 focus-visible:ring-offset-primary-700'
+                    : 'bg-primary-50 text-primary-700 hover:bg-primary-100 dark:bg-primary-900/30 dark:text-primary-300 dark:hover:bg-primary-900/50 focus-visible:ring-primary-500 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-700'
                 }`}
                 aria-expanded={showOriginal}
               >
