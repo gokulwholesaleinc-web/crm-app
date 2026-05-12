@@ -11,11 +11,9 @@ import {
   CalendarIcon,
   CalendarDaysIcon,
   MegaphoneIcon,
-  BoltIcon,
   ArrowsRightLeftIcon,
   ChartBarIcon,
   Cog6ToothIcon,
-  QueueListIcon,
   ViewColumnsIcon,
   DocumentMagnifyingGlassIcon,
   ShieldCheckIcon,
@@ -50,8 +48,6 @@ export const DEFAULT_MAIN_NAVIGATION: NavItem[] = [
 ];
 
 export const DEFAULT_SECONDARY_NAVIGATION: NavItem[] = [
-  { id: 'sequences', name: 'Sequences', href: '/sequences', icon: QueueListIcon },
-  { id: 'workflows', name: 'Workflows', href: '/workflows', icon: BoltIcon },
   { id: 'import-export', name: 'Import/Export', href: '/import-export', icon: ArrowsRightLeftIcon },
   { id: 'reports', name: 'Reports', href: '/reports', icon: ChartBarIcon },
   { id: 'settings', name: 'Settings', href: '/settings', icon: Cog6ToothIcon },

@@ -74,14 +74,8 @@ const CampaignDetailPage = lazy(() => import('../features/campaigns/CampaignDeta
 // Reports
 const ReportsPage = lazy(() => import('../features/reports/ReportsPage'));
 
-// Workflows
-const WorkflowsPage = lazy(() => import('../features/workflows/WorkflowsPage'));
-
 // Import/Export
 const ImportExportPage = lazy(() => import('../features/import-export/ImportExportPage'));
-
-// Sequences
-const SequencesPage = lazy(() => import('../features/sequences/SequencesPage'));
 
 // Inbox
 const InboxPage = lazy(() => import('../features/inbox/InboxPage'));
@@ -354,18 +348,6 @@ function AppRoutes() {
         }
       />
 
-      {/* Workflows */}
-      <Route
-        path="/workflows"
-        element={
-          <PrivateRoute>
-            <ErrorBoundary>
-              <WorkflowsPage />
-            </ErrorBoundary>
-          </PrivateRoute>
-        }
-      />
-
       {/* Import/Export */}
       <Route
         path="/import-export"
@@ -373,18 +355,6 @@ function AppRoutes() {
           <PrivateRoute>
             <ErrorBoundary>
               <ImportExportPage />
-            </ErrorBoundary>
-          </PrivateRoute>
-        }
-      />
-
-      {/* Sequences */}
-      <Route
-        path="/sequences"
-        element={
-          <PrivateRoute>
-            <ErrorBoundary>
-              <SequencesPage />
             </ErrorBoundary>
           </PrivateRoute>
         }

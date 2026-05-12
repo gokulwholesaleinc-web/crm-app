@@ -56,12 +56,10 @@ from src.proposals.router import router as proposals_router
 from src.quotes.router import router as quotes_router
 from src.reports.router import router as reports_router
 from src.roles.router import router as roles_router
-from src.sequences.router import router as sequences_router
 from src.settings.router import router as settings_router
 from src.webhooks.router import router as webhooks_router
 from src.whitelabel.middleware import TenantMiddleware
 from src.whitelabel.router import router as whitelabel_router
-from src.workflows.router import router as workflows_router
 
 logger = logging.getLogger(__name__)
 
@@ -182,7 +180,6 @@ app.include_router(dashboard_router)
 app.include_router(whitelabel_router)
 app.include_router(import_export_router)
 app.include_router(notes_router)
-app.include_router(workflows_router)
 app.include_router(attachments_router)
 app.include_router(dedup_router)
 app.include_router(email_router)
@@ -195,7 +192,6 @@ app.include_router(comments_router)
 app.include_router(roles_router)
 app.include_router(webhooks_router)
 app.include_router(assignment_router)
-app.include_router(sequences_router)
 app.include_router(me_router)
 app.include_router(sharing_router)
 app.include_router(quotes_router)
