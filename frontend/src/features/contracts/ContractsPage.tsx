@@ -385,13 +385,13 @@ function ContractsPage() {
                   <div className="flex gap-4 pt-2 mt-2 border-t border-gray-100 dark:border-gray-700">
                     <Link
                       to={`/contracts/${contract.id}`}
-                      className="flex-1 text-center py-2 text-sm font-medium text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-md"
+                      className="flex-1 text-center py-3 text-sm font-medium text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-md"
                     >
                       View
                     </Link>
                     <button
                       onClick={() => handleDeleteClick(contract)}
-                      className="flex-1 text-center py-2 text-sm font-medium text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md"
+                      className="flex-1 text-center py-3 text-sm font-medium text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md"
                     >
                       Delete
                     </button>

@@ -22,6 +22,7 @@ import { extractApiErrorDetail } from '../../utils/errors';
 import type { ContractUpdate } from '../../types';
 
 import { ContractAttachmentsSection } from './ContractAttachmentsSection';
+import { ContractAuditCard } from './ContractAuditCard';
 import { ContractStatusBadge } from './statusBadge';
 import EntitySharing from '../../components/shared/EntitySharing';
 import { StatusTimeline } from '../../components/shared/StatusTimeline';
@@ -49,6 +50,9 @@ function ContractDetailPage() {
   const actionRowRef = useRef<HTMLDivElement>(null);
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showSendModal, setShowSendModal] = useState(false);
+  const [sendToEmail, setSendToEmail] = useState('');
+  const [sendMessage, setSendMessage] = useState('');
   const [showEditModal, setShowEditModal] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editScope, setEditScope] = useState('');
@@ -170,9 +174,22 @@ function ContractDetailPage() {
     }
   };
 
+  const openSendModal = () => {
+    setSendToEmail('');
+    setSendMessage('');
+    setShowSendModal(true);
+  };
+
   const handleSend = async () => {
     try {
-      await sendMutation.mutateAsync({ id: contract.id });
+      const email = sendToEmail.trim();
+      const note = sendMessage.trim();
+      const body = {
+        ...(email && { to_email: email }),
+        ...(note && { message: note }),
+      };
+      await sendMutation.mutateAsync({ id: contract.id, body });
+      setShowSendModal(false);
       showSuccess('Contract sent for signature');
     } catch (err) {
       showError(extractApiErrorDetail(err) ?? 'Failed to send contract');
@@ -213,12 +230,12 @@ function ContractDetailPage() {
           </Button>
         )}
         {canSend && (
-          <Button size="sm" onClick={handleSend} disabled={sendMutation.isPending}>
+          <Button size="sm" onClick={openSendModal} disabled={sendMutation.isPending}>
             {sendMutation.isPending ? 'Sending...' : 'Send for Signature'}
           </Button>
         )}
         {canResend && (
-          <Button size="sm" variant="secondary" onClick={handleSend} disabled={sendMutation.isPending}>
+          <Button size="sm" variant="secondary" onClick={openSendModal} disabled={sendMutation.isPending}>
             {sendMutation.isPending ? 'Resending...' : 'Resend'}
           </Button>
         )}
@@ -274,7 +291,7 @@ function ContractDetailPage() {
           {/* PRIMARY action — the highest-leverage next step per status. */}
           {canSend && (
             <Button
-              onClick={handleSend}
+              onClick={openSendModal}
               leftIcon={<PaperAirplaneIcon className="h-4 w-4" />}
               disabled={sendMutation.isPending}
             >
@@ -284,7 +301,7 @@ function ContractDetailPage() {
           {canResend && (
             <Button
               variant="secondary"
-              onClick={handleSend}
+              onClick={openSendModal}
               leftIcon={<PaperAirplaneIcon className="h-4 w-4" />}
               disabled={sendMutation.isPending}
             >
@@ -432,8 +449,66 @@ function ContractDetailPage() {
             ownerName={ownerName}
             canManage={canManage}
           />
+
+          <ContractAuditCard contract={contract} />
         </div>
       </div>
+
+      {/* Send / Resend Modal */}
+      <Modal
+        isOpen={showSendModal}
+        onClose={() => setShowSendModal(false)}
+        title={canSend ? 'Send for Signature' : 'Resend for Signature'}
+        size="md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            {canSend
+              ? 'Send this contract to the signer. Leave the email blank to use the contact\'s default address.'
+              : 'Resend this contract to the signer.'}
+          </p>
+          <div>
+            <label htmlFor="send-to-email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Override recipient email
+            </label>
+            <input
+              id="send-to-email"
+              type="email"
+              autoComplete="email"
+              spellCheck={false}
+              value={sendToEmail}
+              onChange={(e) => setSendToEmail(e.target.value)}
+              placeholder="Leave blank to use contact email..."
+              className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
+            />
+          </div>
+          <div>
+            <label htmlFor="send-message" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Custom message <span className="font-normal text-gray-400">(optional)</span>
+            </label>
+            <textarea
+              id="send-message"
+              rows={3}
+              value={sendMessage}
+              onChange={(e) => setSendMessage(e.target.value)}
+              placeholder="Add a personal note to the signing email..."
+              className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-2 border-t border-gray-200 dark:border-gray-700">
+            <Button type="button" variant="secondary" onClick={() => setShowSendModal(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSend}
+              disabled={sendMutation.isPending}
+              leftIcon={<PaperAirplaneIcon className="h-4 w-4" />}
+            >
+              {sendMutation.isPending ? 'Sending...' : canSend ? 'Send' : 'Resend'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Edit Modal */}
       <Modal isOpen={showEditModal} onClose={() => setShowEditModal(false)} title="Edit Contract" size="lg" fullScreenOnMobile>
