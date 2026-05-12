@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 import secrets
 import sys
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 import pytest
 import pytest_asyncio
@@ -19,42 +19,60 @@ from sqlalchemy.pool import StaticPool
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../../../"))
 
-from src.auth.models import User, RejectedAccessEmail
-from src.auth.security import create_access_token, get_password_hash
-from src.database import Base, get_db
-from src.proposals.models import Proposal, ProposalTemplate, ProposalView
+from src.account.models import UserNotificationPrefs, UserPreferences  # noqa: F401
 
 # Import all models so create_all picks them up
 from src.activities.models import Activity  # noqa: F401
-from src.campaigns.models import Campaign, CampaignMember, EmailTemplate, EmailCampaignStep  # noqa: F401
-from src.core.models import Note, Tag, EntityTag, EntityShare  # noqa: F401
-from src.workflows.models import WorkflowRule, WorkflowExecution  # noqa: F401
-from src.dashboard.models import DashboardNumberCard, DashboardChart, DashboardReportWidget  # noqa: F401
-from src.attachments.models import Attachment  # noqa: F401
-from src.email.models import EmailQueue, InboundEmail, EmailSettings  # noqa: F401
-from src.notifications.models import Notification  # noqa: F401
-from src.account.models import UserNotificationPrefs, UserPreferences  # noqa: F401
-from src.filters.models import SavedFilter  # noqa: F401
-from src.reports.models import SavedReport  # noqa: F401
-from src.audit.models import AuditLog  # noqa: F401
-from src.comments.models import Comment  # noqa: F401
-from src.roles.models import Role, UserRole, RoleName, DEFAULT_PERMISSIONS  # noqa: F401
-from src.webhooks.models import Webhook, WebhookDelivery  # noqa: F401
 from src.assignment.models import AssignmentRule  # noqa: F401
-from src.sequences.models import Sequence, SequenceEnrollment  # noqa: F401
-from src.payments.models import StripeCustomer, Product, Price, Payment, Subscription  # noqa: F401
-from src.contracts.models import Contract  # noqa: F401
-from src.leads.models import Lead, LeadSource  # noqa: F401
-from src.opportunities.models import Opportunity, PipelineStage  # noqa: F401
-from src.meta.models import CompanyMetaData, MetaCredential, MetaLeadCapture  # noqa: F401
-from src.expenses.models import Expense  # noqa: F401
-from src.integrations.google_calendar.models import GoogleCalendarCredential, CalendarSyncEvent  # noqa: F401
-from src.integrations.gmail.models import GmailConnection, GmailSyncState  # noqa: F401
-from src.integrations.mailchimp.models import MailchimpConnection  # noqa: F401
-from src.contacts.models import Contact  # noqa: F401
+from src.attachments.models import Attachment  # noqa: F401
+from src.audit.models import AuditLog  # noqa: F401
+from src.auth.models import User
+from src.auth.security import create_access_token, get_password_hash
+from src.campaigns.models import (  # noqa: F401
+    Campaign,
+    CampaignMember,
+    EmailCampaignStep,
+    EmailTemplate,
+)
+from src.comments.models import Comment  # noqa: F401
 from src.companies.models import Company  # noqa: F401
-from src.quotes.models import Quote, QuoteLineItem, QuoteTemplate, ProductBundle, ProductBundleItem  # noqa: F401
+from src.contacts.models import Contact  # noqa: F401
+from src.contracts.models import Contract  # noqa: F401
+from src.core.models import EntityShare, EntityTag, Note, Tag  # noqa: F401
+from src.dashboard.models import (  # noqa: F401
+    DashboardChart,
+    DashboardNumberCard,
+    DashboardReportWidget,
+)
+from src.database import Base, get_db
+from src.email.models import EmailQueue, EmailSettings, InboundEmail  # noqa: F401
+from src.expenses.models import Expense  # noqa: F401
+from src.filters.models import SavedFilter  # noqa: F401
+from src.integrations.gmail.models import GmailConnection, GmailSyncState  # noqa: F401
+from src.integrations.google_calendar.models import (  # noqa: F401
+    CalendarSyncEvent,
+    GoogleCalendarCredential,
+)
+from src.integrations.mailchimp.models import MailchimpConnection  # noqa: F401
+from src.leads.models import Lead, LeadSource  # noqa: F401
+from src.meta.models import CompanyMetaData, MetaCredential, MetaLeadCapture  # noqa: F401
+from src.notifications.models import Notification  # noqa: F401
+from src.opportunities.models import Opportunity, PipelineStage  # noqa: F401
+from src.payments.models import Payment, Price, Product, StripeCustomer, Subscription  # noqa: F401
+from src.proposals.models import Proposal
+from src.quotes.models import (  # noqa: F401
+    ProductBundle,
+    ProductBundleItem,
+    Quote,
+    QuoteLineItem,
+    QuoteTemplate,
+)
+from src.reports.models import SavedReport  # noqa: F401
+from src.roles.models import DEFAULT_PERMISSIONS, Role, RoleName, UserRole  # noqa: F401
+from src.sequences.models import Sequence, SequenceEnrollment  # noqa: F401
+from src.webhooks.models import Webhook, WebhookDelivery  # noqa: F401
 from src.whitelabel.models import Tenant, TenantSettings, TenantUser  # noqa: F401
+from src.workflows.models import WorkflowExecution, WorkflowRule  # noqa: F401
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -193,7 +211,7 @@ class TestDuplicateEndpoint:
     async def test_clone_clears_esign_fields(
         self, client: AsyncClient, db_session: AsyncSession, test_user: User, auth_headers: dict
     ):
-        from datetime import datetime, UTC
+        from datetime import UTC, datetime
         proposal = await _make_proposal(
             db_session, test_user, status="accepted", signed_at=datetime.now(UTC)
         )
@@ -255,7 +273,7 @@ class TestDuplicateEndpoint:
         self, client: AsyncClient, db_session: AsyncSession, test_user: User, auth_headers: dict
     ):
         """Accepted (locked) proposals can still be cloned."""
-        from datetime import datetime, UTC
+        from datetime import UTC, datetime
         proposal = await _make_proposal(
             db_session, test_user, status="accepted", signed_at=datetime.now(UTC)
         )
