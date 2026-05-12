@@ -28,7 +28,7 @@ from src.email.schemas import (
     ThreadEmailItem,
     ThreadResponse,
 )
-from src.email.service import EmailService
+from src.email.service import EmailService, assert_gmail_connected
 from src.email.throttle import EmailThrottleService
 from src.email.types import EmailAttachment
 
@@ -66,6 +66,16 @@ async def send_email(
         ]
 
     service = EmailService(db)
+
+    # Pre-flight Gmail-connected check so the user gets a clean 400
+    # instead of a "sent" indicator on a row that's actually in the
+    # retry pool because their Gmail expired/was never connected.
+    try:
+        await assert_gmail_connected(db, current_user.id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST, detail=str(exc),
+        ) from exc
 
     # Reply-gating: non-admins can only reply to threads they're a
     # participant of (defaults to closing the cross-mailbox identity-bleed
@@ -127,6 +137,12 @@ async def send_template_email(
     db: DBSession,
 ):
     """Send an email using a template."""
+    try:
+        await assert_gmail_connected(db, current_user.id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST, detail=str(exc),
+        ) from exc
     service = EmailService(db)
     try:
         email = await service.send_template_email(

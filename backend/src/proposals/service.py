@@ -873,6 +873,15 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         self, proposal_id: int, user_id: int, attach_pdf: bool = False
     ) -> None:
         """Send branded proposal email to the contact's email."""
+        from src.email.service import assert_gmail_connected
+
+        # Pre-flight: refuse to mark a proposal as sent if the operator's
+        # Gmail isn't connected — otherwise the email lands in `retry`
+        # status and the UI looks correct ("Sent at <ts>") while nothing
+        # left the building. Surface the cause as a 400 so the operator
+        # can fix it before clicking send again.
+        await assert_gmail_connected(self.db, user_id)
+
         proposal = await self.get_by_id(proposal_id)
         if not proposal:
             raise ValueError(f"Proposal {proposal_id} not found")

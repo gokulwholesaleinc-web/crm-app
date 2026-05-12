@@ -197,6 +197,16 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
         ``SELECT … FOR UPDATE`` pattern in
         ``proposals/service.resend_payment_link``.)
         """
+        from src.email.service import assert_gmail_connected
+
+        # Pre-flight: refuse if the operator's Gmail isn't connected,
+        # before minting a new sign-token or flipping the contract to
+        # "sent". The post-queue check below still catches deeper
+        # failures (Gmail returns 5xx etc.) but this short-circuits the
+        # most common case so the operator sees an actionable 400 and
+        # the contract row stays in "draft".
+        await assert_gmail_connected(self.db, user_id)
+
         # Resolution order: explicit request override > the contract's
         # designated signer > the linked contact's primary email. The
         # send modal's `to_email` is the operator's last-mile override

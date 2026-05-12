@@ -268,6 +268,31 @@ def render_template(
     return re.sub(r"\{\{(\w+)\}\}", replacer, template)
 
 
+async def assert_gmail_connected(db: AsyncSession, sent_by_id: int) -> None:
+    """Raise ValueError if ``sent_by_id`` has no active GmailConnection.
+
+    User-initiated one-shot sends (proposal, quote, contract,
+    activity-followup email) MUST pre-flight here before queueing — the
+    queue path swallows GmailNotConnectedError and parks the row in
+    ``retry``, which silently breaks the "I clicked Send, it said
+    sent" UX. The error message is the one we want to render to the
+    operator so they know to reconnect Gmail in Settings.
+    """
+    from src.integrations.gmail.models import GmailConnection
+
+    row = await db.execute(
+        select(GmailConnection).where(
+            GmailConnection.user_id == sent_by_id,
+            GmailConnection.revoked_at.is_(None),
+        )
+    )
+    if row.scalar_one_or_none() is None:
+        raise ValueError(
+            "Your Gmail account is not connected. "
+            "Connect it under Settings → Integrations before sending."
+        )
+
+
 class EmailService:
     """Service for email queue operations."""
 

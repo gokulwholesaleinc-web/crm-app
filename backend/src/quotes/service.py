@@ -299,6 +299,13 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
         to 'sent' state with no email dispatched, leaving the user
         thinking the customer received it.
         """
+        from src.email.service import assert_gmail_connected
+
+        # Same pre-flight as proposals — refuse to flip status to "sent"
+        # if the sender's Gmail isn't connected; queue path swallows the
+        # failure and parks in retry.
+        await assert_gmail_connected(self.db, user_id)
+
         quote = await self.get_by_id(quote_id)
         if not quote:
             raise ValueError(f"Quote {quote_id} not found")
