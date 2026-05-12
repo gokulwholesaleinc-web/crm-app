@@ -1,5 +1,5 @@
-import { ReactNode, useState, useCallback } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { ReactNode, useState } from 'react';
+import { Link } from 'react-router-dom';
 import clsx from 'clsx';
 import { Sidebar, MobileSidebar } from './Sidebar';
 import { Header, User } from './Header';
@@ -27,17 +27,7 @@ export function Layout({
   className,
 }: LayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const navigate = useNavigate();
-  const location = useLocation();
   useDensity();
-
-  const handleGlobalSearch = useCallback((query: string) => {
-    const searchableRoutes = ['/contacts', '/companies', '/leads', '/quotes', '/proposals', '/payments'];
-    const currentBase = '/' + location.pathname.split('/')[1];
-    const target = searchableRoutes.includes(currentBase) ? currentBase : '/contacts';
-    const params = query ? `?search=${encodeURIComponent(query)}` : '';
-    navigate(`${target}${params}`);
-  }, [navigate, location.pathname]);
 
   return (
     <div className="flex flex-col h-screen bg-brand-page overflow-hidden">
@@ -74,7 +64,6 @@ export function Layout({
           <Header
             user={user}
             onMenuClick={() => setMobileMenuOpen(true)}
-            onSearch={handleGlobalSearch}
             onLogout={onLogout}
             showSearch={showSearch}
             notifications={notifications}

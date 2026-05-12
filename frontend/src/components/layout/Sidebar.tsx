@@ -289,8 +289,8 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
           {tenant?.logo_url && !logoError ? (
             <div
               className={clsx(
-                'flex items-center justify-center flex-shrink-0 dark:rounded-md dark:bg-white/95 dark:ring-1 dark:ring-white/10 dark:shadow-sm',
-                collapsed ? 'h-10 w-10 dark:p-1' : 'h-12 dark:px-2 dark:py-1'
+                'flex items-center justify-center flex-shrink-0',
+                collapsed ? 'h-10 w-10' : 'h-12'
               )}
             >
               <img

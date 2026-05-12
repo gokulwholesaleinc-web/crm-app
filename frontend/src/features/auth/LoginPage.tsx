@@ -22,7 +22,7 @@ function LoginPage() {
         <div>
           {tenant?.logo_url && !logoError ? (
             <div className="flex justify-center mb-4">
-              <div className="dark:bg-white/95 dark:rounded-lg dark:px-4 dark:py-2 dark:ring-1 dark:ring-white/10 dark:shadow-sm">
+              <div>
                 <img
                   src={tenant.logo_url}
                   alt={tenant.company_name || 'Company logo'}
