@@ -22,26 +22,53 @@ from datetime import timedelta
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from sqlalchemy import select  # noqa: E402
+from dataclasses import dataclass  # noqa: E402
+from datetime import datetime  # noqa: E402
 
-from src.auth.models import User  # noqa: E402
+from sqlalchemy import text  # noqa: E402
+
 from src.auth.security import create_access_token  # noqa: E402
 from src.database import get_db  # noqa: E402
 
 
-async def _resolve_user(*, email: str | None, user_id: int | None) -> User:
+@dataclass
+class _UserRow:
+    id: int
+    email: str
+    full_name: str
+    is_active: bool
+    is_superuser: bool
+    created_at: datetime | None
+
+
+async def _resolve_user(*, email: str | None, user_id: int | None) -> _UserRow:
+    """Plain SQL lookup so we don't trigger the User mapper's relationship
+    init — the full ORM model needs every related model imported, which
+    is overkill for a one-shot mint script.
+    """
     if email is None and user_id is None:
         raise SystemExit("Pass --email or --user-id")
 
+    sql = (
+        "SELECT id, email, full_name, is_active, is_superuser, created_at "
+        "FROM users WHERE "
+        + ("email = :email" if email is not None else "id = :user_id")
+        + " LIMIT 1"
+    )
+    params = {"email": email} if email is not None else {"user_id": user_id}
+
     async for db in get_db():
-        if email is not None:
-            row = await db.execute(select(User).where(User.email == email))
-        else:
-            row = await db.execute(select(User).where(User.id == user_id))
-        user = row.scalar_one_or_none()
-        if user is None:
+        row = (await db.execute(text(sql), params)).first()
+        if row is None:
             raise SystemExit(f"No user found (email={email!r}, id={user_id!r})")
-        return user
+        return _UserRow(
+            id=row.id,
+            email=row.email,
+            full_name=row.full_name,
+            is_active=row.is_active,
+            is_superuser=row.is_superuser,
+            created_at=row.created_at,
+        )
     raise SystemExit("Could not open a DB session")
 
 
