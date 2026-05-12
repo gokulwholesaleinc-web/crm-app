@@ -191,7 +191,7 @@ class TestSignContract:
             signer_email=test_contact.email,
             signature_data_url=self.DUMMY_SIGNATURE,
             signer_ip="127.0.0.1",
-            signer_ua="TestBrowser/1.0",
+            signer_user_agent="TestBrowser/1.0",
         )
 
         assert result.status == "signed"
@@ -199,6 +199,11 @@ class TestSignContract:
         assert result.signed_by_name == "Jane Signer"
         assert result.sign_token is None
         assert result.sign_token_expires_at is None
+        # Audit-trail parity: signer email / IP / UA must persist on the
+        # Contract row so the detail-page ContractAuditCard renders them.
+        assert result.signer_email == test_contact.email
+        assert result.signer_ip == "127.0.0.1"
+        assert result.signer_user_agent == "TestBrowser/1.0"
 
     async def test_sign_rejects_expired_token(
         self, db_session: AsyncSession, test_user: User, test_contact: Contact
@@ -384,7 +389,9 @@ class TestContractEsignRoutes:
         auth_headers: dict,
         test_contact: Contact,
     ):
-        _, token = await self._create_and_send(client, db_session, test_user, auth_headers, test_contact)
+        contract_id, token = await self._create_and_send(
+            client, db_session, test_user, auth_headers, test_contact
+        )
         resp = await client.post(
             f"/api/contracts/public/{token}/sign",
             json={
@@ -392,11 +399,28 @@ class TestContractEsignRoutes:
                 "signer_email": test_contact.email,
                 "signature_data_url": self.DUMMY_SIGNATURE,
             },
+            headers={"User-Agent": "TestBrowser/1.0"},
         )
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "signed"
         assert data["signed_by_name"] == "Jane Signer"
+
+        # Audit-trail parity (#290 ContractAuditCard): the signer's
+        # email, IP, and user-agent must round-trip back through the
+        # authenticated detail endpoint so the audit card has data.
+        detail_resp = await client.get(
+            f"/api/contracts/{contract_id}", headers=auth_headers
+        )
+        assert detail_resp.status_code == 200
+        detail = detail_resp.json()
+        assert detail["signer_email"] == test_contact.email
+        assert detail["signer_user_agent"] == "TestBrowser/1.0"
+        # signer_ip — set by FastAPI's request.client.host in the test
+        # transport; just assert it persisted as a non-empty string
+        # rather than pinning the exact loopback value, which differs
+        # by ASGI client implementation.
+        assert detail["signer_ip"]
 
     async def test_sign_400_on_expired_token(
         self,

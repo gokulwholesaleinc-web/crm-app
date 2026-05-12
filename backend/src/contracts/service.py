@@ -282,7 +282,7 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
         signer_email: str,
         signature_data_url: str,
         signer_ip: str | None = None,
-        signer_ua: str | None = None,
+        signer_user_agent: str | None = None,
     ) -> Contract:
         """Persist signature, generate signed PDF, email signer a copy."""
         if contract.status != "sent":
@@ -318,8 +318,9 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
                 signed_at=now,
                 signed_by_name=signer_name,
                 signed_signature_b64=signature_data_url,
-                signed_ip=signer_ip,
-                signed_ua=signer_ua,
+                signer_email=signer_email,
+                signer_ip=signer_ip,
+                signer_user_agent=signer_user_agent,
                 sign_token=None,
                 sign_token_expires_at=None,
             )
@@ -466,7 +467,7 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
         signatory_html = ""
         if include_signature and contract.signed_at:
             signed_display = contract.signed_at.strftime("%B %d, %Y · %H:%M UTC")
-            ua = contract.signed_ua or ""
+            ua = contract.signer_user_agent or ""
             if len(ua) > 90:
                 ua = ua[:87] + "..."
 
@@ -474,8 +475,10 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
                 ("Signatory", contract.signed_by_name or ""),
                 ("Signed at", signed_display),
             ]
-            if contract.signed_ip:
-                rows.append(("IP address", contract.signed_ip))
+            if contract.signer_email:
+                rows.append(("Email", contract.signer_email))
+            if contract.signer_ip:
+                rows.append(("IP address", contract.signer_ip))
             if ua:
                 rows.append(("User-agent", ua))
 

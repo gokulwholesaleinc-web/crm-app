@@ -74,6 +74,10 @@ class ContractResponse(BaseModel):
     sent_at: datetime | None = None
     signed_at: datetime | None = None
     signed_by_name: str | None = None
+    # E-sign audit fields — parity with ProposalResponse.
+    signer_email: str | None = None
+    signer_ip: str | None = None
+    signer_user_agent: str | None = None
     signed_pdf_r2_key: str | None = None
 
     model_config = ConfigDict(from_attributes=True)

@@ -300,7 +300,7 @@ async def sign_contract_public(
         )
 
     signer_ip = get_client_ip(request)
-    signer_ua = request.headers.get("user-agent")
+    signer_user_agent = request.headers.get("user-agent")
 
     try:
         contract = await service.sign_contract(
@@ -309,7 +309,7 @@ async def sign_contract_public(
             signer_email=body.signer_email,
             signature_data_url=body.signature_data_url,
             signer_ip=signer_ip,
-            signer_ua=signer_ua,
+            signer_user_agent=signer_user_agent,
         )
     except ValueError as exc:
         raise HTTPException(
