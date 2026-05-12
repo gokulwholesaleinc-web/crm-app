@@ -29,7 +29,19 @@ import {
   generateExportFilename,
 } from '../../api/importExport';
 import { showError } from '../../utils/toast';
-import type { ImportResult, ImportPreview, ImportExportEntityType, ContactDecision, ContactMatch } from '../../types';
+import type { ImportResult, ImportPreview, ImportExportEntityType, ContactDecision, ContactMatch, ImportMatchKey, ImportMergeStrategy } from '../../types';
+
+const MATCH_KEY_LABEL: Record<ImportMatchKey, string> = {
+  none: 'Add as new records (no matching)',
+  email: 'Match on email',
+  phone: 'Match on phone',
+  name_plus_company: 'Match on name + company',
+};
+
+const MERGE_STRATEGY_LABEL: Record<ImportMergeStrategy, string> = {
+  preserve_existing: 'Only fill blank fields',
+  overwrite_all: 'Replace existing values',
+};
 
 type OperationStatus = 'idle' | 'loading' | 'previewing' | 'importing' | 'success' | 'error';
 
@@ -82,6 +94,10 @@ interface ImportState {
   preview: ImportPreview | null;
   file: File | null;
   error: string | null;
+  matchKey: ImportMatchKey;
+  mergeStrategy: ImportMergeStrategy;
+  dryRunResult: ImportResult | null;
+  dryRunStatus: 'idle' | 'loading';
 }
 
 const INITIAL_IMPORT_STATE: ImportState = {
@@ -90,6 +106,10 @@ const INITIAL_IMPORT_STATE: ImportState = {
   preview: null,
   file: null,
   error: null,
+  matchKey: 'none',
+  mergeStrategy: 'preserve_existing',
+  dryRunResult: null,
+  dryRunStatus: 'idle',
 };
 
 interface ImportSectionProps {
@@ -101,9 +121,13 @@ interface ImportSectionProps {
   onFileSelect: (file: File) => void;
   onConfirmImport: () => void;
   onCancel: () => void;
+  onMatchKeyChange: (matchKey: ImportMatchKey) => void;
+  onMergeStrategyChange: (strategy: ImportMergeStrategy) => void;
+  onPreviewMerges: () => void;
+  supportsDedup: boolean;
 }
 
-function ImportSection({ entityType, label, state, contactDecisions, onContactDecisionChange, onFileSelect, onConfirmImport, onCancel }: ImportSectionProps) {
+function ImportSection({ entityType, label, state, contactDecisions, onContactDecisionChange, onFileSelect, onConfirmImport, onCancel, onMatchKeyChange, onMergeStrategyChange, onPreviewMerges, supportsDedup }: ImportSectionProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -169,6 +193,14 @@ function ImportSection({ entityType, label, state, contactDecisions, onContactDe
               onContactDecisionChange={onContactDecisionChange}
               onConfirm={onConfirmImport}
               onCancel={onCancel}
+              supportsDedup={supportsDedup}
+              matchKey={state.matchKey}
+              mergeStrategy={state.mergeStrategy}
+              dryRunResult={state.dryRunResult}
+              dryRunStatus={state.dryRunStatus}
+              onMatchKeyChange={onMatchKeyChange}
+              onMergeStrategyChange={onMergeStrategyChange}
+              onPreviewMerges={onPreviewMerges}
             />
           )}
 
@@ -179,8 +211,16 @@ function ImportSection({ entityType, label, state, contactDecisions, onContactDe
                 <CheckCircleIcon className="h-5 w-5 text-green-600 dark:text-green-400" aria-hidden="true" />
                 <span className="text-sm font-medium text-green-800 dark:text-green-300">
                   Successfully imported {state.result.imported_count} record{state.result.imported_count !== 1 ? 's' : ''}
+                  {(state.result.updated_count ?? 0) > 0 && (
+                    <> &middot; updated {state.result.updated_count} existing</>
+                  )}
                 </span>
               </div>
+              {(state.result.conflicts?.length ?? 0) > 0 && (
+                <p className="text-xs font-medium text-orange-700 dark:text-orange-400 mt-1">
+                  {state.result.conflicts!.length} row{state.result.conflicts!.length !== 1 ? 's' : ''} skipped due to ambiguous match
+                </p>
+              )}
               {(state.result.contacts_created ?? 0) > 0 && (
                 <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">
                   {state.result.contacts_created} contact{state.result.contacts_created !== 1 ? 's' : ''} created
@@ -333,6 +373,114 @@ function ContactMatchPanel({ matches, decisions, onDecisionChange }: ContactMatc
   );
 }
 
+interface DedupPickerProps {
+  matchKey: ImportMatchKey;
+  mergeStrategy: ImportMergeStrategy;
+  dryRunResult: ImportResult | null;
+  dryRunStatus: 'idle' | 'loading';
+  onMatchKeyChange: (matchKey: ImportMatchKey) => void;
+  onMergeStrategyChange: (strategy: ImportMergeStrategy) => void;
+  onPreviewMerges: () => void;
+  disabled: boolean;
+}
+
+function DedupPicker({ matchKey, mergeStrategy, dryRunResult, dryRunStatus, onMatchKeyChange, onMergeStrategyChange, onPreviewMerges, disabled }: DedupPickerProps) {
+  const matchOptions: ImportMatchKey[] = ['none', 'email', 'phone', 'name_plus_company'];
+  const strategyOptions: ImportMergeStrategy[] = ['preserve_existing', 'overwrite_all'];
+  const matchOn = matchKey !== 'none';
+
+  return (
+    <div className="border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-white dark:bg-gray-800 space-y-2">
+      <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">Update existing records</p>
+      <div>
+        <label htmlFor="dedup-match-key" className="block text-[11px] text-gray-500 dark:text-gray-400 mb-1">
+          When a CSV row matches an existing record by:
+        </label>
+        <select
+          id="dedup-match-key"
+          value={matchKey}
+          onChange={(e) => onMatchKeyChange(e.target.value as ImportMatchKey)}
+          disabled={disabled}
+          className="block w-full text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:opacity-60"
+        >
+          {matchOptions.map((k) => (
+            <option key={k} value={k}>{MATCH_KEY_LABEL[k]}</option>
+          ))}
+        </select>
+      </div>
+      {matchOn && (
+        <div className="space-y-1">
+          <span className="block text-[11px] text-gray-500 dark:text-gray-400">When matched:</span>
+          <div className="flex flex-wrap gap-3">
+            {strategyOptions.map((s) => (
+              <label key={s} className="flex items-center gap-1.5 text-xs cursor-pointer">
+                <input
+                  type="radio"
+                  name="dedup-merge-strategy"
+                  value={s}
+                  checked={mergeStrategy === s}
+                  onChange={() => onMergeStrategyChange(s)}
+                  disabled={disabled}
+                  className="text-primary-600"
+                />
+                <span className="text-gray-700 dark:text-gray-300">{MERGE_STRATEGY_LABEL[s]}</span>
+              </label>
+            ))}
+          </div>
+          <div className="flex items-center gap-2 pt-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onPreviewMerges}
+              isLoading={dryRunStatus === 'loading'}
+              disabled={disabled}
+            >
+              Preview matches
+            </Button>
+            {dryRunResult && (
+              <span className="text-[11px] text-gray-600 dark:text-gray-400" aria-live="polite">
+                {dryRunResult.imported_count} new &middot; {dryRunResult.updated_count ?? 0} update{(dryRunResult.updated_count ?? 0) !== 1 ? 's' : ''}
+                {(dryRunResult.conflicts?.length ?? 0) > 0 && (
+                  <> &middot; <span className="text-orange-600 dark:text-orange-400">{dryRunResult.conflicts!.length} conflict{dryRunResult.conflicts!.length !== 1 ? 's' : ''}</span></>
+                )}
+                {(dryRunResult.errors?.length ?? 0) > 0 && (
+                  <> &middot; <span className="text-red-600 dark:text-red-400">{dryRunResult.errors.length} row error{dryRunResult.errors.length !== 1 ? 's' : ''}</span></>
+                )}
+              </span>
+            )}
+          </div>
+          {dryRunResult && (dryRunResult.conflicts?.length ?? 0) > 0 && (
+            <ul className="text-[11px] text-orange-700 dark:text-orange-400 list-disc list-inside max-h-24 overflow-y-auto">
+              {dryRunResult.conflicts!.slice(0, 5).map((c, i) => (
+                <li key={`${c.row}-${i}`}>
+                  Row {c.row}: {c.match_value} &mdash; {c.reason}
+                </li>
+              ))}
+              {dryRunResult.conflicts!.length > 5 && (
+                <li className="list-none text-gray-500 dark:text-gray-500">
+                  ...and {dryRunResult.conflicts!.length - 5} more
+                </li>
+              )}
+            </ul>
+          )}
+          {dryRunResult && (dryRunResult.errors?.length ?? 0) > 0 && (
+            <ul className="text-[11px] text-red-700 dark:text-red-400 list-disc list-inside max-h-24 overflow-y-auto">
+              {dryRunResult.errors.slice(0, 5).map((e, i) => (
+                <li key={i}>{e}</li>
+              ))}
+              {dryRunResult.errors.length > 5 && (
+                <li className="list-none text-gray-500 dark:text-gray-500">
+                  ...and {dryRunResult.errors.length - 5} more
+                </li>
+              )}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface PreviewPanelProps {
   preview: ImportPreview;
   fileName: string;
@@ -341,9 +489,17 @@ interface PreviewPanelProps {
   onContactDecisionChange: (csvName: string, decision: ContactDecision) => void;
   onConfirm: () => void;
   onCancel: () => void;
+  supportsDedup: boolean;
+  matchKey: ImportMatchKey;
+  mergeStrategy: ImportMergeStrategy;
+  dryRunResult: ImportResult | null;
+  dryRunStatus: 'idle' | 'loading';
+  onMatchKeyChange: (matchKey: ImportMatchKey) => void;
+  onMergeStrategyChange: (strategy: ImportMergeStrategy) => void;
+  onPreviewMerges: () => void;
 }
 
-function PreviewPanel({ preview, fileName, isImporting, contactDecisions, onContactDecisionChange, onConfirm, onCancel }: PreviewPanelProps) {
+function PreviewPanel({ preview, fileName, isImporting, contactDecisions, onContactDecisionChange, onConfirm, onCancel, supportsDedup, matchKey, mergeStrategy, dryRunResult, dryRunStatus, onMatchKeyChange, onMergeStrategyChange, onPreviewMerges }: PreviewPanelProps) {
   const mappedCount = Object.keys(preview.column_mapping).length;
   const mappingEntries = Object.entries(preview.column_mapping);
 
@@ -451,6 +607,20 @@ function PreviewPanel({ preview, fileName, isImporting, contactDecisions, onCont
         </div>
       )}
 
+      {/* Match-and-update picker (contacts + leads only) */}
+      {supportsDedup && (
+        <DedupPicker
+          matchKey={matchKey}
+          mergeStrategy={mergeStrategy}
+          dryRunResult={dryRunResult}
+          dryRunStatus={dryRunStatus}
+          onMatchKeyChange={onMatchKeyChange}
+          onMergeStrategyChange={onMergeStrategyChange}
+          onPreviewMerges={onPreviewMerges}
+          disabled={isImporting}
+        />
+      )}
+
       {/* Actions */}
       <div className="flex gap-2">
         <Button size="sm" onClick={onConfirm} isLoading={isImporting}>
@@ -535,7 +705,7 @@ export function ImportExportPage() {
   };
 
   const handleConfirmImport = async (entityType: ImportExportEntityType) => {
-    const { file } = importStates[entityType];
+    const { file, matchKey, mergeStrategy } = importStates[entityType];
     if (!file) return;
 
     updateImportState(entityType, { status: 'importing' });
@@ -546,14 +716,64 @@ export function ImportExportPage() {
         result = await importCompanies(file, true, decisions.length > 0 ? decisions : undefined);
       } else {
         const importFns = { contacts: importContacts, leads: importLeads } as const;
-        result = await importFns[entityType](file);
+        result = await importFns[entityType](file, true, { matchKey, mergeStrategy });
       }
-      updateImportState(entityType, { status: 'success', result, preview: null, file: null });
+      updateImportState(entityType, {
+        status: 'success',
+        result,
+        preview: null,
+        file: null,
+        dryRunResult: null,
+      });
       setContactDecisions({});
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Import failed';
       updateImportState(entityType, { status: 'error', error: message, preview: null, file: null });
     }
+  };
+
+  const handlePreviewMerges = async (entityType: ImportExportEntityType) => {
+    const { file, matchKey, mergeStrategy } = importStates[entityType];
+    if (!file) {
+      showError('Choose a CSV file first');
+      return;
+    }
+    // companies path uses contact_decisions and doesn't accept dedup yet;
+    // matchKey === 'none' means the user hasn't opted into dedup so a
+    // dry-run would produce no useful info — guard with a visible toast
+    // rather than a silent return so a UI refactor can't break the button.
+    if (entityType === 'companies') {
+      showError('Match-and-update preview is not yet available for company imports');
+      return;
+    }
+    if (matchKey === 'none') {
+      showError('Pick a match key to preview merges');
+      return;
+    }
+    updateImportState(entityType, { dryRunStatus: 'loading', dryRunResult: null });
+    try {
+      const importFns = { contacts: importContacts, leads: importLeads } as const;
+      const result = await importFns[entityType](file, true, {
+        matchKey,
+        mergeStrategy,
+        dryRun: true,
+      });
+      updateImportState(entityType, { dryRunStatus: 'idle', dryRunResult: result });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Preview failed';
+      updateImportState(entityType, { dryRunStatus: 'idle', error: message });
+      showError(message);
+    }
+  };
+
+  const handleMatchKeyChange = (entityType: ImportExportEntityType, matchKey: ImportMatchKey) => {
+    // Reset dry-run when the matching criteria changes so the displayed
+    // counts can't drift out of sync with the picker.
+    updateImportState(entityType, { matchKey, dryRunResult: null });
+  };
+
+  const handleMergeStrategyChange = (entityType: ImportExportEntityType, mergeStrategy: ImportMergeStrategy) => {
+    updateImportState(entityType, { mergeStrategy, dryRunResult: null });
   };
 
   const handleCancel = (entityType: ImportExportEntityType) => {
@@ -600,24 +820,26 @@ export function ImportExportPage() {
       <div>
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">Import Data</h2>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
-          Contacts are auto-created when importing companies via the &quot;Point of Contact&quot; column.
+          Re-importing contacts or leads can match on email, phone, or name + company so an existing record gets filled in instead of duplicated. Contacts are also auto-created when importing companies via the &quot;Point of Contact&quot; column.
         </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {entityConfigs
-            .filter((config) => config.type !== 'contacts')
-            .map((config) => (
-              <ImportSection
-                key={config.type}
-                entityType={config.type}
-                label={config.label}
-                state={importStates[config.type]}
-                contactDecisions={contactDecisions}
-                onContactDecisionChange={handleContactDecisionChange}
-                onFileSelect={(file) => handleFileSelect(config.type, file)}
-                onConfirmImport={() => handleConfirmImport(config.type)}
-                onCancel={() => handleCancel(config.type)}
-              />
-            ))}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {entityConfigs.map((config) => (
+            <ImportSection
+              key={config.type}
+              entityType={config.type}
+              label={config.label}
+              state={importStates[config.type]}
+              contactDecisions={contactDecisions}
+              onContactDecisionChange={handleContactDecisionChange}
+              onFileSelect={(file) => handleFileSelect(config.type, file)}
+              onConfirmImport={() => handleConfirmImport(config.type)}
+              onCancel={() => handleCancel(config.type)}
+              onMatchKeyChange={(k) => handleMatchKeyChange(config.type, k)}
+              onMergeStrategyChange={(s) => handleMergeStrategyChange(config.type, s)}
+              onPreviewMerges={() => handlePreviewMerges(config.type)}
+              supportsDedup={config.type !== 'companies'}
+            />
+          ))}
         </div>
       </div>
     </div>

@@ -6,6 +6,33 @@ export interface DuplicateEntry {
   label: string;
 }
 
+export type ImportMatchKey = 'none' | 'email' | 'phone' | 'name_plus_company';
+export type ImportMergeStrategy = 'preserve_existing' | 'overwrite_all';
+
+export interface ImportFieldChange {
+  field: string;
+  old: unknown;
+  new: unknown;
+}
+
+export interface ImportUpdateRow {
+  row: number;
+  existing_id: number;
+  match_key: ImportMatchKey;
+  match_value: string;
+  merge_strategy: ImportMergeStrategy;
+  field_changes: ImportFieldChange[];
+  noop: boolean;
+}
+
+export interface ImportConflictRow {
+  row: number;
+  match_key: ImportMatchKey;
+  match_value: string;
+  existing_ids: number[];
+  reason: string;
+}
+
 export interface ImportResult {
   success: boolean;
   imported_count: number;
@@ -14,6 +41,10 @@ export interface ImportResult {
   duplicates: DuplicateEntry[];
   contacts_created?: number;
   contacts_linked?: number;
+  updated_count?: number;
+  updates?: ImportUpdateRow[];
+  conflicts?: ImportConflictRow[];
+  dry_run?: boolean;
 }
 
 export interface ContactMatchCandidate {

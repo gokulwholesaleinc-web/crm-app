@@ -1327,6 +1327,370 @@ Loc,Test,loc.monday@test.com,123 Main St
         assert contact.address_line1 == "123 Main St"
 
 
+class TestImportDedupOnImport:
+    """Tests for match_key / merge_strategy / dry_run on contact imports."""
+
+    @pytest.mark.asyncio
+    async def test_phone_match_preserves_existing_fills_blanks(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+    ):
+        """Re-importing on phone fills the missing email without duplicating the row."""
+        seed = """first_name,last_name,email,phone
+Jane,Doe,,(312) 555-9090
+"""
+        files = {"file": ("contacts.csv", seed, "text/csv")}
+        first = await client.post(
+            "/api/import-export/import/contacts",
+            headers=auth_headers,
+            files=files,
+        )
+        assert first.status_code == 200
+        assert first.json()["imported_count"] == 1
+
+        update_csv = """first_name,last_name,email,phone
+Jane,Doe,jane@example.com,3125559090
+"""
+        files = {"file": ("contacts.csv", update_csv, "text/csv")}
+        second = await client.post(
+            "/api/import-export/import/contacts",
+            headers=auth_headers,
+            files=files,
+            data={"match_key": "phone", "merge_strategy": "preserve_existing"},
+        )
+        assert second.status_code == 200
+        body = second.json()
+        assert body["imported_count"] == 0
+        assert body["updated_count"] == 1
+        assert len(body["updates"]) == 1
+        assert body["dry_run"] is False
+        update = body["updates"][0]
+        assert update["match_key"] == "phone"
+        fields_changed = {c["field"] for c in update["field_changes"]}
+        assert "email" in fields_changed
+
+        result = await db_session.execute(
+            select(Contact).where(Contact.first_name == "Jane", Contact.last_name == "Doe")
+        )
+        rows = result.scalars().all()
+        assert len(rows) == 1
+        assert rows[0].email == "jane@example.com"
+
+    @pytest.mark.asyncio
+    async def test_preserve_existing_keeps_non_blank_fields(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+    ):
+        """An existing populated field is not overwritten by preserve_existing."""
+        seed = """first_name,last_name,email,phone,city
+Lucia,Park,lucia@old.example,3125550000,Chicago
+"""
+        await client.post(
+            "/api/import-export/import/contacts",
+            headers=auth_headers,
+            files={"file": ("contacts.csv", seed, "text/csv")},
+        )
+
+        clobber = """first_name,last_name,email,phone,city
+Lucia,Park,lucia@new.example,3125550000,Naperville
+"""
+        resp = await client.post(
+            "/api/import-export/import/contacts",
+            headers=auth_headers,
+            files={"file": ("contacts.csv", clobber, "text/csv")},
+            data={"match_key": "phone", "merge_strategy": "preserve_existing"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["updated_count"] == 1
+        update = resp.json()["updates"][0]
+        fields_changed = {c["field"] for c in update["field_changes"]}
+        assert "email" not in fields_changed
+        assert "city" not in fields_changed
+
+        result = await db_session.execute(
+            select(Contact).where(Contact.first_name == "Lucia", Contact.last_name == "Park")
+        )
+        contact = result.scalar_one()
+        assert contact.email == "lucia@old.example"
+        assert contact.city == "Chicago"
+
+    @pytest.mark.asyncio
+    async def test_overwrite_all_replaces_fields(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+    ):
+        """overwrite_all replaces populated fields with CSV values."""
+        seed = """first_name,last_name,email,phone,city
+Marc,Hahn,old@example.com,3125551111,Chicago
+"""
+        await client.post(
+            "/api/import-export/import/contacts",
+            headers=auth_headers,
+            files={"file": ("contacts.csv", seed, "text/csv")},
+        )
+
+        update_csv = """first_name,last_name,email,phone,city
+Marc,Hahn,new@example.com,3125551111,Naperville
+"""
+        resp = await client.post(
+            "/api/import-export/import/contacts",
+            headers=auth_headers,
+            files={"file": ("contacts.csv", update_csv, "text/csv")},
+            data={"match_key": "phone", "merge_strategy": "overwrite_all"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["updated_count"] == 1
+        update = body["updates"][0]
+        fields_changed = {c["field"] for c in update["field_changes"]}
+        assert "email" in fields_changed
+        assert "city" in fields_changed
+
+        result = await db_session.execute(
+            select(Contact).where(Contact.first_name == "Marc", Contact.last_name == "Hahn")
+        )
+        contact = result.scalar_one()
+        assert contact.email == "new@example.com"
+        assert contact.city == "Naperville"
+
+    @pytest.mark.asyncio
+    async def test_dry_run_makes_no_changes(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+    ):
+        """dry_run reports updates but doesn't touch the DB."""
+        seed = """first_name,last_name,email,phone
+Owen,Tate,,3125552222
+"""
+        await client.post(
+            "/api/import-export/import/contacts",
+            headers=auth_headers,
+            files={"file": ("contacts.csv", seed, "text/csv")},
+        )
+
+        upload = """first_name,last_name,email,phone
+Owen,Tate,owen@example.com,3125552222
+New,Lead,new@example.com,4445559999
+"""
+        resp = await client.post(
+            "/api/import-export/import/contacts",
+            headers=auth_headers,
+            files={"file": ("contacts.csv", upload, "text/csv")},
+            data={
+                "match_key": "phone",
+                "merge_strategy": "preserve_existing",
+                "dry_run": "true",
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["dry_run"] is True
+        assert body["updated_count"] == 1
+        assert body["imported_count"] == 1
+        assert len(body["updates"]) == 1
+
+        result = await db_session.execute(select(Contact))
+        all_contacts = result.scalars().all()
+        assert len(all_contacts) == 1
+        assert all_contacts[0].email is None
+
+    @pytest.mark.asyncio
+    async def test_conflict_when_two_existing_rows_match(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """If the match key resolves to >1 existing rows the CSV row is a conflict."""
+        from src.contacts.models import Contact as ContactModel
+        db_session.add(ContactModel(
+            first_name="One", last_name="Same", phone="3125558888",
+            owner_id=test_user.id, created_by_id=test_user.id,
+        ))
+        db_session.add(ContactModel(
+            first_name="Two", last_name="Same", phone="3125558888",
+            owner_id=test_user.id, created_by_id=test_user.id,
+        ))
+        await db_session.flush()
+
+        upload = """first_name,last_name,email,phone
+Three,Same,three@example.com,3125558888
+"""
+        resp = await client.post(
+            "/api/import-export/import/contacts",
+            headers=auth_headers,
+            files={"file": ("contacts.csv", upload, "text/csv")},
+            data={"match_key": "phone", "merge_strategy": "preserve_existing"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["imported_count"] == 0
+        assert body["updated_count"] == 0
+        assert len(body["conflicts"]) == 1
+        conflict = body["conflicts"][0]
+        assert conflict["match_key"] == "phone"
+        assert len(conflict["existing_ids"]) == 2
+
+    @pytest.mark.asyncio
+    async def test_match_key_none_keeps_legacy_email_skip(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+    ):
+        """With match_key='none' the legacy email-skip dedup still fires."""
+        seed = """first_name,last_name,email
+Quinn,Liu,quinn@example.com
+"""
+        await client.post(
+            "/api/import-export/import/contacts",
+            headers=auth_headers,
+            files={"file": ("contacts.csv", seed, "text/csv")},
+        )
+
+        upload = """first_name,last_name,email,city
+Quinn,Liu,quinn@example.com,Evanston
+"""
+        resp = await client.post(
+            "/api/import-export/import/contacts",
+            headers=auth_headers,
+            files={"file": ("contacts.csv", upload, "text/csv")},
+        )
+        body = resp.json()
+        assert body["imported_count"] == 0
+        assert body["duplicates_skipped"] == 1
+        assert body["updated_count"] == 0
+
+        result = await db_session.execute(select(Contact).where(Contact.first_name == "Quinn"))
+        contact = result.scalar_one()
+        assert contact.city is None
+
+    @pytest.mark.asyncio
+    async def test_invalid_match_key_returns_400(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+    ):
+        csv_content = "first_name,last_name\nA,B\n"
+        resp = await client.post(
+            "/api/import-export/import/contacts",
+            headers=auth_headers,
+            files={"file": ("contacts.csv", csv_content, "text/csv")},
+            data={"match_key": "first_name"},
+        )
+        assert resp.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_name_plus_company_matches_same_company(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """Contacts with the same first+last under the same company merge; different company stays separate."""
+        from src.companies.models import Company as CompanyModel
+        from src.contacts.models import Contact as ContactModel
+
+        co_a = CompanyModel(name="Acme Co", owner_id=test_user.id, created_by_id=test_user.id)
+        co_b = CompanyModel(name="Beta Inc", owner_id=test_user.id, created_by_id=test_user.id)
+        db_session.add_all([co_a, co_b])
+        await db_session.flush()
+
+        # Seed: Sam Patel at Acme without email.
+        db_session.add(ContactModel(
+            first_name="Sam", last_name="Patel", company_id=co_a.id,
+            owner_id=test_user.id, created_by_id=test_user.id,
+        ))
+        await db_session.flush()
+
+        # Re-import: same Sam Patel at Acme with email filled, plus a
+        # second Sam Patel at Beta (different company) that should NOT
+        # match the existing row.
+        upload = f"""first_name,last_name,email,company_id
+Sam,Patel,sam@acme.example,{co_a.id}
+Sam,Patel,sam@beta.example,{co_b.id}
+"""
+        resp = await client.post(
+            "/api/import-export/import/contacts",
+            headers=auth_headers,
+            files={"file": ("contacts.csv", upload, "text/csv")},
+            data={"match_key": "name_plus_company", "merge_strategy": "preserve_existing"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["imported_count"] == 1  # the Beta Sam was new
+        assert body["updated_count"] == 1   # the Acme Sam was filled in
+
+        result = await db_session.execute(
+            select(ContactModel).where(ContactModel.first_name == "Sam", ContactModel.last_name == "Patel")
+        )
+        rows = result.scalars().all()
+        assert len(rows) == 2
+        by_company = {r.company_id: r.email for r in rows}
+        assert by_company[co_a.id] == "sam@acme.example"
+        assert by_company[co_b.id] == "sam@beta.example"
+
+    @pytest.mark.asyncio
+    async def test_soft_deleted_row_is_not_a_match_target(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """A soft-deleted contact must not silently absorb an import row."""
+        from datetime import datetime, timezone
+        from src.contacts.models import Contact as ContactModel
+
+        contact = ContactModel(
+            first_name="Erika",
+            last_name="Vance",
+            phone="3125557777",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(contact)
+        await db_session.flush()
+        # Soft-delete it (mimics the merge path).
+        contact.deleted_at = datetime.now(timezone.utc)
+        await db_session.flush()
+
+        upload = """first_name,last_name,email,phone
+Erika,Vance,erika@example.com,3125557777
+"""
+        resp = await client.post(
+            "/api/import-export/import/contacts",
+            headers=auth_headers,
+            files={"file": ("contacts.csv", upload, "text/csv")},
+            data={"match_key": "phone", "merge_strategy": "preserve_existing"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        # The CSV row inserts as new — the soft-deleted contact is invisible to dedup.
+        assert body["imported_count"] == 1
+        assert body["updated_count"] == 0
+
+        result = await db_session.execute(
+            select(ContactModel).where(
+                ContactModel.first_name == "Erika",
+                ContactModel.deleted_at.is_(None),
+            )
+        )
+        live = result.scalars().all()
+        assert len(live) == 1
+        assert live[0].email == "erika@example.com"
+
+
 class TestSplitFullName:
     """Unit tests for _split_full_name helper."""
 
