@@ -53,6 +53,7 @@ from src.proposals.schemas import (
     ProposalUpdate,
 )
 from src.proposals.service import ProposalService, ProposalTemplateService
+from src.proposals.refresh import refresh_proposal_from_quote
 
 logger = logging.getLogger(__name__)
 
@@ -801,6 +802,53 @@ async def retry_proposal_billing(
     with value_error_as_400():
         proposal = await service.retry_billing(proposal)
     return ProposalResponse.model_validate(proposal)
+
+
+@router.post("/{proposal_id}/refresh-from-quote", response_model=ProposalResponse)
+async def refresh_proposal_from_quote_endpoint(
+    proposal_id: int,
+    request: Request,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Sync proposal billing fields (amount, currency, payment_type, recurring) from its linked quote.
+
+    Refuses if the proposal is locked (signed/accepted/awaiting_payment/paid)
+    or has no quote link.
+    """
+    service = ProposalService(db)
+    proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
+    check_ownership(proposal, current_user, EntityNames.PROPOSAL)
+
+    old_data = {
+        "amount": proposal.amount,
+        "currency": proposal.currency,
+        "payment_type": proposal.payment_type,
+        "recurring_interval": proposal.recurring_interval,
+        "recurring_interval_count": proposal.recurring_interval_count,
+    }
+
+    try:
+        updated = await refresh_proposal_from_quote(db, proposal)
+    except LookupError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    new_data = {
+        "amount": updated.amount,
+        "currency": updated.currency,
+        "payment_type": updated.payment_type,
+        "recurring_interval": updated.recurring_interval,
+        "recurring_interval_count": updated.recurring_interval_count,
+    }
+    ip_address = get_client_ip(request)
+    await audit_entity_update(
+        db, "proposal", updated.id, current_user.id, old_data, new_data, ip_address
+    )
+    await db.commit()
+    await db.refresh(updated)
+    return ProposalResponse.model_validate(updated)
 
 
 @router.post("/{proposal_id}/resend-payment-link")
