@@ -1,13 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderWithProviders, screen, waitFor, fireEvent } from '../../../test-utils/renderWithProviders';
 import { OnboardingLinkGenerator } from './OnboardingLinkGenerator';
-import type { StripeCustomer } from '../../../types/payments';
+import type { StripeCustomer, StripeCustomerListResponse } from '../../../types/payments';
 
-type StripeCustomersResult = { data: { items: StripeCustomer[] } | undefined; isLoading: boolean };
+type StripeCustomersResult = { data: StripeCustomerListResponse | undefined; isLoading: boolean };
+
+const emptyCustomerList = (): StripeCustomerListResponse => ({
+  items: [], total: 0, page: 1, page_size: 1, pages: 0,
+});
+const customerListOf = (...customers: StripeCustomer[]): StripeCustomerListResponse => ({
+  items: customers, total: customers.length, page: 1, page_size: 1, pages: 1,
+});
 
 const linkMutateAsync = vi.fn();
 let mockIsPending = false;
-const mockStripeCustomers = vi.fn<[], StripeCustomersResult>(() => ({ data: { items: [] }, isLoading: false }));
+const mockStripeCustomers = vi.fn<[], StripeCustomersResult>(() => ({ data: emptyCustomerList(), isLoading: false }));
 
 vi.mock('../../../hooks/usePayments', () => ({
   useCreateOnboardingLink: () => ({ mutateAsync: linkMutateAsync, isPending: mockIsPending }),
@@ -22,7 +29,7 @@ vi.mock('../../../utils/toast', () => ({
 beforeEach(() => {
   vi.clearAllMocks();
   mockIsPending = false;
-  mockStripeCustomers.mockReturnValue({ data: { items: [] }, isLoading: false });
+  mockStripeCustomers.mockReturnValue({ data: emptyCustomerList(), isLoading: false });
   Object.assign(navigator, {
     clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
   });
@@ -40,7 +47,7 @@ describe('OnboardingLinkGenerator', () => {
       id: 1, stripe_customer_id: 'cus_test', email: null, name: null,
       contact_id: 7, company_id: null, created_at: '', updated_at: '',
     };
-    mockStripeCustomers.mockReturnValue({ data: { items: [customer] }, isLoading: false });
+    mockStripeCustomers.mockReturnValue({ data: customerListOf(customer), isLoading: false });
 
     renderWithProviders(<OnboardingLinkGenerator contactId={7} />);
     expect(screen.getByText(/payment method on file/i)).toBeInTheDocument();
@@ -51,7 +58,7 @@ describe('OnboardingLinkGenerator', () => {
       id: 2, stripe_customer_id: 'cus_test2', email: null, name: null,
       contact_id: null, company_id: 99, created_at: '', updated_at: '',
     };
-    mockStripeCustomers.mockReturnValue({ data: { items: [customer] }, isLoading: false });
+    mockStripeCustomers.mockReturnValue({ data: customerListOf(customer), isLoading: false });
 
     renderWithProviders(<OnboardingLinkGenerator companyId={99} />);
     expect(screen.getByText(/payment method on file/i)).toBeInTheDocument();
@@ -83,8 +90,20 @@ describe('OnboardingLinkGenerator', () => {
     );
   });
 
-  it('calls showError when mutation rejects', async () => {
-    linkMutateAsync.mockRejectedValueOnce(new Error('stripe error'));
+  it('surfaces the backend reason via showError when mutation rejects with a detail', async () => {
+    linkMutateAsync.mockRejectedValueOnce({ detail: 'Stripe is down', status_code: 502 });
+
+    renderWithProviders(<OnboardingLinkGenerator contactId={3} />);
+    fireEvent.click(screen.getByRole('button', { name: /generate payment setup link/i }));
+
+    const toast = await import('../../../utils/toast');
+    await waitFor(() =>
+      expect(toast.showError).toHaveBeenCalledWith('Stripe is down')
+    );
+  });
+
+  it('falls back to a generic message when the rejection has no extractable detail', async () => {
+    linkMutateAsync.mockRejectedValueOnce({});
 
     renderWithProviders(<OnboardingLinkGenerator contactId={3} />);
     fireEvent.click(screen.getByRole('button', { name: /generate payment setup link/i }));
