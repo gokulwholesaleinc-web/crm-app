@@ -90,13 +90,13 @@ class TestCampaignExecution:
         return campaign, template, template2
 
     async def test_execute_campaign_returns_step_info(
-        self, client: AsyncClient, auth_headers: dict, campaign_setup
+        self, client: AsyncClient, admin_auth_headers: dict, campaign_setup
     ):
         """Should return multi-step execution info."""
         campaign, _, _ = campaign_setup
         response = await client.post(
             f"/api/campaigns/{campaign.id}/execute",
-            headers=auth_headers,
+            headers=admin_auth_headers,
         )
         assert response.status_code == 200
         data = response.json()
@@ -104,7 +104,7 @@ class TestCampaignExecution:
         assert data["status"] == "active"
 
     async def test_execute_campaign_no_steps(
-        self, client: AsyncClient, auth_headers: dict, db_session: AsyncSession, test_user: User
+        self, client: AsyncClient, admin_auth_headers: dict, db_session: AsyncSession, test_user: User
     ):
         """Should return message when no steps are configured."""
         campaign = Campaign(
@@ -118,19 +118,19 @@ class TestCampaignExecution:
 
         response = await client.post(
             f"/api/campaigns/{campaign.id}/execute",
-            headers=auth_headers,
+            headers=admin_auth_headers,
         )
         assert response.status_code == 200
         assert "No steps" in response.json()["message"]
 
     async def test_campaign_response_includes_new_fields(
-        self, client: AsyncClient, auth_headers: dict, campaign_setup
+        self, client: AsyncClient, admin_auth_headers: dict, campaign_setup
     ):
         """Should include current_step, next_step_at, is_executing in response."""
         campaign, _, _ = campaign_setup
         response = await client.get(
             f"/api/campaigns/{campaign.id}",
-            headers=auth_headers,
+            headers=admin_auth_headers,
         )
         assert response.status_code == 200
         data = response.json()
@@ -545,12 +545,12 @@ class TestScheduledReportDelivery:
         assert "&lt;b&gt;Weekly" in body
 
     async def test_schedule_field_in_report_response(
-        self, client: AsyncClient, auth_headers: dict, db_session: AsyncSession, test_user: User
+        self, client: AsyncClient, admin_auth_headers: dict, db_session: AsyncSession, test_user: User
     ):
         """Should include schedule and recipients in saved report response."""
         response = await client.post(
             "/api/reports",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "name": "Scheduled Test",
                 "entity_type": "leads",
