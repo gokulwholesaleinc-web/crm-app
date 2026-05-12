@@ -26,8 +26,21 @@ card has real data to display and the audit trail is durable:
 already coalesces `signer_name ?? signed_by_name`, so renaming is
 not required to fix the audit card and would balloon the diff.
 
-Postgres ALTER COLUMN RENAME is atomic and metadata-only on a row
-count this small, so no online-migration dance required.
+Deploy notes:
+  - Postgres ALTER COLUMN RENAME is metadata-only and the lock is
+    microsecond-fast on a table this small. The rename itself isn't
+    a row-rewrite hazard.
+  - It is NOT strictly zero-downtime in a rolling deploy though:
+    during the swap, old backend pods are still issuing
+    ``SELECT … signed_ip, signed_ua …`` via SQLAlchemy. Those
+    queries fail with "column does not exist" until the old pod
+    drains. Practical impact on the single-instance Railway deploy
+    is a short blip; flagging so a future multi-instance topology
+    knows to switch to add-column + dual-write + drop instead.
+  - Downgrade is LOSSY for ``signer_email``: any signature captured
+    while 031 was live is dropped by the column-drop, with no
+    archive table. Take a ``pg_dump`` of ``contracts.signer_email``
+    before downgrading if the captured audit trail still matters.
 """
 
 import sqlalchemy as sa
@@ -41,19 +54,17 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # IF EXISTS so a re-run after a partial failure doesn't crash —
-    # mirrors the defensive style in 022_contracts_esign.py.
+    # Postgres does not support ``RENAME COLUMN ... IF EXISTS`` on
+    # ALTER TABLE — only the table-level ``ALTER TABLE IF EXISTS``
+    # variant takes IF EXISTS. So a re-run after a partial failure
+    # (first rename committed, second crashed) requires manual
+    # unwind. The contracts table is small enough that this hasn't
+    # been worth the DO-block dance — but don't pretend otherwise.
     op.execute(
-        """
-        ALTER TABLE contracts
-            RENAME COLUMN signed_ip TO signer_ip
-        """
+        "ALTER TABLE contracts RENAME COLUMN signed_ip TO signer_ip"
     )
     op.execute(
-        """
-        ALTER TABLE contracts
-            RENAME COLUMN signed_ua TO signer_user_agent
-        """
+        "ALTER TABLE contracts RENAME COLUMN signed_ua TO signer_user_agent"
     )
     op.add_column(
         "contracts",
@@ -64,14 +75,8 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_column("contracts", "signer_email")
     op.execute(
-        """
-        ALTER TABLE contracts
-            RENAME COLUMN signer_user_agent TO signed_ua
-        """
+        "ALTER TABLE contracts RENAME COLUMN signer_user_agent TO signed_ua"
     )
     op.execute(
-        """
-        ALTER TABLE contracts
-            RENAME COLUMN signer_ip TO signed_ip
-        """
+        "ALTER TABLE contracts RENAME COLUMN signer_ip TO signed_ip"
     )
