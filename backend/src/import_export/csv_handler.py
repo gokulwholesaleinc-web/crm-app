@@ -2,16 +2,18 @@
 
 import csv
 import io
+import logging
 from collections.abc import Sequence
 from datetime import datetime
 from difflib import SequenceMatcher
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.companies.models import Company
 from src.contacts.models import Contact
+from src.dedup.service import normalize_phone
 from src.import_export.csv_column_mapper import (
     apply_monday_status,
     detect_linkedin_format,
@@ -26,9 +28,27 @@ from src.import_export.csv_column_mapper import (
 )
 from src.leads.models import Lead
 
+logger = logging.getLogger(__name__)
+
+MatchKey = Literal["none", "email", "phone", "name_plus_company"]
+MergeStrategy = Literal["preserve_existing", "overwrite_all"]
+ALLOWED_MATCH_KEYS: tuple[str, ...] = ("none", "email", "phone", "name_plus_company")
+ALLOWED_MERGE_STRATEGIES: tuple[str, ...] = ("preserve_existing", "overwrite_all")
+
+# Fields the import pipeline must never overwrite on an existing row — the
+# AuditableMixin owns created_at / created_by_id, and ownership is set by
+# explicit reassign flows, never by an upload.
+PROTECTED_FIELDS_ON_MERGE: frozenset[str] = frozenset(
+    {"id", "created_at", "created_by_id", "owner_id", "deleted_at", "merged_into_id"}
+)
+
 # Re-export module-level helpers so callers that imported them from here still work
 __all__ = [
     "CSVHandler",
+    "MatchKey",
+    "MergeStrategy",
+    "ALLOWED_MATCH_KEYS",
+    "ALLOWED_MERGE_STRATEGIES",
     "map_columns",
     "find_name_column",
     "find_location_column",
@@ -40,6 +60,33 @@ __all__ = [
     "split_location",
     "normalize_header",
 ]
+
+
+def _format_match_value(value: Any) -> str:
+    """Serialize a match-index key for inclusion in API responses."""
+    if isinstance(value, tuple):
+        # name_plus_company: keep human-readable; the company_id is just an
+        # int marker and a missing one shows as "—" so the wizard can call
+        # out rows without company context.
+        first, last, company_id, company_name = value
+        bits = [f"{first} {last}".strip() or "—"]
+        if company_name:
+            bits.append(company_name)
+        elif company_id:
+            bits.append(f"company#{company_id}")
+        else:
+            bits.append("—")
+        return " · ".join(bits)
+    return str(value) if value is not None else ""
+
+
+def _entity_type_for(entity_class: type) -> str:
+    """Map ORM class to the entity_type slug AuditService expects."""
+    return {
+        Contact: "contacts",
+        Company: "companies",
+        Lead: "leads",
+    }.get(entity_class, getattr(entity_class, "__tablename__", entity_class.__name__.lower()))
 
 # Legacy private-name aliases — tests/unit/test_import_export.py and
 # tests/unit/test_linkedin_campaigns.py still import these
@@ -115,8 +162,25 @@ class CSVHandler:
     # Import
     # ------------------------------------------------------------------
 
-    async def import_contacts(self, csv_content: str, user_id: int, skip_errors: bool = True) -> dict[str, Any]:
-        return await self._import_entities(csv_content, Contact, self.CONTACT_FIELDS, user_id, skip_errors)
+    async def import_contacts(
+        self,
+        csv_content: str,
+        user_id: int,
+        skip_errors: bool = True,
+        match_key: str = "none",
+        merge_strategy: str = "preserve_existing",
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        return await self._import_entities(
+            csv_content,
+            Contact,
+            self.CONTACT_FIELDS,
+            user_id,
+            skip_errors,
+            match_key=match_key,
+            merge_strategy=merge_strategy,
+            dry_run=dry_run,
+        )
 
     async def import_companies(
         self,
@@ -259,8 +323,25 @@ class CSVHandler:
             "duplicates": duplicates,
         }
 
-    async def import_leads(self, csv_content: str, user_id: int, skip_errors: bool = True) -> dict[str, Any]:
-        return await self._import_entities(csv_content, Lead, self.LEAD_FIELDS, user_id, skip_errors)
+    async def import_leads(
+        self,
+        csv_content: str,
+        user_id: int,
+        skip_errors: bool = True,
+        match_key: str = "none",
+        merge_strategy: str = "preserve_existing",
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        return await self._import_entities(
+            csv_content,
+            Lead,
+            self.LEAD_FIELDS,
+            user_id,
+            skip_errors,
+            match_key=match_key,
+            merge_strategy=merge_strategy,
+            dry_run=dry_run,
+        )
 
     # ------------------------------------------------------------------
     # Preview (no DB writes)
@@ -273,6 +354,9 @@ class CSVHandler:
         column_mapping: dict[str, str],
         user_id: int,
         skip_errors: bool = True,
+        match_key: str = "none",
+        merge_strategy: str = "preserve_existing",
+        dry_run: bool = False,
     ) -> dict[str, Any]:
         """Import entities using user-specified column mapping."""
         entity_class = self._get_model(entity_type)
@@ -284,7 +368,17 @@ class CSVHandler:
 
         active_mapping = {k: v for k, v in column_mapping.items() if v and v != "skip"}
 
-        return await self._import_entities(csv_content, entity_class, fields, user_id, skip_errors, active_mapping)
+        return await self._import_entities(
+            csv_content,
+            entity_class,
+            fields,
+            user_id,
+            skip_errors,
+            active_mapping,
+            match_key=match_key,
+            merge_strategy=merge_strategy,
+            dry_run=dry_run,
+        )
 
     async def preview_csv(self, entity_type: str, csv_content: str) -> dict[str, Any]:
         """Preview a CSV: show column mapping, first rows, and validation warnings."""
@@ -440,6 +534,122 @@ class CSVHandler:
         )
         return {row[0] for row in result.all()}
 
+    @staticmethod
+    def _row_match_value(entity_data: dict[str, Any], match_key: str) -> str | tuple | None:
+        """Pull the comparable match value out of a parsed CSV row.
+
+        Returns ``None`` when the row has no usable value for the chosen
+        match key — the import path should treat that row as a brand new
+        record rather than guessing.
+        """
+        if match_key == "email":
+            email = entity_data.get("email")
+            return email.lower().strip() if isinstance(email, str) and email.strip() else None
+        if match_key == "phone":
+            phone = entity_data.get("phone")
+            normalized = normalize_phone(phone) if isinstance(phone, str) else ""
+            return normalized or None
+        if match_key == "name_plus_company":
+            first = (entity_data.get("first_name") or "").strip().lower()
+            last = (entity_data.get("last_name") or "").strip().lower()
+            if not (first and last):
+                return None
+            company_id = entity_data.get("company_id")
+            company_name = (entity_data.get("company_name") or "").strip().lower()
+            return (first, last, company_id, company_name or None)
+        return None
+
+    @staticmethod
+    def _entity_match_value(entity: Any, match_key: str) -> str | tuple | None:
+        """Same as ``_row_match_value`` but reads from a hydrated ORM entity."""
+        if match_key == "email":
+            email = getattr(entity, "email", None)
+            return email.lower().strip() if isinstance(email, str) and email.strip() else None
+        if match_key == "phone":
+            phone = getattr(entity, "phone", None)
+            normalized = normalize_phone(phone) if isinstance(phone, str) else ""
+            return normalized or None
+        if match_key == "name_plus_company":
+            first = (getattr(entity, "first_name", None) or "").strip().lower()
+            last = (getattr(entity, "last_name", None) or "").strip().lower()
+            if not (first and last):
+                return None
+            company_id = getattr(entity, "company_id", None)
+            company_name = (getattr(entity, "company_name", None) or "").strip().lower()
+            return (first, last, company_id, company_name or None)
+        return None
+
+    async def _build_match_index(
+        self, entity_class: type, match_key: str
+    ) -> dict[Any, list[int]]:
+        """Build a single-query lookup index of existing rows by match key.
+
+        Maps the comparable key (lower email, normalized phone, or composite
+        tuple) to the list of existing entity ids that produce that key. We
+        return *lists* rather than ids so the caller can flag conflict rows
+        (one CSV row landing on multiple existing records) instead of
+        silently merging into the first match.
+
+        Soft-deleted rows and merged-away rows are filtered out — those
+        records still exist for AR-ledger / audit-history reasons (see the
+        ``deleted_at IS NULL`` invariant documented on
+        :class:`src.contacts.models.Contact`) but they MUST NOT be the
+        target of a re-import update or the merged-away row would silently
+        come back to life. Mirrored on the per-row re-fetch in
+        :meth:`_merge_into_existing` as a belt-and-suspenders guard.
+        """
+        if match_key == "none":
+            return {}
+        query = select(entity_class)
+        if hasattr(entity_class, "deleted_at"):
+            query = query.where(entity_class.deleted_at.is_(None))
+        if hasattr(entity_class, "merged_into_id"):
+            query = query.where(entity_class.merged_into_id.is_(None))
+        result = await self.db.execute(query)
+        index: dict[Any, list[int]] = {}
+        for entity in result.scalars().all():
+            key = self._entity_match_value(entity, match_key)
+            if key is None:
+                continue
+            index.setdefault(key, []).append(entity.id)
+        return index
+
+    @staticmethod
+    def _diff_fields(
+        existing: Any,
+        new_data: dict[str, Any],
+        strategy: str,
+    ) -> list[dict[str, Any]]:
+        """Compute the list of field changes a merge would apply.
+
+        Each diff dict is shaped to match :class:`src.audit.service.AuditService`
+        ``log_change`` expectations (``field`` / ``old`` / ``new``) so the dry-
+        run preview and the executed merge produce identical change records.
+        """
+        diffs: list[dict[str, Any]] = []
+        for field, new_value in new_data.items():
+            if field in PROTECTED_FIELDS_ON_MERGE:
+                continue
+            old_value = getattr(existing, field, None)
+            if strategy == "preserve_existing":
+                # Only fill blanks. None, "" and 0/0.0 are treated as
+                # blank — the CSV importer never writes a zero into a
+                # numeric field unless it parsed something, and a literal
+                # 0 in budget_amount is conceptually empty.
+                blank = old_value is None or (isinstance(old_value, str) and not old_value.strip())
+                if not blank:
+                    continue
+            if old_value == new_value:
+                continue
+            diffs.append({"field": field, "old": old_value, "new": new_value})
+        return diffs
+
+    @staticmethod
+    def _apply_diffs(existing: Any, diffs: list[dict[str, Any]]) -> None:
+        """Apply a precomputed diff list to an entity in-place."""
+        for diff in diffs:
+            setattr(existing, diff["field"], diff["new"])
+
     def _parse_value(self, field: str, raw: str) -> Any:
         value = raw.strip()
         if not value:
@@ -458,7 +668,17 @@ class CSVHandler:
         user_id: int,
         skip_errors: bool = True,
         column_mapping: dict[str, str] | None = None,
+        match_key: str = "none",
+        merge_strategy: str = "preserve_existing",
+        dry_run: bool = False,
     ) -> dict[str, Any]:
+        if match_key not in ALLOWED_MATCH_KEYS:
+            raise ValueError(f"Invalid match_key '{match_key}'. Allowed: {ALLOWED_MATCH_KEYS}")
+        if merge_strategy not in ALLOWED_MERGE_STRATEGIES:
+            raise ValueError(
+                f"Invalid merge_strategy '{merge_strategy}'. Allowed: {ALLOWED_MERGE_STRATEGIES}"
+            )
+
         reader = csv.DictReader(io.StringIO(csv_content))
         csv_headers = reader.fieldnames or []
 
@@ -470,9 +690,16 @@ class CSVHandler:
         is_linkedin = detect_linkedin_format(csv_headers)
 
         existing_emails = await self._get_existing_emails(entity_class)
+        match_index = await self._build_match_index(entity_class, match_key)
         seen_emails: set[str] = set()
+        # Track which CSV row claimed which existing id so two rows can't
+        # both try to merge into the same existing record on this pass.
+        claimed_ids: set[int] = set()
 
         imported = 0
+        updated_count = 0
+        updates: list[dict[str, Any]] = []
+        conflicts: list[dict[str, Any]] = []
         errors = []
         duplicates_skipped = 0
         duplicates = []
@@ -507,8 +734,54 @@ class CSVHandler:
                 if is_linkedin and hasattr(entity_class, "source_details"):
                     entity_data.setdefault("source_details", "linkedin_sales_navigator")
 
+                # Reconcile against existing rows if a match_key was chosen.
+                match_value = self._row_match_value(entity_data, match_key) if match_key != "none" else None
+                if match_value is not None:
+                    candidate_ids = match_index.get(match_value, [])
+                    if len(candidate_ids) > 1:
+                        conflicts.append({
+                            "row": row_num,
+                            "match_key": match_key,
+                            "match_value": _format_match_value(match_value),
+                            "existing_ids": list(candidate_ids),
+                            "reason": "Multiple existing records match this key",
+                        })
+                        continue
+                    if len(candidate_ids) == 1:
+                        existing_id = candidate_ids[0]
+                        if existing_id in claimed_ids:
+                            conflicts.append({
+                                "row": row_num,
+                                "match_key": match_key,
+                                "match_value": _format_match_value(match_value),
+                                "existing_ids": [existing_id],
+                                "reason": "Another row in this file already matched this record",
+                            })
+                            continue
+                        claimed_ids.add(existing_id)
+                        update_result, conflict = await self._merge_into_existing(
+                            entity_class=entity_class,
+                            existing_id=existing_id,
+                            entity_data=entity_data,
+                            row_num=row_num,
+                            match_key=match_key,
+                            match_value=match_value,
+                            merge_strategy=merge_strategy,
+                            user_id=user_id,
+                            dry_run=dry_run,
+                        )
+                        if conflict is not None:
+                            conflicts.append(conflict)
+                        elif update_result is not None:
+                            updates.append(update_result)
+                            updated_count += 1
+                        continue
+
+                # Legacy email-skip dedup only fires when no match key is
+                # set — with a match key we already covered the email path
+                # via the reconcile branch above.
                 email = (entity_data.get("email") or "").lower()
-                if email:
+                if match_key == "none" and email:
                     if email in existing_emails or email in seen_emails:
                         duplicates_skipped += 1
                         first = entity_data.get("first_name") or ""
@@ -518,6 +791,10 @@ class CSVHandler:
                         duplicates.append({"row": row_num, "email": email, "label": label})
                         continue
                     seen_emails.add(email)
+
+                if dry_run:
+                    imported += 1
+                    continue
 
                 entity = entity_class(**entity_data, owner_id=user_id, created_by_id=user_id)
 
@@ -536,10 +813,23 @@ class CSVHandler:
             except Exception as e:
                 errors.append(f"Row {row_num}: {e!s}")
                 if not skip_errors:
-                    return {"imported": 0, "errors": errors, "success": False, "duplicates_skipped": duplicates_skipped}
+                    return {
+                        "imported": 0,
+                        "errors": errors,
+                        "success": False,
+                        "duplicates_skipped": duplicates_skipped,
+                        "updated_count": updated_count,
+                        "updates": updates,
+                        "conflicts": conflicts,
+                    }
 
-        if not skip_errors:
+        if not skip_errors and not dry_run:
             await self.db.flush()
+        # No dry-run rollback: `_merge_into_existing` short-circuits before
+        # mutating any entity when `dry_run=True`, and a rollback here
+        # would also discard unrelated pending state from a future caller
+        # that composes this method with other DB writes in the same
+        # session (FastAPI commits on request exit via `get_db`).
 
         return {
             "imported": imported,
@@ -547,7 +837,99 @@ class CSVHandler:
             "success": True,
             "duplicates_skipped": duplicates_skipped,
             "duplicates": duplicates,
+            "updated_count": updated_count,
+            "updates": updates,
+            "conflicts": conflicts,
+            "dry_run": dry_run,
         }
+
+    async def _merge_into_existing(
+        self,
+        *,
+        entity_class: type,
+        existing_id: int,
+        entity_data: dict[str, Any],
+        row_num: int,
+        match_key: str,
+        match_value: Any,
+        merge_strategy: str,
+        user_id: int,
+        dry_run: bool,
+    ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+        """Merge ``entity_data`` into the existing row identified by ``existing_id``.
+
+        Returns a ``(update, conflict)`` pair so the caller can record the
+        outcome accurately:
+
+        - ``(update, None)`` — merge applied (or planned, in dry-run).
+        - ``(None, conflict)`` — the row vanished between index build and
+          re-fetch (got soft-deleted or merged away mid-import). A real
+          conflict entry lets the user see the row was dropped instead of
+          silently losing it.
+        """
+        query = select(entity_class).where(entity_class.id == existing_id)
+        if hasattr(entity_class, "deleted_at"):
+            query = query.where(entity_class.deleted_at.is_(None))
+        if hasattr(entity_class, "merged_into_id"):
+            query = query.where(entity_class.merged_into_id.is_(None))
+        result = await self.db.execute(query)
+        existing = result.scalar_one_or_none()
+        if existing is None:
+            logger.warning(
+                "import dedup: existing_id=%s vanished or was soft-deleted between index build and merge",
+                existing_id,
+            )
+            return None, {
+                "row": row_num,
+                "match_key": match_key,
+                "match_value": _format_match_value(match_value),
+                "existing_ids": [existing_id],
+                "reason": "Existing record was deleted or merged during import",
+            }
+
+        diffs = self._diff_fields(existing, entity_data, merge_strategy)
+        summary = {
+            "row": row_num,
+            "existing_id": existing_id,
+            "match_key": match_key,
+            "match_value": _format_match_value(match_value),
+            "merge_strategy": merge_strategy,
+            "field_changes": diffs,
+            "noop": len(diffs) == 0,
+        }
+        if dry_run or not diffs:
+            return summary, None
+
+        self._apply_diffs(existing, diffs)
+        existing.updated_by_id = user_id
+
+        # Audit log mirrors what the existing /api/dedup/merge writes, so
+        # an import-time field fill shows up on the entity history page
+        # alongside ordinary edits. Wrap in a SAVEPOINT so an audit-table
+        # failure can't leave the outer session in PendingRollbackError —
+        # a correct merge must survive a flaky audit insert.
+        try:
+            from src.audit.service import AuditService
+            async with self.db.begin_nested():
+                audit = AuditService(self.db)
+                entity_type = _entity_type_for(entity_class)
+                await audit.log_change(
+                    entity_type=entity_type,
+                    entity_id=existing_id,
+                    user_id=user_id,
+                    action="import_merge",
+                    changes=diffs,
+                )
+        except Exception:
+            # Audit failure must not roll back a correct merge. Capture the
+            # traceback so Sentry can pick it up instead of dropping the
+            # context with %s.
+            logger.exception(
+                "import dedup: failed to audit merge for %s id=%s row=%s",
+                entity_class.__name__, existing_id, row_num,
+            )
+
+        return summary, None
 
     def get_template(self, entity_type: str) -> str:
         fields = self._get_fields(entity_type)

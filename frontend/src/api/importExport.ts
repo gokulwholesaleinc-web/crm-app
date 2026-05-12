@@ -4,9 +4,32 @@
  */
 
 import { apiClient } from './client';
-import type { ImportResult, ImportPreview, ImportExportEntityType, BulkUpdateRequest, BulkAssignRequest, BulkOperationResult, ContactDecision } from '../types';
+import type {
+  ImportResult,
+  ImportPreview,
+  ImportExportEntityType,
+  ImportMatchKey,
+  ImportMergeStrategy,
+  BulkUpdateRequest,
+  BulkAssignRequest,
+  BulkOperationResult,
+  ContactDecision,
+} from '../types';
 
 const IMPORT_EXPORT_BASE = '/api/import-export';
+
+export interface ImportDedupOptions {
+  matchKey?: ImportMatchKey;
+  mergeStrategy?: ImportMergeStrategy;
+  dryRun?: boolean;
+}
+
+function appendDedupFields(formData: FormData, opts: ImportDedupOptions | undefined): void {
+  if (!opts) return;
+  if (opts.matchKey && opts.matchKey !== 'none') formData.append('match_key', opts.matchKey);
+  if (opts.mergeStrategy) formData.append('merge_strategy', opts.mergeStrategy);
+  if (opts.dryRun) formData.append('dry_run', 'true');
+}
 
 /**
  * Export contacts as CSV
@@ -43,10 +66,12 @@ export const exportLeads = async (): Promise<Blob> => {
  */
 export const importContacts = async (
   file: File,
-  skipErrors: boolean = true
+  skipErrors: boolean = true,
+  dedup?: ImportDedupOptions,
 ): Promise<ImportResult> => {
   const formData = new FormData();
   formData.append('file', file);
+  appendDedupFields(formData, dedup);
 
   const response = await apiClient.post<ImportResult>(
     `${IMPORT_EXPORT_BASE}/import/contacts`,
@@ -87,10 +112,12 @@ export const importCompanies = async (
  */
 export const importLeads = async (
   file: File,
-  skipErrors: boolean = true
+  skipErrors: boolean = true,
+  dedup?: ImportDedupOptions,
 ): Promise<ImportResult> => {
   const formData = new FormData();
   formData.append('file', file);
+  appendDedupFields(formData, dedup);
 
   const response = await apiClient.post<ImportResult>(
     `${IMPORT_EXPORT_BASE}/import/leads`,

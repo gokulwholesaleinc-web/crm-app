@@ -14,9 +14,35 @@ from src.core.data_scope import DataScope, get_data_scope
 from src.core.permissions import require_manager_or_above
 from src.core.router_utils import CurrentUser, DBSession, raise_bad_request
 from src.import_export.bulk_operations import BulkOperationsHandler
-from src.import_export.csv_handler import CSVHandler
+from src.import_export.csv_handler import (
+    ALLOWED_MATCH_KEYS,
+    ALLOWED_MERGE_STRATEGIES,
+    CSVHandler,
+)
 
 MAX_CSV_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+
+
+def _validate_dedup_args(match_key: str, merge_strategy: str) -> None:
+    if match_key not in ALLOWED_MATCH_KEYS:
+        raise_bad_request(
+            f"Invalid match_key '{match_key}'. Allowed: {', '.join(ALLOWED_MATCH_KEYS)}"
+        )
+    if merge_strategy not in ALLOWED_MERGE_STRATEGIES:
+        raise_bad_request(
+            f"Invalid merge_strategy '{merge_strategy}'. "
+            f"Allowed: {', '.join(ALLOWED_MERGE_STRATEGIES)}"
+        )
+
+
+def _dedup_response_payload(result: dict[str, Any]) -> dict[str, Any]:
+    """Pull the dedup result fields the wizard needs into a flat dict."""
+    return {
+        "updated_count": result.get("updated_count", 0),
+        "updates": result.get("updates", []),
+        "conflicts": result.get("conflicts", []),
+        "dry_run": result.get("dry_run", False),
+    }
 
 
 async def _read_csv_upload(file: UploadFile) -> str:
@@ -117,8 +143,12 @@ async def import_contacts(
     db: DBSession,
     file: UploadFile = File(...),
     skip_errors: bool = True,
+    match_key: str = Form("none"),
+    merge_strategy: str = Form("preserve_existing"),
+    dry_run: bool = Form(False),
 ):
     """Import contacts from CSV file."""
+    _validate_dedup_args(match_key, merge_strategy)
     csv_content = await _read_csv_upload(file)
 
     handler = CSVHandler(db)
@@ -126,6 +156,9 @@ async def import_contacts(
         csv_content=csv_content,
         user_id=current_user.id,
         skip_errors=skip_errors,
+        match_key=match_key,
+        merge_strategy=merge_strategy,
+        dry_run=dry_run,
     )
 
     if not result.get("success"):
@@ -133,7 +166,15 @@ async def import_contacts(
             status_code=HTTPStatus.BAD_REQUEST,
             detail={"imported_count": result.get("imported", 0), "errors": result.get("errors", [])},
         )
-    return {"success": True, "detail": "Import complete", "imported_count": result["imported"], "errors": result.get("errors", []), "duplicates_skipped": result.get("duplicates_skipped", 0), "duplicates": result.get("duplicates", [])}
+    return {
+        "success": True,
+        "detail": "Import complete",
+        "imported_count": result["imported"],
+        "errors": result.get("errors", []),
+        "duplicates_skipped": result.get("duplicates_skipped", 0),
+        "duplicates": result.get("duplicates", []),
+        **_dedup_response_payload(result),
+    }
 
 
 @router.post("/import/companies")
@@ -187,8 +228,12 @@ async def import_leads(
     db: DBSession,
     file: UploadFile = File(...),
     skip_errors: bool = True,
+    match_key: str = Form("none"),
+    merge_strategy: str = Form("preserve_existing"),
+    dry_run: bool = Form(False),
 ):
     """Import leads from CSV file."""
+    _validate_dedup_args(match_key, merge_strategy)
     csv_content = await _read_csv_upload(file)
 
     handler = CSVHandler(db)
@@ -196,6 +241,9 @@ async def import_leads(
         csv_content=csv_content,
         user_id=current_user.id,
         skip_errors=skip_errors,
+        match_key=match_key,
+        merge_strategy=merge_strategy,
+        dry_run=dry_run,
     )
 
     if not result.get("success"):
@@ -203,7 +251,15 @@ async def import_leads(
             status_code=HTTPStatus.BAD_REQUEST,
             detail={"imported_count": result.get("imported", 0), "errors": result.get("errors", [])},
         )
-    return {"success": True, "detail": "Import complete", "imported_count": result["imported"], "errors": result.get("errors", []), "duplicates_skipped": result.get("duplicates_skipped", 0), "duplicates": result.get("duplicates", [])}
+    return {
+        "success": True,
+        "detail": "Import complete",
+        "imported_count": result["imported"],
+        "errors": result.get("errors", []),
+        "duplicates_skipped": result.get("duplicates_skipped", 0),
+        "duplicates": result.get("duplicates", []),
+        **_dedup_response_payload(result),
+    }
 
 
 # Preview endpoint
@@ -258,6 +314,9 @@ async def import_with_mapping(
     file: UploadFile = File(...),
     column_mapping: str = Form(...),
     skip_errors: bool = Form(True),
+    match_key: str = Form("none"),
+    merge_strategy: str = Form("preserve_existing"),
+    dry_run: bool = Form(False),
 ):
     """Import entities using user-specified column mapping.
 
@@ -267,6 +326,7 @@ async def import_with_mapping(
     if entity_type not in ["contacts", "companies", "leads"]:
         raise_bad_request("Invalid entity type. Must be: contacts, companies, or leads")
 
+    _validate_dedup_args(match_key, merge_strategy)
     csv_content = await _read_csv_upload(file)
 
     try:
@@ -282,6 +342,9 @@ async def import_with_mapping(
             column_mapping=mapping,
             user_id=current_user.id,
             skip_errors=skip_errors,
+            match_key=match_key,
+            merge_strategy=merge_strategy,
+            dry_run=dry_run,
         )
     except ValueError as exc:
         raise_bad_request(str(exc))
@@ -297,6 +360,7 @@ async def import_with_mapping(
         "imported_count": result["imported"],
         "errors": result.get("errors", []),
         "duplicates_skipped": result.get("duplicates_skipped", 0),
+        **_dedup_response_payload(result),
     }
 
 
