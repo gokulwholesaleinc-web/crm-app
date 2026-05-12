@@ -257,3 +257,17 @@ export function useCreateFromTemplate() {
     },
   });
 }
+
+/**
+ * Hook to duplicate a proposal as a new draft.
+ */
+export function useDuplicateProposal() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (proposalId: number) => proposalsApi.duplicate(proposalId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: proposalKeys.lists() });
+    },
+  });
+}

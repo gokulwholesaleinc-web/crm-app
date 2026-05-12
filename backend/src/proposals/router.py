@@ -982,6 +982,59 @@ async def accept_proposal(
     return ProposalResponse.model_validate(proposal)
 
 
+@router.post("/{proposal_id}/duplicate", response_model=ProposalResponse, status_code=HTTPStatus.CREATED)
+async def duplicate_proposal(
+    proposal_id: int,
+    request: Request,
+    current_user: CurrentUser,
+    db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
+):
+    """Clone a proposal as a new draft.
+
+    Copies core content + billing fields, appends " (copy)" to the title,
+    and clears all e-sign / Stripe / sent timestamps. The clone is owned
+    by the requesting user.
+    """
+    service = ProposalService(db)
+    proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
+    check_record_access_or_shared(
+        proposal, current_user, data_scope.role_name,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_PROPOSALS),
+    )
+
+    clone_data = ProposalCreate(
+        title=f"{proposal.title} (copy)",
+        content=proposal.content,
+        cover_letter=proposal.cover_letter,
+        executive_summary=proposal.executive_summary,
+        scope_of_work=proposal.scope_of_work,
+        pricing_section=proposal.pricing_section,
+        timeline=proposal.timeline,
+        terms=proposal.terms,
+        valid_until=proposal.valid_until,
+        opportunity_id=proposal.opportunity_id,
+        contact_id=proposal.contact_id,
+        company_id=proposal.company_id,
+        quote_id=proposal.quote_id,
+        payment_type=proposal.payment_type,
+        recurring_interval=proposal.recurring_interval,
+        recurring_interval_count=proposal.recurring_interval_count,
+        amount=proposal.amount,
+        currency=proposal.currency,
+        designated_signer_email=proposal.designated_signer_email,
+        status="draft",
+    )
+
+    with value_error_as_400():
+        clone = await service.create(clone_data, current_user.id)
+
+    ip_address = get_client_ip(request)
+    await audit_entity_create(db, "proposal", clone.id, current_user.id, ip_address)
+
+    return ProposalResponse.model_validate(clone)
+
+
 @router.post("/{proposal_id}/reject", response_model=ProposalResponse)
 async def reject_proposal(
     proposal_id: int,

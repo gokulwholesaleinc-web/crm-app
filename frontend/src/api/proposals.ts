@@ -311,6 +311,16 @@ export const publicProposalAttachmentDownloadUrl = (
 };
 
 /**
+ * Duplicate a proposal as a new draft with " (copy)" title suffix.
+ */
+export const duplicateProposal = async (proposalId: number): Promise<Proposal> => {
+  const response = await apiClient.post<Proposal>(
+    `${PROPOSALS_BASE}/${proposalId}/duplicate`,
+  );
+  return response.data;
+};
+
+/**
  * Refresh a proposal's billing fields from its linked quote.
  */
 export const refreshProposalFromQuote = async (proposalId: number): Promise<Proposal> => {
@@ -344,5 +354,6 @@ export const proposalsApi = {
   deleteAttachment: deleteProposalAttachment,
   publicAttachmentDownloadUrl: publicProposalAttachmentDownloadUrl,
   refreshFromQuote: refreshProposalFromQuote,
+  duplicate: duplicateProposal,
 };
 

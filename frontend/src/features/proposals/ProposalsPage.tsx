@@ -6,7 +6,7 @@ import { SkeletonTable } from '../../components/ui/Skeleton';
 import { ProposalForm } from './ProposalForm';
 import { TemplateGallery } from './TemplateGallery';
 import { SortableTh } from '../../components/shared/SortableTh';
-import { useProposals, useCreateProposal, useDeleteProposal } from '../../hooks/useProposals';
+import { useProposals, useCreateProposal, useDeleteProposal, useDuplicateProposal } from '../../hooks/useProposals';
 import {
   useListPageSizeState,
   useListSortPersistence,
@@ -74,6 +74,7 @@ function ProposalsPage() {
 
   const createProposalMutation = useCreateProposal();
   const deleteProposalMutation = useDeleteProposal();
+  const duplicateProposalMutation = useDuplicateProposal();
 
   const proposals = proposalsData?.items ?? [];
   const totalPages = proposalsData?.pages ?? 1;
@@ -96,6 +97,16 @@ function ProposalsPage() {
 
   const handleDeleteCancel = () => {
     setDeleteConfirm({ isOpen: false, proposal: null });
+  };
+
+  const handleDuplicate = async (proposal: Proposal) => {
+    try {
+      const clone = await duplicateProposalMutation.mutateAsync(proposal.id);
+      showSuccess('Proposal duplicated');
+      navigate(`/proposals/${clone.id}`);
+    } catch {
+      showError('Failed to duplicate proposal');
+    }
   };
 
   const handleFormSubmit = async (data: ProposalCreate) => {
@@ -320,6 +331,13 @@ function ProposalsPage() {
                       View
                     </Link>
                     <button
+                      onClick={() => handleDuplicate(proposal)}
+                      className="flex-1 text-center py-2 text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+                      disabled={duplicateProposalMutation.isPending}
+                    >
+                      Duplicate
+                    </button>
+                    <button
                       onClick={() => handleDeleteClick(proposal)}
                       className="flex-1 text-center py-2 text-sm font-medium text-red-600 hover:text-red-900 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                       disabled={deleteProposalMutation.isPending}
@@ -422,6 +440,15 @@ function ProposalsPage() {
                         >
                           View
                         </Link>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); void handleDuplicate(proposal); }}
+                          className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded mr-4"
+                          disabled={duplicateProposalMutation.isPending}
+                          title="Duplicate"
+                          aria-label={`Duplicate ${proposal.title}`}
+                        >
+                          <DocumentDuplicateIcon className="h-4 w-4 inline" aria-hidden="true" />
+                        </button>
                         <button
                           onClick={() => handleDeleteClick(proposal)}
                           className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded"
