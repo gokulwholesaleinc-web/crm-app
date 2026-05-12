@@ -35,9 +35,12 @@ class TestFilterConditions:
     Per-operator "returns a non-None expression" tests (eq/neq/contains/
     gt/lt/in/between/etc.) were dropped — they verified that the function
     returned something without ever compiling or executing the resulting
-    SQL. Operator semantics are covered by the SQL-executing tests in
-    TestApplyFiltersToQuery, TestReportExecution, and
-    TestAdvancedFilterOnListEndpoints.
+    SQL. Full per-operator coverage with ``ClauseElement`` instance-of
+    assertions (strictly stronger than the old ``is not None``) lives in
+    ``tests/unit/test_core_filtering.py::TestApplyFilterCondition``;
+    end-to-end SQL-executing coverage lives in
+    ``TestApplyFiltersToQuery``, ``TestReportExecution``, and
+    ``TestAdvancedFilterOnListEndpoints`` here.
     """
 
     def test_unknown_field_raises_error(self):
