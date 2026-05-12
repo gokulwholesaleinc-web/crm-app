@@ -268,3 +268,41 @@ class TestAttachmentDownload:
         )
 
         assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_download_attachment_as_json_without_r2_returns_503(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_contact: Contact,
+    ):
+        """GET ?as_json=1 when R2 is not configured must return 503, not binary bytes.
+
+        In tests, object storage is never configured (no R2 env vars), so
+        uploaded files land on disk.  The frontend preview path sends
+        ``?as_json=1`` and expects ``{"download_url": "..."}``.  Returning
+        a raw FileResponse would leave ``response.data.download_url``
+        undefined, causing the silent "Preview unavailable" toast.
+        """
+        upload = await client.post(
+            "/api/attachments/upload",
+            headers=auth_headers,
+            files={"file": ("test.pdf", b"%PDF-1.4", "application/pdf")},
+            data={"entity_type": "contacts", "entity_id": str(test_contact.id)},
+        )
+        assert upload.status_code == 201, upload.text
+        attachment_id = upload.json()["id"]
+
+        response = await client.get(
+            f"/api/attachments/{attachment_id}/download",
+            params={"as_json": "1"},
+            headers=auth_headers,
+        )
+        # Must not silently return binary PDF — the frontend would get
+        # undefined for download_url and show the misleading "Preview
+        # unavailable" error.
+        assert response.status_code == 503, (
+            f"Expected 503, got {response.status_code}: {response.text}"
+        )
+        assert response.json()["detail"] == "Attachment storage temporarily unavailable"

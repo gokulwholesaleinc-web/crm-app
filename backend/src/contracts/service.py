@@ -17,7 +17,7 @@ from src.core.constants import DEFAULT_PAGE_SIZE
 from src.core.filtering import build_token_search
 from src.core.sorting import build_order_clauses
 from src.core.url_safety import UnsafeUrlError, validate_public_url
-from src.email.branded_templates import TenantBrandingHelper
+from src.email.branded_templates import TenantBrandingHelper, render_contract_send_email
 from src.email.pdf_render import pdf_logo_allowed_hosts, render_html_to_pdf
 from src.email.service import EmailService
 from src.email.types import EmailAttachment
@@ -185,19 +185,15 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
         sign_url = f"{base_url}/contracts/sign/{contract.sign_token}"
 
         branding = await TenantBrandingHelper.get_branding_for_user(self.db, owner_id)
-        company = branding.get("company_name") or "Your provider"
-        title = escape(contract.title)
-        sign_url_safe = escape(sign_url)
-        extra_msg = f"<p>{escape(message)}</p>" if message else ""
-
-        body = (
-            f"<p>You have been sent a contract for your electronic signature.</p>"
-            f"<p><strong>{title}</strong></p>"
-            f"{extra_msg}"
-            f"<p>Please review and sign the contract at the link below:</p>"
-            f'<p><a href="{sign_url_safe}">{sign_url_safe}</a></p>'
-            f"<p>This link expires in 7 days.</p>"
-            f"<p>{escape(company)}</p>"
+        client_first_name = (
+            contract.contact.first_name if contract.contact else ""
+        )
+        subject, body = render_contract_send_email(
+            branding=branding,
+            contract_title=contract.title,
+            client_first_name=client_first_name,
+            sign_url=sign_url,
+            message=message,
         )
 
         # `queue_email` catches transport failures internally and returns
@@ -209,7 +205,7 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
         try:
             email = await email_service.queue_email(
                 to_email=recipient,
-                subject=f"Contract for signature — {contract.title}",
+                subject=subject,
                 body=body,
                 sent_by_id=owner_id,
                 entity_type=ENTITY_TYPE_CONTRACTS,

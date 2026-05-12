@@ -34,7 +34,8 @@ import { usePageTitle } from '../../hooks/usePageTitle';
 import { showSuccess, showError } from '../../utils/toast';
 import { useProposals } from '../../hooks/useProposals';
 import { extractApiErrorDetail } from '../../utils/errors';
-import type { QuoteUpdate, QuoteLineItemCreate, ProductBundle } from '../../types';
+import { QuoteForm } from './QuoteForm';
+import type { QuoteCreate, QuoteUpdate, QuoteLineItemCreate, ProductBundle } from '../../types';
 
 function QuoteDetailPage() {
   const { id } = useParams();
@@ -69,8 +70,6 @@ function QuoteDetailPage() {
   const actionRowRef = useRef<HTMLDivElement>(null);
   const [showAddLineItem, setShowAddLineItem] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [editTitle, setEditTitle] = useState('');
-  const [editDescription, setEditDescription] = useState('');
 
   // Line item form state
   const [newItemDescription, setNewItemDescription] = useState('');
@@ -196,25 +195,20 @@ function QuoteDetailPage() {
     }
   };
 
-  const handleEditSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // QuoteForm emits a QuoteCreate. QuoteUpdate is a strict subset
+  // (no `status`, no `line_items` — line items have their own endpoints
+  // and are managed inline on the detail page). Drop those and forward
+  // every other field the backend update schema accepts.
+  const handleEditSubmit = async (formData: QuoteCreate) => {
+    const { status: _status, line_items: _lineItems, ...rest } = formData;
+    const data: QuoteUpdate = rest;
     try {
-      const data: QuoteUpdate = {
-        title: editTitle,
-        description: editDescription || null,
-      };
       await updateQuoteMutation.mutateAsync({ id: quote.id, data });
       setShowEditModal(false);
       showSuccess('Quote updated');
     } catch {
       showError('Failed to update quote');
     }
-  };
-
-  const openEditModal = () => {
-    setEditTitle(quote.title);
-    setEditDescription(quote.description ?? '');
-    setShowEditModal(true);
   };
 
   const currentUser = useAuthStore.getState().user;
@@ -244,7 +238,7 @@ function QuoteDetailPage() {
           </Button>
         )}
         {isDraft && (
-          <Button variant="secondary" size="sm" onClick={openEditModal}>
+          <Button variant="secondary" size="sm" onClick={() => setShowEditModal(true)}>
             Edit
           </Button>
         )}
@@ -283,7 +277,7 @@ function QuoteDetailPage() {
             {downloadPDFMutation.isPending ? 'Generating...' : 'Download PDF'}
           </Button>
           {isDraft && (
-            <Button variant="secondary" onClick={openEditModal} leftIcon={<PencilIcon className="h-4 w-4" />}>
+            <Button variant="secondary" onClick={() => setShowEditModal(true)} leftIcon={<PencilIcon className="h-4 w-4" />}>
               Edit
             </Button>
           )}
@@ -697,42 +691,41 @@ function QuoteDetailPage() {
         </form>
       </Modal>
 
-      {/* Edit Quote Modal */}
+      {/* Edit Quote Modal — reuses QuoteForm so edit exposes every field
+          create does (contact/company/opportunity, billing, currency,
+          discount, tax, terms, etc.). Line items are intentionally
+          excluded from PATCH; they have dedicated add/remove endpoints
+          driven from the detail page. */}
       <Modal
         isOpen={showEditModal}
         onClose={() => setShowEditModal(false)}
         title="Edit Quote"
-        size="md"
+        size="lg"
+        fullScreenOnMobile
       >
-        <form onSubmit={handleEditSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="edit-title" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Title *</label>
-            <input
-              type="text"
-              id="edit-title"
-              required
-              value={editTitle}
-              onChange={(e) => setEditTitle(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
-            />
-          </div>
-          <div>
-            <label htmlFor="edit-desc" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
-            <textarea
-              id="edit-desc"
-              rows={3}
-              value={editDescription}
-              onChange={(e) => setEditDescription(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
-            />
-          </div>
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-            <Button type="button" variant="secondary" onClick={() => setShowEditModal(false)}>Cancel</Button>
-            <Button type="submit" disabled={updateQuoteMutation.isPending || !editTitle.trim()}>
-              {updateQuoteMutation.isPending ? 'Saving...' : 'Save'}
-            </Button>
-          </div>
-        </form>
+        <QuoteForm
+          key={`${quote.id}-${quote.updated_at ?? ''}`}
+          initialData={{
+            title: quote.title,
+            description: quote.description ?? null,
+            contact_id: quote.contact?.id ?? null,
+            company_id: quote.company?.id ?? null,
+            opportunity_id: quote.opportunity?.id ?? null,
+            currency: quote.currency,
+            valid_until: quote.valid_until ?? null,
+            discount_type: quote.discount_type ?? null,
+            discount_value: quote.discount_value,
+            tax_rate: quote.tax_rate,
+            terms_and_conditions: quote.terms_and_conditions ?? null,
+            notes: quote.notes ?? null,
+            payment_type: quote.payment_type,
+            recurring_interval: quote.recurring_interval ?? null,
+            recurring_interval_count: quote.recurring_interval_count ?? null,
+          }}
+          onSubmit={handleEditSubmit}
+          onCancel={() => setShowEditModal(false)}
+          isLoading={updateQuoteMutation.isPending}
+        />
       </Modal>
 
       {/* Delete Confirmation */}

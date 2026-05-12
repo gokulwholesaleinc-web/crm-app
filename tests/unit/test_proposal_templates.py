@@ -558,8 +558,8 @@ class TestPublicViewBranding:
         branding = data["branding"]
         assert branding is not None
         # Should have default colors
-        assert branding["primary_color"] == "#6366f1"
-        assert branding["secondary_color"] == "#8b5cf6"
+        assert branding["primary_color"] == "#1e293b"
+        assert branding["secondary_color"] == "#0ea5e9"
 
     @pytest.mark.asyncio
     async def test_public_view_includes_proposal_content(

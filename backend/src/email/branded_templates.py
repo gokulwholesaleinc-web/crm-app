@@ -79,12 +79,14 @@ def _safe_url(url: str | None) -> str:
 # Default branding (used when no tenant is configured)
 # ---------------------------------------------------------------------------
 
+# Tenants override via tenant_branding settings; these defaults are the
+# agency-grade fallback for tenants that haven't customized their palette.
 _DEFAULT_BRANDING = {
     "company_name": "CRM",
     "logo_url": "",
-    "primary_color": "#6366f1",
-    "secondary_color": "#8b5cf6",
-    "accent_color": "#22c55e",
+    "primary_color": "#1e293b",
+    "secondary_color": "#0ea5e9",
+    "accent_color": "#0ea5e9",
     # Page + surface backgrounds (light mode only on customer-facing
     # surfaces — public quote/contract/proposal pages and emails
     # render light by default; the app's dark mode is for authenticated
@@ -172,6 +174,7 @@ def _base_email_html(
     body_html: str,
     cta_text: str | None = None,
     cta_url: str | None = None,
+    sender_title: str | None = None,
 ) -> str:
     """Render content into a branded, responsive HTML email wrapper.
 
@@ -185,9 +188,9 @@ def _base_email_html(
     # customer would see a white email with no diagnostic trace. See
     # _safe_hex docstring for why ORM-level reads bypass the schema
     # validator.
-    primary = escape(_safe_hex(branding.get("primary_color"), "#6366f1", field="primary_color"))
-    secondary = escape(_safe_hex(branding.get("secondary_color"), "#8b5cf6", field="secondary_color"))
-    accent = escape(_safe_hex(branding.get("accent_color"), "#22c55e", field="accent_color"))
+    primary = escape(_safe_hex(branding.get("primary_color"), "#1e293b", field="primary_color"))
+    secondary = escape(_safe_hex(branding.get("secondary_color"), "#0ea5e9", field="secondary_color"))
+    accent = escape(_safe_hex(branding.get("accent_color"), "#0ea5e9", field="accent_color"))
     # Light-mode page + card surface colors. The email's dark-mode media
     # query keeps its hardcoded #1f2937 / #111827 — those approximate
     # the tenant_settings dark defaults and refactoring them through
@@ -239,12 +242,12 @@ def _base_email_html(
         cta_html = (
             f'<table role="presentation" cellpadding="0" cellspacing="0" '
             f'style="margin:24px auto 0;">'
-            f'<tr><td style="background-color:{accent};border-radius:6px;'
+            f'<tr><td style="background-color:{accent};border-radius:24px;'
             f'text-align:center;">'
             f'<a href="{escape(safe_cta_url)}" target="_blank" '
             f'style="display:inline-block;padding:12px 28px;color:#ffffff;'
-            f'font-family:Arial,Helvetica,sans-serif;font-size:15px;'
-            f'font-weight:600;text-decoration:none;">{escape(cta_text)}</a>'
+            f"font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:15px;"
+            f'font-weight:600;text-decoration:none;text-transform:uppercase;letter-spacing:0.5px;">{escape(cta_text)}</a>'
             f'</td></tr></table>'
         )
     else:
@@ -269,6 +272,11 @@ def _base_email_html(
         if footer_text
         else ""
     )
+    sender_title_block = (
+        f'<p style="margin:0 0 8px;color:#94a3b8;font-size:12px;">{escape(sender_title)}</p>'
+        if sender_title
+        else ""
+    )
 
     return f"""\
 <!DOCTYPE html>
@@ -290,7 +298,7 @@ def _base_email_html(
 }}
 </style>
 </head>
-<body style="margin:0;padding:0;background-color:{bg_light};font-family:Arial,Helvetica,sans-serif;">
+<body style="margin:0;padding:0;background-color:{bg_light};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
 <table role="presentation" class="email-bg" cellpadding="0" cellspacing="0" width="100%" style="background-color:{bg_light};">
 <tr><td align="center" style="padding:24px 16px;">
 
@@ -298,7 +306,7 @@ def _base_email_html(
 <table role="presentation" cellpadding="0" cellspacing="0" width="600" style="max-width:600px;width:100%;">
 <tr><td style="background-color:{primary};padding:24px 32px;border-radius:8px 8px 0 0;">
   <table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr>
-    <td style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:18px;font-weight:700;">
+    <td style="color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:18px;font-weight:700;">
       {logo_html}{company_label}
     </td>
   </tr></table>
@@ -309,8 +317,8 @@ def _base_email_html(
 <!-- Body -->
 <table role="presentation" class="email-card" cellpadding="0" cellspacing="0" width="600" style="max-width:600px;width:100%;background-color:{surface_light};">
 <tr><td style="padding:32px 32px;">
-  <h1 class="email-headline" style="margin:0 0 16px;font-family:Arial,Helvetica,sans-serif;font-size:22px;font-weight:700;color:#111827;">{escape(headline)}</h1>
-  <div class="email-text" style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;color:#374151;">
+  <h1 class="email-headline" style="margin:0 0 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:22px;font-weight:700;color:#111827;">{escape(headline)}</h1>
+  <div class="email-text" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:15px;line-height:1.6;color:#334155;">
     {body_html}
   </div>
   {cta_html}
@@ -319,8 +327,9 @@ def _base_email_html(
 
 <!-- Footer -->
 <table role="presentation" class="email-footer" cellpadding="0" cellspacing="0" width="600" style="max-width:600px;width:100%;background-color:#f9fafb;">
-<tr><td style="padding:20px 24px;border-radius:0 0 8px 8px;text-align:center;font-family:Arial,Helvetica,sans-serif;">
+<tr><td style="padding:20px 24px;border-radius:0 0 8px 8px;text-align:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
   <p style="margin:0 0 4px;color:#6b7280;font-size:13px;font-weight:600;">{company}</p>
+  {sender_title_block}
   {footer_text_block}
   <p style="margin:0;font-size:12px;">{footer_links}</p>
 </td></tr>
@@ -343,6 +352,7 @@ def render_branded_email(
     body_html: str,
     cta_text: str | None = None,
     cta_url: str | None = None,
+    sender_title: str | None = None,
 ) -> str:
     """Render any content into the branded email wrapper."""
     return _base_email_html(
@@ -351,6 +361,7 @@ def render_branded_email(
         body_html=body_html,
         cta_text=cta_text,
         cta_url=cta_url,
+        sender_title=sender_title,
     )
 
 
@@ -398,13 +409,13 @@ def render_quote_email(branding: dict, quote_data: dict) -> tuple[str, str]:
     # Intro copy changes depending on whether this is an e-sign flow
     if view_url:
         intro = (
-            f'<p>Dear {client},</p>'
+            f'<p>Hi {client},</p>'
             f'<p>{company} has sent you quote <strong>#{number}</strong> for your review. '
             f'Please click the button below to view the full details, and accept or decline the quote.</p>'
         )
     else:
         intro = (
-            f'<p>Dear {client},</p>'
+            f'<p>Hi {client},</p>'
             f'<p>Please find your quote <strong>#{number}</strong> below.</p>'
         )
 
@@ -461,14 +472,14 @@ def render_proposal_email(branding: dict, proposal_data: dict) -> tuple[str, str
     currency = escape(str(proposal_data.get("currency", "USD")))
 
     body_html = f"""\
-<p>Dear {client},</p>
-<p>We are pleased to present our proposal: <strong>{title}</strong>.</p>
+<p>Hi {client},</p>
+<p>Here's our proposal: <strong>{title}</strong></p>
 <div style="background-color:#f9fafb;border-radius:6px;padding:16px;margin:16px 0;">
   <p style="margin:0 0 8px;font-size:14px;color:#6b7280;">Summary</p>
   <p style="margin:0;font-size:15px;">{summary}</p>
 </div>
 <p style="font-size:16px;font-weight:700;">Proposed investment: {currency} {total}</p>
-<p>We look forward to discussing this with you.</p>"""
+<p>Ready to move forward? Click the button below to review and accept.</p>"""
 
     subject = f"Proposal: {title} from {company}"
     view_url = proposal_data.get("view_url")
@@ -516,8 +527,8 @@ def render_payment_receipt_email(branding: dict, payment_data: dict) -> tuple[st
         )
 
     body_html = f"""\
-<p>Dear {client},</p>
-<p>Thank you for your payment. Here is your receipt.</p>
+<p>Hi {client},</p>
+<p>Your invoice #{receipt_no} has been processed. Details below.</p>
 <div style="background-color:#f0fdf4;border-left:4px solid {accent};border-radius:4px;padding:16px;margin:16px 0;">
   <p style="margin:0;font-size:13px;color:#6b7280;">Amount paid</p>
   <p style="margin:4px 0 0;font-size:24px;font-weight:700;color:#111827;">{currency} {amount}</p>
@@ -526,7 +537,8 @@ def render_payment_receipt_email(branding: dict, payment_data: dict) -> tuple[st
 <tr><td style="padding:4px 0;color:#6b7280;">Receipt #</td><td style="padding:4px 0;text-align:right;">{receipt_no}</td></tr>
 <tr><td style="padding:4px 0;color:#6b7280;">Date</td><td style="padding:4px 0;text-align:right;">{pay_date}</td></tr>
 <tr><td style="padding:4px 0;color:#6b7280;">Payment method</td><td style="padding:4px 0;text-align:right;">{pay_method}</td></tr>
-</table>"""
+</table>
+<p style="font-size:13px;color:#6b7280;">Questions about this invoice? Reply here or contact us.</p>"""
 
     if items_html:
         body_html += f"""\
@@ -587,7 +599,7 @@ def render_payment_invoice_email(branding: dict, payment_data: dict) -> tuple[st
         )
 
     body_html = f"""\
-<p>Dear {client},</p>
+<p>Hi {client},</p>
 <p>Please find your invoice attached. The headline details are repeated below for your records.</p>
 <div style="background-color:#f9fafb;border-left:4px solid {accent};border-radius:4px;padding:16px;margin:16px 0;">
   <p style="margin:0;font-size:13px;color:#6b7280;">Amount due</p>
@@ -604,8 +616,7 @@ def render_payment_invoice_email(branding: dict, payment_data: dict) -> tuple[st
 
     body_html += "</table>" + pay_button
     body_html += (
-        '<p style="font-size:13px;color:#6b7280;">If you have any questions, '
-        'just reply to this email.</p>'
+        '<p style="font-size:13px;color:#6b7280;">Questions about this invoice? Reply here or contact us.</p>'
     )
 
     subject = f"Invoice #{invoice_no} from {company}"
@@ -672,13 +683,13 @@ def render_lead_assigned_email(
         )
 
     body_html = f"""\
-<p>{assigner} has assigned a new lead to you.</p>
+<p>{assigner} assigned you a new lead: <strong>{lead_name}</strong></p>
 <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color:#f9fafb;border-radius:6px;padding:16px;margin:16px 0;font-size:14px;">
 <tbody>
 {''.join(rows)}
 </tbody>
 </table>
-<p style="color:#6b7280;font-size:13px;">Open the lead to add an activity, qualify it, or hand it off.</p>"""
+<p style="color:#6b7280;font-size:13px;">First step: view the lead and schedule an outreach call.</p>"""
 
     subject = f"New lead assigned: {data.get('lead_full_name') or 'unnamed lead'}"
     html = render_branded_email(
@@ -718,12 +729,13 @@ def render_task_due_email(branding: dict, data: dict) -> tuple[str, str]:
         )
 
     body_html = f"""\
-<p>You have a task coming due in your CRM.</p>
+<p><strong>{activity_subject}</strong> is due {due_at}.</p>
 <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color:#f9fafb;border-radius:6px;padding:16px;margin:16px 0;font-size:14px;">
 <tbody>
 {''.join(rows)}
 </tbody>
-</table>"""
+</table>
+<p style="color:#6b7280;font-size:13px;">Jump in to complete or reschedule.</p>"""
 
     subject = f"Task due — {data.get('activity_subject') or 'Untitled task'}"
     html = render_branded_email(
@@ -891,7 +903,6 @@ def render_contract_signed_email(
     signed_at = escape(str(data.get("signed_at") or ""))
     contract_url = data.get("contract_url")
     audience = (data.get("audience") or "owner").lower()
-    company = escape(branding.get("company_name", "CRM"))
 
     if audience == "signer":
         # Distinct copy when the PDF couldn't be rendered — saying
@@ -901,12 +912,12 @@ def render_contract_signed_email(
             body_html = f"""\
 <p>Hi {signer_name or 'there'},</p>
 <p>Thank you for signing <strong>{title}</strong>. Your signed PDF copy will be sent once it's ready — usually within a few minutes. Reply to this email if you don't see it shortly.</p>
-<p>{company}</p>"""
+<p>We'll follow up once the other party signs. You'll get an email confirmation at that time.</p>"""
         else:
             body_html = f"""\
 <p>Hi {signer_name or 'there'},</p>
-<p>Thank you for signing <strong>{title}</strong>. A signed PDF copy is attached for your records.</p>
-<p>{company}</p>"""
+<p>Thank you for signing <strong>{title}</strong>. Your signed copy is attached.</p>
+<p>We'll follow up once the other party signs. You'll get an email confirmation at that time.</p>"""
         subject = f"Signed copy — {data.get('contract_title') or 'Contract'}"
         headline = "Thank you for signing"
         cta_text = None
@@ -1027,3 +1038,43 @@ def render_campaign_wrapper(
         headline="",
         body_html=body_with_unsub,
     )
+
+
+# ---------------------------------------------------------------------------
+# Contract send email
+# ---------------------------------------------------------------------------
+
+def render_contract_send_email(
+    branding: dict,
+    contract_title: str,
+    client_first_name: str,
+    sign_url: str,
+    message: str | None = None,
+) -> tuple[str, str]:
+    """Returns (subject, html_body) for a contract signature request email.
+
+    Uses the centralized branded email wrapper so the layout, colors, and
+    footer match every other outbound email rather than the hand-built
+    inline HTML that contracts/service.py previously constructed.
+    """
+    title = escape(contract_title)
+    name = escape(client_first_name) if client_first_name else "there"
+    extra_msg = f"<p>{escape(message)}</p>" if message else ""
+
+    body_html = f"""\
+<p>Hi {name},</p>
+<p>We've prepared <strong>{title}</strong> for your signature.</p>
+{extra_msg}
+<p>Review and sign using the button below. The link is valid for 7 days.</p>
+<p>Questions? Reply to this email.</p>"""
+
+    subject = f"Contract for signature — {contract_title}"
+    html = render_branded_email(
+        branding=branding,
+        subject=subject,
+        headline="Contract ready to sign",
+        body_html=body_html,
+        cta_text="Review & Sign",
+        cta_url=sign_url,
+    )
+    return subject, html

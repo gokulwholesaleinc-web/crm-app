@@ -195,13 +195,38 @@ describe('EmailThread', () => {
     expect(expanded!.textContent).toContain('Giancarlo');
   });
 
-  it('does NOT trim outbound HTML (our own branded templates pass through untouched)', () => {
-    // A future branded template could legitimately quote a customer
-    // testimonial in a <blockquote type="cite">; trimming it would
-    // silently erase the marketing payload. Outbound bypasses trim.
+  it('trims outbound HTML when explicit Gmail/Outlook markers are present (Gmail-synced sent mail)', () => {
+    // Outbound is no longer skipped: users replying from their own Gmail
+    // client produce EmailQueue rows via the history sync that carry the
+    // same gmail_quote / blockquote[type="cite"] markers as inbound. The
+    // trim utility cuts ONLY at those explicit markers — a CRM-composed
+    // branded template (no marker) still passes through untouched, which
+    // is guarded by the next test.
+    const html =
+      '<p>New reply text</p>' +
+      '<blockquote type="cite">Previous message in the thread</blockquote>';
+    mockUseEmailThread.mockReturnValue({
+      data: threadResponse([makeEmail({ id: 1, direction: 'outbound', body_html: html })]),
+      isLoading: false,
+    });
+
+    renderWithProviders(<EmailThread entityType="contacts" entityId={1883} />);
+
+    const body = document.querySelector('.email-html-content');
+    expect(body!.textContent).toContain('New reply text');
+    expect(body!.textContent).not.toContain('Previous message in the thread');
+    expect(screen.getByRole('button', { name: /Show quoted history/i })).toBeInTheDocument();
+  });
+
+  it('passes outbound HTML through unchanged when no quote/signature markers are present (branded templates)', () => {
+    // CRM-composed branded emails (proposal send, quote send, contract
+    // send) carry no Gmail markers, so the trim utility returns the
+    // body verbatim. Tests that a future template can include a real
+    // <blockquote> (e.g. testimonial) without surprise stripping —
+    // detection requires the gmail_quote class or blockquote[type="cite"].
     const html =
       '<p>Thanks for your purchase!</p>' +
-      '<blockquote type="cite">"Their service is amazing." — Jane</blockquote>';
+      '<blockquote>"Their service is amazing." — Jane</blockquote>';
     mockUseEmailThread.mockReturnValue({
       data: threadResponse([makeEmail({ id: 1, direction: 'outbound', body_html: html })]),
       isLoading: false,

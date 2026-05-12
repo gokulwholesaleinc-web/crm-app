@@ -110,7 +110,7 @@ class TestTenantBrandingHelper:
         defaults = TenantBrandingHelper.get_default_branding()
         assert branding == defaults
         assert branding["company_name"] == "CRM"
-        assert branding["primary_color"] == "#6366f1"
+        assert branding["primary_color"] == "#1e293b"
 
     async def test_get_default_branding_has_required_keys(self):
         """Should include all required branding keys in the default branding dict."""
@@ -1051,8 +1051,8 @@ class TestSafeHexAtRender:
         assert "#12345" not in html
         # Documented defaults take over for each rejected field that
         # the base shell renders.
-        assert "#6366f1" in html  # primary fallback
-        assert "#8b5cf6" in html  # secondary fallback
+        assert "#1e293b" in html  # primary fallback
+        assert "#0ea5e9" in html  # secondary fallback
         assert "#f9fafb" in html  # bg_color_light fallback
         assert "#ffffff" in html  # surface_color_light fallback
 

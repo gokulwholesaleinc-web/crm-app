@@ -156,17 +156,19 @@ function EmailBubble({
   const hasBody = Boolean(email.body_html || bodyContent);
   const rawHtml = email.body_html || (looksLikeHtml(bodyContent) ? bodyContent : null);
 
-  // Trim signatures + quoted reply history from inbound bodies. The
-  // thread view already groups messages chronologically, so quoted
-  // history is duplication and signatures render poorly without inline
-  // `style` (which we strip for security). Cut at explicit Gmail/
-  // Outlook/Apple-Mail markers only — never guess at unmarked
-  // boundaries. Outbound emails are our own branded HTML — never trim
-  // them; a future template could legitimately contain a testimonial
-  // <blockquote type="cite"> we'd otherwise erase silently.
+  // Trim signatures + quoted reply history before render. The thread
+  // view groups messages chronologically, so quoted history is pure
+  // duplication and signatures render poorly without inline `style`.
+  // Applies to BOTH directions — outbound emails synced from Gmail's
+  // Sent folder (user replied from phone/Gmail web → CRM history sync
+  // wrote an EmailQueue row) carry the same Gmail/Outlook quote +
+  // signature blocks as inbound. Cut at explicit markers only
+  // (`gmail_quote`, `blockquote[type="cite"]`, RFC 3676 `-- `,
+  // `On X wrote:`, etc.) — a CRM-composed branded template (proposal
+  // send, quote send) wouldn't contain those markers, so it passes
+  // through untouched.
   const [showOriginal, setShowOriginal] = useState(false);
   const trim = useMemo<TrimResult>(() => {
-    if (isOutbound) return { body: rawHtml ?? bodyContent, trimmed: false, cut: 'none' };
     try {
       return rawHtml ? trimQuotedHtml(rawHtml) : trimQuotedText(bodyContent);
     } catch {
@@ -175,7 +177,7 @@ function EmailBubble({
       // to the un-trimmed body so the user still sees the email.
       return { body: rawHtml ?? bodyContent, trimmed: false, cut: 'none' };
     }
-  }, [isOutbound, rawHtml, bodyContent]);
+  }, [rawHtml, bodyContent]);
   const renderableHtml = rawHtml ? (showOriginal ? rawHtml : trim.body) : null;
   const renderableText = rawHtml ? bodyContent : showOriginal ? bodyContent : trim.body;
   // click_count may not yet exist on older records; safe-access via cast
@@ -198,12 +200,36 @@ function EmailBubble({
             : 'bg-gray-100 text-gray-900 dark:bg-gray-700 dark:text-gray-100'
         }`}
       >
-        {/* Header: from/to + status */}
+        {/* Header: from/to + status. On outbound we surface BOTH From
+            and To — with Gmail send-as aliases the sender address can
+            differ from the connected user's default, and that matters
+            for audit + reply-routing. Inbound also surfaces To when
+            present so multi-recipient threads stay legible. */}
         <div className="flex items-start justify-between gap-2 mb-1">
           <div className="min-w-0 flex-1">
-            <p className={`text-xs truncate ${isOutbound ? 'text-white/90' : 'text-gray-500 dark:text-gray-400'}`}>
-              {isOutbound ? `To: ${email.to_email}` : `From: ${email.from_email || 'Unknown'}`}
-            </p>
+            {isOutbound ? (
+              <>
+                {email.from_email && (
+                  <p className="text-xs truncate text-white/90">
+                    From: {email.from_email}
+                  </p>
+                )}
+                <p className={`text-xs truncate ${email.from_email ? 'text-white/80' : 'text-white/90'}`}>
+                  To: {email.to_email}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-xs truncate text-gray-500 dark:text-gray-400">
+                  From: {email.from_email || 'Unknown'}
+                </p>
+                {email.to_email && (
+                  <p className="text-xs truncate text-gray-400 dark:text-gray-500">
+                    To: {email.to_email}
+                  </p>
+                )}
+              </>
+            )}
             {email.cc && (
               <p className={`text-xs truncate ${isOutbound ? 'text-white/80' : 'text-gray-400 dark:text-gray-500'}`}>
                 CC: {email.cc}
