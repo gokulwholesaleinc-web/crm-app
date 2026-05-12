@@ -5,7 +5,7 @@ import axios from 'axios';
 import { sanitizeHexColor } from '../../utils/colorValidation';
 import { useForceLightMode } from '../../hooks/useForceLightMode';
 import { formatCurrency, formatDate } from '../../utils/formatters';
-import { setPublicPageMeta, pickReadableText } from './publicMeta';
+import { setPublicPageMeta } from './publicMeta';
 import { Modal, ModalFooter } from '../../components/ui/Modal';
 
 // Bare axios for public (unauthenticated) quote endpoints. Does NOT
@@ -90,6 +90,7 @@ function PublicQuoteView() {
   const [signerName, setSignerName] = useState('');
   const [signerEmail, setSignerEmail] = useState('');
   const [esignError, setEsignError] = useState<string | null>(null);
+  const [esignChecked, setEsignChecked] = useState(false);
 
   useForceLightMode();
 
@@ -138,6 +139,7 @@ function PublicQuoteView() {
 
   const handleAcceptClick = useCallback(() => {
     setEsignError(null);
+    setEsignChecked(false);
     setShowEsignModal(true);
   }, []);
 
@@ -219,26 +221,8 @@ function PublicQuoteView() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
         <div className="text-center max-w-md">
-          <svg
-            className="mx-auto h-16 w-16 text-gray-400 mb-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            aria-hidden="true"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.5}
-              d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
-            />
-          </svg>
-          <h1 className="text-xl font-semibold text-gray-900 mb-2">
-            Quote Not Found
-          </h1>
-          <p className="text-gray-500">
-            {error || 'This quote may have been removed or the link is invalid.'}
-          </p>
+          <h1 className="text-xl font-semibold text-gray-900 mb-2">Quote not found</h1>
+          <p className="text-gray-500">{error || 'This quote may have been removed or the link is no longer valid. Please contact your account manager.'}</p>
         </div>
       </div>
     );
@@ -272,94 +256,109 @@ function PublicQuoteView() {
     ? formatDate(quote.valid_until, 'long')
     : null;
 
-  const onPrimary = pickReadableText(branding.primary_color);
-  const onSecondary = pickReadableText(branding.secondary_color);
+  const primary = branding.primary_color;
+  const accent = branding.accent_color;
 
   return (
-    // Customer-facing surface uses the tenant's light-mode bg directly via
-    // inline style — public viewers don't have the `dark` class set, and we
-    // want logged-in seller previews to match the customer experience.
-    <div className="min-h-screen" style={{ backgroundColor: branding.bg_color_light }}>
-      {/* Branded Top Bar — text color picked from primary_color luminance so a
-          tenant who configures #ffffff (or any pale color) doesn't end up with
-          unreadable white-on-white. */}
-      <header
-        className="sticky top-0 z-10 border-b border-gray-200 dark:border-gray-700"
-        style={{ backgroundColor: branding.primary_color }}
-      >
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+    <div className="min-h-screen text-gray-900 antialiased" style={{ backgroundColor: branding.bg_color_light }}>
+      <div
+        aria-hidden="true"
+        style={{
+          height: 4,
+          backgroundImage: `linear-gradient(90deg, ${primary}, ${branding.secondary_color}, ${accent})`,
+        }}
+      />
+      <header className="border-b border-gray-200" style={{ backgroundColor: branding.surface_color_light }}>
+        <div className="mx-auto max-w-3xl px-6 sm:px-10 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             {branding.logo_url && !logoError ? (
               <img
                 src={branding.logo_url}
                 alt={companyDisplayName}
-                width={36}
-                height={36}
-                className="rounded"
-                style={{ maxHeight: 36 }}
+                width={180}
+                height={30}
+                className="object-contain"
+                style={{ height: 30, width: 'auto', maxWidth: 180 }}
                 onError={() => setLogoError(true)}
               />
             ) : (
-              <div
-                className="h-9 w-9 rounded flex items-center justify-center flex-shrink-0"
-                style={{ backgroundColor: branding.secondary_color }}
-              >
-                <span className={`font-bold text-lg ${onSecondary === 'white' ? 'text-white' : 'text-gray-900'}`}>
+              <>
+                <div
+                  className="h-8 w-8 rounded flex items-center justify-center flex-shrink-0 text-white text-sm font-semibold"
+                  style={{ backgroundColor: primary }}
+                >
                   {companyDisplayName[0]?.toUpperCase() || 'Q'}
+                </div>
+                <span className="text-[15px] font-semibold text-gray-900 truncate">
+                  {companyDisplayName}
                 </span>
-              </div>
+              </>
             )}
-            <span className={`text-lg font-semibold truncate ${onPrimary === 'white' ? 'text-white' : 'text-gray-900'}`}>
-              {companyDisplayName}
-            </span>
           </div>
-          <div className={`flex items-center gap-2 text-sm ${onPrimary === 'white' ? 'text-white/80' : 'text-gray-700'}`}>
-            <span>{quote.quote_number}</span>
-            {quote.status === 'accepted' || actionDone === 'accepted' ? (
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            <span className="tabular-nums">{quote.quote_number}</span>
+            {(quote.status === 'accepted' || actionDone === 'accepted') && (
+              <span
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium text-white"
+                style={{ backgroundColor: accent }}
+              >
                 <CheckIcon className="h-3 w-3" aria-hidden="true" />
                 Accepted
               </span>
-            ) : quote.status === 'rejected' || actionDone === 'rejected' ? (
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+            )}
+            {(quote.status === 'rejected' || actionDone === 'rejected') && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
                 <XMarkIcon className="h-3 w-3" aria-hidden="true" />
                 Rejected
               </span>
-            ) : null}
+            )}
           </div>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        {/* Title & Valid Until */}
-        <div>
-          <h1
-            className="text-2xl sm:text-3xl font-bold"
-            style={{ color: branding.primary_color, textWrap: 'balance' }}
-          >
+      <main className="mx-auto max-w-3xl px-6 sm:px-10 py-10 sm:py-14 space-y-10 sm:space-y-12">
+        {/* Cover — matches Proposal/Contract letterhead style */}
+        <section className="pb-8 border-b border-gray-200">
+          <p className="text-xs uppercase tracking-wider text-gray-500 mb-3">
+            Quote <span className="text-gray-300 mx-1">·</span>
+            <span className="tabular-nums">{quote.quote_number}</span>
+          </p>
+          <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 leading-tight tracking-tight text-balance">
             {quote.title}
           </h1>
           {quote.contact && (
-            <p className="mt-1 text-gray-500 dark:text-gray-400">
-              Prepared for {quote.contact.full_name}
+            <p className="mt-3 text-[15px] text-gray-600">
+              Prepared for <span className="font-medium text-gray-900">{quote.contact.full_name}</span>
+              {quote.company?.name && (
+                <span className="text-gray-500"> · {quote.company.name}</span>
+              )}
             </p>
           )}
           {quote.description && (
-            <p className="mt-2 text-gray-600 dark:text-gray-300">
+            <p className="mt-2 text-[15px] text-gray-600 leading-relaxed">
               {quote.description}
             </p>
           )}
           {formattedValidUntil && (
-            <p className={`mt-2 text-sm ${isExpired ? 'text-red-600 dark:text-red-400 font-medium' : 'text-gray-500 dark:text-gray-400'}`}>
-              {isExpired ? 'Expired on ' : 'Valid until '}{formattedValidUntil}
+            <p className={`mt-2 text-sm ${isExpired ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
+              {isExpired ? 'Expired on ' : 'Valid until '}<span className="tabular-nums">{formattedValidUntil}</span>
             </p>
           )}
           {quote.payment_type === 'subscription' && quote.recurring_interval && (
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            <p className="mt-1 text-sm text-gray-500">
               Recurring: {quote.recurring_interval}
             </p>
           )}
-        </div>
+        </section>
+
+        {/* Expired banner — matches Contract pattern */}
+        {isExpired && (
+          <section className="rounded-lg shadow-sm border border-amber-200 bg-amber-50 px-5 py-4" role="status">
+            <p className="text-sm font-medium text-amber-900">
+              This quote has expired. Please contact your account manager for a new link.
+            </p>
+          </section>
+        )}
 
         {/* Line Items Table */}
         {quote.line_items.length > 0 && (
@@ -368,10 +367,7 @@ function PublicQuoteView() {
             style={{ backgroundColor: `${branding.secondary_color}10` }}
           >
             <div className="px-6 sm:px-8 pt-6 sm:pt-8 pb-4">
-              <h2
-                className="text-lg font-semibold mb-4"
-                style={{ color: branding.primary_color }}
-              >
+              <h2 className="text-lg font-semibold mb-4 text-gray-900">
                 Line Items
               </h2>
             </div>
@@ -427,10 +423,7 @@ function PublicQuoteView() {
 
         {/* Totals Summary */}
         <section className="rounded-lg shadow-sm border border-gray-200 p-6 sm:p-8" style={{ backgroundColor: branding.surface_color_light }}>
-          <h2
-            className="text-lg font-semibold mb-4"
-            style={{ color: branding.primary_color }}
-          >
+          <h2 className="text-lg font-semibold mb-4 text-gray-900">
             Summary
           </h2>
           <dl className="space-y-2 text-sm" style={{ fontVariantNumeric: 'tabular-nums' }}>
@@ -478,10 +471,7 @@ function PublicQuoteView() {
             className="rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 sm:p-8"
             style={{ backgroundColor: `${branding.secondary_color}10` }}
           >
-            <h2
-              className="text-lg font-semibold mb-4"
-              style={{ color: branding.primary_color }}
-            >
+            <h2 className="text-lg font-semibold mb-4 text-gray-900">
               Terms and Conditions
             </h2>
             <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed break-words">
@@ -493,10 +483,7 @@ function PublicQuoteView() {
         {/* Accept / Reject Actions */}
         {canRespond && (
           <section className="rounded-lg shadow-sm border border-gray-200 p-6 sm:p-8" style={{ backgroundColor: branding.surface_color_light }}>
-            <h2
-              className="text-lg font-semibold mb-2"
-              style={{ color: branding.primary_color }}
-            >
+            <h2 className="text-lg font-semibold mb-2 text-gray-900">
               Your Response
             </h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
@@ -561,7 +548,7 @@ function PublicQuoteView() {
                   }`}
                 >
                   {actionDone === 'accepted'
-                    ? 'Thank you for accepting this quote. We will be in touch shortly.'
+                    ? 'A signed copy will be emailed to the address you provided. You can safely close this page.'
                     : 'Thank you for your response. We appreciate your time.'}
                 </p>
               </div>
@@ -574,23 +561,26 @@ function PublicQuoteView() {
           indicator doesn't overlap the footer text. Requires viewport-fit=cover
           on the <meta name=viewport> tag (set in index.html). */}
       <footer
-        className="border-t border-gray-200 dark:border-gray-700 mt-12"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        className="mt-16 border-t border-gray-200"
+        style={{ backgroundColor: branding.surface_color_light, paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 text-center text-sm text-gray-400 dark:text-gray-500">
-          {branding.footer_text ? (
-            <p className="mb-1">{branding.footer_text}</p>
-          ) : null}
-          <p>
-            {companyDisplayName} &middot; {quote.quote_number}
-          </p>
+        <div className="mx-auto max-w-3xl px-6 sm:px-10 py-8 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold text-gray-900">{companyDisplayName}</p>
+              {branding.footer_text && (
+                <p className="text-xs text-gray-500 leading-relaxed max-w-sm">{branding.footer_text}</p>
+              )}
+              <p className="text-xs text-gray-400 tabular-nums mt-1">{quote.quote_number}</p>
+            </div>
+          </div>
         </div>
       </footer>
 
       {/* E-Sign Modal */}
       <Modal
         isOpen={showEsignModal}
-        onClose={() => setShowEsignModal(false)}
+        onClose={() => { setShowEsignModal(false); setEsignChecked(false); }}
         title="Confirm Acceptance"
         description="By providing your name and email, you agree to accept this quote as a binding agreement."
         size="md"
@@ -649,11 +639,26 @@ function PublicQuoteView() {
           </div>
         </div>
 
+        <div className="mt-4 flex items-start gap-2.5">
+          <input
+            type="checkbox"
+            id="esign-agree"
+            checked={esignChecked}
+            onChange={(e) => setEsignChecked(e.target.checked)}
+            disabled={actionPending}
+            className="mt-0.5 h-4 w-4 rounded border-gray-300 focus-visible:outline focus-visible:outline-2"
+            style={{ accentColor: branding.primary_color }}
+          />
+          <label htmlFor="esign-agree" className="text-sm text-gray-700 dark:text-gray-300 leading-snug cursor-pointer">
+            I have read and agree to the terms and conditions above
+          </label>
+        </div>
+
         <ModalFooter>
           <button
             type="button"
             aria-label="Cancel acceptance"
-            onClick={() => setShowEsignModal(false)}
+            onClick={() => { setShowEsignModal(false); setEsignChecked(false); }}
             disabled={actionPending}
             className="flex-1 rounded-lg bg-white dark:bg-gray-700 px-4 py-2.5 text-sm font-semibold text-gray-900 dark:text-gray-100 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-500 disabled:opacity-50"
           >
@@ -663,7 +668,7 @@ function PublicQuoteView() {
             type="button"
             aria-label="Confirm and sign acceptance"
             onClick={handleEsignSubmit}
-            disabled={actionPending}
+            disabled={actionPending || !esignChecked}
             className="flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
             style={{ backgroundColor: branding.accent_color, outlineColor: branding.accent_color }}
           >
