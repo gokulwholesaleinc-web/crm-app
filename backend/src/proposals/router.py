@@ -30,6 +30,7 @@ from src.core.router_utils import (
     raise_bad_request,
     raise_not_found,
 )
+from src.email.service import assert_gmail_connected
 from src.events.service import PROPOSAL_ACCEPTED, PROPOSAL_REJECTED, PROPOSAL_SENT, emit
 from src.proposals.attachment_views import (
     ProposalAttachmentView,
@@ -800,6 +801,7 @@ async def retry_proposal_billing(
     proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
     check_ownership(proposal, current_user, EntityNames.PROPOSAL)
     with value_error_as_400():
+        await assert_gmail_connected(db, current_user.id)
         proposal = await service.retry_billing(proposal)
     return ProposalResponse.model_validate(proposal)
 
@@ -889,6 +891,7 @@ async def resend_proposal_payment_link(
     check_ownership(proposal, current_user, EntityNames.PROPOSAL)
     before = {"status": proposal.status, "stripe_invoice_id": proposal.stripe_invoice_id}
     with value_error_as_400():
+        await assert_gmail_connected(db, current_user.id)
         result = await service.resend_payment_link(proposal)
     ip_address = get_client_ip(request)
     await audit_entity_update(

@@ -269,15 +269,16 @@ def render_template(
 
 
 async def assert_gmail_connected(db: AsyncSession, sent_by_id: int) -> None:
-    """Raise ValueError if ``sent_by_id`` has no active GmailConnection.
+    """Raise ValueError if ``sent_by_id`` cannot send via Gmail right now.
 
-    User-initiated one-shot sends (proposal, quote, contract,
-    activity-followup email) MUST pre-flight here before queueing — the
-    queue path swallows GmailNotConnectedError and parks the row in
-    ``retry``, which silently breaks the "I clicked Send, it said
-    sent" UX. The error message is the one we want to render to the
-    operator so they know to reconnect Gmail in Settings.
+    Two checks: (1) an active (non-revoked) GmailConnection exists, and
+    (2) the access token is fresh or a refresh exchange succeeds. The
+    second check matters because a row with ``revoked_at IS NULL`` but
+    a stale refresh-token (user revoked from Google account page;
+    Testing-mode apps lose refresh tokens after 7 days) silently fails
+    the real send while passing a row-only check.
     """
+    from src.integrations.gmail.client import GmailAuthError, GmailClient
     from src.integrations.gmail.models import GmailConnection
 
     row = await db.execute(
@@ -286,11 +287,21 @@ async def assert_gmail_connected(db: AsyncSession, sent_by_id: int) -> None:
             GmailConnection.revoked_at.is_(None),
         )
     )
-    if row.scalar_one_or_none() is None:
+    conn = row.scalar_one_or_none()
+    if conn is None:
         raise ValueError(
             "Your Gmail account is not connected. "
             "Connect it under Settings → Integrations before sending."
         )
+
+    try:
+        async with GmailClient(conn, db) as client:
+            await client._refresh_if_needed()
+    except GmailAuthError as exc:
+        raise ValueError(
+            "Your Gmail connection has expired. "
+            "Reconnect it under Settings → Integrations before sending."
+        ) from exc
 
 
 class EmailService:

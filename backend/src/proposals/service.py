@@ -29,7 +29,7 @@ from src.email.branded_templates import (
     render_proposal_email,
 )
 from src.email.pdf_render import pdf_logo_allowed_hosts, render_html_to_pdf
-from src.email.service import EmailService
+from src.email.service import EmailService, assert_gmail_connected
 from src.email.types import EmailAttachment
 from src.payments.service import PaymentService
 from src.proposals.attachment_views import get_unviewed_attachment_ids
@@ -873,13 +873,8 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         self, proposal_id: int, user_id: int, attach_pdf: bool = False
     ) -> None:
         """Send branded proposal email to the contact's email."""
-        from src.email.service import assert_gmail_connected
-
-        # Pre-flight: refuse to mark a proposal as sent if the operator's
-        # Gmail isn't connected — otherwise the email lands in `retry`
-        # status and the UI looks correct ("Sent at <ts>") while nothing
-        # left the building. Surface the cause as a 400 so the operator
-        # can fix it before clicking send again.
+        # Pre-flight: queue path swallows GmailNotConnected and parks the
+        # row in retry, leaving "sent" UX with no email actually sent.
         await assert_gmail_connected(self.db, user_id)
 
         proposal = await self.get_by_id(proposal_id)

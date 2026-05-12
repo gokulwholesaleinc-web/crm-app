@@ -14,7 +14,7 @@ import os
 import secrets
 import sys
 from collections.abc import AsyncGenerator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
@@ -89,8 +89,11 @@ TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 pytestmark = pytest.mark.asyncio
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture
 async def test_engine():
+    # Function-scoped so each test starts on a fresh schema — guardrail
+    # tests commit() (User, Contact, GmailConnection, Proposal, Contract)
+    # and a session-scoped engine would let those rows bleed across tests.
     engine = create_async_engine(
         TEST_DATABASE_URL,
         connect_args={"check_same_thread": False},
@@ -145,12 +148,15 @@ async def auth_headers(user: User) -> dict:
 
 
 async def _attach_gmail(db: AsyncSession, user: User) -> GmailConnection:
+    # Far-future expiry so the guard's _refresh_if_needed short-circuits
+    # without attempting a real Google refresh during the test.
     conn = GmailConnection(
         user_id=user.id,
         email=user.email,
         access_token="x",
         refresh_token="y",
         scopes="https://www.googleapis.com/auth/gmail.send",
+        token_expiry=datetime.now(UTC) + timedelta(hours=1),
     )
     db.add(conn)
     await db.commit()
@@ -188,6 +194,7 @@ class TestAssertGmailConnectedUnit:
         await db_session.commit()
         with pytest.raises(ValueError, match="Gmail account is not connected"):
             await assert_gmail_connected(db_session, user.id)
+
 
 
 class TestProposalSendGuardrail:

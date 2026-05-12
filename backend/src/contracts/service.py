@@ -19,7 +19,7 @@ from src.core.sorting import build_order_clauses
 from src.core.url_safety import UnsafeUrlError, validate_public_url
 from src.email.branded_templates import TenantBrandingHelper, render_contract_send_email
 from src.email.pdf_render import pdf_logo_allowed_hosts, render_html_to_pdf
-from src.email.service import EmailService
+from src.email.service import EmailService, assert_gmail_connected
 from src.email.types import EmailAttachment
 
 logger = logging.getLogger(__name__)
@@ -197,14 +197,8 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
         ``SELECT … FOR UPDATE`` pattern in
         ``proposals/service.resend_payment_link``.)
         """
-        from src.email.service import assert_gmail_connected
-
-        # Pre-flight: refuse if the operator's Gmail isn't connected,
-        # before minting a new sign-token or flipping the contract to
-        # "sent". The post-queue check below still catches deeper
-        # failures (Gmail returns 5xx etc.) but this short-circuits the
-        # most common case so the operator sees an actionable 400 and
-        # the contract row stays in "draft".
+        # Pre-flight before minting the sign-token / flipping to "sent" —
+        # surfaces a 400 instead of leaving the row in draft+silently-broken.
         await assert_gmail_connected(self.db, user_id)
 
         # Resolution order: explicit request override > the contract's
