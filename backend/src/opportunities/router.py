@@ -23,7 +23,7 @@ from src.core.cache import (
 from src.core.client_ip import get_client_ip
 from src.core.constants import ENTITY_TYPE_OPPORTUNITIES, EntityNames, HTTPStatus
 from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
-from src.core.permissions import require_admin
+from src.core.permissions import require_admin, require_permission
 from src.core.router_utils import (
     CurrentUser,
     DBSession,
@@ -209,7 +209,7 @@ async def get_kanban_view(
 async def move_opportunity(
     opportunity_id: int,
     request: MoveOpportunityRequest,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("opportunities", "update"))],
     db: DBSession,
 ):
     """Move an opportunity to a different pipeline stage."""
@@ -324,7 +324,7 @@ async def list_opportunities(
 async def create_opportunity(
     opp_data: OpportunityCreate,
     request: Request,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("opportunities", "create"))],
     db: DBSession,
 ):
     """Create a new opportunity."""
@@ -386,7 +386,7 @@ async def update_opportunity(
     opportunity_id: int,
     opp_data: OpportunityUpdate,
     request: Request,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("opportunities", "update"))],
     db: DBSession,
 ):
     """Update an opportunity."""
@@ -437,7 +437,7 @@ async def update_opportunity(
 async def delete_opportunity(
     opportunity_id: int,
     request: Request,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("opportunities", "delete"))],
     db: DBSession,
 ):
     """Delete an opportunity."""

@@ -9,8 +9,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy import or_, select
 
+from src.auth.models import User
 from src.core.constants import HTTPStatus
 from src.core.data_scope import DataScope, get_data_scope
+from src.core.permissions import require_permission
 from src.core.router_utils import CurrentUser, DBSession
 from src.reports.models import SavedReport
 from src.reports.schemas import (
@@ -59,12 +61,14 @@ router = APIRouter(prefix="/api/reports", tags=["reports"])
 @router.post("/execute", response_model=ReportResult)
 async def execute_report(
     definition: ReportDefinition,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("reports", "read"))],
     db: DBSession,
     data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
-    """Execute a report definition and return results (scoped to current user)."""
-    executor = ReportExecutor(db, user_id=current_user.id, is_admin=data_scope.can_see_all())
+    """Execute a report definition and return results (scoped to current user
+    for sales_rep/viewer; unscoped for admin/manager)."""
+    scoped_user_id = None if data_scope.can_see_all() else current_user.id
+    executor = ReportExecutor(db, user_id=scoped_user_id, is_admin=data_scope.can_see_all())
     try:
         return await executor.execute(definition)
     except PermissionError as exc:
@@ -76,12 +80,13 @@ async def execute_report(
 @router.post("/export-csv")
 async def export_report_csv(
     definition: ReportDefinition,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("reports", "read"))],
     db: DBSession,
     data_scope: Annotated[DataScope, Depends(get_data_scope)],
 ):
     """Execute a report and return results as CSV download."""
-    executor = ReportExecutor(db, user_id=current_user.id, is_admin=data_scope.can_see_all())
+    scoped_user_id = None if data_scope.can_see_all() else current_user.id
+    executor = ReportExecutor(db, user_id=scoped_user_id, is_admin=data_scope.can_see_all())
     try:
         csv_content = await executor.export_csv(definition)
     except PermissionError as exc:
@@ -135,7 +140,7 @@ async def list_saved_reports(
 @router.post("", response_model=SavedReportResponse, status_code=HTTPStatus.CREATED)
 async def create_saved_report(
     data: SavedReportCreate,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("reports", "create"))],
     db: DBSession,
 ):
     """Create a new saved report."""
@@ -208,7 +213,7 @@ async def get_saved_report(
 async def update_saved_report(
     report_id: int,
     data: SavedReportUpdate,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("reports", "update"))],
     db: DBSession,
 ):
     """Update a saved report."""
@@ -257,7 +262,7 @@ async def update_saved_report(
 async def update_report_schedule(
     report_id: int,
     data: ScheduleUpdateRequest,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("reports", "update"))],
     db: DBSession,
 ):
     """Set schedule and recipients on a saved report."""
@@ -285,7 +290,7 @@ async def update_report_schedule(
 @router.delete("/{report_id}", status_code=HTTPStatus.NO_CONTENT)
 async def delete_saved_report(
     report_id: int,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("reports", "delete"))],
     db: DBSession,
 ):
     """Delete a saved report."""

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Modal } from '../../components/ui/Modal';
 import { ViewingAsSelector } from './components/ViewingAsSelector';
 import { loadStoredViewingAs, type ViewingAsValue } from './components/viewingAsStorage';
@@ -204,7 +205,10 @@ function DashboardPage() {
     recentActivities: (timelineData?.items ?? []).slice(0, 10).map(item => ({
       id: item.id,
       description: item.subject || item.description || 'Activity',
-      timestamp: item.scheduled_at || item.completed_at || item.due_date || new Date().toISOString(),
+      timestamp: item.scheduled_at || item.completed_at || item.due_date || item.created_at,
+      ownerName: item.owner_name ?? null,
+      entityLink: item.entity_link ?? null,
+      entityLabel: item.entity_label ?? null,
     })),
     pipelineData: (pipelineData?.data ?? []) as (ChartDataPoint & { stage?: string; count?: number; value?: number })[],
     leadsBySource: (leadsBySourceData?.data ?? []) as (ChartDataPoint & { source?: string; count?: number })[],
@@ -514,47 +518,73 @@ function DashboardPage() {
         <div className="flow-root">
           <ul className="-mb-8">
             {data?.recentActivities && data.recentActivities.length > 0 ? (
-              data.recentActivities.map((activity: { id: number; description: string; timestamp: string }, idx: number) => (
-                <li key={activity.id}>
-                  <div className="relative pb-6 sm:pb-8">
-                    {idx !== (data?.recentActivities?.length || 0) - 1 && (
-                      <span
-                        className="absolute top-3 sm:top-4 left-3 sm:left-4 -ml-px h-full w-0.5 bg-gray-200 dark:bg-gray-700"
-                        aria-hidden="true"
-                      />
-                    )}
-                    <div className="relative flex space-x-2 sm:space-x-3">
-                      <div>
-                        <span className="h-6 w-6 sm:h-8 sm:w-8 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center ring-4 sm:ring-8 ring-white dark:ring-gray-800">
-                          <svg
-                            className="h-3 w-3 sm:h-4 sm:w-4 text-primary-600"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                            />
-                          </svg>
-                        </span>
-                      </div>
-                      <div className="min-w-0 flex-1 pt-0.5 sm:pt-1.5">
-                        <div className="flex flex-col sm:flex-row sm:justify-between sm:space-x-4">
-                          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 break-words">
-                            {activity.description}
-                          </p>
-                          <div className="text-xs sm:text-sm text-gray-400 sm:text-gray-500 dark:text-gray-500 whitespace-nowrap mt-0.5 sm:mt-0">
-                            {formatDate(activity.timestamp)}
+              data.recentActivities.map((activity, idx) => {
+                const showLink = !!(activity.entityLink && activity.entityLabel);
+                return (
+                  <li key={activity.id}>
+                    <div className="relative pb-6 sm:pb-8">
+                      {idx !== (data?.recentActivities?.length || 0) - 1 && (
+                        <span
+                          className="absolute top-3 sm:top-4 left-3 sm:left-4 -ml-px h-full w-0.5 bg-gray-200 dark:bg-gray-700"
+                          aria-hidden="true"
+                        />
+                      )}
+                      <div className="relative flex space-x-2 sm:space-x-3">
+                        <div>
+                          <span className="h-6 w-6 sm:h-8 sm:w-8 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center ring-4 sm:ring-8 ring-white dark:ring-gray-800">
+                            <svg
+                              className="h-3 w-3 sm:h-4 sm:w-4 text-primary-600"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              aria-hidden="true"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                              />
+                            </svg>
+                          </span>
+                        </div>
+                        <div className="min-w-0 flex-1 pt-0.5 sm:pt-1.5">
+                          <div className="flex flex-col sm:flex-row sm:justify-between sm:space-x-4">
+                            <div className="min-w-0">
+                              <p className="text-xs sm:text-sm text-gray-700 dark:text-gray-200 break-words">
+                                {activity.description}
+                              </p>
+                              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                {activity.ownerName ? (
+                                  <span className="font-medium text-gray-700 dark:text-gray-300">
+                                    {activity.ownerName}
+                                  </span>
+                                ) : (
+                                  <span className="italic">Unknown user</span>
+                                )}
+                                {showLink && (
+                                  <>
+                                    <span className="mx-1 text-gray-400" aria-hidden="true">·</span>
+                                    <Link
+                                      to={activity.entityLink!}
+                                      className="text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary-500 rounded-sm"
+                                    >
+                                      {activity.entityLabel}
+                                    </Link>
+                                  </>
+                                )}
+                              </p>
+                            </div>
+                            <div className="text-xs sm:text-sm text-gray-400 sm:text-gray-500 dark:text-gray-500 whitespace-nowrap mt-0.5 sm:mt-0">
+                              {formatDate(activity.timestamp)}
+                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                </li>
-              ))
+                  </li>
+                );
+              })
             ) : (
               <li className="text-center py-4 text-sm text-gray-500 dark:text-gray-400">
                 No recent activities

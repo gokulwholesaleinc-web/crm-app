@@ -23,9 +23,11 @@ from src.audit.utils import (
     audit_entity_update,
     snapshot_entity,
 )
+from src.auth.models import User
 from src.core.client_ip import get_client_ip
 from src.core.constants import ENTITY_TYPE_ACTIVITIES, ENTITY_TYPE_USERS, EntityNames, HTTPStatus
 from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
+from src.core.permissions import require_permission
 from src.core.router_utils import (
     CurrentUser,
     DBSession,
@@ -187,7 +189,7 @@ async def list_activities(
 async def create_activity(
     activity_data: ActivityCreate,
     request: Request,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("activities", "create"))],
     db: DBSession,
 ):
     """Create a new activity."""
@@ -350,7 +352,7 @@ async def update_activity(
     activity_id: int,
     activity_data: ActivityUpdate,
     request: Request,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("activities", "update"))],
     db: DBSession,
 ):
     """Update an activity."""
@@ -384,7 +386,7 @@ async def update_activity(
 async def complete_activity(
     activity_id: int,
     request: CompleteActivityRequest,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("activities", "update"))],
     db: DBSession,
 ):
     """Mark an activity as completed."""
@@ -398,7 +400,7 @@ async def complete_activity(
 async def delete_activity(
     activity_id: int,
     request: Request,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("activities", "delete"))],
     db: DBSession,
 ):
     """Delete an activity."""

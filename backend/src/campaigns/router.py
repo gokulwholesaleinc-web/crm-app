@@ -4,6 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from src.auth.models import User
 from src.campaigns.schemas import (
     AddMembersRequest,
     CampaignAnalytics,
@@ -31,6 +32,7 @@ from src.campaigns.service import (
 )
 from src.core.constants import ENTITY_TYPE_CAMPAIGNS, EntityNames, HTTPStatus
 from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
+from src.core.permissions import require_permission
 from src.core.router_utils import (
     CurrentUser,
     DBSession,
@@ -63,7 +65,7 @@ def _can_manage_template(template, current_user) -> bool:
 @router.post("/templates", response_model=EmailTemplateResponse, status_code=HTTPStatus.CREATED)
 async def create_email_template(
     template_data: EmailTemplateCreate,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("campaigns", "create"))],
     db: DBSession,
 ):
     """Create a new email template."""
@@ -109,7 +111,7 @@ async def get_email_template(
 async def update_email_template(
     template_id: int,
     template_data: EmailTemplateUpdate,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("campaigns", "update"))],
     db: DBSession,
 ):
     """Update an email template."""
@@ -126,7 +128,7 @@ async def update_email_template(
 @router.delete("/templates/{template_id}", status_code=HTTPStatus.NO_CONTENT)
 async def delete_email_template(
     template_id: int,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("campaigns", "delete"))],
     db: DBSession,
 ):
     """Delete an email template."""
@@ -144,7 +146,7 @@ async def delete_email_template(
 @router.post("/create-from-import", response_model=CampaignResponse, status_code=HTTPStatus.CREATED)
 async def create_campaign_from_import(
     request: CreateFromImportRequest,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("campaigns", "create"))],
     db: DBSession,
 ):
     """Create a new campaign and bulk-add members from an import.
@@ -228,7 +230,7 @@ async def list_campaigns(
 @router.post("", response_model=CampaignResponse, status_code=HTTPStatus.CREATED)
 async def create_campaign(
     campaign_data: CampaignCreate,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("campaigns", "create"))],
     db: DBSession,
 ):
     """Create a new campaign."""
@@ -264,7 +266,7 @@ async def get_campaign(
 async def update_campaign(
     campaign_id: int,
     campaign_data: CampaignUpdate,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("campaigns", "update"))],
     db: DBSession,
 ):
     """Update a campaign."""
@@ -278,7 +280,7 @@ async def update_campaign(
 @router.delete("/{campaign_id}", status_code=HTTPStatus.NO_CONTENT)
 async def delete_campaign(
     campaign_id: int,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("campaigns", "delete"))],
     db: DBSession,
 ):
     """Delete a campaign."""
@@ -357,7 +359,7 @@ async def list_campaign_members(
 async def add_campaign_members(
     campaign_id: int,
     request: AddMembersRequest,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("campaigns", "update"))],
     db: DBSession,
 ):
     """Add members to a campaign."""
@@ -380,7 +382,7 @@ async def update_campaign_member(
     campaign_id: int,
     member_id: int,
     member_data: CampaignMemberUpdate,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("campaigns", "update"))],
     db: DBSession,
 ):
     """Update a campaign member."""
@@ -402,7 +404,7 @@ async def update_campaign_member(
 async def remove_campaign_member(
     campaign_id: int,
     member_id: int,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("campaigns", "update"))],
     db: DBSession,
 ):
     """Remove a member from a campaign."""
@@ -425,7 +427,7 @@ async def remove_campaign_member(
 async def add_campaign_step(
     campaign_id: int,
     step_data: EmailCampaignStepCreate,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("campaigns", "update"))],
     db: DBSession,
 ):
     """Add a step to a campaign sequence."""
@@ -462,7 +464,7 @@ async def get_campaign_steps(
 async def reorder_campaign_steps(
     campaign_id: int,
     payload: EmailCampaignStepReorderRequest,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("campaigns", "update"))],
     db: DBSession,
 ):
     """Atomically reorder all steps in a campaign.
@@ -492,7 +494,7 @@ async def update_campaign_step(
     campaign_id: int,
     step_id: int,
     step_data: EmailCampaignStepUpdate,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("campaigns", "update"))],
     db: DBSession,
 ):
     """Update a campaign step."""
@@ -512,7 +514,7 @@ async def update_campaign_step(
 async def delete_campaign_step(
     campaign_id: int,
     step_id: int,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("campaigns", "update"))],
     db: DBSession,
 ):
     """Delete a campaign step."""
@@ -530,7 +532,7 @@ async def delete_campaign_step(
 @router.post("/{campaign_id}/execute")
 async def execute_campaign(
     campaign_id: int,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_permission("campaigns", "update"))],
     db: DBSession,
 ):
     """Execute a campaign: send step 1 immediately, schedule remaining steps."""

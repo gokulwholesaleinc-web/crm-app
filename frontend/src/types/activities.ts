@@ -109,7 +109,10 @@ export interface TimelineItem {
   priority: string;
   created_at: string;
   owner_id?: number | null;
+  owner_name?: string | null;
   assigned_to_id?: number | null;
+  entity_label?: string | null;
+  entity_link?: string | null;
   call_duration_minutes?: number | null;
   call_outcome?: string | null;
   meeting_location?: string | null;

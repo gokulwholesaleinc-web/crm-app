@@ -30,13 +30,13 @@ class TestReportExecute:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_contact: Contact,
     ):
         """Test executing a basic count report."""
         response = await client.post(
             "/api/reports/execute",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "entity_type": "contacts",
                 "metric": "count",
@@ -56,13 +56,13 @@ class TestReportExecute:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_lead: Lead,
     ):
         """Test executing a count report grouped by a field."""
         response = await client.post(
             "/api/reports/execute",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "entity_type": "leads",
                 "metric": "count",
@@ -85,13 +85,13 @@ class TestReportExecute:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_lead: Lead,
     ):
         """Test executing a sum metric report on a numeric field."""
         response = await client.post(
             "/api/reports/execute",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "entity_type": "leads",
                 "metric": "sum",
@@ -111,12 +111,12 @@ class TestReportExecute:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
     ):
         """Test executing report with invalid entity type raises error."""
         response = await client.post(
             "/api/reports/execute",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "entity_type": "invalid_type",
                 "metric": "count",
@@ -154,12 +154,12 @@ class TestReportTemplatesAPI:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
     ):
         """Test listing pre-built report templates."""
         response = await client.get(
             "/api/reports/templates",
-            headers=auth_headers,
+            headers=admin_auth_headers,
         )
 
         assert response.status_code == 200
@@ -179,12 +179,12 @@ class TestReportTemplatesAPI:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
     ):
         """Test that pipeline_by_stage template is present."""
         response = await client.get(
             "/api/reports/templates",
-            headers=auth_headers,
+            headers=admin_auth_headers,
         )
 
         data = response.json()
@@ -196,7 +196,7 @@ class TestReportTemplatesAPI:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
     ):
         """The full set of template IDs is part of the public API surface.
 
@@ -206,7 +206,7 @@ class TestReportTemplatesAPI:
         """
         response = await client.get(
             "/api/reports/templates",
-            headers=auth_headers,
+            headers=admin_auth_headers,
         )
         assert response.status_code == 200
         actual = {t["id"] for t in response.json()}
@@ -236,12 +236,12 @@ class TestSavedReportCRUDAPI:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
     ):
         """Test creating a saved report."""
         response = await client.post(
             "/api/reports",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "name": "My Lead Report",
                 "description": "Leads by status",
@@ -267,12 +267,12 @@ class TestSavedReportCRUDAPI:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
     ):
         """Test creating saved report with filter definition."""
         response = await client.post(
             "/api/reports",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "name": "Filtered Report",
                 "entity_type": "contacts",
@@ -292,13 +292,13 @@ class TestSavedReportCRUDAPI:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
     ):
         """Test listing saved reports (own + public)."""
         # Create a report first
         await client.post(
             "/api/reports",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "name": "List Test Report",
                 "entity_type": "contacts",
@@ -309,7 +309,7 @@ class TestSavedReportCRUDAPI:
 
         response = await client.get(
             "/api/reports",
-            headers=auth_headers,
+            headers=admin_auth_headers,
         )
 
         assert response.status_code == 200
@@ -322,12 +322,12 @@ class TestSavedReportCRUDAPI:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
     ):
         """Test listing reports filtered by entity_type."""
         await client.post(
             "/api/reports",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "name": "Contact Report",
                 "entity_type": "contacts",
@@ -337,7 +337,7 @@ class TestSavedReportCRUDAPI:
         )
         await client.post(
             "/api/reports",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "name": "Lead Report",
                 "entity_type": "leads",
@@ -348,7 +348,7 @@ class TestSavedReportCRUDAPI:
 
         response = await client.get(
             "/api/reports",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             params={"entity_type": "contacts"},
         )
 
@@ -361,12 +361,12 @@ class TestSavedReportCRUDAPI:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
     ):
         """Test getting a saved report by ID."""
         create_response = await client.post(
             "/api/reports",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "name": "Get By ID Report",
                 "entity_type": "contacts",
@@ -378,7 +378,7 @@ class TestSavedReportCRUDAPI:
 
         response = await client.get(
             f"/api/reports/{report_id}",
-            headers=auth_headers,
+            headers=admin_auth_headers,
         )
 
         assert response.status_code == 200
@@ -391,12 +391,12 @@ class TestSavedReportCRUDAPI:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
     ):
         """Test getting non-existent report returns 404."""
         response = await client.get(
             "/api/reports/99999",
-            headers=auth_headers,
+            headers=admin_auth_headers,
         )
 
         assert response.status_code == 404
@@ -406,12 +406,12 @@ class TestSavedReportCRUDAPI:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
     ):
         """Test updating a saved report."""
         create_response = await client.post(
             "/api/reports",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "name": "Old Report Name",
                 "entity_type": "leads",
@@ -423,7 +423,7 @@ class TestSavedReportCRUDAPI:
 
         response = await client.patch(
             f"/api/reports/{report_id}",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "name": "New Report Name",
                 "chart_type": "line",
@@ -442,12 +442,12 @@ class TestSavedReportCRUDAPI:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
     ):
         """Test updating non-existent report returns 404."""
         response = await client.patch(
             "/api/reports/99999",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={"name": "Test"},
         )
 
@@ -458,12 +458,12 @@ class TestSavedReportCRUDAPI:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
     ):
         """Test deleting a saved report."""
         create_response = await client.post(
             "/api/reports",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "name": "To Delete Report",
                 "entity_type": "contacts",
@@ -475,7 +475,7 @@ class TestSavedReportCRUDAPI:
 
         response = await client.delete(
             f"/api/reports/{report_id}",
-            headers=auth_headers,
+            headers=admin_auth_headers,
         )
 
         assert response.status_code == 204
@@ -483,7 +483,7 @@ class TestSavedReportCRUDAPI:
         # Verify deletion
         get_response = await client.get(
             f"/api/reports/{report_id}",
-            headers=auth_headers,
+            headers=admin_auth_headers,
         )
         assert get_response.status_code == 404
 
@@ -492,12 +492,12 @@ class TestSavedReportCRUDAPI:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
     ):
         """Test deleting non-existent report returns 404."""
         response = await client.delete(
             "/api/reports/99999",
-            headers=auth_headers,
+            headers=admin_auth_headers,
         )
 
         assert response.status_code == 404
@@ -511,13 +511,13 @@ class TestReportExportCSV:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        admin_auth_headers: dict,
         test_contact: Contact,
     ):
         """Test exporting a report as CSV."""
         response = await client.post(
             "/api/reports/export-csv",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={
                 "entity_type": "contacts",
                 "metric": "count",
@@ -583,7 +583,8 @@ class TestReportOwnerScopeGate:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
-        auth_headers: dict,
+        sales_rep_auth_headers: dict,
+        seed_roles,
     ):
         """Non-admin querying an entity without owner_id must get 403.
 
@@ -600,7 +601,7 @@ class TestReportOwnerScopeGate:
         with patch.dict(reports_service.ENTITY_MODEL_MAP, {"unscoped_entity": _NoOwnerModel}):
             response = await client.post(
                 "/api/reports/execute",
-                headers=auth_headers,
+                headers=sales_rep_auth_headers,
                 json={
                     "entity_type": "unscoped_entity",
                     "metric": "count",
