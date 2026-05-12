@@ -149,7 +149,7 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
                   alt={tenant.company_name || 'Logo'}
                   width={180}
                   height={40}
-                  className="h-10 w-auto max-w-[176px] object-contain"
+                  className="h-10 w-auto max-w-[176px] object-contain dark:[filter:drop-shadow(0_0_2px_rgba(255,255,255,0.75))_drop-shadow(0_0_6px_rgba(255,255,255,0.35))]"
                   onError={() => setMobileLogoError(true)}
                 />
               </div>
