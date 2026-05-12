@@ -1,18 +1,12 @@
 """Tests for Custom Reports and Advanced Filtering features.
 
 Tests cover:
-- Core filtering engine (apply_filter_condition, parse_filter_group, apply_filters_to_query)
+- Core filtering engine (apply_filter_condition error paths, parse_filter_group, apply_filters_to_query)
 - Report execution (count, sum, avg, min, max metrics with group_by)
 - Report CSV export
-- Report templates listing (service-layer)
-- Saved report CRUD (direct DB)
-- Saved filter CRUD via API
+- Saved report API CRUD
+- Saved filter API CRUD
 - Advanced filters on entity list endpoints (leads, contacts, companies, opportunities, activities)
-
-Note: TestReportTemplates and TestSavedReportCRUD were renamed to
-TestReportTemplatesServiceLayer and TestSavedReportCRUDDirectDB to
-avoid class name collision with the API-level tests in
-tests/unit/test_reports.py (TestReportTemplatesAPI, TestSavedReportCRUDAPI).
 """
 
 import json
@@ -25,7 +19,7 @@ from src.activities.models import Activity
 from src.contacts.models import Contact
 from src.reports.models import SavedReport
 from src.filters.models import SavedFilter
-from src.reports.service import ReportExecutor, REPORT_TEMPLATES
+from src.reports.service import ReportExecutor
 from src.reports.schemas import ReportDefinition
 from src.core.filtering import apply_filter_condition, parse_filter_group, apply_filters_to_query
 from sqlalchemy import select
@@ -36,72 +30,15 @@ from sqlalchemy import select
 # ============================================================
 
 class TestFilterConditions:
-    """Test individual filter condition operators."""
+    """Test individual filter condition operators.
 
-    def test_eq_operator(self):
-        """Should produce a valid filter condition for the eq operator."""
-        cond = apply_filter_condition(Lead, "status", "eq", "new")
-        assert cond is not None
-
-    def test_neq_operator(self):
-        """Should produce a valid filter condition for the neq operator."""
-        cond = apply_filter_condition(Lead, "status", "neq", "lost")
-        assert cond is not None
-
-    def test_contains_operator(self):
-        """Should produce a valid filter condition for the contains operator."""
-        cond = apply_filter_condition(Lead, "first_name", "contains", "john")
-        assert cond is not None
-
-    def test_not_contains_operator(self):
-        """Should produce a valid filter condition for the not_contains operator."""
-        cond = apply_filter_condition(Lead, "first_name", "not_contains", "john")
-        assert cond is not None
-
-    def test_gt_operator(self):
-        """Should produce a valid filter condition for the gt operator."""
-        cond = apply_filter_condition(Lead, "score", "gt", 50)
-        assert cond is not None
-
-    def test_lt_operator(self):
-        """Should produce a valid filter condition for the lt operator."""
-        cond = apply_filter_condition(Lead, "score", "lt", 50)
-        assert cond is not None
-
-    def test_gte_operator(self):
-        """Should produce a valid filter condition for the gte operator."""
-        cond = apply_filter_condition(Lead, "score", "gte", 50)
-        assert cond is not None
-
-    def test_lte_operator(self):
-        """Should produce a valid filter condition for the lte operator."""
-        cond = apply_filter_condition(Lead, "score", "lte", 50)
-        assert cond is not None
-
-    def test_in_operator(self):
-        """Should produce a valid filter condition for the in operator."""
-        cond = apply_filter_condition(Lead, "status", "in", ["new", "contacted"])
-        assert cond is not None
-
-    def test_not_in_operator(self):
-        """Should produce a valid filter condition for the not_in operator."""
-        cond = apply_filter_condition(Lead, "status", "not_in", ["lost", "converted"])
-        assert cond is not None
-
-    def test_is_empty_operator(self):
-        """Should produce a valid filter condition for the is_empty operator."""
-        cond = apply_filter_condition(Lead, "email", "is_empty", None)
-        assert cond is not None
-
-    def test_is_not_empty_operator(self):
-        """Should produce a valid filter condition for the is_not_empty operator."""
-        cond = apply_filter_condition(Lead, "email", "is_not_empty", None)
-        assert cond is not None
-
-    def test_between_operator(self):
-        """Should produce a valid filter condition for the between operator."""
-        cond = apply_filter_condition(Lead, "score", "between", [20, 80])
-        assert cond is not None
+    Per-operator "returns a non-None expression" tests (eq/neq/contains/
+    gt/lt/in/between/etc.) were dropped — they verified that the function
+    returned something without ever compiling or executing the resulting
+    SQL. Operator semantics are covered by the SQL-executing tests in
+    TestApplyFiltersToQuery, TestReportExecution, and
+    TestAdvancedFilterOnListEndpoints.
+    """
 
     def test_unknown_field_raises_error(self):
         """Should raise ValueError when filtering on an unknown field."""
@@ -211,84 +148,14 @@ class TestApplyFiltersToQuery:
 
 
 # ============================================================
-# Report template tests
-# ============================================================
-
-class TestReportTemplatesServiceLayer:
-    """Test pre-built report templates at the service layer (REPORT_TEMPLATES constant)."""
-
-    def test_templates_exist(self):
-        """Should have exactly 10 pre-built report templates."""
-        assert len(REPORT_TEMPLATES) == 10
-
-    def test_pipeline_by_stage_template(self):
-        """Should define pipeline_by_stage template for opportunities grouped by stage."""
-        tmpl = next(t for t in REPORT_TEMPLATES if t["id"] == "pipeline_by_stage")
-        assert tmpl["entity_type"] == "opportunities"
-        assert tmpl["group_by"] == "pipeline_stage_id"
-        assert tmpl["metric"] == "count"
-
-    def test_revenue_by_month_template(self):
-        """Should define revenue_by_month template summing opportunity amounts."""
-        tmpl = next(t for t in REPORT_TEMPLATES if t["id"] == "revenue_by_month")
-        assert tmpl["entity_type"] == "opportunities"
-        assert tmpl["metric"] == "sum"
-        assert tmpl["metric_field"] == "amount"
-
-    def test_lead_conversion_template(self):
-        """Should define lead_conversion template for leads grouped by status."""
-        tmpl = next(t for t in REPORT_TEMPLATES if t["id"] == "lead_conversion")
-        assert tmpl["entity_type"] == "leads"
-        assert tmpl["group_by"] == "status"
-
-    def test_activity_by_rep_template(self):
-        """Should define activity_by_rep template for activities grouped by owner."""
-        tmpl = next(t for t in REPORT_TEMPLATES if t["id"] == "activity_by_rep")
-        assert tmpl["entity_type"] == "activities"
-        assert tmpl["group_by"] == "owner_id"
-
-    def test_campaign_performance_template(self):
-        """Should define campaign_performance template for campaigns entity."""
-        tmpl = next(t for t in REPORT_TEMPLATES if t["id"] == "campaign_performance")
-        assert tmpl["entity_type"] == "campaigns"
-
-    def test_deals_won_lost_template(self):
-        """Should define deals_won_lost template for opportunities entity."""
-        tmpl = next(t for t in REPORT_TEMPLATES if t["id"] == "deals_won_lost")
-        assert tmpl["entity_type"] == "opportunities"
-
-    def test_payment_summary_by_month_template(self):
-        """Should define payment_summary_by_month template summing payment amounts by month."""
-        tmpl = next(t for t in REPORT_TEMPLATES if t["id"] == "payment_summary_by_month")
-        assert tmpl["entity_type"] == "payments"
-        assert tmpl["metric"] == "sum"
-        assert tmpl["metric_field"] == "amount"
-        assert tmpl["date_group"] == "month"
-
-    def test_contracts_by_status_template(self):
-        """Should define contracts_by_status template counting contracts grouped by status."""
-        tmpl = next(t for t in REPORT_TEMPLATES if t["id"] == "contracts_by_status")
-        assert tmpl["entity_type"] == "contracts"
-        assert tmpl["metric"] == "count"
-        assert tmpl["group_by"] == "status"
-
-    def test_revenue_by_source_template(self):
-        """Should define revenue_by_source template summing opportunity amounts."""
-        tmpl = next(t for t in REPORT_TEMPLATES if t["id"] == "revenue_by_source")
-        assert tmpl["entity_type"] == "opportunities"
-        assert tmpl["metric"] == "sum"
-        assert tmpl["metric_field"] == "amount"
-
-    def test_pipeline_value_by_owner_template(self):
-        """Should define pipeline_value_by_owner template for opportunities grouped by owner."""
-        tmpl = next(t for t in REPORT_TEMPLATES if t["id"] == "pipeline_value_by_owner")
-        assert tmpl["entity_type"] == "opportunities"
-        assert tmpl["group_by"] == "owner_id"
-
-
-# ============================================================
 # Report execution integration tests
 # ============================================================
+
+# Per-template shape tests (TestReportTemplatesServiceLayer) were dropped —
+# they walked each entry in the REPORT_TEMPLATES static constant and asserted
+# its hard-coded fields, which is just restating the constant. The
+# user-facing surface is covered by TestReportTemplatesAPI in
+# tests/unit/test_reports.py.
 
 @pytest.mark.asyncio
 class TestReportExecution:
@@ -516,147 +383,15 @@ class TestSavedReportSchedule:
 
 
 # ============================================================
-# Saved report CRUD integration tests (via direct DB)
-# ============================================================
-
-@pytest.mark.asyncio
-class TestSavedReportCRUDDirectDB:
-    """Integration tests for saved report CRUD via direct DB operations."""
-
-    async def test_create_saved_report(self, db_session, test_user):
-        """Test creating a saved report directly in DB."""
-        report = SavedReport(
-            name="Test Report",
-            description="A test saved report",
-            entity_type="leads",
-            group_by="status",
-            metric="count",
-            chart_type="bar",
-            is_public=False,
-            created_by_id=test_user.id,
-        )
-        db_session.add(report)
-        await db_session.flush()
-        await db_session.refresh(report)
-
-        assert report.id > 0
-        assert report.name == "Test Report"
-        assert report.entity_type == "leads"
-        assert report.created_by_id == test_user.id
-
-    async def test_list_saved_reports(self, db_session, test_user):
-        """Test listing saved reports from DB."""
-        for i in range(2):
-            report = SavedReport(
-                name=f"Report {i}",
-                entity_type="leads",
-                metric="count",
-                chart_type="bar",
-                created_by_id=test_user.id,
-            )
-            db_session.add(report)
-        await db_session.flush()
-
-        result = await db_session.execute(
-            select(SavedReport).where(SavedReport.created_by_id == test_user.id)
-        )
-        reports = list(result.scalars().all())
-        assert len(reports) >= 2
-
-    async def test_delete_saved_report(self, db_session, test_user):
-        """Test deleting a saved report."""
-        report = SavedReport(
-            name="Delete Me",
-            entity_type="leads",
-            metric="count",
-            chart_type="bar",
-            created_by_id=test_user.id,
-        )
-        db_session.add(report)
-        await db_session.flush()
-        await db_session.refresh(report)
-        report_id = report.id
-
-        await db_session.delete(report)
-        await db_session.flush()
-
-        result = await db_session.execute(
-            select(SavedReport).where(SavedReport.id == report_id)
-        )
-        assert result.scalar_one_or_none() is None
-
-
-# ============================================================
-# Saved filter CRUD integration tests (via direct DB)
-# ============================================================
-
-@pytest.mark.asyncio
-class TestSavedFilterCRUD:
-    """Integration tests for saved filter CRUD via direct DB."""
-
-    async def test_create_saved_filter(self, db_session, test_user):
-        """Test creating a saved filter directly in the database."""
-        saved_filter = SavedFilter(
-            name="High Score Leads",
-            entity_type="leads",
-            filters=json.dumps({
-                "operator": "and",
-                "conditions": [{"field": "score", "op": "gte", "value": 50}],
-            }),
-            user_id=test_user.id,
-            is_default=False,
-        )
-        db_session.add(saved_filter)
-        await db_session.flush()
-        await db_session.refresh(saved_filter)
-
-        assert saved_filter.id > 0
-        assert saved_filter.name == "High Score Leads"
-        assert saved_filter.entity_type == "leads"
-
-    async def test_list_saved_filters(self, db_session, test_user):
-        """Test listing saved filters."""
-        for i in range(2):
-            sf = SavedFilter(
-                name=f"Filter {i}",
-                entity_type="leads",
-                filters=json.dumps({"operator": "and", "conditions": []}),
-                user_id=test_user.id,
-            )
-            db_session.add(sf)
-        await db_session.flush()
-
-        result = await db_session.execute(
-            select(SavedFilter).where(SavedFilter.user_id == test_user.id)
-        )
-        filters = list(result.scalars().all())
-        assert len(filters) >= 2
-
-    async def test_delete_saved_filter(self, db_session, test_user):
-        """Test deleting a saved filter."""
-        sf = SavedFilter(
-            name="Delete Me",
-            entity_type="leads",
-            filters=json.dumps({"operator": "and", "conditions": []}),
-            user_id=test_user.id,
-        )
-        db_session.add(sf)
-        await db_session.flush()
-        await db_session.refresh(sf)
-        sf_id = sf.id
-
-        await db_session.delete(sf)
-        await db_session.flush()
-
-        result = await db_session.execute(
-            select(SavedFilter).where(SavedFilter.id == sf_id)
-        )
-        assert result.scalar_one_or_none() is None
-
-
-# ============================================================
 # API endpoint integration tests
 # ============================================================
+
+# TestSavedReportCRUDDirectDB and TestSavedFilterCRUD were dropped — both
+# only exercised SQLAlchemy (add/flush/select/delete) against an in-memory
+# session, without touching the routers, services, or auth surface. Saved-
+# report CRUD is covered by TestReportsAPI below and TestSavedReportCRUDAPI
+# in tests/unit/test_reports.py; saved-filter CRUD is covered by
+# TestFiltersAPI and TestSavedFilterIsPublic below.
 
 @pytest.mark.asyncio
 class TestReportsAPI:
