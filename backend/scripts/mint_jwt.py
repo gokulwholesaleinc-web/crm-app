@@ -22,26 +22,32 @@ from datetime import timedelta
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from sqlalchemy import select  # noqa: E402
+from sqlalchemy import Row, text  # noqa: E402
 
-from src.auth.models import User  # noqa: E402
 from src.auth.security import create_access_token  # noqa: E402
 from src.database import get_db  # noqa: E402
 
 
-async def _resolve_user(*, email: str | None, user_id: int | None) -> User:
+async def _resolve_user(*, email: str | None, user_id: int | None) -> Row:
+    """Plain SQL lookup so we don't trigger the User mapper's relationship
+    init — the full ORM model needs every related model imported, which
+    is overkill for a one-shot mint script.
+    """
     if email is None and user_id is None:
         raise SystemExit("Pass --email or --user-id")
 
+    where_clause = "email = :email" if email is not None else "id = :user_id"
+    sql = text(
+        "SELECT id, email, full_name, is_active, is_superuser, created_at "
+        f"FROM users WHERE {where_clause} LIMIT 1"
+    )
+    params = {"email": email} if email is not None else {"user_id": user_id}
+
     async for db in get_db():
-        if email is not None:
-            row = await db.execute(select(User).where(User.email == email))
-        else:
-            row = await db.execute(select(User).where(User.id == user_id))
-        user = row.scalar_one_or_none()
-        if user is None:
+        row = (await db.execute(sql, params)).first()
+        if row is None:
             raise SystemExit(f"No user found (email={email!r}, id={user_id!r})")
-        return user
+        return row
     raise SystemExit("Could not open a DB session")
 
 

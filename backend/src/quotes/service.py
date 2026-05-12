@@ -17,7 +17,7 @@ from src.core.sorting import build_order_clauses
 from src.email.branded_templates import TenantBrandingHelper, render_quote_email
 from src.email.pdf_render import render_html_to_pdf
 from src.email.pdf_service import BrandedPDFGenerator
-from src.email.service import EmailService
+from src.email.service import EmailService, assert_gmail_connected
 from src.email.types import EmailAttachment
 from src.quotes.models import ProductBundle, ProductBundleItem, Quote, QuoteLineItem
 from src.quotes.schemas import (
@@ -299,6 +299,10 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
         to 'sent' state with no email dispatched, leaving the user
         thinking the customer received it.
         """
+        # Pre-flight: same reason as proposals — queue swallows
+        # GmailNotConnected and parks in retry while status flips to sent.
+        await assert_gmail_connected(self.db, user_id)
+
         quote = await self.get_by_id(quote_id)
         if not quote:
             raise ValueError(f"Quote {quote_id} not found")

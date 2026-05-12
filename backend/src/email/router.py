@@ -8,6 +8,7 @@ from fastapi.responses import RedirectResponse, Response
 from sqlalchemy import select
 
 from src.core.constants import EntityNames, HTTPStatus
+from src.core.http_errors import value_error_as_400
 from src.core.router_utils import (
     CurrentUser,
     DBSession,
@@ -28,7 +29,7 @@ from src.email.schemas import (
     ThreadEmailItem,
     ThreadResponse,
 )
-from src.email.service import EmailService
+from src.email.service import EmailService, assert_gmail_connected
 from src.email.throttle import EmailThrottleService
 from src.email.types import EmailAttachment
 
@@ -66,6 +67,10 @@ async def send_email(
         ]
 
     service = EmailService(db)
+
+    # Pre-flight: clean 400 instead of a "sent" row stuck in retry.
+    with value_error_as_400():
+        await assert_gmail_connected(db, current_user.id)
 
     # Reply-gating: non-admins can only reply to threads they're a
     # participant of (defaults to closing the cross-mailbox identity-bleed
@@ -127,6 +132,8 @@ async def send_template_email(
     db: DBSession,
 ):
     """Send an email using a template."""
+    with value_error_as_400():
+        await assert_gmail_connected(db, current_user.id)
     service = EmailService(db)
     try:
         email = await service.send_template_email(

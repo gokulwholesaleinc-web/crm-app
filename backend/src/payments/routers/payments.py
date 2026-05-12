@@ -8,12 +8,14 @@ from sqlalchemy import select
 
 from src.core.constants import ENTITY_TYPE_PAYMENTS, EntityNames, HTTPStatus
 from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
+from src.core.http_errors import value_error_as_400
 from src.core.opportunity_guards import assert_opportunity_active
 from src.core.router_utils import (
     CurrentUser,
     DBSession,
     get_entity_or_404,
 )
+from src.email.service import assert_gmail_connected
 from src.events.service import PAYMENT_RECEIVED, emit
 from src.payments._router_helpers import (
     _verify_opportunity_access,
@@ -251,6 +253,11 @@ async def send_receipt(
         shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_PAYMENTS),
     )
 
+    # Pre-flight: webhook-fired receipts skip this (they call the service
+    # directly); the manual "Resend Receipt" button goes through here.
+    with value_error_as_400():
+        await assert_gmail_connected(db, current_user.id)
+
     try:
         await service.send_payment_receipt(payment_id)
     except Exception as e:
@@ -276,6 +283,9 @@ async def send_invoice(
         payment, current_user, data_scope.role_name,
         shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_PAYMENTS),
     )
+
+    with value_error_as_400():
+        await assert_gmail_connected(db, current_user.id)
 
     try:
         await service.send_payment_invoice(payment_id)
