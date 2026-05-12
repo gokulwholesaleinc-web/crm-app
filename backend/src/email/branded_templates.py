@@ -1057,13 +1057,6 @@ def render_contract_send_email(
     Uses the centralized branded email wrapper so the layout, colors, and
     footer match every other outbound email rather than the hand-built
     inline HTML that contracts/service.py previously constructed.
-
-    Args:
-        branding: Tenant branding dict from TenantBrandingHelper.
-        contract_title: Title of the contract being sent.
-        client_first_name: First name of the signer (for the greeting).
-        sign_url: Public signing link (must be https).
-        message: Optional personal note from the sender.
     """
     title = escape(contract_title)
     name = escape(client_first_name) if client_first_name else "there"

@@ -268,9 +268,7 @@ function ContractDetailPage() {
           </div>
         </div>
 
-        {/* Action row — one primary CTA per status, secondary follows.
-            Removed disabled "Cancel Send — coming soon" stub (placeholders
-            in production UI confuse users about what's actually shipping). */}
+        {/* Action row — one primary CTA per status, secondary follows. */}
         <div ref={actionRowRef} className="flex flex-wrap items-center gap-2">
           {/* PRIMARY action — the highest-leverage next step per status. */}
           {canSend && (

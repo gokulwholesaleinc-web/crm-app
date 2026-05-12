@@ -160,7 +160,7 @@ export function buildProposalSendChecklist(
   });
 
   // Expired valid_until is a warning, not a hard block — the backend
-  // doesn't refuse send on a past date — but Lorenzo probably doesn't
+  // doesn't refuse send on a past date — but the sender probably didn't
   // mean to send a proposal that says "valid until 3 weeks ago."
   if (proposal.valid_until) {
     const isExpired = new Date(proposal.valid_until) < new Date();

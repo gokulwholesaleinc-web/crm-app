@@ -76,12 +76,6 @@ function InfoDot() {
   );
 }
 
-/**
- * Compact pre-send gate checklist. Renders a card listing required and optional
- * conditions before a Proposal or Contract can be sent. Each item shows its
- * pass/fail/optional state with an icon, label, optional hint text, and an
- * optional action button to remediate a failed gate.
- */
 export function SendChecklist({
   title = 'Ready to send',
   items,

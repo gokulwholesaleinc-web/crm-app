@@ -1,14 +1,3 @@
-/**
- * InlineSectionEditor — two-mode card for inline text editing.
- *
- * Read mode: shows title + value text. If canEdit is true, a pencil button
- * appears in the top-right corner. Empty value + canEdit shows an "Add…"
- * affordance instead of an empty card.
- *
- * Edit mode: replaces value with a controlled textarea that autofocuses.
- * Keyboard shortcuts: Cmd/Ctrl+Enter → Save, Esc → Cancel.
- */
-
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { PencilIcon } from '@heroicons/react/24/outline';
 import { Button } from '../ui/Button';
