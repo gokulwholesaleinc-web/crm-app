@@ -99,12 +99,12 @@ const OAuthCallbackPage = lazy(() => import('../features/settings/OAuthCallbackP
 const AdminDashboardPage = lazy(() => import('../features/admin/AdminDashboard'));
 const UserApprovalsPage = lazy(() => import('../features/admin/UserApprovalsPage'));
 const AdminSharingPage = lazy(() => import('../features/admin/AdminSharingPage'));
+const AdminDedupPage = lazy(() => import('../features/admin/AdminDedupPage'));
 
 // Help
 const HelpPage = lazy(() => import('../features/help/HelpPage'));
 
 // Duplicates
-const DuplicatesPage = lazy(() => import('../features/settings/DuplicatesPage'));
 
 function AppRoutes() {
   return (
@@ -457,6 +457,16 @@ function AppRoutes() {
           </PrivateRoute>
         }
       />
+      <Route
+        path="/admin/dedup"
+        element={
+          <PrivateRoute>
+            <ErrorBoundary>
+              <AdminDedupPage />
+            </ErrorBoundary>
+          </PrivateRoute>
+        }
+      />
 
       {/* Help */}
       <Route
@@ -470,17 +480,10 @@ function AppRoutes() {
         }
       />
 
-      {/* Duplicates */}
-      <Route
-        path="/duplicates"
-        element={
-          <PrivateRoute>
-            <ErrorBoundary>
-              <DuplicatesPage />
-            </ErrorBoundary>
-          </PrivateRoute>
-        }
-      />
+      {/* Duplicates — old route preserved for bookmarks; the new admin
+          dedup page at /admin/dedup is strictly better (tenant-wide
+          scan, activity-aware winner pick, bulk merge, manager-gated). */}
+      <Route path="/duplicates" element={<Navigate to="/admin/dedup" replace />} />
 
       {/* OAuth Callbacks */}
       <Route

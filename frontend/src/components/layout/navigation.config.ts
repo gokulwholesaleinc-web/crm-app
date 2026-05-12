@@ -52,7 +52,6 @@ export const DEFAULT_MAIN_NAVIGATION: NavItem[] = [
 export const DEFAULT_SECONDARY_NAVIGATION: NavItem[] = [
   { id: 'sequences', name: 'Sequences', href: '/sequences', icon: QueueListIcon },
   { id: 'workflows', name: 'Workflows', href: '/workflows', icon: BoltIcon },
-  { id: 'duplicates', name: 'Duplicates', href: '/duplicates', icon: DocumentMagnifyingGlassIcon },
   { id: 'import-export', name: 'Import/Export', href: '/import-export', icon: ArrowsRightLeftIcon },
   { id: 'reports', name: 'Reports', href: '/reports', icon: ChartBarIcon },
   { id: 'settings', name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
@@ -60,12 +59,13 @@ export const DEFAULT_SECONDARY_NAVIGATION: NavItem[] = [
   { id: 'admin', name: 'Admin', href: '/admin', icon: ShieldCheckIcon },
   { id: 'approvals', name: 'User Approvals', href: '/admin/user-approvals', icon: UserPlusIcon },
   { id: 'admin-sharing', name: 'Sharing', href: '/admin/sharing', icon: ShareIcon },
+  { id: 'admin-dedup', name: 'Duplicate Cleanup', href: '/admin/dedup', icon: DocumentMagnifyingGlassIcon },
 ];
 
 export const STORAGE_KEY_MAIN = 'crm-sidebar-order:v1';
 export const STORAGE_KEY_SECONDARY = 'crm-sidebar-secondary-order:v1';
 
-export const ADMIN_ONLY_IDS = new Set(['admin', 'approvals', 'admin-sharing']);
+export const ADMIN_ONLY_IDS = new Set(['admin', 'approvals', 'admin-sharing', 'admin-dedup']);
 
 export function readStoredOrder(key: string): string[] | null {
   const parsed = safeStorage.getJson<unknown>(key);

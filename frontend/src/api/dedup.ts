@@ -50,8 +50,81 @@ export const mergeEntities = async (
   return response.data;
 };
 
+export type DedupEntityType = 'contacts' | 'companies' | 'leads';
+export type DedupClusterKey = 'email' | 'phone' | 'name';
+
+export interface DedupClusterMember {
+  id: number;
+  label: string;
+  email: string | null;
+  phone: string | null;
+  company_id: number | null;
+  owner_id: number | null;
+  created_at: string | null;
+  last_activity_at: string | null;
+  activity_count: number;
+}
+
+export interface DedupCluster {
+  key: DedupClusterKey;
+  key_value: string;
+  member_count: number;
+  members: DedupClusterMember[];
+}
+
+export interface DedupClustersResponse {
+  entity_type: DedupEntityType;
+  key: DedupClusterKey;
+  clusters: DedupCluster[];
+  skipped_no_key: number;
+}
+
+export type MergeClusterFailureCode =
+  | 'self_merge'
+  | 'stale_cluster'
+  | 'not_found_primary'
+  | 'other';
+
+export interface MergeClusterFailure {
+  id: number;
+  reason: string;
+  reason_code: MergeClusterFailureCode;
+}
+
+export interface MergeClusterResponse {
+  success: boolean;
+  winner_id: number;
+  merged_ids: number[];
+  failures: MergeClusterFailure[];
+}
+
+export const listDuplicateClusters = async (
+  entityType: DedupEntityType,
+  key: DedupClusterKey,
+): Promise<DedupClustersResponse> => {
+  const response = await apiClient.get<DedupClustersResponse>(`${BASE}/clusters`, {
+    params: { entity_type: entityType, key },
+  });
+  return response.data;
+};
+
+export const mergeCluster = async (
+  entityType: DedupEntityType,
+  winnerId: number,
+  loserIds: number[],
+): Promise<MergeClusterResponse> => {
+  const response = await apiClient.post<MergeClusterResponse>(`${BASE}/merge-cluster`, {
+    entity_type: entityType,
+    winner_id: winnerId,
+    loser_ids: loserIds,
+  });
+  return response.data;
+};
+
 export const dedupApi = {
   check: checkDuplicates,
   merge: mergeEntities,
+  listClusters: listDuplicateClusters,
+  mergeCluster,
 };
 
