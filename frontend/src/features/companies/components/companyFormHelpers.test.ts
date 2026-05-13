@@ -30,6 +30,16 @@ describe('parseLooseInt', () => {
   });
 
   it('truncates decimals (revenue/employee_count are int columns)', () => {
-    expect(parseLooseInt('100.99')).toBe(10099);
+    // Earlier version of this helper stripped the decimal point and
+    // returned 10099 — a silent 100× inflation. Verify "100.99"
+    // truncates to 100 and the worst-case "1,000,000.50" truncates to
+    // 1,000,000, not 10,000,005.
+    expect(parseLooseInt('100.99')).toBe(100);
+    expect(parseLooseInt('1,000,000.50')).toBe(1000000);
+    expect(parseLooseInt('1.5')).toBe(1);
+  });
+
+  it('returns null for a lone decimal point', () => {
+    expect(parseLooseInt('.')).toBeNull();
   });
 });

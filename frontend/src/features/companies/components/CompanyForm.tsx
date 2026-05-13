@@ -140,8 +140,8 @@ export function CompanyForm({
       state: company?.state || '',
       postal_code: company?.postal_code || '',
       country: company?.country || '',
-      annual_revenue: company?.annual_revenue?.toLocaleString() || '',
-      employee_count: company?.employee_count?.toLocaleString() || '',
+      annual_revenue: company?.annual_revenue?.toLocaleString('en-US') || '',
+      employee_count: company?.employee_count?.toLocaleString('en-US') || '',
       linkedin_url: company?.linkedin_url || '',
       twitter_handle: company?.twitter_handle || '',
       description: company?.description || '',
@@ -172,8 +172,8 @@ export function CompanyForm({
         state: company.state || '',
         postal_code: company.postal_code || '',
         country: company.country || '',
-        annual_revenue: company.annual_revenue?.toLocaleString() || '',
-        employee_count: company.employee_count?.toLocaleString() || '',
+        annual_revenue: company.annual_revenue?.toLocaleString('en-US') || '',
+        employee_count: company.employee_count?.toLocaleString('en-US') || '',
         linkedin_url: company.linkedin_url || '',
         twitter_handle: company.twitter_handle || '',
         description: company.description || '',
@@ -190,39 +190,46 @@ export function CompanyForm({
   const onFormSubmit = async (data: FormValues) => {
     // On update, cleared optional fields go out as null (not undefined)
     // so Pydantic sees them as `set` and the service applies the clear
-    // — same pattern as the leads modal fix, since `exclude_unset=True`
-    // would otherwise silently keep the old value. Required fields
-    // (name, status) stay non-null.
-    const clear = isEditing
-      ? <T,>(v: T | undefined | null | ''): T | null => (v === '' || v == null ? null : v as T)
-      : <T,>(v: T | undefined | null | ''): T | undefined => (v === '' || v == null ? undefined : v as T);
-
-    const trimmed = (v: string) => v.trim();
+    // — `exclude_unset=True` would otherwise silently keep the old
+    // value, the same bug the leads modal fix addressed. Create stays
+    // on undefined so Pydantic uses its own defaults.
+    const clearStr = (v: string): string | null | undefined => {
+      const t = v.trim();
+      if (t) return t;
+      return isEditing ? null : undefined;
+    };
+    const clearNum = (n: number | null): number | null | undefined =>
+      n != null ? n : isEditing ? null : undefined;
 
     const formattedData = {
       name: data.name.trim(),
-      website: clear(trimmed(data.website)),
-      industry: clear(trimmed(data.industry)),
-      company_size: clear(trimmed(data.company_size)),
-      phone: clear(trimmed(data.phone)),
-      email: clear(trimmed(data.email)),
-      address_line1: clear(trimmed(data.address_line1)),
-      address_line2: clear(trimmed(data.address_line2)),
-      city: clear(trimmed(data.city)),
-      state: clear(trimmed(data.state)),
-      postal_code: clear(trimmed(data.postal_code)),
-      country: clear(trimmed(data.country)),
-      annual_revenue: parseLooseInt(data.annual_revenue) ?? (isEditing ? null : undefined),
-      employee_count: parseLooseInt(data.employee_count) ?? (isEditing ? null : undefined),
-      linkedin_url: clear(trimmed(data.linkedin_url)),
-      twitter_handle: clear(trimmed(data.twitter_handle)),
-      description: clear(trimmed(data.description)),
-      link_creative_tier: clear(trimmed(data.link_creative_tier)),
-      sow_url: clear(trimmed(data.sow_url)),
-      account_manager: clear(trimmed(data.account_manager)),
+      website: clearStr(data.website),
+      industry: clearStr(data.industry),
+      company_size: clearStr(data.company_size),
+      phone: clearStr(data.phone),
+      email: clearStr(data.email),
+      address_line1: clearStr(data.address_line1),
+      address_line2: clearStr(data.address_line2),
+      city: clearStr(data.city),
+      state: clearStr(data.state),
+      postal_code: clearStr(data.postal_code),
+      country: clearStr(data.country),
+      annual_revenue: clearNum(parseLooseInt(data.annual_revenue)),
+      employee_count: clearNum(parseLooseInt(data.employee_count)),
+      linkedin_url: clearStr(data.linkedin_url),
+      twitter_handle: clearStr(data.twitter_handle),
+      description: clearStr(data.description),
+      link_creative_tier: clearStr(data.link_creative_tier),
+      sow_url: clearStr(data.sow_url),
+      account_manager: clearStr(data.account_manager),
       status: data.status,
-      segment: clear(trimmed(data.segment)),
-      owner_id: data.owner_id === '' ? (isEditing ? null : undefined) : Number(data.owner_id),
+      segment: clearStr(data.segment),
+      owner_id:
+        data.owner_id === ''
+          ? isEditing
+            ? null
+            : undefined
+          : Number(data.owner_id),
     };
 
     await onSubmit(formattedData);
@@ -235,7 +242,10 @@ export function CompanyForm({
       {/* Basic Info */}
       <div className="grid grid-cols-2 gap-4">
         <Input
-          {...register('name', { required: 'Company name is required' })}
+          {...register('name', {
+            required: 'Company name is required',
+            validate: (v) => v.trim().length > 0 || 'Company name is required',
+          })}
           label="Company Name"
           autoComplete="organization"
           placeholder="Enter company name..."
