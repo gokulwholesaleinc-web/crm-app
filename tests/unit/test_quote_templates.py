@@ -12,6 +12,9 @@ from datetime import date, timedelta
 from httpx import AsyncClient
 from pypdf import PdfReader
 
+# Send paths gate on assert_gmail_connected (PR #310).
+pytestmark = pytest.mark.usefixtures("gmail_connected_test_user")
+
 
 def _extract_pdf_text(content: bytes) -> str:
     """Real PDF in CI (via pypdf), HTML fallback locally when weasyprint is absent."""

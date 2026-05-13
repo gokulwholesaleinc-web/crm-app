@@ -78,6 +78,110 @@ from src.reports.delivery import ReportDeliveryService
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 
+@pytest.fixture
+def _stub_gmail_http_send(monkeypatch):
+    """Stub ``GmailClient.send_message`` so /send paths don't fire real
+    HTTPS POSTs to ``gmail.googleapis.com`` during tests.
+
+    Strictly an external-boundary stub — every line of CRM code under
+    test still runs unmodified. Without this, the
+    ``gmail_connected_*`` fixtures would let the send pipeline reach
+    the network with a fake bearer token (~277 forged 401s per CI run
+    if egress is open, 5s connect-timeouts × 277 if it isn't).
+
+    Function-scoped + opt-in via the gmail_connected_* wrappers — tests
+    in ``test_gmail_client.py`` that exercise the real ``send_message``
+    implementation directly are unaffected.
+    """
+    async def _fake_send(self, raw: bytes, thread_id=None):
+        return {"id": "test-msg-id", "threadId": thread_id or "test-thread-id"}
+
+    monkeypatch.setattr(
+        "src.integrations.gmail.client.GmailClient.send_message",
+        _fake_send,
+    )
+
+
+@pytest_asyncio.fixture
+async def gmail_connected_test_user(
+    db_session, test_user: User, _stub_gmail_http_send
+) -> User:
+    """Attach a GmailConnection to ``test_user`` AND stub the Gmail
+    HTTP send so /send routes pass the PR #310 pre-flight without
+    real outbound HTTPS.
+
+    Opt-in: apply via ``pytestmark = pytest.mark.usefixtures(
+    "gmail_connected_test_user")`` at the module/class level on files
+    that hit /api/quotes/.../send, /api/proposals/.../send,
+    /api/contracts/.../send, /api/email/send, or
+    /api/payments/.../send-receipt.
+
+    Not autouse — gmail-sync / gmail-relink tests build their own
+    GmailConnection rows and exercise the real send_message; an
+    autouse hook here would either trip the unique user_id
+    constraint or stomp on their patches.
+    """
+    await _attach_gmail_connection(db_session, test_user)
+    return test_user
+
+
+@pytest_asyncio.fixture
+async def gmail_connected_test_admin_user(
+    db_session, test_admin_user: User, _stub_gmail_http_send
+) -> User:
+    """Same as ``gmail_connected_test_user`` but for ``test_admin_user``."""
+    await _attach_gmail_connection(db_session, test_admin_user)
+    return test_admin_user
+
+
+async def _attach_gmail_connection(db_session, user: User) -> None:
+    """Attach a GmailConnection so user-initiated /send routes pass
+    `assert_gmail_connected` (PR #310 pre-flight). Token expiry is set
+    far-future so `_refresh_if_needed` short-circuits without a real
+    Google API call. The actual Gmail HTTP send still happens for tests
+    that exercise the full send path — fake bearer token gets a fast
+    401 from gmail.googleapis.com which the queue catches and parks the
+    row in `retry` status. Tests that assert on the response itself
+    (status code, body) still see 200/201; tests that assert on
+    EmailQueue rows already tolerate `("pending","sent","failed","retry")`.
+
+    Idempotent: silently skips when a test has already attached its own
+    GmailConnection. Load-bearing for files that carry the
+    ``pytestmark = pytest.mark.usefixtures("gmail_connected_test_user")``
+    AND also build their own GmailConnection on ``test_user`` (gmail-sync
+    / gmail-relink suites that override token state) — without this
+    check those collide on the ``user_id`` UNIQUE constraint.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import select
+
+    existing = await db_session.execute(
+        select(GmailConnection).where(GmailConnection.user_id == user.id)
+    )
+    if existing.scalar_one_or_none() is not None:
+        # Visible in -v output so the silent skip can be audited if a
+        # gmail-sync test ever fails unexpectedly with a stale token.
+        import logging
+        logging.getLogger(__name__).debug(
+            "_attach_gmail_connection skipped: user_id=%s already has a row",
+            user.id,
+        )
+        return
+
+    db_session.add(
+        GmailConnection(
+            user_id=user.id,
+            email=user.email,
+            access_token="test-access-token",
+            refresh_token="test-refresh-token",
+            scopes="https://www.googleapis.com/auth/gmail.send",
+            token_expiry=datetime.now(timezone.utc) + timedelta(hours=1),
+        )
+    )
+    await db_session.commit()
+
+
 @pytest.fixture(autouse=True)
 def clear_user_cache():
     """Clear the auth user cache before each test to prevent DetachedInstanceError."""

@@ -10,6 +10,9 @@ import pytest_asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# Send paths gate on assert_gmail_connected (PR #310).
+pytestmark = pytest.mark.usefixtures("gmail_connected_test_user")
+
 from src.account.models import UserNotificationPrefs
 from src.auth.models import User
 from src.companies.models import Company

@@ -413,6 +413,9 @@ async def _create_user(db_session: AsyncSession, email: str, is_superuser: bool 
     db_session.add(user)
     await db_session.commit()
     await db_session.refresh(user)
+    # Pre-flight gate on send paths (PR #310): user must have a connected Gmail.
+    from tests.conftest import _attach_gmail_connection
+    await _attach_gmail_connection(db_session, user)
     return user
 
 
