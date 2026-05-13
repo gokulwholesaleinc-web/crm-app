@@ -2,8 +2,9 @@
  * Campaign form for creating/editing campaigns
  */
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useForm, Controller } from 'react-hook-form';
+import { useQuery } from '@tanstack/react-query';
 import { InformationCircleIcon } from '@heroicons/react/24/outline';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
@@ -13,6 +14,7 @@ import { useUnsavedChangesWarning } from '../../../hooks/useUnsavedChangesWarnin
 import type { Campaign, CampaignCreate, CampaignUpdate } from '../../../types';
 import { useFormSubmitShortcut } from '../../../hooks/useSubmitShortcut';
 import { formatDateInputValue } from '../../../utils/formatters';
+import { type MailchimpStatus, getMailchimpStatus } from '../../../api/integrations';
 
 interface CampaignFormProps {
   campaign?: Campaign;
@@ -45,10 +47,24 @@ const campaignTypeOptions = [
   { value: 'other', label: 'Other' },
 ];
 
-const sendViaOptions = [
-  { value: 'gmail', label: 'Gmail (your connected mailbox)' },
-  { value: 'mailchimp', label: 'Mailchimp (default audience)' },
-];
+/**
+ * Resolve the dropdown label for the Mailchimp send option based on the
+ * current connection state. Falls back to a clear "not configured"
+ * message so an admin who picks Mailchimp without setting up an audience
+ * isn't surprised at send time.
+ */
+function mailchimpOptionLabel(status: MailchimpStatus | undefined): string {
+  if (!status || !status.connected) {
+    return 'Mailchimp (not connected)';
+  }
+  if (status.default_audience_name) {
+    return `Mailchimp (${status.default_audience_name})`;
+  }
+  if (status.default_audience_id) {
+    return `Mailchimp (audience ${status.default_audience_id})`;
+  }
+  return 'Mailchimp (no default audience selected)';
+}
 
 const statusOptions = [
   { value: 'planned', label: 'Planned' },
@@ -80,6 +96,34 @@ export function CampaignForm({
   isLoading,
 }: CampaignFormProps) {
   const isEditing = !!campaign;
+
+  // Used purely to render the audience name in the send-via dropdown.
+  // The form still defaults to Gmail; the Mailchimp option is disabled
+  // when the integration isn't connected so an admin can't accidentally
+  // pick a path that will fail at send time.
+  const { data: mailchimpStatus, isLoading: mailchimpLoading } = useQuery<MailchimpStatus>({
+    queryKey: ['integrations', 'mailchimp', 'status'],
+    queryFn: getMailchimpStatus,
+  });
+
+  const sendViaOptions = useMemo(
+    () => [
+      { value: 'gmail', label: 'Gmail (your connected mailbox)' },
+      {
+        value: 'mailchimp',
+        // While the status query is in flight, label as "checking…" — not
+        // "not connected" — so a user who IS connected doesn't see a flash
+        // of an alarming label on first paint.
+        label: mailchimpLoading
+          ? 'Mailchimp (checking…)'
+          : mailchimpOptionLabel(mailchimpStatus),
+        // Stay disabled while loading so the value can't be committed
+        // before we know whether Mailchimp is reachable.
+        disabled: mailchimpLoading || !mailchimpStatus?.connected,
+      },
+    ],
+    [mailchimpStatus, mailchimpLoading],
+  );
 
   const {
     register,
@@ -198,8 +242,23 @@ export function CampaignForm({
           <Controller
             name="send_via"
             control={control}
+            rules={{
+              // Block submit if the campaign was previously saved with
+              // mailchimp but the integration has since been disconnected.
+              // The disabled <option> only stops new selections — the
+              // current value still submits without this guard.
+              validate: (val) =>
+                val !== 'mailchimp' || mailchimpStatus?.connected === true
+                  ? true
+                  : 'Mailchimp is not connected. Switch to Gmail or reconnect in Settings → Integrations.',
+            }}
             render={({ field }) => (
-              <Select {...field} label="Send through" options={sendViaOptions} />
+              <Select
+                {...field}
+                label="Send through"
+                options={sendViaOptions}
+                error={errors.send_via?.message}
+              />
             )}
           />
           <FieldHint>
