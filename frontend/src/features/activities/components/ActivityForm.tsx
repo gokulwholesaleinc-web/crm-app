@@ -11,6 +11,7 @@ import { FormTextarea } from '../../../components/forms';
 import { useFormSubmitShortcut } from '../../../hooks/useSubmitShortcut';
 import { useUnsavedChangesWarning } from '../../../hooks/useUnsavedChangesWarning';
 import type { Activity, ActivityCreate, ActivityUpdate } from '../../../types';
+import { formatDateInputValue, formatDateTimeInputValue } from '../../../utils/formatters';
 
 interface ActivityFormProps {
   activity?: Activity;
@@ -67,32 +68,6 @@ const callOutcomeOptions = [
   { value: 'busy', label: 'Busy' },
 ];
 
-// `datetime-local` inputs expect a string in the user's LOCAL timezone
-// (no Z suffix). Using `.toISOString()` here would emit UTC and the input
-// would re-interpret it as local — round-tripping a save shifts the time
-// by the user's UTC offset every cycle.
-function formatDateTimeLocal(date: string | null | undefined): string {
-  if (!date) return '';
-  const d = new Date(date);
-  if (Number.isNaN(d.getTime())) return '';
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mi = String(d.getMinutes()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
-}
-
-function formatDateLocal(date: string | null | undefined): string {
-  if (!date) return '';
-  const d = new Date(date);
-  if (Number.isNaN(d.getTime())) return '';
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
-}
-
 export function ActivityForm({
   activity,
   entityType,
@@ -119,8 +94,8 @@ export function ActivityForm({
       activity_type: activity?.activity_type || 'task',
       subject: activity?.subject || '',
       description: activity?.description || '',
-      scheduled_at: formatDateTimeLocal(activity?.scheduled_at),
-      due_date: formatDateLocal(activity?.due_date),
+      scheduled_at: formatDateTimeInputValue(activity?.scheduled_at),
+      due_date: formatDateInputValue(activity?.due_date),
       priority: activity?.priority || 'normal',
       call_duration_minutes: activity?.call_duration_minutes?.toString() || '',
       call_outcome: activity?.call_outcome || '',
@@ -128,7 +103,7 @@ export function ActivityForm({
       email_cc: activity?.email_cc || '',
       meeting_location: activity?.meeting_location || '',
       meeting_attendees: activity?.meeting_attendees || '',
-      task_reminder_at: formatDateTimeLocal(activity?.task_reminder_at),
+      task_reminder_at: formatDateTimeInputValue(activity?.task_reminder_at),
     },
   });
 
@@ -159,8 +134,8 @@ export function ActivityForm({
         activity_type: activity.activity_type,
         subject: activity.subject,
         description: activity.description || '',
-        scheduled_at: formatDateTimeLocal(activity.scheduled_at),
-        due_date: formatDateLocal(activity.due_date),
+        scheduled_at: formatDateTimeInputValue(activity.scheduled_at),
+        due_date: formatDateInputValue(activity.due_date),
         priority: activity.priority,
         call_duration_minutes: activity.call_duration_minutes?.toString() || '',
         call_outcome: activity.call_outcome || '',
@@ -168,7 +143,7 @@ export function ActivityForm({
         email_cc: activity.email_cc || '',
         meeting_location: activity.meeting_location || '',
         meeting_attendees: activity.meeting_attendees || '',
-        task_reminder_at: formatDateTimeLocal(activity.task_reminder_at),
+        task_reminder_at: formatDateTimeInputValue(activity.task_reminder_at),
       });
     }
   }, [activity, reset]);

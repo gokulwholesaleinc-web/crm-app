@@ -12,6 +12,7 @@ import { FormTextarea } from '../../../components/forms';
 import { useUnsavedChangesWarning } from '../../../hooks/useUnsavedChangesWarning';
 import type { Campaign, CampaignCreate, CampaignUpdate } from '../../../types';
 import { useFormSubmitShortcut } from '../../../hooks/useSubmitShortcut';
+import { formatDateInputValue } from '../../../utils/formatters';
 
 interface CampaignFormProps {
   campaign?: Campaign;
@@ -72,18 +73,6 @@ function FieldHint({ children }: { children: React.ReactNode }) {
   );
 }
 
-// `date` inputs expect local YYYY-MM-DD. `toISOString()` emits UTC, which
-// would shift the displayed date by ±1 day around midnight in non-UTC zones.
-function formatDateLocal(date: string | null | undefined): string {
-  if (!date) return '';
-  const d = new Date(date);
-  if (Number.isNaN(d.getTime())) return '';
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
-}
-
 export function CampaignForm({
   campaign,
   onSubmit,
@@ -105,8 +94,8 @@ export function CampaignForm({
       description: campaign?.description || '',
       campaign_type: campaign?.campaign_type || 'email',
       status: campaign?.status || 'planned',
-      start_date: formatDateLocal(campaign?.start_date),
-      end_date: formatDateLocal(campaign?.end_date),
+      start_date: formatDateInputValue(campaign?.start_date),
+      end_date: formatDateInputValue(campaign?.end_date),
       budget_amount: campaign?.budget_amount?.toString() || '',
       budget_currency: campaign?.budget_currency || 'USD',
       target_audience: campaign?.target_audience || '',
@@ -128,8 +117,8 @@ export function CampaignForm({
         description: campaign.description || '',
         campaign_type: campaign.campaign_type,
         status: campaign.status,
-        start_date: formatDateLocal(campaign.start_date),
-        end_date: formatDateLocal(campaign.end_date),
+        start_date: formatDateInputValue(campaign.start_date),
+        end_date: formatDateInputValue(campaign.end_date),
         budget_amount: campaign.budget_amount?.toString() || '',
         budget_currency: campaign.budget_currency,
         target_audience: campaign.target_audience || '',

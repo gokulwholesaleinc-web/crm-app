@@ -123,20 +123,19 @@ export function AttachmentList({ entityType, entityId }: AttachmentListProps) {
 
   const handleDownload = async (attachmentId: number, filename: string) => {
     try {
-      // Ask the backend for a presigned URL as JSON (?as_json=1) rather
-      // than following its 307 to R2. R2 doesn't return CORS headers, so
-      // the redirect path 502s in the browser even though the underlying
-      // request would have worked via top-level navigation. Once we have
-      // the URL, an anchor click triggers a no-CORS download with the
-      // presigned auth carried in the query string.
+      // Ask the backend for a presigned URL as JSON (?as_json=1) instead
+      // of letting fetch follow the default 307 to R2 — R2 returns no CORS
+      // headers, so the auto-followed redirect fails at the CORS layer.
+      // Anchor-click on the presigned URL is a top-level navigation, which
+      // bypasses CORS entirely.
       const token = getToken();
       const response = await fetch(`${getDownloadUrl(attachmentId)}?as_json=1`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!response.ok) throw new Error('Download failed');
-      const { download_url } = await response.json();
+      const { download_url: downloadUrl } = (await response.json()) as { download_url: string };
       const link = document.createElement('a');
-      link.href = download_url;
+      link.href = downloadUrl;
       link.download = filename;
       link.rel = 'noopener noreferrer';
       document.body.appendChild(link);
