@@ -43,6 +43,15 @@ export interface TenantConfig {
   footer_text: string | null;
   privacy_policy_url: string | null;
   terms_of_service_url: string | null;
+  // Email-wrapper extras (migration 034). Drive the branded email
+  // header tagline + dark-footer social-icon row.
+  tagline: string | null;
+  social_facebook_url: string | null;
+  social_instagram_url: string | null;
+  social_tiktok_url: string | null;
+  social_linkedin_url: string | null;
+  social_youtube_url: string | null;
+  social_website_url: string | null;
   default_language: string;
   date_format: string;
   custom_css: string | null;

@@ -13,6 +13,13 @@ _URL_FIELD_LABELS = {
     'favicon_url': 'Favicon URL',
     'privacy_policy_url': 'Privacy policy URL',
     'terms_of_service_url': 'Terms of service URL',
+    # Branded-email wrapper social links (migration 034).
+    'social_facebook_url': 'Facebook URL',
+    'social_instagram_url': 'Instagram URL',
+    'social_tiktok_url': 'TikTok URL',
+    'social_linkedin_url': 'LinkedIn URL',
+    'social_youtube_url': 'YouTube URL',
+    'social_website_url': 'Website URL',
 }
 
 # Color fields that must be valid hex literals. Without this, an admin can
@@ -56,6 +63,32 @@ def _validate_url_field(v: str | None, info: ValidationInfo) -> str | None:
     return stripped
 
 
+_TAGLINE_MAX_CHARS = 255
+
+
+def _validate_tagline_field(v: str | None, _info: ValidationInfo) -> str | None:
+    """Strip the tagline and enforce the column-width ceiling.
+
+    Without this, a tagline >255 chars sails through Pydantic and
+    raises ``StringDataRightTruncationError`` on UPDATE — the admin
+    sees a 500 and no field-level hint about why their copy was
+    rejected. Caps at the same ``VARCHAR(255)`` width the migration
+    sets on ``tenant_settings.tagline``.
+    """
+    if v is None:
+        return None
+    if not isinstance(v, str):
+        raise ValueError('Tagline must be text')
+    stripped = v.strip()
+    if not stripped:
+        return None
+    if len(stripped) > _TAGLINE_MAX_CHARS:
+        raise ValueError(
+            f'Tagline must be {_TAGLINE_MAX_CHARS} characters or fewer'
+        )
+    return stripped
+
+
 def _validate_color_field(v: str | None, info: ValidationInfo) -> str | None:
     """Validate a color field: strict ``#rgb``/``#rrggbb``/``#rrggbbaa`` hex.
 
@@ -95,6 +128,14 @@ class TenantSettingsBase(BaseModel):
     footer_text: str | None = None
     privacy_policy_url: str | None = None
     terms_of_service_url: str | None = None
+    # Branded-email wrapper extras (migration 034).
+    tagline: str | None = None
+    social_facebook_url: str | None = None
+    social_instagram_url: str | None = None
+    social_tiktok_url: str | None = None
+    social_linkedin_url: str | None = None
+    social_youtube_url: str | None = None
+    social_website_url: str | None = None
     default_language: str = "en"
     default_timezone: str = "UTC"
     default_currency: str = "USD"
@@ -109,6 +150,11 @@ class TenantSettingsBase(BaseModel):
     @classmethod
     def _validate_colors(cls, v, info: ValidationInfo):
         return _validate_color_field(v, info)
+
+    @field_validator('tagline', mode='before')
+    @classmethod
+    def _validate_tagline(cls, v, info: ValidationInfo):
+        return _validate_tagline_field(v, info)
 
 
 class TenantSettingsCreate(TenantSettingsBase):
@@ -133,6 +179,13 @@ class TenantSettingsUpdate(BaseModel):
     footer_text: str | None = None
     privacy_policy_url: str | None = None
     terms_of_service_url: str | None = None
+    tagline: str | None = None
+    social_facebook_url: str | None = None
+    social_instagram_url: str | None = None
+    social_tiktok_url: str | None = None
+    social_linkedin_url: str | None = None
+    social_youtube_url: str | None = None
+    social_website_url: str | None = None
     default_language: str | None = None
     default_timezone: str | None = None
     default_currency: str | None = None
@@ -147,6 +200,11 @@ class TenantSettingsUpdate(BaseModel):
     @classmethod
     def _validate_colors(cls, v, info: ValidationInfo):
         return _validate_color_field(v, info)
+
+    @field_validator('tagline', mode='before')
+    @classmethod
+    def _validate_tagline(cls, v, info: ValidationInfo):
+        return _validate_tagline_field(v, info)
 
 
 class TenantSettingsResponse(TenantSettingsBase):
@@ -226,6 +284,16 @@ class PublicTenantConfig(BaseModel):
     footer_text: str | None
     privacy_policy_url: str | None
     terms_of_service_url: str | None
+    # Email-wrapper settings — surfaced publicly because they hydrate
+    # the admin branding form and are themselves intended for outbound
+    # emails (no secret material). Migration 034.
+    tagline: str | None = None
+    social_facebook_url: str | None = None
+    social_instagram_url: str | None = None
+    social_tiktok_url: str | None = None
+    social_linkedin_url: str | None = None
+    social_youtube_url: str | None = None
+    social_website_url: str | None = None
     default_language: str
     date_format: str
     custom_css: str | None

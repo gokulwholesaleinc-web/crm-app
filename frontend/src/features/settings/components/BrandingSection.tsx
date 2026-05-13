@@ -26,7 +26,52 @@ interface BrandingFormData {
   logo_url: string;
   favicon_url: string;
   footer_text: string;
+  // Email-wrapper extras (migration 034): tagline appears in the
+  // branded-email header with gold `|` separators; the six social
+  // URLs drive the dark-footer social-icon row.
+  tagline: string;
+  social_facebook_url: string;
+  social_instagram_url: string;
+  social_tiktok_url: string;
+  social_linkedin_url: string;
+  social_youtube_url: string;
+  social_website_url: string;
 }
+
+// Field keys for the email-template section; the typed tuple drives
+// the read-mode grid, edit-mode inputs, and seed loop. EmailField is
+// derived from the tuple via ``as const`` so the union and the
+// iteration order can't drift.
+const EMAIL_FIELDS = [
+  'tagline',
+  'social_facebook_url',
+  'social_instagram_url',
+  'social_tiktok_url',
+  'social_linkedin_url',
+  'social_youtube_url',
+  'social_website_url',
+] as const;
+type EmailField = (typeof EMAIL_FIELDS)[number];
+
+const EMAIL_FIELD_LABELS: Record<EmailField, string> = {
+  tagline: 'Email Tagline',
+  social_facebook_url: 'Facebook URL',
+  social_instagram_url: 'Instagram URL',
+  social_tiktok_url: 'TikTok URL',
+  social_linkedin_url: 'LinkedIn URL',
+  social_youtube_url: 'YouTube URL',
+  social_website_url: 'Website URL',
+};
+
+const EMAIL_FIELD_PLACEHOLDERS: Record<EmailField, string> = {
+  tagline: 'ACCESSIBLE MEDIA | AUTHENTIC STORYTELLING | REAL RESULTS',
+  social_facebook_url: 'https://facebook.com/your-page',
+  social_instagram_url: 'https://instagram.com/your-handle',
+  social_tiktok_url: 'https://tiktok.com/@your-handle',
+  social_linkedin_url: 'https://linkedin.com/company/your-org',
+  social_youtube_url: 'https://youtube.com/@your-channel',
+  social_website_url: 'https://your-domain.com',
+};
 
 const NEUTRAL_GRAY = '#94a3b8';
 
@@ -90,10 +135,16 @@ const PALETTE_HINTS: Record<PaletteField, string> = {
 };
 
 // Loose shape so we don't have to import the full TenantConfig type just
-// for typing fallbacks; only color fields are read here.
-type TenantConfigLike = Partial<Record<ColorField, string | null | undefined>> & {
-  company_name?: string | null;
-};
+// for typing fallbacks; color fields and the email-wrapper extras share
+// the same `string | null | undefined` shape from the public config.
+type TenantConfigLike = Partial<Record<ColorField, string | null | undefined>>
+  & Partial<Record<EmailField, string | null | undefined>>
+  & {
+    company_name?: string | null;
+    logo_url?: string | null;
+    favicon_url?: string | null;
+    footer_text?: string | null;
+  };
 
 function tenantColor(tenant: TenantConfigLike | null | undefined, field: ColorField): string {
   return tenant?.[field] ?? COLOR_DEFAULTS[field];
@@ -194,14 +245,19 @@ export function BrandingSection() {
     favicon_url: '',
     footer_text: '',
     ...COLOR_DEFAULTS,
+    ...(Object.fromEntries(EMAIL_FIELDS.map((f) => [f, ''])) as Record<EmailField, string>),
   }));
 
   const seededFromTenant = useMemo<BrandingFormData>(() => {
     const colors = Object.fromEntries(
       (Object.keys(COLOR_DEFAULTS) as ColorField[]).map((f) => [f, tenantColor(tenant, f)])
     ) as Record<ColorField, string>;
+    const emailFields = Object.fromEntries(
+      EMAIL_FIELDS.map((f) => [f, tenant?.[f] ?? ''])
+    ) as Record<EmailField, string>;
     return {
       ...colors,
+      ...emailFields,
       company_name: tenant?.company_name ?? '',
       logo_url: tenant?.logo_url ?? '',
       favicon_url: tenant?.favicon_url ?? '',
@@ -422,6 +478,16 @@ export function BrandingSection() {
                 {tenant?.footer_text || 'Not set'}
               </p>
             </div>
+            {EMAIL_FIELDS.map((field) => (
+              <div key={field}>
+                <label className="block text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">
+                  {EMAIL_FIELD_LABELS[field]}
+                </label>
+                <p className="mt-1 text-sm text-gray-900 dark:text-gray-100 break-all">
+                  {tenant?.[field] || 'Not set'}
+                </p>
+              </div>
+            ))}
           </div>
         ) : (
           <div className="space-y-4">
@@ -564,6 +630,45 @@ export function BrandingSection() {
                     onChange={(next) => setFormData((prev) => ({ ...prev, [field]: next }))}
                   />
                 ))}
+              </div>
+            </div>
+
+            {/* Email template (tagline + footer socials) */}
+            <div>
+              <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">
+                Email Template
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                Tagline renders in the branded-email header under the logo
+                with gold <code>|</code> separators. Social URLs appear as a
+                row of circles in the dark email footer; leave any blank to
+                omit that platform.
+              </p>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {EMAIL_FIELDS.map((field) => {
+                  const inputId = `branding-${field.replace(/_/g, '-')}`;
+                  const isUrl = field !== 'tagline';
+                  return (
+                    <div key={field}>
+                      <label htmlFor={inputId} className="form-label">
+                        {EMAIL_FIELD_LABELS[field]}
+                      </label>
+                      <input
+                        id={inputId}
+                        type={isUrl ? 'url' : 'text'}
+                        className="form-input"
+                        name={field}
+                        autoComplete={isUrl ? 'url' : 'off'}
+                        spellCheck={false}
+                        value={formData[field]}
+                        onChange={(e) =>
+                          setFormData((prev) => ({ ...prev, [field]: e.target.value }))
+                        }
+                        placeholder={EMAIL_FIELD_PLACEHOLDERS[field]}
+                      />
+                    </div>
+                  );
+                })}
               </div>
             </div>
 

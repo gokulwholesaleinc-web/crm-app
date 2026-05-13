@@ -79,14 +79,17 @@ def _safe_url(url: str | None) -> str:
 # Default branding (used when no tenant is configured)
 # ---------------------------------------------------------------------------
 
-# Tenants override via tenant_branding settings; these defaults are the
-# agency-grade fallback for tenants that haven't customized their palette.
+# Tenants override via tenant_branding settings; these defaults match
+# the Link Creative wrapper aesthetic (gold-on-black) since the CRM is
+# single-tenant by design. ``primary_color`` is the dark text/footer
+# color, ``secondary_color`` is the gold accent rule + tagline pipes,
+# and ``accent_color`` drives the CTA pill (same gold by default).
 _DEFAULT_BRANDING = {
     "company_name": "CRM",
     "logo_url": "",
-    "primary_color": "#1e293b",
-    "secondary_color": "#0ea5e9",
-    "accent_color": "#0ea5e9",
+    "primary_color": "#000000",
+    "secondary_color": "#c5a467",
+    "accent_color": "#c5a467",
     # Page + surface backgrounds (light mode only on customer-facing
     # surfaces — public quote/contract/proposal pages and emails
     # render light by default; the app's dark mode is for authenticated
@@ -99,7 +102,42 @@ _DEFAULT_BRANDING = {
     "terms_of_service_url": "",
     "email_from_name": "CRM",
     "email_from_address": "",
+    # Email wrapper extras (migration 034). Empty strings mean "omit"
+    # — the wrapper skips the corresponding header/footer block when
+    # no value is present so transactional emails for tenants that
+    # haven't configured these still render cleanly.
+    "tagline": "",
+    "social_facebook_url": "",
+    "social_instagram_url": "",
+    "social_tiktok_url": "",
+    "social_linkedin_url": "",
+    "social_youtube_url": "",
+    "social_website_url": "",
 }
+
+
+# Footer social-row glyphs. The Link Creative template uses bordered
+# circles with platform iconography; reliable email-client rendering of
+# inline SVG / icon fonts / @font-face is unworkable across Outlook,
+# Gmail, and Apple Mail, so we use short letter labels inside white
+# circle outlines as a universally-compatible visual fallback. Tenants
+# who want true brand glyphs can ship icon-URL columns in a follow-up
+# (out of scope for migration 034). Order is the visible footer order.
+_SOCIAL_PLATFORMS: tuple[tuple[str, str, str], ...] = (
+    ("Facebook", "social_facebook_url", "f"),
+    ("Instagram", "social_instagram_url", "IG"),
+    ("TikTok", "social_tiktok_url", "TT"),
+    ("LinkedIn", "social_linkedin_url", "in"),
+    ("YouTube", "social_youtube_url", "YT"),
+    ("Website", "social_website_url", "W"),
+)
+
+# Fixed near-black for the email footer. Kept hardcoded rather than
+# threaded through tenant_settings: the dark footer is the design
+# contract of the wrapper, not a per-tenant toggle. Tenants choose
+# their wordmark + tagline + accent gold; the footer surface is the
+# brand-agnostic frame.
+_EMAIL_FOOTER_BG = "#0a0a0a"
 
 
 # ---------------------------------------------------------------------------
@@ -156,6 +194,16 @@ class TenantBrandingHelper:
             "terms_of_service_url": s.terms_of_service_url or "",
             "email_from_name": s.email_from_name or s.company_name or tenant.name,
             "email_from_address": s.email_from_address or "",
+            # Email-wrapper extras (migration 034). Missing values become
+            # empty strings so the render path's truthy checks omit the
+            # block instead of emitting an unconfigured placeholder.
+            "tagline": s.tagline or "",
+            "social_facebook_url": s.social_facebook_url or "",
+            "social_instagram_url": s.social_instagram_url or "",
+            "social_tiktok_url": s.social_tiktok_url or "",
+            "social_linkedin_url": s.social_linkedin_url or "",
+            "social_youtube_url": s.social_youtube_url or "",
+            "social_website_url": s.social_website_url or "",
         }
 
     @staticmethod
@@ -168,6 +216,81 @@ class TenantBrandingHelper:
 # Base HTML email template
 # ---------------------------------------------------------------------------
 
+def _render_tagline(tagline: str, pipe_color: str) -> str:
+    """Render the email-header tagline with gold-pipe separators.
+
+    The on-disk value carries vertical bars ("ACCESSIBLE MEDIA |
+    AUTHENTIC STORYTELLING | …"); this splits on ``|``, escapes each
+    segment, and re-joins with a styled span that paints the bars in
+    the brand accent color. Empty/whitespace-only segments are dropped
+    so trailing or doubled pipes don't emit phantom dividers.
+    """
+    parts = [p.strip() for p in (tagline or "").split("|") if p.strip()]
+    if not parts:
+        return ""
+    sep = (
+        f'<span style="color:{pipe_color};font-weight:700;padding:0 6px;" '
+        f'aria-hidden="true">|</span>'
+    )
+    return sep.join(escape(p) for p in parts)
+
+
+def _safe_external_url(url: str | None) -> str:
+    """Strict variant of :func:`_safe_url` for outbound social links.
+
+    The social-row cells are public footer links that must always
+    point to a remote profile page — site-relative paths and
+    ``mailto:`` URIs are valid for other email surfaces (campaign
+    unsubscribe link in particular) but here they'd produce a
+    confused recipient clicking "Facebook" and landing on
+    ``/admin/internal`` or popping a compose window. Reject anything
+    that isn't ``http(s)://`` so the schema-layer validator's policy
+    is enforced again at the render sink.
+    """
+    stripped = (url or "").strip()
+    if not stripped:
+        return ""
+    if stripped.lower().startswith(("https://", "http://")):
+        return stripped
+    return ""
+
+
+def _render_social_row(branding: dict) -> str:
+    """Render the social-platform circle links for the dark footer.
+
+    Each platform contributes a `<td>` cell only when its URL field
+    is non-empty *and* passes the strict ``http(s)://`` allowlist;
+    cells are omitted otherwise so all-unsafe configurations
+    collapse cleanly.
+
+    Returns the joined ``<td>`` cells of a single ``<tr>``, or the
+    empty string. The caller wraps the surviving cells in a
+    ``<table><tr>`` and emits the "KEEP UP WITH US ON SOCIAL"
+    heading only when this function returned non-empty.
+    """
+    cells: list[str] = []
+    for label, key, glyph in _SOCIAL_PLATFORMS:
+        href = _safe_external_url(branding.get(key))
+        if not href:
+            continue
+        cells.append(
+            f'<td style="padding:0 6px;">'
+            f'<a href="{escape(href)}" target="_blank" '
+            f'aria-label="{escape(label)}" '
+            # The circle: 32px white-bordered, transparent fill, white
+            # letter glyph centered. Outlook's Word renderer ignores
+            # border-radius and will paint a square — links still work
+            # and the glyph still reads, so the degraded state is
+            # acceptable rather than worth shipping VML for.
+            f'style="display:inline-block;width:32px;height:32px;line-height:30px;'
+            f'border:1.5px solid #ffffff;border-radius:50%;'
+            f'color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;'
+            f'font-size:13px;font-weight:700;text-align:center;text-decoration:none;">'
+            f'{escape(glyph)}</a></td>'
+        )
+    return "".join(cells)
+
+
 def _base_email_html(
     branding: dict,
     headline: str,
@@ -179,14 +302,25 @@ def _base_email_html(
 ) -> str:
     """Render content into a branded, responsive HTML email wrapper.
 
-    Uses inline CSS for maximum email-client compatibility (Gmail,
-    Outlook, Apple Mail). Includes dark-mode + <480px mobile media
-    query support: on phones the header logo/sender cells stack,
-    paddings tighten, the headline + body scale down, and the CTA
-    pill goes full-width so the touch target is comfortable.
+    Visual contract (Link Creative template, see PR #325):
+      * White header with a centered wordmark logo, the brand tagline
+        below with gold ``|`` separators, then a gold accent rule.
+      * White body section: headline, content, optional CTA pill.
+      * Near-black footer with "KEEP UP WITH US ON SOCIAL" heading,
+        a row of social-icon circles (whichever URLs are configured),
+        optional sender attribution, footer text, and privacy/ToS
+        links.
 
-    Note: ``sender_title`` renders in the header right column (paired
-    with ``sender_name``) — it no longer appears in the footer.
+    Uses inline CSS only — every email client (Gmail, Outlook, Apple
+    Mail, web previews) strips `<style>` blocks unevenly. Includes
+    dark-mode + <480px mobile media query support: paddings tighten,
+    the headline + body scale down, and the CTA pill goes full-width
+    so the touch target is comfortable.
+
+    ``sender_name`` / ``sender_title`` survive as a small attribution
+    caption rendered above the body (kept for API-level back-compat —
+    no production caller passes them today; they used to live in the
+    old two-column dark header).
     """
     # _safe_hex sanitizes each color before it reaches the inline-CSS
     # sinks below. ``escape`` is HTML-escaping, not hex validation; a
@@ -195,9 +329,9 @@ def _base_email_html(
     # customer would see a white email with no diagnostic trace. See
     # _safe_hex docstring for why ORM-level reads bypass the schema
     # validator.
-    primary = escape(_safe_hex(branding.get("primary_color"), "#1e293b", field="primary_color"))
-    secondary = escape(_safe_hex(branding.get("secondary_color"), "#0ea5e9", field="secondary_color"))
-    accent = escape(_safe_hex(branding.get("accent_color"), "#0ea5e9", field="accent_color"))
+    primary = escape(_safe_hex(branding.get("primary_color"), "#000000", field="primary_color"))
+    secondary = escape(_safe_hex(branding.get("secondary_color"), "#c5a467", field="secondary_color"))
+    accent = escape(_safe_hex(branding.get("accent_color"), "#c5a467", field="accent_color"))
     # Light-mode page + card surface colors. The email's dark-mode media
     # query keeps its hardcoded #1f2937 / #111827 — those approximate
     # the tenant_settings dark defaults and refactoring them through
@@ -211,38 +345,60 @@ def _base_email_html(
     privacy_url = _safe_url(branding.get("privacy_policy_url", ""))
     terms_url = _safe_url(branding.get("terms_of_service_url", ""))
     safe_cta_url = _safe_url(cta_url)
+    tagline_html = _render_tagline(branding.get("tagline", ""), secondary)
 
-    # Logo block — height-locked, width auto to preserve aspect ratio for
-    # wordmark logos. max-width caps ultra-wide logos so the header row
-    # doesn't wrap. Outlook reads the height attribute; the style block
-    # covers Gmail/Apple Mail/web clients.
-    #
-    # When a logo image is present we assume it already contains the
-    # company wordmark and suppress the text company name next to it —
-    # otherwise you get "LINKCREATIVE  Link Creative" side-by-side.
+    # Centered wordmark logo. When no logo is configured we fall back
+    # to the company-name text in the same slot so the header doesn't
+    # collapse — admins who skip the logo upload still get a usable
+    # branded header.
     if logo_url:
-        # White pill wraps the logo so it stays visible regardless of header
-        # primary color (e.g. a white logo on a white header would disappear).
-        # width="224" on the table (200px logo + 12px×2 padding) is required by
-        # Outlook 2013-2021's Word rendering engine, which ignores display:inline-table
-        # and CSS max-width on tables — without it the pill expands to full 600px.
-        # width="200" on the img caps natural pixel width in Outlook the same way.
-        logo_html = (
-            f'<table role="presentation" cellpadding="0" cellspacing="0" '
-            f'width="224" '
-            f'style="display:inline-table;vertical-align:middle;margin-right:12px;'
-            f'background-color:#ffffff;border-radius:6px;">'
-            f'<tr><td style="padding:8px 12px;">'
+        logo_block = (
             f'<img src="{escape(logo_url)}" alt="{company}" '
-            f'width="200" height="40" '
-            f'style="display:inline-block;vertical-align:middle;'
-            f'height:40px;width:200px;max-width:200px;" />'
-            f'</td></tr></table>'
+            f'width="240" height="48" '
+            f'style="display:inline-block;height:48px;width:auto;max-width:240px;'
+            f'max-height:48px;" />'
         )
-        company_label = ""
     else:
-        logo_html = ""
-        company_label = company
+        logo_block = (
+            f'<span style="color:{primary};font-family:-apple-system,BlinkMacSystemFont,'
+            f"'Segoe UI',sans-serif;font-size:24px;font-weight:700;letter-spacing:0.5px;\">"
+            f'{company}</span>'
+        )
+
+    tagline_block = (
+        f'<div class="email-tagline" style="margin-top:10px;'
+        f'color:{primary};font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;'
+        f'font-size:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase;'
+        f'line-height:1.4;">{tagline_html}</div>'
+        if tagline_html
+        else ""
+    )
+
+    # Sender attribution — small caption above the body. Kept for
+    # back-compat with the old two-column header API even though no
+    # production caller passes these fields today; whitespace-only
+    # values are treated as absent.
+    sn = (sender_name or "").strip()
+    st = (sender_title or "").strip()
+    sender_block = ""
+    if sn or st:
+        parts: list[str] = []
+        if sn:
+            parts.append(
+                f'<span style="color:#111827;font-weight:600;">{escape(sn)}</span>'
+            )
+        if st:
+            parts.append(
+                f'<span class="email-sender-title" style="color:#6b7280;'
+                f'{"margin-left:6px;" if sn else ""}">{escape(st)}</span>'
+            )
+        sender_block = (
+            '<div class="email-sender-attribution" '
+            'style="margin-bottom:12px;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;'
+            'font-size:13px;line-height:1.4;">'
+            + "".join(parts)
+            + "</div>"
+        )
 
     # CTA button — only render if the URL passed the scheme allowlist.
     # email-cta-wrap / email-cta-link classes drive the <480px mobile
@@ -263,75 +419,55 @@ def _base_email_html(
     else:
         cta_html = ""
 
-    # Footer links
-    footer_links_parts = []
+    # Footer social-icons row. Heading only renders when at least one
+    # platform URL is configured; otherwise the entire block collapses
+    # so tenants with no socials don't get a stranded "KEEP UP WITH
+    # US ON SOCIAL" line above an empty row.
+    socials_row = _render_social_row(branding)
+    if socials_row:
+        socials_html = (
+            f'<p class="email-social-heading" '
+            f'style="margin:0 0 14px;color:#ffffff;font-family:-apple-system,'
+            f"BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:11px;font-weight:700;"
+            f'letter-spacing:2px;text-transform:uppercase;text-align:center;">'
+            f'KEEP UP WITH US ON SOCIAL</p>'
+            f'<table role="presentation" cellpadding="0" cellspacing="0" align="center" '
+            f'style="margin:0 auto;"><tr>{socials_row}</tr></table>'
+        )
+    else:
+        socials_html = ""
+
+    # Footer text links — privacy + terms render as small white
+    # underlined links centered below the social row, matching the
+    # Link Creative footnote style ("update your preferences or
+    # unsubscribe"). Campaign emails layer an unsubscribe link in via
+    # ``render_campaign_wrapper``; transactional emails just surface
+    # the legal links if configured.
+    footer_links_parts: list[str] = []
     if privacy_url:
         footer_links_parts.append(
-            f'<a href="{escape(privacy_url)}" style="color:#9ca3af;text-decoration:underline;">'
-            f'Privacy Policy</a>'
+            f'<a href="{escape(privacy_url)}" '
+            f'style="color:#e5e7eb;text-decoration:underline;">Privacy Policy</a>'
         )
     if terms_url:
         footer_links_parts.append(
-            f'<a href="{escape(terms_url)}" style="color:#9ca3af;text-decoration:underline;">'
-            f'Terms of Service</a>'
+            f'<a href="{escape(terms_url)}" '
+            f'style="color:#e5e7eb;text-decoration:underline;">Terms of Service</a>'
         )
-    footer_links = " &middot; ".join(footer_links_parts)
+    footer_links = (
+        '<p style="margin:18px 0 0;color:#9ca3af;font-size:12px;text-align:center;">'
+        + " &middot; ".join(footer_links_parts)
+        + "</p>"
+        if footer_links_parts
+        else ""
+    )
 
     footer_text_block = (
-        f'<p style="margin:0 0 8px;color:#9ca3af;font-size:12px;">{footer_text}</p>'
+        f'<p style="margin:14px 0 0;color:#9ca3af;font-size:12px;text-align:center;">'
+        f'{footer_text}</p>'
         if footer_text
         else ""
     )
-
-    # Right-side header sender column — name on top, title underneath.
-    # Lives in the header (not the footer) so the recipient sees who the
-    # email is from before any body content. The right cell is dropped
-    # entirely when neither field is set so single-cell emails still
-    # render flush-left and the mobile stacking rule doesn't leave a
-    # phantom 8px gap below a lone logo cell.
-    #
-    # Whitespace-only values (`" "`) are treated as absent: otherwise
-    # `bool(" ")` would flip on the two-cell layout and emit a blank
-    # right column with no visible content.
-    #
-    # Explicit width="62%"/"38%" on the two cells gives Outlook desktop's
-    # Word renderer fixed guidance — without them the engine splits 50/50
-    # and a long sender title wraps awkwardly into the logo column when
-    # Outlook is in a narrow reading pane.
-    sn = (sender_name or "").strip()
-    st = (sender_title or "").strip()
-    sender_name_html = (
-        f'<div style="color:#ffffff;font-size:14px;font-weight:600;line-height:1.3;">'
-        f'{escape(sn)}</div>'
-        if sn
-        else ""
-    )
-    sender_title_html = (
-        f'<div style="color:#cbd5e1;font-size:12px;font-weight:400;line-height:1.3;'
-        f'{"margin-top:2px;" if sn else ""}">'
-        f'{escape(st)}</div>'
-        if st
-        else ""
-    )
-    has_sender = bool(sn or st)
-    # Solo cell uses a distinct class so the mobile stacking rule (which
-    # adds padding-bottom:8px for stacked-row spacing) doesn't apply when
-    # there's nothing stacked beneath it.
-    logo_class = "email-header-logo" if has_sender else "email-header-logo-solo"
-    logo_width_attr = ' width="62%"' if has_sender else ""
-    logo_cell = (
-        f'<td class="{logo_class}"{logo_width_attr} valign="middle" '
-        f'style="color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;'
-        f'font-size:18px;font-weight:700;">{logo_html}{company_label}</td>'
-    )
-    sender_cell = (
-        f'<td class="email-header-sender" width="38%" valign="middle" '
-        f'style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;'
-        f'text-align:right;">{sender_name_html}{sender_title_html}</td>'
-        if has_sender
-        else ""
-    )
-    header_row_html = logo_cell + sender_cell
 
     return f"""\
 <!DOCTYPE html>
@@ -349,20 +485,15 @@ def _base_email_html(
   .email-card{{background-color:#111827!important;}}
   .email-text{{color:#e5e7eb!important;}}
   .email-headline{{color:#f9fafb!important;}}
-  .email-footer{{background-color:#111827!important;}}
 }}
 @media only screen and (max-width:480px){{
   .email-outer-cell{{padding:12px 8px!important;}}
-  .email-header-cell{{padding:18px 18px!important;}}
+  .email-header-cell{{padding:20px 16px 16px!important;}}
   .email-body-cell{{padding:24px 18px!important;}}
-  .email-footer-cell{{padding:18px 16px!important;}}
-  .email-header-logo,.email-header-sender{{
-    display:block!important;width:100%!important;
-    text-align:left!important;padding-bottom:8px!important;
-  }}
-  .email-header-sender{{padding-bottom:0!important;}}
+  .email-footer-cell{{padding:22px 16px!important;}}
   .email-headline{{font-size:19px!important;line-height:1.3!important;}}
   .email-text{{font-size:14px!important;}}
+  .email-tagline{{font-size:11px!important;letter-spacing:0.5px!important;}}
   .email-cta-wrap{{width:100%!important;margin:20px 0 0!important;}}
   .email-cta-link{{display:block!important;padding:14px 20px!important;}}
 }}
@@ -372,12 +503,11 @@ def _base_email_html(
 <table role="presentation" class="email-bg" cellpadding="0" cellspacing="0" width="100%" style="background-color:{bg_light};">
 <tr><td class="email-outer-cell" align="center" style="padding:24px 16px;">
 
-<!-- Header -->
-<table role="presentation" cellpadding="0" cellspacing="0" width="600" style="max-width:600px;width:100%;">
-<tr><td class="email-header-cell" style="background-color:{primary};padding:24px 32px;border-radius:8px 8px 0 0;">
-  <table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr>
-    {header_row_html}
-  </tr></table>
+<!-- Header (white surface, centered logo + tagline + gold rule) -->
+<table role="presentation" cellpadding="0" cellspacing="0" width="600" style="max-width:600px;width:100%;background-color:{surface_light};">
+<tr><td class="email-header-cell" align="center" style="padding:32px 32px 20px;text-align:center;border-radius:8px 8px 0 0;">
+  {logo_block}
+  {tagline_block}
 </td></tr>
 <tr><td style="height:3px;line-height:3px;font-size:0;background-color:{secondary};">&nbsp;</td></tr>
 </table>
@@ -385,6 +515,7 @@ def _base_email_html(
 <!-- Body -->
 <table role="presentation" class="email-card" cellpadding="0" cellspacing="0" width="600" style="max-width:600px;width:100%;background-color:{surface_light};">
 <tr><td class="email-body-cell" style="padding:32px 32px;">
+  {sender_block}
   <h1 class="email-headline" style="margin:0 0 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:22px;font-weight:700;color:#111827;">{escape(headline)}</h1>
   <div class="email-text" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:15px;line-height:1.6;color:#334155;">
     {body_html}
@@ -393,12 +524,12 @@ def _base_email_html(
 </td></tr>
 </table>
 
-<!-- Footer -->
-<table role="presentation" class="email-footer" cellpadding="0" cellspacing="0" width="600" style="max-width:600px;width:100%;background-color:#f9fafb;">
-<tr><td class="email-footer-cell" style="padding:20px 24px;border-radius:0 0 8px 8px;text-align:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-  <p style="margin:0 0 4px;color:#6b7280;font-size:13px;font-weight:600;">{company}</p>
+<!-- Footer (dark surface, social-icon row + legal links) -->
+<table role="presentation" class="email-footer" cellpadding="0" cellspacing="0" width="600" style="max-width:600px;width:100%;background-color:{_EMAIL_FOOTER_BG};">
+<tr><td class="email-footer-cell" style="padding:28px 24px;border-radius:0 0 8px 8px;text-align:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  {socials_html}
   {footer_text_block}
-  <p style="margin:0;font-size:12px;">{footer_links}</p>
+  {footer_links}
 </td></tr>
 </table>
 
