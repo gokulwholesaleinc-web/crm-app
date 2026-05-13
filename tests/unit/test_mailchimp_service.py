@@ -178,6 +178,38 @@ class TestAudiences:
         with pytest.raises(MailchimpNotConnected):
             await service.list_audiences(tenant.id)
 
+    @pytest.mark.asyncio
+    async def test_set_blocked_audiences_persists_dedups_and_strips(
+        self, db_session: AsyncSession, test_user: User
+    ):
+        tenant = await _make_tenant(db_session, slug="block")
+        db_session.add(MailchimpConnection(
+            tenant_id=tenant.id,
+            api_key="key-us19",
+            server_prefix="us19",
+            connected_by_id=test_user.id,
+        ))
+        await db_session.commit()
+
+        service = MailchimpService(db_session)
+        conn = await service.set_blocked_audiences(
+            tenant.id,
+            # Duplicate + whitespace + empty entries — service should normalize.
+            ["list-a", "list-b", "list-a", "  ", "", "list-c"],
+        )
+        assert conn.blocked_audience_ids == ["list-a", "list-b", "list-c"]
+
+        # Out-of-order input must come back sorted (deterministic for
+        # diff-friendly comparisons in tests + audit logs).
+        conn = await service.set_blocked_audiences(
+            tenant.id, ["list-z", "list-a", "list-m"]
+        )
+        assert conn.blocked_audience_ids == ["list-a", "list-m", "list-z"]
+
+        # Replacing with empty list clears the blocklist.
+        conn = await service.set_blocked_audiences(tenant.id, [])
+        assert conn.blocked_audience_ids == []
+
 
 # ---------------------------------------------------------------------------
 # send_campaign_step

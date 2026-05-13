@@ -18,6 +18,7 @@ from src.core.router_utils import CurrentUser, DBSession
 from src.integrations.mailchimp.client import MailchimpError
 from src.integrations.mailchimp.schemas import (
     MailchimpAudience,
+    MailchimpBlockedAudiencesRequest,
     MailchimpConnectRequest,
     MailchimpSetAudienceRequest,
     MailchimpStatsResponse,
@@ -43,12 +44,12 @@ async def _user_tenant_id(db, user_id: int) -> int:
     return primary.tenant_id
 
 
-@router.get("/status", response_model=MailchimpStatus)
-async def get_status(db: DBSession, current_user: CurrentUser) -> MailchimpStatus:
-    tenant_id = await _user_tenant_id(db, current_user.id)
-    conn = await MailchimpService(db).get_connection(tenant_id)
-    if conn is None:
-        return MailchimpStatus(connected=False)
+def _status_from_conn(conn) -> MailchimpStatus:
+    """Build a MailchimpStatus from a connected MailchimpConnection.
+
+    Centralized so adding a new status field doesn't require touching
+    every endpoint return path (and silently missing one).
+    """
     return MailchimpStatus(
         connected=True,
         server_prefix=conn.server_prefix,
@@ -56,8 +57,18 @@ async def get_status(db: DBSession, current_user: CurrentUser) -> MailchimpStatu
         account_login_id=conn.account_login_id,
         default_audience_id=conn.default_audience_id,
         default_audience_name=conn.default_audience_name,
+        blocked_audience_ids=list(conn.blocked_audience_ids or []),
         connected_at=conn.connected_at,
     )
+
+
+@router.get("/status", response_model=MailchimpStatus)
+async def get_status(db: DBSession, current_user: CurrentUser) -> MailchimpStatus:
+    tenant_id = await _user_tenant_id(db, current_user.id)
+    conn = await MailchimpService(db).get_connection(tenant_id)
+    if conn is None:
+        return MailchimpStatus(connected=False)
+    return _status_from_conn(conn)
 
 
 @router.post("/connect", response_model=MailchimpStatus)
@@ -83,15 +94,7 @@ async def connect(
             detail=f"Mailchimp rejected the API key: {exc}",
         ) from exc
     await db.commit()
-    return MailchimpStatus(
-        connected=True,
-        server_prefix=conn.server_prefix,
-        account_email=conn.account_email,
-        account_login_id=conn.account_login_id,
-        default_audience_id=conn.default_audience_id,
-        default_audience_name=conn.default_audience_name,
-        connected_at=conn.connected_at,
-    )
+    return _status_from_conn(conn)
 
 
 @router.delete("/disconnect")
@@ -139,15 +142,35 @@ async def set_default_audience(
             status_code=HTTPStatus.BAD_REQUEST, detail=str(exc)
         ) from exc
     await db.commit()
-    return MailchimpStatus(
-        connected=True,
-        server_prefix=conn.server_prefix,
-        account_email=conn.account_email,
-        account_login_id=conn.account_login_id,
-        default_audience_id=conn.default_audience_id,
-        default_audience_name=conn.default_audience_name,
-        connected_at=conn.connected_at,
-    )
+    return _status_from_conn(conn)
+
+
+@router.put("/audiences/blocked", response_model=MailchimpStatus)
+async def set_blocked_audiences(
+    payload: MailchimpBlockedAudiencesRequest,
+    db: DBSession,
+    current_user: Annotated[User, Depends(require_admin)],
+) -> MailchimpStatus:
+    """Replace the per-connection blocklist with the supplied list.
+
+    Frontend picker uses ``MailchimpStatus.blocked_audience_ids`` to
+    disable entries in the audience dropdown so a CRM admin can't
+    accidentally point the integration at a marketing-team audience.
+    The send path does NOT currently enforce this (Option A — UI-only
+    block); Layer 1 (segment scoping) already bounds the blast radius
+    at the API level.
+    """
+    tenant_id = await _user_tenant_id(db, current_user.id)
+    try:
+        conn = await MailchimpService(db).set_blocked_audiences(
+            tenant_id, payload.blocked_audience_ids
+        )
+    except MailchimpNotConnected as exc:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST, detail=str(exc)
+        ) from exc
+    await db.commit()
+    return _status_from_conn(conn)
 
 
 @router.post(
