@@ -454,6 +454,67 @@ class TestCampaignsDelete:
         assert deleted_campaign is None
 
     @pytest.mark.asyncio
+    async def test_delete_campaign_with_members_does_not_500(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        admin_auth_headers: dict,
+        test_user: User,
+    ):
+        """Regression for incident 2026-05-13.
+
+        Campaign.members was a ``lazy="dynamic"`` relationship without
+        ``passive_deletes=True``. SQLAlchemy tried to load the dynamic
+        collection during ``db.delete(campaign)`` to apply the in-Python
+        cascade — but async sessions can't perform a lazy load mid-flush,
+        so DELETE /api/campaigns/{id} returned 500 for any campaign that
+        had members. The DB-level ondelete=CASCADE handles the actual
+        row removal; passive_deletes tells SQLAlchemy to trust the DB.
+        """
+        from src.contacts.models import Contact
+
+        # A campaign with a CampaignMember row is enough to reproduce.
+        # EmailCampaignStep has no back-relationship on Campaign so its
+        # DB-level CASCADE doesn't go through the ORM lazy-load path —
+        # only the campaign_members collection triggers the failure.
+        contact = Contact(
+            first_name="Ada", last_name="Lovelace",
+            email="ada@example.com", owner_id=test_user.id,
+        )
+        db_session.add(contact)
+        await db_session.flush()
+
+        campaign = Campaign(
+            name="With members",
+            campaign_type="email",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(campaign)
+        await db_session.flush()
+        db_session.add(CampaignMember(
+            campaign_id=campaign.id,
+            member_type="contact",
+            member_id=contact.id,
+        ))
+        await db_session.commit()
+        campaign_id = campaign.id
+
+        response = await client.delete(
+            f"/api/campaigns/{campaign_id}",
+            headers=admin_auth_headers,
+        )
+
+        assert response.status_code == 204, response.text
+        # And the campaign + its members are gone (DB CASCADE).
+        assert (await db_session.execute(
+            select(Campaign).where(Campaign.id == campaign_id)
+        )).scalar_one_or_none() is None
+        assert (await db_session.execute(
+            select(CampaignMember).where(CampaignMember.campaign_id == campaign_id)
+        )).scalar_one_or_none() is None
+
+    @pytest.mark.asyncio
     async def test_delete_campaign_not_found(
         self, client: AsyncClient, db_session: AsyncSession, admin_auth_headers: dict
     ):
