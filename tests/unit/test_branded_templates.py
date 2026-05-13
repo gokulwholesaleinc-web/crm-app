@@ -110,7 +110,10 @@ class TestTenantBrandingHelper:
         defaults = TenantBrandingHelper.get_default_branding()
         assert branding == defaults
         assert branding["company_name"] == "CRM"
-        assert branding["primary_color"] == "#1e293b"
+        # PR #325: Link Creative palette swap — primary_color is now
+        # the brand-spotlight gold (drives accent rule + tagline pipes
+        # + wordmark first word) rather than the legacy slate dark text.
+        assert branding["primary_color"] == "#CF982C"
 
     async def test_get_default_branding_has_required_keys(self):
         """Should include all required branding keys in the default branding dict."""
@@ -120,6 +123,17 @@ class TestTenantBrandingHelper:
             "accent_color", "bg_color_light", "surface_color_light",
             "footer_text", "privacy_policy_url",
             "terms_of_service_url", "email_from_name", "email_from_address",
+            # PR #325 (migration 034): tagline + 6 social URL fields
+            # surface through the default branding dict so the email
+            # wrapper renders them with empty fallbacks when no
+            # tenant is configured.
+            "tagline",
+            "social_facebook_url",
+            "social_instagram_url",
+            "social_tiktok_url",
+            "social_linkedin_url",
+            "social_youtube_url",
+            "social_website_url",
         }
         assert required_keys == set(branding.keys())
 
@@ -210,7 +224,7 @@ class TestRenderBrandedEmail:
         assert "Terms of Service" not in html
 
     def test_html_structure_is_valid(self):
-        """Should produce valid HTML with DOCTYPE and dark mode support."""
+        """Should produce valid HTML with DOCTYPE and light-only color scheme."""
         html = render_branded_email(
             branding=SAMPLE_BRANDING,
             subject="Structure Test",
@@ -220,7 +234,11 @@ class TestRenderBrandedEmail:
 
         assert html.startswith("<!DOCTYPE html>")
         assert "</html>" in html
-        assert "prefers-color-scheme:dark" in html
+        # PR #325: the wrapper is fixed-light by design (no dark-mode
+        # variant) — the meta is ``content="only light"`` and the
+        # @media (prefers-color-scheme) block was removed.
+        assert 'content="only light"' in html
+        assert "prefers-color-scheme" not in html
 
     def test_escapes_special_characters(self):
         """Should HTML-escape special characters in branding and headline text."""
@@ -1050,62 +1068,81 @@ class TestSafeHexAtRender:
         assert "not-a-color" not in html
         assert "#12345" not in html
         # Documented defaults take over for each rejected field that
-        # the base shell renders.
-        assert "#1e293b" in html  # primary fallback
-        assert "#0ea5e9" in html  # secondary fallback
+        # the base shell renders. PR #325 palette swap: primary is the
+        # gold spotlight (#CF982C); accent is black. secondary_color
+        # is unused by the email wrapper post-swap so don't assert it.
+        assert "#CF982C" in html  # primary fallback
+        assert "#000000" in html  # accent fallback (used by CTA + wordmark rest)
         assert "#f9fafb" in html  # bg_color_light fallback
         assert "#ffffff" in html  # surface_color_light fallback
 
 
 # ---------------------------------------------------------------------------
-# Visual polish fixes (PR #271)
+# Visual contract (PR #325 — Link Creative wrapper redesign)
 # ---------------------------------------------------------------------------
 
 
-_WHITE_HEADER_BRANDING = {
+_HEADER_WITH_LOGO_BRANDING = {
     **NOTIF_BRANDING,
     "logo_url": "https://example.com/logo.png",
-    "primary_color": "#ffffff",  # white header — logo would disappear without the pill
 }
 
 _NO_LOGO_BRANDING = {**NOTIF_BRANDING, "logo_url": ""}
 
 
-class TestLogoWhitePill:
-    """Logo must be wrapped in a white pill so it remains visible on any header color."""
+class TestHeaderLogoBlock:
+    """PR #325 redesign: header is white surface; logo renders bare and centered.
 
-    def test_logo_wrapped_in_white_background_cell(self):
-        """White pill table carries white background and border-radius when a logo URL is set."""
+    The legacy "white pill table at width=224 around a 200x40 logo" pattern
+    was the right answer for the dark-block header it lived inside — that
+    header is gone. The new header surface is already white so a white pill
+    around a white logo wouldn't help; the redesign drops the pill and
+    centers the bare image instead.
+    """
+
+    def test_logo_renders_as_centered_img_when_url_set(self):
         html = render_branded_email(
-            _WHITE_HEADER_BRANDING, "s", "h", "<p>b</p>"
+            _HEADER_WITH_LOGO_BRANDING, "s", "h", "<p>b</p>"
         )
-        assert "background-color:#ffffff;border-radius:6px;" in html
         assert 'src="https://example.com/logo.png"' in html
+        # Centered text-align on the surrounding header cell is the
+        # visual contract for the redesigned wrapper.
+        assert "text-align:center" in html
 
-    def test_no_logo_omits_pill(self):
-        """When no logo is provided the white pill table must not appear."""
+    def test_no_logo_falls_back_to_wordmark(self):
+        """When no logo URL, the wrapper renders the company name as a
+        styled wordmark fallback so the header doesn't collapse."""
         html = render_branded_email(_NO_LOGO_BRANDING, "s", "h", "<p>b</p>")
+        # No <img> with the legacy logo URL.
+        assert 'src="https://example.com/logo.png"' not in html
+        # Wordmark fallback emits the company_name uppercase in a
+        # styled <span>. NOTIF_BRANDING.company_name is "Acme Corp".
+        assert "Acme" in html
+        assert "Corp" in html
+
+    def test_legacy_white_pill_chrome_is_gone(self):
+        """Round 1 + 2 fixups deleted the white pill wrapper table; ensure
+        it stays gone so regressions surface immediately."""
+        html = render_branded_email(_HEADER_WITH_LOGO_BRANDING, "s", "h", "<p>b</p>")
         assert "background-color:#ffffff;border-radius:6px;" not in html
-
-    def test_logo_pill_table_has_width_attribute(self):
-        """Pill table must carry width= HTML attr — Outlook Word engine ignores CSS max-width on tables."""
-        html = render_branded_email(_WHITE_HEADER_BRANDING, "s", "h", "<p>b</p>")
-        assert 'width="224"' in html
-
-    def test_logo_img_has_width_and_height_attributes(self):
-        """Img must carry width= and height= HTML attrs for Outlook to constrain natural pixel size."""
-        html = render_branded_email(_WHITE_HEADER_BRANDING, "s", "h", "<p>b</p>")
-        assert 'width="200"' in html
-        assert 'height="40"' in html
+        assert 'width="224"' not in html
 
 
 class TestHeaderBodyPadding:
-    """Header and body padding must be increased for better breathing room."""
+    """Header and body padding for the redesigned wrapper.
 
-    def test_header_padding_24_32(self):
-        """Header td uses padding:24px 32px."""
+    The new white-surface header uses asymmetric vertical padding
+    (32px top, 20px bottom) to seat the wordmark + tagline + accent
+    rule comfortably. The body card keeps the 32px symmetric padding
+    that was already documented.
+    """
+
+    def test_header_uses_redesigned_padding(self):
         html = render_branded_email(_NO_LOGO_BRANDING, "s", "h", "<p>b</p>")
-        assert "padding:24px 32px;border-radius:8px 8px 0 0;" in html
+        # Bottom padding shrunk vs. the legacy 24/32 to fit the
+        # tagline + 3px gold rule below the wordmark.
+        assert "padding:32px 32px 20px;" in html
+        assert "border-radius:8px 8px 0 0;" in html
 
     def test_body_padding_32_32(self):
         """Body card td uses padding:32px 32px."""

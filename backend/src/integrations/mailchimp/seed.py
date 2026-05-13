@@ -58,6 +58,31 @@ async def seed_mailchimp_from_env(
     for tenant in tenants:
         existing = await service.get_connection(tenant.id)
         if existing is not None:
+            # API-key rotation stays UI-driven, but the default audience
+            # pin is treated as authoritative-from-env when the row has
+            # no pin yet. This is the "ops created the CRM-Managed
+            # Contacts audience and wants it baked in" path — without
+            # this backfill, the env var would only take effect on a
+            # fresh connect, which never happens after the first boot.
+            if (
+                default_audience
+                and not (existing.default_audience_id or "").strip()
+            ):
+                try:
+                    await service.set_default_audience(tenant.id, default_audience)
+                    await db.commit()
+                    logger.info(
+                        "mailchimp seed: backfilled default audience tenant=%s id=%s",
+                        tenant.slug,
+                        default_audience,
+                    )
+                except MailchimpError as exc:
+                    logger.warning(
+                        "mailchimp seed could not backfill audience tenant=%s id=%s reason=%s",
+                        tenant.slug,
+                        default_audience,
+                        exc,
+                    )
             continue
         # Use a synthetic user id of None for the connected_by_id —
         # there's no human at the wheel for boot-time seeds, and the

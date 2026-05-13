@@ -28,14 +28,16 @@ def _default_branding(**overrides: str) -> dict:
 # ---------------------------------------------------------------------------
 
 class TestVisualDefaults:
-    def test_agency_palette_primary(self):
-        assert _DEFAULT_BRANDING["primary_color"] == "#1e293b"
+    # The CRM is single-tenant by design and ships with the Link
+    # Creative gold/black palette baked in as defaults. The wrapper
+    # treats `primary_color` as the brand-spotlight gold (rule + pipes
+    # + wordmark first word) and `accent_color` as the CTA pill bg
+    # (typically black), matching the production tenant_settings row.
+    def test_link_creative_palette_primary_is_gold(self):
+        assert _DEFAULT_BRANDING["primary_color"] == "#CF982C"
 
-    def test_agency_palette_accent(self):
-        assert _DEFAULT_BRANDING["accent_color"] == "#0ea5e9"
-
-    def test_agency_palette_secondary(self):
-        assert _DEFAULT_BRANDING["secondary_color"] == "#0ea5e9"
+    def test_link_creative_palette_accent_is_black(self):
+        assert _DEFAULT_BRANDING["accent_color"] == "#000000"
 
     def test_system_font_stack_in_body(self):
         html = _base_email_html(_default_branding(), "Test", "<p>hello</p>")
@@ -65,20 +67,346 @@ class TestVisualDefaults:
         assert "Senior Account Manager" in html
 
     def test_sender_title_absent_when_not_set(self):
+        # No production caller passes sender info today, but the API
+        # surface kept the kwargs so back-compat is intact. When nothing
+        # is set the entire attribution block must collapse — including
+        # the wrapper class — so the body doesn't grow a stray empty div.
         html = _base_email_html(_default_branding(), "Test", "<p>body</p>")
         assert "sender_title" not in html
+        assert "email-sender-attribution" not in html
+        assert "email-sender-title" not in html
 
-    # -- Responsive v2: header structure + mobile media query --------------
+    # -- Header layout: centered logo + tagline + gold rule ---------------
+
+    def test_centered_header_uses_company_name_when_no_logo(self):
+        # No logo configured: the company name renders as a wordmark
+        # fallback in the centered header so the email still has brand
+        # presence.
+        html = _base_email_html(
+            _default_branding(company_name="Link Creative"),
+            "Test",
+            "<p>body</p>",
+        )
+        assert "Link" in html
+        assert "Creative" in html
+        # Centered text-align is the visual contract.
+        assert "text-align:center" in html
+
+    def test_wordmark_fallback_splits_first_word_in_primary_color(self):
+        # Two-word company names render with the first word in the
+        # primary (gold) accent and the rest in the accent (typically
+        # black) — approximates the Link Creative split-word wordmark
+        # before an admin uploads a real logo image.
+        html = _base_email_html(
+            _default_branding(
+                company_name="Link Creative",
+                primary_color="#CF982C",
+                accent_color="#000000",
+            ),
+            "Test",
+            "<p>body</p>",
+        )
+        # Both spans render with the explicit foreground colors.
+        assert 'color:#CF982C;' in html
+        assert '>Link</span>' in html
+        assert 'color:#000000;' in html
+        assert '>Creative</span>' in html
+
+    def test_wordmark_fallback_whitespace_company_name_uses_crm(self):
+        # A whitespace-only company_name (e.g. accidental " " save)
+        # survives the `... or "CRM"` truthy guard but strips to ""
+        # — without the post-strip ``or "CRM"`` fallback it'd emit
+        # an empty wordmark span and collapse the header silently.
+        html = _base_email_html(
+            _default_branding(company_name="   "),
+            "Test",
+            "<p>body</p>",
+        )
+        assert ">CRM</span>" in html
+
+    def test_primary_color_collision_with_surface_falls_back(self):
+        # If a tenant misconfigures primary_color to the same value as
+        # the white card surface, the gold rule + tagline pipes would
+        # paint invisibly. The wrapper clamps to the gold default so
+        # the visual contract holds.
+        html = _base_email_html(
+            _default_branding(
+                primary_color="#ffffff",
+                surface_color_light="#ffffff",
+                tagline="ONE | TWO",
+            ),
+            "Test",
+            "<p>body</p>",
+        )
+        # Default gold takes over for the accent rule + pipes.
+        assert "background-color:#CF982C" in html
+
+    def test_social_anchor_carries_legible_line_height_for_alt_fallback(self):
+        # When the iconify CDN response is blocked or 404s the alt
+        # letter must still render at a readable line-height — line-
+        # height:0 would collapse the box and leave the recipient
+        # with an empty footer row.
+        html = _base_email_html(
+            _default_branding(social_facebook_url="https://facebook.com/co"),
+            "Test",
+            "<p>body</p>",
+        )
+        assert "line-height:28px" in html
+        assert "line-height:0" not in html.split('<table role="presentation"')[0]
+
+    def test_wordmark_fallback_single_word_stays_accent(self):
+        html = _base_email_html(
+            _default_branding(
+                company_name="Acme",
+                primary_color="#CF982C",
+                accent_color="#000000",
+            ),
+            "Test",
+            "<p>body</p>",
+        )
+        # Single-word wordmark renders in the accent color (dark
+        # text) — primary is reserved for the brand-gold accent rule
+        # + tagline pipes, not the wordmark itself when there's no
+        # first word to split off.
+        assert '>Acme</span>' in html
+        wordmark_idx = html.find('>Acme</span>')
+        # The 250-char span before the closing tag should be a single
+        # accent-color span, not a primary-gold one.
+        wordmark_span = html[max(0, wordmark_idx - 250):wordmark_idx]
+        assert 'color:#000000' in wordmark_span
+        assert 'color:#CF982C' not in wordmark_span
+
+    def test_logo_renders_as_image_when_configured(self):
+        html = _base_email_html(
+            _default_branding(
+                company_name="Link Creative",
+                logo_url="https://example.com/logo.png",
+            ),
+            "Test",
+            "<p>body</p>",
+        )
+        assert 'src="https://example.com/logo.png"' in html
+        assert 'alt="Link Creative"' in html
+
+    def test_tagline_renders_with_gold_pipe_separators(self):
+        html = _base_email_html(
+            _default_branding(
+                tagline="ACCESSIBLE MEDIA | AUTHENTIC STORYTELLING | REAL RESULTS",
+                primary_color="#CF982C",
+            ),
+            "Test",
+            "<p>body</p>",
+        )
+        assert "ACCESSIBLE MEDIA" in html
+        assert "AUTHENTIC STORYTELLING" in html
+        assert "REAL RESULTS" in html
+        # Pipes recolored to the primary (gold) accent, not left as
+        # plain text "|".
+        assert "color:#CF982C;font-weight:700" in html
+
+    def test_tagline_block_absent_when_unset(self):
+        # The mobile media query references `.email-tagline` whether
+        # or not a tagline is present, so check for the rendered div
+        # itself rather than the bare class string.
+        html = _base_email_html(_default_branding(), "Test", "<p>body</p>")
+        assert 'class="email-tagline"' not in html
+
+    def test_tagline_collapses_empty_pipe_segments(self):
+        # Doubled or trailing pipes must not emit phantom dividers; the
+        # rendered tagline should only carry separators between non-empty
+        # segments.
+        html = _base_email_html(
+            _default_branding(tagline="ONE ||  | TWO |"),
+            "Test",
+            "<p>body</p>",
+        )
+        assert "ONE" in html
+        assert "TWO" in html
+        # Exactly one separator span between the two real segments,
+        # colored to whatever primary_color is on the branding dict.
+        primary = _default_branding()["primary_color"]
+        assert html.count(f'color:{primary};font-weight:700;padding:0 6px') == 1
+
+    def test_empty_headline_omits_h1(self):
+        # Notification emails often pass headline="" because the body
+        # already opens with a greeting. Emitting an empty <h1> left a
+        # ~22px gap of whitespace; the new wrapper skips the element
+        # entirely when there's nothing to display.
+        html = _base_email_html(_default_branding(), "", "<p>body</p>")
+        assert '<h1' not in html
+        # The body div still renders normally.
+        assert '<p>body</p>' in html
+
+    def test_whitespace_only_headline_omits_h1(self):
+        html = _base_email_html(_default_branding(), "   \t  ", "<p>body</p>")
+        assert '<h1' not in html
+
+    def test_social_icons_render_bare_white_glyphs(self):
+        # The Link Creative reference uses the brand-mark shapes
+        # directly (Facebook ``f`` in a rounded square, LinkedIn
+        # ``in`` tile, etc.) without a wrapping outline. The render
+        # emits a 28px <img> in white per platform, no circle
+        # wrapper, separated by horizontal cell padding only.
+        html = _base_email_html(
+            _default_branding(social_facebook_url="https://facebook.com/co"),
+            "Test",
+            "<p>body</p>",
+        )
+        # No outlined-circle wrapper around the icons.
+        assert "border-radius:50%" not in html
+        assert "border:1.5px solid #ffffff" not in html
+        # The icon image renders block-level at the right size.
+        assert 'width="28"' in html
+        assert 'height="28"' in html
+
+    def test_social_cells_emit_iconify_img_with_letter_alt(self):
+        # Each cell renders an <img src=...iconify.design...> so
+        # recipients see the actual brand glyph; the alt= carries
+        # the letter fallback so image-blocking clients still display
+        # a recognizable mark. Brand glyphs come from Simple Icons
+        # (the authoritative open-source brand-mark collection) so
+        # the shapes match what recipients recognize across email
+        # clients.
+        html = _base_email_html(
+            _default_branding(
+                social_facebook_url="https://facebook.com/co",
+                social_youtube_url="https://youtube.com/@co",
+            ),
+            "Test",
+            "<p>body</p>",
+        )
+        assert "api.iconify.design/simple-icons/facebook.svg" in html
+        assert "api.iconify.design/simple-icons/youtube.svg" in html
+        # All icons render white on the dark footer.
+        assert "color=%23ffffff" in html
+        assert 'alt="f"' in html
+        assert 'alt="YT"' in html
+
+    def test_gold_accent_rule_below_header(self):
+        # The 3px gold strip under the header is part of the visual
+        # contract — its presence is what differentiates this wrapper
+        # from the legacy dark-block header. Driven by primary_color
+        # so it follows the tenant's brand spotlight.
+        html = _base_email_html(
+            _default_branding(primary_color="#CF982C"),
+            "Test",
+            "<p>body</p>",
+        )
+        assert "background-color:#CF982C" in html
+        assert "height:3px" in html
+
+    # -- Footer: dark surface + social row + legal links ------------------
+
+    def test_footer_uses_near_black_surface(self):
+        html = _base_email_html(_default_branding(), "Test", "<p>body</p>")
+        assert "background-color:#0a0a0a" in html
+
+    def test_social_row_renders_only_configured_platforms(self):
+        html = _base_email_html(
+            _default_branding(
+                social_facebook_url="https://facebook.com/foo",
+                social_linkedin_url="https://linkedin.com/company/foo",
+            ),
+            "Test",
+            "<p>body</p>",
+        )
+        # KEEP UP heading appears because at least one platform is set.
+        assert "KEEP UP WITH US ON SOCIAL" in html
+        # Configured platforms emit anchored circles.
+        assert 'href="https://facebook.com/foo"' in html
+        assert 'href="https://linkedin.com/company/foo"' in html
+        assert 'aria-label="Facebook"' in html
+        assert 'aria-label="LinkedIn"' in html
+        # Unconfigured platforms render nothing.
+        assert "instagram.com" not in html
+        assert "tiktok.com" not in html
+        assert "youtube.com" not in html
+        assert 'aria-label="Instagram"' not in html
+
+    def test_social_row_omitted_when_no_platforms_configured(self):
+        # The "KEEP UP WITH US ON SOCIAL" heading is gated behind at
+        # least one configured platform so tenants that haven't filled
+        # any social URLs in don't get a stranded heading above an
+        # empty row.
+        html = _base_email_html(_default_branding(), "Test", "<p>body</p>")
+        assert "KEEP UP WITH US ON SOCIAL" not in html
+
+    def test_social_url_with_unsafe_scheme_is_dropped(self):
+        # javascript:/data:/vbscript: schemes must never reach an
+        # ``href`` attribute even when stored in the database.
+        html = _base_email_html(
+            _default_branding(
+                social_facebook_url="javascript:alert(1)",
+                social_instagram_url="https://instagram.com/ok",
+            ),
+            "Test",
+            "<p>body</p>",
+        )
+        assert "javascript:" not in html
+        assert 'aria-label="Facebook"' not in html
+        # Tighten: the safe URL still renders so we know the row
+        # wasn't collapsed for an unrelated reason.
+        assert 'aria-label="Instagram"' in html
+        assert "instagram.com/ok" in html
+
+    def test_social_url_strict_rejects_mailto_and_relative(self):
+        # _safe_url permits ``mailto:`` and site-relative paths for the
+        # campaign unsubscribe surface; social footer cells must be
+        # external http(s) only or a recipient clicking a "Facebook"
+        # circle could land on /admin/internal or pop a compose window.
+        html = _base_email_html(
+            _default_branding(
+                social_facebook_url="mailto:owner@example.com",
+                social_instagram_url="/admin/internal",
+                social_tiktok_url="https://tiktok.com/@ok",
+            ),
+            "Test",
+            "<p>body</p>",
+        )
+        assert "mailto:" not in html
+        assert "/admin/internal" not in html
+        assert 'aria-label="Facebook"' not in html
+        assert 'aria-label="Instagram"' not in html
+        assert 'aria-label="TikTok"' in html
+
+    def test_social_row_omitted_when_all_urls_unsafe(self):
+        # If every configured URL fails the allowlist, the entire
+        # "KEEP UP WITH US ON SOCIAL" block must collapse rather than
+        # render an empty row beneath a stranded heading.
+        html = _base_email_html(
+            _default_branding(
+                social_facebook_url="javascript:alert(1)",
+                social_instagram_url="mailto:x@y",
+                social_tiktok_url="/relative",
+            ),
+            "Test",
+            "<p>body</p>",
+        )
+        assert "KEEP UP WITH US ON SOCIAL" not in html
+
+    def test_footer_legal_links_render_white_on_dark(self):
+        html = _base_email_html(
+            _default_branding(
+                privacy_policy_url="https://example.com/privacy",
+                terms_of_service_url="https://example.com/terms",
+            ),
+            "Test",
+            "<p>body</p>",
+        )
+        assert "Privacy Policy" in html
+        assert "Terms of Service" in html
+        # Light gray legible against the dark footer.
+        assert "color:#e5e7eb;text-decoration:underline" in html
+
+    # -- Responsive: mobile media query -----------------------------------
 
     def test_mobile_media_query_present(self):
         html = _base_email_html(_default_branding(), "Test", "<p>body</p>")
         assert "@media only screen and (max-width:480px)" in html
 
-    def test_mobile_media_query_stacks_header_cells(self):
+    def test_mobile_media_query_scales_tagline(self):
         html = _base_email_html(_default_branding(), "Test", "<p>body</p>")
-        assert ".email-header-logo,.email-header-sender" in html
-        assert "display:block!important" in html
-        assert "width:100%!important" in html
+        assert ".email-tagline{font-size:11px!important" in html
 
     def test_mobile_media_query_full_width_cta(self):
         html = _base_email_html(
@@ -95,73 +423,14 @@ class TestVisualDefaults:
         assert ".email-headline{font-size:19px!important" in html
         assert ".email-text{font-size:14px!important" in html
 
-    def test_dark_mode_media_query_still_present(self):
-        # Responsive v2 must not regress the existing dark-mode support.
+    def test_color_scheme_opts_out_of_dark_mode(self):
+        # The Link Creative wrapper is a fixed white-card composition —
+        # there's no dark-mode variant by design. The meta `only light`
+        # tells conformant clients to skip automatic inversion, and the
+        # CSS has no prefers-color-scheme media query.
         html = _base_email_html(_default_branding(), "Test", "<p>body</p>")
-        assert "@media (prefers-color-scheme:dark)" in html
-
-    def test_header_renders_sender_name_and_title_together(self):
-        html = _base_email_html(
-            _default_branding(), "Test", "<p>body</p>",
-            sender_name="Jane Smith",
-            sender_title="Senior Account Manager",
-        )
-        sender_cell_start = html.find('class="email-header-sender"')
-        assert sender_cell_start != -1
-        sender_cell_end = html.find("</td>", sender_cell_start)
-        sender_cell = html[sender_cell_start:sender_cell_end]
-        assert "Jane Smith" in sender_cell
-        assert "Senior Account Manager" in sender_cell
-
-    def test_header_omits_sender_cell_when_no_sender_info(self):
-        # Without sender info the right cell is dropped entirely so the
-        # logo cell stays flush-left on a single column.
-        html = _base_email_html(_default_branding(), "Test", "<p>body</p>")
-        assert 'class="email-header-sender"' not in html
-        # Solo cell uses a distinct class so the mobile stacking rule
-        # doesn't add an 8px ghost gap below it.
-        assert 'class="email-header-logo-solo"' in html
-        # The shared ``email-header-logo`` class is reserved for the
-        # two-cell case so the stacking selector only matches when there
-        # is actually something to stack.
-        assert 'class="email-header-logo"' not in html
-
-    def test_header_whitespace_sender_treated_as_absent(self):
-        # bool(" ") is True, but a whitespace-only string must not flip
-        # on the two-cell layout — that would render a blank right
-        # column and leave the logo no longer flush-left.
-        html = _base_email_html(
-            _default_branding(), "Test", "<p>body</p>",
-            sender_name="   ", sender_title="\t",
-        )
-        assert 'class="email-header-sender"' not in html
-        assert 'class="email-header-logo-solo"' in html
-
-    def test_header_two_cell_layout_has_explicit_widths(self):
-        # Outlook desktop's Word renderer splits unwidthed cells 50/50,
-        # which wraps long sender titles into the logo column. Explicit
-        # width attributes give the renderer fixed guidance.
-        html = _base_email_html(
-            _default_branding(), "Test", "<p>body</p>",
-            sender_name="Jane",
-        )
-        assert 'width="62%"' in html
-        assert 'width="38%"' in html
-
-    def test_header_only_sender_title_renders_without_extra_top_margin(self):
-        # When sender_name is absent the title is the only line in the
-        # cell — the 2px top margin (which exists to space it under the
-        # name) must not be applied or it visibly pushes the title down.
-        html = _base_email_html(
-            _default_branding(), "Test", "<p>body</p>",
-            sender_title="Senior Account Manager",
-        )
-        sender_cell_start = html.find('class="email-header-sender"')
-        assert sender_cell_start != -1
-        sender_cell_end = html.find("</td>", sender_cell_start)
-        sender_cell = html[sender_cell_start:sender_cell_end]
-        assert "Senior Account Manager" in sender_cell
-        assert "margin-top:2px" not in sender_cell
+        assert 'content="only light"' in html
+        assert "prefers-color-scheme" not in html
 
     def test_responsive_class_hooks_on_outer_cells(self):
         # Layout cells get class hooks so the mobile media query can
@@ -172,23 +441,53 @@ class TestVisualDefaults:
         assert 'class="email-body-cell"' in html
         assert 'class="email-footer-cell"' in html
 
+    # -- Sender attribution (back-compat API) -----------------------------
+
+    def test_sender_block_renders_above_body(self):
+        # Old two-column header is gone; sender_name/sender_title now
+        # surface as a small caption above the body headline so the
+        # back-compat API still has a visible effect.
+        html = _base_email_html(
+            _default_branding(), "Headline", "<p>body</p>",
+            sender_name="Jane Smith",
+            sender_title="Senior Account Manager",
+        )
+        attribution_start = html.find('class="email-sender-attribution"')
+        assert attribution_start != -1
+        body_h1 = html.find("<h1", attribution_start)
+        assert body_h1 != -1
+        attribution = html[attribution_start:body_h1]
+        assert "Jane Smith" in attribution
+        assert "Senior Account Manager" in attribution
+
+    def test_sender_block_whitespace_treated_as_absent(self):
+        html = _base_email_html(
+            _default_branding(), "Test", "<p>body</p>",
+            sender_name="   ", sender_title="\t",
+        )
+        assert "email-sender-attribution" not in html
+
     def test_render_branded_email_plumbs_sender_name(self):
         from src.email.branded_templates import render_branded_email
         html = render_branded_email(
             _default_branding(), "Subject", "Headline", "<p>body</p>",
             sender_name="Jane Smith", sender_title="AE",
         )
-        sender_cell_start = html.find('class="email-header-sender"')
-        assert sender_cell_start != -1
-        sender_cell_end = html.find("</td>", sender_cell_start)
-        sender_cell = html[sender_cell_start:sender_cell_end]
-        assert "Jane Smith" in sender_cell
-        assert "AE" in sender_cell
+        attribution_start = html.find('class="email-sender-attribution"')
+        assert attribution_start != -1
+        # Both fields appear inside the attribution block.
+        body_h1 = html.find("<h1", attribution_start)
+        attribution = html[attribution_start:body_h1]
+        assert "Jane Smith" in attribution
+        assert "AE" in attribution
 
     def test_tenant_primary_color_overrides_default(self):
         branding = _default_branding(primary_color="#ff0000")
         html = _base_email_html(branding, "Test", "<p>body</p>")
         assert "#ff0000" in html
+        # The new wrapper uses ``primary_color`` for tagline copy and
+        # the no-logo wordmark fallback; the old hardcoded #1e293b
+        # default must not leak through.
         assert "#1e293b" not in html
 
 

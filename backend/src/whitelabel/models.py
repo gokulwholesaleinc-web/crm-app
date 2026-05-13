@@ -91,6 +91,18 @@ class TenantSettings(Base, TimestampMixin):
     privacy_policy_url: Mapped[str | None] = mapped_column(String(500))
     terms_of_service_url: Mapped[str | None] = mapped_column(String(500))
 
+    # Branded-email wrapper extras (migration 034). `tagline` renders in
+    # the email header under the logo; the six `social_*_url` fields drive
+    # the dark footer's social-icons row. NULL means "omit" — the wrapper
+    # skips empty values rather than rendering placeholders.
+    tagline: Mapped[str | None] = mapped_column(String(255))
+    social_facebook_url: Mapped[str | None] = mapped_column(String(500))
+    social_instagram_url: Mapped[str | None] = mapped_column(String(500))
+    social_tiktok_url: Mapped[str | None] = mapped_column(String(500))
+    social_linkedin_url: Mapped[str | None] = mapped_column(String(500))
+    social_youtube_url: Mapped[str | None] = mapped_column(String(500))
+    social_website_url: Mapped[str | None] = mapped_column(String(500))
+
     # Localization
     default_language: Mapped[str] = mapped_column(String(5), default="en")
     default_timezone: Mapped[str] = mapped_column(String(50), default="UTC")
