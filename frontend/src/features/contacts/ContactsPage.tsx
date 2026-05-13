@@ -407,14 +407,8 @@ function ContactsPage() {
                     {contact.mobile && contact.mobile !== contact.phone && (
                       <p>Mobile: {formatPhoneNumber(contact.mobile)}</p>
                     )}
-                    {contact.department && <p>Dept: {contact.department}</p>}
                     {(contact.city || contact.state) && (
                       <p>{[contact.city, contact.state].filter(Boolean).join(', ')}</p>
-                    )}
-                    {contact.status && (
-                      <span className="inline-block text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 capitalize">
-                        {contact.status}
-                      </span>
                     )}
                     <p className="text-xs text-gray-400 dark:text-gray-500">Created: {formatDate(contact.created_at)}</p>
                   </div>
@@ -440,24 +434,6 @@ function ContactsPage() {
                       className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                     >
                       Phone
-                    </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
-                    >
-                      Department
-                    </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
-                    >
-                      Location
-                    </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
-                    >
-                      Status
                     </th>
                     <SortableTh field="created_at" label="Created" sortBy={sortBy} sortDir={sortDir} onToggle={toggle} />
                     <th scope="col" className="relative px-6 py-3">
@@ -501,21 +477,6 @@ function ContactsPage() {
                             M: {formatPhoneNumber(contact.mobile)}
                           </div>
                         )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                        {contact.department || '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                        {contact.city || contact.state
-                          ? [contact.city, contact.state].filter(Boolean).join(', ')
-                          : '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        {contact.status ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 capitalize">
-                            {contact.status}
-                          </span>
-                        ) : '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {formatDate(contact.created_at)}

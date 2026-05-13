@@ -46,11 +46,8 @@ function LoginPage() {
             </div>
           )}
           <h2 className="mt-4 sm:mt-6 text-center text-2xl sm:text-3xl font-extrabold text-gray-900 dark:text-gray-100">
-            {tenant?.company_name ? `Sign in to ${tenant.company_name}` : 'Sign in to your account'}
+            {tenant?.company_name ? `Welcome to ${tenant.company_name}` : 'Welcome'}
           </h2>
-          <p className="mt-2 text-center text-sm text-gray-500 dark:text-gray-400">
-            Sign in with your Google account to continue.
-          </p>
         </div>
 
         {error && (
