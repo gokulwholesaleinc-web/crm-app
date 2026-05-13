@@ -113,8 +113,17 @@ async def create_company(
     current_user: Annotated[User, Depends(require_permission("companies", "create"))],
     db: DBSession,
 ):
-    """Create a new company."""
+    """Create a new company.
+
+    Defaults ``owner_id`` to the creator when omitted so the row is
+    visible to that user in their own /companies list (sales-rep scope
+    filters by ``Company.owner_id``). Admins/managers can override by
+    passing ``owner_id`` in the request body — same convention as the
+    leads/opportunities routers.
+    """
     service = CompanyService(db)
+    if company_data.owner_id is None:
+        company_data.owner_id = current_user.id
     company = await service.create(company_data, current_user.id)
 
     ip_address = get_client_ip(request)

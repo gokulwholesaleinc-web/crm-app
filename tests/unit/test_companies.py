@@ -202,6 +202,29 @@ class TestCompaniesCreate:
         assert data["status"] == "prospect"  # Default
 
     @pytest.mark.asyncio
+    async def test_create_company_defaults_owner_to_creator(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+    ):
+        """Omitting ``owner_id`` on create defaults to the requesting user
+        so sales-rep scopes (which filter by ``Company.owner_id``) can
+        see the row they just created. The previous behaviour left
+        ``owner_id`` NULL and the company became invisible in /companies
+        for any non-admin caller.
+        """
+        response = await client.post(
+            "/api/companies",
+            headers=auth_headers,
+            json={"name": "Default Owner Co"},
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["owner_id"] == test_user.id
+
+    @pytest.mark.asyncio
     async def test_create_company_missing_name(
         self, client: AsyncClient, db_session: AsyncSession, auth_headers: dict
     ):
