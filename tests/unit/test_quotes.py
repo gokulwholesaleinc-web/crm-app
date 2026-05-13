@@ -11,6 +11,9 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
+# Send paths gate on assert_gmail_connected (PR #310).
+pytestmark = pytest.mark.usefixtures("gmail_connected_test_user")
+
 from src.auth.models import User
 from src.auth.security import get_password_hash, create_access_token
 from src.quotes.models import Quote, QuoteLineItem

@@ -87,6 +87,11 @@ async def branded_user(db_session: AsyncSession, branded_tenant: Tenant) -> User
     db_session.add(tenant_user)
     await db_session.commit()
     await db_session.refresh(user)
+    # Pre-flight gate on send paths (PR #310): user must have a
+    # connected Gmail. Far-future expiry so _refresh_if_needed
+    # short-circuits without a real Google call.
+    from tests.conftest import _attach_gmail_connection
+    await _attach_gmail_connection(db_session, user)
     return user
 
 
