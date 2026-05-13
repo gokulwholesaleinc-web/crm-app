@@ -22,6 +22,7 @@ a mock ``httpx`` transport without touching the service logic.
 from __future__ import annotations
 
 import logging
+import secrets
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
@@ -280,7 +281,18 @@ class MailchimpService:
             }
 
         members = await self._resolve_member_emails(campaign.id)
+        if not members:
+            # Fail-closed: never hand a Mailchimp send off without a
+            # bounded recipient set. Previously this would have created
+            # an unsegmented campaign and broadcast to the entire
+            # audience.
+            raise ValueError(
+                f"Cannot send Mailchimp campaign {campaign.id}: "
+                "no members resolved to email addresses"
+            )
+
         async with await self._client(conn) as mc:
+            upserted_emails: list[str] = []
             for email, first_name, last_name in members:
                 merge: dict[str, str] = {}
                 if first_name:
@@ -293,6 +305,7 @@ class MailchimpService:
                         email,
                         merge_fields=merge or None,
                     )
+                    upserted_emails.append(email)
                 except MailchimpError as exc:
                     # Mailchimp returns 400 with title="Member In
                     # Compliance State" for previously-unsubscribed or
@@ -312,14 +325,71 @@ class MailchimpService:
                         continue
                     raise
 
+            if not upserted_emails:
+                # Every member hit compliance — nothing to send. Bail
+                # before creating a segment + campaign that would have
+                # no recipients (and which Mailchimp may then refuse
+                # to send, or worse fall back to the whole audience).
+                raise ValueError(
+                    f"Cannot send Mailchimp campaign {campaign.id}: "
+                    "all members are in compliance state (unsubscribed/bounced)"
+                )
+
+            # Per-send static segment: limits the Mailchimp campaign to
+            # exactly the CRM contacts we attached. Without this the
+            # campaign broadcasts to every active subscriber in the
+            # audience — see PR #319-followup incident 2026-05-13.
+            #
+            # KNOWN: if create_regular_campaign / set_content / send_campaign
+            # raises after the segment is created, the segment will leak in
+            # Mailchimp. Mailchimp's audience segment cap (~200) means
+            # repeated mid-flight failures will eventually block sends.
+            # Acceptable for now; tracked as cleanup followup.
+            # Random suffix prevents 400 "name already exists" on retry:
+            # if create_segment succeeds but create_campaign later raises,
+            # the outer transaction rolls back without persisting
+            # mailchimp_campaign_id, so the idempotency guard above
+            # doesn't fire on the next worker tick. A deterministic name
+            # would collide with the leaked segment and stop the retry
+            # from ever succeeding.
+            segment_suffix = secrets.token_hex(4)
+            segment = await mc.create_static_segment(
+                conn.default_audience_id,
+                name=(
+                    f"crm-campaign-{campaign.id}-step-"
+                    f"{campaign.current_step + 1}-{segment_suffix}"
+                ),
+                emails=upserted_emails,
+            )
+            raw_segment_id = segment.get("id")
+            if not raw_segment_id:
+                # ValueError lands in the execute-router's caught tuple
+                # → campaign moves to "paused" with a useful message,
+                # rather than a 500 that leaves the row in an active +
+                # not-executing limbo.
+                raise ValueError(
+                    f"Mailchimp create_static_segment returned no id for campaign "
+                    f"{campaign.id}; response={segment!r}"
+                )
+            # Mailchimp returns segment ids as integers; cast explicitly
+            # so the int-typed downstream parameter is enforced at the
+            # boundary even though _request returns dict[str, Any].
+            segment_id = int(raw_segment_id)
+
             created = await mc.create_regular_campaign(
                 list_id=conn.default_audience_id,
+                segment_id=segment_id,
                 subject=subject,
                 from_name=from_name,
                 reply_to=reply_to,
                 title=f"{campaign.name} — step {campaign.current_step + 1}",
             )
-            mc_campaign_id = created["id"]
+            mc_campaign_id = created.get("id")
+            if not mc_campaign_id:
+                raise ValueError(
+                    f"Mailchimp create_regular_campaign returned no id for campaign "
+                    f"{campaign.id}; response={created!r}"
+                )
             await mc.set_campaign_content(mc_campaign_id, html=wrapped)
 
             # Persist + flush BEFORE actually sending. If the
@@ -332,13 +402,16 @@ class MailchimpService:
 
             await mc.send_campaign(mc_campaign_id)
 
-        campaign.num_sent = (campaign.num_sent or 0) + len(members)
+        # Count only the emails that actually made it into the segment.
+        # Compliance-state skips were filtered above, so upserted_emails
+        # is the authoritative recipient set for this send.
+        campaign.num_sent = (campaign.num_sent or 0) + len(upserted_emails)
 
         now = datetime.now(UTC)
         member_result = await self.db.execute(
             select(CampaignMember).where(CampaignMember.campaign_id == campaign.id)
         )
-        emails_sent = {e for e, _, _ in members}
+        emails_sent = set(upserted_emails)
         for member in member_result.scalars().all():
             from src.email.service import EmailService
 
@@ -351,7 +424,7 @@ class MailchimpService:
         await self.db.flush()
         return {
             "mailchimp_campaign_id": mc_campaign_id,
-            "emails_sent": len(members),
+            "emails_sent": len(upserted_emails),
         }
 
     # --- Stats ---------------------------------------------------

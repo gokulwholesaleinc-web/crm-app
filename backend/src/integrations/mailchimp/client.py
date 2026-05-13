@@ -167,18 +167,56 @@ class MailchimpClient:
 
     # --- Campaigns ------------------------------------------------
 
+    async def create_static_segment(
+        self,
+        list_id: str,
+        *,
+        name: str,
+        emails: list[str],
+    ) -> dict[str, Any]:
+        """Create a Mailchimp static segment containing exactly ``emails``.
+
+        Static segments are the documented way to send a Mailchimp
+        campaign to a specific subset of an audience. We use them as a
+        per-send "blast-radius limiter" so a campaign send only reaches
+        the CRM contacts we attached to that campaign — not the entire
+        audience.
+
+        ``emails`` must already exist in the audience (use
+        :meth:`upsert_member` first); Mailchimp silently drops any
+        email that isn't a list member.
+        """
+        return await self._request(
+            "POST",
+            f"/lists/{list_id}/segments",
+            json={
+                "name": name,
+                "static_segment": emails,
+            },
+        )
+
     async def create_regular_campaign(
         self,
         *,
         list_id: str,
+        segment_id: int,
         subject: str,
         from_name: str,
         reply_to: str,
         title: str | None = None,
     ) -> dict[str, Any]:
+        """Create a regular campaign scoped to a saved/static segment.
+
+        ``segment_id`` is REQUIRED. We never send to an unsegmented
+        audience because that would broadcast to every active
+        subscriber, not just the CRM campaign members.
+        """
         payload = {
             "type": "regular",
-            "recipients": {"list_id": list_id},
+            "recipients": {
+                "list_id": list_id,
+                "segment_opts": {"saved_segment_id": segment_id},
+            },
             "settings": {
                 "subject_line": subject,
                 "from_name": from_name,

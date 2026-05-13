@@ -156,6 +156,7 @@ class TestCampaigns:
         async with _client(transport) as mc:
             data = await mc.create_regular_campaign(
                 list_id="L1",
+                segment_id=42,
                 subject="Hello",
                 from_name="CRM",
                 reply_to="me@example.com",
@@ -164,7 +165,12 @@ class TestCampaigns:
         assert data["id"] == "campaign-1"
         body = captured["body"]
         assert body["type"] == "regular"
-        assert body["recipients"] == {"list_id": "L1"}
+        # Blast-radius guard: every regular campaign must be scoped to a
+        # static/saved segment, never broadcast at the audience.
+        assert body["recipients"] == {
+            "list_id": "L1",
+            "segment_opts": {"saved_segment_id": 42},
+        }
         assert body["settings"]["subject_line"] == "Hello"
         assert body["settings"]["title"] == "Hello — step 1"
 
