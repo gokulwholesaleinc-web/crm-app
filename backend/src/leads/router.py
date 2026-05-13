@@ -93,74 +93,91 @@ async def _resolve_lead_stage(db, stage_id: int) -> PipelineStage:
     return stage
 
 
+async def _preflight_won_conversion(
+    db,
+    lead: Lead,
+    stage: PipelineStage,
+) -> PipelineStage | None:
+    """Validate that a Won-stage move can complete its auto-convert.
+
+    Pure read — never mutates the lead. Returns the opportunity stage
+    the auto-convert should land in, or ``None`` when the transition
+    shouldn't trigger an auto-convert (non-Won, already-converted, or
+    stale ``converted_contact_id``). Raises 409 when a Won move would
+    silently fail because no opportunity stage is configured — admin
+    needs to add one before retrying.
+
+    Must be called BEFORE the caller mutates ``lead.pipeline_stage_id``
+    so the 409 doesn't leave a flushed-but-unconverted stage write
+    visible to the request session (the test harness shares a single
+    session across the request and the assertion, and ``get_db`` does
+    not rollback on ``HTTPException``).
+    """
+    if not stage.is_won or lead.converted_opportunity_id:
+        return None
+
+    opp_stage_result = await db.execute(
+        select(PipelineStage)
+        .where(PipelineStage.pipeline_type == "opportunity")
+        .where(PipelineStage.is_active == True)
+        .order_by(PipelineStage.order)
+        .limit(1)
+    )
+    opp_stage = opp_stage_result.scalar_one_or_none()
+    if opp_stage is None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Cannot auto-convert lead: no active opportunity "
+                "pipeline stage is configured. Add one in Pipeline "
+                "settings and retry."
+            ),
+        )
+
+    # Stale-FK pre-flight: the relaxed guard (skip when
+    # converted_opportunity_id is null, even if contact_id is set)
+    # would otherwise re-enter full_conversion against a stranded
+    # converted_contact_id. If that contact has been soft-deleted,
+    # full_conversion's alias-match path filters it out, then tries
+    # to INSERT a fresh row with the same email — and the
+    # ``ix_contacts_unique_email`` index is unconditional, so the
+    # insert 500s. Decline the auto-convert in that case and leave
+    # the lead's stage change valid; admin needs to un-delete the
+    # contact or clear the FK before retrying.
+    if lead.converted_contact_id is not None:
+        linked = await db.get(Contact, lead.converted_contact_id)
+        if linked is None or linked.deleted_at is not None:
+            logger.warning(
+                "lead %s has stale converted_contact_id=%s (missing or "
+                "soft-deleted); skipping auto-convert on Won-stage move",
+                lead.id, lead.converted_contact_id,
+            )
+            return None
+
+    return opp_stage
+
+
 async def _apply_stage_change(
     db,
     lead: Lead,
     stage: PipelineStage,
     current_user: User,
+    opp_stage: PipelineStage | None,
 ) -> dict | None:
     """Apply stage-change side effects: status sync + auto-convert.
 
-    Caller must have already set ``lead.pipeline_stage_id = stage.id``.
-    Returns conversion info if auto-convert fired, else None.
+    Caller must have already set ``lead.pipeline_stage_id = stage.id``
+    AND called :func:`_preflight_won_conversion` to validate the move.
+    The resolved ``opp_stage`` (or ``None`` to skip the auto-convert)
+    is passed in so this function performs writes only — pre-flight
+    short-circuits never reach a mid-flush state.
 
     Shared by POST /leads/{id}/move and PATCH /leads/{id} so picking
     "Won" from the lead-detail edit form behaves the same as dragging
     onto the Won column. Lead 1597 (2026-05-13) ended up at the Won
-    stage with status='qualified' and no opportunity because PATCH used
-    to skip both side effects.
-
-    Won-path is single-transaction-safe: pre-flight checks happen before
-    the status flush so a missing opp stage or stale converted_contact_id
-    short-circuits cleanly instead of leaving the lead stranded at
-    ``status='converted'`` mid-helper.
+    stage with status='qualified' and no opportunity because PATCH
+    used to skip both side effects.
     """
-    # Pre-flight: resolve which opportunity stage the new opp would land
-    # in (if any). Doing this BEFORE mutating ``lead.status`` means an
-    # operator misconfig (no active opportunity stage) raises a clean
-    # 409 instead of silently flipping the lead to "converted" with no
-    # downstream record — i.e. the exact partial-conversion shape this
-    # change is meant to prevent.
-    opp_stage: PipelineStage | None = None
-    if stage.is_won and not lead.converted_opportunity_id:
-        opp_stage_result = await db.execute(
-            select(PipelineStage)
-            .where(PipelineStage.pipeline_type == "opportunity")
-            .where(PipelineStage.is_active == True)
-            .order_by(PipelineStage.order)
-            .limit(1)
-        )
-        opp_stage = opp_stage_result.scalar_one_or_none()
-        if opp_stage is None:
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "Cannot auto-convert lead: no active opportunity "
-                    "pipeline stage is configured. Add one in Pipeline "
-                    "settings and retry."
-                ),
-            )
-
-        # Stale-FK pre-flight: the relaxed guard (skip when
-        # converted_opportunity_id is null, even if contact_id is set)
-        # would otherwise re-enter full_conversion against a stranded
-        # converted_contact_id. If that contact has been soft-deleted,
-        # full_conversion's alias-match path filters it out, then tries
-        # to INSERT a fresh row with the same email — and the
-        # ``ix_contacts_unique_email`` index is unconditional, so the
-        # insert 500s. Decline the auto-convert in that case and leave
-        # the lead's stage change valid; admin needs to un-delete the
-        # contact or clear the FK before retrying.
-        if lead.converted_contact_id is not None:
-            linked = await db.get(Contact, lead.converted_contact_id)
-            if linked is None or linked.deleted_at is not None:
-                logger.warning(
-                    "lead %s has stale converted_contact_id=%s (missing or "
-                    "soft-deleted); skipping auto-convert on Won-stage move",
-                    lead.id, lead.converted_contact_id,
-                )
-                opp_stage = None
-
     if stage.is_won:
         lead.status = "converted"
     elif stage.is_lost:
@@ -540,8 +557,9 @@ async def move_lead(
     )
 
     stage = await _resolve_lead_stage(db, request.new_stage_id)
+    opp_stage = await _preflight_won_conversion(db, lead, stage)
     lead.pipeline_stage_id = stage.id
-    conversion_info = await _apply_stage_change(db, lead, stage, current_user)
+    conversion_info = await _apply_stage_change(db, lead, stage, current_user, opp_stage)
 
     lead_response = await _build_lead_response(service, lead)
     response_dict = lead_response.model_dump()
@@ -592,13 +610,20 @@ async def update_lead(
 
     # Pre-validate the new stage before service.update writes it so a
     # bad stage_id rejects cleanly instead of FK-failing mid-transaction.
+    # Pre-flight the Won-conversion side effect BEFORE service.update so
+    # a 409 (no opportunity stage configured) rolls back cleanly without
+    # leaving the new pipeline_stage_id flushed to the request session.
     stage_for_sync: PipelineStage | None = None
+    opp_stage_for_sync: PipelineStage | None = None
     if (
         "pipeline_stage_id" in update_fields
         and lead_data.pipeline_stage_id is not None
         and lead_data.pipeline_stage_id != old_stage_id
     ):
         stage_for_sync = await _resolve_lead_stage(db, lead_data.pipeline_stage_id)
+        opp_stage_for_sync = await _preflight_won_conversion(
+            db, lead, stage_for_sync,
+        )
         # _apply_stage_change will mutate status (and may stamp
         # converted_*) — record those columns in the audit diff even
         # though the client didn't submit them. Otherwise audit shows a
@@ -622,7 +647,7 @@ async def update_lead(
     conversion_info = None
     if stage_for_sync is not None:
         conversion_info = await _apply_stage_change(
-            db, updated_lead, stage_for_sync, current_user,
+            db, updated_lead, stage_for_sync, current_user, opp_stage_for_sync,
         )
 
     new_data = snapshot_entity(updated_lead, update_fields)
