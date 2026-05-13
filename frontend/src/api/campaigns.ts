@@ -239,10 +239,21 @@ export const reorderCampaignSteps = async (
   return response.data;
 };
 
+export interface ExecuteCampaignResponse {
+  message: string;
+  status: string;
+  emails_sent?: number;
+  send_via?: string;
+  total_steps?: number;
+  next_step_at?: string | null;
+}
+
 export const executeCampaign = async (
   campaignId: number
-): Promise<{ message: string; status: string }> => {
-  const response = await apiClient.post(`${CAMPAIGNS_BASE}/${campaignId}/execute`);
+): Promise<ExecuteCampaignResponse> => {
+  const response = await apiClient.post<ExecuteCampaignResponse>(
+    `${CAMPAIGNS_BASE}/${campaignId}/execute`
+  );
   return response.data;
 };
 

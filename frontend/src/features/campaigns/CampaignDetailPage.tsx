@@ -403,13 +403,11 @@ export function CampaignDetailPage() {
     await deleteStep.mutateAsync({ campaignId, stepId });
   };
 
-  const handleExecute = async () => {
+  const handleExecute = () => {
     if (!campaignId) return;
-    try {
-      await executeCampaign.mutateAsync(campaignId);
-    } catch {
-      showError('Failed to start campaign');
-    }
+    // useExecuteCampaign owns success/info/error toasts based on the
+    // backend response shape — don't double-fire here.
+    executeCampaign.mutate(campaignId);
   };
 
   const handleAddMembers = async (memberType: 'contact' | 'lead', memberIds: number[]) => {
@@ -521,15 +519,15 @@ export function CampaignDetailPage() {
                 <span className="text-xs font-bold text-blue-600 dark:text-blue-300">1</span>
               </div>
               <div className="min-w-0">
-                <p className="text-sm font-medium text-blue-900 dark:text-blue-100">Add a sequence step</p>
+                <p className="text-sm font-medium text-blue-900 dark:text-blue-100">Add an email step</p>
                 <p className="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
-                  Pick an email template and set the send delay.{' '}
+                  Pick an email template (or create one) and set the send delay.{' '}
                   <button
                     type="button"
                     onClick={() => stepBuilderRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
                     className="underline hover:no-underline font-medium"
                   >
-                    Go to Campaign Sequence
+                    Go to Email Steps
                   </button>
                 </p>
               </div>
