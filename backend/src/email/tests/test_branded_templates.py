@@ -199,29 +199,30 @@ class TestVisualDefaults:
         html = _base_email_html(_default_branding(), "   \t  ", "<p>body</p>")
         assert '<h1' not in html
 
-    def test_social_circles_use_white_fill_with_dark_letter(self):
-        # The Link Creative reference shows social icons as white-
-        # filled badges with dark glyphs (not outlined). The render
-        # uses solid #ffffff background + #0a0a0a foreground so the
-        # circles read as badges against the near-black footer.
+    def test_social_circles_are_outlined_white_with_white_glyph(self):
+        # The Link Creative reference shows social icons as
+        # transparent-fill circles with a 1.5px white outline and a
+        # white brand glyph inside. The render emits
+        # ``border:1.5px solid #ffffff;border-radius:50%`` on the
+        # wrapper table and ``color=%23ffffff`` on the Iconify src.
         html = _base_email_html(
             _default_branding(social_facebook_url="https://facebook.com/co"),
             "Test",
             "<p>body</p>",
         )
-        assert "background-color:#ffffff;border-radius:50%" in html
-        # Foreground #0a0a0a is shared by both the alt-letter color
-        # and the icon-tint query param, so it appears in the render
-        # twice (once on the <a>, once URL-encoded in the icon src).
-        assert "color:#0a0a0a;" in html
+        assert "border:1.5px solid #ffffff;border-radius:50%" in html
+        assert "background-color:transparent" in html
+        # White foreground for the alt-text fallback inside the <a>.
+        assert "color:#ffffff;" in html
 
     def test_social_cells_emit_iconify_img_with_letter_alt(self):
         # Each rendered circle wraps an <img src=...iconify.design...>
         # so recipients see the actual brand glyph; the alt= carries
         # the letter fallback so image-blocking clients still display
-        # a recognizable mark. All glyphs come from the Material
-        # Design Icons collection (`mdi/`) so visual weight is
-        # consistent across the row.
+        # a recognizable mark. Brand glyphs come from Simple Icons
+        # (the authoritative open-source brand-mark collection) so
+        # the shapes match what recipients recognize across email
+        # clients.
         html = _base_email_html(
             _default_branding(
                 social_facebook_url="https://facebook.com/co",
@@ -230,8 +231,10 @@ class TestVisualDefaults:
             "Test",
             "<p>body</p>",
         )
-        assert "api.iconify.design/mdi/facebook.svg" in html
-        assert "api.iconify.design/mdi/youtube.svg" in html
+        assert "api.iconify.design/simple-icons/facebook.svg" in html
+        assert "api.iconify.design/simple-icons/youtube.svg" in html
+        # All icons render white on the dark footer.
+        assert "color=%23ffffff" in html
         assert 'alt="f"' in html
         assert 'alt="YT"' in html
 

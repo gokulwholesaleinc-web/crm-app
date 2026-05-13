@@ -132,45 +132,49 @@ _DEFAULT_BRANDING = {
 # circle text-color so the alt-letter and the loaded icon look
 # consistent.
 _ICONIFY_BASE = "https://api.iconify.design"
-# All icons from the same collection (Material Design Icons) so visual
-# weight + viewBox padding are consistent across the row — mixing
-# simple-icons brand glyphs with material-symbols globe gave wildly
-# different inner sizes that read as "clunky".
+# Brand glyphs from Simple Icons (the authoritative open-source brand-
+# mark collection) so the shapes match what recipients recognize —
+# Facebook ``f``, IG camera, TikTok musical note + tail, LinkedIn
+# ``in`` badge, YouTube play triangle in a tile. The website slot
+# uses ``mdi:web`` for a stroke-weight globe that pairs visually.
+# All icons render in white (``color=%23ffffff``) on transparent so
+# they sit inside a white-outlined circle, matching the Link Creative
+# reference.
 _SOCIAL_PLATFORMS: tuple[tuple[str, str, str, str], ...] = (
     (
         "Facebook",
         "social_facebook_url",
-        f"{_ICONIFY_BASE}/mdi/facebook.svg?color=%230a0a0a",
+        f"{_ICONIFY_BASE}/simple-icons/facebook.svg?color=%23ffffff",
         "f",
     ),
     (
         "Instagram",
         "social_instagram_url",
-        f"{_ICONIFY_BASE}/mdi/instagram.svg?color=%230a0a0a",
+        f"{_ICONIFY_BASE}/simple-icons/instagram.svg?color=%23ffffff",
         "IG",
     ),
     (
         "TikTok",
         "social_tiktok_url",
-        f"{_ICONIFY_BASE}/ic/baseline-tiktok.svg?color=%230a0a0a",
+        f"{_ICONIFY_BASE}/simple-icons/tiktok.svg?color=%23ffffff",
         "TT",
     ),
     (
         "LinkedIn",
         "social_linkedin_url",
-        f"{_ICONIFY_BASE}/mdi/linkedin.svg?color=%230a0a0a",
+        f"{_ICONIFY_BASE}/simple-icons/linkedin.svg?color=%23ffffff",
         "in",
     ),
     (
         "YouTube",
         "social_youtube_url",
-        f"{_ICONIFY_BASE}/mdi/youtube.svg?color=%230a0a0a",
+        f"{_ICONIFY_BASE}/simple-icons/youtube.svg?color=%23ffffff",
         "YT",
     ),
     (
         "Website",
         "social_website_url",
-        f"{_ICONIFY_BASE}/mdi/web.svg?color=%230a0a0a",
+        f"{_ICONIFY_BASE}/mdi/web.svg?color=%23ffffff",
         "W",
     ),
 )
@@ -316,26 +320,27 @@ def _render_social_row(branding: dict) -> str:
         href = _safe_external_url(branding.get(key))
         if not href:
             continue
-        # 32px solid-white circle with an 18px brand-icon <img>
-        # centered via the email-bulletproof nested-table pattern:
-        # the inner ``<td align="center" valign="middle">`` is the
-        # only reliable cross-client way to center a smaller image
-        # inside a fixed-size cell — inline-block + margin tricks
-        # rendered the icons low in Apple Mail and Outlook Desktop.
-        # The image's ``alt`` carries the fallback letter so
-        # image-blocking clients still render a legible mark in the
-        # badge. Cell padding kept tight (4px each side = 8px gap
-        # between circles) so the six-icon row reads as a band.
+        # 36px circle: transparent fill, 1.5px white outline, 18px
+        # white brand-icon <img> centered via the email-bulletproof
+        # nested-table pattern. Centering uses the inner
+        # ``<td align="center" valign="middle">`` which is the only
+        # reliable cross-client method for centering a smaller image
+        # inside a fixed-size cell. Image ``alt`` carries the
+        # fallback letter (in white via the wrapping <a>) so image-
+        # blocking clients still render a legible mark. Cell padding
+        # 5px each side = 10px gap between circles so the six-icon
+        # row matches the reference spacing without crowding.
         cells.append(
-            f'<td style="padding:0 4px;" valign="middle">'
+            f'<td style="padding:0 5px;" valign="middle">'
             f'<a href="{escape(href)}" target="_blank" '
             f'aria-label="{escape(label)}" '
-            f'style="text-decoration:none;color:#0a0a0a;'
+            f'style="text-decoration:none;color:#ffffff;'
             f"font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;"
             f'font-size:13px;font-weight:700;line-height:0;">'
             f'<table role="presentation" cellpadding="0" cellspacing="0" border="0" '
-            f'width="32" height="32" '
-            f'style="background-color:#ffffff;border-radius:50%;border-collapse:separate;">'
+            f'width="36" height="36" '
+            f'style="border:1.5px solid #ffffff;border-radius:50%;'
+            f'border-collapse:separate;background-color:transparent;">'
             f'<tr><td align="center" valign="middle" '
             f'style="text-align:center;vertical-align:middle;line-height:0;">'
             f'<img src="{escape(icon_url)}" alt="{escape(fallback_letter)}" '
