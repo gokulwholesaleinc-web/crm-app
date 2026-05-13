@@ -19,7 +19,7 @@ from src.database import Base
 
 
 class _BlockedAudienceIds(TypeDecorator):
-    """TEXT[] on Postgres, JSON-array on SQLite (the test path).
+    """TEXT[] on Postgres, JSON-array on SQLite (the pytest default).
 
     Mirrors ``email/models.py::_ParticipantEmails`` so the unit-test suite,
     which boots against in-memory SQLite, can build the table at all.
@@ -62,7 +62,7 @@ class MailchimpConnection(Base):
     # currently hard-reject (UI-only block). Defense-in-depth on top of
     # the per-send static-segment scoping shipped in PR #320.
     blocked_audience_ids: Mapped[list[str]] = mapped_column(
-        _BlockedAudienceIds(), nullable=False, default=list, server_default="{}"
+        _BlockedAudienceIds(), nullable=False, server_default="{}", default=list
     )
 
     account_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
