@@ -562,9 +562,12 @@ class TestPublicViewBranding:
         assert "branding" in data
         branding = data["branding"]
         assert branding is not None
-        # Should have default colors
-        assert branding["primary_color"] == "#1e293b"
-        assert branding["secondary_color"] == "#0ea5e9"
+        # Should have default colors — PR #325 (Link Creative wrapper
+        # redesign) shipped the gold/black/off-white palette as the
+        # platform default; tenants without configured settings inherit
+        # from `_DEFAULT_BRANDING` in `email/branded_templates.py`.
+        assert branding["primary_color"] == "#CF982C"
+        assert branding["secondary_color"] == "#F9F9F9"
 
     @pytest.mark.asyncio
     async def test_public_view_includes_proposal_content(
