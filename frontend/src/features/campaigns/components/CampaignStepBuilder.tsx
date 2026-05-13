@@ -34,6 +34,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { Button } from '../../../components/ui/Button';
 import type { EmailCampaignStep, EmailTemplate } from '../../../types';
+import { CreateEmailTemplateModal } from './CreateEmailTemplateModal';
 
 interface CampaignStepBuilderProps {
   steps: EmailCampaignStep[];
@@ -158,6 +159,7 @@ export function CampaignStepBuilder({
 }: CampaignStepBuilderProps) {
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | ''>('');
   const [delayDays, setDelayDays] = useState<number>(0);
+  const [showCreateTemplate, setShowCreateTemplate] = useState(false);
 
   const sortedSteps = steps.toSorted((a, b) => a.step_order - b.step_order);
 
@@ -212,12 +214,13 @@ export function CampaignStepBuilder({
   return (
     <div className="space-y-4">
       <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-        Campaign Sequence
+        Email Steps
       </h3>
 
       {sortedSteps.length === 0 ? (
         <div className="text-center py-6 text-sm text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
-          No steps defined. Add steps below to build your email sequence.
+          No steps defined. Add at least one email step below — a single step
+          with 0 days delay sends an immediate one-shot blast.
         </div>
       ) : (
         <DndContext
@@ -250,9 +253,19 @@ export function CampaignStepBuilder({
 
       {/* Add step form */}
       <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-        <h4 className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Add Step
-        </h4>
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-xs font-medium text-gray-700 dark:text-gray-300">
+            Add Step
+          </h4>
+          <button
+            type="button"
+            onClick={() => setShowCreateTemplate(true)}
+            aria-label="Create new email template"
+            className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500 rounded"
+          >
+            + New template
+          </button>
+        </div>
         <div className="flex flex-col sm:flex-row gap-2">
           <select
             value={selectedTemplateId}
@@ -260,8 +273,11 @@ export function CampaignStepBuilder({
               setSelectedTemplateId(e.target.value ? Number(e.target.value) : '')
             }
             className="flex-1 rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 text-sm shadow-sm focus:border-primary-500 focus:ring-primary-500"
+            aria-label="Email template"
           >
-            <option value="">Select template...</option>
+            <option value="">
+              {templates.length === 0 ? 'No templates yet — click + New template' : 'Select template...'}
+            </option>
             {templates.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name}
@@ -276,6 +292,7 @@ export function CampaignStepBuilder({
             className="w-24 rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 text-sm shadow-sm focus:border-primary-500 focus:ring-primary-500"
             placeholder="Days"
             title="Delay in days"
+            aria-label="Delay in days"
           />
           <Button
             size="sm"
@@ -287,6 +304,17 @@ export function CampaignStepBuilder({
           </Button>
         </div>
       </div>
+
+      <CreateEmailTemplateModal
+        isOpen={showCreateTemplate}
+        onClose={() => setShowCreateTemplate(false)}
+        onCreated={(template) => {
+          // Auto-select the freshly created template so a single click on
+          // "Add" turns it into a step — fewer dead-ends in the setup flow.
+          setSelectedTemplateId(template.id);
+          setShowCreateTemplate(false);
+        }}
+      />
     </div>
   );
 }

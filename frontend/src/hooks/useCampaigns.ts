@@ -6,7 +6,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { createEntityHooks, createQueryKeys } from './useEntityCRUD';
 import { campaignsApi } from '../api/campaigns';
+import type { ExecuteCampaignResponse } from '../api/campaigns';
 import type {
+  ApiError,
   Campaign,
   CampaignCreate,
   CampaignUpdate,
@@ -16,8 +18,10 @@ import type {
   EmailCampaignStep,
   EmailCampaignStepCreate,
   EmailCampaignStepUpdate,
+  EmailTemplate,
+  EmailTemplateCreate,
 } from '../types';
-import { showError } from '../utils/toast';
+import { showError, showSuccess, showInfo } from '../utils/toast';
 
 // Query Keys
 
@@ -286,15 +290,51 @@ export function useEmailTemplates(params?: { page?: number; page_size?: number; 
   });
 }
 
+export function useCreateEmailTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation<EmailTemplate, Error, EmailTemplateCreate>({
+    mutationFn: (data) => campaignsApi.createTemplate(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['campaigns', 'templates'] });
+    },
+  });
+}
+
 export function useExecuteCampaign() {
   const queryClient = useQueryClient();
 
-  return useMutation({
-    mutationFn: (campaignId: number) => campaignsApi.execute(campaignId),
-    onSuccess: (_, campaignId) => {
+  return useMutation<ExecuteCampaignResponse, Error, number>({
+    mutationFn: (campaignId) => campaignsApi.execute(campaignId),
+    onSuccess: (data, campaignId) => {
       queryClient.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) });
       queryClient.invalidateQueries({ queryKey: campaignKeys.lists() });
       queryClient.invalidateQueries({ queryKey: campaignKeys.stats(campaignId) });
+
+      // The backend returns 200 for several pre-flight bail-outs (no steps,
+      // already executing, provider not connected → paused). Without the
+      // toasts below the user clicks "Send" and sees nothing change.
+      if (data.status === 'paused') {
+        showError(data.message || 'Campaign paused — check provider connection.');
+      } else if (/no steps/i.test(data.message)) {
+        showError('Add at least one step (template + delay) before sending.');
+      } else if (/already executing/i.test(data.message)) {
+        showInfo('Campaign is already running.');
+      } else {
+        const emailsSent = data.emails_sent ?? 0;
+        if (emailsSent === 0) {
+          showError('Campaign ran but 0 emails were sent. Check members and template.');
+        } else {
+          showSuccess(`Campaign started: ${emailsSent} email${emailsSent === 1 ? '' : 's'} sent.`);
+        }
+      }
+    },
+    onError: (error) => {
+      // The axios interceptor in api/client.ts shapes failures as ApiError
+      // with a flattened .detail string — surface it so users see the
+      // actual cause (403, 404, 422 validation, etc.) instead of a generic
+      // message.
+      const detail = (error as Partial<ApiError>).detail;
+      showError(detail || 'Failed to start campaign.');
     },
   });
 }
