@@ -62,17 +62,21 @@ function LeadDetailPage() {
   const handleEditSubmit = async (data: LeadFormData) => {
     if (!leadId) return;
     try {
+      // Cleared optional fields are sent as null (not undefined) so
+      // Pydantic sees them as `set` and the service writes the clear
+      // instead of silently keeping the old value. EmailStr rejects ""
+      // so the same null-on-empty pattern keeps email valid too.
       const updateData: LeadUpdate = {
-        first_name: data.firstName?.trim() || undefined,
-        last_name: data.lastName?.trim() || undefined,
-        email: data.email?.trim() || undefined,
-        phone: data.phone?.trim() || undefined,
-        company_name: data.company?.trim() || undefined,
-        job_title: data.jobTitle?.trim() || undefined,
-        source_id: data.source_id ?? undefined,
-        pipeline_stage_id: data.pipeline_stage_id ?? undefined,
-        sales_code: data.salesCode?.trim() || undefined,
-        description: data.notes?.trim() || undefined,
+        first_name: data.firstName?.trim() || null,
+        last_name: data.lastName?.trim() || null,
+        email: data.email?.trim() || null,
+        phone: data.phone?.trim() || null,
+        company_name: data.company?.trim() || null,
+        job_title: data.jobTitle?.trim() || null,
+        source_id: data.source_id ?? null,
+        pipeline_stage_id: data.pipeline_stage_id ?? null,
+        sales_code: data.salesCode?.trim() || null,
+        description: data.notes?.trim() || null,
       };
       // Only include status when it actually changed. The backend rejects
       // status='converted' direct edits, so re-asserting an existing

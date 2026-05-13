@@ -216,6 +216,9 @@ function LeadsPage() {
   };
 
   const doCreateLead = async (data: LeadFormData) => {
+    // On create, empty optional fields are sent as undefined so Pydantic
+    // applies its defaults / leaves them NULL rather than rejecting an
+    // empty `EmailStr`.
     const createData: LeadCreate = {
       first_name: data.firstName?.trim() || undefined,
       last_name: data.lastName?.trim() || undefined,
@@ -240,17 +243,23 @@ function LeadsPage() {
   const handleFormSubmit = async (data: LeadFormData) => {
     try {
       if (editingLead) {
+        // On update, cleared optional fields are sent as null (not
+        // undefined) so Pydantic sees them as `set`, and the service
+        // applies the clear instead of silently keeping the old value.
+        // EmailStr is the one exception: empty email is sent as null
+        // since "" is not a valid EmailStr. Required string `first_name`
+        // / `last_name` are passed through trim().
         const updateData: LeadUpdate = {
-          first_name: data.firstName?.trim() || undefined,
-          last_name: data.lastName?.trim() || undefined,
-          email: data.email?.trim() || undefined,
-          phone: data.phone?.trim() || undefined,
-          company_name: data.company?.trim() || undefined,
-          job_title: data.jobTitle?.trim() || undefined,
-          source_id: data.source_id ?? undefined,
-          pipeline_stage_id: data.pipeline_stage_id ?? undefined,
-          sales_code: data.salesCode?.trim() || undefined,
-          description: data.notes?.trim() || undefined,
+          first_name: data.firstName?.trim() || null,
+          last_name: data.lastName?.trim() || null,
+          email: data.email?.trim() || null,
+          phone: data.phone?.trim() || null,
+          company_name: data.company?.trim() || null,
+          job_title: data.jobTitle?.trim() || null,
+          source_id: data.source_id ?? null,
+          pipeline_stage_id: data.pipeline_stage_id ?? null,
+          sales_code: data.salesCode?.trim() || null,
+          description: data.notes?.trim() || null,
         };
         // Only send status when it changed. Re-asserting an existing
         // 'converted' status (e.g. on an orphan-converted row) trips the
@@ -706,6 +715,12 @@ function LeadsPage() {
         fullScreenOnMobile
       >
         <LeadForm
+          // Force a fresh form instance whenever the modal flips between
+          // create / edit-A / edit-B. Without the key, RHF defaultValues
+          // and the LeadForm internal source/pipeline state seed only on
+          // mount, so swapping `editingLead` while the modal is still
+          // visible would leak the prior lead's values onto the new PUT.
+          key={editingLead?.id ?? 'new'}
           initialData={getInitialFormData()}
           onSubmit={handleFormSubmit}
           onCancel={handleFormCancel}
