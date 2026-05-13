@@ -320,33 +320,27 @@ def _render_social_row(branding: dict) -> str:
         href = _safe_external_url(branding.get(key))
         if not href:
             continue
-        # 36px circle: transparent fill, 1.5px white outline, 18px
-        # white brand-icon <img> centered via the email-bulletproof
-        # nested-table pattern. Centering uses the inner
-        # ``<td align="center" valign="middle">`` which is the only
-        # reliable cross-client method for centering a smaller image
-        # inside a fixed-size cell. Image ``alt`` carries the
-        # fallback letter (in white via the wrapping <a>) so image-
-        # blocking clients still render a legible mark. Cell padding
-        # 5px each side = 10px gap between circles so the six-icon
-        # row matches the reference spacing without crowding.
+        # Bare 28px white brand-icon <img>, no wrapping circle. The
+        # Simple Icons glyphs already carry their own brand shape
+        # (Facebook ``f`` in a square, LinkedIn ``in`` tile, YouTube
+        # play in a rounded rectangle) so the outlined-circle wrapper
+        # was redundant container chrome on top of container chrome.
+        # 10px horizontal padding each side gives the six-icon row
+        # comfortable breathing room without looking sparse. Image
+        # ``alt`` is the fallback letter so image-blocking clients
+        # still render a recognizable mark inside the white-text
+        # styled <a>.
         cells.append(
-            f'<td style="padding:0 5px;" valign="middle">'
+            f'<td style="padding:0 10px;" valign="middle">'
             f'<a href="{escape(href)}" target="_blank" '
             f'aria-label="{escape(label)}" '
             f'style="text-decoration:none;color:#ffffff;'
             f"font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;"
-            f'font-size:13px;font-weight:700;line-height:0;">'
-            f'<table role="presentation" cellpadding="0" cellspacing="0" border="0" '
-            f'width="36" height="36" '
-            f'style="border:1.5px solid #ffffff;border-radius:50%;'
-            f'border-collapse:separate;background-color:transparent;">'
-            f'<tr><td align="center" valign="middle" '
-            f'style="text-align:center;vertical-align:middle;line-height:0;">'
+            f'font-size:14px;font-weight:700;line-height:0;">'
             f'<img src="{escape(icon_url)}" alt="{escape(fallback_letter)}" '
-            f'width="18" height="18" '
-            f'style="display:block;width:18px;height:18px;border:0;outline:none;" />'
-            f'</td></tr></table>'
+            f'width="28" height="28" '
+            f'style="display:block;width:28px;height:28px;'
+            f'border:0;outline:none;" />'
             f'</a></td>'
         )
     return "".join(cells)

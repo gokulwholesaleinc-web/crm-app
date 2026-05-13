@@ -199,25 +199,27 @@ class TestVisualDefaults:
         html = _base_email_html(_default_branding(), "   \t  ", "<p>body</p>")
         assert '<h1' not in html
 
-    def test_social_circles_are_outlined_white_with_white_glyph(self):
-        # The Link Creative reference shows social icons as
-        # transparent-fill circles with a 1.5px white outline and a
-        # white brand glyph inside. The render emits
-        # ``border:1.5px solid #ffffff;border-radius:50%`` on the
-        # wrapper table and ``color=%23ffffff`` on the Iconify src.
+    def test_social_icons_render_bare_white_glyphs(self):
+        # The Link Creative reference uses the brand-mark shapes
+        # directly (Facebook ``f`` in a rounded square, LinkedIn
+        # ``in`` tile, etc.) without a wrapping outline. The render
+        # emits a 28px <img> in white per platform, no circle
+        # wrapper, separated by horizontal cell padding only.
         html = _base_email_html(
             _default_branding(social_facebook_url="https://facebook.com/co"),
             "Test",
             "<p>body</p>",
         )
-        assert "border:1.5px solid #ffffff;border-radius:50%" in html
-        assert "background-color:transparent" in html
-        # White foreground for the alt-text fallback inside the <a>.
-        assert "color:#ffffff;" in html
+        # No outlined-circle wrapper around the icons.
+        assert "border-radius:50%" not in html
+        assert "border:1.5px solid #ffffff" not in html
+        # The icon image renders block-level at the right size.
+        assert 'width="28"' in html
+        assert 'height="28"' in html
 
     def test_social_cells_emit_iconify_img_with_letter_alt(self):
-        # Each rendered circle wraps an <img src=...iconify.design...>
-        # so recipients see the actual brand glyph; the alt= carries
+        # Each cell renders an <img src=...iconify.design...> so
+        # recipients see the actual brand glyph; the alt= carries
         # the letter fallback so image-blocking clients still display
         # a recognizable mark. Brand glyphs come from Simple Icons
         # (the authoritative open-source brand-mark collection) so
@@ -237,20 +239,6 @@ class TestVisualDefaults:
         assert "color=%23ffffff" in html
         assert 'alt="f"' in html
         assert 'alt="YT"' in html
-
-    def test_social_cell_uses_table_cell_centering(self):
-        # The nested <table valign="middle"> is the only email-
-        # bulletproof way to center a smaller <img> inside a fixed
-        # cell. Inline-block + margin-top tricks rendered the icons
-        # visibly low in Apple Mail; the table pattern is the
-        # historically-reliable fix.
-        html = _base_email_html(
-            _default_branding(social_facebook_url="https://facebook.com/co"),
-            "Test",
-            "<p>body</p>",
-        )
-        assert 'align="center" valign="middle"' in html
-        assert 'border-radius:50%' in html
 
     def test_gold_accent_rule_below_header(self):
         # The 3px gold strip under the header is part of the visual
