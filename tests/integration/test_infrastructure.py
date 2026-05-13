@@ -252,23 +252,31 @@ class TestMetaEndpoints:
         assert data["connected"] is False
 
     async def test_connect_without_config(
-        self, client: AsyncClient, auth_headers: dict
+        self, client: AsyncClient, admin_auth_headers: dict
     ):
-        """Should return error when Meta not configured."""
+        """Should return error when Meta not configured.
+
+        PR #311 restricted integrations endpoints to admins. Updated
+        from auth_headers to admin_auth_headers so the test reaches
+        the config check instead of stopping at the RBAC gate.
+        """
         response = await client.post(
             "/api/meta/connect",
-            headers=auth_headers,
+            headers=admin_auth_headers,
             json={"redirect_uri": "http://localhost:3000/callback"},
         )
         assert response.status_code == 400
 
     async def test_disconnect_not_found(
-        self, client: AsyncClient, auth_headers: dict
+        self, client: AsyncClient, admin_auth_headers: dict
     ):
-        """Should return 404 when no Meta connection exists."""
+        """Should return 404 when no Meta connection exists.
+
+        Admin-only since PR #311.
+        """
         response = await client.delete(
             "/api/meta/disconnect",
-            headers=auth_headers,
+            headers=admin_auth_headers,
         )
         assert response.status_code == 404
 

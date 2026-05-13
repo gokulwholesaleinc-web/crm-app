@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth.models import User
 from src.auth.security import create_access_token
 from src.opportunities.models import Opportunity, PipelineStage
-from src.sequences.models import Sequence
 
 
 # =============================================================================
@@ -62,85 +61,10 @@ class TestMoveOpportunityOwnership:
 
 
 # =============================================================================
-# sequences PUT/DELETE: non-manager (sales_rep) → 403
-# =============================================================================
-
-class TestSequenceOwnershipGate:
-    """PUT/DELETE on sequences must require manager-or-above."""
-
-    async def _create_sequence(self, db_session: AsyncSession, user: User) -> Sequence:
-        seq = Sequence(
-            name="Test Sequence",
-            description="A test sequence",
-            steps=[],
-            is_active=True,
-            created_by_id=user.id,
-        )
-        db_session.add(seq)
-        await db_session.commit()
-        await db_session.refresh(seq)
-        return seq
-
-    async def test_sales_rep_cannot_update_sequence(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        test_user: User,
-        _sales_rep_user: User,
-        seed_roles: list,
-    ):
-        """Sales rep should receive 403 on sequence PUT."""
-        seq = await self._create_sequence(db_session, test_user)
-        token = create_access_token(data={"sub": str(_sales_rep_user.id)})
-        headers = {"Authorization": f"Bearer {token}"}
-
-        response = await client.put(
-            f"/api/sequences/{seq.id}",
-            headers=headers,
-            json={"name": "Attempted rename"},
-        )
-        assert response.status_code == 403
-
-    async def test_sales_rep_cannot_delete_sequence(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        test_user: User,
-        _sales_rep_user: User,
-        seed_roles: list,
-    ):
-        """Sales rep should receive 403 on sequence DELETE."""
-        seq = await self._create_sequence(db_session, test_user)
-        token = create_access_token(data={"sub": str(_sales_rep_user.id)})
-        headers = {"Authorization": f"Bearer {token}"}
-
-        response = await client.delete(
-            f"/api/sequences/{seq.id}",
-            headers=headers,
-        )
-        assert response.status_code == 403
-
-    async def test_manager_can_update_sequence(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        test_user: User,
-        _manager_user: User,
-        seed_roles: list,
-    ):
-        """Manager should be able to update a sequence."""
-        seq = await self._create_sequence(db_session, test_user)
-        token = create_access_token(data={"sub": str(_manager_user.id)})
-        headers = {"Authorization": f"Bearer {token}"}
-
-        response = await client.put(
-            f"/api/sequences/{seq.id}",
-            headers=headers,
-            json={"name": "Manager Renamed"},
-        )
-        assert response.status_code == 200
-
-
+# Sequences feature removed in PR #309 — the ownership-gate suite that
+# lived here is gone with it. Sequence router is unmounted; the test
+# file's old cases asserted 403 from a 404 endpoint, which was
+# meaningless after the removal.
 # =============================================================================
 # File upload: oversized upload → 400 (ValueError from service layer)
 # =============================================================================

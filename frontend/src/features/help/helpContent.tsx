@@ -12,8 +12,7 @@ import {
   CreditCardIcon,
   CalendarIcon,
   MegaphoneIcon,
-  QueueListIcon,
-  BoltIcon,
+  EnvelopeIcon,
   DocumentMagnifyingGlassIcon,
   ArrowsRightLeftIcon,
   ChartBarIcon,
@@ -73,8 +72,8 @@ export const SECTIONS: Section[] = [
         <p className="text-sm text-gray-700 dark:text-gray-300">
           The CRM is built around a simple funnel:{' '}
           <strong>Lead → Contact (and optionally Company) → Opportunity → Quote / Proposal → Payment</strong>.
-          Every other tab — Activities, Campaigns, Sequences, Workflows — exists to help you move
-          records through that funnel and keep a full history of what happened along the way.
+          Every other tab — Activities, Campaigns, Inbox — exists to help you move records
+          through that funnel and keep a full history of what happened along the way.
         </p>
 
         <div>
@@ -104,8 +103,8 @@ export const SECTIONS: Section[] = [
             <Bullet>
               The left sidebar has two groups: a main group (Dashboard, Contacts, Companies,
               Leads, Pipeline, Quotes, Proposals, Contracts, Payments, Activities, Calendar,
-              Campaigns) and a secondary group (Sequences, Workflows, Duplicates, Import/Export,
-              Reports, Settings, Help, Admin).
+              Campaigns, Inbox) and a secondary group (Duplicates, Import/Export, Reports,
+              Settings, Help, Admin).
             </Bullet>
             <Bullet>
               Click <strong>Customize Menu</strong> at the bottom of the sidebar to drag items into
@@ -366,10 +365,6 @@ export const SECTIONS: Section[] = [
               the per-member status.
             </Step>
           </ol>
-          <Tip>
-            Want a multi-channel drip with tasks, waits, and conditional steps? Use{' '}
-            <strong>Sequences</strong> instead — the help section below covers it.
-          </Tip>
           <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
             Direct link: <code>/help#tutorial-email-campaign</code>
           </p>
@@ -962,91 +957,46 @@ export const SECTIONS: Section[] = [
     ),
   },
   {
-    id: 'sequences',
-    title: 'Sequences',
-    icon: QueueListIcon,
+    id: 'inbox',
+    title: 'Inbox',
+    icon: EnvelopeIcon,
     searchText:
-      'sequences drip multi step email task wait delay enrollment pause resume cancel sales engagement template',
+      'inbox email gmail sync received sent thread reply compose contact link unread mark read filter search recent volume stats',
     body: (
       <div className="space-y-3">
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          A Sequence is a multi-step drip cadence enrolled per contact — think 1:1 sales engagement,
-          not bulk marketing. You build a series of email, task, and wait steps once and apply it to
-          any contact.
+          The Inbox is a unified finder for every email the CRM has synced from Gmail. It is
+          intentionally not a Gmail clone — its job is to surface the message you're looking for
+          and hand you off to the entity (contact, quote, proposal, contract) where the full
+          thread and the reply composer already live.
         </p>
-        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Step types</h4>
+        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">What you can do here</h4>
         <ul className="space-y-1.5">
           <Bullet>
-            <strong>Email</strong> — sends a templated email to the enrolled contact.
+            <strong>Filter & paginate.</strong> Filter state is in the URL — share a /inbox link
+            with a teammate and they see exactly your view.
           </Bullet>
           <Bullet>
-            <strong>Task</strong> — creates a task for the assigned rep (e.g. "Make a follow-up
-            call").
+            <strong>Jump to the thread.</strong> Click any row to open the message on its
+            related contact, company, quote, proposal, or contract — the reply composer there
+            threads correctly into Gmail via the original Message-ID.
           </Bullet>
           <Bullet>
-            <strong>Wait</strong> — pauses the sequence for N days before the next step fires.
+            <strong>Spot unlinked mail.</strong> Emails that haven't been matched to a CRM
+            record yet show an amber "Not linked to a contact yet" warning so you can fix the
+            link before replying.
+          </Bullet>
+          <Bullet>
+            <strong>Daily send volume</strong> at the top tracks today's outbound count against
+            your Gmail daily limit (plus warmup-day budget when applicable) so you can spot a
+            sending-cap problem before it becomes a deliverability one.
           </Bullet>
         </ul>
-        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Enrollments</h4>
-        <p className="text-sm text-gray-700 dark:text-gray-300">
-          Each contact you enroll gets its own enrollment record with current step, status (active /
-          paused / completed / cancelled), started time, and next-step time. You can pause, resume,
-          or delete an enrollment at any time.
-        </p>
         <Tip>
-          <strong>Campaign vs Sequence vs Workflow.</strong> Campaign = one-time blast with delays.
-          Sequence = per-contact drip you control. Workflow = event-triggered automation (next
-          section).
+          Quotes, Proposals, and Contracts have an <strong>Email Activity</strong> panel on the
+          detail page that shows that record's emails specifically, including queue status
+          (sent / retry / failed) so you can self-diagnose deliverability.
         </Tip>
-      </div>
-    ),
-  },
-  {
-    id: 'workflows',
-    title: 'Workflows',
-    icon: BoltIcon,
-    searchText:
-      'workflows automation rules trigger entity event lead opportunity contact activity created updated status changed score actions assign owner conditions',
-    body: (
-      <div className="space-y-3">
-        <p className="text-sm text-gray-700 dark:text-gray-300">
-          Workflows are event-triggered automations. They watch your CRM for things like "lead
-          score crossed 80" or "opportunity moved to negotiation" and run actions in response.
-        </p>
-        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Trigger</h4>
-        <ul className="space-y-1.5">
-          <Bullet>
-            Pick an entity (lead, opportunity, contact, activity, or company).
-          </Bullet>
-          <Bullet>
-            Pick an event: <em>created, updated, status_changed, score_changed</em>.
-          </Bullet>
-        </ul>
-        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Conditions</h4>
-        <p className="text-sm text-gray-700 dark:text-gray-300">
-          Optional. JSON-defined predicates like <code>{'{"field": "score", "operator": ">=", "value": 80}'}</code>{' '}
-          to filter which trigger events actually fire the rule.
-        </p>
-        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Actions</h4>
-        <p className="text-sm text-gray-700 dark:text-gray-300">
-          A list of action objects, e.g. <code>{'[{"type": "assign_owner", "value": 1}]'}</code>.
-          Each rule can run multiple actions in sequence.
-        </p>
-        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Operating the page</h4>
-        <ul className="space-y-1.5">
-          <Bullet>
-            Workflows render as cards with an active/inactive toggle, the entity type, and a short
-            description.
-          </Bullet>
-          <Bullet>
-            Every fire is logged in the executions table with status (success/failed/skipped),
-            result, and timestamp — so you can audit what happened.
-          </Bullet>
-          <Bullet>
-            Use the <em>Test</em> action to validate a rule against a sample entity before turning
-            it on.
-          </Bullet>
-        </ul>
       </div>
     ),
   },
