@@ -3,6 +3,7 @@
 from datetime import datetime
 
 from sqlalchemy import (
+    JSON,
     DateTime,
     ForeignKey,
     Integer,
@@ -12,8 +13,25 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.types import TypeDecorator
 
 from src.database import Base
+
+
+class _BlockedAudienceIds(TypeDecorator):
+    """TEXT[] on Postgres, JSON-array on SQLite (the test path).
+
+    Mirrors ``email/models.py::_ParticipantEmails`` so the unit-test suite,
+    which boots against in-memory SQLite, can build the table at all.
+    """
+
+    impl = JSON
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(ARRAY(String(64)))
+        return dialect.type_descriptor(JSON())
 
 
 class MailchimpConnection(Base):
@@ -44,7 +62,7 @@ class MailchimpConnection(Base):
     # currently hard-reject (UI-only block). Defense-in-depth on top of
     # the per-send static-segment scoping shipped in PR #320.
     blocked_audience_ids: Mapped[list[str]] = mapped_column(
-        ARRAY(String(64)), nullable=False, server_default="{}"
+        _BlockedAudienceIds(), nullable=False, default=list, server_default="{}"
     )
 
     account_email: Mapped[str | None] = mapped_column(String(255), nullable=True)

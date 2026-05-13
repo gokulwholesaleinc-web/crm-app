@@ -16,6 +16,7 @@ from src.audit.utils import (
 )
 from src.auth.dependencies import get_current_superuser
 from src.auth.models import User
+from src.contacts.models import Contact
 from src.core.cache import (
     CACHE_LEAD_SOURCES,
     cached_fetch,
@@ -38,7 +39,6 @@ from src.core.router_utils import (
     parse_tag_ids,
     raise_bad_request,
 )
-from src.contacts.models import Contact
 from src.events.service import LEAD_CREATED, LEAD_UPDATED, emit
 from src.leads.conversion import LeadConverter
 from src.leads.models import Lead

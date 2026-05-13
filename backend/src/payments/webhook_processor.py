@@ -95,7 +95,6 @@ class WebhookProcessor:
         event_id: str
         event_type: str
         obj: dict
-        event: dict
 
         stripe = _svc_mod._get_stripe()
         if stripe is not None:
