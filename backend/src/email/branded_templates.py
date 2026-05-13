@@ -120,26 +120,17 @@ _DEFAULT_BRANDING = {
 
 
 # Footer social-row glyphs. Each tuple is
-# ``(label, settings_field, icon_url, letter_fallback)`` — the icon
-# URL renders as an ``<img>`` inside the white circle, and the letter
-# is used as ``alt=`` text so image-blocking clients still show a
-# recognizable mark. We point at api.iconify.design which serves the
-# Simple Icons vector marks at any color via query params; this gives
-# us actual brand glyphs (Facebook ``f``, IG camera, TikTok music
-# note, LinkedIn ``in`` badge, YouTube play triangle, Material globe
-# for the generic website slot) without each tenant having to host
-# their own icon assets. The same color (``#0a0a0a``) matches the
-# circle text-color so the alt-letter and the loaded icon look
-# consistent.
+# ``(label, settings_field, icon_url, letter_fallback)`` — the URL
+# renders as a bare 28-px white ``<img>``, the letter is wired to
+# the image's ``alt=`` so image-blocking email clients (Outlook
+# Desktop's default first-touch policy, Gmail privacy mode) still
+# show a readable mark in the same cell. Brand glyphs come from
+# Simple Icons (the authoritative open-source brand-mark collection
+# — Facebook ``f``, IG camera, TikTok musical note + tail, LinkedIn
+# ``in`` badge, YouTube play tile); the website slot uses
+# ``mdi:web`` for a stroke-matched globe. All rendered in white via
+# ``color=%23ffffff`` to sit against the dark footer.
 _ICONIFY_BASE = "https://api.iconify.design"
-# Brand glyphs from Simple Icons (the authoritative open-source brand-
-# mark collection) so the shapes match what recipients recognize —
-# Facebook ``f``, IG camera, TikTok musical note + tail, LinkedIn
-# ``in`` badge, YouTube play triangle in a tile. The website slot
-# uses ``mdi:web`` for a stroke-weight globe that pairs visually.
-# All icons render in white (``color=%23ffffff``) on transparent so
-# they sit inside a white-outlined circle, matching the Link Creative
-# reference.
 _SOCIAL_PLATFORMS: tuple[tuple[str, str, str, str], ...] = (
     (
         "Facebook",
@@ -303,7 +294,7 @@ def _safe_external_url(url: str | None) -> str:
 
 
 def _render_social_row(branding: dict) -> str:
-    """Render the social-platform circle links for the dark footer.
+    """Render the social-platform glyph links for the dark footer.
 
     Each platform contributes a `<td>` cell only when its URL field
     is non-empty *and* passes the strict ``http(s)://`` allowlist;
@@ -320,23 +311,21 @@ def _render_social_row(branding: dict) -> str:
         href = _safe_external_url(branding.get(key))
         if not href:
             continue
-        # Bare 28px white brand-icon <img>, no wrapping circle. The
-        # Simple Icons glyphs already carry their own brand shape
-        # (Facebook ``f`` in a square, LinkedIn ``in`` tile, YouTube
-        # play in a rounded rectangle) so the outlined-circle wrapper
-        # was redundant container chrome on top of container chrome.
-        # 10px horizontal padding each side gives the six-icon row
-        # comfortable breathing room without looking sparse. Image
-        # ``alt`` is the fallback letter so image-blocking clients
-        # still render a recognizable mark inside the white-text
-        # styled <a>.
+        # Bare 28px white brand-icon. 10px horizontal padding each
+        # side gives the six-icon row breathing room. The <a>'s
+        # ``font-*`` + ``line-height:28px`` are deliberate fallback
+        # styling for image-blocked clients (Outlook desktop default
+        # / Gmail privacy mode) — when the iconify CDN response or
+        # remote-image policy strips the inline <img>, the ``alt``
+        # letter still renders at a readable 14px white inside a
+        # 28-px line box, instead of collapsing to zero height.
         cells.append(
             f'<td style="padding:0 10px;" valign="middle">'
             f'<a href="{escape(href)}" target="_blank" '
             f'aria-label="{escape(label)}" '
             f'style="text-decoration:none;color:#ffffff;'
             f"font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;"
-            f'font-size:14px;font-weight:700;line-height:0;">'
+            f'font-size:14px;font-weight:700;line-height:28px;">'
             f'<img src="{escape(icon_url)}" alt="{escape(fallback_letter)}" '
             f'width="28" height="28" '
             f'style="display:block;width:28px;height:28px;'
@@ -390,9 +379,9 @@ def _base_email_html(
     # accent_color  = CTA pill background + wordmark fallback's rest.
     # secondary_color is unused by the email wrapper (still drives
     # in-app surfaces).
-    # Hardcode #c5a467 / #000000 fallbacks so a tenant with empty
+    # Hardcode #CF982C / #000000 fallbacks so a tenant with empty
     # color fields still renders the Link Creative aesthetic.
-    primary = escape(_safe_hex(branding.get("primary_color"), "#CF982C", field="primary_color"))
+    primary_raw = _safe_hex(branding.get("primary_color"), "#CF982C", field="primary_color")
     accent = escape(_safe_hex(branding.get("accent_color"), "#000000", field="accent_color"))
     # Light-mode page + card surfaces. The wrapper is fixed light-mode
     # (no prefers-color-scheme media query) so these always paint as
@@ -400,8 +389,23 @@ def _base_email_html(
     # Prod's bg_color_light is #F9F9F9 (off-white); we let that flow
     # through. Surface defaults to pure #ffffff so the card stays
     # clearly readable even when an admin sets bg to a gray.
-    bg_light = escape(_safe_hex(branding.get("bg_color_light"), "#f9fafb", field="bg_color_light"))
-    surface_light = escape(_safe_hex(branding.get("surface_color_light"), "#ffffff", field="surface_color_light"))
+    bg_light_raw = _safe_hex(branding.get("bg_color_light"), "#f9fafb", field="bg_color_light")
+    surface_light_raw = _safe_hex(branding.get("surface_color_light"), "#ffffff", field="surface_color_light")
+    # Defensive clamp: if a tenant has set ``primary_color`` to a
+    # value that collides with the surface or page background, the
+    # gold accent rule + tagline pipes would render invisibly against
+    # the header card. Fall back to the default gold so the visual
+    # contract holds. ``_safe_hex`` lowercases inconsistently (it
+    # only strips), so compare case-folded.
+    if primary_raw.lower() in (surface_light_raw.lower(), bg_light_raw.lower()):
+        logger.warning(
+            "branding primary_color (%s) collides with surface/bg; falling back to #CF982C",
+            primary_raw,
+        )
+        primary_raw = "#CF982C"
+    primary = escape(primary_raw)
+    bg_light = escape(bg_light_raw)
+    surface_light = escape(surface_light_raw)
     company = escape(branding.get("company_name", "CRM"))
     logo_url = _safe_url(branding.get("logo_url", ""))
     footer_text = escape(branding.get("footer_text", ""))
@@ -426,7 +430,12 @@ def _base_email_html(
             f'max-height:48px;" />'
         )
     else:
-        raw_company = (branding.get("company_name") or "CRM").strip()
+        # ``... or "CRM"`` only catches ``None`` and ``""`` — a
+        # whitespace-only value like ``"   "`` survives that guard
+        # and then strips to ``""``, which would emit an empty
+        # ``<span>`` and collapse the header. Re-check the stripped
+        # value before splitting and fall through to "CRM" if empty.
+        raw_company = (branding.get("company_name") or "CRM").strip() or "CRM"
         font_stack = (
             "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;"
             "font-size:28px;font-weight:800;letter-spacing:0.5px;"

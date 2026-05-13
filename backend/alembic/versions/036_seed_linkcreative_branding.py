@@ -10,10 +10,16 @@ added empty ``tagline`` + six ``social_*_url`` columns to
 values so the redesigned email wrapper renders on-brand on the next
 deploy without requiring an admin to walk through Settings → Branding.
 
-Each ``UPDATE`` is COALESCE-guarded: only fills NULL/empty cells, so
-an admin who has already configured a different value via the UI
-keeps their choice. Downgrade reverts only the cells that still match
-exactly what we wrote.
+Each ``UPDATE`` is empty-cell-guarded (``WHERE col IS NULL OR col = ''``):
+only fills cells that don't already have a value, so an admin who
+has already configured a different value via the UI keeps their
+choice. Downgrade reverts only the cells that still match exactly
+what we wrote.
+
+The values below are module-level string literals with no
+apostrophes/backslashes, so inline f-string interpolation into raw
+SQL is safe at this site. A future hand parameterizing from a row
+value MUST switch to ``op.execute(text(...))`` with bound params.
 """
 
 from alembic import op
@@ -36,8 +42,11 @@ _SOCIALS: tuple[tuple[str, str], ...] = (
 
 
 def upgrade() -> None:
-    # Tagline first — separate statement so a constraint error on one
-    # social URL doesn't roll back the tagline (each is independent).
+    # Tagline rendered first for readability — alembic wraps the
+    # whole migration in a single transaction by default, so any
+    # statement that errors still rolls all of these UPDATEs back
+    # together. The split is per-statement clarity, not per-statement
+    # isolation.
     op.execute(
         f"""
         UPDATE tenant_settings

@@ -112,6 +112,48 @@ class TestVisualDefaults:
         assert 'color:#000000;' in html
         assert '>Creative</span>' in html
 
+    def test_wordmark_fallback_whitespace_company_name_uses_crm(self):
+        # A whitespace-only company_name (e.g. accidental " " save)
+        # survives the `... or "CRM"` truthy guard but strips to ""
+        # — without the post-strip ``or "CRM"`` fallback it'd emit
+        # an empty wordmark span and collapse the header silently.
+        html = _base_email_html(
+            _default_branding(company_name="   "),
+            "Test",
+            "<p>body</p>",
+        )
+        assert ">CRM</span>" in html
+
+    def test_primary_color_collision_with_surface_falls_back(self):
+        # If a tenant misconfigures primary_color to the same value as
+        # the white card surface, the gold rule + tagline pipes would
+        # paint invisibly. The wrapper clamps to the gold default so
+        # the visual contract holds.
+        html = _base_email_html(
+            _default_branding(
+                primary_color="#ffffff",
+                surface_color_light="#ffffff",
+                tagline="ONE | TWO",
+            ),
+            "Test",
+            "<p>body</p>",
+        )
+        # Default gold takes over for the accent rule + pipes.
+        assert "background-color:#CF982C" in html
+
+    def test_social_anchor_carries_legible_line_height_for_alt_fallback(self):
+        # When the iconify CDN response is blocked or 404s the alt
+        # letter must still render at a readable line-height — line-
+        # height:0 would collapse the box and leave the recipient
+        # with an empty footer row.
+        html = _base_email_html(
+            _default_branding(social_facebook_url="https://facebook.com/co"),
+            "Test",
+            "<p>body</p>",
+        )
+        assert "line-height:28px" in html
+        assert "line-height:0" not in html.split('<table role="presentation"')[0]
+
     def test_wordmark_fallback_single_word_stays_accent(self):
         html = _base_email_html(
             _default_branding(
