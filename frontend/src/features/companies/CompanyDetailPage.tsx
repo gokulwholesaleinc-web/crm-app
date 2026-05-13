@@ -25,7 +25,7 @@ import { useQuotes } from '../../hooks/useQuotes';
 import { useProposals } from '../../hooks/useProposals';
 import { getStatusColor, formatStatusLabel } from '../../utils/statusColors';
 import { showSuccess, showError } from '../../utils/toast';
-import type { CompanyUpdate } from '../../types';
+import type { CompanyUpdate, ApiError } from '../../types';
 
 const ContractsList = lazy(() => import('../../components/shared/ContractsList'));
 const MetaTab = lazy(() => import('./components/MetaTab'));
@@ -99,8 +99,9 @@ export function CompanyDetailPage() {
       await deleteCompany.mutateAsync(companyId);
       showSuccess('Company deleted successfully');
       navigate('/companies');
-    } catch {
-      showError('Failed to delete company');
+    } catch (err) {
+      const detail = (err as ApiError | null)?.detail;
+      showError(detail || 'Failed to delete company');
     }
   };
 
@@ -110,8 +111,9 @@ export function CompanyDetailPage() {
       await updateCompany.mutateAsync({ id: companyId, data });
       setShowEditForm(false);
       showSuccess('Company updated successfully');
-    } catch {
-      showError('Failed to update company');
+    } catch (err) {
+      const detail = (err as ApiError | null)?.detail;
+      showError(detail || 'Failed to update company');
     }
   };
 

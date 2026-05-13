@@ -29,7 +29,7 @@ import { getStatusColor, formatStatusLabel } from '../../utils/statusColors';
 import { formatCurrency } from '../../utils/formatters';
 import { showSuccess, showError } from '../../utils/toast';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
-import type { Company, CompanyCreate, CompanyUpdate, CompanyFilters } from '../../types';
+import type { Company, CompanyCreate, CompanyUpdate, CompanyFilters, ApiError } from '../../types';
 import type { DuplicateMatch } from '../../api/dedup';
 
 const statusOptions = [
@@ -317,8 +317,9 @@ export function CompaniesPage() {
       await deleteCompany.mutateAsync(deleteConfirm.company.id);
       setDeleteConfirm({ isOpen: false, company: null });
       showSuccess('Company deleted successfully');
-    } catch {
-      showError('Failed to delete company');
+    } catch (err) {
+      const detail = (err as ApiError | null)?.detail;
+      showError(detail || 'Failed to delete company');
     }
   };
 
@@ -360,8 +361,9 @@ export function CompaniesPage() {
         }
         await doCreateCompany(data as CompanyCreate);
       }
-    } catch {
-      showError('Failed to save company');
+    } catch (err) {
+      const detail = (err as ApiError | null)?.detail;
+      showError(detail || 'Failed to save company');
     }
   };
 
@@ -370,8 +372,9 @@ export function CompaniesPage() {
     setShowDuplicateWarning(false);
     try {
       await doCreateCompany(pendingFormData as CompanyCreate);
-    } catch {
-      showError('Failed to create company');
+    } catch (err) {
+      const detail = (err as ApiError | null)?.detail;
+      showError(detail || 'Failed to create company');
     }
   };
 

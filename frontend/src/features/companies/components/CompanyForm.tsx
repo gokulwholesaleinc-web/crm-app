@@ -2,16 +2,18 @@
  * Company form for creating/editing companies
  */
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
 import { Select } from '../../../components/ui/Select';
 import { FormTextarea } from '../../../components/forms';
 import { useUnsavedChangesWarning } from '../../../hooks/useUnsavedChangesWarning';
+import { useUsers } from '../../../hooks/useAuth';
 import { normalizeEmail, normalizePhone } from '../../../utils/inputNormalize';
 import type { Company, CompanyCreate, CompanyUpdate } from '../../../types';
 import { useFormSubmitShortcut } from '../../../hooks/useSubmitShortcut';
+import { parseLooseInt } from './companyFormHelpers';
 
 interface CompanyFormProps {
   company?: Company;
@@ -43,6 +45,7 @@ interface FormValues {
   account_manager: string;
   status: string;
   segment: string;
+  owner_id: string;
 }
 
 const statusOptions = [
@@ -103,6 +106,18 @@ export function CompanyForm({
   isLoading,
 }: CompanyFormProps) {
   const isEditing = !!company;
+  const { data: usersData } = useUsers();
+
+  const ownerOptions = useMemo(
+    () => [
+      { value: '', label: '— Unassigned —' },
+      ...((usersData ?? []) as Array<{ id: number; full_name: string }>).map((u) => ({
+        value: String(u.id),
+        label: u.full_name,
+      })),
+    ],
+    [usersData]
+  );
 
   const {
     register,
@@ -125,8 +140,8 @@ export function CompanyForm({
       state: company?.state || '',
       postal_code: company?.postal_code || '',
       country: company?.country || '',
-      annual_revenue: company?.annual_revenue?.toString() || '',
-      employee_count: company?.employee_count?.toString() || '',
+      annual_revenue: company?.annual_revenue?.toLocaleString() || '',
+      employee_count: company?.employee_count?.toLocaleString() || '',
       linkedin_url: company?.linkedin_url || '',
       twitter_handle: company?.twitter_handle || '',
       description: company?.description || '',
@@ -135,6 +150,7 @@ export function CompanyForm({
       account_manager: company?.account_manager || '',
       status: company?.status || 'prospect',
       segment: company?.segment || '',
+      owner_id: company?.owner_id != null ? String(company.owner_id) : '',
     },
   });
 
@@ -156,8 +172,8 @@ export function CompanyForm({
         state: company.state || '',
         postal_code: company.postal_code || '',
         country: company.country || '',
-        annual_revenue: company.annual_revenue?.toString() || '',
-        employee_count: company.employee_count?.toString() || '',
+        annual_revenue: company.annual_revenue?.toLocaleString() || '',
+        employee_count: company.employee_count?.toLocaleString() || '',
         linkedin_url: company.linkedin_url || '',
         twitter_handle: company.twitter_handle || '',
         description: company.description || '',
@@ -166,34 +182,47 @@ export function CompanyForm({
         account_manager: company.account_manager || '',
         status: company.status,
         segment: company.segment || '',
+        owner_id: company.owner_id != null ? String(company.owner_id) : '',
       });
     }
   }, [company, reset]);
 
   const onFormSubmit = async (data: FormValues) => {
+    // On update, cleared optional fields go out as null (not undefined)
+    // so Pydantic sees them as `set` and the service applies the clear
+    // — same pattern as the leads modal fix, since `exclude_unset=True`
+    // would otherwise silently keep the old value. Required fields
+    // (name, status) stay non-null.
+    const clear = isEditing
+      ? <T,>(v: T | undefined | null | ''): T | null => (v === '' || v == null ? null : v as T)
+      : <T,>(v: T | undefined | null | ''): T | undefined => (v === '' || v == null ? undefined : v as T);
+
+    const trimmed = (v: string) => v.trim();
+
     const formattedData = {
-      name: data.name,
-      website: data.website || undefined,
-      industry: data.industry || undefined,
-      company_size: data.company_size || undefined,
-      phone: data.phone || undefined,
-      email: data.email || undefined,
-      address_line1: data.address_line1 || undefined,
-      address_line2: data.address_line2 || undefined,
-      city: data.city || undefined,
-      state: data.state || undefined,
-      postal_code: data.postal_code || undefined,
-      country: data.country || undefined,
-      annual_revenue: data.annual_revenue ? parseInt(data.annual_revenue, 10) : undefined,
-      employee_count: data.employee_count ? parseInt(data.employee_count, 10) : undefined,
-      linkedin_url: data.linkedin_url || undefined,
-      twitter_handle: data.twitter_handle || undefined,
-      description: data.description || undefined,
-      link_creative_tier: data.link_creative_tier || undefined,
-      sow_url: data.sow_url || undefined,
-      account_manager: data.account_manager || undefined,
+      name: data.name.trim(),
+      website: clear(trimmed(data.website)),
+      industry: clear(trimmed(data.industry)),
+      company_size: clear(trimmed(data.company_size)),
+      phone: clear(trimmed(data.phone)),
+      email: clear(trimmed(data.email)),
+      address_line1: clear(trimmed(data.address_line1)),
+      address_line2: clear(trimmed(data.address_line2)),
+      city: clear(trimmed(data.city)),
+      state: clear(trimmed(data.state)),
+      postal_code: clear(trimmed(data.postal_code)),
+      country: clear(trimmed(data.country)),
+      annual_revenue: parseLooseInt(data.annual_revenue) ?? (isEditing ? null : undefined),
+      employee_count: parseLooseInt(data.employee_count) ?? (isEditing ? null : undefined),
+      linkedin_url: clear(trimmed(data.linkedin_url)),
+      twitter_handle: clear(trimmed(data.twitter_handle)),
+      description: clear(trimmed(data.description)),
+      link_creative_tier: clear(trimmed(data.link_creative_tier)),
+      sow_url: clear(trimmed(data.sow_url)),
+      account_manager: clear(trimmed(data.account_manager)),
       status: data.status,
-      segment: data.segment || undefined,
+      segment: clear(trimmed(data.segment)),
+      owner_id: data.owner_id === '' ? (isEditing ? null : undefined) : Number(data.owner_id),
     };
 
     await onSubmit(formattedData);
@@ -385,6 +414,13 @@ export function CompanyForm({
         <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Account & Creative</h4>
         <div className="grid grid-cols-2 gap-4">
           <Controller
+            name="owner_id"
+            control={control}
+            render={({ field }) => (
+              <Select {...field} label="Owner" options={ownerOptions} />
+            )}
+          />
+          <Controller
             name="link_creative_tier"
             control={control}
             render={({ field }) => (
@@ -396,8 +432,6 @@ export function CompanyForm({
             label="Account Manager"
             placeholder="e.g. Jane Smith..."
           />
-        </div>
-        <div className="mt-4">
           <Input
             {...register('sow_url')}
             type="url"
