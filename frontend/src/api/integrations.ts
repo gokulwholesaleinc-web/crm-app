@@ -219,6 +219,35 @@ export const setMailchimpBlockedAudiences = async (
   return response.data;
 };
 
+export interface MailchimpAudienceMember {
+  email: string;
+  full_name: string | null;
+  mailchimp_status: string;
+  crm_contact_id: number | null;
+  crm_lead_id: number | null;
+  drift: boolean;
+  last_emailed_at: string | null;
+}
+
+export interface MailchimpAudienceMembersResponse {
+  items: MailchimpAudienceMember[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export const listMailchimpAudienceMembers = async (params: {
+  page?: number;
+  page_size?: number;
+  status?: string;
+}): Promise<MailchimpAudienceMembersResponse> => {
+  const response = await apiClient.get<MailchimpAudienceMembersResponse>(
+    '/api/integrations/mailchimp/audience-members',
+    { params },
+  );
+  return response.data;
+};
+
 export const syncMailchimpCampaignStats = async (campaignId: number): Promise<MailchimpStats> => {
   const response = await apiClient.post<MailchimpStats>(
     `/api/integrations/mailchimp/campaigns/${campaignId}/sync-stats`,

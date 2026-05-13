@@ -179,6 +179,70 @@ class TestAudiences:
             await service.list_audiences(tenant.id)
 
     @pytest.mark.asyncio
+    async def test_list_audience_members_enriches_with_crm_matches(
+        self, db_session: AsyncSession, test_user: User
+    ):
+        """Audience viewer must label each Mailchimp member with the
+        matching CRM contact/lead id and flag rows that don't match
+        anything as ``drift``. This is the health-check signal that
+        catches if someone manually adds emails to the CRM-Managed
+        audience outside the CRM."""
+        tenant = await _make_tenant(db_session, slug="viewer")
+        db_session.add(TenantUser(
+            tenant_id=tenant.id, user_id=test_user.id, is_primary=True,
+        ))
+        db_session.add(MailchimpConnection(
+            tenant_id=tenant.id,
+            api_key="key-us19",
+            server_prefix="us19",
+            default_audience_id="list-view",
+            connected_by_id=test_user.id,
+        ))
+
+        contact = Contact(
+            first_name="Ada", last_name="Lovelace",
+            email="ada@example.com", owner_id=test_user.id,
+        )
+        db_session.add(contact)
+        await db_session.commit()
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/3.0/lists/list-view/members":
+                return httpx.Response(200, json={
+                    "list_id": "list-view",
+                    "total_items": 2,
+                    "members": [
+                        {
+                            "email_address": "ada@example.com",
+                            "status": "subscribed",
+                            "merge_fields": {"FNAME": "Ada", "LNAME": "Lovelace"},
+                        },
+                        {
+                            "email_address": "stranger@example.com",
+                            "status": "subscribed",
+                            "merge_fields": {},
+                        },
+                    ],
+                })
+            return httpx.Response(599, json={"detail": "unmocked"})
+
+        service = MailchimpService(
+            db_session,
+            client_factory=_factory(httpx.MockTransport(handler)),
+        )
+        result = await service.list_audience_members(tenant.id, page=1, page_size=50)
+
+        assert result["total"] == 2
+        by_email = {m["email"]: m for m in result["items"]}
+        assert by_email["ada@example.com"]["crm_contact_id"] == contact.id
+        assert by_email["ada@example.com"]["drift"] is False
+        assert by_email["ada@example.com"]["full_name"] == "Ada Lovelace"
+        # Email not present in CRM contacts or leads → flagged as drift.
+        assert by_email["stranger@example.com"]["crm_contact_id"] is None
+        assert by_email["stranger@example.com"]["crm_lead_id"] is None
+        assert by_email["stranger@example.com"]["drift"] is True
+
+    @pytest.mark.asyncio
     async def test_set_blocked_audiences_persists_dedups_and_strips(
         self, db_session: AsyncSession, test_user: User
     ):

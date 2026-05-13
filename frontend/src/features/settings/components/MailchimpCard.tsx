@@ -30,6 +30,7 @@ import {
   setMailchimpBlockedAudiences,
 } from '../../../api/integrations';
 import { usePermissions } from '../../../hooks/usePermissions';
+import { MailchimpAudienceViewer } from './MailchimpAudienceViewer';
 
 function StatusPill({ connected }: { connected: boolean }) {
   return connected ? (
@@ -265,6 +266,22 @@ function AudiencePicker({ status }: { status: MailchimpStatus }) {
   );
 }
 
+function AudienceViewerToggle() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 rounded"
+      >
+        {open ? 'Hide audience members' : 'View audience members'}
+      </button>
+      <MailchimpAudienceViewer enabled={open} />
+    </div>
+  );
+}
+
 export function MailchimpCard({
   onRequestDisconnect,
 }: {
@@ -309,6 +326,9 @@ export function MailchimpCard({
             <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
               Default audience: {status.default_audience_name ?? 'not set'}
             </p>
+            {isAdmin && status.default_audience_id && (
+              <AudienceViewerToggle />
+            )}
           </>
         )}
         {!connected && isAdmin && (

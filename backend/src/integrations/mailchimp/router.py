@@ -18,6 +18,8 @@ from src.core.router_utils import CurrentUser, DBSession
 from src.integrations.mailchimp.client import MailchimpError
 from src.integrations.mailchimp.schemas import (
     MailchimpAudience,
+    MailchimpAudienceMember,
+    MailchimpAudienceMembersResponse,
     MailchimpBlockedAudiencesRequest,
     MailchimpConnectRequest,
     MailchimpSetAudienceRequest,
@@ -120,6 +122,47 @@ async def list_audiences(
             status_code=HTTPStatus.BAD_REQUEST, detail=str(exc)
         ) from exc
     return [MailchimpAudience(**row) for row in rows]
+
+
+@router.get(
+    "/audience-members",
+    response_model=MailchimpAudienceMembersResponse,
+)
+async def list_audience_members(
+    db: DBSession,
+    current_user: Annotated[User, Depends(require_admin)],
+    page: int = 1,
+    page_size: int = 50,
+    status: str | None = None,
+) -> MailchimpAudienceMembersResponse:
+    """Paginated viewer for the current Mailchimp default audience.
+
+    Each row is enriched with CRM cross-refs (matched contact/lead id,
+    drift flag for orphans, last-emailed-from-CRM timestamp).
+    """
+    tenant_id = await _user_tenant_id(db, current_user.id)
+    try:
+        payload = await MailchimpService(db).list_audience_members(
+            tenant_id, page=page, page_size=page_size, status=status,
+        )
+    except MailchimpNotConnected as exc:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST, detail=str(exc)
+        ) from exc
+    except MailchimpError as exc:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_GATEWAY, detail=str(exc)
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST, detail=str(exc)
+        ) from exc
+    return MailchimpAudienceMembersResponse(
+        items=[MailchimpAudienceMember(**item) for item in payload["items"]],
+        total=payload["total"],
+        page=payload["page"],
+        page_size=payload["page_size"],
+    )
 
 
 @router.post("/audiences/select", response_model=MailchimpStatus)
