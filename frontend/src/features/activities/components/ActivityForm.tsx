@@ -67,24 +67,30 @@ const callOutcomeOptions = [
   { value: 'busy', label: 'Busy' },
 ];
 
+// `datetime-local` inputs expect a string in the user's LOCAL timezone
+// (no Z suffix). Using `.toISOString()` here would emit UTC and the input
+// would re-interpret it as local — round-tripping a save shifts the time
+// by the user's UTC offset every cycle.
 function formatDateTimeLocal(date: string | null | undefined): string {
   if (!date) return '';
-  try {
-    const d = new Date(date);
-    return d.toISOString().slice(0, 16);
-  } catch {
-    return '';
-  }
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return '';
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
 }
 
 function formatDateLocal(date: string | null | undefined): string {
   if (!date) return '';
-  try {
-    const d = new Date(date);
-    return d.toISOString().slice(0, 10);
-  } catch {
-    return '';
-  }
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return '';
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 export function ActivityForm({

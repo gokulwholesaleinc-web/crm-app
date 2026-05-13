@@ -72,14 +72,16 @@ function FieldHint({ children }: { children: React.ReactNode }) {
   );
 }
 
+// `date` inputs expect local YYYY-MM-DD. `toISOString()` emits UTC, which
+// would shift the displayed date by ±1 day around midnight in non-UTC zones.
 function formatDateLocal(date: string | null | undefined): string {
   if (!date) return '';
-  try {
-    const d = new Date(date);
-    return d.toISOString().slice(0, 10);
-  } catch {
-    return '';
-  }
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return '';
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 export function CampaignForm({
