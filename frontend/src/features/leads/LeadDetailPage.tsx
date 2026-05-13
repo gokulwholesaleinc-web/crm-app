@@ -15,7 +15,7 @@ import { showError } from '../../utils/toast';
 import { formatDate, formatPhoneNumber } from '../../utils/formatters';
 import { useLead, useDeleteLead, useConvertLead, useUpdateLead } from '../../hooks/useLeads';
 import { useAuthStore } from '../../store/authStore';
-import type { LeadUpdate } from '../../types';
+import type { LeadUpdate, ApiError } from '../../types';
 import clsx from 'clsx';
 
 const CommentSection = lazy(() => import('../../components/shared/CommentSection'));
@@ -63,12 +63,16 @@ function LeadDetailPage() {
     if (!leadId) return;
     try {
       const updateData: LeadUpdate = {
-        first_name: data.firstName,
-        last_name: data.lastName,
-        email: data.email,
-        phone: data.phone || undefined,
-        company_name: data.company || undefined,
-        job_title: data.jobTitle || undefined,
+        first_name: data.firstName?.trim() || undefined,
+        last_name: data.lastName?.trim() || undefined,
+        email: data.email?.trim() || undefined,
+        phone: data.phone?.trim() || undefined,
+        company_name: data.company?.trim() || undefined,
+        job_title: data.jobTitle?.trim() || undefined,
+        source_id: data.source_id ?? undefined,
+        pipeline_stage_id: data.pipeline_stage_id ?? undefined,
+        sales_code: data.salesCode?.trim() || undefined,
+        description: data.notes?.trim() || undefined,
       };
       // Only include status when it actually changed. The backend rejects
       // status='converted' direct edits, so re-asserting an existing
@@ -84,7 +88,8 @@ function LeadDetailPage() {
       });
       setShowEditForm(false);
     } catch (err) {
-      showError('Failed to update lead');
+      const detail = (err as ApiError | null)?.detail;
+      showError(detail || 'Failed to update lead');
     }
   };
 
@@ -98,7 +103,9 @@ function LeadDetailPage() {
       company: lead.company_name || '',
       jobTitle: lead.job_title || '',
       status: lead.status,
-      source: lead.source?.name || '',
+      source_id: lead.source?.id ?? null,
+      pipeline_stage_id: lead.pipeline_stage_id ?? null,
+      salesCode: lead.sales_code || '',
       notes: lead.description || '',
     };
   };
@@ -473,6 +480,7 @@ function LeadDetailPage() {
           onCancel={() => setShowEditForm(false)}
           isLoading={updateLeadMutation.isPending}
           submitLabel="Update Lead"
+          score={lead.score ?? null}
         />
       </Modal>
 

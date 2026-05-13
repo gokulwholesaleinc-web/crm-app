@@ -48,9 +48,8 @@ export interface Comment {
   parent_id: number | null;
   is_internal: boolean;
   user_id: number;
-  user_name?: string;
-  user_email?: string;
-  mentioned_users: string[];
+  author_name?: string | null;
+  mentions: string[];
   replies: Comment[];
   created_at: string;
   updated_at: string;

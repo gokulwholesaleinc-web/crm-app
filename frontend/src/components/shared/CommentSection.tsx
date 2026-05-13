@@ -209,7 +209,7 @@ function CommentItem({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                {comment.user_name || 'Unknown User'}
+                {comment.author_name || 'Unknown User'}
               </span>
               {comment.is_internal && (
                 <span className="inline-flex items-center rounded-full bg-yellow-100 dark:bg-yellow-900/30 px-2 py-0.5 text-xs font-medium text-yellow-800 dark:text-yellow-300">
@@ -380,7 +380,7 @@ export function CommentSection({ entityType, entityId }: CommentSectionProps) {
                   {replyingTo === comment.id && (
                     <div className="ml-6 pl-4 border-l-2 border-primary-200 dark:border-primary-700 py-2">
                       <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                        Replying to {comment.user_name || 'Unknown User'}
+                        Replying to {comment.author_name || 'Unknown User'}
                         <button
                           type="button"
                           onClick={() => setReplyingTo(null)}
