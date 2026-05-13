@@ -208,7 +208,7 @@ export function CampaignForm({
           </FieldHint>
           <div className="rounded-md bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-3 text-sm text-blue-800 dark:text-blue-200">
             <p className="font-medium mb-0.5">After creating this campaign:</p>
-            <p>Scroll to <strong>Campaign Sequence</strong> on the detail page to attach an email template and set the send schedule. Then click <strong>Add Members</strong> to load your recipient list.</p>
+            <p>Scroll to <strong>Email Steps</strong> on the detail page to attach an email template and set the send schedule. Then click <strong>Add Members</strong> to load your recipient list.</p>
           </div>
         </>
       )}

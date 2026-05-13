@@ -504,8 +504,8 @@ export function CampaignDetailPage() {
 
       {/* Setup wizard card — only shown for users who can actually take the
           actions it advertises (canManageCampaign), and only on fresh email
-          campaigns with no steps and no members. */}
-      {canManageCampaign && campaign.campaign_type === 'email' && steps.length === 0 && (!members || members.length === 0) && (
+          campaigns with no steps configured yet. */}
+      {canManageCampaign && campaign.campaign_type === 'email' && steps.length === 0 && (
         <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-4 sm:p-5">
           <h2 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-3">
             Get this campaign live in 3 steps

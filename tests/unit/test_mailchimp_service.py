@@ -9,6 +9,7 @@ internal services — the DB, ORM, and CRM models are all real here.
 from __future__ import annotations
 
 import httpx
+import json
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -235,12 +236,18 @@ class TestSendCampaignStep:
         await db_session.commit()
 
         seen_paths: list[str] = []
+        captured_segment_body: dict = {}
+        captured_campaign_body: dict = {}
 
         def handler(request: httpx.Request) -> httpx.Response:
             seen_paths.append(f"{request.method} {request.url.path}")
             if request.url.path.startswith("/3.0/lists/list-1/members/"):
                 return httpx.Response(200, json={"id": "h", "email_address": "ada@example.com"})
+            if request.url.path == "/3.0/lists/list-1/segments" and request.method == "POST":
+                captured_segment_body.update(json.loads(request.content))
+                return httpx.Response(200, json={"id": 4242, "name": "seg"})
             if request.url.path == "/3.0/campaigns" and request.method == "POST":
+                captured_campaign_body.update(json.loads(request.content))
                 return httpx.Response(200, json={"id": "mc-camp-1"})
             if request.url.path == "/3.0/campaigns/mc-camp-1/content":
                 return httpx.Response(200, json={"html": "ok"})
@@ -267,8 +274,19 @@ class TestSendCampaignStep:
         assert campaign.num_sent == 1
         # Verify the right Mailchimp endpoints were hit in order.
         assert any("PUT /3.0/lists/list-1/members/" in p for p in seen_paths)
+        assert "POST /3.0/lists/list-1/segments" in seen_paths
         assert "POST /3.0/campaigns" in seen_paths
         assert "PUT /3.0/campaigns/mc-camp-1/content" in seen_paths
+        # Blast-radius guard: the segment Mailchimp creates must contain
+        # exactly the CRM campaign member emails — no more, no fewer.
+        assert captured_segment_body["static_segment"] == ["ada@example.com"]
+        # And the campaign must be scoped to that segment, not the
+        # whole audience.
+        assert captured_campaign_body["recipients"]["list_id"] == "list-1"
+        assert (
+            captured_campaign_body["recipients"]["segment_opts"]["saved_segment_id"]
+            == 4242
+        )
         assert "POST /3.0/campaigns/mc-camp-1/actions/send" in seen_paths
 
     @pytest.mark.asyncio
@@ -407,6 +425,159 @@ class TestSendCampaignStep:
 
         service = MailchimpService(db_session)
         with pytest.raises(MailchimpNotConnected):
+            await service.send_campaign_step(
+                campaign=campaign,
+                template_id=template.id,
+                sent_by_id=test_user.id,
+                tenant_id=tenant.id,
+            )
+
+    @pytest.mark.asyncio
+    async def test_send_campaign_step_scopes_segment_to_only_campaign_members(
+        self, db_session: AsyncSession, test_user: User
+    ):
+        """Blast-radius assertion — the Mailchimp segment created for
+        the send MUST contain exactly the CRM campaign-member emails,
+        even when the underlying audience has many other subscribers.
+
+        This is the regression test for the 2026-05-13 incident in
+        which an unsegmented campaign send broadcast to the entire
+        980-member audience instead of the 2 campaign members.
+        """
+        tenant = await _make_tenant(db_session, slug="blast")
+        db_session.add(TenantUser(
+            tenant_id=tenant.id, user_id=test_user.id, is_primary=True,
+        ))
+        db_session.add(MailchimpConnection(
+            tenant_id=tenant.id,
+            api_key="key-us19",
+            server_prefix="us19",
+            default_audience_id="list-blast",
+            connected_by_id=test_user.id,
+            account_email="ops@example.com",
+        ))
+
+        # Two CRM contacts. The Mailchimp audience is opaque from the
+        # CRM's perspective but assume it has hundreds of other
+        # subscribers — those must NOT receive the campaign.
+        c1 = Contact(
+            first_name="Ada", last_name="Lovelace",
+            email="ada@example.com", owner_id=test_user.id,
+        )
+        c2 = Contact(
+            first_name="Grace", last_name="Hopper",
+            email="grace@example.com", owner_id=test_user.id,
+        )
+        db_session.add_all([c1, c2])
+        await db_session.flush()
+
+        template = EmailTemplate(
+            name="blast-tmpl",
+            subject_template="Hi",
+            body_template="<p>Body</p>",
+            created_by_id=test_user.id,
+        )
+        db_session.add(template)
+        await db_session.flush()
+
+        campaign = Campaign(
+            name="Blast Test",
+            campaign_type="email",
+            send_via="mailchimp",
+            owner_id=test_user.id,
+        )
+        db_session.add(campaign)
+        await db_session.flush()
+        db_session.add_all([
+            CampaignMember(campaign_id=campaign.id, member_type="contact", member_id=c1.id),
+            CampaignMember(campaign_id=campaign.id, member_type="contact", member_id=c2.id),
+        ])
+        await db_session.commit()
+
+        captured_segment_body: dict = {}
+        captured_campaign_body: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path.startswith("/3.0/lists/list-blast/members/"):
+                return httpx.Response(200, json={"id": "h"})
+            if request.url.path == "/3.0/lists/list-blast/segments":
+                captured_segment_body.update(json.loads(request.content))
+                return httpx.Response(200, json={"id": 9999, "name": "seg"})
+            if request.url.path == "/3.0/campaigns" and request.method == "POST":
+                captured_campaign_body.update(json.loads(request.content))
+                return httpx.Response(200, json={"id": "mc-camp-blast"})
+            if request.url.path == "/3.0/campaigns/mc-camp-blast/content":
+                return httpx.Response(200, json={"html": "ok"})
+            if request.url.path == "/3.0/campaigns/mc-camp-blast/actions/send":
+                return httpx.Response(204)
+            return httpx.Response(599, json={"detail": "unmocked"})
+
+        service = MailchimpService(
+            db_session, client_factory=_factory(httpx.MockTransport(handler))
+        )
+        summary = await service.send_campaign_step(
+            campaign=campaign,
+            template_id=template.id,
+            sent_by_id=test_user.id,
+            tenant_id=tenant.id,
+        )
+        await db_session.commit()
+
+        assert summary["emails_sent"] == 2
+        assert set(captured_segment_body["static_segment"]) == {
+            "ada@example.com", "grace@example.com",
+        }
+        assert (
+            captured_campaign_body["recipients"]["segment_opts"]["saved_segment_id"]
+            == 9999
+        )
+
+    @pytest.mark.asyncio
+    async def test_send_campaign_step_refuses_when_no_members(
+        self, db_session: AsyncSession, test_user: User
+    ):
+        """Fail-closed: a campaign with zero members must NOT trigger
+        an unsegmented Mailchimp send (which would broadcast to the
+        whole audience). Raise instead.
+        """
+        tenant = await _make_tenant(db_session, slug="no-members")
+        db_session.add(TenantUser(
+            tenant_id=tenant.id, user_id=test_user.id, is_primary=True,
+        ))
+        db_session.add(MailchimpConnection(
+            tenant_id=tenant.id,
+            api_key="key-us19",
+            server_prefix="us19",
+            default_audience_id="list-no-members",
+            connected_by_id=test_user.id,
+            account_email="ops@example.com",
+        ))
+        template = EmailTemplate(
+            name="no-members-tmpl",
+            subject_template="Hi",
+            body_template="<p>Body</p>",
+            created_by_id=test_user.id,
+        )
+        db_session.add(template)
+        await db_session.flush()
+        campaign = Campaign(
+            name="No Members",
+            campaign_type="email",
+            send_via="mailchimp",
+            owner_id=test_user.id,
+        )
+        db_session.add(campaign)
+        await db_session.commit()
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            # The fail-closed guard runs before we'd hit Mailchimp, so
+            # any HTTP call out is itself a bug — flag it.
+            return httpx.Response(599, json={"detail": "unexpected http call"})
+
+        service = MailchimpService(
+            db_session, client_factory=_factory(httpx.MockTransport(handler))
+        )
+        with pytest.raises(ValueError, match="no members resolved"):
             await service.send_campaign_step(
                 campaign=campaign,
                 template_id=template.id,
