@@ -109,9 +109,9 @@ async def _preflight_won_conversion(
 
     Must be called BEFORE the caller mutates ``lead.pipeline_stage_id``
     so the 409 doesn't leave a flushed-but-unconverted stage write
-    visible to the request session (the test harness shares a single
-    session across the request and the assertion, and ``get_db`` does
-    not rollback on ``HTTPException``).
+    visible to the request session — ``get_db`` only rolls back on
+    ``SQLAlchemyError`` / ``OSError``, not on ``HTTPException``, so a
+    409 raised mid-helper would otherwise persist the partial write.
     """
     if not stage.is_won or lead.converted_opportunity_id:
         return None
@@ -613,16 +613,16 @@ async def update_lead(
     # Pre-flight the Won-conversion side effect BEFORE service.update so
     # a 409 (no opportunity stage configured) rolls back cleanly without
     # leaving the new pipeline_stage_id flushed to the request session.
-    stage_for_sync: PipelineStage | None = None
-    opp_stage_for_sync: PipelineStage | None = None
+    stage: PipelineStage | None = None
+    opp_stage: PipelineStage | None = None
     if (
         "pipeline_stage_id" in update_fields
         and lead_data.pipeline_stage_id is not None
         and lead_data.pipeline_stage_id != old_stage_id
     ):
-        stage_for_sync = await _resolve_lead_stage(db, lead_data.pipeline_stage_id)
-        opp_stage_for_sync = await _preflight_won_conversion(
-            db, lead, stage_for_sync,
+        stage = await _resolve_lead_stage(db, lead_data.pipeline_stage_id)
+        opp_stage = await _preflight_won_conversion(
+            db, lead, stage,
         )
         # _apply_stage_change will mutate status (and may stamp
         # converted_*) — record those columns in the audit diff even
@@ -645,9 +645,9 @@ async def update_lead(
         ) from exc
 
     conversion_info = None
-    if stage_for_sync is not None:
+    if stage is not None:
         conversion_info = await _apply_stage_change(
-            db, updated_lead, stage_for_sync, current_user, opp_stage_for_sync,
+            db, updated_lead, stage, current_user, opp_stage,
         )
 
     new_data = snapshot_entity(updated_lead, update_fields)
