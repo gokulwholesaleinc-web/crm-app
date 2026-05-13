@@ -29,17 +29,15 @@ def _default_branding(**overrides: str) -> dict:
 
 class TestVisualDefaults:
     # The CRM is single-tenant by design and ships with the Link
-    # Creative gold/black palette baked in as defaults so emails render
-    # correctly even before an admin opens the branding form. Tenants
-    # that customize colors still override these via TenantSettings.
-    def test_link_creative_palette_primary_is_black(self):
-        assert _DEFAULT_BRANDING["primary_color"] == "#000000"
+    # Creative gold/black palette baked in as defaults. The wrapper
+    # treats `primary_color` as the brand-spotlight gold (rule + pipes
+    # + wordmark first word) and `accent_color` as the CTA pill bg
+    # (typically black), matching the production tenant_settings row.
+    def test_link_creative_palette_primary_is_gold(self):
+        assert _DEFAULT_BRANDING["primary_color"] == "#CF982C"
 
-    def test_link_creative_palette_accent_is_gold(self):
-        assert _DEFAULT_BRANDING["accent_color"] == "#c5a467"
-
-    def test_link_creative_palette_secondary_is_gold(self):
-        assert _DEFAULT_BRANDING["secondary_color"] == "#c5a467"
+    def test_link_creative_palette_accent_is_black(self):
+        assert _DEFAULT_BRANDING["accent_color"] == "#000000"
 
     def test_system_font_stack_in_body(self):
         html = _base_email_html(_default_branding(), "Test", "<p>hello</p>")
@@ -94,44 +92,47 @@ class TestVisualDefaults:
         # Centered text-align is the visual contract.
         assert "text-align:center" in html
 
-    def test_wordmark_fallback_splits_first_word_in_secondary_color(self):
+    def test_wordmark_fallback_splits_first_word_in_primary_color(self):
         # Two-word company names render with the first word in the
-        # secondary (gold) accent and the rest in the primary (dark) —
-        # approximates the Link Creative split-word wordmark before an
-        # admin uploads a real logo image.
+        # primary (gold) accent and the rest in the accent (typically
+        # black) — approximates the Link Creative split-word wordmark
+        # before an admin uploads a real logo image.
         html = _base_email_html(
             _default_branding(
                 company_name="Link Creative",
-                primary_color="#000000",
-                secondary_color="#c5a467",
+                primary_color="#CF982C",
+                accent_color="#000000",
             ),
             "Test",
             "<p>body</p>",
         )
         # Both spans render with the explicit foreground colors.
-        assert 'color:#c5a467;' in html
+        assert 'color:#CF982C;' in html
         assert '>Link</span>' in html
         assert 'color:#000000;' in html
         assert '>Creative</span>' in html
 
-    def test_wordmark_fallback_single_word_stays_primary(self):
+    def test_wordmark_fallback_single_word_stays_accent(self):
         html = _base_email_html(
             _default_branding(
                 company_name="Acme",
-                primary_color="#000000",
-                secondary_color="#c5a467",
+                primary_color="#CF982C",
+                accent_color="#000000",
             ),
             "Test",
             "<p>body</p>",
         )
-        # No secondary-color span for the wordmark since there's no
+        # Single-word wordmark renders in the accent color (dark
+        # text) — primary is reserved for the brand-gold accent rule
+        # + tagline pipes, not the wordmark itself when there's no
         # first word to split off.
         assert '>Acme</span>' in html
-        # The accent rule below the header still emits #c5a467; the
-        # wordmark itself must not.
         wordmark_idx = html.find('>Acme</span>')
-        wordmark_span = html[max(0, wordmark_idx - 200):wordmark_idx]
-        assert '#c5a467' not in wordmark_span
+        # The 250-char span before the closing tag should be a single
+        # accent-color span, not a primary-gold one.
+        wordmark_span = html[max(0, wordmark_idx - 250):wordmark_idx]
+        assert 'color:#000000' in wordmark_span
+        assert 'color:#CF982C' not in wordmark_span
 
     def test_logo_renders_as_image_when_configured(self):
         html = _base_email_html(
@@ -149,6 +150,7 @@ class TestVisualDefaults:
         html = _base_email_html(
             _default_branding(
                 tagline="ACCESSIBLE MEDIA | AUTHENTIC STORYTELLING | REAL RESULTS",
+                primary_color="#CF982C",
             ),
             "Test",
             "<p>body</p>",
@@ -156,9 +158,9 @@ class TestVisualDefaults:
         assert "ACCESSIBLE MEDIA" in html
         assert "AUTHENTIC STORYTELLING" in html
         assert "REAL RESULTS" in html
-        # Pipes recolored to the secondary (gold) accent, not left as
+        # Pipes recolored to the primary (gold) accent, not left as
         # plain text "|".
-        assert "color:#c5a467;font-weight:700" in html
+        assert "color:#CF982C;font-weight:700" in html
 
     def test_tagline_block_absent_when_unset(self):
         # The mobile media query references `.email-tagline` whether
@@ -178,8 +180,10 @@ class TestVisualDefaults:
         )
         assert "ONE" in html
         assert "TWO" in html
-        # Exactly one separator span between the two real segments.
-        assert html.count('color:#c5a467;font-weight:700;padding:0 6px') == 1
+        # Exactly one separator span between the two real segments,
+        # colored to whatever primary_color is on the branding dict.
+        primary = _default_branding()["primary_color"]
+        assert html.count(f'color:{primary};font-weight:700;padding:0 6px') == 1
 
     def test_empty_headline_omits_h1(self):
         # Notification emails often pass headline="" because the body
@@ -206,18 +210,56 @@ class TestVisualDefaults:
             "<p>body</p>",
         )
         assert "background-color:#ffffff;border-radius:50%" in html
+        # Foreground #0a0a0a is shared by both the alt-letter color
+        # and the icon-tint query param, so it appears in the render
+        # twice (once on the <a>, once URL-encoded in the icon src).
         assert "color:#0a0a0a;" in html
+
+    def test_social_cells_emit_iconify_img_with_letter_alt(self):
+        # Each rendered circle wraps an <img src=...iconify.design...>
+        # so recipients see the actual brand glyph; the alt= carries
+        # the letter fallback so image-blocking clients still display
+        # a recognizable mark. All glyphs come from the Material
+        # Design Icons collection (`mdi/`) so visual weight is
+        # consistent across the row.
+        html = _base_email_html(
+            _default_branding(
+                social_facebook_url="https://facebook.com/co",
+                social_youtube_url="https://youtube.com/@co",
+            ),
+            "Test",
+            "<p>body</p>",
+        )
+        assert "api.iconify.design/mdi/facebook.svg" in html
+        assert "api.iconify.design/mdi/youtube.svg" in html
+        assert 'alt="f"' in html
+        assert 'alt="YT"' in html
+
+    def test_social_cell_uses_table_cell_centering(self):
+        # The nested <table valign="middle"> is the only email-
+        # bulletproof way to center a smaller <img> inside a fixed
+        # cell. Inline-block + margin-top tricks rendered the icons
+        # visibly low in Apple Mail; the table pattern is the
+        # historically-reliable fix.
+        html = _base_email_html(
+            _default_branding(social_facebook_url="https://facebook.com/co"),
+            "Test",
+            "<p>body</p>",
+        )
+        assert 'align="center" valign="middle"' in html
+        assert 'border-radius:50%' in html
 
     def test_gold_accent_rule_below_header(self):
         # The 3px gold strip under the header is part of the visual
         # contract — its presence is what differentiates this wrapper
-        # from the legacy dark-block header.
+        # from the legacy dark-block header. Driven by primary_color
+        # so it follows the tenant's brand spotlight.
         html = _base_email_html(
-            _default_branding(secondary_color="#c5a467"),
+            _default_branding(primary_color="#CF982C"),
             "Test",
             "<p>body</p>",
         )
-        assert "background-color:#c5a467" in html
+        assert "background-color:#CF982C" in html
         assert "height:3px" in html
 
     # -- Footer: dark surface + social row + legal links ------------------

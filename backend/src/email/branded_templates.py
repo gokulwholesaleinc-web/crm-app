@@ -79,17 +79,20 @@ def _safe_url(url: str | None) -> str:
 # Default branding (used when no tenant is configured)
 # ---------------------------------------------------------------------------
 
-# Tenants override via tenant_branding settings; these defaults match
-# the Link Creative wrapper aesthetic (gold-on-black) since the CRM is
-# single-tenant by design. ``primary_color`` is the dark text/footer
-# color, ``secondary_color`` is the gold accent rule + tagline pipes,
-# and ``accent_color`` drives the CTA pill (same gold by default).
+# Tenants override via tenant_branding settings. The wrapper uses
+# ``primary_color`` as the brand-spotlight gold (drives the accent
+# rule + tagline pipe separators + wordmark-fallback first word) and
+# ``accent_color`` as the CTA-pill background (typically a strong
+# contrast — black or white). ``secondary_color`` is unused by the
+# email wrapper but still drives in-app surfaces. Defaults below
+# match the production Link Creative palette (primary=#CF982C gold,
+# accent=#000000 black).
 _DEFAULT_BRANDING = {
     "company_name": "CRM",
     "logo_url": "",
-    "primary_color": "#000000",
-    "secondary_color": "#c5a467",
-    "accent_color": "#c5a467",
+    "primary_color": "#CF982C",
+    "secondary_color": "#F9F9F9",
+    "accent_color": "#000000",
     # Page + surface backgrounds (light mode only on customer-facing
     # surfaces — public quote/contract/proposal pages and emails
     # render light by default; the app's dark mode is for authenticated
@@ -116,20 +119,60 @@ _DEFAULT_BRANDING = {
 }
 
 
-# Footer social-row glyphs. The Link Creative template uses bordered
-# circles with platform iconography; reliable email-client rendering of
-# inline SVG / icon fonts / @font-face is unworkable across Outlook,
-# Gmail, and Apple Mail, so we use short letter labels inside white
-# circle outlines as a universally-compatible visual fallback. Tenants
-# who want true brand glyphs can ship icon-URL columns in a follow-up
-# (out of scope for migration 034). Order is the visible footer order.
-_SOCIAL_PLATFORMS: tuple[tuple[str, str, str], ...] = (
-    ("Facebook", "social_facebook_url", "f"),
-    ("Instagram", "social_instagram_url", "IG"),
-    ("TikTok", "social_tiktok_url", "TT"),
-    ("LinkedIn", "social_linkedin_url", "in"),
-    ("YouTube", "social_youtube_url", "YT"),
-    ("Website", "social_website_url", "W"),
+# Footer social-row glyphs. Each tuple is
+# ``(label, settings_field, icon_url, letter_fallback)`` — the icon
+# URL renders as an ``<img>`` inside the white circle, and the letter
+# is used as ``alt=`` text so image-blocking clients still show a
+# recognizable mark. We point at api.iconify.design which serves the
+# Simple Icons vector marks at any color via query params; this gives
+# us actual brand glyphs (Facebook ``f``, IG camera, TikTok music
+# note, LinkedIn ``in`` badge, YouTube play triangle, Material globe
+# for the generic website slot) without each tenant having to host
+# their own icon assets. The same color (``#0a0a0a``) matches the
+# circle text-color so the alt-letter and the loaded icon look
+# consistent.
+_ICONIFY_BASE = "https://api.iconify.design"
+# All icons from the same collection (Material Design Icons) so visual
+# weight + viewBox padding are consistent across the row — mixing
+# simple-icons brand glyphs with material-symbols globe gave wildly
+# different inner sizes that read as "clunky".
+_SOCIAL_PLATFORMS: tuple[tuple[str, str, str, str], ...] = (
+    (
+        "Facebook",
+        "social_facebook_url",
+        f"{_ICONIFY_BASE}/mdi/facebook.svg?color=%230a0a0a",
+        "f",
+    ),
+    (
+        "Instagram",
+        "social_instagram_url",
+        f"{_ICONIFY_BASE}/mdi/instagram.svg?color=%230a0a0a",
+        "IG",
+    ),
+    (
+        "TikTok",
+        "social_tiktok_url",
+        f"{_ICONIFY_BASE}/ic/baseline-tiktok.svg?color=%230a0a0a",
+        "TT",
+    ),
+    (
+        "LinkedIn",
+        "social_linkedin_url",
+        f"{_ICONIFY_BASE}/mdi/linkedin.svg?color=%230a0a0a",
+        "in",
+    ),
+    (
+        "YouTube",
+        "social_youtube_url",
+        f"{_ICONIFY_BASE}/mdi/youtube.svg?color=%230a0a0a",
+        "YT",
+    ),
+    (
+        "Website",
+        "social_website_url",
+        f"{_ICONIFY_BASE}/mdi/web.svg?color=%230a0a0a",
+        "W",
+    ),
 )
 
 # Fixed near-black for the email footer. Kept hardcoded rather than
@@ -269,30 +312,37 @@ def _render_social_row(branding: dict) -> str:
     heading only when this function returned non-empty.
     """
     cells: list[str] = []
-    for label, key, glyph in _SOCIAL_PLATFORMS:
+    for label, key, icon_url, fallback_letter in _SOCIAL_PLATFORMS:
         href = _safe_external_url(branding.get(key))
         if not href:
             continue
+        # 32px solid-white circle with an 18px brand-icon <img>
+        # centered via the email-bulletproof nested-table pattern:
+        # the inner ``<td align="center" valign="middle">`` is the
+        # only reliable cross-client way to center a smaller image
+        # inside a fixed-size cell — inline-block + margin tricks
+        # rendered the icons low in Apple Mail and Outlook Desktop.
+        # The image's ``alt`` carries the fallback letter so
+        # image-blocking clients still render a legible mark in the
+        # badge. Cell padding kept tight (4px each side = 8px gap
+        # between circles) so the six-icon row reads as a band.
         cells.append(
-            f'<td style="padding:0 6px;">'
+            f'<td style="padding:0 4px;" valign="middle">'
             f'<a href="{escape(href)}" target="_blank" '
             f'aria-label="{escape(label)}" '
-            # 36px solid-white circle, dark-letter glyph centered —
-            # reads as a "badge" against the dark footer, which is
-            # closer to the Link Creative reference than the previous
-            # outlined-circle variant. True brand-icon glyphs (the
-            # Facebook ``f`` mark, IG camera, etc.) require hosted
-            # PNGs and are deferred to a follow-up PR that adds a
-            # ``social_*_icon_url`` column per platform; the letter
-            # fallback here remains universally compatible (Outlook,
-            # Gmail, Apple Mail, web previewers all render text in
-            # a styled <a> regardless of color-scheme or image-load
-            # state).
-            f'style="display:inline-block;width:36px;height:36px;line-height:36px;'
-            f'background-color:#ffffff;border-radius:50%;'
-            f'color:#0a0a0a;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;'
-            f'font-size:14px;font-weight:700;text-align:center;text-decoration:none;">'
-            f'{escape(glyph)}</a></td>'
+            f'style="text-decoration:none;color:#0a0a0a;'
+            f"font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;"
+            f'font-size:13px;font-weight:700;line-height:0;">'
+            f'<table role="presentation" cellpadding="0" cellspacing="0" border="0" '
+            f'width="32" height="32" '
+            f'style="background-color:#ffffff;border-radius:50%;border-collapse:separate;">'
+            f'<tr><td align="center" valign="middle" '
+            f'style="text-align:center;vertical-align:middle;line-height:0;">'
+            f'<img src="{escape(icon_url)}" alt="{escape(fallback_letter)}" '
+            f'width="18" height="18" '
+            f'style="display:block;width:18px;height:18px;border:0;outline:none;" />'
+            f'</td></tr></table>'
+            f'</a></td>'
         )
     return "".join(cells)
 
@@ -335,14 +385,22 @@ def _base_email_html(
     # customer would see a white email with no diagnostic trace. See
     # _safe_hex docstring for why ORM-level reads bypass the schema
     # validator.
-    primary = escape(_safe_hex(branding.get("primary_color"), "#000000", field="primary_color"))
-    secondary = escape(_safe_hex(branding.get("secondary_color"), "#c5a467", field="secondary_color"))
-    accent = escape(_safe_hex(branding.get("accent_color"), "#c5a467", field="accent_color"))
-    # Light-mode page + card surface colors. The email's dark-mode media
-    # query keeps its hardcoded #1f2937 / #111827 — those approximate
-    # the tenant_settings dark defaults and refactoring them through
-    # tenant settings risks regressions in finicky email clients
-    # (Outlook desktop especially) for marginal gain.
+    # primary_color = brand-spotlight gold → drives the accent rule,
+    #                 tagline pipe separators, and wordmark fallback's
+    #                 first word.
+    # accent_color  = CTA pill background + wordmark fallback's rest.
+    # secondary_color is unused by the email wrapper (still drives
+    # in-app surfaces).
+    # Hardcode #c5a467 / #000000 fallbacks so a tenant with empty
+    # color fields still renders the Link Creative aesthetic.
+    primary = escape(_safe_hex(branding.get("primary_color"), "#CF982C", field="primary_color"))
+    accent = escape(_safe_hex(branding.get("accent_color"), "#000000", field="accent_color"))
+    # Light-mode page + card surfaces. The wrapper is fixed light-mode
+    # (no prefers-color-scheme media query) so these always paint as
+    # configured.
+    # Prod's bg_color_light is #F9F9F9 (off-white); we let that flow
+    # through. Surface defaults to pure #ffffff so the card stays
+    # clearly readable even when an admin sets bg to a gray.
     bg_light = escape(_safe_hex(branding.get("bg_color_light"), "#f9fafb", field="bg_color_light"))
     surface_light = escape(_safe_hex(branding.get("surface_color_light"), "#ffffff", field="surface_color_light"))
     company = escape(branding.get("company_name", "CRM"))
@@ -351,21 +409,21 @@ def _base_email_html(
     privacy_url = _safe_url(branding.get("privacy_policy_url", ""))
     terms_url = _safe_url(branding.get("terms_of_service_url", ""))
     safe_cta_url = _safe_url(cta_url)
-    tagline_html = _render_tagline(branding.get("tagline", ""), secondary)
+    tagline_html = _render_tagline(branding.get("tagline", ""), primary)
 
     # Centered wordmark logo. When no logo is configured we fall back
     # to the company-name text in the same slot so the header doesn't
     # collapse — admins who skip the logo upload still get a usable
     # branded header. Multi-word company names render with the first
-    # word in the secondary (gold) accent and the remainder in the
-    # primary (dark) — approximates the Link Creative split-word
+    # word in the primary (gold) accent and the rest in the accent
+    # (typically black) — approximates the Link Creative split-word
     # wordmark so single-tenant deployments look on-brand even before
     # an admin uploads the real logo.
     if logo_url:
         logo_block = (
             f'<img src="{escape(logo_url)}" alt="{company}" '
-            f'width="240" height="48" '
-            f'style="display:inline-block;height:48px;width:auto;max-width:240px;'
+            f'height="48" '
+            f'style="display:inline-block;height:48px;width:auto;max-width:320px;'
             f'max-height:48px;" />'
         )
     else:
@@ -379,17 +437,20 @@ def _base_email_html(
         if len(parts) == 2:
             first, rest = parts
             logo_block = (
-                f'<span style="color:{secondary};{font_stack}">{escape(first)}</span>'
-                f'<span style="color:{primary};{font_stack}">{escape(rest)}</span>'
+                f'<span style="color:{primary};{font_stack}">{escape(first)}</span>'
+                f'<span style="color:{accent};{font_stack}">{escape(rest)}</span>'
             )
         else:
             logo_block = (
-                f'<span style="color:{primary};{font_stack}">{escape(raw_company)}</span>'
+                f'<span style="color:{accent};{font_stack}">{escape(raw_company)}</span>'
             )
 
+    # Tagline copy text is dark — hardcoded #111827 so it stays
+    # readable regardless of how primary is configured. The pipe
+    # separators inside the rendered tagline pick up `primary` (gold).
     tagline_block = (
         f'<div class="email-tagline" style="margin-top:10px;'
-        f'color:{primary};font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;'
+        f'color:#111827;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;'
         f'font-size:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase;'
         f'line-height:1.4;">{tagline_html}</div>'
         if tagline_html
@@ -546,7 +607,7 @@ def _base_email_html(
   {logo_block}
   {tagline_block}
 </td></tr>
-<tr><td style="height:3px;line-height:3px;font-size:0;background-color:{secondary};">&nbsp;</td></tr>
+<tr><td style="height:3px;line-height:3px;font-size:0;background-color:{primary};">&nbsp;</td></tr>
 </table>
 
 <!-- Body -->
