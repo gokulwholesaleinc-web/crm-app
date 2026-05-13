@@ -3,6 +3,7 @@
 from fastapi import APIRouter, HTTPException, Query
 
 from src.core.constants import HTTPStatus
+from src.core.entity_links import fill_entity_labels
 from src.core.router_utils import CurrentUser, DBSession, calculate_pages
 from src.notifications.schemas import (
     NotificationListResponse,
@@ -30,8 +31,28 @@ async def list_notifications(
         page_size=page_size,
         unread_only=unread_only,
     )
+
+    # Resolve (entity_type, entity_id) → label + link in one batched pass
+    # so the bell can render an EntityLink chip without each row firing
+    # its own fetch. Unroutable rows get None for both fields.
+    rows = [
+        {"entity_type": n.entity_type, "entity_id": n.entity_id}
+        for n in items
+    ]
+    await fill_entity_labels(db, rows)
+
+    response_items = []
+    for notif, enriched in zip(items, rows, strict=True):
+        response_items.append(
+            NotificationResponse.model_validate(notif).model_copy(
+                update={
+                    "entity_label": enriched["entity_label"],
+                    "entity_link": enriched["entity_link"],
+                }
+            )
+        )
     return NotificationListResponse(
-        items=[NotificationResponse.model_validate(n) for n in items],
+        items=response_items,
         total=total,
         page=page,
         page_size=page_size,
