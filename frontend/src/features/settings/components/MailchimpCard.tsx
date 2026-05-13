@@ -27,6 +27,7 @@ import {
   getMailchimpStatus,
   listMailchimpAudiences,
   setMailchimpAudience,
+  setMailchimpBlockedAudiences,
 } from '../../../api/integrations';
 import { usePermissions } from '../../../hooks/usePermissions';
 
@@ -108,6 +109,7 @@ function ConnectForm({ onConnected }: { onConnected: () => void }) {
 
 function AudiencePicker({ status }: { status: MailchimpStatus }) {
   const queryClient = useQueryClient();
+  const [showBlockedManager, setShowBlockedManager] = useState(false);
   const { data: audiences, isLoading } = useQuery<MailchimpAudience[]>({
     queryKey: ['integrations', 'mailchimp', 'audiences'],
     queryFn: listMailchimpAudiences,
@@ -121,6 +123,15 @@ function AudiencePicker({ status }: { status: MailchimpStatus }) {
       showSuccess('Default audience updated');
     },
     onError: () => showError('Could not update audience'),
+  });
+
+  const blockMutation = useMutation({
+    mutationFn: setMailchimpBlockedAudiences,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['integrations', 'mailchimp', 'status'] });
+      showSuccess('Blocklist updated');
+    },
+    onError: () => showError('Could not update blocklist'),
   });
 
   if (isLoading) {
@@ -139,20 +150,45 @@ function AudiencePicker({ status }: { status: MailchimpStatus }) {
     );
   }
 
+  const blockedSet = new Set(status.blocked_audience_ids ?? []);
+  const defaultIsBlocked =
+    status.default_audience_id != null &&
+    blockedSet.has(status.default_audience_id);
+
+  const toggleBlocked = (audienceId: string) => {
+    const next = new Set(blockedSet);
+    if (next.has(audienceId)) {
+      next.delete(audienceId);
+    } else {
+      next.add(audienceId);
+    }
+    blockMutation.mutate([...next]);
+  };
+
   return (
-    <div className="mt-2 flex flex-col gap-1.5">
+    <div className="mt-2 flex flex-col gap-2">
       <label
         htmlFor="mailchimp-audience"
         className="block text-xs font-medium text-gray-700 dark:text-gray-300"
       >
         Default audience
       </label>
+      {defaultIsBlocked && (
+        <p
+          role="alert"
+          className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-2.5 py-1.5 text-xs text-amber-700 dark:text-amber-300"
+        >
+          Heads up: the current default audience is blocked. Campaigns will
+          still send to it until you pick a different default. Either unblock
+          it below or pick a new default first.
+        </p>
+      )}
       <select
         id="mailchimp-audience"
         value={status.default_audience_id ?? ''}
         onChange={(e) => {
           const next = e.target.value;
-          if (next) setMutation.mutate(next);
+          if (next && !blockedSet.has(next)) setMutation.mutate(next);
         }}
         className="block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2.5 py-1.5 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
       >
@@ -160,11 +196,71 @@ function AudiencePicker({ status }: { status: MailchimpStatus }) {
           Select an audience&hellip;
         </option>
         {audiences.map((a) => (
-          <option key={a.id} value={a.id}>
+          <option
+            key={a.id}
+            value={a.id}
+            disabled={blockedSet.has(a.id)}
+          >
+            {blockedSet.has(a.id) ? '🚫 ' : ''}
             {a.name} ({a.member_count.toLocaleString()})
+            {blockedSet.has(a.id) ? ' — blocked' : ''}
           </option>
         ))}
       </select>
+
+      <button
+        type="button"
+        onClick={() => setShowBlockedManager((v) => !v)}
+        className="self-start text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 rounded"
+      >
+        {showBlockedManager ? 'Hide blocklist' : 'Manage blocked audiences'}
+        {blockedSet.size > 0 && (
+          <span className="ml-1 text-gray-500 dark:text-gray-400">
+            ({blockedSet.size} blocked)
+          </span>
+        )}
+      </button>
+
+      {showBlockedManager && (
+        <div className="rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-3">
+          <p className="mb-2 text-xs text-gray-600 dark:text-gray-400">
+            Audiences marked blocked are disabled in the dropdown so the
+            CRM can't accidentally point at them. The send path still
+            relies on per-send segment scoping for the actual safety guarantee.
+          </p>
+          <ul className="space-y-1">
+            {audiences.map((a) => {
+              const isBlocked = blockedSet.has(a.id);
+              return (
+                <li key={a.id} className="flex items-center gap-2">
+                  <input
+                    id={`block-${a.id}`}
+                    type="checkbox"
+                    checked={isBlocked}
+                    onChange={() => toggleBlocked(a.id)}
+                    disabled={blockMutation.isPending}
+                    className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <label
+                    htmlFor={`block-${a.id}`}
+                    className="text-xs text-gray-700 dark:text-gray-300 select-none"
+                  >
+                    {a.name}{' '}
+                    <span className="text-gray-500 dark:text-gray-400">
+                      ({a.member_count.toLocaleString()})
+                    </span>
+                    {isBlocked && (
+                      <span className="ml-1 font-medium text-red-600 dark:text-red-400">
+                        blocked
+                      </span>
+                    )}
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

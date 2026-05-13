@@ -10,6 +10,7 @@ from sqlalchemy import (
     Text,
     func,
 )
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.database import Base
@@ -37,6 +38,14 @@ class MailchimpConnection(Base):
 
     default_audience_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     default_audience_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # Audience ids that admins have marked off-limits for CRM sends. The
+    # frontend audience picker filters these out; the send path does NOT
+    # currently hard-reject (UI-only block). Defense-in-depth on top of
+    # the per-send static-segment scoping shipped in PR #320.
+    blocked_audience_ids: Mapped[list[str]] = mapped_column(
+        ARRAY(String(64)), nullable=False, server_default="{}"
+    )
 
     account_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     account_login_id: Mapped[str | None] = mapped_column(String(255), nullable=True)

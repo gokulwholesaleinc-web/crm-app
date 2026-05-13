@@ -178,6 +178,21 @@ class MailchimpService:
         await self.db.refresh(conn)
         return conn
 
+    async def set_blocked_audiences(
+        self, tenant_id: int, blocked_audience_ids: list[str]
+    ) -> MailchimpConnection:
+        """Replace the per-connection blocklist with ``blocked_audience_ids``.
+
+        De-duplicates and strips empty strings so a slightly-sloppy
+        admin payload doesn't end up with `["", ""]` rows.
+        """
+        conn = await self.require_connection(tenant_id)
+        cleaned = sorted({a.strip() for a in blocked_audience_ids if a and a.strip()})
+        conn.blocked_audience_ids = cleaned
+        await self.db.flush()
+        await self.db.refresh(conn)
+        return conn
+
     # --- Campaign send -------------------------------------------
 
     async def _resolve_member_emails(

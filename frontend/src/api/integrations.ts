@@ -152,6 +152,7 @@ export interface MailchimpStatus {
   account_login_id: string | null;
   default_audience_id: string | null;
   default_audience_name: string | null;
+  blocked_audience_ids: string[];
   connected_at: string | null;
 }
 
@@ -204,6 +205,16 @@ export const setMailchimpAudience = async (audienceId: string): Promise<Mailchim
   const response = await apiClient.post<MailchimpStatus>(
     '/api/integrations/mailchimp/audiences/select',
     { audience_id: audienceId },
+  );
+  return response.data;
+};
+
+export const setMailchimpBlockedAudiences = async (
+  blockedAudienceIds: string[],
+): Promise<MailchimpStatus> => {
+  const response = await apiClient.put<MailchimpStatus>(
+    '/api/integrations/mailchimp/audiences/blocked',
+    { blocked_audience_ids: blockedAudienceIds },
   );
   return response.data;
 };
