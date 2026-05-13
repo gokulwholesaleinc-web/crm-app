@@ -435,13 +435,21 @@ def _base_email_html(
         # and then strips to ``""``, which would emit an empty
         # ``<span>`` and collapse the header. Re-check the stripped
         # value before splitting and fall through to "CRM" if empty.
-        raw_company = (branding.get("company_name") or "CRM").strip() or "CRM"
+        # The ``: str`` annotation widens the LiteralString that
+        # pyright otherwise infers (both ``or "CRM"`` branches are
+        # literals) so .split() returns ``list[str]`` instead of
+        # ``list[LiteralString]`` and downstream type-checks pass.
+        raw_company: str = (branding.get("company_name") or "CRM").strip() or "CRM"
         font_stack = (
             "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;"
             "font-size:28px;font-weight:800;letter-spacing:0.5px;"
             "text-transform:uppercase;"
         )
-        parts = raw_company.split(maxsplit=1)
+        # ``list[str]`` annotation + ``list(...)`` constructor are
+        # both required to widen the LiteralString that pyright still
+        # carries through ``.split()`` even after raw_company is
+        # widened to str.
+        parts: list[str] = list(raw_company.split(maxsplit=1))
         if len(parts) == 2:
             first, rest = parts
             logo_block = (
