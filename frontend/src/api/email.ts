@@ -44,6 +44,8 @@ export interface EmailQueueItem {
   body: string;
   status: string;
   attempts: number;
+  retry_count: number;
+  next_retry_at: string | null;
   error: string | null;
   created_at: string;
   sent_at: string | null;

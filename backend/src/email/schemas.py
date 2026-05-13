@@ -132,6 +132,8 @@ class EmailQueueResponse(BaseModel):
     bcc: str | None = None
     status: str
     attempts: int
+    retry_count: int = 0
+    next_retry_at: datetime | None = None
     error: str | None = None
     created_at: datetime
     sent_at: datetime | None = None

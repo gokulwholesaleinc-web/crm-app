@@ -270,7 +270,7 @@ class TestSendQuoteEmail:
         assert quote_with_contact.sent_at is not None
 
     @pytest.mark.asyncio
-    async def test_cannot_send_already_sent_quote(
+    async def test_resending_a_sent_quote_is_allowed(
         self,
         client: AsyncClient,
         db_session: AsyncSession,
@@ -278,11 +278,55 @@ class TestSendQuoteEmail:
         test_user: User,
         test_contact: Contact,
     ):
-        """Test that sending an already-sent quote returns 400."""
+        """Resending an already-sent quote is allowed (the "Resend Quote"
+        button). The PATCH widens valid_send_statuses to include sent/viewed
+        — accepted/rejected/expired stay blocked.
+        """
+        from datetime import UTC, datetime, timedelta
+
+        original_sent = datetime.now(UTC) - timedelta(days=3)
         quote = Quote(
             quote_number="QT-2026-SENT-001",
             title="Already Sent",
             status="sent",
+            sent_at=original_sent,
+            currency="USD",
+            contact_id=test_contact.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(quote)
+        await db_session.commit()
+        await db_session.refresh(quote)
+
+        response = await client.post(
+            f"/api/quotes/{quote.id}/send",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        # Original send timestamp is preserved across resends — audit answer
+        # to "when did we first email this customer?" must not silently drift.
+        await db_session.refresh(quote)
+        assert (
+            quote.sent_at.replace(tzinfo=None)
+            == original_sent.replace(tzinfo=None)
+        )
+
+    @pytest.mark.asyncio
+    async def test_cannot_send_an_accepted_quote(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        test_contact: Contact,
+    ):
+        """Terminal statuses (accepted/rejected/expired) still block send."""
+        quote = Quote(
+            quote_number="QT-2026-ACCEPTED-001",
+            title="Already Accepted",
+            status="accepted",
             currency="USD",
             contact_id=test_contact.id,
             owner_id=test_user.id,
