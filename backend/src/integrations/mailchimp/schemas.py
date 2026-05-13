@@ -57,6 +57,29 @@ class MailchimpBlockedAudiencesRequest(BaseModel):
         return v
 
 
+class MailchimpAudienceMember(BaseModel):
+    """One row in the audience viewer — enriched with CRM cross-refs."""
+
+    email: str
+    full_name: str | None = None
+    # subscribed | unsubscribed | cleaned | pending | transactional
+    mailchimp_status: str
+    crm_contact_id: int | None = None
+    crm_lead_id: int | None = None
+    # True when the audience member doesn't match any CRM contact or lead.
+    # After ops swaps to the empty CRM-Managed audience, drift should
+    # be ~0; anything > 0 is worth investigating.
+    drift: bool = False
+    last_emailed_at: datetime | None = None
+
+
+class MailchimpAudienceMembersResponse(BaseModel):
+    items: list[MailchimpAudienceMember]
+    total: int
+    page: int
+    page_size: int
+
+
 class MailchimpStatsResponse(BaseModel):
     campaign_id: int
     mailchimp_campaign_id: str

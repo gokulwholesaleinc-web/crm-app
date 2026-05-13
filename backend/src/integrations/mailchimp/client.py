@@ -165,6 +165,31 @@ class MailchimpClient:
             "GET", f"/lists/{list_id}/members/{subscriber_hash(email)}"
         )
 
+    async def list_members(
+        self,
+        list_id: str,
+        *,
+        count: int = 50,
+        offset: int = 0,
+        status: str | None = None,
+    ) -> dict[str, Any]:
+        """Paginated list of audience members.
+
+        Mailchimp's max ``count`` per call is 1000. Callers paginate
+        explicitly so the UI gets a tight window per request.
+
+        Returns the raw Mailchimp shape:
+        ``{members: [...], total_items: int, list_id: str}``.
+        """
+        params: dict[str, Any] = {"count": count, "offset": offset}
+        if status:
+            params["status"] = status
+        return await self._request(
+            "GET",
+            f"/lists/{list_id}/members",
+            params=params,
+        )
+
     # --- Campaigns ------------------------------------------------
 
     async def create_static_segment(

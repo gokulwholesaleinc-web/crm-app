@@ -26,7 +26,7 @@ import secrets
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.campaigns.models import Campaign, CampaignMember, EmailTemplate
@@ -192,6 +192,114 @@ class MailchimpService:
         await self.db.flush()
         await self.db.refresh(conn)
         return conn
+
+    async def list_audience_members(
+        self,
+        tenant_id: int,
+        *,
+        page: int = 1,
+        page_size: int = 50,
+        status: str | None = None,
+    ) -> dict:
+        """Fetch a page of audience members, enriched with CRM cross-refs.
+
+        For each Mailchimp member we look up:
+        - whether the email matches an active CRM contact or lead (case-
+          insensitive on the local-part-and-domain)
+        - the latest sent_at across email_queue + campaign_members for
+          that email (so the UI can show "last emailed N days ago")
+
+        ``drift`` is True when the audience member matches neither a
+        contact nor a lead — useful as a health check post audience-swap.
+        """
+        from src.contacts.models import Contact
+        from src.email.models import EmailQueue
+        from src.leads.models import Lead
+
+        conn = await self.require_connection(tenant_id)
+        if not conn.default_audience_id:
+            raise ValueError("No default audience selected on this connection")
+
+        page = max(1, page)
+        page_size = max(1, min(page_size, 200))
+        offset = (page - 1) * page_size
+
+        async with await self._client(conn) as mc:
+            payload = await mc.list_members(
+                conn.default_audience_id,
+                count=page_size,
+                offset=offset,
+                status=status,
+            )
+        raw_members: list[dict] = payload.get("members") or []
+        total: int = int(payload.get("total_items") or 0)
+
+        # Build a single lookup keyed by lowercased email so we don't
+        # re-query the CRM N times. Limit the IN clause to the page we
+        # actually rendered.
+        emails_lower = sorted({
+            (m.get("email_address") or "").strip().lower()
+            for m in raw_members
+            if m.get("email_address")
+        })
+        contacts_by_email: dict[str, Contact] = {}
+        leads_by_email: dict[str, Lead] = {}
+        last_emailed_by_email: dict[str, datetime] = {}
+        if emails_lower:
+            c_rows = (await self.db.execute(
+                select(Contact).where(func.lower(Contact.email).in_(emails_lower))
+            )).scalars().all()
+            for c in c_rows:
+                if c.email:
+                    contacts_by_email[c.email.strip().lower()] = c
+
+            l_rows = (await self.db.execute(
+                select(Lead).where(func.lower(Lead.email).in_(emails_lower))
+            )).scalars().all()
+            for l_ in l_rows:
+                if l_.email:
+                    leads_by_email[l_.email.strip().lower()] = l_
+
+            # Most-recent send timestamp per email across the queue.
+            sent_rows = (await self.db.execute(
+                select(
+                    func.lower(EmailQueue.to_email).label("email"),
+                    func.max(EmailQueue.sent_at).label("last_sent"),
+                ).where(
+                    func.lower(EmailQueue.to_email).in_(emails_lower),
+                    EmailQueue.sent_at.isnot(None),
+                ).group_by(func.lower(EmailQueue.to_email))
+            )).all()
+            for row in sent_rows:
+                if row.email and row.last_sent:
+                    last_emailed_by_email[row.email] = row.last_sent
+
+        items: list[dict] = []
+        for m in raw_members:
+            email = (m.get("email_address") or "").strip()
+            key = email.lower()
+            merge = m.get("merge_fields") or {}
+            first = (merge.get("FNAME") or "").strip()
+            last = (merge.get("LNAME") or "").strip()
+            full_name = f"{first} {last}".strip() or None
+            contact = contacts_by_email.get(key)
+            lead = leads_by_email.get(key)
+            items.append({
+                "email": email,
+                "full_name": full_name,
+                "mailchimp_status": m.get("status") or "unknown",
+                "crm_contact_id": contact.id if contact else None,
+                "crm_lead_id": lead.id if lead else None,
+                "drift": contact is None and lead is None,
+                "last_emailed_at": last_emailed_by_email.get(key),
+            })
+
+        return {
+            "items": items,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        }
 
     # --- Campaign send -------------------------------------------
 
