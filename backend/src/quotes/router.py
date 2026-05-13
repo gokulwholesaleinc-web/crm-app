@@ -405,17 +405,24 @@ async def send_quote(
     service = QuoteService(db)
     quote = await get_entity_or_404(service, quote_id, EntityNames.QUOTE)
     check_ownership(quote, current_user, EntityNames.QUOTE)
+    # Capture pre-send status so QUOTE_SENT only fires on the FIRST
+    # transition out of draft. Resends from sent/viewed are now legal
+    # ("Resend Quote") — re-emitting on every click would spam owner
+    # notifications and re-fire every subscribed webhook, since the
+    # event handlers don't dedup by entity.
+    previous_status = quote.status
     try:
         quote = await service.send_quote_email(quote_id, current_user.id, attach_pdf=attach_pdf)
     except ValueError as e:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e)) from e
 
-    await emit(QUOTE_SENT, {
-        "entity_id": quote.id,
-        "entity_type": "quote",
-        "user_id": current_user.id,
-        "data": {"quote_number": quote.quote_number, "status": quote.status},
-    })
+    if previous_status == "draft":
+        await emit(QUOTE_SENT, {
+            "entity_id": quote.id,
+            "entity_type": "quote",
+            "user_id": current_user.id,
+            "data": {"quote_number": quote.quote_number, "status": quote.status},
+        })
 
     return QuoteResponse.model_validate(quote)
 

@@ -14,6 +14,7 @@ import {
   ArrowDownTrayIcon,
 } from '@heroicons/react/24/outline';
 import { Button, HelpLink, Modal, ConfirmDialog, StatusBadge } from '../../components/ui';
+import { EmailHistory } from '../../components/email/EmailHistory';
 import { EntitySharing } from '../../components/shared/EntitySharing';
 import { useAuthStore } from '../../store/authStore';
 import {
@@ -612,6 +613,14 @@ function QuoteDetailPage() {
               <p className="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap">{quote.notes}</p>
             </div>
           )}
+
+          {/* Email Activity — surfaces queue status (sent/retry/failed)
+              so users can self-diagnose deliverability without a DB
+              query. Mirrors the LeadDetailPage panel. */}
+          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-transparent dark:border-gray-700">
+            <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">Email Activity</h2>
+            <EmailHistory entityType="quotes" entityId={quote.id} />
+          </div>
 
           {/* Sharing */}
           <EntitySharing

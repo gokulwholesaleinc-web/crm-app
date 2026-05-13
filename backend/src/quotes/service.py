@@ -72,6 +72,11 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
     model = Quote
     create_exclude_fields = {"line_items"}
     update_exclude_fields = set()
+    # Resends are intentional — a quote already in sent/viewed can be
+    # re-emailed (reminder, fixed recipient typo, etc.). The default
+    # ["draft"] from the mixin would 400 every "Resend Quote" click.
+    # accepted/rejected/expired stay locked.
+    valid_send_statuses = ["draft", "sent", "viewed"]
 
     def _get_eager_load_options(self):
         return [
@@ -378,7 +383,13 @@ class QuoteService(StatusTransitionMixin, CRUDService[Quote, QuoteCreate, QuoteU
         )
 
         quote.status = "sent"
-        quote.sent_at = datetime.now(UTC)
+        # Preserve the original send timestamp across resends. Otherwise
+        # every Resend Quote click rewrites history — audit answers to
+        # "when did we first email this customer?" silently drift to
+        # "just now," and reminder-cadence logic that reads sent_at
+        # treats the quote as freshly issued.
+        if quote.sent_at is None:
+            quote.sent_at = datetime.now(UTC)
         await self.db.flush()
         await self.db.refresh(quote)
 
