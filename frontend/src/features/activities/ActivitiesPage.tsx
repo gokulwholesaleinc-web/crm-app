@@ -17,6 +17,7 @@ import {
   DocumentTextIcon,
 } from '@heroicons/react/24/outline';
 import { Button, EntityLink, normalizeEntityType, Select, Spinner, Modal, ConfirmDialog } from '../../components/ui';
+import { parseLocalDate } from '../../utils/formatters';
 import { ActivityCard } from './components/ActivityCard';
 import { ActivityTimeline } from './components/ActivityTimeline';
 import { ActivityForm } from './components/ActivityForm';
@@ -382,7 +383,7 @@ export function ActivitiesPage() {
                   const isOverdue =
                     !activity.is_completed &&
                     activity.due_date &&
-                    new Date(activity.due_date) < new Date();
+                    parseLocalDate(activity.due_date) < new Date();
                   // Hide Google-sync activities (entity_type === 'users'); they have no CRM target.
                   const showEntity = activity.entity_type && activity.entity_type !== 'users';
                   const entityLinkType = showEntity ? normalizeEntityType(activity.entity_type) : null;
@@ -432,7 +433,7 @@ export function ActivitiesPage() {
                             {activity.due_date ? (
                               <span className={clsx('flex items-center gap-1', isOverdue ? 'text-red-600 dark:text-red-400' : '')}>
                                 <CalendarIcon className="h-3 w-3 flex-shrink-0" aria-hidden="true" />
-                                {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(activity.due_date))}
+                                {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(parseLocalDate(activity.due_date))}
                               </span>
                             ) : activity.scheduled_at ? (
                               <span className="flex items-center gap-1">

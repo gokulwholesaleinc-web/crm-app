@@ -16,6 +16,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { CheckCircleIcon as CheckCircleSolidIcon } from '@heroicons/react/24/solid';
 import type { Activity, TimelineItem } from '../../../types';
+import { parseLocalDate } from '../../../utils/formatters';
 
 type ActivityData = Activity | TimelineItem;
 
@@ -65,7 +66,7 @@ export function ActivityCard({
   const isOverdue =
     !activity.is_completed &&
     activity.due_date &&
-    new Date(activity.due_date) < new Date();
+    parseLocalDate(activity.due_date) < new Date();
 
   const formatDate = (dateString: string | null | undefined) => {
     if (!dateString) return null;

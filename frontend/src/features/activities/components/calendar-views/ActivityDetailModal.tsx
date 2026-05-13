@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { ArrowUpOnSquareIcon } from '@heroicons/react/24/outline';
 import { EntityLink, Modal, normalizeEntityType } from '../../../../components/ui';
+import { parseLocalDate } from '../../../../utils/formatters';
 import type { CalendarActivity } from '../../../../api/activities';
 import { GOOGLE_SYNC_ENTITY_TYPE } from './helpers';
 import clsx from 'clsx';
@@ -59,7 +60,7 @@ export function ActivityDetailModal({
           {activity.due_date && (
             <div>
               <span className="font-medium text-gray-500 dark:text-gray-400">Due Date</span>
-              <p className="text-gray-900 dark:text-gray-100">{DATE_FMT.format(new Date(activity.due_date))}</p>
+              <p className="text-gray-900 dark:text-gray-100">{DATE_FMT.format(parseLocalDate(activity.due_date))}</p>
             </div>
           )}
           {activity.meeting_location && (

@@ -76,6 +76,27 @@ type DateFormat = 'short' | 'long' | 'relative';
  * formatDate('2024-01-15', 'long') // 'January 15, 2024'
  * formatDate(new Date(), 'relative') // 'Today'
  */
+/**
+ * Parse a date string as LOCAL time, not UTC.
+ *
+ * The bare `YYYY-MM-DD` form is spec-defined to parse as UTC midnight
+ * with the default `Date` constructor; `Intl.DateTimeFormat` then
+ * renders in the user's zone, shifting the date by ±1 day west of UTC.
+ * Anchor those bare-date strings to local midnight instead.
+ *
+ * Strings with a time component (full ISO) use the default UTC parse —
+ * that interpretation is already correct.
+ */
+export function parseLocalDate(value: string | Date): Date {
+  if (value instanceof Date) return value;
+  const bareDateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (bareDateMatch) {
+    const [, y, m, d] = bareDateMatch;
+    return new Date(Number(y), Number(m) - 1, Number(d));
+  }
+  return new Date(value);
+}
+
 export function formatDate(
   date: string | Date | null | undefined,
   format: DateFormat = 'short'
@@ -86,9 +107,8 @@ export function formatDate(
 
   let dateObj: Date;
   try {
-    dateObj = typeof date === 'string' ? new Date(date) : date;
+    dateObj = parseLocalDate(date);
 
-    // Check for invalid date
     if (isNaN(dateObj.getTime())) {
       return typeof date === 'string' ? date : '-';
     }
@@ -161,6 +181,47 @@ function formatRelativeDate(date: Date): string {
       year: 'numeric',
     });
   }
+}
+
+/**
+ * Format a date for an `<input type="date">` value (`YYYY-MM-DD` in the
+ * user's local timezone).
+ *
+ * `.toISOString().slice(0, 10)` emits UTC and shifts the displayed date by
+ * ±1 day around midnight in non-UTC zones — re-saving a form would drift
+ * the value every cycle.
+ *
+ * @example
+ * formatDateInputValue('2024-01-15T23:30:00-05:00') // '2024-01-15'
+ */
+export function formatDateInputValue(date: string | null | undefined): string {
+  if (!date) return '';
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return '';
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/**
+ * Format a date for an `<input type="datetime-local">` value
+ * (`YYYY-MM-DDTHH:mm` in the user's local timezone, no Z suffix).
+ *
+ * See {@link formatDateInputValue} for why `.toISOString()` is unsafe here:
+ * the input would re-interpret a UTC string as local and shift the time by
+ * the user's UTC offset on every save→edit cycle.
+ */
+export function formatDateTimeInputValue(date: string | null | undefined): string {
+  if (!date) return '';
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return '';
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
 }
 
 /**

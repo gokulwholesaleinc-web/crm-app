@@ -11,6 +11,7 @@ import { FormTextarea } from '../../../components/forms';
 import { useFormSubmitShortcut } from '../../../hooks/useSubmitShortcut';
 import { useUnsavedChangesWarning } from '../../../hooks/useUnsavedChangesWarning';
 import type { Activity, ActivityCreate, ActivityUpdate } from '../../../types';
+import { formatDateInputValue, formatDateTimeInputValue } from '../../../utils/formatters';
 
 interface ActivityFormProps {
   activity?: Activity;
@@ -67,26 +68,6 @@ const callOutcomeOptions = [
   { value: 'busy', label: 'Busy' },
 ];
 
-function formatDateTimeLocal(date: string | null | undefined): string {
-  if (!date) return '';
-  try {
-    const d = new Date(date);
-    return d.toISOString().slice(0, 16);
-  } catch {
-    return '';
-  }
-}
-
-function formatDateLocal(date: string | null | undefined): string {
-  if (!date) return '';
-  try {
-    const d = new Date(date);
-    return d.toISOString().slice(0, 10);
-  } catch {
-    return '';
-  }
-}
-
 export function ActivityForm({
   activity,
   entityType,
@@ -113,8 +94,8 @@ export function ActivityForm({
       activity_type: activity?.activity_type || 'task',
       subject: activity?.subject || '',
       description: activity?.description || '',
-      scheduled_at: formatDateTimeLocal(activity?.scheduled_at),
-      due_date: formatDateLocal(activity?.due_date),
+      scheduled_at: formatDateTimeInputValue(activity?.scheduled_at),
+      due_date: formatDateInputValue(activity?.due_date),
       priority: activity?.priority || 'normal',
       call_duration_minutes: activity?.call_duration_minutes?.toString() || '',
       call_outcome: activity?.call_outcome || '',
@@ -122,7 +103,7 @@ export function ActivityForm({
       email_cc: activity?.email_cc || '',
       meeting_location: activity?.meeting_location || '',
       meeting_attendees: activity?.meeting_attendees || '',
-      task_reminder_at: formatDateTimeLocal(activity?.task_reminder_at),
+      task_reminder_at: formatDateTimeInputValue(activity?.task_reminder_at),
     },
   });
 
@@ -153,8 +134,8 @@ export function ActivityForm({
         activity_type: activity.activity_type,
         subject: activity.subject,
         description: activity.description || '',
-        scheduled_at: formatDateTimeLocal(activity.scheduled_at),
-        due_date: formatDateLocal(activity.due_date),
+        scheduled_at: formatDateTimeInputValue(activity.scheduled_at),
+        due_date: formatDateInputValue(activity.due_date),
         priority: activity.priority,
         call_duration_minutes: activity.call_duration_minutes?.toString() || '',
         call_outcome: activity.call_outcome || '',
@@ -162,7 +143,7 @@ export function ActivityForm({
         email_cc: activity.email_cc || '',
         meeting_location: activity.meeting_location || '',
         meeting_attendees: activity.meeting_attendees || '',
-        task_reminder_at: formatDateTimeLocal(activity.task_reminder_at),
+        task_reminder_at: formatDateTimeInputValue(activity.task_reminder_at),
       });
     }
   }, [activity, reset]);
