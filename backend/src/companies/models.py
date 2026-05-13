@@ -76,10 +76,20 @@ class Company(Base, AuditableMixin):
     )
 
     # Relationships
+    #
+    # passive_deletes=True parallels the fix on Campaign.members — same root
+    # cause: a `lazy="dynamic"` relationship without passive_deletes triggers
+    # a mid-flush lazy load when the parent is deleted, which the AsyncSession
+    # can't service (no greenlet) and the request 500s. The companies router
+    # currently guards this with a contact_count > 0 pre-check, so direct UI
+    # deletes don't 500, but any other call path that invokes
+    # ``service.delete(company)`` would. The Contact.company_id FK is
+    # ondelete=SET NULL at the DB level, so Postgres handles the nulling.
     contacts: Mapped[list["Contact"]] = relationship(
         "Contact",
         back_populates="company",
         lazy="dynamic",
+        passive_deletes=True,
     )
 
     __table_args__ = (

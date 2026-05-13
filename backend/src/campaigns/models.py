@@ -75,10 +75,19 @@ class Campaign(Base, AuditableMixin):
     )
 
     # Relationships
+    #
+    # passive_deletes=True is REQUIRED here: campaign_members.campaign_id has
+    # ondelete=CASCADE at the DB level, so Postgres removes the rows for us.
+    # Without passive_deletes the ORM tries to load the dynamic collection
+    # during db.delete(campaign), but an AsyncSession can't perform a lazy
+    # load mid-flush (no greenlet available) — the request 500s.
+    # Symptom before this fix: DELETE /api/campaigns/{id} returned 500
+    # for any campaign that had members. See incident 2026-05-13.
     members: Mapped[list["CampaignMember"]] = relationship(
         "CampaignMember",
         back_populates="campaign",
         lazy="dynamic",
+        passive_deletes=True,
     )
 
     @property
