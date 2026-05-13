@@ -652,6 +652,487 @@ class TestMoveLeadStage:
         )
         assert response.status_code == 404
 
+    @pytest.mark.asyncio
+    async def test_move_lead_to_won_with_contact_already_linked_creates_opportunity(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        lead_pipeline_stages: list[PipelineStage],
+    ):
+        """Partial-conversion recovery: lead already has a converted_contact_id
+        but no opportunity. Re-dropping onto Won must create the opportunity
+        instead of silently skipping (previous guard required BOTH fields
+        to be null).
+        """
+        from src.contacts.models import Contact
+        from src.opportunities.models import Opportunity
+        from src.opportunities.models import PipelineStage as OppStage
+
+        new_stage = lead_pipeline_stages[0]
+        won_stage = lead_pipeline_stages[3]
+
+        opp_stage = OppStage(
+            name="Opp Discovery",
+            order=1,
+            color="#6366f1",
+            probability=20,
+            is_won=False,
+            is_lost=False,
+            is_active=True,
+            pipeline_type="opportunity",
+        )
+        db_session.add(opp_stage)
+
+        existing = Contact(
+            first_name="Already",
+            last_name="Converted",
+            email="already.converted@example.com",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(existing)
+        await db_session.commit()
+        await db_session.refresh(existing)
+
+        lead = Lead(
+            first_name="Stuck",
+            last_name="Lead",
+            email="already.converted@example.com",
+            status="qualified",
+            pipeline_stage_id=new_stage.id,
+            converted_contact_id=existing.id,
+            converted_opportunity_id=None,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(lead)
+        await db_session.commit()
+        await db_session.refresh(lead)
+
+        response = await client.post(
+            f"/api/leads/{lead.id}/move",
+            headers=auth_headers,
+            json={"new_stage_id": won_stage.id},
+        )
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert data["status"] == "converted"
+        assert data.get("conversion", {}).get("converted") is True
+        assert data["conversion"]["opportunity_id"] is not None
+        assert data["conversion"]["contact_id"] == existing.id
+
+        await db_session.refresh(lead)
+        assert lead.converted_opportunity_id is not None
+        opp = await db_session.get(Opportunity, lead.converted_opportunity_id)
+        assert opp is not None
+        assert opp.contact_id == existing.id
+
+
+class TestPatchLeadStageChange:
+    """PATCH /api/leads/{id} stage changes must mirror POST /move side
+    effects — status sync + auto-convert. Regression coverage for the
+    lead-detail edit form path that previously bypassed both.
+    """
+
+    @pytest.mark.asyncio
+    async def test_patch_lead_to_won_syncs_status_and_creates_opportunity(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        lead_pipeline_stages: list[PipelineStage],
+    ):
+        """PATCH that flips pipeline_stage_id to a Won stage must sync
+        status to 'converted' and spawn a Contact + Opportunity, just
+        like dragging on the kanban board does."""
+        from src.opportunities.models import Opportunity
+        from src.opportunities.models import PipelineStage as OppStage
+
+        new_stage = lead_pipeline_stages[0]
+        won_stage = lead_pipeline_stages[3]
+
+        opp_stage = OppStage(
+            name="Opp Discovery",
+            order=1,
+            color="#6366f1",
+            probability=20,
+            is_won=False,
+            is_lost=False,
+            is_active=True,
+            pipeline_type="opportunity",
+        )
+        db_session.add(opp_stage)
+        await db_session.commit()
+
+        lead = Lead(
+            first_name="Patch",
+            last_name="ToWon",
+            email="patch.towon@example.com",
+            status="qualified",
+            pipeline_stage_id=new_stage.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(lead)
+        await db_session.commit()
+        await db_session.refresh(lead)
+
+        response = await client.patch(
+            f"/api/leads/{lead.id}",
+            headers=auth_headers,
+            json={"pipeline_stage_id": won_stage.id},
+        )
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert data["pipeline_stage_id"] == won_stage.id
+        assert data["status"] == "converted"
+        assert data.get("conversion", {}).get("converted") is True
+        assert data["conversion"]["opportunity_id"] is not None
+
+        await db_session.refresh(lead)
+        assert lead.converted_contact_id is not None
+        assert lead.converted_opportunity_id is not None
+        opp = await db_session.get(Opportunity, lead.converted_opportunity_id)
+        assert opp is not None
+
+    @pytest.mark.asyncio
+    async def test_patch_lead_non_stage_fields_does_not_trigger_conversion(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        lead_pipeline_stages: list[PipelineStage],
+    ):
+        """PATCH that doesn't touch pipeline_stage_id must not fire
+        conversion, even when the lead is already sitting on a Won stage.
+        Otherwise editing a typo on a Won-stage lead would re-trigger."""
+        won_stage = lead_pipeline_stages[3]
+
+        lead = Lead(
+            first_name="Edit",
+            last_name="Only",
+            email="edit.only@example.com",
+            status="converted",
+            pipeline_stage_id=won_stage.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(lead)
+        await db_session.commit()
+        await db_session.refresh(lead)
+
+        response = await client.patch(
+            f"/api/leads/{lead.id}",
+            headers=auth_headers,
+            json={"phone": "+15555550100"},
+        )
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert "conversion" not in data
+        assert data["phone"] == "+15555550100"
+
+    @pytest.mark.asyncio
+    async def test_patch_lead_to_same_stage_does_not_re_trigger_conversion(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        lead_pipeline_stages: list[PipelineStage],
+    ):
+        """PATCH with pipeline_stage_id equal to current value is a no-op
+        for stage-change side effects. Avoids re-running auto-convert
+        when the form just re-submits unchanged values."""
+        won_stage = lead_pipeline_stages[3]
+
+        lead = Lead(
+            first_name="Same",
+            last_name="Stage",
+            email="same.stage@example.com",
+            status="converted",
+            pipeline_stage_id=won_stage.id,
+            converted_contact_id=None,
+            converted_opportunity_id=None,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(lead)
+        await db_session.commit()
+        await db_session.refresh(lead)
+
+        response = await client.patch(
+            f"/api/leads/{lead.id}",
+            headers=auth_headers,
+            json={"pipeline_stage_id": won_stage.id},
+        )
+        assert response.status_code == 200, response.text
+        data = response.json()
+        # No stage change → no conversion side-effect block in response.
+        assert "conversion" not in data
+
+    @pytest.mark.asyncio
+    async def test_patch_lead_to_nonexistent_stage_returns_404(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        lead_pipeline_stages: list[PipelineStage],
+    ):
+        """PATCH validates the new stage the same way /move does."""
+        new_stage = lead_pipeline_stages[0]
+
+        lead = Lead(
+            first_name="Bad",
+            last_name="Patch",
+            email="bad.patch@example.com",
+            status="new",
+            pipeline_stage_id=new_stage.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(lead)
+        await db_session.commit()
+        await db_session.refresh(lead)
+
+        response = await client.patch(
+            f"/api/leads/{lead.id}",
+            headers=auth_headers,
+            json={"pipeline_stage_id": 99999},
+        )
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_patch_lead_to_opportunity_stage_returns_400(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        lead_pipeline_stages: list[PipelineStage],
+        opp_pipeline_stage: PipelineStage,
+    ):
+        """PATCH rejects setting an opportunity-type stage on a lead."""
+        new_stage = lead_pipeline_stages[0]
+
+        lead = Lead(
+            first_name="Wrong",
+            last_name="Pipeline",
+            email="wrong.pipeline@example.com",
+            status="new",
+            pipeline_stage_id=new_stage.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(lead)
+        await db_session.commit()
+        await db_session.refresh(lead)
+
+        response = await client.patch(
+            f"/api/leads/{lead.id}",
+            headers=auth_headers,
+            json={"pipeline_stage_id": opp_pipeline_stage.id},
+        )
+        assert response.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_patch_lead_to_won_without_opportunity_stage_returns_409(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        lead_pipeline_stages: list[PipelineStage],
+    ):
+        """Operator misconfig: no active opportunity-type stage exists,
+        so auto-convert can't pick a landing stage. The helper raises
+        409 BEFORE flushing status='converted', so the lead is not left
+        stranded at Won with no opportunity (the exact lead-1597 shape).
+        """
+        new_stage = lead_pipeline_stages[0]
+        won_stage = lead_pipeline_stages[3]
+
+        lead = Lead(
+            first_name="No",
+            last_name="OppStage",
+            email="no.oppstage@example.com",
+            status="qualified",
+            pipeline_stage_id=new_stage.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(lead)
+        await db_session.commit()
+        await db_session.refresh(lead)
+
+        response = await client.patch(
+            f"/api/leads/{lead.id}",
+            headers=auth_headers,
+            json={"pipeline_stage_id": won_stage.id},
+        )
+        assert response.status_code == 409, response.text
+
+        # Lead state must be untouched — the 409 means we never reached
+        # the status flush. Drag-to-Won should not silently land at
+        # status='converted' with no opportunity.
+        await db_session.refresh(lead)
+        assert lead.status == "qualified"
+        assert lead.pipeline_stage_id == new_stage.id
+        assert lead.converted_opportunity_id is None
+
+    @pytest.mark.asyncio
+    async def test_patch_lead_to_won_with_soft_deleted_contact_skips_conversion(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        lead_pipeline_stages: list[PipelineStage],
+    ):
+        """Stale converted_contact_id (soft-deleted contact) must not
+        re-enter full_conversion — the alias-match path filters
+        deleted_at IS NULL and would then try to INSERT a fresh contact
+        with the same email, colliding with the unconditional
+        ix_contacts_unique_email. Helper declines auto-convert; stage
+        change still applies so the user isn't blocked.
+        """
+        from datetime import datetime, timezone
+
+        from src.contacts.models import Contact
+        from src.opportunities.models import PipelineStage as OppStage
+
+        new_stage = lead_pipeline_stages[0]
+        won_stage = lead_pipeline_stages[3]
+
+        opp_stage = OppStage(
+            name="Opp Discovery",
+            order=1,
+            color="#6366f1",
+            probability=20,
+            is_won=False,
+            is_lost=False,
+            is_active=True,
+            pipeline_type="opportunity",
+        )
+        db_session.add(opp_stage)
+
+        gone = Contact(
+            first_name="Soft",
+            last_name="Deleted",
+            email="soft.deleted@example.com",
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+            deleted_at=datetime.now(timezone.utc),
+        )
+        db_session.add(gone)
+        await db_session.commit()
+        await db_session.refresh(gone)
+
+        lead = Lead(
+            first_name="Stranded",
+            last_name="Lead",
+            email="soft.deleted@example.com",
+            status="qualified",
+            pipeline_stage_id=new_stage.id,
+            converted_contact_id=gone.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(lead)
+        await db_session.commit()
+        await db_session.refresh(lead)
+
+        response = await client.patch(
+            f"/api/leads/{lead.id}",
+            headers=auth_headers,
+            json={"pipeline_stage_id": won_stage.id},
+        )
+        assert response.status_code == 200, response.text
+        data = response.json()
+        # Stage change applies; auto-convert silently skipped (decline).
+        assert data["pipeline_stage_id"] == won_stage.id
+        assert data["status"] == "converted"
+        assert "conversion" not in data
+
+        await db_session.refresh(lead)
+        assert lead.converted_opportunity_id is None
+        # Stale FK left as-is — admin can investigate and either
+        # un-delete the contact or clear the column manually.
+        assert lead.converted_contact_id == gone.id
+
+    @pytest.mark.asyncio
+    async def test_patch_lead_to_won_records_status_in_audit_log(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        lead_pipeline_stages: list[PipelineStage],
+    ):
+        """Audit row for a Won-stage PATCH must include the server-derived
+        status flip (qualified → converted), not just the user-submitted
+        pipeline_stage_id. Otherwise consumers tailing audit_logs miss the
+        "lead converted via PATCH" signal.
+        """
+        from src.audit.models import AuditLog
+        from src.opportunities.models import PipelineStage as OppStage
+
+        new_stage = lead_pipeline_stages[0]
+        won_stage = lead_pipeline_stages[3]
+
+        opp_stage = OppStage(
+            name="Opp Discovery",
+            order=1,
+            color="#6366f1",
+            probability=20,
+            is_won=False,
+            is_lost=False,
+            is_active=True,
+            pipeline_type="opportunity",
+        )
+        db_session.add(opp_stage)
+        await db_session.commit()
+
+        lead = Lead(
+            first_name="Audit",
+            last_name="Won",
+            email="audit.won@example.com",
+            status="qualified",
+            pipeline_stage_id=new_stage.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        db_session.add(lead)
+        await db_session.commit()
+        await db_session.refresh(lead)
+
+        response = await client.patch(
+            f"/api/leads/{lead.id}",
+            headers=auth_headers,
+            json={"pipeline_stage_id": won_stage.id},
+        )
+        assert response.status_code == 200, response.text
+
+        audit_rows = (await db_session.execute(
+            select(AuditLog)
+            .where(AuditLog.entity_type == "lead")
+            .where(AuditLog.entity_id == lead.id)
+            .where(AuditLog.action == "update")
+            .order_by(AuditLog.timestamp.desc())
+        )).scalars().all()
+        assert audit_rows, "expected at least one audit row for the PATCH"
+        latest = audit_rows[0]
+        # AuditLog.changes is [{field, old_value, new_value}, ...].
+        changed_fields = {row["field"] for row in (latest.changes or [])}
+        assert "pipeline_stage_id" in changed_fields
+        assert "status" in changed_fields, (
+            f"audit row missing status delta — saw {changed_fields}"
+        )
+
 
 class TestPipelineTypeIsolation:
     """Tests ensuring lead and opportunity pipeline stages are isolated."""
