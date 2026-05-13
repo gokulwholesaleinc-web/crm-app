@@ -505,18 +505,14 @@ class TestCampaignsDelete:
             headers=admin_auth_headers,
         )
 
-        # Primary regression check: the DELETE must not 500 just because
-        # the campaign had members. The `passive_deletes=True` fix tells
-        # SQLAlchemy not to try a forbidden async lazy-load mid-flush.
+        # The actual regression — no 500 on delete-with-members.
         assert response.status_code == 204, response.text
         assert (await db_session.execute(
             select(Campaign).where(Campaign.id == campaign_id)
         )).scalar_one_or_none() is None
-        # CampaignMember rows are cleaned up by Postgres's
-        # ondelete=CASCADE on the FK (models.py:123). SQLite tests run
-        # without `PRAGMA foreign_keys=ON`, so the cascade doesn't fire
-        # in this harness — assert the regression (no 500) instead of
-        # the cascade (which is a DB-engine guarantee on prod).
+        # CampaignMember rows clean up via Postgres ondelete=CASCADE on
+        # CampaignMember.campaign_id; SQLite's test harness runs without
+        # FK enforcement so that's a prod guarantee, not asserted here.
 
     @pytest.mark.asyncio
     async def test_delete_campaign_not_found(

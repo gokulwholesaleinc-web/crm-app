@@ -220,7 +220,7 @@ class TestAutoConversion:
         assert "conversion" not in data or data.get("conversion") is None
 
     @pytest.mark.asyncio
-    async def test_won_move_rejects_when_no_opp_stages(
+    async def test_won_move_to_no_opp_stages_returns_409(
         self,
         client: AsyncClient,
         db_session: AsyncSession,
@@ -229,14 +229,7 @@ class TestAutoConversion:
         lead_stages: list[PipelineStage],
         # Note: NOT using opp_stages fixture - no opportunity stages exist
     ):
-        """Moving to Won without opportunity stages rejects with 409.
-
-        PR #326 replaced the prior silent-skip-then-strand behavior
-        (lead landed at Won with status='converted' but no opportunity
-        row) with a clean 409 pre-flight. Admin must add an opportunity
-        pipeline stage before the Won move is allowed — the original
-        lead 1597 strand-at-Won shape this prevents.
-        """
+        """Moving to Won without opp stages returns 409 + leaves lead untouched."""
         new_stage = lead_stages[0]
         won_stage = lead_stages[3]
 
