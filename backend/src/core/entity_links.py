@@ -29,6 +29,9 @@ ROUTABLE_ENTITY_PLURALS: dict[str, str] = {
     "proposals": "/proposals",
     "contracts": "/contracts",
     "payments": "/payments",
+    # `notify_on_activity_due_soon` writes entity_type="activities" so
+    # the notification bell needs to route those to the activities page.
+    "activities": "/activities",
 }
 
 # Historical singular spellings stored on older rows. Maps to the
@@ -42,6 +45,7 @@ ENTITY_ALIASES: dict[str, str] = {
     "proposal": "proposals",
     "contract": "contracts",
     "payment": "payments",
+    "activity": "activities",
 }
 
 
@@ -124,6 +128,19 @@ async def labels_for(
             select(Contract.id, Contract.title).where(Contract.id.in_(ids))
         )
         return {(entity_type, row[0]): row[1] for row in rows.all()}
+    if entity_type == "activities":
+        from src.activities.models import Activity
+        rows = await db.execute(
+            select(Activity.id, Activity.subject, Activity.activity_type).where(
+                Activity.id.in_(ids)
+            )
+        )
+        # Fall back to the activity_type when no subject is set (notes /
+        # call-only rows often have empty subjects).
+        return {
+            (entity_type, row[0]): row[1] or row[2].capitalize() or f"Activity #{row[0]}"
+            for row in rows.all()
+        }
 
     return {}
 

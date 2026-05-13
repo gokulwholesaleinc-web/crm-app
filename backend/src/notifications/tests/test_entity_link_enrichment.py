@@ -21,7 +21,7 @@ from sqlalchemy.pool import StaticPool
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../../../"))
 
 from src.account.models import UserNotificationPrefs, UserPreferences  # noqa: F401
-from src.activities.models import Activity  # noqa: F401
+from src.activities.models import Activity
 from src.assignment.models import AssignmentRule  # noqa: F401
 from src.attachments.models import Attachment  # noqa: F401
 from src.audit.models import AuditLog  # noqa: F401
@@ -220,6 +220,33 @@ class TestNotificationEntityLinkEnrichment:
         items = resp.json()["items"]
         assert items[0]["entity_label"] is None
         assert items[0]["entity_link"] is None
+
+    async def test_activity_notification_routes_to_activities_page(
+        self, client: AsyncClient, db_session: AsyncSession, user: User, auth_headers: dict,
+    ):
+        # "Activity due" notifications carry entity_type="activities". The
+        # old hand-rolled route map in NotificationBell handled this; verify
+        # the server-side resolver does too (regression caught by trio).
+        activity = Activity(
+            activity_type="task",
+            subject="Follow up with prospect",
+            entity_type="contacts",
+            entity_id=1,
+            owner_id=user.id,
+            created_by_id=user.id,
+        )
+        db_session.add(activity)
+        await db_session.commit()
+        await db_session.refresh(activity)
+
+        await _make_notification(
+            db_session, user, entity_type="activities", entity_id=activity.id,
+        )
+
+        resp = await client.get("/api/notifications", headers=auth_headers)
+        items = resp.json()["items"]
+        assert items[0]["entity_label"] == "Follow up with prospect"
+        assert items[0]["entity_link"] == f"/activities/{activity.id}"
 
     async def test_missing_row_gets_fallback_label(
         self, client: AsyncClient, db_session: AsyncSession, user: User, auth_headers: dict,
