@@ -89,9 +89,49 @@ class TestVisualDefaults:
             "Test",
             "<p>body</p>",
         )
-        assert "Link Creative" in html
+        assert "Link" in html
+        assert "Creative" in html
         # Centered text-align is the visual contract.
         assert "text-align:center" in html
+
+    def test_wordmark_fallback_splits_first_word_in_secondary_color(self):
+        # Two-word company names render with the first word in the
+        # secondary (gold) accent and the rest in the primary (dark) —
+        # approximates the Link Creative split-word wordmark before an
+        # admin uploads a real logo image.
+        html = _base_email_html(
+            _default_branding(
+                company_name="Link Creative",
+                primary_color="#000000",
+                secondary_color="#c5a467",
+            ),
+            "Test",
+            "<p>body</p>",
+        )
+        # Both spans render with the explicit foreground colors.
+        assert 'color:#c5a467;' in html
+        assert '>Link</span>' in html
+        assert 'color:#000000;' in html
+        assert '>Creative</span>' in html
+
+    def test_wordmark_fallback_single_word_stays_primary(self):
+        html = _base_email_html(
+            _default_branding(
+                company_name="Acme",
+                primary_color="#000000",
+                secondary_color="#c5a467",
+            ),
+            "Test",
+            "<p>body</p>",
+        )
+        # No secondary-color span for the wordmark since there's no
+        # first word to split off.
+        assert '>Acme</span>' in html
+        # The accent rule below the header still emits #c5a467; the
+        # wordmark itself must not.
+        wordmark_idx = html.find('>Acme</span>')
+        wordmark_span = html[max(0, wordmark_idx - 200):wordmark_idx]
+        assert '#c5a467' not in wordmark_span
 
     def test_logo_renders_as_image_when_configured(self):
         html = _base_email_html(
@@ -140,6 +180,33 @@ class TestVisualDefaults:
         assert "TWO" in html
         # Exactly one separator span between the two real segments.
         assert html.count('color:#c5a467;font-weight:700;padding:0 6px') == 1
+
+    def test_empty_headline_omits_h1(self):
+        # Notification emails often pass headline="" because the body
+        # already opens with a greeting. Emitting an empty <h1> left a
+        # ~22px gap of whitespace; the new wrapper skips the element
+        # entirely when there's nothing to display.
+        html = _base_email_html(_default_branding(), "", "<p>body</p>")
+        assert '<h1' not in html
+        # The body div still renders normally.
+        assert '<p>body</p>' in html
+
+    def test_whitespace_only_headline_omits_h1(self):
+        html = _base_email_html(_default_branding(), "   \t  ", "<p>body</p>")
+        assert '<h1' not in html
+
+    def test_social_circles_use_white_fill_with_dark_letter(self):
+        # The Link Creative reference shows social icons as white-
+        # filled badges with dark glyphs (not outlined). The render
+        # uses solid #ffffff background + #0a0a0a foreground so the
+        # circles read as badges against the near-black footer.
+        html = _base_email_html(
+            _default_branding(social_facebook_url="https://facebook.com/co"),
+            "Test",
+            "<p>body</p>",
+        )
+        assert "background-color:#ffffff;border-radius:50%" in html
+        assert "color:#0a0a0a;" in html
 
     def test_gold_accent_rule_below_header(self):
         # The 3px gold strip under the header is part of the visual
@@ -281,10 +348,14 @@ class TestVisualDefaults:
         assert ".email-headline{font-size:19px!important" in html
         assert ".email-text{font-size:14px!important" in html
 
-    def test_dark_mode_media_query_still_present(self):
-        # Existing dark-mode support is preserved.
+    def test_color_scheme_opts_out_of_dark_mode(self):
+        # The Link Creative wrapper is a fixed white-card composition —
+        # there's no dark-mode variant by design. The meta `only light`
+        # tells conformant clients to skip automatic inversion, and the
+        # CSS has no prefers-color-scheme media query.
         html = _base_email_html(_default_branding(), "Test", "<p>body</p>")
-        assert "@media (prefers-color-scheme:dark)" in html
+        assert 'content="only light"' in html
+        assert "prefers-color-scheme" not in html
 
     def test_responsive_class_hooks_on_outer_cells(self):
         # Layout cells get class hooks so the mobile media query can

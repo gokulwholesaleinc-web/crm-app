@@ -277,15 +277,21 @@ def _render_social_row(branding: dict) -> str:
             f'<td style="padding:0 6px;">'
             f'<a href="{escape(href)}" target="_blank" '
             f'aria-label="{escape(label)}" '
-            # The circle: 32px white-bordered, transparent fill, white
-            # letter glyph centered. Outlook's Word renderer ignores
-            # border-radius and will paint a square — links still work
-            # and the glyph still reads, so the degraded state is
-            # acceptable rather than worth shipping VML for.
-            f'style="display:inline-block;width:32px;height:32px;line-height:30px;'
-            f'border:1.5px solid #ffffff;border-radius:50%;'
-            f'color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;'
-            f'font-size:13px;font-weight:700;text-align:center;text-decoration:none;">'
+            # 36px solid-white circle, dark-letter glyph centered —
+            # reads as a "badge" against the dark footer, which is
+            # closer to the Link Creative reference than the previous
+            # outlined-circle variant. True brand-icon glyphs (the
+            # Facebook ``f`` mark, IG camera, etc.) require hosted
+            # PNGs and are deferred to a follow-up PR that adds a
+            # ``social_*_icon_url`` column per platform; the letter
+            # fallback here remains universally compatible (Outlook,
+            # Gmail, Apple Mail, web previewers all render text in
+            # a styled <a> regardless of color-scheme or image-load
+            # state).
+            f'style="display:inline-block;width:36px;height:36px;line-height:36px;'
+            f'background-color:#ffffff;border-radius:50%;'
+            f'color:#0a0a0a;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;'
+            f'font-size:14px;font-weight:700;text-align:center;text-decoration:none;">'
             f'{escape(glyph)}</a></td>'
         )
     return "".join(cells)
@@ -350,7 +356,11 @@ def _base_email_html(
     # Centered wordmark logo. When no logo is configured we fall back
     # to the company-name text in the same slot so the header doesn't
     # collapse — admins who skip the logo upload still get a usable
-    # branded header.
+    # branded header. Multi-word company names render with the first
+    # word in the secondary (gold) accent and the remainder in the
+    # primary (dark) — approximates the Link Creative split-word
+    # wordmark so single-tenant deployments look on-brand even before
+    # an admin uploads the real logo.
     if logo_url:
         logo_block = (
             f'<img src="{escape(logo_url)}" alt="{company}" '
@@ -359,11 +369,23 @@ def _base_email_html(
             f'max-height:48px;" />'
         )
     else:
-        logo_block = (
-            f'<span style="color:{primary};font-family:-apple-system,BlinkMacSystemFont,'
-            f"'Segoe UI',sans-serif;font-size:24px;font-weight:700;letter-spacing:0.5px;\">"
-            f'{company}</span>'
+        raw_company = (branding.get("company_name") or "CRM").strip()
+        font_stack = (
+            "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;"
+            "font-size:28px;font-weight:800;letter-spacing:0.5px;"
+            "text-transform:uppercase;"
         )
+        parts = raw_company.split(maxsplit=1)
+        if len(parts) == 2:
+            first, rest = parts
+            logo_block = (
+                f'<span style="color:{secondary};{font_stack}">{escape(first)}</span>'
+                f'<span style="color:{primary};{font_stack}">{escape(rest)}</span>'
+            )
+        else:
+            logo_block = (
+                f'<span style="color:{primary};{font_stack}">{escape(raw_company)}</span>'
+            )
 
     tagline_block = (
         f'<div class="email-tagline" style="margin-top:10px;'
@@ -399,6 +421,22 @@ def _base_email_html(
             + "".join(parts)
             + "</div>"
         )
+
+    # Headline `<h1>` only renders when the caller actually supplies
+    # one. Notification emails frequently pass an empty string when the
+    # body already opens with "Hello, ..." — emitting an empty `<h1>`
+    # left a 22-px-tall gap of whitespace that didn't match the
+    # reference template.
+    headline_text = (headline or "").strip()
+    if headline_text:
+        headline_html = (
+            f'<h1 class="email-headline" style="margin:0 0 16px;'
+            f"font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;"
+            f'font-size:22px;font-weight:700;color:#111827;">'
+            f'{escape(headline_text)}</h1>'
+        )
+    else:
+        headline_html = ""
 
     # CTA button — only render if the URL passed the scheme allowlist.
     # email-cta-wrap / email-cta-link classes drive the <480px mobile
@@ -475,17 +513,16 @@ def _base_email_html(
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<meta name="color-scheme" content="light dark"/>
-<meta name="supported-color-schemes" content="light dark"/>
+<meta name="color-scheme" content="only light"/>
+<meta name="supported-color-schemes" content="light"/>
 <title>{escape(headline)}</title>
 <!--[if mso]><noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript><![endif]-->
 <style>
-@media (prefers-color-scheme:dark){{
-  .email-bg{{background-color:#1f2937!important;}}
-  .email-card{{background-color:#111827!important;}}
-  .email-text{{color:#e5e7eb!important;}}
-  .email-headline{{color:#f9fafb!important;}}
-}}
+/* The Link Creative wrapper is a fixed white-card / gold-rule / black-footer
+   composition — no dark-mode variant by design. The meta `only light` tells
+   conformant clients to skip automatic color-scheme inversion, and we leave
+   every surface paint explicit inline so non-conformant clients (older
+   Outlook, some web previewers) don't repaint via :root inheritance. */
 @media only screen and (max-width:480px){{
   .email-outer-cell{{padding:12px 8px!important;}}
   .email-header-cell{{padding:20px 16px 16px!important;}}
@@ -516,7 +553,7 @@ def _base_email_html(
 <table role="presentation" class="email-card" cellpadding="0" cellspacing="0" width="600" style="max-width:600px;width:100%;background-color:{surface_light};">
 <tr><td class="email-body-cell" style="padding:32px 32px;">
   {sender_block}
-  <h1 class="email-headline" style="margin:0 0 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:22px;font-weight:700;color:#111827;">{escape(headline)}</h1>
+  {headline_html}
   <div class="email-text" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:15px;line-height:1.6;color:#334155;">
     {body_html}
   </div>
