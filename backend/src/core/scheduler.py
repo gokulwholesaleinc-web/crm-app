@@ -30,11 +30,6 @@ async def _run_scheduled_job(job_name: str, service_factory: Callable, method: s
         logger.exception("[%s] Error", job_name)
 
 
-async def _process_due_sequence_steps():
-    from src.sequences.service import SequenceService
-    await _run_scheduled_job("sequence_steps", SequenceService, "process_due_steps")
-
-
 async def _process_email_retries():
     from src.email.service import EmailService
     await _run_scheduled_job("email_retries", EmailService, "process_retries")
@@ -80,11 +75,13 @@ async def _sync_google_calendars():
 
 
 async def _background_tick():
-    # Single periodic wakeup runs all five handlers sequentially so Neon's
+    # Single periodic wakeup runs all four handlers sequentially so Neon's
     # compute only has to come out of autosuspend once per interval.
     # Gmail sync runs on its own faster cadence — see start_scheduler.
+    # Sequence step processing retired with the feature in PR #309 — the
+    # scheduler hook was missed at the time and used to fail silently
+    # every 90 min with no UI / test coverage to surface it.
     await _process_email_retries()
-    await _process_due_sequence_steps()
     await _process_due_campaign_steps()
     await _deliver_scheduled_reports()
     await _sync_google_calendars()
