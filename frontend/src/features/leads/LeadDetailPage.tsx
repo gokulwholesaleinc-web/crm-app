@@ -15,7 +15,7 @@ import { showError } from '../../utils/toast';
 import { formatDate, formatPhoneNumber } from '../../utils/formatters';
 import { useLead, useDeleteLead, useConvertLead, useUpdateLead } from '../../hooks/useLeads';
 import { useAuthStore } from '../../store/authStore';
-import type { LeadUpdate } from '../../types';
+import type { LeadUpdate, ApiError } from '../../types';
 import clsx from 'clsx';
 
 const CommentSection = lazy(() => import('../../components/shared/CommentSection'));
@@ -62,13 +62,21 @@ function LeadDetailPage() {
   const handleEditSubmit = async (data: LeadFormData) => {
     if (!leadId) return;
     try {
+      // Cleared optional fields are sent as null (not undefined) so
+      // Pydantic sees them as `set` and the service writes the clear
+      // instead of silently keeping the old value. EmailStr rejects ""
+      // so the same null-on-empty pattern keeps email valid too.
       const updateData: LeadUpdate = {
-        first_name: data.firstName,
-        last_name: data.lastName,
-        email: data.email,
-        phone: data.phone || undefined,
-        company_name: data.company || undefined,
-        job_title: data.jobTitle || undefined,
+        first_name: data.firstName?.trim() || null,
+        last_name: data.lastName?.trim() || null,
+        email: data.email?.trim() || null,
+        phone: data.phone?.trim() || null,
+        company_name: data.company?.trim() || null,
+        job_title: data.jobTitle?.trim() || null,
+        source_id: data.source_id ?? null,
+        pipeline_stage_id: data.pipeline_stage_id ?? null,
+        sales_code: data.salesCode?.trim() || null,
+        description: data.notes?.trim() || null,
       };
       // Only include status when it actually changed. The backend rejects
       // status='converted' direct edits, so re-asserting an existing
@@ -84,7 +92,8 @@ function LeadDetailPage() {
       });
       setShowEditForm(false);
     } catch (err) {
-      showError('Failed to update lead');
+      const detail = (err as ApiError | null)?.detail;
+      showError(detail || 'Failed to update lead');
     }
   };
 
@@ -98,7 +107,9 @@ function LeadDetailPage() {
       company: lead.company_name || '',
       jobTitle: lead.job_title || '',
       status: lead.status,
-      source: lead.source?.name || '',
+      source_id: lead.source?.id ?? null,
+      pipeline_stage_id: lead.pipeline_stage_id ?? null,
+      salesCode: lead.sales_code || '',
       notes: lead.description || '',
     };
   };
@@ -473,6 +484,7 @@ function LeadDetailPage() {
           onCancel={() => setShowEditForm(false)}
           isLoading={updateLeadMutation.isPending}
           submitLabel="Update Lead"
+          score={lead.score ?? null}
         />
       </Modal>
 

@@ -1,12 +1,12 @@
 import { useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
-import { Button, SearchableSelect } from '../../../components/ui';
+import { Button } from '../../../components/ui';
 import { FormInput, FormSelect, FormTextarea } from '../../../components/forms';
-import { useCompanies } from '../../../hooks/useCompanies';
 import { useLeadSources, useLeadPipelineStages } from '../../../hooks/useLeads';
 import { useUnsavedChangesWarning } from '../../../hooks/useUnsavedChangesWarning';
 import { normalizeEmail, normalizePhone } from '../../../utils/inputNormalize';
 import { useFormSubmitShortcut } from '../../../hooks/useSubmitShortcut';
+import type { PipelineStage } from '../../../types';
 
 export interface LeadFormData {
   firstName?: string;
@@ -15,12 +15,9 @@ export interface LeadFormData {
   phone?: string;
   company?: string;
   jobTitle?: string;
-  source: string;
   source_id?: number | null;
-  company_id?: number | null;
   pipeline_stage_id?: number | null;
   status: string;
-  score?: number;
   salesCode?: string;
   notes?: string;
 }
@@ -31,6 +28,11 @@ export interface LeadFormProps {
   onCancel: () => void;
   isLoading?: boolean;
   submitLabel?: string;
+  score?: number | null;
+  // When true (create mode), hide everything below email/phone until at
+  // least one contact field has a value. Edit mode passes false so users
+  // can keep working on partial historical rows.
+  requireContactFirst?: boolean;
 }
 
 // `converted` is intentionally absent — the only legitimate way to land
@@ -50,11 +52,14 @@ export function LeadForm({
   onCancel,
   isLoading = false,
   submitLabel = 'Save Lead',
+  score = null,
+  requireContactFirst = false,
 }: LeadFormProps) {
   const {
     register,
     handleSubmit,
     setValue,
+    watch,
     formState: { errors, isDirty },
   } = useForm<LeadFormData>({
     defaultValues: {
@@ -64,9 +69,7 @@ export function LeadForm({
       phone: '',
       company: '',
       jobTitle: '',
-      source: 'website',
       status: 'new',
-      score: 0,
       salesCode: '',
       notes: '',
       ...initialData,
@@ -74,38 +77,58 @@ export function LeadForm({
   });
 
   const [sourceId, setSourceId] = useState<number | null>(initialData?.source_id ?? null);
-  const [companyId, setCompanyId] = useState<number | null>(initialData?.company_id ?? null);
   const [pipelineStageId, setPipelineStageId] = useState<number | null>(initialData?.pipeline_stage_id ?? null);
 
   const sidecarChanged =
     sourceId !== (initialData?.source_id ?? null) ||
-    companyId !== (initialData?.company_id ?? null) ||
     pipelineStageId !== (initialData?.pipeline_stage_id ?? null);
   useUnsavedChangesWarning(isDirty || sidecarChanged);
 
   const { data: leadSourcesData } = useLeadSources();
-  const { data: companiesData } = useCompanies({ page_size: 100 });
   const { data: pipelineStagesData } = useLeadPipelineStages();
 
   const sourceOptions = useMemo(
-    () => (leadSourcesData ?? []).map((s: { id: number; name: string }) => ({ value: s.id, label: s.name })),
+    () => [
+      { value: '', label: '— Select source —' },
+      ...(leadSourcesData ?? []).map((s: { id: number; name: string }) => ({
+        value: String(s.id),
+        label: s.name,
+      })),
+    ],
     [leadSourcesData]
   );
 
-  const companyOptions = useMemo(
-    () => (companiesData?.items ?? []).map((c) => ({ value: c.id, label: c.name })),
-    [companiesData]
-  );
-
+  // Terminal stages (Won/Lost) are excluded from the edit dropdown.
+  // Moving to Won fires the auto-conversion side effects (create Contact +
+  // Opportunity, stamp converted_*_id) which only the kanban `/move`
+  // endpoint runs — PUT /update would leave inconsistent state. The
+  // explicit path is the Convert button on the detail page.
   const pipelineStageOptions = useMemo(
-    () => (pipelineStagesData ?? []).map((s: { id: number; name: string }) => ({ value: s.id, label: s.name })),
+    () => [
+      { value: '', label: '— Select stage —' },
+      ...((pipelineStagesData ?? []) as PipelineStage[])
+        .filter((s) => !s.is_won && !s.is_lost)
+        .map((s) => ({
+          value: String(s.id),
+          label: s.name,
+        })),
+    ],
     [pipelineStagesData]
   );
 
   const [formError, setFormError] = useState<string | null>(null);
   const formRef = useFormSubmitShortcut();
 
+  const watchedEmail = watch('email') ?? '';
+  const watchedPhone = watch('phone') ?? '';
+  const hasContact = !!(watchedEmail.trim() || watchedPhone.trim());
+  const showFullForm = !requireContactFirst || hasContact;
+
   const onFormSubmit = (data: LeadFormData) => {
+    if (requireContactFirst && !data.email?.trim() && !data.phone?.trim()) {
+      setFormError('Enter an email or phone before saving.');
+      return;
+    }
     const hasName = !!(data.firstName?.trim() || data.lastName?.trim());
     const hasCompany = !!data.company?.trim();
     if (!hasName && !hasCompany) {
@@ -113,38 +136,31 @@ export function LeadForm({
       return;
     }
     setFormError(null);
-    return onSubmit({ ...data, source_id: sourceId, company_id: companyId, pipeline_stage_id: pipelineStageId });
+    return onSubmit({
+      ...data,
+      source_id: sourceId,
+      pipeline_stage_id: pipelineStageId,
+    });
   };
 
   return (
-    <form ref={formRef} onSubmit={handleSubmit(onFormSubmit)} className="space-y-6">
+    <form ref={formRef} onSubmit={handleSubmit(onFormSubmit)} className="space-y-8">
       {formError && (
-        <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-4" aria-live="polite">
+        <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-3" aria-live="polite">
           <p className="text-sm text-red-700 dark:text-red-400">{formError}</p>
         </div>
       )}
-      {/* Basic Information */}
-      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
-        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
-          Basic Information
+
+      <section>
+        <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1">
+          Contact
         </h3>
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-          <FormInput
-            label="First Name"
-            name="firstName"
-            autoComplete="given-name"
-            register={register('firstName')}
-            error={errors.firstName?.message}
-          />
-
-          <FormInput
-            label="Last Name"
-            name="lastName"
-            autoComplete="family-name"
-            register={register('lastName')}
-            error={errors.lastName?.message}
-          />
-
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+          {requireContactFirst
+            ? 'Enter an email or phone to continue.'
+            : 'Either an email or phone is recommended so the lead is reachable.'}
+        </p>
+        <div className="grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-2">
           <FormInput
             label="Email"
             name="email"
@@ -188,14 +204,40 @@ export function LeadForm({
             }}
           />
         </div>
-      </div>
+      </section>
 
-      {/* Work Information */}
-      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
-        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
-          Work Information
+      {!showFullForm && (
+        <div
+          className="rounded-md border border-dashed border-gray-300 dark:border-gray-600 p-6 text-center"
+          aria-live="polite"
+        >
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Add an email or phone above to fill in the rest of the lead.
+          </p>
+        </div>
+      )}
+
+      <section className={showFullForm ? '' : 'hidden'} aria-hidden={!showFullForm}>
+        <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">
+          Basic Information
         </h3>
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-2">
+          <FormInput
+            label="First Name"
+            name="firstName"
+            autoComplete="given-name"
+            register={register('firstName')}
+            error={errors.firstName?.message}
+          />
+
+          <FormInput
+            label="Last Name"
+            name="lastName"
+            autoComplete="family-name"
+            register={register('lastName')}
+            error={errors.lastName?.message}
+          />
+
           <FormInput
             label="Company Name"
             name="company"
@@ -203,17 +245,6 @@ export function LeadForm({
             register={register('company')}
             placeholder="Enter company name..."
           />
-
-          <SearchableSelect
-            label="Link to Existing Company"
-            id="lead-company"
-            name="company_id"
-            value={companyId}
-            onChange={setCompanyId}
-            options={companyOptions}
-            placeholder="Search companies..."
-          />
-
           <FormInput
             label="Job Title"
             name="jobTitle"
@@ -221,22 +252,29 @@ export function LeadForm({
             register={register('jobTitle')}
           />
         </div>
-      </div>
+      </section>
 
-      {/* Lead Information */}
-      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
-        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
-          Lead Information
-        </h3>
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-          <SearchableSelect
+      <section className={showFullForm ? '' : 'hidden'} aria-hidden={!showFullForm}>
+        <div className="flex items-baseline justify-between mb-4">
+          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+            Lead Information
+          </h3>
+          {score != null && (
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              Score <span className="font-semibold text-gray-700 dark:text-gray-200">{score}</span>/100 · auto-calculated
+            </span>
+          )}
+        </div>
+        <div className="grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-2">
+          <FormSelect
             label="Source"
-            id="lead-source"
             name="source_id"
-            value={sourceId}
-            onChange={setSourceId}
             options={sourceOptions}
-            placeholder="Search sources..."
+            value={sourceId == null ? '' : String(sourceId)}
+            onChange={(e) => {
+              const v = e.target.value;
+              setSourceId(v === '' ? null : Number(v));
+            }}
           />
 
           <FormSelect
@@ -250,41 +288,30 @@ export function LeadForm({
             error={errors.status?.message}
           />
 
-          <SearchableSelect
+          <FormSelect
             label="Pipeline Stage"
-            id="lead-pipeline-stage"
             name="pipeline_stage_id"
-            value={pipelineStageId}
-            onChange={setPipelineStageId}
             options={pipelineStageOptions}
-            placeholder="Select pipeline stage..."
+            value={pipelineStageId == null ? '' : String(pipelineStageId)}
+            onChange={(e) => {
+              const v = e.target.value;
+              setPipelineStageId(v === '' ? null : Number(v));
+            }}
           />
 
           <FormInput
             label="Sales Code"
             name="salesCode"
             register={register('salesCode')}
-            placeholder="Enter sales code..."
-          />
-
-          <FormInput
-            label="Lead Score (0-100)"
-            name="score"
-            type="number"
-            min={0}
-            max={100}
-            register={register('score', {
-              min: { value: 0, message: 'Score must be at least 0' },
-              max: { value: 100, message: 'Score cannot exceed 100' },
-            })}
-            error={errors.score?.message}
+            placeholder="Optional"
           />
         </div>
-      </div>
+      </section>
 
-      {/* Notes */}
-      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
-        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Notes</h3>
+      <section className={showFullForm ? '' : 'hidden'} aria-hidden={!showFullForm}>
+        <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4">
+          Notes
+        </h3>
         <FormTextarea
           label="Notes"
           name="notes"
@@ -292,14 +319,13 @@ export function LeadForm({
           placeholder="Add any additional notes about this lead..."
           register={register('notes')}
         />
-      </div>
+      </section>
 
-      {/* Form Actions */}
-      <div className="flex justify-end space-x-3">
+      <div className="flex justify-end gap-3 pt-2 border-t border-gray-200 dark:border-gray-700">
         <Button type="button" variant="secondary" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" isLoading={isLoading}>
+        <Button type="submit" isLoading={isLoading} disabled={!showFullForm}>
           {submitLabel}
         </Button>
       </div>

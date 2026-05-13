@@ -19,6 +19,39 @@ const BASE_URL = import.meta.env.VITE_API_URL || '';
 
 const TENANT_SLUG_KEY = 'crm_tenant_slug:v1';
 
+/**
+ * Flatten an arbitrary `detail` payload into a readable toast string.
+ *
+ * FastAPI 422 responses carry `detail: Array<{loc, msg, type}>` and the
+ * default toast would render `[object Object],[object Object]`. Joining the
+ * `msg` values surfaces the actual cause ("value is not a valid email
+ * address"). Falls back to `JSON.stringify` when any element doesn't fit
+ * the `{msg: string}` shape so legacy or custom errors are still visible
+ * rather than silently dropped.
+ *
+ * Returns `undefined` when there's nothing to surface so callers can
+ * cascade to other detail sources (e.g. axios's `error.message`).
+ */
+export const flattenErrorDetail = (raw: unknown): string | undefined => {
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    return trimmed || undefined;
+  }
+  if (Array.isArray(raw)) {
+    if (raw.length === 0) return undefined;
+    const msgs = raw.map((d) =>
+      typeof d === 'object' && d !== null && typeof (d as { msg?: unknown }).msg === 'string'
+        ? (d as { msg: string }).msg
+        : null,
+    );
+    return msgs.every((m): m is string => m !== null)
+      ? msgs.join('; ')
+      : JSON.stringify(raw);
+  }
+  if (raw != null) return JSON.stringify(raw);
+  return undefined;
+};
+
 // Token getter injected by the auth store. Defaults to returning null so the
 // client is safe to import before the store has initialized.
 let tokenGetter: () => string | null = () => null;
@@ -93,27 +126,7 @@ const createApiClient = (): AxiosInstance => {
           const text = await data.text();
           try {
             const parsed = JSON.parse(text) as { detail?: unknown };
-            if (typeof parsed.detail === 'string' && parsed.detail.trim()) {
-              detailFromBlob = parsed.detail.trim();
-            } else if (Array.isArray(parsed.detail)) {
-              // FastAPI 422 payload: detail is an array of {loc, msg, type}.
-              // Joining the msgs is far more readable than a JSON.stringify
-              // of the whole array. If ANY element doesn't fit the
-              // {msg: string} shape (legacy errors, custom raisers), fall
-              // through to the full dump so we don't surface a curated
-              // subset that hides the malformed elements.
-              const msgs = parsed.detail.map((d) =>
-                typeof d === 'object' && d !== null && typeof (d as { msg?: unknown }).msg === 'string'
-                  ? (d as { msg: string }).msg
-                  : null,
-              );
-              detailFromBlob =
-                msgs.length > 0 && msgs.every((m): m is string => m !== null)
-                  ? msgs.join('; ')
-                  : JSON.stringify(parsed.detail);
-            } else if (parsed.detail) {
-              detailFromBlob = JSON.stringify(parsed.detail);
-            }
+            detailFromBlob = flattenErrorDetail(parsed.detail);
           } catch {
             if (text.trim()) detailFromBlob = text.trim();
           }
@@ -126,8 +139,11 @@ const createApiClient = (): AxiosInstance => {
         }
       }
 
+      // JSON 422 responses (the common case for non-blob endpoints) get
+      // the same flattening so toasts surface `EmailStr: not a valid
+      // email` instead of `[object Object]`.
       const responseDetail = !(data instanceof Blob)
-        ? (data as ApiError | undefined)?.detail
+        ? flattenErrorDetail((data as ApiError | undefined)?.detail)
         : undefined;
 
       const apiError: ApiError = {

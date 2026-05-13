@@ -285,6 +285,71 @@ class TestLeadKanban:
         assert stages_map["Discovery"]["leads"][0]["owner_name"] == test_user.full_name
 
     @pytest.mark.asyncio
+    async def test_kanban_hides_converted_leads(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_user: User,
+        lead_pipeline_stages: list[PipelineStage],
+    ):
+        """Leads where the auto-convert produced an Opportunity disappear
+        from the lead kanban (the deal now lives on the opportunity board).
+        Orphan-converted rows (no opportunity_id) stay visible so the user
+        can finish them via the explicit Convert action.
+        """
+        new_stage = lead_pipeline_stages[0]
+        won_stage = next(s for s in lead_pipeline_stages if s.is_won)
+
+        active = Lead(
+            first_name="Active",
+            last_name="Lead",
+            email="active@example.com",
+            status="qualified",
+            pipeline_stage_id=new_stage.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+        )
+        converted = Lead(
+            first_name="Converted",
+            last_name="Lead",
+            email="converted@example.com",
+            status="converted",
+            pipeline_stage_id=won_stage.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+            converted_contact_id=1,
+            converted_opportunity_id=1,
+        )
+        orphan = Lead(
+            first_name="Orphan",
+            last_name="Lead",
+            email="orphan@example.com",
+            status="converted",
+            pipeline_stage_id=won_stage.id,
+            owner_id=test_user.id,
+            created_by_id=test_user.id,
+            converted_contact_id=None,
+            converted_opportunity_id=None,
+        )
+        db_session.add_all([active, converted, orphan])
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/leads/kanban",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        all_names = [
+            lead["full_name"]
+            for stage in response.json()["stages"]
+            for lead in stage["leads"]
+        ]
+        assert "Active Lead" in all_names
+        assert "Orphan Lead" in all_names
+        assert "Converted Lead" not in all_names
+
+    @pytest.mark.asyncio
     async def test_kanban_empty_stages(
         self,
         client: AsyncClient,

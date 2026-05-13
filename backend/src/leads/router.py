@@ -271,8 +271,15 @@ async def get_lead_kanban(
     # Lets us build the owner-id → full_name map from a single follow-up
     # User query instead of N (one per stage) or doing the .map() inside
     # each loop iteration.
+    #
+    # Hide successfully-converted leads: once the auto-convert (Won move)
+    # has produced the Opportunity, the deal lives on as that Opportunity
+    # — duplicating it on the lead board is just noise. Orphan-converted
+    # rows (converted_opportunity_id IS NULL) stay visible so the user
+    # can finish them via the explicit Convert action.
     leads_query = select(Lead).where(
-        Lead.pipeline_stage_id.in_([s.id for s in stages])
+        Lead.pipeline_stage_id.in_([s.id for s in stages]),
+        Lead.converted_opportunity_id.is_(None),
     )
     if resolved_owner_id:
         leads_query = leads_query.where(Lead.owner_id == resolved_owner_id)
