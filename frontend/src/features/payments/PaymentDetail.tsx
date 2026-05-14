@@ -323,7 +323,7 @@ function PaymentDetailPage() {
               Replaces the retired Quotes feature: Lorenzo's one-off invoices
               are billed standalone, with the back-up PDF (signed estimate,
               statement of work, etc.) attached here. Reuses the shared
-              AttachmentList that already powers Contracts/Companies. */}
+              AttachmentList that already powers Contacts/Companies. */}
           <div>
             <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">Attachments</h2>
             <AttachmentList entityType="payments" entityId={payment.id} />

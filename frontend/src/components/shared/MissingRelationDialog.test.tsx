@@ -24,7 +24,7 @@ describe('MissingRelationDialog', () => {
     render(
       <MissingRelationDialog
         isOpen={false}
-        entityType="quote"
+        entityType="proposal"
         onConfirm={vi.fn()}
         onCancel={vi.fn()}
       />
@@ -37,7 +37,7 @@ describe('MissingRelationDialog', () => {
     render(
       <MissingRelationDialog
         isOpen
-        entityType="contract"
+        entityType="proposal"
         onConfirm={onConfirm}
         onCancel={vi.fn()}
       />
@@ -60,8 +60,9 @@ describe('MissingRelationDialog', () => {
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
-  it('uses the entityType in copy across all three variants', () => {
-    const types = ['proposal', 'contract', 'quote'] as const;
+  it('uses the entityType in the title copy', () => {
+    // Quote + contract variants retired 2026-05-14 with their routers.
+    const types = ['proposal'] as const;
     for (const t of types) {
       const { unmount } = render(
         <MissingRelationDialog

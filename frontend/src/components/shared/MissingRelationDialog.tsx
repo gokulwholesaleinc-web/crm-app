@@ -1,6 +1,10 @@
 import { ConfirmDialog } from '../ui';
 
-export type RelationEntityType = 'proposal' | 'contract' | 'quote';
+// ``contract`` retired 2026-05-14 — contracts router unmounted.
+// ``quote`` retired 2026-05-14 — quotes router unmounted.
+// Both surfaces that mounted with those entityType values have been
+// removed; the union now only covers Proposals.
+export type RelationEntityType = 'proposal';
 
 interface MissingRelationDialogProps {
   isOpen: boolean;

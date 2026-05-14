@@ -16,4 +16,4 @@ export * from './payments';
 export * from './proposals';
 export * from './misc';
 export * from './email';
-export * from './contracts';
+// Contract types removed 2026-05-14 — contracts feature retired.

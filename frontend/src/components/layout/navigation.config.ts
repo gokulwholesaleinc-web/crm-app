@@ -5,7 +5,6 @@ import {
   BuildingOfficeIcon,
   FunnelIcon,
   DocumentDuplicateIcon,
-  ScaleIcon,
   CreditCardIcon,
   CalendarIcon,
   CalendarDaysIcon,
@@ -40,7 +39,8 @@ export const DEFAULT_MAIN_NAVIGATION: NavItem[] = [
   // Quotes nav entry removed 2026-05-14 — quotes replaced by one-off
   // Payment invoices with optional PDF attachments.
   { id: 'proposals', name: 'Proposals', href: '/proposals', icon: DocumentDuplicateIcon },
-  { id: 'contracts', name: 'Contracts', href: '/contracts', icon: ScaleIcon },
+  // Contracts nav entry removed 2026-05-14 — contract terms now fold
+  // into the Proposal T&C inline.
   { id: 'payments', name: 'Payments', href: '/payments', icon: CreditCardIcon },
   { id: 'activities', name: 'Activities', href: '/activities', icon: CalendarIcon },
   { id: 'calendar', name: 'Calendar', href: '/calendar', icon: CalendarDaysIcon },

@@ -6,7 +6,7 @@
 export * from './admin';
 export * from './audit';
 export * from './webhooks';
-export * from './contracts';
+// Contract types removed 2026-05-14 — contracts feature retired.
 export * from './import-export';
 
 // Tag Types (used across multiple domains)

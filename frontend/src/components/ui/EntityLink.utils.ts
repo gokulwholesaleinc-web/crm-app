@@ -24,10 +24,19 @@ export type LegacyOpportunityType = typeof LEGACY_OPPORTUNITY_TYPE;
 export const LEGACY_QUOTE_TYPE = 'quote-legacy' as const;
 export type LegacyQuoteType = typeof LEGACY_QUOTE_TYPE;
 
+// Sentinel returned for historical activity/audit rows that still carry
+// `entity_type='contracts'`. The Contracts feature was retired
+// 2026-05-14 — contract terms fold into the Proposal T&C inline. The
+// backend preserves the column for historical data; this sentinel lets
+// the UI render a muted "(legacy contract)" label without a route.
+export const LEGACY_CONTRACT_TYPE = 'contract-legacy' as const;
+export type LegacyContractType = typeof LEGACY_CONTRACT_TYPE;
+
 export type NormalizedEntityType =
   | EntityType
   | LegacyOpportunityType
-  | LegacyQuoteType;
+  | LegacyQuoteType
+  | LegacyContractType;
 
 export const entityRoutes: Record<EntityType, string> = {
   contact: '/contacts',
@@ -61,6 +70,9 @@ export function normalizeEntityType(
   }
   if (lower === 'quote' || lower === 'quotes') {
     return LEGACY_QUOTE_TYPE;
+  }
+  if (lower === 'contract' || lower === 'contracts') {
+    return LEGACY_CONTRACT_TYPE;
   }
   if (lower in entityRoutes) return lower as EntityType;
   return pluralAliases[lower] ?? null;

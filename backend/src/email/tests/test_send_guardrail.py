@@ -1,9 +1,13 @@
 """Tests for the assert_gmail_connected pre-flight guardrail.
 
-Before this guardrail, user-initiated send paths (proposal, quote,
-contract, /api/email/send) marked the target entity as "sent" even
-when the operator's Gmail wasn't connected — the queue path swallowed
-the error and parked the row in "retry" status.
+Before this guardrail, user-initiated send paths (proposal,
+/api/email/send) marked the target entity as "sent" even when the
+operator's Gmail wasn't connected — the queue path swallowed the
+error and parked the row in "retry" status.
+
+The quote + contract router send paths previously covered here were
+both unmounted 2026-05-14; the corresponding test classes were
+removed when their routers stopped mounting.
 
 Real SQLite + ASGI client; no mocks per CRM CLAUDE.md.
 """
@@ -40,7 +44,7 @@ from src.campaigns.models import (  # noqa: F401
 from src.comments.models import Comment  # noqa: F401
 from src.companies.models import Company  # noqa: F401
 from src.contacts.models import Contact
-from src.contracts.models import Contract
+from src.contracts.models import Contract  # noqa: F401  # SQLite FK registration; contracts router unmounted 2026-05-14
 from src.core.models import EntityShare, EntityTag, Note, Tag  # noqa: F401
 from src.dashboard.models import (  # noqa: F401
     DashboardChart,
@@ -92,7 +96,7 @@ pytestmark = pytest.mark.asyncio
 @pytest_asyncio.fixture
 async def test_engine():
     # Function-scoped so each test starts on a fresh schema — guardrail
-    # tests commit() (User, Contact, GmailConnection, Proposal, Contract)
+    # tests commit() (User, Contact, GmailConnection, Proposal)
     # and a session-scoped engine would let those rows bleed across tests.
     engine = create_async_engine(
         TEST_DATABASE_URL,
@@ -241,30 +245,6 @@ class TestEmailSendEndpointGuardrail:
         assert "Gmail" in resp.json()["detail"]
 
 
-class TestContractSendGuardrail:
-    async def test_contract_send_refuses_when_no_gmail(
-        self, client: AsyncClient, db_session: AsyncSession, user: User, auth_headers: dict
-    ):
-        contact = await _make_contact(db_session, user)
-        c = Contract(
-            contract_number=f"CT-{secrets.token_hex(3).upper()}",
-            title="Test", status="draft",
-            owner_id=user.id, created_by_id=user.id,
-            contact_id=contact.id,
-        )
-        db_session.add(c)
-        await db_session.commit()
-        await db_session.refresh(c)
-
-        resp = await client.post(
-            f"/api/contracts/{c.id}/send",
-            headers=auth_headers,
-            json={"to_email": "signer@example.com"},
-        )
-        assert resp.status_code == 400
-        assert "Gmail" in resp.json()["detail"]
-
-        await db_session.refresh(c)
-        assert c.status == "draft"
-        assert c.sent_at is None
-        assert c.sign_token is None
+# TestContractSendGuardrail removed 2026-05-14 — contracts router unmounted
+# so /api/contracts/{id}/send no longer exists. Contract model + tables
+# preserved (see noqa F401 import above) for historical FK data.

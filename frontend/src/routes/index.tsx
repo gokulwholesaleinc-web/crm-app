@@ -44,10 +44,8 @@ const ProposalsPage = lazy(() => import('../features/proposals/ProposalsPage'));
 const ProposalDetailPage = lazy(() => import('../features/proposals/ProposalDetail'));
 const PublicProposalView = lazy(() => import('../features/proposals/PublicProposalView'));
 
-// Contracts
-const ContractsPage = lazy(() => import('../features/contracts/ContractsPage'));
-const ContractDetailPage = lazy(() => import('../features/contracts/ContractDetailPage'));
-const PublicContractView = lazy(() => import('../features/contracts/PublicContractView'));
+// Contracts feature removed 2026-05-14 — contract terms folded into the
+// Proposal T&C inline. Backend tables preserved for historical data.
 
 // Activities
 const ActivitiesPage = lazy(() => import('../features/activities/ActivitiesPage'));
@@ -93,7 +91,7 @@ function AppRoutes() {
       <Route path="/auth/google/callback" element={<GoogleAuthCallbackPage />} />
       <Route path="/proposals/public/:token" element={<PublicProposalView />} />
       {/* /quotes/public/:quoteNumber route removed 2026-05-14 */}
-      <Route path="/contracts/sign/:token" element={<PublicContractView />} />
+      {/* /contracts/sign/:token route removed 2026-05-14 — contracts retired */}
 
       {/* Protected routes */}
       <Route
@@ -232,27 +230,8 @@ function AppRoutes() {
         }
       />
 
-      {/* Contracts */}
-      <Route
-        path="/contracts"
-        element={
-          <PrivateRoute>
-            <ErrorBoundary>
-              <ContractsPage />
-            </ErrorBoundary>
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/contracts/:id"
-        element={
-          <PrivateRoute>
-            <ErrorBoundary>
-              <ContractDetailPage />
-            </ErrorBoundary>
-          </PrivateRoute>
-        }
-      />
+      {/* Contracts routes removed 2026-05-14 — contract terms now fold into
+          the Proposal T&C inline. */}
 
       {/* Activities */}
       <Route

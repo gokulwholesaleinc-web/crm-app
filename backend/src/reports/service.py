@@ -11,14 +11,14 @@ from src.activities.models import Activity
 from src.campaigns.models import Campaign
 from src.companies.models import Company
 from src.contacts.models import Contact
-from src.contracts.models import Contract
 from src.core.filtering import apply_filters_to_query
 from src.leads.models import Lead
 from src.opportunities.models import Opportunity, PipelineStage
 from src.payments.models import Payment
 from src.reports.schemas import ReportDataPoint, ReportDefinition, ReportResult
 
-# Mapping from entity_type string to SQLAlchemy model
+# Mapping from entity_type string to SQLAlchemy model.
+# ``contracts`` removed 2026-05-14 — contracts router unmounted.
 ENTITY_MODEL_MAP: dict[str, type] = {
     "leads": Lead,
     "contacts": Contact,
@@ -27,7 +27,6 @@ ENTITY_MODEL_MAP: dict[str, type] = {
     "campaigns": Campaign,
     "companies": Company,
     "payments": Payment,
-    "contracts": Contract,
 }
 
 # Numeric fields per entity type (for sum/avg/min/max metrics)
@@ -40,7 +39,6 @@ NUMERIC_FIELDS: dict[str, list[str]] = {
                    "num_sent", "num_responses", "num_converted"],
     "companies": ["annual_revenue", "employee_count"],
     "payments": ["amount"],
-    "contracts": ["value"],
 }
 
 
@@ -289,15 +287,6 @@ REPORT_TEMPLATES: list[dict[str, Any]] = [
         "metric_field": "amount",
         "date_group": "month",
         "chart_type": "bar",
-    },
-    {
-        "id": "contracts_by_status",
-        "name": "Contracts by Status",
-        "description": "Contract count grouped by status",
-        "entity_type": "contracts",
-        "metric": "count",
-        "group_by": "status",
-        "chart_type": "pie",
     },
     {
         "id": "revenue_by_source",

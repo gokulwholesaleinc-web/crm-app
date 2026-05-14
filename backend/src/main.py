@@ -27,8 +27,6 @@ from src.comments.router import router as comments_router
 from src.companies.router import router as companies_router
 from src.config import settings
 from src.contacts.router import router as contacts_router
-from src.contracts.router import router as contracts_router
-from src.contracts.stats_router import router as contracts_stats_router
 from src.core.constants import CACHE_IMMUTABLE_ASSETS_MAX_AGE_SECONDS
 from src.core.me_router import router as me_router
 from src.core.migrations import _run_production_migrations
@@ -199,8 +197,9 @@ app.include_router(sharing_router)
 # for historical FK data on ``Payment.quote_id`` and ``Proposal.quote_id``.
 app.include_router(payments_router)
 app.include_router(proposals_router)
-app.include_router(contracts_stats_router)
-app.include_router(contracts_router)
+# Contracts router unmounted 2026-05-14 — Lorenzo collapsed contract terms
+# into the Proposal T&C inline. Model + tables preserved for historical
+# data on the ``contracts`` table.
 app.include_router(admin_router)
 app.include_router(meta_router)
 app.include_router(expenses_router)

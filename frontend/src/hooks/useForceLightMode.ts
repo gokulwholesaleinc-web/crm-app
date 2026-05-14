@@ -4,7 +4,7 @@ import { useEffect } from 'react';
  * Strip the global `.dark` class from <html> while a public-facing
  * customer view is mounted, then restore it on unmount.
  *
- * Public proposal / quote / contract pages render with a light-only
+ * Public proposal pages render with a light-only
  * palette (header chip, tenant `bg_color_light`, gold accents) and
  * intentionally do NOT have a dark variant. When a CRM employee is
  * signed in with dark mode active and previews one of these links in
