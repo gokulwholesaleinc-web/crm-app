@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { renderWithProviders, screen, fireEvent } from '../../test-utils/renderWithProviders';
 import { EntityLink } from './EntityLink';
+import { normalizeEntityType, LEGACY_OPPORTUNITY_TYPE } from './EntityLink.utils';
 
 describe('EntityLink', () => {
   it('renders a link to the matching detail route', () => {
@@ -48,5 +49,24 @@ describe('EntityLink', () => {
     );
     fireEvent.click(screen.getByRole('link', { name: 'Click' }));
     expect(bubbled).toBe(true);
+  });
+
+  describe('legacy opportunity', () => {
+    it('normalizes "opportunity" and "opportunities" to the legacy sentinel', () => {
+      expect(normalizeEntityType('opportunity')).toBe(LEGACY_OPPORTUNITY_TYPE);
+      expect(normalizeEntityType('opportunities')).toBe(LEGACY_OPPORTUNITY_TYPE);
+      expect(normalizeEntityType('OPPORTUNITIES')).toBe(LEGACY_OPPORTUNITY_TYPE);
+    });
+
+    it('renders a non-clickable muted label for legacy opportunity rows', () => {
+      renderWithProviders(
+        <EntityLink type={LEGACY_OPPORTUNITY_TYPE} id={42}>
+          Old Deal
+        </EntityLink>,
+      );
+      expect(screen.queryByRole('link')).toBeNull();
+      expect(screen.getByText('Old Deal')).toBeInTheDocument();
+      expect(screen.getByText(/legacy opportunity/i)).toBeInTheDocument();
+    });
   });
 });

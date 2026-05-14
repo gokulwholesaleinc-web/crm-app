@@ -98,16 +98,16 @@ export function LeadForm({
     [leadSourcesData]
   );
 
-  // Terminal stages (Won/Lost) are excluded from the edit dropdown.
-  // Moving to Won fires the auto-conversion side effects (create Contact,
-  // stamp converted_contact_id) which only the kanban `/move` endpoint
-  // runs — PUT /update would leave inconsistent state. The explicit path
-  // is the Convert button on the detail page.
+  // Terminal stages (Won/Lost) are excluded from the form-level
+  // dropdown. The natural way to land in Won is to drag the card onto
+  // the Won column on /pipeline (which runs the auto-Contact-creation
+  // side effects); Lost is set from the detail page. Keeping them out
+  // of this dropdown avoids accidental transitions during a routine edit.
   const pipelineStageOptions = useMemo(
     () => [
-      { value: '', label: '— Select stage —' },
+      { value: '', label: '(unstaged)' },
       ...((pipelineStagesData ?? []) as PipelineStage[])
-        .filter((s) => !s.is_won && !s.is_lost)
+        .filter((s) => s.is_active && !s.is_won && !s.is_lost)
         .map((s) => ({
           value: String(s.id),
           label: s.name,

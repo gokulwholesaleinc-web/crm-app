@@ -20,6 +20,11 @@ interface BulkActionToolbarProps {
   isLoading?: boolean;
   users?: Array<{ id: number; full_name: string }>;
   statusOptions?: Array<{ value: string; label: string }>;
+  // Caller-owned extra action node, rendered before the menus. Used by
+  // the Leads page to surface "Move to Discovery" alongside the
+  // standard Update/Assign menus without forcing every consumer of the
+  // toolbar to learn about pipeline stages.
+  extraAction?: React.ReactNode;
 }
 
 export function BulkActionToolbar({
@@ -31,6 +36,7 @@ export function BulkActionToolbar({
   isLoading,
   users = [],
   statusOptions = [],
+  extraAction,
 }: BulkActionToolbarProps) {
   if (selectedIds.length === 0) return null;
 
@@ -49,6 +55,7 @@ export function BulkActionToolbar({
       </span>
 
       <div className="flex items-center gap-2 ml-auto">
+        {extraAction}
         {/* Status Update */}
         {statusOptions.length > 0 && (
           <Menu as="div" className="relative">
