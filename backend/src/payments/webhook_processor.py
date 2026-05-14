@@ -833,64 +833,11 @@ class WebhookProcessor:
         proposal.status = "paid"
         proposal.paid_at = datetime.now(UTC)
         await self.db.flush()
-        await self._move_opportunity_to_won(proposal.opportunity_id)
-
-    async def _move_opportunity_to_won(self, opportunity_id: int | None) -> None:
-        """Advance the linked opportunity to its first Won pipeline stage.
-
-        Skips silently if no opportunity, the opp is already on a Won
-        stage, or no Won stage is configured. Picks the lowest-`order`
-        Won stage so deployments with multiple "Closed Won" variants
-        land on the canonical entry stage.
-
-        Tenant scope: PipelineStage is single-tenant today, mirroring the
-        invoice/session lookups in this module. If a second tenant ever
-        onboards with their own pipeline, add a tenant_id filter here so
-        a paid-in-tenant-A event can't flip a tenant-B opportunity to
-        Won. See ``_mark_proposal_paid_from_invoice`` for the matching
-        comment on the proposal-side lookup.
-        """
-        if not opportunity_id:
-            return
-        from src.opportunities.models import Opportunity, PipelineStage
-
-        opp_result = await self.db.execute(
-            select(Opportunity).where(Opportunity.id == opportunity_id)
-        )
-        opportunity = opp_result.scalar_one_or_none()
-        if opportunity is None:
-            return
-
-        # Already won? Don't overwrite — admins may have hand-picked a
-        # specific Won stage variant we shouldn't reset.
-        if opportunity.pipeline_stage_id is not None:
-            current_stage_result = await self.db.execute(
-                select(PipelineStage).where(
-                    PipelineStage.id == opportunity.pipeline_stage_id
-                )
-            )
-            current_stage = current_stage_result.scalar_one_or_none()
-            if current_stage is not None and current_stage.is_won:
-                return
-
-        # NULLS LAST so a Won stage with order=NULL doesn't beat a stage
-        # with order=10 by chance of pg sort order — that would land us
-        # on a non-canonical Won variant.
-        won_result = await self.db.execute(
-            select(PipelineStage)
-            .where(
-                PipelineStage.pipeline_type == "opportunity",
-                PipelineStage.is_won.is_(True),
-            )
-            .order_by(PipelineStage.order.asc().nulls_last(), PipelineStage.id.asc())
-            .limit(1)
-        )
-        won_stage = won_result.scalar_one_or_none()
-        if won_stage is None:
-            return
-
-        opportunity.pipeline_stage_id = won_stage.id
-        await self.db.flush()
+        # Legacy paths called ``_move_opportunity_to_won`` here to advance
+        # the linked Opportunity's stage. That hook was deleted with the
+        # 2026-05-14 Opportunities removal — new proposals carry no
+        # ``opportunity_id``, and lead-pipeline advancement happens at
+        # the lead layer, not via Stripe webhook.
 
     async def _mark_proposal_paid_from_session(self, session_obj: dict) -> None:
         metadata = session_obj.get("metadata") or {}
@@ -919,11 +866,7 @@ class WebhookProcessor:
         if subscription_id and not proposal.stripe_subscription_id:
             proposal.stripe_subscription_id = subscription_id
 
-        flipped_to_paid = False
         if session_obj.get("payment_status") == "paid" and proposal.status != "paid":
             proposal.status = "paid"
             proposal.paid_at = datetime.now(UTC)
-            flipped_to_paid = True
         await self.db.flush()
-        if flipped_to_paid:
-            await self._move_opportunity_to_won(proposal.opportunity_id)

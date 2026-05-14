@@ -110,17 +110,17 @@ async def _preflight_won_conversion(
     path would attempt a duplicate insert against the unconditional
     ``ix_contacts_unique_email`` index and 500.
     """
-    if not stage.is_won or lead.converted_contact_id is not None:
-        if lead.converted_contact_id is not None:
-            linked = await db.get(Contact, lead.converted_contact_id)
-            if linked is None or linked.deleted_at is not None:
-                logger.warning(
-                    "lead %s has stale converted_contact_id=%s (missing or "
-                    "soft-deleted); skipping auto-convert on Won-stage move",
-                    lead.id, lead.converted_contact_id,
-                )
+    if not stage.is_won:
         return False
-
+    if lead.converted_contact_id is not None:
+        linked = await db.get(Contact, lead.converted_contact_id)
+        if linked is None or linked.deleted_at is not None:
+            logger.warning(
+                "lead %s has stale converted_contact_id=%s (missing or "
+                "soft-deleted); skipping auto-convert on Won-stage move",
+                lead.id, lead.converted_contact_id,
+            )
+        return False
     return True
 
 
@@ -160,7 +160,7 @@ async def _apply_stage_change(
     # with the rest of the request transaction — no stranded
     # ``status='converted'`` row with a missing contact link.
     converter = LeadConverter(db)
-    contact, company = await converter.full_conversion(
+    contact, company = await converter.convert_to_contact(
         lead=lead,
         user_id=current_user.id,
         create_company=bool(lead.company_name),
@@ -374,14 +374,12 @@ async def get_lead_kanban(
     # User query instead of N (one per stage) or doing the .map() inside
     # each loop iteration.
     #
-    # Hide successfully-converted leads: once the auto-convert (Won move)
-    # has produced the Opportunity, the deal lives on as that Opportunity
-    # — duplicating it on the lead board is just noise. Orphan-converted
-    # rows (converted_opportunity_id IS NULL) stay visible so the user
-    # can finish them via the explicit Convert action.
+    # New leads start with pipeline_stage_id=NULL (off-kanban) per
+    # Lorenzo's 2026-05-14 call — they only appear once an admin moves
+    # them into Discovery via the quick-edit. Won-stage leads stay in
+    # the Won column for visibility even after Contact auto-conversion.
     leads_query = select(Lead).where(
         Lead.pipeline_stage_id.in_([s.id for s in stages]),
-        Lead.converted_opportunity_id.is_(None),
     )
     if resolved_owner_id:
         leads_query = leads_query.where(Lead.owner_id == resolved_owner_id)
@@ -709,7 +707,7 @@ async def full_conversion(
         raise_bad_request(ErrorMessages.already_converted(EntityNames.LEAD))
 
     converter = LeadConverter(db)
-    contact, company = await converter.full_conversion(
+    contact, company = await converter.convert_to_contact(
         lead=lead,
         user_id=current_user.id,
         create_company=request.create_company,
