@@ -3,6 +3,7 @@ import clsx from 'clsx';
 import {
   entityRoutes,
   LEGACY_OPPORTUNITY_TYPE,
+  LEGACY_QUOTE_TYPE,
   type NormalizedEntityType,
 } from './EntityLink.utils';
 
@@ -59,6 +60,24 @@ export function EntityLink({
       >
         {children}{' '}
         <span className="text-[10px] uppercase tracking-wide">(legacy opportunity)</span>
+      </span>
+    );
+  }
+
+  // Quotes retired 2026-05-14 — mirror the legacy-opportunity treatment
+  // so historical activity/audit rows render a muted non-clickable label
+  // instead of routing to a 404.
+  if (type === LEGACY_QUOTE_TYPE) {
+    return (
+      <span
+        className={clsx(
+          'text-gray-400 dark:text-gray-500 italic',
+          className,
+        )}
+        title={title ?? 'Quotes were replaced by Payment invoices — original entity is preserved for audit history.'}
+      >
+        {children}{' '}
+        <span className="text-[10px] uppercase tracking-wide">(legacy quote)</span>
       </span>
     );
   }

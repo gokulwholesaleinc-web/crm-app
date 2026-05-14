@@ -169,11 +169,14 @@ from src.leads.models import Lead
 from src.opportunities.models import Opportunity, PipelineStage
 from src.payments.models import Payment
 from src.proposals.models import Proposal
-from src.quotes.models import Quote
 
 
 class SalesKPIResponse(BaseModel):
-    quotes_sent: int
+    # ``quotes_sent`` + ``quote_to_payment_conversion_rate`` retired
+    # 2026-05-14 (quotes router unmounted). Fields kept on response for
+    # client-compat; ``quotes_sent`` is always 0 and the conversion rate
+    # now reads proposals-accepted → payments-collected.
+    quotes_sent: int = 0
     proposals_sent: int
     payments_collected_total: float
     payments_collected_count: int
@@ -207,17 +210,7 @@ async def get_sales_kpis(
 
     from datetime import datetime
 
-    quotes_filters = [Quote.status != "draft"]
-    if resolved_owner_id is not None:
-        quotes_filters.append(Quote.owner_id == resolved_owner_id)
-    if parsed_from:
-        quotes_filters.append(Quote.created_at >= datetime.combine(parsed_from, datetime.min.time()))
-    if parsed_to:
-        quotes_filters.append(Quote.created_at <= datetime.combine(parsed_to, datetime.max.time()))
-    quotes_sent_result = await db.execute(
-        select(func.count(Quote.id)).where(*quotes_filters)
-    )
-
+    # Quote-stat queries retired 2026-05-14 — quotes router unmounted.
     proposals_filters = [Proposal.status != "draft"]
     if resolved_owner_id is not None:
         proposals_filters.append(Proposal.created_by_id == resolved_owner_id)
@@ -243,42 +236,47 @@ async def get_sales_kpis(
         ).where(*payments_filters)
     )
 
-    total_quotes_filters = []
+    # Conversion-rate basis switched from Quotes → Proposals 2026-05-14
+    # to follow the quotes-router unmount.
+    total_proposals_filters = []
     if resolved_owner_id is not None:
-        total_quotes_filters.append(Quote.owner_id == resolved_owner_id)
+        total_proposals_filters.append(Proposal.created_by_id == resolved_owner_id)
     if parsed_from:
-        total_quotes_filters.append(Quote.created_at >= datetime.combine(parsed_from, datetime.min.time()))
+        total_proposals_filters.append(Proposal.created_at >= datetime.combine(parsed_from, datetime.min.time()))
     if parsed_to:
-        total_quotes_filters.append(Quote.created_at <= datetime.combine(parsed_to, datetime.max.time()))
-    total_quotes_result = await db.execute(
-        select(func.count(Quote.id)).where(*total_quotes_filters)
+        total_proposals_filters.append(Proposal.created_at <= datetime.combine(parsed_to, datetime.max.time()))
+    total_proposals_result = await db.execute(
+        select(func.count(Proposal.id)).where(*total_proposals_filters)
     )
 
-    accepted_quotes_filters = [Quote.status == "accepted"]
+    accepted_proposals_filters = [Proposal.status == "accepted"]
     if resolved_owner_id is not None:
-        accepted_quotes_filters.append(Quote.owner_id == resolved_owner_id)
+        accepted_proposals_filters.append(Proposal.created_by_id == resolved_owner_id)
     if parsed_from:
-        accepted_quotes_filters.append(Quote.created_at >= datetime.combine(parsed_from, datetime.min.time()))
+        accepted_proposals_filters.append(Proposal.created_at >= datetime.combine(parsed_from, datetime.min.time()))
     if parsed_to:
-        accepted_quotes_filters.append(Quote.created_at <= datetime.combine(parsed_to, datetime.max.time()))
-    accepted_quotes_result = await db.execute(
-        select(func.count(Quote.id)).where(*accepted_quotes_filters)
+        accepted_proposals_filters.append(Proposal.created_at <= datetime.combine(parsed_to, datetime.max.time()))
+    accepted_proposals_result = await db.execute(
+        select(func.count(Proposal.id)).where(*accepted_proposals_filters)
     )
 
-    quotes_sent = quotes_sent_result.scalar() or 0
     proposals_sent = proposals_sent_result.scalar() or 0
 
     row = payments_result.one()
     payments_collected_count = row[0] or 0
     payments_collected_total = float(row[1] or 0)
 
-    total_quotes = total_quotes_result.scalar() or 0
-    accepted_quotes = accepted_quotes_result.scalar() or 0
+    total_proposals = total_proposals_result.scalar() or 0
+    accepted_proposals = accepted_proposals_result.scalar() or 0
 
-    conversion_rate = round((accepted_quotes / total_quotes) * 100, 1) if total_quotes > 0 else 0.0
+    conversion_rate = (
+        round((accepted_proposals / total_proposals) * 100, 1)
+        if total_proposals > 0
+        else 0.0
+    )
 
     result = SalesKPIResponse(
-        quotes_sent=quotes_sent,
+        quotes_sent=0,
         proposals_sent=proposals_sent,
         payments_collected_total=payments_collected_total,
         payments_collected_count=payments_collected_count,

@@ -5,7 +5,6 @@ import {
   UserGroupIcon,
   BuildingOfficeIcon,
   FunnelIcon,
-  DocumentTextIcon,
   DocumentDuplicateIcon,
   ScaleIcon,
   CreditCardIcon,
@@ -70,7 +69,7 @@ export const SECTIONS: Section[] = [
       <div className="space-y-4">
         <p className="text-sm text-gray-700 dark:text-gray-300">
           The CRM is built around a simple funnel:{' '}
-          <strong>Lead → Contact (and optionally Company) → Quote / Proposal → Payment</strong>.
+          <strong>Lead → Contact (and optionally Company) → Proposal → Payment</strong>.
           Every other tab — Activities, Campaigns, Inbox — exists to help you move records
           through that funnel and keep a full history of what happened along the way.
         </p>
@@ -101,7 +100,7 @@ export const SECTIONS: Section[] = [
           <ul className="space-y-1.5">
             <Bullet>
               The left sidebar has two groups: a main group (Dashboard, Contacts, Companies,
-              Leads, Quotes, Proposals, Contracts, Payments, Activities, Calendar,
+              Leads, Proposals, Contracts, Payments, Activities, Calendar,
               Campaigns, Inbox) and a secondary group (Duplicates, Import/Export, Reports,
               Settings, Help, Admin).
             </Bullet>
@@ -111,7 +110,7 @@ export const SECTIONS: Section[] = [
               to restore the original layout.
             </Bullet>
             <Bullet>
-              The header has a global search that looks across Contacts, Leads, Companies, Quotes,
+              The header has a global search that looks across Contacts, Leads, Companies,
               Proposals, and Payments. You can also toggle dark mode from the header.
             </Bullet>
             <Bullet>
@@ -146,18 +145,18 @@ export const SECTIONS: Section[] = [
           </h3>
           <p className="text-sm text-gray-700 dark:text-gray-300 mb-3">
             <strong>The CRM has its own e-signature built in</strong> — you don&rsquo;t need a
-            separate DocuSign / HelloSign / Adobe Sign account. Quotes and Proposals both
-            include a public-link signing flow that captures the signer&rsquo;s name, email,
+            separate DocuSign / HelloSign / Adobe Sign account. Proposals include
+            a public-link signing flow that captures the signer&rsquo;s name, email,
             IP, and timestamp.
           </p>
           <ol className="space-y-2.5">
             <Step n={1}>
-              Open <strong>Quotes</strong> (or <strong>Proposals</strong>) in the sidebar and
-              click <em>Create Quote</em> / <em>Create Proposal</em>.
+              Open <strong>Proposals</strong> in the sidebar and click
+              <em> Create Proposal</em>.
             </Step>
             <Step n={2}>
-              Fill in the line items (Quote) or sections (Proposal), pick the contact and
-              company, then save. The status starts as <Badge variant="gray">draft</Badge>.
+              Fill in the sections, pick the contact and company, then save.
+              The status starts as <Badge variant="gray">draft</Badge>.
             </Step>
             <Step n={3}>
               Click <em>Send</em> — status flips to <Badge variant="blue">sent</Badge> and a
@@ -166,7 +165,6 @@ export const SECTIONS: Section[] = [
             <Step n={4}>
               Copy the public link from the detail page (or use the &ldquo;Email link&rdquo;
               shortcut) and send it to the client. The URL looks like
-              {' '}<code>/quotes/public/&#123;token&#125;</code> or
               {' '}<code>/proposals/public/&#123;token&#125;</code>.
             </Step>
             <Step n={5}>
@@ -178,8 +176,7 @@ export const SECTIONS: Section[] = [
             <Step n={6}>
               For <strong>Proposals</strong> with a price, accepting auto-spawns a
               Stripe invoice (one-time) or Checkout session (subscription) — see
-              tutorial 2. <strong>Quotes</strong> don&rsquo;t auto-bill on accept; you
-              create the charge yourself from Payments after acceptance.
+              tutorial 2.
             </Step>
           </ol>
           <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
@@ -248,17 +245,9 @@ export const SECTIONS: Section[] = [
               begins.
             </Step>
             <Step n={3}>
-              <strong>Recurring — Quote route (manual):</strong> a Quote with{' '}
-              <em>Payment type = Subscription</em> records the recurrence on the
-              Quote, but accepting via the public link only stores the e-signature
-              (it does not auto-bill). After acceptance, open Payments and create the
-              checkout yourself, passing the Quote — the CRM will create a
-              subscription-mode session because the linked Quote is marked recurring.
-            </Step>
-            <Step n={4}>
               Recurring charges show up on the Payments page under the{' '}
               <em>Subscriptions</em> tab, and on the customer&rsquo;s contact / company
-              detail page under the new <em>Payments</em> tab (tutorial 4).
+              detail page under the <em>Payments</em> tab.
             </Step>
           </ol>
           <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
@@ -403,15 +392,15 @@ export const SECTIONS: Section[] = [
             you'll see the contact's full history on the Contact detail page.
           </Step>
           <Step n={4}>
-            <strong>You build a Quote and/or Proposal.</strong> Both can link to a Contact and a
-            Company. Quotes hold line items with prices and discounts; Proposals hold longer-form
-            sections (cover letter, scope, pricing, timeline, terms). Each has a public share URL
-            you send to the client.
+            <strong>You build a Proposal.</strong> It links to a Contact and a Company and
+            holds longer-form sections (cover letter, scope, pricing, timeline, terms).
+            Each has a public share URL you send to the client.
           </Step>
           <Step n={5}>
-            <strong>The client accepts or rejects.</strong> Public quote/proposal pages capture
-            the decision and an e-signature (name, email, IP, signed-at) — the built-in
-            DocuSign-equivalent. Status flips to <em>accepted</em> or <em>rejected</em>.
+            <strong>The client accepts or rejects.</strong> The public proposal page
+            captures the decision and an e-signature (name, email, IP, signed-at) — the
+            built-in DocuSign-equivalent. Status flips to <em>accepted</em> or
+            <em> rejected</em>.
           </Step>
           <Step n={6}>
             <strong>You collect Payment.</strong> The Payments tab tracks Stripe payment intents,
@@ -452,8 +441,8 @@ export const SECTIONS: Section[] = [
             trend indicator and a click-through to the relevant tab.
           </Bullet>
           <Bullet>
-            <strong>Sales KPIs:</strong> Quotes Sent, Proposals Sent, Payments Collected, and Quote
-            Conversion Rate.
+            <strong>Sales KPIs:</strong> Proposals Sent, Payments Collected, and
+            Proposal Conversion Rate.
           </Bullet>
           <Bullet>
             <strong>Report Widgets:</strong> Pin any saved report from the Reports tab as a widget.
@@ -484,7 +473,7 @@ export const SECTIONS: Section[] = [
       <div className="space-y-3">
         <p className="text-sm text-gray-700 dark:text-gray-300">
           A Contact is a person you do business with. Contacts can be linked to a Company, and most
-          other records (activities, quotes, proposals, contracts) hang off a contact.
+          other records (activities, proposals, contracts) hang off a contact.
         </p>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Creating &amp; editing</h4>
         <ul className="space-y-1.5">
@@ -504,7 +493,7 @@ export const SECTIONS: Section[] = [
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Detail page tabs</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">
           Open any contact and you&rsquo;ll see tabs for: <em>Details, Activities, Notes, Emails,
-          Contracts, Quotes, Proposals, Payments, Documents, Attachments, History, Sharing</em>.
+          Contracts, Proposals, Payments, Documents, Attachments, History, Sharing</em>.
           Each is a self-contained view of just the records that belong to this contact —
           including the <strong>Payments</strong> tab, which lists every Stripe charge and
           subscription tied to this customer.
@@ -521,7 +510,7 @@ export const SECTIONS: Section[] = [
     body: (
       <div className="space-y-3">
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          Companies group contacts together and act as the parent for contracts, quotes, proposals,
+          Companies group contacts together and act as the parent for contracts, proposals,
           and expenses tied to that account.
         </p>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">List view</h4>
@@ -542,7 +531,7 @@ export const SECTIONS: Section[] = [
         </ul>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Detail page tabs</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          <em>Overview, Contracts, Quotes, Proposals, Activities, Notes, Attachments, History,
+          <em>Overview, Contracts, Proposals, Activities, Notes, Attachments, History,
           Sharing, Meta (custom fields), Expenses.</em> The Overview tab lists all linked contacts
           as cards.
         </p>
@@ -601,61 +590,8 @@ export const SECTIONS: Section[] = [
       </div>
     ),
   },
-  {
-    id: 'quotes',
-    title: 'Quotes',
-    icon: DocumentTextIcon,
-    searchText:
-      'quotes quote line items discount tax payment type one time subscription recurring monthly quarterly yearly draft sent viewed accepted rejected expired public link e-signature',
-    body: (
-      <div className="space-y-3">
-        <p className="text-sm text-gray-700 dark:text-gray-300">
-          Quotes are itemized price offers you send to a contact. They link to a contact and/or
-          company.
-        </p>
-        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Anatomy of a quote</h4>
-        <ul className="space-y-1.5">
-          <Bullet>
-            Header fields: title, description, currency (default USD), <em>valid until</em> date,
-            payment type (one-time or subscription), recurring interval if subscription (monthly,
-            quarterly, yearly), and a discount (percent or fixed).
-          </Bullet>
-          <Bullet>
-            Line items: quantity × unit price minus per-line discount. Totals roll up automatically.
-          </Bullet>
-          <Bullet>
-            Branding: company name, logo, and primary/secondary/accent colors are pulled from your
-            tenant white-label settings.
-          </Bullet>
-        </ul>
-        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Status flow</h4>
-        <p className="text-sm text-gray-700 dark:text-gray-300">
-          <Badge variant="gray">draft</Badge> →{' '}
-          <Badge variant="blue">sent</Badge> →{' '}
-          <Badge variant="yellow">viewed</Badge> →{' '}
-          <Badge variant="green">accepted</Badge> /{' '}
-          <Badge variant="red">rejected</Badge> /{' '}
-          <Badge variant="gray">expired</Badge>
-        </p>
-        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Public link &amp; e-signature (DocuSign-equivalent)</h4>
-        <ul className="space-y-1.5">
-          <Bullet>
-            Every quote has a public URL at <code>/quotes/public/&#123;public_token&#125;</code>{' '}
-            — the token is an unguessable 32-byte string the CRM generates per
-            quote (not the sequential quote number) so the link is safe to share
-            without requiring the client to log in.
-          </Bullet>
-          <Bullet>
-            On the public page, the client types their name + email and clicks Accept (or
-            rejects with a reason). Name, email, IP, and timestamp are captured as the
-            e-signature. Status updates flow back into the CRM.{' '}
-            <strong>You don&rsquo;t need DocuSign / HelloSign</strong> — this is the built-in
-            equivalent. See the <em>Tutorials</em> section for the full walkthrough.
-          </Bullet>
-        </ul>
-      </div>
-    ),
-  },
+  // Quotes help section removed 2026-05-14 — quotes router unmounted;
+  // replaced by one-off Payment invoices with optional PDF attachments.
   {
     id: 'proposals',
     title: 'Proposals',
@@ -689,12 +625,12 @@ export const SECTIONS: Section[] = [
         <ul className="space-y-1.5">
           <Bullet>
             Public URL pattern: <code>/proposals/public/&#123;public_token&#125;</code>.
-            Same unguessable-token scheme as quotes (not the sequential proposal
+            The token is an unguessable 32-byte string (not the sequential proposal
             number). Send the link to the client; they don&rsquo;t need an account.
           </Bullet>
           <Bullet>
             The public page lets the client type their name + email and accept (or
-            reject with a reason) — same DocuSign-equivalent flow used by Quotes. Name,
+            reject with a reason) — a built-in DocuSign-equivalent flow. Name,
             email, IP, and timestamp are captured on the proposal record.
           </Bullet>
           <Bullet>
@@ -788,7 +724,7 @@ export const SECTIONS: Section[] = [
             Stripe identifiers: payment intent ID, checkout session ID, invoice ID, and customer ID.
           </Bullet>
           <Bullet>
-            Links back to the originating Quote, Proposal, and CRM contact via the StripeCustomer
+            Links back to the originating Proposal and CRM contact via the StripeCustomer
             mapping.
           </Bullet>
           <Bullet>
@@ -940,7 +876,7 @@ export const SECTIONS: Section[] = [
           </Bullet>
         </ul>
         <Tip>
-          Quotes, Proposals, and Contracts have an <strong>Email Activity</strong> panel on the
+          Proposals and Contracts have an <strong>Email Activity</strong> panel on the
           detail page that shows that record's emails specifically, including queue status
           (sent / retry / failed) so you can self-diagnose deliverability.
         </Tip>
@@ -1094,7 +1030,7 @@ export const SECTIONS: Section[] = [
           </Bullet>
           <Bullet>
             <strong>Branding (white-label):</strong> company name, primary/secondary/accent colors,
-            logo URL, favicon URL, footer text. Applied tenant-wide and visible on quotes and
+            logo URL, favicon URL, footer text. Applied tenant-wide and visible on
             proposals you send.
           </Bullet>
           <Bullet>
@@ -1150,8 +1086,8 @@ export const SECTIONS: Section[] = [
         </p>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">System stats grid</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          Eight top-line numbers: Total Users, Active Users (last 7 days), Total Contacts, Total
-          Companies, Total Leads, Total Quotes, Total Proposals, Total Payments.
+          Seven top-line numbers: Total Users, Active Users (last 7 days), Total Contacts, Total
+          Companies, Total Leads, Total Proposals, Total Payments.
         </p>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">User management</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">

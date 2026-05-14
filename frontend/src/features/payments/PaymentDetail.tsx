@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useSmartBack } from '../../hooks/useSmartBack';
 import { ArrowLeftIcon, DocumentArrowDownIcon, EnvelopeIcon, ClipboardDocumentIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
 import { EntityLink, StatusBadge } from '../../components/ui';
+import { AttachmentList } from '../../components/shared/AttachmentList';
 import { usePayment } from '../../hooks/usePayments';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
@@ -317,6 +318,16 @@ function PaymentDetailPage() {
               )}
             </dl>
           </div>
+
+          {/* Attachments — PDFs that ride along on the invoice email.
+              Replaces the retired Quotes feature: Lorenzo's one-off invoices
+              are billed standalone, with the back-up PDF (signed estimate,
+              statement of work, etc.) attached here. Reuses the shared
+              AttachmentList that already powers Contracts/Companies. */}
+          <div>
+            <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">Attachments</h2>
+            <AttachmentList entityType="payments" entityId={payment.id} />
+          </div>
         </div>
 
         {/* Sidebar */}
@@ -358,17 +369,8 @@ function PaymentDetailPage() {
                   </dd>
                 </div>
               )}
-              {payment.quote && (
-                <div>
-                  <dt className="text-xs text-gray-500 dark:text-gray-400">Quote</dt>
-                  <dd className="text-sm font-medium">
-                    <EntityLink type="quote" id={payment.quote.id}>
-                      {payment.quote.title}
-                    </EntityLink>
-                  </dd>
-                </div>
-              )}
-              {!payment.customer && !payment.quote && !payment.proposal && (
+              {/* Quote-linked payments retired 2026-05-14 — quotes router unmounted. */}
+              {!payment.customer && !payment.proposal && (
                 <p className="text-sm text-gray-500 dark:text-gray-400">No related entities</p>
               )}
             </dl>

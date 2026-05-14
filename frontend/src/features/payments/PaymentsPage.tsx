@@ -40,7 +40,7 @@ function CustomerLink({
   return <>{label}</>;
 }
 
-// Renders the entity this payment is for: proposal > quote.
+// Renders the entity this payment is for: proposal.
 // Returns a placeholder when the payment was created standalone.
 export function PaymentForLink({ payment }: { payment: Payment }) {
   if (payment.proposal) {
@@ -50,13 +50,9 @@ export function PaymentForLink({ payment }: { payment: Payment }) {
       </EntityLink>
     );
   }
-  if (payment.quote) {
-    return (
-      <EntityLink type="quote" id={payment.quote.id} variant="muted" title={payment.quote.title}>
-        Quote #{payment.quote.id}
-      </EntityLink>
-    );
-  }
+  // Quote-linked payments retired 2026-05-14 — quotes router unmounted.
+  // Historical payment rows still carry ``quote_id`` for audit purposes
+  // but the Payment.quote relation is no longer hydrated on the API.
   return <span className="text-gray-400 dark:text-gray-500">—</span>;
 }
 
@@ -282,7 +278,7 @@ function PaymentsPage() {
                       </span>
                       <span className="text-gray-500 dark:text-gray-400">{formatDate(payment.created_at)}</span>
                     </div>
-                    {(payment.proposal || payment.quote) && (
+                    {payment.proposal && (
                       <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 truncate">
                         For <PaymentForLink payment={payment} />
                       </p>

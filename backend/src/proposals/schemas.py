@@ -137,7 +137,6 @@ from src.core.schemas import (  # noqa: E402
     ContactBrief,
     ContactBriefWithEmail,
     OpportunityBrief,
-    QuoteBrief,
     UserBrief,
 )
 
@@ -184,7 +183,8 @@ class ProposalResponse(ProposalBase):
     contact: ContactBriefWithEmail | None = None
     company: CompanyBrief | None = None
     opportunity: OpportunityBrief | None = None
-    quote: QuoteBrief | None = None
+    # ``quote`` field removed 2026-05-14 — relationship dropped with the
+    # quotes router unmount; ``quote_id`` column still present below.
     # ORM attr is `created_by_user`; JSON name is `created_by`.
     created_by: UserBrief | None = Field(
         default=None,

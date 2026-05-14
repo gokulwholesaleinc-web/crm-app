@@ -78,10 +78,11 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
     update_exclude_fields: set = set()
 
     def _get_eager_load_options(self):
+        # ``Payment.quote`` eager-load dropped 2026-05-14 — relationship
+        # removed with the quotes router unmount; ``quote_id`` column persists.
         return [
             selectinload(Payment.customer),
             selectinload(Payment.opportunity),
-            selectinload(Payment.quote),
         ]
 
     async def attach_proposals(self, payments: list[Payment]) -> None:
@@ -139,12 +140,13 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         StripeCustomer — the contact/company detail page uses these to show
         every payment, invoice, and checkout session for that record.
         """
+        # ``Payment.quote`` eager-load dropped 2026-05-14 — relationship
+        # removed with the quotes router unmount.
         query = (
             select(Payment)
             .options(
                 selectinload(Payment.customer),
                 selectinload(Payment.opportunity),
-                selectinload(Payment.quote),
             )
         )
 
@@ -249,24 +251,14 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             if customer:
                 stripe_customer_id = customer.stripe_customer_id
 
-        # Check if quote is subscription type
+        # Quote-driven checkout retired 2026-05-14 — quotes router unmounted.
+        # Subscription kickoff now requires explicit ``payment_type`` /
+        # ``recurring_interval`` on the request body. ``quote_id`` is still
+        # accepted on the request schema for legacy clients but no longer
+        # influences checkout configuration.
         is_subscription = False
         recurring_interval = None
-        # Inherit the linked opportunity from the quote so reporting + the
-        # opportunity-side payment ledger don't lose the relationship just
-        # because checkout was kicked off from the quote view.
         opportunity_id = None
-        if quote_id:
-            from src.quotes.models import Quote
-            quote_result = await self.db.execute(
-                select(Quote).where(Quote.id == quote_id)
-            )
-            quote = quote_result.scalar_one_or_none()
-            if quote:
-                opportunity_id = quote.opportunity_id
-                if quote.payment_type == "subscription":
-                    is_subscription = True
-                    recurring_interval = quote.recurring_interval
 
         # Get tenant branding for company name in checkout description
         company_name = "CRM"
@@ -512,11 +504,11 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         )
         from src.email.service import EmailService
 
+        # ``Payment.quote`` eager-load dropped 2026-05-14 — relationship removed.
         result = await self.db.execute(
             select(Payment)
             .options(
                 selectinload(Payment.customer),
-                selectinload(Payment.quote),
             )
             .where(Payment.id == payment_id)
         )
@@ -574,6 +566,12 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         Used by the staff "Resend Invoice" button when the customer reports
         not receiving the original. Reuses the same PDF generator as the
         download endpoint plus a dedicated branded email template.
+
+        Also attaches every staff-uploaded Attachment that hangs off this
+        Payment (entity_type='payments', entity_id=payment.id) — the
+        Lorenzo one-off-invoice flow uses these for the signed estimate /
+        statement-of-work PDF that backs the bill, in place of the retired
+        Quotes feature.
         """
         from src.email.branded_templates import (
             TenantBrandingHelper,
@@ -582,11 +580,11 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         from src.email.service import EmailService
         from src.email.types import EmailAttachment
 
+        # ``Payment.quote`` eager-load dropped 2026-05-14 — relationship removed.
         result = await self.db.execute(
             select(Payment)
             .options(
                 selectinload(Payment.customer),
-                selectinload(Payment.quote),
             )
             .where(Payment.id == payment_id)
         )
@@ -621,11 +619,17 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         # fallback path); attach with the appropriate content-type so
         # mail clients render or download as expected.
         pdf_bytes = await self.generate_invoice_pdf(payment_id)
-        attachment: EmailAttachment = {
-            "filename": f"invoice-{payment_id}.html",
-            "content": pdf_bytes,
-            "content_type": "text/html",
-        }
+        attachments: list[EmailAttachment] = [EmailAttachment(
+            filename=f"invoice-{payment_id}.html",
+            content=pdf_bytes,
+            content_type="text/html",
+        )]
+
+        # Staff-uploaded supporting docs (Lorenzo one-off invoice flow,
+        # replaces retired Quotes attachments). Failures are logged + skipped,
+        # not raised — the invoice email is more valuable than a backup PDF.
+        extras = await self._collect_payment_attachments(payment_id)
+        attachments.extend(extras)
 
         email_service = EmailService(self.db)
         await email_service.queue_email(
@@ -635,8 +639,76 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             sent_by_id=payment.owner_id,
             entity_type="payments",
             entity_id=payment.id,
-            attachments=[attachment],
+            attachments=attachments,
         )
+
+    async def _collect_payment_attachments(
+        self, payment_id: int,
+    ) -> list:
+        """Fetch every staff-uploaded Attachment for ``payment_id`` from R2.
+
+        Mirrors ``ProposalService._collect_proposal_attachments`` — fetches
+        each file with a 10s timeout, logs+skips on failure (R2 outage,
+        missing key, network) so a flaky storage backend can't take down
+        the Resend Invoice flow. Caller appends successful items to the
+        email attachment list.
+        """
+        import hashlib
+
+        import httpx
+
+        from src.attachments.models import Attachment
+        from src.attachments.service import AttachmentService
+        from src.email.types import EmailAttachment
+
+        result = await self.db.execute(
+            select(Attachment)
+            .where(Attachment.entity_type == "payments")
+            .where(Attachment.entity_id == payment_id)
+            .order_by(Attachment.created_at.asc())
+        )
+        rows = list(result.scalars().all())
+        if not rows:
+            return []
+
+        att_service = AttachmentService(self.db)
+        attachments: list = []
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            for att in rows:
+                try:
+                    download_url = await att_service.get_download_url(att)
+                    if download_url:
+                        resp = await client.get(download_url)
+                        resp.raise_for_status()
+                        content = resp.content
+                    else:
+                        # Local-disk fallback (dev/test).
+                        path = att_service.get_file_path(att)
+                        if not path or not path.exists():
+                            raise FileNotFoundError(str(path))
+                        content = path.read_bytes()
+
+                    attachments.append(EmailAttachment(
+                        filename=att.original_filename,
+                        content=content,
+                        content_type=att.mime_type or "application/octet-stream",
+                    ))
+                except (httpx.HTTPError, OSError) as exc:
+                    key_for_hash = att.file_path or att.filename or ""
+                    digest = hashlib.sha256(
+                        key_for_hash.encode("utf-8")
+                    ).hexdigest()[:16]
+                    logger.warning(
+                        "Failed to attach payment attachment %s (payment=%s): %s",
+                        att.id, payment_id, exc,
+                        exc_info=True,
+                    )
+                    # Skip — payment email goes out without this file rather
+                    # than failing the whole send.
+                    _ = digest
+
+        return attachments
 
     async def _handle_checkout_completed(self, session_obj: dict) -> None:
         """Handle checkout.session.completed event. Delegates to WebhookProcessor."""
@@ -828,17 +900,10 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             payment_method_types=payment_method_types,
         )
 
-        # Inherit the quote's opportunity so this Payment shows on the
-        # opportunity ledger — symmetric with create_checkout_session.
+        # Quote-driven invoice inheritance retired 2026-05-14 — quotes
+        # router unmounted. ``quote_id`` is still persisted on the Payment
+        # row for legacy lookups but no longer back-fills opportunity_id.
         opportunity_id = None
-        if quote_id:
-            from src.quotes.models import Quote
-            quote_result = await self.db.execute(
-                select(Quote).where(Quote.id == quote_id)
-            )
-            quote = quote_result.scalar_one_or_none()
-            if quote:
-                opportunity_id = quote.opportunity_id
 
         invoice_url = getattr(invoice, "hosted_invoice_url", None)
         payment = Payment(

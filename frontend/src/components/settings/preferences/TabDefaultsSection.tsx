@@ -15,7 +15,6 @@ const ENTITY_TABS: Record<EntityKindWithTabs, readonly string[]> = {
     'notes',
     'emails',
     'contracts',
-    'quotes',
     'proposals',
     'payments',
     'documents',
@@ -36,7 +35,6 @@ const ENTITY_TABS: Record<EntityKindWithTabs, readonly string[]> = {
   company: [
     'overview',
     'contracts',
-    'quotes',
     'proposals',
     'payments',
     'activities',

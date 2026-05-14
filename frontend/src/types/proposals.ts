@@ -99,7 +99,8 @@ export interface Proposal extends ProposalBase {
   updated_at: string;
   contact?: { id: number; full_name: string; email?: string | null } | null;
   company?: { id: number; name: string } | null;
-  quote?: { id: number; quote_number: string; title: string; total: number } | null;
+  // ``quote`` relation removed 2026-05-14 — quotes feature retired.
+  // ``quote_id`` column still present on the proposal for legacy lookups.
   /** User who clicked "Create Proposal". Immutable. Rendered in admin list+detail. */
   created_by?: { id: number; full_name: string; email?: string | null } | null;
   /** User the proposal is currently assigned to. Defaults to created_by but can be reassigned. */

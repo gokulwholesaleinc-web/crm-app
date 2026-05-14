@@ -53,7 +53,8 @@ export interface Payment extends PaymentBase {
   refund_amount: number | null;
   metadata_json: Record<string, unknown> | null;
   customer?: StripeCustomerBrief | null;
-  quote?: { id: number; title: string } | null;
+  // ``quote`` relation removed 2026-05-14 — quotes feature retired.
+  // ``quote_id`` column still present on PaymentBase above.
   proposal?: { id: number; title: string; proposal_number: string } | null;
   created_at: string;
   updated_at: string;

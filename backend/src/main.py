@@ -52,7 +52,6 @@ from src.notes.router import router as notes_router
 from src.notifications.router import router as notifications_router
 from src.payments.router import router as payments_router
 from src.proposals.router import router as proposals_router
-from src.quotes.router import router as quotes_router
 from src.reports.router import router as reports_router
 from src.roles.router import router as roles_router
 from src.settings.router import router as settings_router
@@ -195,7 +194,9 @@ app.include_router(webhooks_router)
 app.include_router(assignment_router)
 app.include_router(me_router)
 app.include_router(sharing_router)
-app.include_router(quotes_router)
+# Quotes router unmounted 2026-05-14 — Lorenzo replaced quotes with one-off
+# Payment invoices (+ optional PDF attachments). Model + tables preserved
+# for historical FK data on ``Payment.quote_id`` and ``Proposal.quote_id``.
 app.include_router(payments_router)
 app.include_router(proposals_router)
 app.include_router(contracts_stats_router)
@@ -226,21 +227,19 @@ from src.events.service import (
     PROPOSAL_ACCEPTED,
     PROPOSAL_REJECTED,
     PROPOSAL_SENT,
-    QUOTE_ACCEPTED,
-    QUOTE_REJECTED,
-    QUOTE_SENT,
 )
 from src.events.service import on as event_on
 from src.notifications.event_handler import notification_event_handler
 from src.webhooks.event_handler import webhook_event_handler
 
+# QUOTE_SENT/QUOTE_ACCEPTED/QUOTE_REJECTED event registrations dropped
+# 2026-05-14 — quotes router unmounted, events will no longer fire.
 for _evt in [
     LEAD_CREATED, LEAD_UPDATED,
     CONTACT_CREATED, CONTACT_UPDATED,
     OPPORTUNITY_CREATED, OPPORTUNITY_UPDATED, OPPORTUNITY_STAGE_CHANGED,
     ACTIVITY_CREATED, ACTIVITY_ASSIGNED,
     COMPANY_CREATED, COMPANY_UPDATED,
-    QUOTE_SENT, QUOTE_ACCEPTED, QUOTE_REJECTED,
     PROPOSAL_SENT, PROPOSAL_ACCEPTED, PROPOSAL_REJECTED,
     PAYMENT_RECEIVED,
 ]:
@@ -249,7 +248,6 @@ for _evt in [
 # Register notification event handler for key events
 for _evt in [
     LEAD_CREATED, CONTACT_CREATED, OPPORTUNITY_STAGE_CHANGED,
-    QUOTE_SENT, QUOTE_REJECTED,
     PROPOSAL_SENT, PROPOSAL_REJECTED,
     PAYMENT_RECEIVED,
 ]:

@@ -53,11 +53,16 @@ export type { SearchableSelectProps, SearchableSelectOption } from './Searchable
 // EntityLink
 export { EntityLink } from './EntityLink';
 export type { EntityLinkProps, EntityLinkVariant } from './EntityLink';
-export { normalizeEntityType, LEGACY_OPPORTUNITY_TYPE } from './EntityLink.utils';
+export {
+  normalizeEntityType,
+  LEGACY_OPPORTUNITY_TYPE,
+  LEGACY_QUOTE_TYPE,
+} from './EntityLink.utils';
 export type {
   EntityType,
   NormalizedEntityType,
   LegacyOpportunityType,
+  LegacyQuoteType,
 } from './EntityLink.utils';
 
 // HelpLink

@@ -13,13 +13,11 @@ import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { TabBar, ActivitiesTab, CommonTabContent, SuspenseFallback } from '../../components/shared/DetailPageShell';
 import { StickyActionBar } from '../../components/shared/StickyActionBar';
 import { OverviewTab } from './components/tabs/OverviewTab';
-import { QuotesTab } from './components/tabs/QuotesTab';
 import { ProposalsTab } from './components/tabs/ProposalsTab';
 import { CompanyForm } from './components/CompanyForm';
 import { useCompany, useUpdateCompany, useDeleteCompany } from '../../hooks/useCompanies';
 import { useAuthStore } from '../../store/authStore';
 import { useContacts } from '../../hooks/useContacts';
-import { useQuotes } from '../../hooks/useQuotes';
 import { useProposals } from '../../hooks/useProposals';
 import { getStatusColor, formatStatusLabel } from '../../utils/statusColors';
 import { showSuccess, showError } from '../../utils/toast';
@@ -30,12 +28,12 @@ const MetaTab = lazy(() => import('./components/MetaTab'));
 const ExpensesTab = lazy(() => import('./components/ExpensesTab'));
 const EntityPaymentsTab = lazy(() => import('../../components/shared/EntityPaymentsTab'));
 
-type TabType = 'overview' | 'contracts' | 'quotes' | 'proposals' | 'payments' | 'activities' | 'notes' | 'attachments' | 'history' | 'sharing' | 'meta' | 'expenses';
+type TabType = 'overview' | 'contracts' | 'proposals' | 'payments' | 'activities' | 'notes' | 'attachments' | 'history' | 'sharing' | 'meta' | 'expenses';
 
 const TABS: { id: TabType; name: string }[] = [
   { id: 'overview', name: 'Overview' },
   { id: 'contracts', name: 'Contracts' },
-  { id: 'quotes', name: 'Quotes' },
+  // Quotes tab removed 2026-05-14 — quotes router unmounted.
   { id: 'proposals', name: 'Proposals' },
   { id: 'payments', name: 'Payments' },
   { id: 'activities', name: 'Activities' },
@@ -73,13 +71,9 @@ export function CompanyDetailPage() {
     page_size: 50,
   });
 
-  const { data: quotesData } = useQuotes(
-    activeTab === 'quotes' && companyId ? { company_id: companyId } : undefined
-  );
   const { data: proposalsData } = useProposals(
     activeTab === 'proposals' && companyId ? { company_id: companyId } : undefined
   );
-  const companyQuotes = quotesData?.items ?? [];
   const companyProposals = proposalsData?.items ?? [];
 
   const currentUser = useAuthStore((s) => s.user);
@@ -239,9 +233,7 @@ export function CompanyDetailPage() {
         </Suspense>
       )}
 
-      {activeTab === 'quotes' && companyId && (
-        <QuotesTab companyId={companyId} quotes={companyQuotes} />
-      )}
+      {/* Quotes tab content removed 2026-05-14 — quotes router unmounted. */}
 
       {activeTab === 'proposals' && (
         <ProposalsTab proposals={companyProposals} />

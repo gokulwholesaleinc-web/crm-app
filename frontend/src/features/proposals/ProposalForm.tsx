@@ -6,7 +6,6 @@ import { useMissingRelationConfirm } from '../../hooks/useMissingRelationConfirm
 import BillingTermsField, { type BillingTermsValue } from '../../components/forms/BillingTermsField';
 import { useContacts } from '../../hooks/useContacts';
 import { useCompanies } from '../../hooks/useCompanies';
-import { useQuotes } from '../../hooks/useQuotes';
 import { useFormSubmitShortcut } from '../../hooks/useSubmitShortcut';
 import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
 import type { ProposalCreate } from '../../types';
@@ -21,8 +20,8 @@ interface ProposalFormProps {
 export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: ProposalFormProps) {
   const [searchParams] = useSearchParams();
   // Pre-fill any of the Related Records from URL query params so
-  // navigating "Create Proposal" from a contact / company / quote detail
-  // page lands the user on a form with that link already selected.
+  // navigating "Create Proposal" from a contact / company detail page
+  // lands the user on a form with that link already selected.
   const parseUrlId = (key: string): number | null => {
     const raw = searchParams.get(key);
     if (!raw) return null;
@@ -31,14 +30,12 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
   };
   const urlContactId = parseUrlId('contact_id');
   const urlCompanyId = parseUrlId('company_id');
-  const urlQuoteId = parseUrlId('quote_id');
 
   const [formData, setFormData] = useState({
     title: initialData?.title ?? '',
     content: initialData?.content ?? '',
     contactId: (initialData?.contact_id ?? urlContactId) as number | null,
     companyId: (initialData?.company_id ?? urlCompanyId) as number | null,
-    quoteId: (initialData?.quote_id ?? urlQuoteId) as number | null,
     executiveSummary: initialData?.executive_summary ?? '',
     scopeOfWork: initialData?.scope_of_work ?? '',
     pricingSection: initialData?.pricing_section ?? '',
@@ -80,16 +77,10 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
   // Fetch entity lists for dropdowns
   const { data: contactsData } = useContacts({ page_size: 100 });
   const { data: companiesData } = useCompanies({ page_size: 100 });
-  const { data: quotesData } = useQuotes({ page_size: 100 });
 
   const contacts = useMemo(() => contactsData?.items ?? [], [contactsData]);
   const companies = useMemo(() => companiesData?.items ?? [], [companiesData]);
-  const quotes = useMemo(() => quotesData?.items ?? [], [quotesData]);
 
-  const quoteOptions = useMemo(
-    () => quotes.map((q) => ({ value: q.id, label: `${q.title} (${q.quote_number})` })),
-    [quotes]
-  );
   const contactOptions = useMemo(
     () => contacts.map((c) => ({ value: c.id, label: c.full_name })),
     [contacts]
@@ -118,7 +109,6 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
       status: 'draft',
       contact_id: formData.contactId,
       company_id: formData.companyId,
-      quote_id: formData.quoteId,
       payment_type: billing.payment_type,
       recurring_interval: billing.recurring_interval,
       recurring_interval_count: billing.recurring_interval_count,
@@ -288,16 +278,8 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
       {/* Related Records */}
       <div className="space-y-4">
         <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Related Records</h3>
+        {/* Quote relation removed 2026-05-14 — quotes router unmounted. */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <SearchableSelect
-            label="Quote"
-            id="proposal-quote"
-            name="quote_id"
-            value={formData.quoteId}
-            onChange={(val) => updateField('quoteId', val)}
-            options={quoteOptions}
-            placeholder="Search quotes..."
-          />
           <SearchableSelect
             label="Contact"
             id="proposal-contact"

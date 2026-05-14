@@ -30,7 +30,7 @@ export function DensitySection({ draft, setDraft }: PreferencesSectionProps) {
         Density
       </h3>
       <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-        Controls row spacing on list pages (contacts, leads, quotes, proposals,
+        Controls row spacing on list pages (contacts, leads, proposals,
         payments).
       </p>
       <fieldset className="mt-3">

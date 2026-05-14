@@ -27,12 +27,14 @@ import type { AdminShareItem } from '../../api/sharing';
 import type { AdminUser } from '../../types';
 import { formatDate } from '../../utils/formatters';
 
+// ``quotes`` retired 2026-05-14 — quotes router unmounted. Historical
+// EntityShare rows targeting quotes still exist in the DB but are
+// no longer reachable from the admin browser filter.
 const ENTITY_TYPE_OPTIONS = [
   { value: '', label: 'All types' },
   { value: 'contacts', label: 'Contacts' },
   { value: 'companies', label: 'Companies' },
   { value: 'leads', label: 'Leads' },
-  { value: 'quotes', label: 'Quotes' },
   { value: 'proposals', label: 'Proposals' },
   { value: 'contracts', label: 'Contracts' },
 ];
@@ -57,7 +59,6 @@ function EntityDetailHref(entityType: string, entityId: number): string {
     contacts: 'contacts',
     companies: 'companies',
     leads: 'leads',
-    quotes: 'quotes',
     proposals: 'proposals',
     contracts: 'contracts',
   };

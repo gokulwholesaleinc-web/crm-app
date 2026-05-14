@@ -17,11 +17,13 @@ async def generate_invoice_pdf(db: AsyncSession, payment_id: int) -> bytes:
     # this prevents (corrupt-row hex would render an unbranded invoice).
     from src.email.branded_templates import TenantBrandingHelper, _safe_hex
 
+    # ``Payment.quote`` eager-load dropped 2026-05-14 — relationship removed
+    # with the quotes router unmount; ``quote_id`` column persists for legacy
+    # rows but is no longer dereferenced.
     result = await db.execute(
         select(Payment)
         .options(
             selectinload(Payment.customer),
-            selectinload(Payment.quote),
             selectinload(Payment.opportunity),
         )
         .where(Payment.id == payment_id)

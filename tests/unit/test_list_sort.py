@@ -17,7 +17,6 @@ from src.contacts.models import Contact
 from src.leads.models import Lead, LeadSource
 from src.payments.models import Payment, StripeCustomer
 from src.proposals.models import Proposal
-from src.quotes.models import Quote
 
 
 class TestContactsSort:
@@ -97,47 +96,7 @@ class TestLeadsSort:
         assert returned_scores == sorted(scores, reverse=True)
 
 
-class TestQuotesSort:
-    """Quotes list endpoint honors order_by=total&order_dir=desc."""
-
-    @pytest.mark.asyncio
-    async def test_sort_by_total_desc(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-        test_user: User,
-    ):
-        """Should return quotes ordered by total descending."""
-        totals = [100.00, 999.99, 250.50]
-        for i, total in enumerate(totals):
-            db_session.add(
-                Quote(
-                    quote_number=f"QT-TEST-{i:04d}",
-                    public_token=f"tok-test-quote-sort-{i}-aaaaaaaaaaaaaaaa",
-                    title=f"Quote {i}",
-                    status="draft",
-                    payment_type="one_time",
-                    currency="USD",
-                    subtotal=total,
-                    tax_rate=0,
-                    tax_amount=0,
-                    total=total,
-                    owner_id=test_user.id,
-                    created_by_id=test_user.id,
-                )
-            )
-        await db_session.commit()
-
-        response = await client.get(
-            "/api/quotes",
-            headers=auth_headers,
-            params={"order_by": "total", "order_dir": "desc", "page_size": 10},
-        )
-        assert response.status_code == 200
-        items = response.json()["items"]
-        returned_totals = [float(q["total"]) for q in items if float(q["total"]) in totals]
-        assert returned_totals == sorted(totals, reverse=True)
+# TestQuotesSort removed 2026-05-14 — quotes router unmounted.
 
 
 class TestProposalsSort:

@@ -8,7 +8,7 @@ export * from './auth';
 export * from './contacts';
 export * from './companies';
 export * from './leads';
-export * from './quotes';
+// Quote types removed 2026-05-14 — quotes feature retired.
 export * from './activities';
 export * from './campaigns';
 export * from './dashboard';

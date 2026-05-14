@@ -6,10 +6,12 @@ export type DensityMode = 'compact' | 'comfortable';
 export type SortDirection = 'asc' | 'desc';
 
 export type EntityKindWithTabs = 'contact' | 'lead' | 'company';
+// ``quotes`` retired 2026-05-14 — quotes router unmounted. Existing
+// persisted ``listDefaults.quotes`` rows in localStorage become unread
+// no-ops because the union no longer includes the key.
 export type ListPageKey =
   | 'contacts'
   | 'leads'
-  | 'quotes'
   | 'proposals'
   | 'payments'
   | 'contracts';
@@ -17,7 +19,6 @@ export type ListPageKey =
 const LIST_PAGE_KEYS: ReadonlySet<string> = new Set([
   'contacts',
   'leads',
-  'quotes',
   'proposals',
   'payments',
   'contracts',

@@ -6,7 +6,7 @@ import { sanitizeHexColor, withAlpha } from '../../utils/colorValidation';
 import { useForceLightMode } from '../../hooks/useForceLightMode';
 import { formatDate } from '../../utils/formatters';
 import { cadenceLabel, formatProposalMoney } from './billing';
-import { setPublicPageMeta } from '../quotes/publicMeta';
+import { setPublicPageMeta } from './publicMeta';
 import { ProposalAttachmentsSection } from './ProposalAttachmentsSection';
 import type { ProposalAttachmentPublic } from '../../types';
 import { ScrollToSignIndicator } from '../../components/ui/ScrollToSignIndicator';
