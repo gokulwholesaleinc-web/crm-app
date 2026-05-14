@@ -29,6 +29,19 @@ from src.proposals.attachment_views import ProposalAttachmentView, _hash_token
 from src.proposals.models import Proposal
 
 
+# Smallest valid PNG (1x1 transparent) used as the drawn signature
+# payload after the 2026-05-14 Sign-to-Confirm rewrite.
+_ONE_PIXEL_PNG_SIGN_TO_CONFIRM = bytes.fromhex(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4"
+    "890000000d49444154789c63000000000005000158a8c4d70000000049454e44ae426082"
+)
+import base64 as _b64_sign_to_confirm  # noqa: E402
+_SIG_TO_CONFIRM = "data:image/png;base64," + _b64_sign_to_confirm.b64encode(
+    _ONE_PIXEL_PNG_SIGN_TO_CONFIRM
+).decode("ascii")
+
+
+
 @pytest.fixture
 async def sent_proposal(
     db_session: AsyncSession, test_user: User, test_contact: Contact,
@@ -154,7 +167,7 @@ class TestReadBeforeSignGate:
 
         response = await client.post(
             f"/api/proposals/public/{sent_proposal.public_token}/accept",
-            json={"signer_name": "Customer", "signer_email": test_contact.email},
+            json={"signer_name": "Customer", "signer_email": test_contact.email, "signature_image": _SIG_TO_CONFIRM, "agreed_to_terms": True},
         )
         assert response.status_code == 400, response.text
         assert "view" in response.json()["detail"].lower()
@@ -180,7 +193,7 @@ class TestReadBeforeSignGate:
 
         response = await client.post(
             f"/api/proposals/public/{sent_proposal.public_token}/accept",
-            json={"signer_name": "Customer", "signer_email": test_contact.email},
+            json={"signer_name": "Customer", "signer_email": test_contact.email, "signature_image": _SIG_TO_CONFIRM, "agreed_to_terms": True},
         )
         assert response.status_code == 200, response.text
         assert response.json()["status"] == "accepted"
@@ -339,7 +352,7 @@ class TestSignedCopyEmail:
 
         response = await client.post(
             f"/api/proposals/public/{sent_proposal.public_token}/accept",
-            json={"signer_name": "Customer", "signer_email": test_contact.email},
+            json={"signer_name": "Customer", "signer_email": test_contact.email, "signature_image": _SIG_TO_CONFIRM, "agreed_to_terms": True},
         )
         assert response.status_code == 200, response.text
 

@@ -27,6 +27,19 @@ from src.opportunities.models import Opportunity, PipelineStage
 from src.proposals.models import Proposal
 
 
+# Smallest valid PNG (1x1 transparent) used as the drawn signature
+# payload after the 2026-05-14 Sign-to-Confirm rewrite.
+_ONE_PIXEL_PNG_SIGN_TO_CONFIRM = bytes.fromhex(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4"
+    "890000000d49444154789c63000000000005000158a8c4d70000000049454e44ae426082"
+)
+import base64 as _b64_sign_to_confirm  # noqa: E402
+_SIG_TO_CONFIRM = "data:image/png;base64," + _b64_sign_to_confirm.b64encode(
+    _ONE_PIXEL_PNG_SIGN_TO_CONFIRM
+).decode("ascii")
+
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -329,7 +342,7 @@ class TestProposalSignedNotification:
             f"/api/proposals/public/{proposal.public_token}/accept",
             json={
                 "signer_name": "Jane Customer",
-                "signer_email": test_contact.email,
+                "signer_email": test_contact.email, "signature_image": _SIG_TO_CONFIRM, "agreed_to_terms": True
             },
         )
         assert resp.status_code == 200, resp.text
@@ -375,7 +388,7 @@ class TestProposalSignedNotification:
             f"/api/proposals/public/{proposal.public_token}/accept",
             json={
                 "signer_name": "Customer X",
-                "signer_email": test_contact.email,
+                "signer_email": test_contact.email, "signature_image": _SIG_TO_CONFIRM, "agreed_to_terms": True
             },
         )
 
