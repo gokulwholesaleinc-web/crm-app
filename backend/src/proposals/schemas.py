@@ -63,6 +63,8 @@ class ProposalBase(ProposalBillingMixin):
     valid_until: date | None = None
     designated_signer_email: str | None = None
     owner_id: int | None = None
+    # Per-proposal T&C override. NULL → tenant default applies.
+    terms_and_conditions: str | None = None
 
 
 class ProposalCreate(ProposalBase):
@@ -85,6 +87,7 @@ class ProposalUpdate(BaseModel):
     valid_until: date | None = None
     designated_signer_email: str | None = None
     owner_id: int | None = None
+    terms_and_conditions: str | None = None
     payment_type: PaymentType | None = None
     recurring_interval: RecurringInterval | None = None
     recurring_interval_count: int | None = None
@@ -122,9 +125,18 @@ class ProposalUpdate(BaseModel):
 
 
 class ProposalAcceptRequest(BaseModel):
-    """E-signature payload submitted from the public accept page."""
+    """E-signature payload submitted from the public Sign-to-Confirm modal.
+
+    ``signature_image`` is the base64-encoded PNG drawn on the canvas
+    (``data:image/png;base64,...`` form is accepted; the data-URL prefix
+    is stripped server-side). The signer's email must match the
+    proposal's designated recipient and the ESIGN consent box must
+    have been ticked — both enforced by the service layer.
+    """
     signer_name: str
     signer_email: str
+    signature_image: str = Field(min_length=1, max_length=400_000)
+    agreed_to_terms: bool
 
 
 class ProposalRejectRequest(BaseModel):
@@ -178,6 +190,13 @@ class ProposalResponse(ProposalBase):
     invoice_sent_at: datetime | None = None
     paid_at: datetime | None = None
     billing_error: str | None = None
+    # Sign-to-Confirm artifacts. The drawn PNG itself is not surfaced
+    # over the wire (it's stamped onto the signed PDF + rendered into
+    # the audit page); the CRM UI checks ``signed_pdf_path`` to know
+    # whether a downloadable countersigned copy exists.
+    master_contract_pdf_path: str | None = None
+    signed_pdf_path: str | None = None
+    terms_and_conditions: str | None = None
     created_at: datetime
     updated_at: datetime
     contact: ContactBriefWithEmail | None = None
@@ -266,10 +285,19 @@ class ProposalPublicResponse(BaseModel):
     company: CompanyBrief | None = None
     contact: ContactBrief | None = None
     branding: ProposalBranding | None = None
-    # Public-side attachment list. The signer must open every item
-    # before /accept will succeed; the read-before-sign gate is enforced
-    # server-side in `accept_proposal_public`.
+    # Public-side attachment list. Surfaced for review; opening
+    # everything is no longer a precondition to signing (Lorenzo's
+    # 2026-05-14 ask — the T&C card inside the signing modal replaces
+    # the forced-PDF-open gate).
     attachments: list[ProposalAttachmentPublicItem] = []
+    # Resolved T&C body for the Sign-to-Confirm modal — proposal
+    # override if set, else tenant default. NULL = no T&C card.
+    terms_and_conditions: str | None = None
+    # Designated signer's email, pre-filled (and locked) in the modal.
+    designated_signer_email: str | None = None
+    # When true, the accept endpoint stamps the drawn signature onto
+    # the master PDF and returns a downloadable countersigned copy.
+    has_master_contract: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

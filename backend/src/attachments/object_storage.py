@@ -57,6 +57,19 @@ async def get_download_url(object_key: str, ttl_sec: int = 3600) -> str:
     )
 
 
+async def download_object_bytes(object_key: str) -> bytes:
+    """Fetch the raw bytes of an R2 object via boto3.
+
+    Used for server-side reads that need the file in-process (PDF
+    stamping, signature replay) rather than a presigned URL handed
+    to a browser. Surfaces the boto error directly so the caller can
+    distinguish missing-object from credential errors.
+    """
+    client = _get_r2_client()
+    response = client.get_object(Bucket=_get_bucket_name(), Key=object_key)
+    return response["Body"].read()
+
+
 async def upload_file_bytes(
     content: bytes,
     object_key: str,

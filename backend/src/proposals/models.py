@@ -3,8 +3,37 @@
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text, func
+from sqlalchemy import (
+    JSON,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    LargeBinary,
+    Numeric,
+    String,
+    Text,
+    func,
+)
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import TypeDecorator
+
+
+class _SignatureCoords(TypeDecorator):
+    """JSONB on Postgres, JSON on SQLite (test DB).
+
+    Stores ``{page, x, y, width, height}`` for stamping the signature
+    image onto ``master_contract_pdf_path``. NULL = auto-detect.
+    """
+
+    impl = JSON
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(JSONB())
+        return dialect.type_descriptor(JSON())
 
 from src.core.mixins.auditable import AuditableMixin
 from src.database import Base
@@ -114,6 +143,27 @@ class Proposal(Base, AuditableMixin):
     rejection_reason: Mapped[str | None] = mapped_column(Text)
     # Optional override for who may sign. NULL falls back to contact.email.
     designated_signer_email: Mapped[str | None] = mapped_column(String(255))
+
+    # Sign-to-Confirm artifacts. The drawn signature lives inline as raw
+    # PNG bytes (~5–30 KB typical) so audit-trail rendering doesn't need
+    # an extra R2 round-trip and a signed copy can be rebuilt from the
+    # row alone if R2 loses the stamped PDF.
+    signature_image: Mapped[bytes | None] = mapped_column(LargeBinary)
+    # R2 key of the optional master service agreement PDF uploaded by
+    # the rep. When set, the accept endpoint stamps the signature image
+    # onto a copy of this PDF + an audit page and persists the result
+    # at ``signed_pdf_path``. NULL = signature image + audit log alone,
+    # which is ESIGN-Act-compliant on its own.
+    master_contract_pdf_path: Mapped[str | None] = mapped_column(Text)
+    # Where in the master PDF to stamp: ``{page:int, x:float, y:float,
+    # width:float, height:float}`` in PDF points (origin = bottom-left).
+    # NULL = auto-detect (last page, bottom-right).
+    signature_field_coords: Mapped[dict | None] = mapped_column(_SignatureCoords)
+    # R2 key of the stamped + audit-appended signed PDF.
+    signed_pdf_path: Mapped[str | None] = mapped_column(Text)
+    # Per-proposal override of the T&C body rendered inside the signing
+    # modal. NULL falls back to ``tenant_settings.default_terms_and_conditions``.
+    terms_and_conditions: Mapped[str | None] = mapped_column(Text)
 
     # Stripe billing artifacts spawned on acceptance. Only one of
     # stripe_invoice_id / stripe_checkout_session_id will be set, based on
