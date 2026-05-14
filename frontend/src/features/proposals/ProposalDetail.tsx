@@ -29,6 +29,7 @@ import {
   useRejectProposal,
   useResendProposalPaymentLink,
   useRetryProposalBilling,
+  useRestampProposalSignedPdf,
 } from '../../hooks/useProposals';
 import { ProposalBillingCard } from './ProposalBillingCard';
 import { ProposalAuditCard } from './ProposalAuditCard';
@@ -69,6 +70,7 @@ function ProposalDetailPage() {
   const rejectProposalMutation = useRejectProposal();
   const resendPaymentLinkMutation = useResendProposalPaymentLink();
   const retryBillingMutation = useRetryProposalBilling();
+  const restampSignedPdfMutation = useRestampProposalSignedPdf();
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -185,6 +187,23 @@ function ProposalDetailPage() {
       }
     } catch (err) {
       showError(extractApiErrorDetail(err) ?? 'Failed to retry billing');
+    }
+  };
+
+  const handleRestampSignedPdf = async () => {
+    try {
+      const updated = await restampSignedPdfMutation.mutateAsync(proposal.id);
+      if (updated.signed_pdf_path) {
+        showSuccess('Signed PDF re-generated');
+      } else {
+        showError(
+          updated.signed_pdf_error
+            ? `Re-stamp still failing: ${updated.signed_pdf_error}`
+            : 'Re-stamp did not produce a signed PDF',
+        );
+      }
+    } catch (err) {
+      showError(extractApiErrorDetail(err) ?? 'Failed to re-stamp signed PDF');
     }
   };
 
@@ -456,6 +475,36 @@ function ProposalDetailPage() {
           >
             <XMarkIcon className="h-4 w-4" aria-hidden="true" />
           </button>
+        </div>
+      )}
+
+      {/* Fail-soft stamp left no countersigned copy — surface so the
+          operator can retry. */}
+      {proposal.signed_pdf_error && !proposal.signed_pdf_path && (
+        <div
+          role="alert"
+          aria-live="polite"
+          className="flex items-start justify-between gap-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-4 py-3"
+        >
+          <div className="flex items-start gap-3">
+            <ArrowPathIcon className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                Signed PDF generation failed
+              </p>
+              <p className="text-xs text-amber-700 dark:text-amber-400 break-words">
+                {proposal.signed_pdf_error}
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="secondary"
+            onClick={handleRestampSignedPdf}
+            leftIcon={<ArrowPathIcon className="h-4 w-4" />}
+            disabled={restampSignedPdfMutation.isPending}
+          >
+            {restampSignedPdfMutation.isPending ? 'Re-stamping...' : 'Re-stamp'}
+          </Button>
         </div>
       )}
 

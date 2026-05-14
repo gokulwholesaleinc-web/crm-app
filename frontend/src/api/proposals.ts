@@ -114,6 +114,13 @@ export const retryProposalBilling = async (proposalId: number): Promise<Proposal
   return response.data;
 };
 
+export const restampProposalSignedPdf = async (proposalId: number): Promise<Proposal> => {
+  const response = await apiClient.post<Proposal>(
+    `${PROPOSALS_BASE}/${proposalId}/restamp`,
+  );
+  return response.data;
+};
+
 /**
  * List proposal templates
  */
@@ -335,6 +342,7 @@ export const proposalsApi = {
   reject: rejectProposal,
   resendPaymentLink: resendProposalPaymentLink,
   retryBilling: retryProposalBilling,
+  restampSignedPdf: restampProposalSignedPdf,
   listTemplates: listProposalTemplates,
   createTemplate: createProposalTemplate,
   getTemplate: getProposalTemplate,

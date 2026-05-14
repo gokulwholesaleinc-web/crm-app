@@ -196,6 +196,7 @@ class ProposalResponse(ProposalBase):
     # whether a downloadable countersigned copy exists.
     master_contract_pdf_path: str | None = None
     signed_pdf_path: str | None = None
+    signed_pdf_error: str | None = None
     terms_and_conditions: str | None = None
     created_at: datetime
     updated_at: datetime

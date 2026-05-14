@@ -162,6 +162,12 @@ class Proposal(Base, AuditableMixin):
     signature_field_coords: Mapped[dict | None] = mapped_column(_SignatureCoords)
     # R2 key of the stamped + audit-appended signed PDF.
     signed_pdf_path: Mapped[str | None] = mapped_column(Text)
+    # Most-recent stamp/upload failure from ``_maybe_stamp_master_pdf``.
+    # Set when the fail-soft path swallows a PdfReadError / R2 ClientError /
+    # other exception so the CRM UI can render a re-stamp banner instead
+    # of leaving the operator wondering why no signed PDF ever materialized.
+    # Cleared on the next successful stamp.
+    signed_pdf_error: Mapped[str | None] = mapped_column(Text)
     # Per-proposal override of the T&C body rendered inside the signing
     # modal. NULL falls back to ``tenant_settings.default_terms_and_conditions``.
     terms_and_conditions: Mapped[str | None] = mapped_column(Text)
