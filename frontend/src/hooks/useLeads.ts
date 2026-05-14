@@ -175,10 +175,17 @@ export function useMoveLeadStage() {
     }: {
       leadId: number;
       newStageId: number;
+      // `ownerId` flows through for cache keying only — the backend
+      // /move endpoint doesn't take it. PipelinePage passes the active
+      // owner-filter so optimistic update + rollback target the right
+      // owner-scoped query (without it, manager-with-filter sees the
+      // drag visually snap back to the source column).
+      ownerId?: number;
     }) => leadsApi.moveLeadStage(leadId, { new_stage_id: newStageId }),
-    onMutate: async ({ leadId, newStageId }) => {
-      await queryClient.cancelQueries({ queryKey: leadPipelineKeys.kanban() });
-      const snapshot = queryClient.getQueryData<LeadKanbanResponse>(leadPipelineKeys.kanban());
+    onMutate: async ({ leadId, newStageId, ownerId }) => {
+      const kanbanKey = leadPipelineKeys.kanban(ownerId);
+      await queryClient.cancelQueries({ queryKey: kanbanKey });
+      const snapshot = queryClient.getQueryData<LeadKanbanResponse>(kanbanKey);
       if (snapshot) {
         const optimistic: LeadKanbanResponse = {
           stages: snapshot.stages.map((stage) => {
@@ -195,23 +202,33 @@ export function useMoveLeadStage() {
             return stage;
           }),
         };
-        queryClient.setQueryData(leadPipelineKeys.kanban(), optimistic);
+        queryClient.setQueryData(kanbanKey, optimistic);
       }
-      return { snapshot };
+      return { snapshot, kanbanKey };
     },
-    onError: (_err, _vars, context) => {
-      if (context?.snapshot) {
-        queryClient.setQueryData(leadPipelineKeys.kanban(), context.snapshot);
+    onError: (err, _vars, context) => {
+      if (context?.snapshot && context?.kanbanKey) {
+        queryClient.setQueryData(context.kanbanKey, context.snapshot);
       }
-      showError('Failed to move lead — change has been reverted.');
+      // Surface backend detail (e.g. the 409 from
+      // _guard_unconvert_transition: "Lead is already converted...")
+      // instead of a generic "Failed to move" toast.
+      const detail = (err as { detail?: string } | undefined)?.detail;
+      showError(detail ?? 'Failed to move lead — change has been reverted.');
     },
-    onSettled: (_data, _err, { leadId }) => {
-      queryClient.invalidateQueries({ queryKey: leadPipelineKeys.kanban() });
+    onSettled: (_data, _err, { leadId, ownerId }) => {
+      // Invalidate BOTH the owner-scoped query (the one the user is
+      // currently looking at) and the unscoped one (legacy callers /
+      // back-to-/leads list refresh) so neither shows stale data.
+      queryClient.invalidateQueries({ queryKey: leadPipelineKeys.kanban(ownerId) });
+      if (ownerId !== undefined) {
+        queryClient.invalidateQueries({ queryKey: leadPipelineKeys.kanban() });
+      }
       queryClient.invalidateQueries({ queryKey: leadKeys.detail(leadId) });
       queryClient.invalidateQueries({ queryKey: leadKeys.lists() });
     },
     onSuccess: (data) => {
-      if (data.conversion) {
+      if (data.conversion?.converted) {
         queryClient.invalidateQueries({ queryKey: contactKeys.lists() });
         queryClient.invalidateQueries({ queryKey: companyKeys.lists() });
         queryClient.invalidateQueries({ queryKey: ['unified-pipeline'] });

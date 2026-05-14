@@ -199,8 +199,10 @@ function LeadsPage() {
   const [bulkMoving, setBulkMoving] = useState(false);
 
   // Per-row stage edit. Fires a PATCH and invalidates list + kanban so
-  // both views stay in sync. Errors surface as a toast — caller still
-  // sees the original value on revert.
+  // both views stay in sync. On 4xx, invalidate the list query so the
+  // controlled <select> snaps back to the server's value — otherwise
+  // the dropdown stays visually on the failed target and the toast is
+  // the only signal anything broke.
   const handleRowStageChange = async (lead: Lead, newStageId: number | null) => {
     if ((lead.pipeline_stage_id ?? null) === newStageId) return;
     try {
@@ -215,6 +217,8 @@ function LeadsPage() {
           : `${lead.full_name || 'Lead'} moved`,
       );
     } catch (err) {
+      // Force the <select> back to the persisted value by refetching.
+      queryClient.invalidateQueries({ queryKey: leadKeys.lists() });
       const detail = (err as ApiError | null)?.detail;
       showError(detail || 'Failed to update stage');
     }
@@ -233,8 +237,10 @@ function LeadsPage() {
           leadsApi.moveLeadStage(id, { new_stage_id: discoveryStageId }),
         ),
       );
-      const successes = results.filter((r) => r.status === 'fulfilled').length;
-      const failures = results.length - successes;
+      const failedIds = selectedIds.filter(
+        (_id, i) => results[i]?.status === 'rejected',
+      );
+      const successes = results.length - failedIds.length;
       queryClient.invalidateQueries({ queryKey: leadKeys.all });
       queryClient.invalidateQueries({ queryKey: leadPipelineKeys.all });
       if (successes > 0) {
@@ -242,12 +248,28 @@ function LeadsPage() {
           `Moved ${successes} lead${successes === 1 ? '' : 's'} to Discovery`,
         );
       }
-      if (failures > 0) {
+      if (failedIds.length > 0) {
+        // Surface a sample reason from the first rejection so admins
+        // see WHY it broke (permission, 409 un-convert guard, etc.)
+        // instead of a bare count. Keep the failed leads selected so
+        // the user can retry just the broken ones without re-checking
+        // every row.
+        const firstReason = results.find((r) => r.status === 'rejected') as
+          | PromiseRejectedResult
+          | undefined;
+        const sampleDetail = (firstReason?.reason as ApiError | undefined)?.detail;
+        const sampleText = sampleDetail ? ` First error: ${sampleDetail}` : '';
+        console.error('bulk move-to-discovery had failures', {
+          failedIds,
+          reasons: results.filter((r) => r.status === 'rejected'),
+        });
         showError(
-          `${failures} lead${failures === 1 ? '' : 's'} failed to move`,
+          `${failedIds.length} lead${failedIds.length === 1 ? '' : 's'} failed to move.${sampleText}`,
         );
+        setSelectedIds(failedIds);
+      } else {
+        setSelectedIds([]);
       }
-      setSelectedIds([]);
     } finally {
       setBulkMoving(false);
     }

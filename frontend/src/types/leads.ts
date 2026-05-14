@@ -174,9 +174,19 @@ export interface MoveLeadRequest {
 }
 
 export interface MoveLeadResponse extends Lead {
-  conversion?: {
-    converted: boolean;
-    contact_id: number;
-    company_id: number | null;
-  } | null;
+  // Conversion result on Won-stage moves. The shape varies:
+  //  - successful convert: { converted: true, contact_id, company_id? }
+  //  - skipped with reason: { converted: false, reason: 'stale_contact_fk' | 'already_converted' }
+  //  - nothing to convert (non-Won move): conversion is absent
+  conversion?:
+    | {
+        converted: true;
+        contact_id: number;
+        company_id: number | null;
+      }
+    | {
+        converted: false;
+        reason: 'stale_contact_fk' | 'already_converted';
+      }
+    | null;
 }

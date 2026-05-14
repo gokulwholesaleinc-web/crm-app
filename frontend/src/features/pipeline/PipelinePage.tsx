@@ -19,7 +19,7 @@ import { useLeadKanban, useMoveLeadStage } from '../../hooks/useLeads';
 import { useUsers } from '../../hooks/useAuth';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { useAuthStore } from '../../store/authStore';
-import { showSuccess } from '../../utils/toast';
+import { showSuccess, showWarning, showInfo } from '../../utils/toast';
 import { SkeletonKanban } from '../../components/ui/Skeleton';
 import { LeadStageColumn } from './components/LeadStageColumn';
 import { LeadDragOverlay } from './components/SortableLeadCard';
@@ -144,13 +144,28 @@ function PipelinePage() {
     if (targetStageId == null || targetStageId === info.stageId) return;
 
     moveLead.mutate(
-      { leadId: info.leadId, newStageId: targetStageId },
+      { leadId: info.leadId, newStageId: targetStageId, ownerId: ownerFilter },
       {
         onSuccess: (data) => {
-          if (data.conversion?.converted && data.conversion.contact_id) {
-            showSuccess(
-              `Lead converted to Contact — view at /contacts/${data.conversion.contact_id}`,
+          const conv = data.conversion;
+          if (!conv) return;
+          if (conv.converted) {
+            if (conv.contact_id) {
+              showSuccess(`Lead converted to Contact #${conv.contact_id}`);
+            } else {
+              // Backend invariant violation — surface visibly + log.
+              showWarning('Lead marked converted but the contact link is missing');
+              console.error('conversion.converted=true without contact_id', {
+                leadId: info.leadId,
+                data,
+              });
+            }
+          } else if (conv.reason === 'stale_contact_fk') {
+            showWarning(
+              'Lead marked Won but the contact link is stale — admin must re-attach it from the lead detail page.',
             );
+          } else if (conv.reason === 'already_converted') {
+            showInfo('Lead was already converted; stage updated to Won.');
           }
         },
       },
@@ -158,12 +173,11 @@ function PipelinePage() {
   };
 
   const isFiltering = deferredQuery.trim() !== '';
-  const activeLead = activeDragId
-    ? (() => {
-        const parsed = parseLeadDragId(activeDragId);
-        return parsed ? (leadById.get(parsed.leadId) ?? null) : null;
-      })()
-    : null;
+  const activeLead = useMemo(() => {
+    if (!activeDragId) return null;
+    const parsed = parseLeadDragId(activeDragId);
+    return parsed ? (leadById.get(parsed.leadId) ?? null) : null;
+  }, [activeDragId, leadById]);
   const isDragging = activeLead !== null;
 
   return (
