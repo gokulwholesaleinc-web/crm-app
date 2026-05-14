@@ -20,7 +20,8 @@ beforeEach(() => {
 describe('ConvertLeadModal', () => {
   it('renders the modal with lead name', () => {
     renderWithProviders(<ConvertLeadModal {...BASE_PROPS} />);
-    expect(screen.getByText(/Convert "Acme Corp"/)).toBeInTheDocument();
+    expect(screen.getByText(/Convert/)).toBeInTheDocument();
+    expect(screen.getByText(/Acme Corp/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
   });
 
@@ -33,8 +34,8 @@ describe('ConvertLeadModal', () => {
 
   it('Cancel while form is dirty shows confirm dialog', async () => {
     renderWithProviders(<ConvertLeadModal {...BASE_PROPS} />);
-    // Uncheck createContact (default is true) — makes form dirty
-    fireEvent.click(screen.getByRole('checkbox', { name: /Create Contact/i }));
+    // Uncheck createCompany (default is true) — makes form dirty
+    fireEvent.click(screen.getByRole('checkbox', { name: /Also create Company/i }));
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(onClose).not.toHaveBeenCalled();
     await waitFor(() => {
@@ -45,7 +46,7 @@ describe('ConvertLeadModal', () => {
   it('confirming discard resets form and calls onClose', async () => {
     renderWithProviders(<ConvertLeadModal {...BASE_PROPS} />);
     // Dirty the form
-    fireEvent.click(screen.getByRole('checkbox', { name: /Create Contact/i }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Also create Company/i }));
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     await waitFor(() => screen.getByText('Discard changes?'));
     fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
@@ -56,10 +57,10 @@ describe('ConvertLeadModal', () => {
 
   it('Keep editing in confirm dialog closes confirm and keeps modal open with values', async () => {
     renderWithProviders(<ConvertLeadModal {...BASE_PROPS} />);
-    // Dirty the form by unchecking createContact
-    const createContactCheckbox = screen.getByRole('checkbox', { name: /Create Contact/i });
-    fireEvent.click(createContactCheckbox);
-    expect(createContactCheckbox).not.toBeChecked();
+    // Dirty the form by unchecking createCompany
+    const createCompanyCheckbox = screen.getByRole('checkbox', { name: /Also create Company/i });
+    fireEvent.click(createCompanyCheckbox);
+    expect(createCompanyCheckbox).not.toBeChecked();
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     await waitFor(() => screen.getByText('Discard changes?'));
@@ -70,6 +71,6 @@ describe('ConvertLeadModal', () => {
     });
     // Modal still open, value still reflects user's edit
     expect(onClose).not.toHaveBeenCalled();
-    expect(screen.getByRole('checkbox', { name: /Create Contact/i })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: /Also create Company/i })).not.toBeChecked();
   });
 });

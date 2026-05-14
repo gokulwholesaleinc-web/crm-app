@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button, SearchableSelect } from '../../components/ui';
 import { MissingRelationDialog } from '../../components/shared/MissingRelationDialog';
@@ -6,7 +6,6 @@ import { useMissingRelationConfirm } from '../../hooks/useMissingRelationConfirm
 import BillingTermsField, { type BillingTermsValue } from '../../components/forms/BillingTermsField';
 import { useContacts } from '../../hooks/useContacts';
 import { useCompanies } from '../../hooks/useCompanies';
-import { useOpportunities, useOpportunity } from '../../hooks/useOpportunities';
 import { useQuotes } from '../../hooks/useQuotes';
 import { useFormSubmitShortcut } from '../../hooks/useSubmitShortcut';
 import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
@@ -21,17 +20,15 @@ interface ProposalFormProps {
 
 export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: ProposalFormProps) {
   const [searchParams] = useSearchParams();
-  // Pre-fill any of the four Related Records from URL query params so
-  // navigating "Create Proposal" from a contact / company / opportunity
-  // / quote detail page lands the user on a form with that link
-  // already selected.
+  // Pre-fill any of the Related Records from URL query params so
+  // navigating "Create Proposal" from a contact / company / quote detail
+  // page lands the user on a form with that link already selected.
   const parseUrlId = (key: string): number | null => {
     const raw = searchParams.get(key);
     if (!raw) return null;
     const n = parseInt(raw, 10);
     return Number.isFinite(n) ? n : null;
   };
-  const urlOpportunityId = parseUrlId('opportunity_id');
   const urlContactId = parseUrlId('contact_id');
   const urlCompanyId = parseUrlId('company_id');
   const urlQuoteId = parseUrlId('quote_id');
@@ -39,7 +36,6 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
   const [formData, setFormData] = useState({
     title: initialData?.title ?? '',
     content: initialData?.content ?? '',
-    opportunityId: (initialData?.opportunity_id ?? urlOpportunityId) as number | null,
     contactId: (initialData?.contact_id ?? urlContactId) as number | null,
     companyId: (initialData?.company_id ?? urlCompanyId) as number | null,
     quoteId: (initialData?.quote_id ?? urlQuoteId) as number | null,
@@ -62,7 +58,7 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
 
   // `touched` flips true on first edit; drives the beforeunload warning.
   // ProposalForm uses `useState` so we can't lean on react-hook-form's
-  // `formState.isDirty`. Auto-fill from URL opportunity does NOT count.
+  // `formState.isDirty`. Auto-fill from URL params does NOT count.
   const [touched, setTouched] = useState(false);
   useUnsavedChangesWarning(touched);
 
@@ -84,21 +80,12 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
   // Fetch entity lists for dropdowns
   const { data: contactsData } = useContacts({ page_size: 100 });
   const { data: companiesData } = useCompanies({ page_size: 100 });
-  const { data: opportunitiesData } = useOpportunities({ page_size: 100 });
   const { data: quotesData } = useQuotes({ page_size: 100 });
-  const { data: urlOpportunity } = useOpportunity(
-    urlOpportunityId ?? undefined,
-  );
 
   const contacts = useMemo(() => contactsData?.items ?? [], [contactsData]);
   const companies = useMemo(() => companiesData?.items ?? [], [companiesData]);
-  const opportunities = useMemo(() => opportunitiesData?.items ?? [], [opportunitiesData]);
   const quotes = useMemo(() => quotesData?.items ?? [], [quotesData]);
 
-  const opportunityOptions = useMemo(
-    () => opportunities.map((o) => ({ value: o.id, label: o.name })),
-    [opportunities]
-  );
   const quoteOptions = useMemo(
     () => quotes.map((q) => ({ value: q.id, label: `${q.title} (${q.quote_number})` })),
     [quotes]
@@ -111,17 +98,6 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
     () => companies.map((c) => ({ value: c.id, label: c.name })),
     [companies]
   );
-
-  // Auto-fill contact/company from URL opportunity
-  useEffect(() => {
-    if (urlOpportunity) {
-      setFormData((prev) => ({
-        ...prev,
-        contactId: urlOpportunity.contact_id && !prev.contactId ? urlOpportunity.contact_id : prev.contactId,
-        companyId: urlOpportunity.company_id && !prev.companyId ? urlOpportunity.company_id : prev.companyId,
-      }));
-    }
-  }, [urlOpportunity]);
 
   const missingRelation = useMissingRelationConfirm<ProposalCreate>(onSubmit);
 
@@ -140,7 +116,6 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
       terms: formData.terms || null,
       valid_until: formData.validUntil || null,
       status: 'draft',
-      opportunity_id: formData.opportunityId,
       contact_id: formData.contactId,
       company_id: formData.companyId,
       quote_id: formData.quoteId,
@@ -314,26 +289,6 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
       <div className="space-y-4">
         <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Related Records</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <SearchableSelect
-            label="Opportunity"
-            id="proposal-opportunity"
-            name="opportunity_id"
-            value={formData.opportunityId}
-            onChange={(val) => {
-              setFormData((prev) => {
-                const updates: Partial<typeof prev> = { opportunityId: val };
-                if (val) {
-                  const opp = opportunities.find((o) => o.id === val);
-                  if (opp?.contact_id) updates.contactId = opp.contact_id;
-                  if (opp?.company_id) updates.companyId = opp.company_id;
-                }
-                return { ...prev, ...updates };
-              });
-              setTouched(true);
-            }}
-            options={opportunityOptions}
-            placeholder="Search opportunities..."
-          />
           <SearchableSelect
             label="Quote"
             id="proposal-quote"

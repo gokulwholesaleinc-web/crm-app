@@ -18,7 +18,6 @@ export interface EntitySharingProps {
     | 'contacts'
     | 'companies'
     | 'leads'
-    | 'opportunities'
     | 'quotes'
     | 'proposals'
     | 'contracts'

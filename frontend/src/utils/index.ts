@@ -5,7 +5,6 @@
 // Status colors and styling
 export {
   leadStatusColors,
-  opportunityStatusColors,
   companyStatusColors,
   campaignStatusColors,
   getStatusColor,

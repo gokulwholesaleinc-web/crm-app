@@ -2,7 +2,7 @@
  * Centralized status color mappings and utilities for consistent styling across the CRM application.
  */
 
-export type StatusType = 'lead' | 'opportunity' | 'company' | 'campaign';
+export type StatusType = 'lead' | 'company' | 'campaign';
 
 export interface StatusColorConfig {
   bg: string;
@@ -23,19 +23,6 @@ export const leadStatusColors: Record<string, StatusColorConfig> = {
   lost: { bg: 'bg-red-100', text: 'text-red-800' },
   unqualified: { bg: 'bg-red-100', text: 'text-red-800' },
   nurturing: { bg: 'bg-purple-100', text: 'text-purple-800' },
-};
-
-/**
- * Opportunity status/stage color mappings
- */
-export const opportunityStatusColors: Record<string, StatusColorConfig> = {
-  discovery: { bg: 'bg-cyan-100', text: 'text-cyan-800' },
-  proposal: { bg: 'bg-purple-100', text: 'text-purple-800' },
-  negotiation: { bg: 'bg-orange-100', text: 'text-orange-800' },
-  scoping: { bg: 'bg-green-100', text: 'text-green-800' },
-  stalling: { bg: 'bg-red-100', text: 'text-red-800' },
-  won: { bg: 'bg-emerald-100', text: 'text-emerald-800' },
-  lost: { bg: 'bg-gray-100', text: 'text-gray-800' },
 };
 
 /**
@@ -73,7 +60,6 @@ const defaultStatusColor: StatusColorConfig = {
  */
 const statusColorMap: Record<StatusType, Record<string, StatusColorConfig>> = {
   lead: leadStatusColors,
-  opportunity: opportunityStatusColors,
   company: companyStatusColors,
   campaign: campaignStatusColors,
 };
@@ -82,7 +68,7 @@ const statusColorMap: Record<StatusType, Record<string, StatusColorConfig>> = {
  * Get the color configuration for a given status and type
  *
  * @param status - The status value (e.g., 'new', 'active', 'qualified')
- * @param type - The entity type ('lead', 'opportunity', 'company', 'campaign')
+ * @param type - The entity type ('lead', 'company', 'campaign')
  * @returns StatusColorConfig object with bg and text color classes
  *
  * @example

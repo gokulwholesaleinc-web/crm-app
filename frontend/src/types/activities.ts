@@ -5,7 +5,7 @@
 import type { PaginatedResponse } from './common';
 
 export type ActivityType = 'call' | 'email' | 'meeting' | 'task' | 'note';
-export type EntityType = 'contact' | 'company' | 'lead' | 'opportunity';
+export type EntityType = 'contact' | 'company' | 'lead';
 export type Priority = 'low' | 'normal' | 'high' | 'urgent';
 
 export interface ActivityBase {

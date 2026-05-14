@@ -40,7 +40,7 @@ function CustomerLink({
   return <>{label}</>;
 }
 
-// Renders the entity this payment is for: proposal > quote > opportunity.
+// Renders the entity this payment is for: proposal > quote.
 // Returns a placeholder when the payment was created standalone.
 export function PaymentForLink({ payment }: { payment: Payment }) {
   if (payment.proposal) {
@@ -54,13 +54,6 @@ export function PaymentForLink({ payment }: { payment: Payment }) {
     return (
       <EntityLink type="quote" id={payment.quote.id} variant="muted" title={payment.quote.title}>
         Quote #{payment.quote.id}
-      </EntityLink>
-    );
-  }
-  if (payment.opportunity) {
-    return (
-      <EntityLink type="opportunity" id={payment.opportunity.id} variant="muted" title={payment.opportunity.name}>
-        Opportunity #{payment.opportunity.id}
       </EntityLink>
     );
   }
@@ -289,7 +282,7 @@ function PaymentsPage() {
                       </span>
                       <span className="text-gray-500 dark:text-gray-400">{formatDate(payment.created_at)}</span>
                     </div>
-                    {(payment.proposal || payment.quote || payment.opportunity) && (
+                    {(payment.proposal || payment.quote) && (
                       <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 truncate">
                         For <PaymentForLink payment={payment} />
                       </p>

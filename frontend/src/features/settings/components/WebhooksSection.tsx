@@ -37,9 +37,6 @@ const AVAILABLE_EVENTS = [
   'contact.updated',
   'company.created',
   'company.updated',
-  'opportunity.created',
-  'opportunity.updated',
-  'opportunity.stage_changed',
   'activity.created',
 ];
 

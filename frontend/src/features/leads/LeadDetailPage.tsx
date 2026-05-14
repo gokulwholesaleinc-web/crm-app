@@ -124,27 +124,17 @@ function LeadDetailPage() {
     }
   };
 
-  const handleConvert = async (data: {
-    createContact: boolean;
-    createOpportunity: boolean;
-    opportunityName?: string;
-    opportunityValue?: number;
-    opportunityStage?: number;
-  }) => {
+  const handleConvert = async (data: { createCompany: boolean }) => {
     if (!leadId) return;
     try {
-      const stageId = data.opportunityStage ?? 1;
       const result = await convertLeadMutation.mutateAsync({
         leadId: leadId,
         data: {
-          pipeline_stage_id: stageId,
-          create_company: data.createContact,
+          create_company: data.createCompany,
         },
       });
       if (result.contact_id) {
         navigate(`/contacts/${result.contact_id}`);
-      } else if (result.opportunity_id) {
-        navigate(`/opportunities`);
       } else {
         navigate('/leads');
       }
@@ -184,8 +174,8 @@ function LeadDetailPage() {
 
   // The lead's status was flipped to 'converted' (e.g. via the edit form
   // before the server-side guard landed) but the Convert flow never ran,
-  // so no Contact / Opportunity exists. Surface a banner that lets the
-  // user run conversion now and re-enable the Convert button below.
+  // so no Contact exists. Surface a banner that lets the user run
+  // conversion now and re-enable the Convert button below.
   const isOrphanConverted =
     lead.status === 'converted' && !lead.converted_contact_id;
 
@@ -284,8 +274,8 @@ function LeadDetailPage() {
         >
           <p className="font-semibold">Lead is marked Converted but conversion never ran.</p>
           <p className="mt-1">
-            No Contact or Opportunity was created. Click <span className="font-medium">Run Conversion</span>{' '}
-            in the header to create them now.
+            No Contact was created. Click <span className="font-medium">Run Conversion</span>{' '}
+            in the header to create one now.
           </p>
         </div>
       )}
@@ -397,31 +387,19 @@ function LeadDetailPage() {
                 <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Last Updated</dt>
                 <dd className="mt-1 text-sm text-gray-900 dark:text-gray-100">{formatDate(lead.updated_at)}</dd>
               </div>
-              {(lead.converted_contact_id || lead.converted_opportunity_id) && (
+              {lead.converted_contact_id && (
                 <>
                   <div className="sm:col-span-2 pt-4 border-t border-gray-200 dark:border-gray-700">
                     <dt className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">Converted Entities</dt>
                   </div>
-                  {lead.converted_contact_id && (
-                    <div>
-                      <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Contact</dt>
-                      <dd className="mt-1 text-sm">
-                        <Link to={`/contacts/${lead.converted_contact_id}`} className="text-primary-600 hover:text-primary-900 dark:hover:text-primary-300">
-                          View Contact #{lead.converted_contact_id}
-                        </Link>
-                      </dd>
-                    </div>
-                  )}
-                  {lead.converted_opportunity_id && (
-                    <div>
-                      <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Opportunity</dt>
-                      <dd className="mt-1 text-sm">
-                        <Link to={`/opportunities/${lead.converted_opportunity_id}`} className="text-primary-600 hover:text-primary-900 dark:hover:text-primary-300">
-                          View Opportunity #{lead.converted_opportunity_id}
-                        </Link>
-                      </dd>
-                    </div>
-                  )}
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">Contact</dt>
+                    <dd className="mt-1 text-sm">
+                      <Link to={`/contacts/${lead.converted_contact_id}`} className="text-primary-600 hover:text-primary-900 dark:hover:text-primary-300">
+                        View Contact #{lead.converted_contact_id}
+                      </Link>
+                    </dd>
+                  </div>
                 </>
               )}
             </dl>

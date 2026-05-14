@@ -17,7 +17,6 @@ import {
   UserGroupIcon,
   BuildingOfficeIcon,
   FunnelIcon,
-  CurrencyDollarIcon,
   DocumentTextIcon,
   DocumentDuplicateIcon,
   CreditCardIcon,
@@ -104,14 +103,6 @@ const teamColumns: Column<TeamMemberOverview>[] = [
     ),
   },
   {
-    key: 'opportunity_count',
-    header: 'Opps',
-    sortable: true,
-    render: (row) => (
-      <span style={{ fontVariantNumeric: 'tabular-nums' }}>{row.opportunity_count}</span>
-    ),
-  },
-  {
     key: 'total_pipeline_value',
     header: 'Pipeline Value',
     sortable: true,
@@ -178,7 +169,6 @@ export default function AdminDashboard() {
         { label: 'Contacts', value: stats.total_contacts, icon: UserGroupIcon, color: 'bg-blue-500' },
         { label: 'Companies', value: stats.total_companies, icon: BuildingOfficeIcon, color: 'bg-purple-500' },
         { label: 'Leads', value: stats.total_leads, icon: FunnelIcon, color: 'bg-yellow-500' },
-        { label: 'Opportunities', value: stats.total_opportunities, icon: CurrencyDollarIcon, color: 'bg-emerald-500' },
         { label: 'Quotes', value: stats.total_quotes, icon: DocumentTextIcon, color: 'bg-cyan-500' },
         { label: 'Proposals', value: stats.total_proposals, icon: DocumentDuplicateIcon, color: 'bg-pink-500' },
         { label: 'Payments', value: stats.total_payments, icon: CreditCardIcon, color: 'bg-orange-500' },

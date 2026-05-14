@@ -5,14 +5,13 @@ import { useQueries } from '@tanstack/react-query';
 import { listContacts } from '../../api/contacts';
 import { listCompanies } from '../../api/companies';
 import { listLeads } from '../../api/leads';
-import { listOpportunities } from '../../api/opportunities';
 import { listQuotes } from '../../api/quotes';
 import { listProposals } from '../../api/proposals';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 
 interface SearchResult {
   id: number;
-  entity: 'contact' | 'company' | 'lead' | 'opportunity' | 'quote' | 'proposal';
+  entity: 'contact' | 'company' | 'lead' | 'quote' | 'proposal';
   label: string;
   sublabel?: string;
   href: string;
@@ -71,25 +70,6 @@ const ENTITIES: EntityConfig[] = [
         id: l.id,
         label: l.name || l.company_name || `Lead #${l.id}`,
         sublabel: l.email || l.company_name,
-      };
-    },
-  },
-  {
-    entity: 'opportunity',
-    groupLabel: 'Opportunities',
-    routePrefix: '/pipeline',
-    fetch: (q) => listOpportunities({ search: q, page_size: 5 }) as Promise<{ items: unknown[] }>,
-    toResult: (raw) => {
-      const o = raw as {
-        id: number;
-        name: string;
-        company?: MaybeNamed;
-        contact?: { full_name?: string };
-      };
-      return {
-        id: o.id,
-        label: o.name,
-        sublabel: o.company?.name || o.contact?.full_name,
       };
     },
   },

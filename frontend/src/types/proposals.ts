@@ -19,7 +19,6 @@ export interface ProposalBillingFields {
 export interface ProposalBase extends ProposalBillingFields {
   title: string;
   content?: string | null;
-  opportunity_id?: number | null;
   contact_id?: number | null;
   company_id?: number | null;
   quote_id?: number | null;
@@ -42,7 +41,6 @@ export interface ProposalCreate extends ProposalBase {}
 export interface ProposalUpdate {
   title?: string;
   content?: string | null;
-  opportunity_id?: number | null;
   contact_id?: number | null;
   company_id?: number | null;
   quote_id?: number | null;
@@ -101,7 +99,6 @@ export interface Proposal extends ProposalBase {
   updated_at: string;
   contact?: { id: number; full_name: string; email?: string | null } | null;
   company?: { id: number; name: string } | null;
-  opportunity?: { id: number; name: string } | null;
   quote?: { id: number; quote_number: string; title: string; total: number } | null;
   /** User who clicked "Create Proposal". Immutable. Rendered in admin list+detail. */
   created_by?: { id: number; full_name: string; email?: string | null } | null;
@@ -116,7 +113,6 @@ export interface ProposalFilters {
   page_size?: number;
   search?: string;
   status?: string;
-  opportunity_id?: number;
   contact_id?: number;
   company_id?: number;
   quote_id?: number;

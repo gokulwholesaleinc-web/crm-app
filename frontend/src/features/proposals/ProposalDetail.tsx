@@ -663,16 +663,6 @@ function ProposalDetailPage() {
                   </dd>
                 </div>
               )}
-              {proposal.opportunity && (
-                <div>
-                  <dt className="text-xs text-gray-500 dark:text-gray-400">Opportunity</dt>
-                  <dd className="text-sm font-medium">
-                    <Link to={`/opportunities/${proposal.opportunity.id}`} className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300">
-                      {proposal.opportunity.name}
-                    </Link>
-                  </dd>
-                </div>
-              )}
               {proposal.quote && (
                 <div>
                   <dt className="text-xs text-gray-500 dark:text-gray-400">Quote</dt>
@@ -696,7 +686,7 @@ function ProposalDetailPage() {
                   </dd>
                 </div>
               )}
-              {!proposal.contact && !proposal.company && !proposal.opportunity && !proposal.quote && (
+              {!proposal.contact && !proposal.company && !proposal.quote && (
                 <p className="text-sm text-gray-500 dark:text-gray-400">No related entities</p>
               )}
             </dl>
@@ -726,7 +716,6 @@ function ProposalDetailPage() {
             timeline: proposal.timeline ?? null,
             terms: proposal.terms ?? null,
             valid_until: proposal.valid_until ?? null,
-            opportunity_id: proposal.opportunity?.id ?? null,
             contact_id: proposal.contact?.id ?? null,
             company_id: proposal.company?.id ?? null,
             quote_id: proposal.quote?.id ?? null,

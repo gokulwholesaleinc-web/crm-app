@@ -303,7 +303,6 @@ function QuoteDetailPage() {
               const params = new URLSearchParams({ action: 'new', quote_id: String(quote.id) });
               if (quote.contact?.id) params.set('contact_id', String(quote.contact.id));
               if (quote.company?.id) params.set('company_id', String(quote.company.id));
-              if (quote.opportunity?.id) params.set('opportunity_id', String(quote.opportunity.id));
               navigate(`/proposals?${params.toString()}`);
             }}
           >
@@ -564,17 +563,7 @@ function QuoteDetailPage() {
                   </dd>
                 </div>
               )}
-              {quote.opportunity && (
-                <div>
-                  <dt className="text-xs text-gray-500 dark:text-gray-400">Opportunity</dt>
-                  <dd className="text-sm font-medium">
-                    <Link to={`/opportunities/${quote.opportunity.id}`} className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300">
-                      {quote.opportunity.name}
-                    </Link>
-                  </dd>
-                </div>
-              )}
-              {!quote.contact && !quote.company && !quote.opportunity && (
+              {!quote.contact && !quote.company && (
                 <p className="text-sm text-gray-500 dark:text-gray-400">No related entities</p>
               )}
             </dl>
@@ -701,10 +690,10 @@ function QuoteDetailPage() {
       </Modal>
 
       {/* Edit Quote Modal — reuses QuoteForm so edit exposes every field
-          create does (contact/company/opportunity, billing, currency,
-          discount, tax, terms, etc.). Line items are intentionally
-          excluded from PATCH; they have dedicated add/remove endpoints
-          driven from the detail page. */}
+          create does (contact/company, billing, currency, discount, tax,
+          terms, etc.). Line items are intentionally excluded from PATCH;
+          they have dedicated add/remove endpoints driven from the detail
+          page. */}
       <Modal
         isOpen={showEditModal}
         onClose={() => setShowEditModal(false)}
@@ -719,7 +708,6 @@ function QuoteDetailPage() {
             description: quote.description ?? null,
             contact_id: quote.contact?.id ?? null,
             company_id: quote.company?.id ?? null,
-            opportunity_id: quote.opportunity?.id ?? null,
             currency: quote.currency,
             valid_until: quote.valid_until ?? null,
             discount_type: quote.discount_type ?? null,

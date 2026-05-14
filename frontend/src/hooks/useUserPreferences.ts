@@ -5,7 +5,7 @@ import { useAuthStore } from '../store/authStore';
 export type DensityMode = 'compact' | 'comfortable';
 export type SortDirection = 'asc' | 'desc';
 
-export type EntityKindWithTabs = 'contact' | 'lead' | 'opportunity' | 'company';
+export type EntityKindWithTabs = 'contact' | 'lead' | 'company';
 export type ListPageKey =
   | 'contacts'
   | 'leads'
@@ -26,7 +26,6 @@ const LIST_PAGE_KEYS: ReadonlySet<string> = new Set([
 const ENTITY_KINDS_WITH_TABS: ReadonlySet<string> = new Set([
   'contact',
   'lead',
-  'opportunity',
   'company',
 ]);
 

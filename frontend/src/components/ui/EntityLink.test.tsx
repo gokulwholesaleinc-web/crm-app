@@ -12,7 +12,6 @@ describe('EntityLink', () => {
   it.each([
     ['company', 7, '/companies/7'],
     ['lead', 3, '/leads/3'],
-    ['opportunity', 11, '/opportunities/11'],
     ['quote', 'abc', '/quotes/abc'],
     ['proposal', 5, '/proposals/5'],
     ['payment', 9, '/payments/9'],

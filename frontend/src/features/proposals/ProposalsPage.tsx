@@ -43,9 +43,8 @@ function ProposalsPage() {
     setSearchParams((prev) => { if (s) prev.set('status', s); else prev.delete('status'); return prev; }, { replace: true });
   const [currentPage, setCurrentPage] = useState(1);
   // Open the create form automatically when arriving with `?action=new`
-  // from a contact / company / quote / opportunity detail page. The
-  // ProposalForm reads the rest of the query string to prefill the
-  // Related Records dropdowns.
+  // from a contact / company / quote detail page. The ProposalForm reads
+  // the rest of the query string to prefill the Related Records dropdowns.
   const [showForm, setShowForm] = useState(searchParams.get('action') === 'new');
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; proposal: Proposal | null }>({
     isOpen: false,

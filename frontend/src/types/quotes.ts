@@ -30,7 +30,6 @@ export interface QuoteLineItemCreate {
 export interface QuoteBase {
   title: string;
   description?: string | null;
-  opportunity_id?: number | null;
   contact_id?: number | null;
   company_id?: number | null;
   status: string;
@@ -54,7 +53,6 @@ export interface QuoteCreate extends QuoteBase {
 export interface QuoteUpdate {
   title?: string | null;
   description?: string | null;
-  opportunity_id?: number | null;
   contact_id?: number | null;
   company_id?: number | null;
   valid_until?: string | null;
@@ -87,7 +85,6 @@ export interface Quote extends QuoteBase {
   line_items: QuoteLineItem[];
   contact?: ContactBriefWithEmail | null;
   company?: CompanyBrief | null;
-  opportunity?: { id: number; name: string } | null;
 }
 
 export type QuoteListResponse = PaginatedResponse<Quote>;
@@ -99,7 +96,6 @@ export interface QuoteFilters {
   status?: string;
   contact_id?: number;
   company_id?: number;
-  opportunity_id?: number;
   owner_id?: number;
   order_by?: string;
   order_dir?: 'asc' | 'desc';

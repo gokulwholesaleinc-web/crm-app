@@ -196,11 +196,9 @@ function DashboardPage() {
   const data = kpiCards ? {
     totalContacts: findCardValue(cardMap, 'total_contacts'),
     totalLeads: findCardValue(cardMap, 'total_leads'),
-    totalOpportunities: findCardValue(cardMap, 'open_opportunities'),
     totalRevenue: findCardValue(cardMap, 'total_revenue'),
     contactsTrend: findCardChange(cardMap, 'total_contacts'),
     leadsTrend: findCardChange(cardMap, 'total_leads'),
-    opportunitiesTrend: findCardChange(cardMap, 'open_opportunities'),
     revenueTrend: findCardChange(cardMap, 'total_revenue'),
     recentActivities: (timelineData?.items ?? []).slice(0, 10).map(item => ({
       id: item.id,
@@ -291,32 +289,6 @@ function DashboardPage() {
                     strokeLinejoin="round"
                     strokeWidth={2}
                     d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-                  />
-                </svg>
-              }
-            />
-
-            <NumberCard
-              title="Open Opportunities"
-              value={data?.totalOpportunities ?? 0}
-              href="/pipeline"
-              colorVariant="accent"
-              trend={{
-                value: data?.opportunitiesTrend ?? 0,
-                isPositive: (data?.opportunitiesTrend ?? 0) >= 0,
-              }}
-              icon={
-                <svg
-                  className="h-6 w-6"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
                   />
                 </svg>
               }
@@ -420,7 +392,7 @@ function DashboardPage() {
         ) : (
         <ChartCard
           title="Pipeline Overview"
-          subtitle="Opportunities by stage"
+          subtitle="Leads by stage"
         >
           <div className="space-y-3 sm:space-y-4">
             {data?.pipelineData?.map((item, index) => {

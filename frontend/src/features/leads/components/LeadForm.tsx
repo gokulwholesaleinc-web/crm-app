@@ -37,7 +37,7 @@ export interface LeadFormProps {
 
 // `converted` is intentionally absent — the only legitimate way to land
 // in that state is through the Convert flow on the lead detail page,
-// which creates the Contact + Opportunity. Picking it here would 400.
+// which creates the Contact (and optional Company). Picking it here would 400.
 const leadStatuses = [
   { value: 'new', label: 'New' },
   { value: 'contacted', label: 'Contacted' },
@@ -99,10 +99,10 @@ export function LeadForm({
   );
 
   // Terminal stages (Won/Lost) are excluded from the edit dropdown.
-  // Moving to Won fires the auto-conversion side effects (create Contact +
-  // Opportunity, stamp converted_*_id) which only the kanban `/move`
-  // endpoint runs — PUT /update would leave inconsistent state. The
-  // explicit path is the Convert button on the detail page.
+  // Moving to Won fires the auto-conversion side effects (create Contact,
+  // stamp converted_contact_id) which only the kanban `/move` endpoint
+  // runs — PUT /update would leave inconsistent state. The explicit path
+  // is the Convert button on the detail page.
   const pipelineStageOptions = useMemo(
     () => [
       { value: '', label: '— Select stage —' },

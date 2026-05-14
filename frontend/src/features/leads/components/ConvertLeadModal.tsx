@@ -1,15 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { CheckIcon } from '@heroicons/react/24/outline';
 import { Button, Modal, ConfirmDialog } from '../../../components/ui';
-import { usePipelineStages } from '../../../hooks/useOpportunities';
 
 interface ConvertLeadFormData {
-  createContact: boolean;
-  createOpportunity: boolean;
-  opportunityName?: string;
-  opportunityValue?: number;
-  opportunityStage?: number;
+  createCompany: boolean;
 }
 
 interface ConvertLeadModalProps {
@@ -20,16 +15,6 @@ interface ConvertLeadModalProps {
   onConvert: (data: ConvertLeadFormData) => Promise<void>;
 }
 
-const FALLBACK_STAGES = [
-  { value: 1, label: 'Discovery' },
-  { value: 2, label: 'Proposal' },
-  { value: 3, label: 'Negotiation' },
-  { value: 4, label: 'Scoping' },
-  { value: 5, label: 'Stalling' },
-  { value: 6, label: 'Won' },
-  { value: 7, label: 'Lost' },
-];
-
 export function ConvertLeadModal({
   isOpen,
   leadName,
@@ -38,39 +23,17 @@ export function ConvertLeadModal({
 }: ConvertLeadModalProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
-  const { data: pipelineStages, isLoading: stagesLoading } = usePipelineStages(true, 'opportunity');
-
-  const opportunityStages = pipelineStages
-    ? pipelineStages.map((s) => ({ value: s.id, label: s.name }))
-    : FALLBACK_STAGES;
-
-  const defaultStageId = opportunityStages[0]?.value ?? 1;
 
   const {
     register,
     handleSubmit,
-    watch,
-    setValue,
     reset,
-    formState: { errors, isDirty },
+    formState: { isDirty },
   } = useForm<ConvertLeadFormData>({
     defaultValues: {
-      createContact: true,
-      createOpportunity: false,
-      opportunityName: '',
-      opportunityValue: 0,
-      opportunityStage: defaultStageId,
+      createCompany: true,
     },
   });
-
-  useEffect(() => {
-    const firstStage = pipelineStages?.[0];
-    if (firstStage) {
-      setValue('opportunityStage', firstStage.id);
-    }
-  }, [pipelineStages, setValue]);
-
-  const createOpportunity = watch('createOpportunity');
 
   const handleCancel = () => {
     if (isDirty) {
@@ -108,7 +71,7 @@ export function ConvertLeadModal({
             Convert Lead
           </h3>
           <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 px-2">
-            Convert "{leadName}" to a contact and/or opportunity.
+            Convert &ldquo;{leadName}&rdquo; to a contact.
           </p>
         </div>
 
@@ -117,128 +80,24 @@ export function ConvertLeadModal({
             <div className="flex items-start">
               <div className="flex items-center h-5">
                 <input
-                  id="createContact"
+                  id="createCompany"
                   type="checkbox"
-                  {...register('createContact')}
+                  {...register('createCompany')}
                   className="focus:ring-primary-500 h-5 w-5 sm:h-4 sm:w-4 text-primary-600 border-gray-300 rounded"
                 />
               </div>
               <div className="ml-3 text-sm">
                 <label
-                  htmlFor="createContact"
+                  htmlFor="createCompany"
                   className="font-medium text-gray-700 dark:text-gray-300"
                 >
-                  Create Contact
+                  Also create Company
                 </label>
                 <p className="text-gray-500">
-                  Create a new contact from this lead's information.
+                  Create a company from the lead&apos;s company info and link it to the new contact.
                 </p>
               </div>
             </div>
-
-            <div className="flex items-start">
-              <div className="flex items-center h-5">
-                <input
-                  id="createOpportunity"
-                  type="checkbox"
-                  {...register('createOpportunity')}
-                  className="focus:ring-primary-500 h-5 w-5 sm:h-4 sm:w-4 text-primary-600 border-gray-300 rounded"
-                />
-              </div>
-              <div className="ml-3 text-sm">
-                <label
-                  htmlFor="createOpportunity"
-                  className="font-medium text-gray-700 dark:text-gray-300"
-                >
-                  Create Opportunity
-                </label>
-                <p className="text-gray-500">
-                  Create a new opportunity for this lead.
-                </p>
-              </div>
-            </div>
-
-            {createOpportunity && (
-              <div className="ml-4 sm:ml-7 space-y-4 border-l-2 border-gray-200 pl-4">
-                <div>
-                  <label
-                    htmlFor="opportunityName"
-                    className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                  >
-                    Opportunity Name *
-                  </label>
-                  <input
-                    type="text"
-                    id="opportunityName"
-                    {...register('opportunityName', {
-                      required: createOpportunity
-                        ? 'Opportunity name is required'
-                        : false,
-                    })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 py-2.5 sm:py-2 text-base sm:text-sm"
-                    placeholder={`${leadName} - Opportunity`}
-                  />
-                  {errors.opportunityName && (
-                    <p className="mt-1 text-sm text-red-600">
-                      {errors.opportunityName.message}
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="opportunityValue"
-                    className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                  >
-                    Expected Value
-                  </label>
-                  <div className="mt-1 relative rounded-md shadow-sm">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <span className="text-gray-500 text-base sm:text-sm">$</span>
-                    </div>
-                    <input
-                      type="number"
-                      id="opportunityValue"
-                      {...register('opportunityValue', {
-                        min: { value: 0, message: 'Value must be positive' },
-                      })}
-                      className="pl-7 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 py-2.5 sm:py-2 text-base sm:text-sm"
-                      placeholder="0.00"
-                    />
-                  </div>
-                  {errors.opportunityValue && (
-                    <p className="mt-1 text-sm text-red-600">
-                      {errors.opportunityValue.message}
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="opportunityStage"
-                    className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                  >
-                    Stage
-                  </label>
-                  <select
-                    id="opportunityStage"
-                    {...register('opportunityStage', { valueAsNumber: true })}
-                    disabled={stagesLoading}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 py-2.5 sm:py-2 text-base sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {stagesLoading ? (
-                      <option value="">Loading stages...</option>
-                    ) : (
-                      opportunityStages.map((stage) => (
-                        <option key={stage.value} value={stage.value}>
-                          {stage.label}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                </div>
-              </div>
-            )}
           </div>
 
           <div className="mt-5 pt-4 border-t border-gray-200 sm:border-t-0 sm:pt-0 sm:mt-6 flex flex-col-reverse sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense gap-3">

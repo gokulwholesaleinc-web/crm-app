@@ -50,7 +50,6 @@ from src.leads.router import router as leads_router
 from src.meta.router import router as meta_router
 from src.notes.router import router as notes_router
 from src.notifications.router import router as notifications_router
-from src.opportunities.router import router as opportunities_router
 from src.payments.router import router as payments_router
 from src.proposals.router import router as proposals_router
 from src.quotes.router import router as quotes_router
@@ -173,7 +172,9 @@ app.include_router(auth_router)
 app.include_router(contacts_router)
 app.include_router(companies_router)
 app.include_router(leads_router)
-app.include_router(opportunities_router)
+# Opportunities router unmounted 2026-05-14 — Lorenzo collapsed pipeline
+# to leads-only. Model + tables preserved for historical FK data on
+# ``Lead.converted_opportunity_id``.
 app.include_router(activities_router)
 app.include_router(campaigns_router)
 app.include_router(dashboard_router)

@@ -13,7 +13,6 @@ import type {
   LeadSourceCreate,
   LeadSourceUpdate,
   LeadConvertToContactRequest,
-  LeadConvertToOpportunityRequest,
   LeadFullConversionRequest,
   ConversionResponse,
   PipelineStage,
@@ -126,21 +125,7 @@ export const convertToContact = async (
 };
 
 /**
- * Convert a lead to an opportunity
- */
-export const convertToOpportunity = async (
-  leadId: number,
-  request: LeadConvertToOpportunityRequest
-): Promise<ConversionResponse> => {
-  const response = await apiClient.post<ConversionResponse>(
-    `${LEADS_BASE}/${leadId}/convert/opportunity`,
-    request
-  );
-  return response.data;
-};
-
-/**
- * Full lead conversion: Lead -> Contact + Company + Opportunity
+ * Full lead conversion: Lead -> Contact + Company
  */
 export const fullConversion = async (
   leadId: number,
@@ -220,7 +205,6 @@ export const leadsApi = {
   deleteSource: deleteLeadSource,
   // Conversion
   convertToContact,
-  convertToOpportunity,
   fullConversion,
   // Pipeline / Kanban
   getLeadPipelineStages,

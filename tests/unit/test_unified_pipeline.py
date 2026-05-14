@@ -98,7 +98,7 @@ class TestAutoConversion:
         opp_stages: list[PipelineStage],
         test_lead_in_pipeline: Lead,
     ):
-        """Moving a lead to a Won stage auto-creates Contact + Opportunity."""
+        """Moving a lead to a Won stage auto-creates a Contact."""
         won_stage = lead_stages[3]  # "Won" stage
 
         response = await client.post(
@@ -117,41 +117,6 @@ class TestAutoConversion:
         assert "conversion" in data
         assert data["conversion"]["converted"] is True
         assert data["conversion"]["contact_id"] is not None
-        assert data["conversion"]["opportunity_id"] is not None
-
-    @pytest.mark.asyncio
-    async def test_auto_conversion_uses_first_opp_stage(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-        test_user: User,
-        lead_stages: list[PipelineStage],
-        opp_stages: list[PipelineStage],
-        test_lead_in_pipeline: Lead,
-    ):
-        """Auto-conversion places the opportunity in the first opportunity pipeline stage."""
-        from sqlalchemy import select
-
-        won_stage = lead_stages[3]
-        first_opp_stage = opp_stages[0]  # "Discovery" (order=1)
-
-        response = await client.post(
-            f"/api/leads/{test_lead_in_pipeline.id}/move",
-            headers=auth_headers,
-            json={"new_stage_id": won_stage.id},
-        )
-        assert response.status_code == 200
-        data = response.json()
-
-        opp_id = data["conversion"]["opportunity_id"]
-
-        # Verify the opportunity is in the first opp stage
-        result = await db_session.execute(
-            select(Opportunity).where(Opportunity.id == opp_id)
-        )
-        opportunity = result.scalar_one()
-        assert opportunity.pipeline_stage_id == first_opp_stage.id
 
     @pytest.mark.asyncio
     async def test_auto_conversion_creates_company_when_company_name_present(
@@ -192,7 +157,8 @@ class TestAutoConversion:
         new_stage = lead_stages[0]
         won_stage = lead_stages[3]
 
-        # Create a lead that's already been converted
+        # Create a lead that's already been converted (legacy
+        # converted_opportunity_id column kept for backward compat)
         lead = Lead(
             first_name="Already",
             last_name="Converted",
@@ -218,48 +184,6 @@ class TestAutoConversion:
 
         # Should not have conversion info
         assert "conversion" not in data or data.get("conversion") is None
-
-    @pytest.mark.asyncio
-    async def test_won_move_to_no_opp_stages_returns_409(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-        test_user: User,
-        lead_stages: list[PipelineStage],
-        # Note: NOT using opp_stages fixture - no opportunity stages exist
-    ):
-        """Moving to Won without opp stages returns 409 + leaves lead untouched."""
-        new_stage = lead_stages[0]
-        won_stage = lead_stages[3]
-
-        lead = Lead(
-            first_name="No",
-            last_name="OppStages",
-            email="no.oppstages@example.com",
-            status="new",
-            pipeline_stage_id=new_stage.id,
-            owner_id=test_user.id,
-            created_by_id=test_user.id,
-        )
-        db_session.add(lead)
-        await db_session.commit()
-        await db_session.refresh(lead)
-
-        response = await client.post(
-            f"/api/leads/{lead.id}/move",
-            headers=auth_headers,
-            json={"new_stage_id": won_stage.id},
-        )
-        assert response.status_code == 409, response.text
-
-        # Lead state must be untouched — pre-flight runs BEFORE the
-        # pipeline_stage_id mutation, so the 409 leaves the lead where
-        # it started rather than stranded at Won.
-        await db_session.refresh(lead)
-        assert lead.status == "new"
-        assert lead.pipeline_stage_id == new_stage.id
-        assert lead.converted_opportunity_id is None
 
 
 class TestUnifiedPipelineEndpoint:
