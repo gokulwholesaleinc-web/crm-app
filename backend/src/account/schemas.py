@@ -14,13 +14,18 @@ TimeFormat = Literal["12h", "24h"]
 WeekStart = Literal["sunday", "monday"]
 CurrencyDisplay = Literal["USD", "EUR", "GBP", "CAD"]
 Theme = Literal["system", "light", "dark"]
+# ``/contracts`` retired 2026-05-14 — contracts router unmounted. The
+# frontend dropped it from the picker; the Literal would otherwise still
+# accept the value on a direct API PATCH, letting clients persist a
+# preference the UI can't surface. Legacy DB rows with
+# ``default_landing='/contracts'`` are silently ignored by the frontend
+# route catch-all (lands on /). Same drop pattern as ``/quotes`` in PR2.
 DefaultLanding = Literal[
     "/dashboard",
     "/leads",
     "/pipeline",
     "/contacts",
     "/proposals",
-    "/contracts",
 ]
 
 _HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")

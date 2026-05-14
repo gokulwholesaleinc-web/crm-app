@@ -102,6 +102,7 @@ export function EntityLink({
           className,
         )}
         title={title ?? 'Contracts were folded into Proposals — original entity is preserved for audit history.'}
+        onClick={legacyClickHandler}
       >
         {children}{' '}
         <span className="text-[10px] uppercase tracking-wide">(legacy contract)</span>

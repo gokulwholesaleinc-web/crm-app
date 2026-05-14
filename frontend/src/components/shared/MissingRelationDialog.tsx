@@ -1,14 +1,13 @@
 import { ConfirmDialog } from '../ui';
 
-// ``contract`` retired 2026-05-14 — contracts router unmounted.
-// ``quote`` retired 2026-05-14 — quotes router unmounted.
-// Both surfaces that mounted with those entityType values have been
-// removed; the union now only covers Proposals.
-export type RelationEntityType = 'proposal';
+// Contracts + Quotes retired 2026-05-14 — both surfaces that used this
+// dialog are gone, so the entityType prop collapsed to a single value
+// ("proposal") and got inlined. If a future module reintroduces a
+// missing-relation confirmation, restore the prop + RelationEntityType
+// union.
 
 interface MissingRelationDialogProps {
   isOpen: boolean;
-  entityType: RelationEntityType;
   onConfirm: () => void;
   onCancel: () => void;
   isLoading?: boolean;
@@ -16,7 +15,6 @@ interface MissingRelationDialogProps {
 
 export function MissingRelationDialog({
   isOpen,
-  entityType,
   onConfirm,
   onCancel,
   isLoading,
@@ -26,11 +24,11 @@ export function MissingRelationDialog({
       isOpen={isOpen}
       onClose={onCancel}
       onConfirm={onConfirm}
-      title={`Create ${entityType} without a contact or company?`}
+      title="Create proposal without a contact or company?"
       message={
         <span>
-          This {entityType} has no contact or company attached. You can save it
-          now and assign one later by editing the {entityType}, but you{'’'}ll
+          This proposal has no contact or company attached. You can save it
+          now and assign one later by editing the proposal, but you{'’'}ll
           need to add a recipient before it can be sent.
         </span>
       }
