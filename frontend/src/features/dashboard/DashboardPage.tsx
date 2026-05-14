@@ -359,7 +359,7 @@ function DashboardPage() {
             }
           />
           <NumberCard
-            title="Quote Conversion"
+            title="Proposal Conversion"
             value={`${salesKpis.quote_to_payment_conversion_rate}%`}
             colorVariant="primary"
             icon={

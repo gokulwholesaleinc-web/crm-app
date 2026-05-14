@@ -236,7 +236,10 @@ def _validate_url(v: str) -> str:
 
 
 class CreateCheckoutRequest(BaseModel):
-    quote_id: int | None = None
+    # ``quote_id`` was dropped 2026-05-14 along with the Quotes module —
+    # legacy callers passing it now hit pydantic's "extra fields" default
+    # of "ignore", so old clients won't 422; the field just no longer
+    # influences the persisted Payment.
     amount: Decimal | None = None
     currency: str = "USD"
     success_url: str
@@ -255,11 +258,11 @@ class CreateCheckoutResponse(BaseModel):
 
 
 class CreatePaymentIntentRequest(BaseModel):
+    # See CreateCheckoutRequest re: dropped ``quote_id``.
     amount: Decimal
     currency: str = "USD"
     customer_id: int | None = None
     opportunity_id: int | None = None
-    quote_id: int | None = None
 
 
 class CreatePaymentIntentResponse(BaseModel):
@@ -269,12 +272,12 @@ class CreatePaymentIntentResponse(BaseModel):
 
 
 class CreateAndSendInvoiceRequest(BaseModel):
+    # See CreateCheckoutRequest re: dropped ``quote_id``.
     customer_id: int
     amount: Decimal
     currency: str = "USD"
     description: str = "Invoice"
     due_days: int = Field(default=30, ge=1, le=365)
-    quote_id: int | None = None
     payment_method_types: list[Literal["card", "us_bank_account"]] | None = None
 
 

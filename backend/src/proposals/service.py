@@ -60,19 +60,14 @@ def _resolve_billing(proposal: Proposal) -> dict | None:
     Quote-fallback removed 2026-05-14 — quotes router unmounted.
     Proposals must now carry their own ``amount`` + ``payment_type``.
     """
-    source = None
-    raw_amount = proposal.amount
-    if raw_amount is not None and Decimal(str(raw_amount)) > 0:
-        source = proposal
-
-    if source is None or raw_amount is None:
+    if proposal.amount is None or Decimal(str(proposal.amount)) <= 0:
         return None
 
-    amount = Decimal(str(raw_amount))
-    currency = getattr(source, "currency", "USD") or "USD"
-    payment_type = getattr(source, "payment_type", "one_time") or "one_time"
-    interval = getattr(source, "recurring_interval", None)
-    interval_count = getattr(source, "recurring_interval_count", None)
+    amount = Decimal(str(proposal.amount))
+    currency = proposal.currency or "USD"
+    payment_type = proposal.payment_type or "one_time"
+    interval = proposal.recurring_interval
+    interval_count = proposal.recurring_interval_count
 
     if payment_type == "subscription":
         if not interval:

@@ -1,3 +1,4 @@
+import type { MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import clsx from 'clsx';
 import {
@@ -49,6 +50,12 @@ export function EntityLink({
   // silently dropping the row or routing to a 404. We intentionally
   // ignore `variant` here: the legacy treatment is always "muted, not a
   // link" so callers don't accidentally style it as clickable.
+  // Click handler shared by both legacy spans. Without stopPropagation,
+  // a parent row's onClick (e.g. "open detail") would fire when the user
+  // taps the muted label — surprising UX for a chip that looks
+  // non-interactive.
+  const legacyClickHandler = stopPropagation ? (e: MouseEvent) => e.stopPropagation() : undefined;
+
   if (type === LEGACY_OPPORTUNITY_TYPE) {
     return (
       <span
@@ -57,6 +64,7 @@ export function EntityLink({
           className,
         )}
         title={title ?? 'Opportunity records were retired — original entity is preserved for audit history.'}
+        onClick={legacyClickHandler}
       >
         {children}{' '}
         <span className="text-[10px] uppercase tracking-wide">(legacy opportunity)</span>
@@ -75,6 +83,7 @@ export function EntityLink({
           className,
         )}
         title={title ?? 'Quotes were replaced by Payment invoices — original entity is preserved for audit history.'}
+        onClick={legacyClickHandler}
       >
         {children}{' '}
         <span className="text-[10px] uppercase tracking-wide">(legacy quote)</span>

@@ -226,16 +226,17 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         cancel_url: str,
         user_id: int,
         customer_id: int | None = None,
-        quote_id: int | None = None,
     ) -> dict:
-        """Create a Stripe Checkout Session.
+        """Create a one-time-payment Stripe Checkout Session.
 
-        If the linked quote has payment_type="subscription", creates a
-        subscription-mode checkout session using the quote's recurring_interval.
-        Supports card and ACH (us_bank_account) payment methods.
+        Subscription mode was driven by the linked Quote's payment_type;
+        Quotes were retired 2026-05-14 so this endpoint is one-time only.
+        Recurring billing is now configured directly in Stripe by an
+        admin against the Payment / Customer record. Supports card and
+        ACH (us_bank_account) payment methods.
 
-        Returns dict with checkout_session_id and checkout_url,
-        or raises ValueError if Stripe is not configured.
+        Returns dict with checkout_session_id and checkout_url, or
+        raises ValueError if Stripe is not configured.
         """
         stripe = _get_stripe()
         if not stripe:
@@ -251,15 +252,6 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             if customer:
                 stripe_customer_id = customer.stripe_customer_id
 
-        # Quote-driven checkout retired 2026-05-14 — quotes router unmounted.
-        # Subscription kickoff now requires explicit ``payment_type`` /
-        # ``recurring_interval`` on the request body. ``quote_id`` is still
-        # accepted on the request schema for legacy clients but no longer
-        # influences checkout configuration.
-        is_subscription = False
-        recurring_interval = None
-        opportunity_id = None
-
         # Get tenant branding for company name in checkout description
         company_name = "CRM"
         if user_id:
@@ -272,27 +264,16 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             except (ImportError, LookupError, OSError) as exc:
                 logger.debug("Could not load tenant branding: %s", exc)
 
-        # Build price_data based on payment type
         price_data: dict = {
             "currency": currency.lower(),
             "product_data": {"name": f"Payment to {company_name} - {currency} {amount}"},
             "unit_amount": _to_cents(amount),
         }
 
-        if is_subscription and recurring_interval:
-            stripe_interval = self.INTERVAL_MAP.get(recurring_interval, "month")
-            interval_count = self.INTERVAL_COUNT_MAP.get(recurring_interval, 1)
-            price_data["recurring"] = {
-                "interval": stripe_interval,
-                "interval_count": interval_count,
-            }
-
-        checkout_mode = "subscription" if is_subscription else "payment"
-
         session_params = {
             "payment_method_types": ["card", "us_bank_account"],
             "line_items": [{"price_data": price_data, "quantity": 1}],
-            "mode": checkout_mode,
+            "mode": "payment",
             "success_url": success_url,
             "cancel_url": cancel_url,
             "payment_method_options": {
@@ -300,23 +281,23 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
                     "financial_connections": {"permissions": ["payment_method"]},
                 },
             },
+            "payment_intent_data": {"setup_future_usage": "off_session"},
         }
         if stripe_customer_id:
             session_params["customer"] = stripe_customer_id
-        if checkout_mode == "payment":
-            session_params["payment_intent_data"] = {"setup_future_usage": "off_session"}
 
         session = stripe.checkout.Session.create(**session_params)
 
-        # Create local payment record
+        # Create local payment record.
+        # ``quote_id`` and ``opportunity_id`` are no longer accepted from
+        # the request — both modules retired 2026-05-14. Legacy rows
+        # keep their non-null values; new rows are NULL.
         payment = Payment(
             stripe_checkout_session_id=session.id,
             amount=amount,
             currency=currency.upper(),
             status="pending",
             customer_id=customer_id,
-            quote_id=quote_id,
-            opportunity_id=opportunity_id,
             owner_id=user_id,
             created_by_id=user_id,
         )
@@ -335,9 +316,12 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         user_id: int,
         customer_id: int | None = None,
         opportunity_id: int | None = None,
-        quote_id: int | None = None,
     ) -> dict:
         """Create a Stripe PaymentIntent.
+
+        ``quote_id`` was dropped from the signature 2026-05-14 alongside
+        the Quotes module removal — historical rows keep their values,
+        new rows are NULL.
 
         Returns dict with payment_intent_id, client_secret, and payment_id,
         or raises ValueError if Stripe is not configured.
@@ -365,7 +349,8 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
 
         intent = stripe.PaymentIntent.create(**intent_params)
 
-        # Create local payment record
+        # Create local payment record. ``quote_id`` is left NULL (column
+        # preserved for historical reads only).
         payment = Payment(
             stripe_payment_intent_id=intent.id,
             amount=amount,
@@ -373,7 +358,6 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             status="pending",
             customer_id=customer_id,
             opportunity_id=opportunity_id,
-            quote_id=quote_id,
             owner_id=user_id,
             created_by_id=user_id,
         )
@@ -628,8 +612,20 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         # Staff-uploaded supporting docs (Lorenzo one-off invoice flow,
         # replaces retired Quotes attachments). Failures are logged + skipped,
         # not raised — the invoice email is more valuable than a backup PDF.
-        extras = await self._collect_payment_attachments(payment_id)
+        # Missing items get appended to the email body so admins see WHICH
+        # uploads dropped, mirroring the proposal-side appendix.
+        extras, missing = await self._collect_payment_attachments(payment_id)
         attachments.extend(extras)
+        if missing:
+            appendix = (
+                "<hr><p style='color:#9a3412;font-size:13px'>"
+                "<strong>Note:</strong> the following supporting document(s) "
+                "could not be attached automatically — please ask your point "
+                "of contact for a fresh copy if you need them:</p><ul>"
+                + "".join(f"<li>{name}</li>" for name in missing)
+                + "</ul>"
+            )
+            html_body = html_body + appendix
 
         email_service = EmailService(self.db)
         await email_service.queue_email(
@@ -644,17 +640,19 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
 
     async def _collect_payment_attachments(
         self, payment_id: int,
-    ) -> list:
+    ) -> tuple[list["EmailAttachment"], list[str]]:
         """Fetch every staff-uploaded Attachment for ``payment_id`` from R2.
 
         Mirrors ``ProposalService._collect_proposal_attachments`` — fetches
         each file with a 10s timeout, logs+skips on failure (R2 outage,
         missing key, network) so a flaky storage backend can't take down
-        the Resend Invoice flow. Caller appends successful items to the
-        email attachment list.
+        the Resend Invoice flow. Returns ``(attachments, missing_lines)``;
+        caller appends successful items to the email attachment list and
+        renders a "(N of M attachments delivered)" appendix from
+        ``missing_lines`` so admins know a backup PDF didn't ride along.
+        Without that surface, R2 outages would silently drop attachments
+        and the green "Invoice sent" toast would mislead admins.
         """
-        import hashlib
-
         import httpx
 
         from src.attachments.models import Attachment
@@ -669,10 +667,11 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
         )
         rows = list(result.scalars().all())
         if not rows:
-            return []
+            return ([], [])
 
         att_service = AttachmentService(self.db)
-        attachments: list = []
+        attachments: list[EmailAttachment] = []
+        missing_lines: list[str] = []
 
         async with httpx.AsyncClient(timeout=10.0) as client:
             for att in rows:
@@ -695,20 +694,14 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
                         content_type=att.mime_type or "application/octet-stream",
                     ))
                 except (httpx.HTTPError, OSError) as exc:
-                    key_for_hash = att.file_path or att.filename or ""
-                    digest = hashlib.sha256(
-                        key_for_hash.encode("utf-8")
-                    ).hexdigest()[:16]
                     logger.warning(
                         "Failed to attach payment attachment %s (payment=%s): %s",
                         att.id, payment_id, exc,
                         exc_info=True,
                     )
-                    # Skip — payment email goes out without this file rather
-                    # than failing the whole send.
-                    _ = digest
+                    missing_lines.append(att.original_filename or f"attachment-{att.id}")
 
-        return attachments
+        return (attachments, missing_lines)
 
     async def _handle_checkout_completed(self, session_obj: dict) -> None:
         """Handle checkout.session.completed event. Delegates to WebhookProcessor."""

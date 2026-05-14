@@ -44,10 +44,10 @@ async def create_checkout(
     """Create a Stripe Checkout Session."""
     service = PaymentService(db)
 
-    # Quote-linking path retired 2026-05-14 — quotes router unmounted. The
-    # ``quote_id`` field still exists on the request schema for legacy
-    # clients but is no longer dereferenced for amount/opportunity
-    # back-fill or access checks.
+    # Quote-linking path retired 2026-05-14 — quotes router unmounted.
+    # ``quote_id`` is no longer threaded into the persisted Payment row
+    # to prevent client-side injection of arbitrary FK values now that
+    # the access check is gone.
     if request_data.customer_id is not None:
         await _verify_stripe_customer_access(db, request_data.customer_id, current_user)
 
@@ -67,7 +67,6 @@ async def create_checkout(
             cancel_url=request_data.cancel_url,
             user_id=current_user.id,
             customer_id=request_data.customer_id,
-            quote_id=request_data.quote_id,
         )
         return CreateCheckoutResponse(**result)
     except ValueError as e:
@@ -100,13 +99,13 @@ async def create_payment_intent(
     try:
         if request_data.opportunity_id is not None:
             await assert_opportunity_active(db, request_data.opportunity_id, "payment")
+        # Same Quote-injection prevention as create_checkout above.
         result = await service.create_payment_intent(
             amount=request_data.amount,
             currency=request_data.currency,
             user_id=current_user.id,
             customer_id=request_data.customer_id,
             opportunity_id=request_data.opportunity_id,
-            quote_id=request_data.quote_id,
         )
         return CreatePaymentIntentResponse(**result)
     except ValueError as e:
