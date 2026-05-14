@@ -16,7 +16,8 @@ export interface SignToConfirmModalProps {
   recipientEmail: string;
   /** Resolved T&C body (proposal override or tenant default). */
   termsAndConditions: string | null;
-  /** When true, the success copy mentions a countersigned PDF. */
+  /** When true, a pre-submit notice warns the signer that a
+   *  countersigned PDF will arrive by email after submission. */
   hasMasterContract: boolean;
   /**
    * Returns `null` on success, or an error message string to display
@@ -63,7 +64,7 @@ export function SignToConfirmModal({
         month: 'long',
         day: 'numeric',
       }).format(new Date()),
-    [isOpen],
+    [],
   );
 
   const canSubmit = hasSignature && agreedToTerms && !submitting;

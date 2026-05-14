@@ -9,7 +9,10 @@ Inputs
 * ``coords``: optional ``{page, x, y, width, height}`` JSON pointing
   at the slot in ``master_pdf`` where the signature image should land
   (PDF points; origin = bottom-left). ``None`` triggers auto-detect
-  to the last page bottom-right.
+  to the last page bottom-right. A coords payload that's missing
+  ``x/y/width/height`` (or has invalid values) falls back to the
+  bottom-right auto-box on the *requested* ``page`` rather than the
+  last page.
 * ``signer_*`` + ``signed_at`` + ``proposal_number``: rendered into
   the appended audit page so a printed copy is self-contained.
 

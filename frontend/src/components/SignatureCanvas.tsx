@@ -44,14 +44,16 @@ export const SignatureCanvas = forwardRef<SignatureCanvasHandle, SignatureCanvas
         },
         clear: () => {
           sigRef.current?.clear();
-          if (!isEmpty) {
-            setIsEmpty(true);
-            onSignatureChange?.(true);
-          }
+          // setIsEmpty(true) is a no-op when already empty, so we don't
+          // need to gate on `isEmpty` (which would churn the handle's
+          // identity every stroke). The onSignatureChange callback is
+          // also de-duped by the parent.
+          setIsEmpty(true);
+          onSignatureChange?.(true);
         },
         isEmpty: () => sigRef.current?.isEmpty() ?? true,
       }),
-      [isEmpty, onSignatureChange],
+      [onSignatureChange],
     );
 
     // Resize the canvas's internal pixel buffer to match the rendered

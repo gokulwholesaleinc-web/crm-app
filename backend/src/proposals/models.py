@@ -107,10 +107,11 @@ class Proposal(Base, AuditableMixin):
     # Validity
     valid_until: Mapped[date | None] = mapped_column(Date)
 
-    # Structured pricing. When set, the CRM uses these fields to spawn a
-    # Stripe Invoice or Subscription on acceptance. `pricing_section`
-    # (free-text, below) remains for human-readable detail but is not
-    # used for billing math.
+    # Structured pricing. Used when the rep clicks Retry Billing or
+    # Resend Payment Link — acceptance itself no longer auto-spawns
+    # Stripe (Lorenzo 2026-05-14). `pricing_section` (free-text, below)
+    # remains for human-readable detail but is not used for billing
+    # math.
     #   payment_type: 'one_time' | 'subscription'
     #   recurring_interval: 'month' | 'year' (only when subscription)
     #   recurring_interval_count: 1 = monthly/yearly, 3 = quarterly,
@@ -165,10 +166,12 @@ class Proposal(Base, AuditableMixin):
     # modal. NULL falls back to ``tenant_settings.default_terms_and_conditions``.
     terms_and_conditions: Mapped[str | None] = mapped_column(Text)
 
-    # Stripe billing artifacts spawned on acceptance. Only one of
-    # stripe_invoice_id / stripe_checkout_session_id will be set, based on
-    # the linked Quote.payment_type: one_time -> invoice, subscription ->
-    # checkout session. stripe_subscription_id is filled in by the
+    # Stripe billing artifacts. Populated only via the explicit Retry
+    # Billing endpoint (accept-time auto-spawn was removed 2026-05-14
+    # per Lorenzo's manual-billing model). Only one of stripe_invoice_id /
+    # stripe_checkout_session_id will be set, based on the linked
+    # Quote.payment_type: one_time -> invoice, subscription -> checkout
+    # session. stripe_subscription_id is filled in by the
     # checkout.session.completed webhook when the client completes setup.
     stripe_invoice_id: Mapped[str | None] = mapped_column(String(255), index=True)
     stripe_subscription_id: Mapped[str | None] = mapped_column(

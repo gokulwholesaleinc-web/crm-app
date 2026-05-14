@@ -356,8 +356,11 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 "and can no longer be accepted",
             )
 
-        _assert_signer_matches(proposal, signer_email)
-
+        # Validate the submitted payload (consent + signature) BEFORE the
+        # signer-email authz check so a customer who forgot to tick the
+        # box doesn't see a confusing "email mismatch" error. The
+        # consent/signature checks are payload-shape only; they leak no
+        # information about the proposal recipient.
         if not agreed_to_terms:
             raise ValueError(
                 "You must agree to the terms and conditions to sign this proposal",
@@ -365,6 +368,8 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
 
         if not signature_image:
             raise ValueError("Signature image is required")
+
+        _assert_signer_matches(proposal, signer_email)
 
         # Atomic status transition: conditional UPDATE guarded by the
         # same (sent|viewed) whitelist. If two accept requests arrive
@@ -1627,12 +1632,17 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             return None
         from src.whitelabel.models import Tenant, TenantSettings, TenantUser
 
+        # Prefer the user's primary tenant but fall back to ANY
+        # membership when no row carries is_primary=True. The strict
+        # is_primary filter silently served the generic defaults on
+        # PR #114 (see feedback_tenant_branding_is_primary) — same
+        # JOIN shape, same trap, applied here to the T&C body.
         result = await self.db.execute(
             select(TenantSettings.default_terms_and_conditions)
             .join(Tenant, Tenant.id == TenantSettings.tenant_id)
             .join(TenantUser, TenantUser.tenant_id == Tenant.id)
             .where(TenantUser.user_id == proposal.owner_id)
-            .where(TenantUser.is_primary.is_(True))
+            .order_by(TenantUser.is_primary.desc())
             .limit(1)
         )
         return result.scalar_one_or_none()

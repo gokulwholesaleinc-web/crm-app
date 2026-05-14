@@ -1,5 +1,7 @@
 """Proposal API routes."""
 
+import base64
+import binascii
 import logging
 from typing import Annotated
 
@@ -74,8 +76,6 @@ def _decode_signature_image(payload: str) -> bytes:
     Raises ``HTTPException(400)`` on invalid payloads so the modal
     can surface a clean error.
     """
-    import base64
-
     raw = payload.strip()
     if raw.startswith("data:"):
         comma = raw.find(",")
@@ -87,7 +87,7 @@ def _decode_signature_image(payload: str) -> bytes:
         raw = raw[comma + 1 :]
     try:
         decoded = base64.b64decode(raw, validate=True)
-    except (ValueError, Exception) as exc:  # noqa: BLE001
+    except (ValueError, binascii.Error) as exc:
         raise HTTPException(
             status_code=HTTPStatus.BAD_REQUEST,
             detail="signature_image is not valid base64",
@@ -507,9 +507,11 @@ async def download_public_proposal_attachment(
 ):
     """Public download of a proposal attachment.
 
-    Records the per-token view (used by the read-before-sign gate) and
-    redirects to a short-lived R2 presigned URL. Falls back to a direct
-    file response when object storage isn't configured (dev/test).
+    Records the per-token view for audit purposes and redirects to a
+    short-lived R2 presigned URL. Falls back to a direct file response
+    when object storage isn't configured (dev/test). The view rows no
+    longer gate signing — the Sign-to-Confirm modal's T&C card
+    replaced the forced PDF-open step on 2026-05-14.
     """
     import hmac as _hmac
 
@@ -779,8 +781,11 @@ async def upload_master_contract(
     """Upload (or replace) the master service agreement PDF.
 
     On signing, the customer's drawn signature is stamped onto a copy
-    of this PDF + an audit page is appended; the composite is stored
-    at ``proposals.signed_pdf_path`` and emailed to both parties.
+    of this PDF + an audit page is appended. The composite is stored
+    at ``proposals.signed_pdf_path``, emailed to the signer, and the
+    owner receives an in-app/email ``proposal_signed`` notification
+    (matrix-gated). The owner does NOT automatically receive the PDF
+    attachment.
     """
     service = ProposalService(db)
     proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
