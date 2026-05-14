@@ -1,10 +1,10 @@
-"""
-Lead conversion following ERPNext pattern.
+"""Lead conversion: Lead → Contact (+ Company).
 
-Conversion flows:
-1. Lead → Contact (creates a contact record from lead data)
-2. Lead → Opportunity (creates an opportunity with lead as source)
-3. Lead → Contact + Opportunity (both at once)
+The Opportunity step Lorenzo flagged as redundant on 2026-05-14 is gone —
+Won-stage leads now produce a Contact (and optionally a Company) only;
+proposals are created manually off the resulting Contact. Historical
+``converted_opportunity_id`` rows are preserved but no new values are
+written from this path.
 """
 
 import logging
@@ -213,89 +213,21 @@ class LeadConverter:
         )
         return count
 
-    async def convert_to_opportunity(
-        self,
-        lead: Lead,
-        user_id: int,
-        pipeline_stage_id: int,
-        contact_id: int | None = None,
-        company_id: int | None = None,
-    ):
-        """
-        Convert a lead to an opportunity.
-
-        Note: This method imports Opportunity locally to avoid circular imports.
-
-        Args:
-            lead: The lead to convert
-            user_id: The user performing the conversion
-            pipeline_stage_id: Initial pipeline stage for the opportunity
-            contact_id: Optional contact to link (if lead was converted to contact first)
-            company_id: Optional company to link
-
-        Returns:
-            Created opportunity
-        """
-        # Local import to avoid circular dependency
-        from src.opportunities.models import Opportunity
-
-        opportunity = Opportunity(
-            name=f"{lead.full_name} - Opportunity",
-            contact_id=contact_id,
-            company_id=company_id,
-            pipeline_stage_id=pipeline_stage_id,
-            amount=lead.budget_amount,
-            currency=lead.budget_currency,
-            source=f"Lead #{lead.id}",
-            description=lead.description or lead.requirements,
-            owner_id=lead.owner_id or user_id,
-            created_by_id=user_id,
-        )
-        self.db.add(opportunity)
-        await self.db.flush()
-
-        # Update lead with conversion info
-        lead.converted_opportunity_id = opportunity.id
-        if lead.status != LeadStatus.CONVERTED.value:
-            lead.status = LeadStatus.CONVERTED.value
-        await self.db.flush()
-
-        await self.db.refresh(opportunity)
-        return opportunity
-
     async def full_conversion(
         self,
         lead: Lead,
         user_id: int,
-        pipeline_stage_id: int,
         create_company: bool = True,
-    ):
-        """
-        Full conversion: Lead → Company + Contact + Opportunity.
+    ) -> tuple[Contact, Company | None]:
+        """Won-stage conversion: Lead → Contact (+ Company).
 
-        Returns:
-            Tuple of (contact, company_or_none, opportunity)
+        Wraps ``convert_to_contact`` so the lead router's stage-change
+        helper has a stable name to call. The Opportunity creation step
+        was removed when Lorenzo collapsed the pipeline to leads-only on
+        2026-05-14.
         """
-        # First convert to contact (optionally with company)
-        contact, company = await self.convert_to_contact(
+        return await self.convert_to_contact(
             lead=lead,
             user_id=user_id,
             create_company=create_company,
         )
-
-        # When convert_to_contact reused an existing contact (no new
-        # company spawned), inherit the contact's existing company onto
-        # the opportunity so reports link the deal to that account
-        # instead of leaving company_id NULL.
-        opp_company_id: int | None = company.id if company else contact.company_id
-
-        # Then convert to opportunity
-        opportunity = await self.convert_to_opportunity(
-            lead=lead,
-            user_id=user_id,
-            pipeline_stage_id=pipeline_stage_id,
-            contact_id=contact.id,
-            company_id=opp_company_id,
-        )
-
-        return contact, company, opportunity

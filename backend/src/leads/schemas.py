@@ -158,14 +158,7 @@ class LeadConvertToContactRequest(BaseModel):
     create_company: bool = False
 
 
-class LeadConvertToOpportunityRequest(BaseModel):
-    pipeline_stage_id: int
-    contact_id: int | None = None
-    company_id: int | None = None
-
-
 class LeadFullConversionRequest(BaseModel):
-    pipeline_stage_id: int
     create_company: bool = True
 
 
@@ -173,7 +166,6 @@ class ConversionResponse(BaseModel):
     lead_id: int
     contact_id: int | None = None
     company_id: int | None = None
-    opportunity_id: int | None = None
     message: str
 
 
