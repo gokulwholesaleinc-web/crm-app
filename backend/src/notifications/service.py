@@ -620,7 +620,15 @@ async def notify_on_contract_signed(
             branding,
             {
                 "audience": "owner",
-                "contract_title": contract_title,
+                # Use the preferred key so this dead branch stays
+                # consistent with the two live callers (proposals
+                # _send_signed_copy + dead contracts/service). If
+                # someone ever deletes the RuntimeError guard at
+                # line 591 to re-enable this path, the renderer's
+                # back-compat fallback would still accept the old
+                # key — but matching the preferred name keeps the
+                # contract honest.
+                "document_title": contract_title,
                 "signer_name": signer_name or "",
                 "signed_at": signed_at or "",
                 "contract_url": deep_link,
