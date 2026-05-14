@@ -11,8 +11,8 @@ const AuditTimeline = lazy(() => import('./AuditTimeline'));
 const EntitySharing = lazy(() => import('./EntitySharing'));
 const CommentSection = lazy(() => import('./CommentSection'));
 
-const QUICK_NOTE_ENTITY_TYPES = new Set(['contact', 'lead', 'company', 'proposal', 'quote']);
-type QuickNoteEntityType = 'contact' | 'lead' | 'company' | 'proposal' | 'quote';
+const QUICK_NOTE_ENTITY_TYPES = new Set(['contact', 'lead', 'company', 'proposal']);
+type QuickNoteEntityType = 'contact' | 'lead' | 'company' | 'proposal';
 
 export function SuspenseFallback() {
   return (

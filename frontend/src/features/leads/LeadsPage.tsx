@@ -70,6 +70,44 @@ function ScoreIndicator({ score }: { score: number }) {
 
 const INITIAL_DELETE_CONFIRM = { isOpen: false, lead: null } as const;
 
+interface StageSelectProps {
+  lead: Lead;
+  stageOptions: PipelineStage[];
+  onChange: (lead: Lead, stageId: number | null) => void;
+  disabled: boolean;
+  variant: 'mobile' | 'desktop';
+}
+
+// File-local: shared <select> for inline stage edits on the leads list.
+// Mobile and desktop variants differ only in id-prefix, padding, and
+// whether the control stretches to fill its row.
+function StageSelect({ lead, stageOptions, onChange, disabled, variant }: StageSelectProps) {
+  const isMobile = variant === 'mobile';
+  return (
+    <select
+      id={`${isMobile ? 'mobile-stage' : 'stage'}-${lead.id}`}
+      value={lead.pipeline_stage_id ?? ''}
+      onChange={(e) => {
+        const v = e.target.value;
+        onChange(lead, v === '' ? null : Number(v));
+      }}
+      disabled={disabled}
+      className={clsx(
+        'text-xs rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary-500',
+        isMobile ? 'flex-1 min-w-0 py-1.5' : 'py-1',
+      )}
+      aria-label={`Move ${lead.full_name || 'lead'} to stage`}
+    >
+      <option value="">(unstaged)</option>
+      {stageOptions.map((s) => (
+        <option key={s.id} value={s.id}>
+          {s.name}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 function LeadsPage() {
   usePageTitle('Leads');
   const navigate = useNavigate();
@@ -665,24 +703,13 @@ function LeadsPage() {
                     >
                       Stage
                     </label>
-                    <select
-                      id={`mobile-stage-${lead.id}`}
-                      value={lead.pipeline_stage_id ?? ''}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        handleRowStageChange(lead, v === '' ? null : Number(v));
-                      }}
+                    <StageSelect
+                      lead={lead}
+                      stageOptions={stageOptions}
+                      onChange={handleRowStageChange}
                       disabled={updateLeadMutation.isPending}
-                      className="flex-1 min-w-0 text-xs rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-2 py-1.5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary-500"
-                      aria-label={`Move ${lead.full_name || 'lead'} to stage`}
-                    >
-                      <option value="">(unstaged)</option>
-                      {stageOptions.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </select>
+                      variant="mobile"
+                    />
                   </div>
                   <div className="flex gap-4 pt-2 border-t border-gray-100 dark:border-gray-700">
                     <button
@@ -777,24 +804,13 @@ function LeadsPage() {
                         <label htmlFor={`stage-${lead.id}`} className="sr-only">
                           Pipeline stage for {lead.full_name || 'lead'}
                         </label>
-                        <select
-                          id={`stage-${lead.id}`}
-                          value={lead.pipeline_stage_id ?? ''}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            handleRowStageChange(lead, v === '' ? null : Number(v));
-                          }}
+                        <StageSelect
+                          lead={lead}
+                          stageOptions={stageOptions}
+                          onChange={handleRowStageChange}
                           disabled={updateLeadMutation.isPending}
-                          className="text-xs rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-2 py-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary-500"
-                          aria-label={`Move ${lead.full_name || 'lead'} to stage`}
-                        >
-                          <option value="">(unstaged)</option>
-                          {stageOptions.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.name}
-                            </option>
-                          ))}
-                        </select>
+                          variant="desktop"
+                        />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <ScoreIndicator score={lead.score} />
@@ -871,18 +887,23 @@ function LeadsPage() {
         // resolved yet (rare — only on first paint or after admin
         // renames the canonical stage).
         extraAction={
-          discoveryStageId != null ? (
-            <Button
-              size="sm"
-              variant="secondary"
-              leftIcon={<ViewColumnsIcon className="h-4 w-4" />}
-              onClick={handleBulkMoveToDiscovery}
-              disabled={bulkMoving || bulkUpdateMutation.isPending}
-              aria-label={`Move ${selectedIds.length} leads to Discovery stage`}
-            >
-              Move to Discovery
-            </Button>
-          ) : null
+          <Button
+            size="sm"
+            variant="secondary"
+            leftIcon={<ViewColumnsIcon className="h-4 w-4" />}
+            onClick={handleBulkMoveToDiscovery}
+            disabled={
+              discoveryStageId == null || bulkMoving || bulkUpdateMutation.isPending
+            }
+            title={
+              discoveryStageId == null
+                ? "No active 'Discovery' stage configured"
+                : undefined
+            }
+            aria-label={`Move ${selectedIds.length} leads to Discovery stage`}
+          >
+            Move to Discovery
+          </Button>
         }
       />
 

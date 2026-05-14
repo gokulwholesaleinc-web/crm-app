@@ -832,12 +832,14 @@ class WebhookProcessor:
             return
         proposal.status = "paid"
         proposal.paid_at = datetime.now(UTC)
+        if proposal.opportunity_id is not None:
+            logger.info(
+                "Skipping legacy opportunity stage-advance for proposal %s "
+                "(opp_id=%s); pipeline retired 2026-05-14",
+                proposal.id,
+                proposal.opportunity_id,
+            )
         await self.db.flush()
-        # Legacy paths called ``_move_opportunity_to_won`` here to advance
-        # the linked Opportunity's stage. That hook was deleted with the
-        # 2026-05-14 Opportunities removal — new proposals carry no
-        # ``opportunity_id``, and lead-pipeline advancement happens at
-        # the lead layer, not via Stripe webhook.
 
     async def _mark_proposal_paid_from_session(self, session_obj: dict) -> None:
         metadata = session_obj.get("metadata") or {}
@@ -869,4 +871,11 @@ class WebhookProcessor:
         if session_obj.get("payment_status") == "paid" and proposal.status != "paid":
             proposal.status = "paid"
             proposal.paid_at = datetime.now(UTC)
+            if proposal.opportunity_id is not None:
+                logger.info(
+                    "Skipping legacy opportunity stage-advance for proposal %s "
+                    "(opp_id=%s); pipeline retired 2026-05-14",
+                    proposal.id,
+                    proposal.opportunity_id,
+                )
         await self.db.flush()

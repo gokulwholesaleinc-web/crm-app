@@ -185,14 +185,13 @@ async def should_send_email(
     """Single-channel email gate.
 
     The cost of false-allow on email is real: a user who explicitly
-    opted out of email notifications gets one anyway, *and* — for
-    cooldown-stamped events like ``contract_expiring`` — they then get
-    locked out of re-notification for the cooldown window once the
-    cooldown stamp lands. In-app fail-open is defensible (extra bell
-    icon); email fail-open is a stated-preference violation. So a
-    transient DB blip in the gate suppresses the send rather than
-    leaking through. ``gate_event`` carries this same fail-CLOSED
-    behaviour.
+    opted out of email notifications gets one anyway, and for any
+    cooldown-stamped event they then get locked out of re-notification
+    for the cooldown window once the cooldown stamp lands. In-app
+    fail-open is defensible (extra bell icon); email fail-open is a
+    stated-preference violation. So a transient DB blip in the gate
+    suppresses the send rather than leaking through. ``gate_event``
+    carries this same fail-CLOSED behaviour.
     """
     _, email_allowed = await gate_event(db, user_id, event_type)
     return email_allowed

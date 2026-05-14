@@ -1152,6 +1152,10 @@ def render_contract_expiring_email(
 ) -> tuple[str, str]:
     """Returns (subject, html_body) for the daily "contract expiring" alert.
 
+    ⚠ Dead code as of 2026-05-14 — Contracts module retired; this renderer
+    has no live caller. Preserved to avoid cascading deletes on
+    test_branded_templates.py.
+
     Expected ``data`` keys: ``contract_title``, ``company_name``
     (optional), ``end_date`` (preformatted string), ``days_left`` (int),
     ``contract_url`` (deep link).
@@ -1203,16 +1207,19 @@ def render_contract_signed_email(
 
     Used for **two distinct flows**:
       1. signer-side transactional copy — caller supplies ``audience='signer'``,
-         ``signer_name``. Always-on, never matrix-gated.
+         ``signer_name``. Always-on, never matrix-gated. Reused by proposals
+         for the post-acceptance signer copy.
       2. owner-side notification — caller supplies ``audience='owner'``,
          ``signer_name``, ``signed_at``, ``contract_url``. Matrix-gated on
          ``contract_signed``.
 
     Expected ``data`` keys: ``audience`` ('signer' | 'owner'),
-    ``contract_title``, ``signer_name``, ``signed_at`` (preformatted str,
+    ``document_title`` (preferred; ``contract_title`` accepted for
+    back-compat), ``signer_name``, ``signed_at`` (preformatted str,
     optional), ``contract_url`` (optional — owner only).
     """
-    title = escape(str(data.get("contract_title") or "Contract"))
+    raw_title = data.get("document_title") or data.get("contract_title") or "Document"
+    title = escape(str(raw_title))
     signer_name = escape(str(data.get("signer_name") or ""))
     signed_at = escape(str(data.get("signed_at") or ""))
     contract_url = data.get("contract_url")
@@ -1232,7 +1239,7 @@ def render_contract_signed_email(
 <p>Hi {signer_name or 'there'},</p>
 <p>Thank you for signing <strong>{title}</strong>. Your signed copy is attached.</p>
 <p>We'll follow up once the other party signs. You'll get an email confirmation at that time.</p>"""
-        subject = f"Signed copy — {data.get('contract_title') or 'Contract'}"
+        subject = f"Signed copy — {raw_title}"
         headline = "Thank you for signing"
         cta_text = None
         cta_url = None
@@ -1256,7 +1263,7 @@ def render_contract_signed_email(
 {''.join(rows)}
 </tbody>
 </table>"""
-        subject = f"Contract signed — {data.get('contract_title') or 'Contract'}"
+        subject = f"Contract signed — {raw_title}"
         headline = "Contract signed"
         cta_text = "Open contract" if contract_url else None
         cta_url = contract_url
@@ -1366,6 +1373,10 @@ def render_contract_send_email(
     message: str | None = None,
 ) -> tuple[str, str]:
     """Returns (subject, html_body) for a contract signature request email.
+
+    ⚠ Dead code as of 2026-05-14 — Contracts module retired; this renderer
+    has no live caller. Preserved to avoid cascading deletes on
+    test_branded_templates.py.
 
     Uses the centralized branded email wrapper so the layout, colors, and
     footer match every other outbound email rather than the hand-built
