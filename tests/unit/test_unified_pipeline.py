@@ -220,7 +220,7 @@ class TestAutoConversion:
         assert "conversion" not in data or data.get("conversion") is None
 
     @pytest.mark.asyncio
-    async def test_no_conversion_when_no_opp_stages(
+    async def test_won_move_to_no_opp_stages_returns_409(
         self,
         client: AsyncClient,
         db_session: AsyncSession,
@@ -229,7 +229,7 @@ class TestAutoConversion:
         lead_stages: list[PipelineStage],
         # Note: NOT using opp_stages fixture - no opportunity stages exist
     ):
-        """Moving to Won without opportunity stages does not crash."""
+        """Moving to Won without opp stages returns 409 + leaves lead untouched."""
         new_stage = lead_stages[0]
         won_stage = lead_stages[3]
 
@@ -251,11 +251,15 @@ class TestAutoConversion:
             headers=auth_headers,
             json={"new_stage_id": won_stage.id},
         )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "converted"
-        # No conversion because there are no opportunity stages
-        assert "conversion" not in data or data.get("conversion") is None
+        assert response.status_code == 409, response.text
+
+        # Lead state must be untouched — pre-flight runs BEFORE the
+        # pipeline_stage_id mutation, so the 409 leaves the lead where
+        # it started rather than stranded at Won.
+        await db_session.refresh(lead)
+        assert lead.status == "new"
+        assert lead.pipeline_stage_id == new_stage.id
+        assert lead.converted_opportunity_id is None
 
 
 class TestUnifiedPipelineEndpoint:

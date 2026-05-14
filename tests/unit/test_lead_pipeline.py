@@ -415,8 +415,15 @@ class TestMoveLeadStage:
         auth_headers: dict,
         test_user: User,
         lead_pipeline_stages: list[PipelineStage],
+        opp_pipeline_stage: PipelineStage,
     ):
-        """Moving lead to a won stage sets status to 'converted'."""
+        """Moving lead to a won stage sets status to 'converted'.
+
+        ``opp_pipeline_stage`` is required because PR #326's Won-move
+        pre-flight 409s when no active opportunity stage exists (to
+        prevent the lead-1597 strand-at-Won shape). Without an opp
+        stage the move would correctly reject with 409, not 200.
+        """
         new_stage = lead_pipeline_stages[0]
         won_stage = lead_pipeline_stages[3]  # "Won" stage
 
