@@ -52,6 +52,9 @@ export interface TenantConfig {
   social_linkedin_url: string | null;
   social_youtube_url: string | null;
   social_website_url: string | null;
+  /** Default body shown inside every proposal Sign-to-Confirm modal,
+   * unless the proposal sets its own ``terms_and_conditions`` override. */
+  default_terms_and_conditions: string | null;
   default_language: string;
   date_format: string;
   custom_css: string | null;

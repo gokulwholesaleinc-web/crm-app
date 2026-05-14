@@ -136,6 +136,9 @@ class TenantSettingsBase(BaseModel):
     social_linkedin_url: str | None = None
     social_youtube_url: str | None = None
     social_website_url: str | None = None
+    # Default T&C body rendered inside the proposal Sign-to-Confirm
+    # modal. Per-proposal ``terms_and_conditions`` overrides this.
+    default_terms_and_conditions: str | None = None
     default_language: str = "en"
     default_timezone: str = "UTC"
     default_currency: str = "USD"
@@ -186,6 +189,7 @@ class TenantSettingsUpdate(BaseModel):
     social_linkedin_url: str | None = None
     social_youtube_url: str | None = None
     social_website_url: str | None = None
+    default_terms_and_conditions: str | None = None
     default_language: str | None = None
     default_timezone: str | None = None
     default_currency: str | None = None
@@ -294,6 +298,10 @@ class PublicTenantConfig(BaseModel):
     social_linkedin_url: str | None = None
     social_youtube_url: str | None = None
     social_website_url: str | None = None
+    # Default proposal-signing T&C body; surfaced so the admin branding
+    # form can read/write it. Per-proposal override always wins at
+    # signing time.
+    default_terms_and_conditions: str | None = None
     default_language: str
     date_format: str
     custom_css: str | None

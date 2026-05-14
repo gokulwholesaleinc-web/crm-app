@@ -8,6 +8,7 @@ import { useContacts } from '../../hooks/useContacts';
 import { useCompanies } from '../../hooks/useCompanies';
 import { useFormSubmitShortcut } from '../../hooks/useSubmitShortcut';
 import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
+import { MasterContractUploader } from './MasterContractUploader';
 import type { ProposalCreate } from '../../types';
 
 interface ProposalFormProps {
@@ -15,9 +16,25 @@ interface ProposalFormProps {
   onCancel: () => void;
   isLoading?: boolean;
   initialData?: Partial<ProposalCreate>;
+  /** When set, the form renders the master contract upload widget
+   *  (only meaningful in edit mode — upload needs a server-side id). */
+  proposalId?: number;
+  /** Existing master-contract R2 key, surfaced so the uploader can
+   *  show "replace" instead of "upload". */
+  masterContractPath?: string | null;
+  /** Fires after a master upload lands so the parent can refetch. */
+  onMasterContractUploaded?: () => void;
 }
 
-export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: ProposalFormProps) {
+export function ProposalForm({
+  onSubmit,
+  onCancel,
+  isLoading,
+  initialData,
+  proposalId,
+  masterContractPath,
+  onMasterContractUploaded,
+}: ProposalFormProps) {
   const [searchParams] = useSearchParams();
   // Pre-fill any of the Related Records from URL query params so
   // navigating "Create Proposal" from a contact / company detail page
@@ -42,6 +59,7 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
     timelineField: initialData?.timeline ?? '',
     terms: initialData?.terms ?? '',
     validUntil: initialData?.valid_until ?? '',
+    termsAndConditions: initialData?.terms_and_conditions ?? '',
   });
 
   // Billing terms (pre-cast amount to string for the controlled input).
@@ -114,6 +132,7 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
       recurring_interval_count: billing.recurring_interval_count,
       amount: amountTrimmed === '' ? null : amountTrimmed,
       currency: billing.currency,
+      terms_and_conditions: formData.termsAndConditions.trim() || null,
     };
 
     // Only nag on create; edit mode pre-selects the proposal's existing
@@ -199,17 +218,18 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
         <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 bg-gray-50 dark:bg-gray-800/40 space-y-4">
           <div>
             <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-              Billing
+              Reference pricing
             </h3>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              Controls what gets charged when the client accepts. Leave amount
-              blank to skip automatic invoicing.
+              Used in the proposal body for the customer's reference. Billing is
+              created manually in the Payments module after the customer signs —
+              this never auto-charges.
             </p>
           </div>
           <BillingTermsField
             value={billing}
             onChange={handleBillingChange}
-            amountHelpText="Total invoice amount (one-time) or per-period amount (subscription)."
+            amountHelpText="Total amount (one-time) or per-period amount (subscription). For display only."
           />
         </div>
 
@@ -273,6 +293,36 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
             placeholder="Terms and conditions..."
           />
         </div>
+
+        <div>
+          <label
+            htmlFor="proposal-tc-override"
+            className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+          >
+            Signing T&amp;C override
+          </label>
+          <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+            Shown inside the customer's Sign-to-Confirm modal. Leave blank to use the
+            tenant default (Settings → Branding → Default T&amp;C).
+          </p>
+          <textarea
+            id="proposal-tc-override"
+            name="terms_and_conditions"
+            rows={4}
+            value={formData.termsAndConditions}
+            onChange={(e) => updateField('termsAndConditions', e.target.value)}
+            className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 shadow-sm focus-visible:border-primary-500 focus-visible:ring-primary-500 sm:text-sm"
+            placeholder="Override the default signing T&Cs for this proposal only..."
+          />
+        </div>
+
+        {proposalId != null && (
+          <MasterContractUploader
+            proposalId={proposalId}
+            currentPath={masterContractPath ?? null}
+            onUploaded={onMasterContractUploaded}
+          />
+        )}
       </div>
 
       {/* Related Records */}
