@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import { TrashIcon, PlusIcon, CubeIcon } from '@heroicons/react/24/outline';
 import { Button, SearchableSelect } from '../../components/ui';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
@@ -8,7 +7,6 @@ import { useMissingRelationConfirm } from '../../hooks/useMissingRelationConfirm
 import BillingTermsField, { type BillingTermsValue } from '../../components/forms/BillingTermsField';
 import { useContacts } from '../../hooks/useContacts';
 import { useCompanies } from '../../hooks/useCompanies';
-import { useOpportunities, useOpportunity } from '../../hooks/useOpportunities';
 import { useBundles } from '../../hooks/useQuotes';
 import { useFormSubmitShortcut } from '../../hooks/useSubmitShortcut';
 import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
@@ -35,7 +33,6 @@ const DEFAULT_FORM_STATE = {
   description: '',
   contactId: null as number | null,
   companyId: null as number | null,
-  opportunityId: null as number | null,
   currency: 'USD',
   validUntil: '',
   discountType: '',
@@ -76,8 +73,6 @@ function initialBillingValue(initialData?: Partial<QuoteCreate>): BillingTermsVa
 
 export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteFormProps) {
   const isEditing = !!initialData;
-  const [searchParams] = useSearchParams();
-  const urlOpportunityId = searchParams.get('opportunity_id');
 
   const [formData, setFormData] = useState(() => ({
     ...DEFAULT_FORM_STATE,
@@ -85,7 +80,6 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
     description: initialData?.description ?? DEFAULT_FORM_STATE.description,
     contactId: initialData?.contact_id ?? DEFAULT_FORM_STATE.contactId,
     companyId: initialData?.company_id ?? DEFAULT_FORM_STATE.companyId,
-    opportunityId: initialData?.opportunity_id ?? (urlOpportunityId ? parseInt(urlOpportunityId, 10) : null),
     currency: initialData?.currency ?? DEFAULT_FORM_STATE.currency,
     validUntil: initialData?.valid_until ?? DEFAULT_FORM_STATE.validUntil,
     discountType: initialData?.discount_type ?? DEFAULT_FORM_STATE.discountType,
@@ -121,19 +115,10 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
   // Fetch entity lists for dropdowns
   const { data: contactsData } = useContacts({ page_size: 100 });
   const { data: companiesData } = useCompanies({ page_size: 100 });
-  const { data: opportunitiesData } = useOpportunities({ page_size: 100 });
-  const { data: urlOpportunity } = useOpportunity(
-    urlOpportunityId ? parseInt(urlOpportunityId, 10) : undefined
-  );
 
   const contacts = useMemo(() => contactsData?.items ?? [], [contactsData]);
   const companies = useMemo(() => companiesData?.items ?? [], [companiesData]);
-  const opportunities = useMemo(() => opportunitiesData?.items ?? [], [opportunitiesData]);
 
-  const opportunityOptions = useMemo(
-    () => opportunities.map((o) => ({ value: o.id, label: o.name })),
-    [opportunities]
-  );
   const contactOptions = useMemo(
     () => contacts.map((c) => ({ value: c.id, label: c.full_name })),
     [contacts]
@@ -142,17 +127,6 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
     () => companies.map((c) => ({ value: c.id, label: c.name })),
     [companies]
   );
-
-  // Auto-fill contact/company from URL opportunity
-  useEffect(() => {
-    if (urlOpportunity) {
-      setFormData((prev) => ({
-        ...prev,
-        contactId: urlOpportunity.contact_id && !prev.contactId ? urlOpportunity.contact_id : prev.contactId,
-        companyId: urlOpportunity.company_id && !prev.companyId ? urlOpportunity.company_id : prev.companyId,
-      }));
-    }
-  }, [urlOpportunity]);
 
   const [lineItems, setLineItems] = useState<QuoteLineItemCreate[]>(
     initialData?.line_items ?? [{ ...EMPTY_LINE_ITEM }]
@@ -243,7 +217,6 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
       status: 'draft',
       contact_id: formData.contactId,
       company_id: formData.companyId,
-      opportunity_id: formData.opportunityId,
       payment_type: billing.payment_type,
       recurring_interval: billing.payment_type === 'subscription' ? billing.recurring_interval : null,
       recurring_interval_count: billing.payment_type === 'subscription' ? billing.recurring_interval_count : null,
@@ -342,27 +315,7 @@ export function QuoteForm({ onSubmit, onCancel, isLoading, initialData }: QuoteF
       {/* Related Records */}
       <div className="space-y-4">
         <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Related Records</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <SearchableSelect
-            label="Opportunity"
-            id="quote-opportunity"
-            name="opportunity_id"
-            value={formData.opportunityId}
-            onChange={(val) => {
-              setFormData((prev) => {
-                const updates: Partial<typeof prev> = { opportunityId: val };
-                if (val) {
-                  const opp = opportunities.find((o) => o.id === val);
-                  if (opp?.contact_id) updates.contactId = opp.contact_id;
-                  if (opp?.company_id) updates.companyId = opp.company_id;
-                }
-                return { ...prev, ...updates };
-              });
-              setTouched(true);
-            }}
-            options={opportunityOptions}
-            placeholder="Search opportunities..."
-          />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <SearchableSelect
             label="Contact"
             id="quote-contact"

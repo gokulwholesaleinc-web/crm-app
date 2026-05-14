@@ -2,7 +2,6 @@ export type EntityType =
   | 'contact'
   | 'company'
   | 'lead'
-  | 'opportunity'
   | 'quote'
   | 'proposal'
   | 'payment'
@@ -13,7 +12,6 @@ export const entityRoutes: Record<EntityType, string> = {
   contact: '/contacts',
   company: '/companies',
   lead: '/leads',
-  opportunity: '/opportunities',
   quote: '/quotes',
   proposal: '/proposals',
   payment: '/payments',
@@ -27,7 +25,6 @@ const pluralAliases: Record<string, EntityType> = {
   contacts: 'contact',
   companies: 'company',
   leads: 'lead',
-  opportunities: 'opportunity',
   quotes: 'quote',
   proposals: 'proposal',
   payments: 'payment',

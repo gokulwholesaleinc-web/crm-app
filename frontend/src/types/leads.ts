@@ -3,7 +3,36 @@
  */
 
 import type { PaginatedResponse, TagBrief } from './common';
-import type { PipelineStage } from './opportunities';
+
+// Shared Pipeline Stage types. The `PipelineStage` model is shared between
+// the lead pipeline and the legacy opportunity pipeline via the
+// `pipeline_type` column on the backend.
+export interface PipelineStage {
+  id: number;
+  name: string;
+  description?: string | null;
+  order: number;
+  color: string;
+  probability: number;
+  is_won: boolean;
+  is_lost: boolean;
+  is_active: boolean;
+  pipeline_type: string;
+}
+
+export interface PipelineStageCreate {
+  name: string;
+  description?: string | null;
+  order?: number;
+  color?: string;
+  probability?: number;
+  is_won?: boolean;
+  is_lost?: boolean;
+  is_active?: boolean;
+  pipeline_type?: string;
+}
+
+export interface PipelineStageUpdate extends Partial<PipelineStageCreate> {}
 
 export interface LeadSource {
   id: number;
@@ -75,6 +104,8 @@ export interface Lead extends LeadBase {
   source?: LeadSource | null;
   tags: TagBrief[];
   converted_contact_id?: number | null;
+  // Legacy nullable FK preserved on the backend for historical data only.
+  // UI must not display or submit this field.
   converted_opportunity_id?: number | null;
 }
 
@@ -99,14 +130,7 @@ export interface LeadConvertToContactRequest {
   create_company?: boolean;
 }
 
-export interface LeadConvertToOpportunityRequest {
-  pipeline_stage_id: number;
-  contact_id?: number | null;
-  company_id?: number | null;
-}
-
 export interface LeadFullConversionRequest {
-  pipeline_stage_id: number;
   create_company?: boolean;
 }
 
@@ -114,7 +138,6 @@ export interface ConversionResponse {
   lead_id: number;
   contact_id?: number | null;
   company_id?: number | null;
-  opportunity_id?: number | null;
   message: string;
 }
 
@@ -155,6 +178,5 @@ export interface MoveLeadResponse extends Lead {
     converted: boolean;
     contact_id: number;
     company_id: number | null;
-    opportunity_id: number;
   } | null;
 }

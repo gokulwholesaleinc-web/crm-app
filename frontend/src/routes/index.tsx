@@ -3,10 +3,11 @@
  */
 
 import { lazy } from 'react';
-import { Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 
 import { PrivateRoute } from './PrivateRoute';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+
 
 // Lazy load all page components for code splitting
 // Authentication pages
@@ -27,20 +28,6 @@ const CompanyDetailPage = lazy(() => import('../features/companies/CompanyDetail
 // Leads
 const LeadsPage = lazy(() => import('../features/leads/LeadsPage'));
 const LeadDetailPage = lazy(() => import('../features/leads/LeadDetailPage'));
-
-// Old `?view=kanban` bookmarks redirect to the unified pipeline board.
-// Done at the route level so LeadsPage's hooks (and the /api/leads
-// fetch they trigger) never run on the redirect path.
-function LeadsPageOrPipelineRedirect() {
-  const [searchParams] = useSearchParams();
-  if (searchParams.get('view') === 'kanban') {
-    return <Navigate to="/pipeline" replace />;
-  }
-  return <LeadsPage />;
-}
-
-// Opportunities (list redirects to Pipeline; detail page remains)
-const OpportunityDetailPage = lazy(() => import('../features/opportunities/OpportunityDetailPage'));
 
 // Quotes
 const QuotesPage = lazy(() => import('../features/quotes/QuotesPage'));
@@ -79,9 +66,6 @@ const ImportExportPage = lazy(() => import('../features/import-export/ImportExpo
 
 // Inbox
 const InboxPage = lazy(() => import('../features/inbox/InboxPage'));
-
-// Pipeline
-const PipelinePage = lazy(() => import('../features/pipeline/PipelinePage'));
 
 // Settings
 const SettingsPage = lazy(() => import('../features/settings/SettingsPage'));
@@ -172,7 +156,7 @@ function AppRoutes() {
         element={
           <PrivateRoute>
             <ErrorBoundary>
-              <LeadsPageOrPipelineRedirect />
+              <LeadsPage />
             </ErrorBoundary>
           </PrivateRoute>
         }
@@ -183,19 +167,6 @@ function AppRoutes() {
           <PrivateRoute>
             <ErrorBoundary>
               <LeadDetailPage />
-            </ErrorBoundary>
-          </PrivateRoute>
-        }
-      />
-
-      {/* Opportunities - redirect list to unified Pipeline page */}
-      <Route path="/opportunities" element={<Navigate to="/pipeline" replace />} />
-      <Route
-        path="/opportunities/:id"
-        element={
-          <PrivateRoute>
-            <ErrorBoundary>
-              <OpportunityDetailPage />
             </ErrorBoundary>
           </PrivateRoute>
         }
@@ -367,18 +338,6 @@ function AppRoutes() {
           <PrivateRoute>
             <ErrorBoundary>
               <InboxPage />
-            </ErrorBoundary>
-          </PrivateRoute>
-        }
-      />
-
-      {/* Pipeline */}
-      <Route
-        path="/pipeline"
-        element={
-          <PrivateRoute>
-            <ErrorBoundary>
-              <PipelinePage />
             </ErrorBoundary>
           </PrivateRoute>
         }

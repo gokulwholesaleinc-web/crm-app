@@ -4,7 +4,6 @@ import { leadsApi } from '../api/leads';
 import type { SendCampaignRequest } from '../api/leads';
 import { contactKeys } from './useContacts';
 import { companyKeys } from './useCompanies';
-import { opportunityKeys } from './useOpportunities';
 import { CACHE_TIMES } from '../config/queryConfig';
 import { showError } from '../utils/toast';
 import type {
@@ -15,7 +14,6 @@ import type {
   LeadSourceCreate,
   LeadSourceUpdate,
   LeadConvertToContactRequest,
-  LeadConvertToOpportunityRequest,
   LeadFullConversionRequest,
   LeadKanbanResponse,
 } from '../types';
@@ -82,20 +80,6 @@ export function useConvertLeadToContact() {
   });
 }
 
-export function useConvertLeadToOpportunity() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({ leadId, data }: { leadId: number; data: LeadConvertToOpportunityRequest }) =>
-      leadsApi.convertToOpportunity(leadId, data),
-    onSuccess: (_, { leadId }) => {
-      queryClient.invalidateQueries({ queryKey: leadKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: leadKeys.detail(leadId) });
-      queryClient.invalidateQueries({ queryKey: opportunityKeys.lists() });
-    },
-  });
-}
-
 export function useConvertLead() {
   const queryClient = useQueryClient();
 
@@ -107,7 +91,6 @@ export function useConvertLead() {
       queryClient.invalidateQueries({ queryKey: leadKeys.detail(leadId) });
       queryClient.invalidateQueries({ queryKey: contactKeys.lists() });
       queryClient.invalidateQueries({ queryKey: companyKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: opportunityKeys.lists() });
     },
   });
 }
@@ -229,7 +212,6 @@ export function useMoveLeadStage() {
     },
     onSuccess: (data) => {
       if (data.conversion) {
-        queryClient.invalidateQueries({ queryKey: opportunityKeys.lists() });
         queryClient.invalidateQueries({ queryKey: contactKeys.lists() });
         queryClient.invalidateQueries({ queryKey: companyKeys.lists() });
         queryClient.invalidateQueries({ queryKey: ['unified-pipeline'] });

@@ -3,7 +3,7 @@ import { Button } from '../ui/Button';
 import { useCreateActivity } from '../../hooks/useActivities';
 import { showError } from '../../utils/toast';
 
-type EntityType = 'contact' | 'lead' | 'company' | 'opportunity' | 'proposal' | 'quote';
+type EntityType = 'contact' | 'lead' | 'company' | 'proposal' | 'quote';
 
 interface QuickAddNoteProps {
   entityType: EntityType;

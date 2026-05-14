@@ -2,7 +2,7 @@
  * Top-level inbox page consuming the existing /api/email surface.
  *
  * The CRM stores emails per-entity (each thread is anchored to a
- * contact / lead / opportunity / etc.) so the Inbox is intentionally a
+ * contact / lead / etc.) so the Inbox is intentionally a
  * *finder* rather than a Gmail clone — every result links back to the
  * entity detail page where the full thread + reply UI already lives
  * (see `EmailThread.tsx` and the `?tab=emails&email=<kind>:<id>` deep

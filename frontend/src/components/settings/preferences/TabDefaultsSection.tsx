@@ -33,21 +33,8 @@ const ENTITY_TABS: Record<EntityKindWithTabs, readonly string[]> = {
     'history',
     'sharing',
   ],
-  opportunity: [
-    'details',
-    'activities',
-    'quotes',
-    'proposals',
-    'payments',
-    'notes',
-    'attachments',
-    'comments',
-    'history',
-    'sharing',
-  ],
   company: [
     'overview',
-    'opportunities',
     'contracts',
     'quotes',
     'proposals',
@@ -65,7 +52,6 @@ const ENTITY_TABS: Record<EntityKindWithTabs, readonly string[]> = {
 const ENTITY_LABELS: Record<EntityKindWithTabs, string> = {
   contact: 'Contacts',
   lead: 'Leads',
-  opportunity: 'Opportunities',
   company: 'Companies',
 };
 

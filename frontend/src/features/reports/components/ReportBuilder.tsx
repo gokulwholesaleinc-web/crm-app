@@ -20,7 +20,6 @@ const ENTITY_TYPES = [
   { value: 'contacts', label: 'Contacts' },
   { value: 'companies', label: 'Companies' },
   { value: 'leads', label: 'Leads' },
-  { value: 'opportunities', label: 'Opportunities' },
   { value: 'payments', label: 'Payments' },
   { value: 'contracts', label: 'Contracts' },
   { value: 'activities', label: 'Activities' },
@@ -38,7 +37,6 @@ const METRICS = [
 const NUMERIC_FIELDS: Record<string, string[]> = {
   leads: ['score', 'budget_amount'],
   contacts: [],
-  opportunities: ['amount', 'probability'],
   activities: ['call_duration_minutes'],
   campaigns: ['budget_amount', 'actual_cost', 'expected_revenue', 'actual_revenue', 'num_sent', 'num_responses', 'num_converted'],
   companies: ['annual_revenue', 'employee_count'],
@@ -47,9 +45,8 @@ const NUMERIC_FIELDS: Record<string, string[]> = {
 };
 
 const GROUP_BY_FIELDS: Record<string, string[]> = {
-  leads: ['status', 'industry', 'owner_id'],
+  leads: ['status', 'industry', 'owner_id', 'pipeline_stage_id'],
   contacts: ['status', 'owner_id'],
-  opportunities: ['source', 'owner_id', 'pipeline_stage_id'],
   activities: ['activity_type', 'priority', 'owner_id'],
   campaigns: ['campaign_type', 'status'],
   companies: ['industry', 'status', 'segment', 'owner_id'],

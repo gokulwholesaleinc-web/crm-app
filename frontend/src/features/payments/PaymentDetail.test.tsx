@@ -36,7 +36,6 @@ const basePayment = {
   created_at: '2026-04-01T12:00:00Z',
   updated_at: '2026-04-02T12:00:00Z',
   customer: { name: 'Acme Corp', email: 'acme@example.com', stripe_customer_id: 'cus_001' },
-  opportunity: null,
   quote: null,
 };
 
@@ -78,9 +77,9 @@ describe('PaymentDetailPage', () => {
     expect(screen.getByRole('button', { name: /resend receipt email/i })).toBeInTheDocument();
   });
 
-  it('shows "No related entities" when customer/opportunity/quote are all missing', () => {
+  it('shows "No related entities" when customer/quote are all missing', () => {
     usePaymentMock.mockReturnValue({
-      data: { ...basePayment, customer: null, opportunity: null, quote: null },
+      data: { ...basePayment, customer: null, quote: null },
       isLoading: false,
       error: null,
     });

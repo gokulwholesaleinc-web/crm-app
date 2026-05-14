@@ -27,7 +27,6 @@ export interface PaymentBase {
   status: string;
   payment_method?: string | null;
   customer_id?: number | null;
-  opportunity_id?: number | null;
   quote_id?: number | null;
   owner_id?: number | null;
 }
@@ -54,7 +53,6 @@ export interface Payment extends PaymentBase {
   refund_amount: number | null;
   metadata_json: Record<string, unknown> | null;
   customer?: StripeCustomerBrief | null;
-  opportunity?: { id: number; name: string } | null;
   quote?: { id: number; title: string } | null;
   proposal?: { id: number; title: string; proposal_number: string } | null;
   created_at: string;
@@ -74,7 +72,6 @@ export interface PaymentFilters {
   /** Filter by the CRM company the StripeCustomer maps to. Used by the
    *  Payments tab on company detail pages. */
   company_id?: number;
-  opportunity_id?: number;
   owner_id?: number;
   search?: string;
   order_by?: string;
@@ -139,7 +136,6 @@ export interface CreatePaymentIntentRequest {
   amount: number;
   currency?: string;
   customer_id?: number;
-  opportunity_id?: number;
   quote_id?: number;
 }
 

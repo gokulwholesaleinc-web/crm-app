@@ -11,7 +11,6 @@ export interface AdminUser {
   created_at?: string | null;
   lead_count: number;
   contact_count: number;
-  opportunity_count: number;
 }
 
 export interface AdminUserUpdate {
@@ -30,7 +29,6 @@ export interface SystemStats {
   total_contacts: number;
   total_companies: number;
   total_leads: number;
-  total_opportunities: number;
   total_quotes: number;
   total_proposals: number;
   total_payments: number;
@@ -42,7 +40,6 @@ export interface TeamMemberOverview {
   user_name: string;
   role: string;
   lead_count: number;
-  opportunity_count: number;
   total_pipeline_value: number;
   won_deals: number;
 }

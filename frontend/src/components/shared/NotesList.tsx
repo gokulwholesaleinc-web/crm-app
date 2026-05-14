@@ -1,5 +1,5 @@
 /**
- * Reusable Notes List component for any entity (contact, lead, opportunity, company).
+ * Reusable Notes List component for any entity (contact, lead, company).
  * Displays notes with add, edit, and delete functionality.
  */
 

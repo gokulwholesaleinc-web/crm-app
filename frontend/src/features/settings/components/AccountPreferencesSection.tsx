@@ -77,7 +77,6 @@ const THEME_OPTIONS: ReadonlyArray<{ value: Theme; label: string }> = [
 const LANDING_OPTIONS: ReadonlyArray<{ value: DefaultLanding; label: string }> = [
   { value: '/dashboard', label: 'Dashboard' },
   { value: '/leads', label: 'Leads' },
-  { value: '/pipeline', label: 'Pipeline' },
   { value: '/contacts', label: 'Contacts' },
   { value: '/proposals', label: 'Proposals' },
   { value: '/contracts', label: 'Contracts' },

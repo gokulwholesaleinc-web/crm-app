@@ -13,14 +13,12 @@ import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { TabBar, ActivitiesTab, CommonTabContent, SuspenseFallback } from '../../components/shared/DetailPageShell';
 import { StickyActionBar } from '../../components/shared/StickyActionBar';
 import { OverviewTab } from './components/tabs/OverviewTab';
-import { OpportunitiesTab } from './components/tabs/OpportunitiesTab';
 import { QuotesTab } from './components/tabs/QuotesTab';
 import { ProposalsTab } from './components/tabs/ProposalsTab';
 import { CompanyForm } from './components/CompanyForm';
 import { useCompany, useUpdateCompany, useDeleteCompany } from '../../hooks/useCompanies';
 import { useAuthStore } from '../../store/authStore';
 import { useContacts } from '../../hooks/useContacts';
-import { useOpportunities } from '../../hooks/useOpportunities';
 import { useQuotes } from '../../hooks/useQuotes';
 import { useProposals } from '../../hooks/useProposals';
 import { getStatusColor, formatStatusLabel } from '../../utils/statusColors';
@@ -32,11 +30,10 @@ const MetaTab = lazy(() => import('./components/MetaTab'));
 const ExpensesTab = lazy(() => import('./components/ExpensesTab'));
 const EntityPaymentsTab = lazy(() => import('../../components/shared/EntityPaymentsTab'));
 
-type TabType = 'overview' | 'opportunities' | 'contracts' | 'quotes' | 'proposals' | 'payments' | 'activities' | 'notes' | 'attachments' | 'history' | 'sharing' | 'meta' | 'expenses';
+type TabType = 'overview' | 'contracts' | 'quotes' | 'proposals' | 'payments' | 'activities' | 'notes' | 'attachments' | 'history' | 'sharing' | 'meta' | 'expenses';
 
 const TABS: { id: TabType; name: string }[] = [
   { id: 'overview', name: 'Overview' },
-  { id: 'opportunities', name: 'Opportunities' },
   { id: 'contracts', name: 'Contracts' },
   { id: 'quotes', name: 'Quotes' },
   { id: 'proposals', name: 'Proposals' },
@@ -76,16 +73,12 @@ export function CompanyDetailPage() {
     page_size: 50,
   });
 
-  const { data: opportunitiesData } = useOpportunities(
-    activeTab === 'opportunities' && companyId ? { company_id: companyId } : undefined
-  );
   const { data: quotesData } = useQuotes(
     activeTab === 'quotes' && companyId ? { company_id: companyId } : undefined
   );
   const { data: proposalsData } = useProposals(
     activeTab === 'proposals' && companyId ? { company_id: companyId } : undefined
   );
-  const companyOpportunities = opportunitiesData?.items ?? [];
   const companyQuotes = quotesData?.items ?? [];
   const companyProposals = proposalsData?.items ?? [];
 
@@ -238,10 +231,6 @@ export function CompanyDetailPage() {
           isLoadingContacts={isLoadingContacts}
           companyId={companyId}
         />
-      )}
-
-      {activeTab === 'opportunities' && companyId && (
-        <OpportunitiesTab companyId={companyId} opportunities={companyOpportunities} />
       )}
 
       {activeTab === 'contracts' && companyId && (

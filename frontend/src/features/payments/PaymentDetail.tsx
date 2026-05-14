@@ -358,16 +358,6 @@ function PaymentDetailPage() {
                   </dd>
                 </div>
               )}
-              {payment.opportunity && (
-                <div>
-                  <dt className="text-xs text-gray-500 dark:text-gray-400">Opportunity</dt>
-                  <dd className="text-sm font-medium">
-                    <EntityLink type="opportunity" id={payment.opportunity.id}>
-                      {payment.opportunity.name}
-                    </EntityLink>
-                  </dd>
-                </div>
-              )}
               {payment.quote && (
                 <div>
                   <dt className="text-xs text-gray-500 dark:text-gray-400">Quote</dt>
@@ -378,7 +368,7 @@ function PaymentDetailPage() {
                   </dd>
                 </div>
               )}
-              {!payment.customer && !payment.opportunity && !payment.quote && !payment.proposal && (
+              {!payment.customer && !payment.quote && !payment.proposal && (
                 <p className="text-sm text-gray-500 dark:text-gray-400">No related entities</p>
               )}
             </dl>

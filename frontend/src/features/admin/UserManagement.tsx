@@ -271,14 +271,6 @@ export default function UserManagement() {
       ),
     },
     {
-      key: 'opportunity_count',
-      header: 'Opps',
-      sortable: true,
-      render: (row) => (
-        <span style={{ fontVariantNumeric: 'tabular-nums' }}>{row.opportunity_count}</span>
-      ),
-    },
-    {
       key: 'actions',
       header: '',
       render: (row) => (

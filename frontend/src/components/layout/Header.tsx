@@ -80,7 +80,7 @@ export function Header({
       {showSearch && (
         <div className="hidden sm:flex flex-1 max-w-md lg:max-w-lg ml-4 lg:ml-0">
           <label htmlFor="desktop-search" className="sr-only">
-            Search contacts, companies, leads, opportunities, quotes, and proposals
+            Search contacts, companies, leads, quotes, and proposals
           </label>
           <GlobalSearch inputId="desktop-search" className="relative w-full" />
         </div>

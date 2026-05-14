@@ -5,7 +5,6 @@ import {
   UserGroupIcon,
   BuildingOfficeIcon,
   FunnelIcon,
-  ViewColumnsIcon,
   DocumentTextIcon,
   DocumentDuplicateIcon,
   ScaleIcon,
@@ -71,7 +70,7 @@ export const SECTIONS: Section[] = [
       <div className="space-y-4">
         <p className="text-sm text-gray-700 dark:text-gray-300">
           The CRM is built around a simple funnel:{' '}
-          <strong>Lead → Contact (and optionally Company) → Opportunity → Quote / Proposal → Payment</strong>.
+          <strong>Lead → Contact (and optionally Company) → Quote / Proposal → Payment</strong>.
           Every other tab — Activities, Campaigns, Inbox — exists to help you move records
           through that funnel and keep a full history of what happened along the way.
         </p>
@@ -102,7 +101,7 @@ export const SECTIONS: Section[] = [
           <ul className="space-y-1.5">
             <Bullet>
               The left sidebar has two groups: a main group (Dashboard, Contacts, Companies,
-              Leads, Pipeline, Quotes, Proposals, Contracts, Payments, Activities, Calendar,
+              Leads, Quotes, Proposals, Contracts, Payments, Activities, Calendar,
               Campaigns, Inbox) and a secondary group (Duplicates, Import/Export, Reports,
               Settings, Help, Admin).
             </Bullet>
@@ -377,7 +376,7 @@ export const SECTIONS: Section[] = [
     title: 'The Core Flow (Read This First)',
     icon: ArrowRightIcon,
     searchText:
-      'flow funnel lead contact company opportunity quote proposal payment conversion convert process journey',
+      'flow funnel lead contact company quote proposal payment conversion convert process journey',
     body: (
       <div className="space-y-4">
         <p className="text-sm text-gray-700 dark:text-gray-300">
@@ -394,10 +393,9 @@ export const SECTIONS: Section[] = [
           </Step>
           <Step n={2}>
             <strong>You qualify and convert it.</strong> Open the lead and click the convert action.
-            The conversion modal lets you create a Contact (default), and optionally also create an
-            Opportunity at the same time with a name, value, and stage. Both pieces are stored on
-            the lead record (<code>converted_contact_id</code>, <code>converted_opportunity_id</code>) and
-            the lead's status flips to <em>converted</em>.
+            The conversion modal creates a Contact (and optionally a Company) from the lead. The
+            new contact id is stored on the lead record (<code>converted_contact_id</code>) and the
+            lead&apos;s status flips to <em>converted</em>.
           </Step>
           <Step n={3}>
             <strong>The Contact lives in Contacts and Companies.</strong> If the lead's company name
@@ -405,28 +403,22 @@ export const SECTIONS: Section[] = [
             you'll see the contact's full history on the Contact detail page.
           </Step>
           <Step n={4}>
-            <strong>The Opportunity moves through the Pipeline.</strong> The Pipeline tab is a kanban
-            with two tracks (Leads and Opportunities) separated by a Conversion divider. Drag cards
-            across stages — the stages themselves are configured in Settings → Pipeline Stages, with
-            colors and probabilities.
+            <strong>You build a Quote and/or Proposal.</strong> Both can link to a Contact and a
+            Company. Quotes hold line items with prices and discounts; Proposals hold longer-form
+            sections (cover letter, scope, pricing, timeline, terms). Each has a public share URL
+            you send to the client.
           </Step>
           <Step n={5}>
-            <strong>You build a Quote and/or Proposal.</strong> Both can link to an Opportunity, a
-            Contact, and a Company. Quotes hold line items with prices and discounts; Proposals hold
-            longer-form sections (cover letter, scope, pricing, timeline, terms). Each has a public
-            share URL you send to the client.
-          </Step>
-          <Step n={6}>
             <strong>The client accepts or rejects.</strong> Public quote/proposal pages capture
             the decision and an e-signature (name, email, IP, signed-at) — the built-in
             DocuSign-equivalent. Status flips to <em>accepted</em> or <em>rejected</em>.
           </Step>
-          <Step n={7}>
+          <Step n={6}>
             <strong>You collect Payment.</strong> The Payments tab tracks Stripe payment intents,
-            checkout sessions, invoices, and subscriptions. Payments link back to the opportunity,
-            quote, and Stripe customer.
+            checkout sessions, invoices, and subscriptions. Payments link back to the quote,
+            proposal, and Stripe customer.
           </Step>
-          <Step n={8}>
+          <Step n={7}>
             <strong>Activities follow the record everywhere.</strong> Calls, emails, meetings, tasks,
             and notes are logged against whichever entity they belong to. They show up on the
             timeline of every detail page and in the Activities tab.
@@ -434,9 +426,9 @@ export const SECTIONS: Section[] = [
         </ol>
 
         <Tip>
-          You don't have to follow the funnel strictly. You can create Contacts, Companies, and
-          Opportunities directly without ever having a Lead — useful for inbound referrals or
-          accounts you already know.
+          You don't have to follow the funnel strictly. You can create Contacts and Companies
+          directly without ever having a Lead — useful for inbound referrals or accounts you
+          already know.
         </Tip>
       </div>
     ),
@@ -456,8 +448,8 @@ export const SECTIONS: Section[] = [
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">What you see</h4>
         <ul className="space-y-1.5">
           <Bullet>
-            <strong>KPI cards:</strong> Total Contacts, Total Leads, Open Opportunities, Total
-            Revenue — each with a trend indicator and a click-through to the relevant tab.
+            <strong>KPI cards:</strong> Total Contacts, Total Leads, Total Revenue — each with a
+            trend indicator and a click-through to the relevant tab.
           </Bullet>
           <Bullet>
             <strong>Sales KPIs:</strong> Quotes Sent, Proposals Sent, Payments Collected, and Quote
@@ -525,12 +517,12 @@ export const SECTIONS: Section[] = [
     title: 'Companies',
     icon: BuildingOfficeIcon,
     searchText:
-      'companies company industry size status prospect customer churned segment custom fields tier sow account manager opportunities contracts quotes proposals expenses meta',
+      'companies company industry size status prospect customer churned segment custom fields tier sow account manager contracts quotes proposals expenses meta',
     body: (
       <div className="space-y-3">
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          Companies group contacts together and act as the parent for opportunities, contracts,
-          quotes, proposals, and expenses tied to that account.
+          Companies group contacts together and act as the parent for contracts, quotes, proposals,
+          and expenses tied to that account.
         </p>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">List view</h4>
         <ul className="space-y-1.5">
@@ -550,9 +542,9 @@ export const SECTIONS: Section[] = [
         </ul>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Detail page tabs</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          <em>Overview, Opportunities, Contracts, Quotes, Proposals, Activities, Notes, Attachments,
-          History, Sharing, Meta (custom fields), Expenses.</em> The Overview tab lists all linked
-          contacts as cards.
+          <em>Overview, Contracts, Quotes, Proposals, Activities, Notes, Attachments, History,
+          Sharing, Meta (custom fields), Expenses.</em> The Overview tab lists all linked contacts
+          as cards.
         </p>
       </div>
     ),
@@ -562,7 +554,7 @@ export const SECTIONS: Section[] = [
     title: 'Leads',
     icon: FunnelIcon,
     searchText:
-      'leads lead score status new contacted qualified unqualified converted lost source kanban list view bulk actions assign campaign convert contact opportunity company budget',
+      'leads lead score status new contacted qualified unqualified converted lost source kanban list view bulk actions assign campaign convert contact company budget',
     body: (
       <div className="space-y-3">
         <p className="text-sm text-gray-700 dark:text-gray-300">
@@ -594,62 +586,18 @@ export const SECTIONS: Section[] = [
             Open the lead and click <strong>Convert</strong>. The conversion modal opens.
           </Step>
           <Step n={2}>
-            <em>Create Contact</em> is checked by default. Leave it on to create a new Contact from
-            the lead's name, email, phone, address, and job title.
+            The modal creates a Contact from the lead&apos;s name, email, phone, address, and job
+            title.
           </Step>
           <Step n={3}>
-            Optionally tick <em>Create Opportunity</em>. You'll be asked for an opportunity name
-            (required), value, and starting stage (discovery, proposal, negotiation, scoping,
-            stalling, won, lost).
+            Tick <em>Also create Company</em> (default on) to create a new Company from the
+            lead&apos;s company info and link it to the contact.
           </Step>
           <Step n={4}>
-            If the lead has a company name set, the system can also create a new Company and link
-            the contact to it.
-          </Step>
-          <Step n={5}>
-            On submit, the lead's status flips to <em>converted</em> and the new contact and
-            opportunity IDs are stored on the lead so you can always trace it back.
+            On submit, the lead&apos;s status flips to <em>converted</em> and the new contact id is
+            stored on the lead so you can always trace it back.
           </Step>
         </ol>
-      </div>
-    ),
-  },
-  {
-    id: 'pipeline',
-    title: 'Pipeline',
-    icon: ViewColumnsIcon,
-    searchText:
-      'pipeline kanban drag drop stages opportunities leads conversion divider stage colors probability won lost',
-    body: (
-      <div className="space-y-3">
-        <p className="text-sm text-gray-700 dark:text-gray-300">
-          The Pipeline page is a unified kanban that shows both Leads and Opportunities in one
-          board, separated by a "Conversion" divider. It's the visual workspace where you move deals
-          forward.
-        </p>
-        <ul className="space-y-1.5">
-          <Bullet>
-            <strong>Drag and drop</strong> cards between stages to update them. Each move is saved
-            instantly.
-          </Bullet>
-          <Bullet>
-            Stages are configurable in <em>Settings → Pipeline Stages</em>. Each stage has a name,
-            color, order, and a probability percentage, plus flags for "is won" and "is lost".
-          </Bullet>
-          <Bullet>
-            Default opportunity stages seen in code: <em>discovery, proposal, negotiation, scoping,
-            stalling, won, lost</em> — but yours may differ if your admin has customized them.
-          </Bullet>
-          <Bullet>
-            Each card shows the deal name, amount, contact, and stage color. Click any card to open
-            its detail page.
-          </Bullet>
-        </ul>
-        <Tip>
-          The list URL <code>/opportunities</code> automatically redirects to <code>/pipeline</code> —
-          there is no separate opportunities list page. Open an individual opportunity from a card
-          to see its detail view.
-        </Tip>
       </div>
     ),
   },
@@ -662,8 +610,8 @@ export const SECTIONS: Section[] = [
     body: (
       <div className="space-y-3">
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          Quotes are itemized price offers you send to a contact. They can stand alone or attach to
-          an Opportunity (and one Opportunity can have multiple Quotes).
+          Quotes are itemized price offers you send to a contact. They link to a contact and/or
+          company.
         </p>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Anatomy of a quote</h4>
         <ul className="space-y-1.5">
@@ -840,7 +788,7 @@ export const SECTIONS: Section[] = [
             Stripe identifiers: payment intent ID, checkout session ID, invoice ID, and customer ID.
           </Bullet>
           <Bullet>
-            Links back to the originating Opportunity, Quote, and CRM contact via the StripeCustomer
+            Links back to the originating Quote, Proposal, and CRM contact via the StripeCustomer
             mapping.
           </Bullet>
           <Bullet>
@@ -872,8 +820,7 @@ export const SECTIONS: Section[] = [
       <div className="space-y-3">
         <p className="text-sm text-gray-700 dark:text-gray-300">
           Activities are the unified history of every interaction. There are five types — and they
-          attach polymorphically to whatever entity they belong to (contact, lead, opportunity, or
-          company).
+          attach polymorphically to whatever entity they belong to (contact, lead, or company).
         </p>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">The five types</h4>
         <ul className="space-y-1.5">
@@ -905,8 +852,8 @@ export const SECTIONS: Section[] = [
           leaving the page.
         </p>
         <Tip>
-          Activities also appear inside the Activities tab of every Contact, Company, Lead, and
-          Opportunity detail page — so you don't have to come back here to see them in context.
+          Activities also appear inside the Activities tab of every Contact, Company, and Lead
+          detail page — so you don&apos;t have to come back here to see them in context.
         </Tip>
       </div>
     ),
@@ -1105,8 +1052,8 @@ export const SECTIONS: Section[] = [
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">1. From a template</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">
           The template gallery has pre-built reports for every entity (contacts, companies, leads,
-          opportunities, payments, contracts, activities, campaigns). Click <em>Run</em> on any
-          template to view the result instantly.
+          payments, contracts, activities, campaigns). Click <em>Run</em> on any template to view
+          the result instantly.
         </p>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">2. With the builder</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">
@@ -1194,7 +1141,7 @@ export const SECTIONS: Section[] = [
     title: 'Admin (admins only)',
     icon: ShieldCheckIcon,
     searchText:
-      'admin dashboard system stats users active total contacts companies leads opportunities quotes proposals payments user management team overview activity feed audit',
+      'admin dashboard system stats users active total contacts companies leads quotes proposals payments user management team overview activity feed audit',
     body: (
       <div className="space-y-3">
         <p className="text-sm text-gray-700 dark:text-gray-300">
@@ -1203,9 +1150,8 @@ export const SECTIONS: Section[] = [
         </p>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">System stats grid</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          Nine top-line numbers: Total Users, Active Users (last 7 days), Total Contacts, Total
-          Companies, Total Leads, Total Opportunities, Total Quotes, Total Proposals, Total
-          Payments.
+          Eight top-line numbers: Total Users, Active Users (last 7 days), Total Contacts, Total
+          Companies, Total Leads, Total Quotes, Total Proposals, Total Payments.
         </p>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">User management</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">
@@ -1214,8 +1160,8 @@ export const SECTIONS: Section[] = [
         </p>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Team overview</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          Per-user breakdown table: name, role, lead count, opportunity count, total pipeline value,
-          and won deals. Sortable by any column.
+          Per-user breakdown table: name, role, lead count, total pipeline value, and won deals.
+          Sortable by any column.
         </p>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Activity feed</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">
@@ -1246,7 +1192,6 @@ export const SECTIONS: Section[] = [
             <Bullet>
               Open any record detail page (
               <a href="/leads" className="text-primary-600 hover:underline dark:text-primary-400">Lead</a>,{' '}
-              <a href="/pipeline" className="text-primary-600 hover:underline dark:text-primary-400">Opportunity</a>,{' '}
               Proposal, Quote,{' '}
               <a href="/contacts" className="text-primary-600 hover:underline dark:text-primary-400">Contact</a>,{' '}
               <a href="/companies" className="text-primary-600 hover:underline dark:text-primary-400">Company</a>, or{' '}
@@ -1265,7 +1210,7 @@ export const SECTIONS: Section[] = [
             </Bullet>
             <Bullet>
               <strong>Assignee</strong> additionally surfaces the record in the teammate&rsquo;s
-              &ldquo;my&rdquo; list (e.g. &ldquo;my opportunities&rdquo;) as if they owned it.
+              &ldquo;my&rdquo; list (e.g. &ldquo;my leads&rdquo;) as if they owned it.
               Use this when two reps are working a deal together.
             </Bullet>
             <Bullet>
@@ -1324,8 +1269,8 @@ export const SECTIONS: Section[] = [
         </div>
 
         <Tip>
-          Sharing is per-record, not per-folder. If you want a rep to see all your opportunities,
-          you need to share each one individually — or change their role to manager/admin.
+          Sharing is per-record, not per-folder. If you want a rep to see all your leads, you need
+          to share each one individually — or change their role to manager/admin.
         </Tip>
       </div>
     ),

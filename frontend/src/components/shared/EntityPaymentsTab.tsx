@@ -135,7 +135,7 @@ function PaymentsTable({ payments }: { payments: Payment[] }) {
               </span>
               <span className="text-gray-500 dark:text-gray-400">{formatDate(payment.created_at)}</span>
             </div>
-            {(payment.proposal || payment.quote || payment.opportunity) && (
+            {(payment.proposal || payment.quote) && (
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 truncate">
                 For <PaymentForLink payment={payment} />
               </p>

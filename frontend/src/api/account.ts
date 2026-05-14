@@ -36,7 +36,6 @@ export type Theme = 'system' | 'light' | 'dark';
 export type DefaultLanding =
   | '/dashboard'
   | '/leads'
-  | '/pipeline'
   | '/contacts'
   | '/proposals'
   | '/contracts';
