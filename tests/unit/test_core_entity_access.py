@@ -129,7 +129,6 @@ class TestResolveEntity:
             ("lead", "leads"),
             ("opportunity", "opportunities"),
             ("proposal", "proposals"),
-            ("contract", "contracts"),
             ("payment", "payments"),
             ("activity", "activities"),
             ("expense", "expenses"),

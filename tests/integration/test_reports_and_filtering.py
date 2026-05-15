@@ -302,41 +302,8 @@ class TestReportExecution:
         assert result.total >= 1
         assert len(result.data) >= 1
 
-    async def test_count_contracts(self, db_session, test_contract):
-        """Test counting contracts entity type."""
-        executor = ReportExecutor(db_session)
-        definition = ReportDefinition(
-            entity_type="contracts",
-            metric="count",
-        )
-        result = await executor.execute(definition)
-        assert result.total >= 1
-
-    async def test_sum_contract_value(self, db_session, test_contract):
-        """Test summing contract values."""
-        executor = ReportExecutor(db_session)
-        definition = ReportDefinition(
-            entity_type="contracts",
-            metric="sum",
-            metric_field="value",
-        )
-        result = await executor.execute(definition)
-        assert result.total >= 25000.0
-
-    async def test_count_contracts_by_status(self, db_session, test_contract):
-        """Test counting contracts grouped by status."""
-        executor = ReportExecutor(db_session)
-        definition = ReportDefinition(
-            entity_type="contracts",
-            metric="count",
-            group_by="status",
-        )
-        result = await executor.execute(definition)
-        assert result.total >= 1
-        assert len(result.data) >= 1
-        draft_dp = next((dp for dp in result.data if dp.label == "draft"), None)
-        assert draft_dp is not None
-        assert draft_dp.value >= 1
+    # Contracts entity type retired from the reports engine 2026-05-14
+    # alongside the Contracts module unmount.
 
 
 # ============================================================
@@ -441,7 +408,8 @@ class TestReportsAPI:
         )
         assert response.status_code == 200
         data = response.json()
-        assert len(data) == 10
+        # `contracts_by_status` retired 2026-05-14 with the Contracts module.
+        assert len(data) == 9
 
     async def test_saved_report_crud_endpoints(self, client, admin_auth_headers):
         """Test full CRUD lifecycle for saved reports via API."""
@@ -511,22 +479,7 @@ class TestReportsAPI:
         data = response.json()
         assert data["total"] >= 5000.0
 
-    async def test_execute_contracts_report_endpoint(self, client, admin_auth_headers, test_contract):
-        """Test executing a report on contracts entity type."""
-        response = await client.post(
-            "/api/reports/execute",
-            json={
-                "entity_type": "contracts",
-                "metric": "count",
-                "group_by": "status",
-                "chart_type": "pie",
-            },
-            headers=admin_auth_headers,
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["total"] >= 1
-        assert len(data["data"]) >= 1
+    # `entity_type=contracts` retired 2026-05-14 — engine rejects the value now.
 
     async def test_create_report_with_schedule(self, client, admin_auth_headers):
         """Test creating a saved report with schedule and recipients."""
@@ -577,8 +530,8 @@ class TestReportsAPI:
         assert data["schedule"] == "monthly"
         assert len(data["recipients"]) == 2
 
-    async def test_templates_include_new_entity_types(self, client, admin_auth_headers):
-        """Test that templates include payment and contract templates."""
+    async def test_templates_include_payment_template(self, client, admin_auth_headers):
+        """Payment template must remain on the templates endpoint."""
         response = await client.get(
             "/api/reports/templates",
             headers=admin_auth_headers,
@@ -586,7 +539,7 @@ class TestReportsAPI:
         data = response.json()
         ids = [t["id"] for t in data]
         assert "payment_summary_by_month" in ids
-        assert "contracts_by_status" in ids
+        # `contracts_by_status` retired 2026-05-14 with the Contracts module.
 
 
 @pytest.mark.asyncio
