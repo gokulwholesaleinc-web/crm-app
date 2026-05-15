@@ -68,8 +68,14 @@ const SIGNOFF_REGEX =
  *   in B2B mail and lives at the end of the body block under the
  *   signature.
  */
+// ``[image: ...]`` alt-text is unbounded user text in Gmail's emitter
+// — ``[image: image001.png]`` (Outlook-forwarded), ``[image: Link
+// Creative Logo]`` (multi-word alts), ``[image: image_1.png]`` (forward
+// chains) all appear in real mail. ``[^\]\n]+`` accepts anything but
+// the closing bracket or a newline. The leading ``[image:`` literal is
+// the load-bearing signal; the alt is just incidental.
 const SIGNATURE_BLOCK_REGEX =
-  /^(?:\[image:\s+[\w-]+\]|this\s+(?:e-?mail|message|email)\s+(?:and\s+any\s+files\s+transmitted\s+with\s+it\s+)?(?:are|is|contains)\s+confidential)/i;
+  /^(?:\[image:\s+[^\]\n]+\]|this\s+(?:e-?mail|message|email)\s+(?:and\s+any\s+files\s+transmitted\s+with\s+it\s+)?(?:are|is|contains)\s+confidential)/i;
 
 /**
  * Cut a node and everything that follows it (within `<body>`) using the
@@ -193,11 +199,14 @@ function findHeuristicSignatureNode(body: HTMLElement): Element | null {
       seenContent &&
       (SIGNOFF_REGEX.test(firstLine) || SIGNATURE_BLOCK_REGEX.test(firstLine))
     ) {
-      // Walk back through preceding short, non-sentence siblings so
-      // the contact-card block above the marker (name / title /
-      // address) is cut with the marker rather than left as 5+ lines
-      // of vertical signature debris. Stop at a sibling that looks
-      // like real prose (long, or ends with sentence punctuation).
+      // Walk back through preceding signature-shaped siblings so the
+      // contact-card block above the marker (name / title / address)
+      // is cut with the marker rather than left as 5+ lines of
+      // vertical signature debris. The stop rule is a positive
+      // ``looksLikeProse`` check, not a sentence-punctuation test —
+      // address lines (``350 W Ontario St.``) end with periods, and
+      // body content can be short (``See attached notes.``), so neither
+      // signal alone is reliable.
       let start = i;
       while (start > 0) {
         const prev = children[start - 1];
@@ -206,9 +215,7 @@ function findHeuristicSignatureNode(body: HTMLElement): Element | null {
           start--;
           continue;
         }
-        const endsWithSentence = /[.!?]['")\]]?\s*$/.test(prevText);
-        const isLong = prevText.length > 120;
-        if (endsWithSentence || isLong) break;
+        if (looksLikeProse(prevText)) break;
         start--;
       }
       if (children.slice(0, start).some((c) => (c.textContent ?? '').trim() !== '')) {
@@ -223,6 +230,43 @@ function findHeuristicSignatureNode(body: HTMLElement): Element | null {
 
 function firstNonEmptyLine(text: string): string {
   return text.split('\n').find((line) => line.trim() !== '')?.trim() ?? '';
+}
+
+/**
+ * Explicit signature-card markers — patterns that effectively never
+ * appear in legitimate body copy. The walk-back uses the negation
+ * (``!isSignatureCard(text)``) as part of its prose detector so a
+ * short ``350 W Ontario St.`` address line gets swallowed but a short
+ * ``See attached notes.`` body acknowledgement doesn't.
+ */
+const _SIGNATURE_CARD_MARKERS = [
+  /\b(?:phone|mobile|cell|tel|telephone|email|e-?mail|office|address|fax)\s*:/i,
+  /\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/, // phone number shapes
+  /\b(?:st|ave|blvd|rd|dr|ln|ct|pl|hwy|pkwy|ste|suite|fl|floor)\.?\s*,?\s*(?:[A-Za-z]+|\d|$)/i,
+  /\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\b/, // US ZIP w/ state
+  /\|\s*\*?[\w\s]+\*?$/, // "Title | Company" pattern
+];
+
+function isSignatureCard(text: string): boolean {
+  return _SIGNATURE_CARD_MARKERS.some((re) => re.test(text));
+}
+
+/**
+ * "Is this text real prose?" — used to gate the signature walk-back.
+ *
+ * Real prose stops the walk; signature-card material doesn't. The
+ * test isn't punctuation alone because address lines (``350 W
+ * Ontario St.``) end with periods, and body content can be short
+ * (``See attached notes.``). The decision tree:
+ *   1. Anything over 120 chars is prose by virtue of length.
+ *   2. Anything matching a signature-card marker is NOT prose,
+ *      regardless of punctuation.
+ *   3. Otherwise, sentence-ending punctuation = prose.
+ */
+function looksLikeProse(text: string): boolean {
+  if (text.length > 120) return true;
+  if (isSignatureCard(text)) return false;
+  return /[.!?]['")\]]?\s*$/.test(text);
 }
 
 /**

@@ -178,6 +178,42 @@ describe('trimQuotedHtml', () => {
     expect(result.body).not.toContain('Lorenzo Costa');
   });
 
+  it('matches multi-word + filename [image:] alts that Outlook-forwards emit', () => {
+    // Real Gmail output includes ``[image: image001.png]`` (Outlook
+    // forwards), ``[image: Link Creative Logo]`` (multi-word alts),
+    // and ``[image: image_1.png]`` (forward chains). A regex
+    // limited to ``[\w-]+`` misses all three.
+    const html =
+      '<div>Here is the proposal you asked about.</div>' +
+      '<div>[image: image001.png] <a href="https://co.example">co.example</a></div>';
+    const result = trimQuotedHtml(html);
+    expect(result.trimmed).toBe(true);
+    expect(result.cut).toBe('signature');
+    expect(result.body).toContain('Here is the proposal');
+    expect(result.body).not.toContain('image001.png');
+  });
+
+  it('walk-back swallows an address line that ends in a period (St.)', () => {
+    // Lorenzo's signature address ``350 W Ontario St.`` ends with a
+    // period — a naive "stop on sentence punctuation" check would
+    // halt the walk-back here and leave half the contact card
+    // visible. The walk-back requires len > 40 AND sentence-ending
+    // to count as "real prose," so short signature-card lines pass
+    // through.
+    const html =
+      '<div>Talk soon — proofs attached for your review.</div>' +
+      '<div>Lorenzo Costa</div>' +
+      '<div>Founder &amp; CEO | Link Creative</div>' +
+      '<div>350 W Ontario St.</div>' +
+      '<div>[image: instagram] <a href="https://co">co</a></div>';
+    const result = trimQuotedHtml(html);
+    expect(result.trimmed).toBe(true);
+    expect(result.cut).toBe('signature');
+    expect(result.body).toContain('proofs attached');
+    expect(result.body).not.toContain('Lorenzo Costa');
+    expect(result.body).not.toContain('350 W Ontario');
+  });
+
   it('does NOT trip on "best laid plans" mid-sentence', () => {
     const html = '<p>The best laid plans of mice and men go awry.</p>';
     const result = trimQuotedHtml(html);
