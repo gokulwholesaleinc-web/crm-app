@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import clsx from 'clsx';
 import { useTenant } from '../../providers/TenantProvider';
 import { safeStorage } from '../../utils/safeStorage';
 import GoogleSignInButton from './GoogleSignInButton';
@@ -7,10 +8,14 @@ function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const { tenant } = useTenant();
   const [logoError, setLogoError] = useState(false);
+  const [darkLogoError, setDarkLogoError] = useState(false);
 
   useEffect(() => {
     setLogoError(false);
   }, [tenant?.logo_url]);
+  useEffect(() => {
+    setDarkLogoError(false);
+  }, [tenant?.logo_url_dark]);
 
   useEffect(() => {
     safeStorage.remove('crm-remember:v1');
@@ -28,9 +33,22 @@ function LoginPage() {
                   alt={tenant.company_name || 'Company logo'}
                   width={64}
                   height={64}
-                  className="h-16 w-auto object-contain [filter:drop-shadow(0_0_1.5px_rgba(255,255,255,0.65))_drop-shadow(0_0_4px_rgba(255,255,255,0.3))]"
+                  className={clsx(
+                    'h-16 w-auto object-contain',
+                    tenant.logo_url_dark && !darkLogoError && 'dark:hidden',
+                  )}
                   onError={() => setLogoError(true)}
                 />
+                {tenant.logo_url_dark && !darkLogoError && (
+                  <img
+                    src={tenant.logo_url_dark}
+                    alt={tenant.company_name || 'Company logo'}
+                    width={64}
+                    height={64}
+                    className="hidden h-16 w-auto object-contain dark:block"
+                    onError={() => setDarkLogoError(true)}
+                  />
+                )}
               </div>
             </div>
           ) : (

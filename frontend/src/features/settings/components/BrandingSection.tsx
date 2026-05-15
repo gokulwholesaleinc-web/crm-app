@@ -24,6 +24,10 @@ interface BrandingFormData {
   surface_color_light: string;
   surface_color_dark: string;
   logo_url: string;
+  /** White-text variant rendered when the app is in dark mode. NULL on
+   * the server falls back to ``logo_url`` so existing tenants are
+   * unaffected. */
+  logo_url_dark: string;
   favicon_url: string;
   footer_text: string;
   // Email-wrapper extras (migration 034): tagline appears in the
@@ -144,6 +148,7 @@ type TenantConfigLike = Partial<Record<ColorField, string | null | undefined>>
   & {
     company_name?: string | null;
     logo_url?: string | null;
+    logo_url_dark?: string | null;
     favicon_url?: string | null;
     footer_text?: string | null;
     default_terms_and_conditions?: string | null;
@@ -242,9 +247,11 @@ export function BrandingSection() {
   const [isEditing, setIsEditing] = useState(false);
   const [logoPreviewError, setLogoPreviewError] = useState(false);
   const [faviconPreviewError, setFaviconPreviewError] = useState(false);
+  const [darkLogoPreviewError, setDarkLogoPreviewError] = useState(false);
   const [formData, setFormData] = useState<BrandingFormData>(() => ({
     company_name: '',
     logo_url: '',
+    logo_url_dark: '',
     favicon_url: '',
     footer_text: '',
     default_terms_and_conditions: '',
@@ -264,6 +271,7 @@ export function BrandingSection() {
       ...emailFields,
       company_name: tenant?.company_name ?? '',
       logo_url: tenant?.logo_url ?? '',
+      logo_url_dark: tenant?.logo_url_dark ?? '',
       favicon_url: tenant?.favicon_url ?? '',
       footer_text: tenant?.footer_text ?? '',
       default_terms_and_conditions: tenant?.default_terms_and_conditions ?? '',
@@ -297,6 +305,7 @@ export function BrandingSection() {
   const startEditing = () => {
     setFormData(seededFromTenant);
     setLogoPreviewError(false);
+    setDarkLogoPreviewError(false);
     setFaviconPreviewError(false);
     setIsEditing(true);
   };
@@ -450,6 +459,28 @@ export function BrandingSection() {
             </div>
             <div>
               <label className="block text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">
+                Dark Mode Logo
+              </label>
+              {tenant?.logo_url_dark ? (
+                <div className="mt-1 flex items-center gap-3">
+                  <img
+                    src={tenant.logo_url_dark}
+                    alt={tenant.company_name || 'Dark mode logo'}
+                    width={40}
+                    height={40}
+                    className="h-10 w-10 rounded-lg object-contain border border-gray-200 dark:border-gray-600 bg-gray-900"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                  <span className="text-xs text-gray-500 dark:text-gray-400 break-all">{tenant.logo_url_dark}</span>
+                </div>
+              ) : (
+                <p className="mt-1 text-sm text-gray-900 dark:text-gray-100">
+                  Not set — falls back to main logo in dark mode
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="block text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">
                 Favicon
               </label>
               {tenant?.favicon_url ? (
@@ -549,6 +580,44 @@ export function BrandingSection() {
                         height={40}
                         className="h-10 w-10 rounded-lg object-contain border border-gray-200 dark:border-gray-600"
                         onError={() => setLogoPreviewError(true)}
+                      />
+                    ) : (
+                      <p className="text-xs text-red-500 dark:text-red-400">Failed to load image</p>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div>
+                <label htmlFor="branding-logo-url-dark" className="form-label">
+                  Dark Mode Logo URL
+                </label>
+                <input
+                  id="branding-logo-url-dark"
+                  type="url"
+                  className="form-input"
+                  name="logo_url_dark"
+                  autoComplete="url"
+                  value={formData.logo_url_dark}
+                  onChange={(e) => {
+                    setFormData((prev) => ({ ...prev, logo_url_dark: e.target.value }));
+                    setDarkLogoPreviewError(false);
+                  }}
+                  placeholder="https://example.com/logo-white.png..."
+                />
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Optional. Use a white-text variant that reads against a dark
+                  surface; the main Logo URL is used when this is blank.
+                </p>
+                {formData.logo_url_dark && (
+                  <div className="mt-2">
+                    {!darkLogoPreviewError ? (
+                      <img
+                        src={formData.logo_url_dark}
+                        alt="Dark mode logo preview"
+                        width={40}
+                        height={40}
+                        className="h-10 w-10 rounded-lg object-contain border border-gray-200 dark:border-gray-600 bg-gray-900"
+                        onError={() => setDarkLogoPreviewError(true)}
                       />
                     ) : (
                       <p className="text-xs text-red-500 dark:text-red-400">Failed to load image</p>

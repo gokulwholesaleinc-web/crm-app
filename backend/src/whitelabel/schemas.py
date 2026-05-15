@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator
 # :class:`TenantSettingsUpdate` without duplicating per-field validators.
 _URL_FIELD_LABELS = {
     'logo_url': 'Logo URL',
+    'logo_url_dark': 'Dark mode logo URL',
     'favicon_url': 'Favicon URL',
     'privacy_policy_url': 'Privacy policy URL',
     'terms_of_service_url': 'Terms of service URL',
@@ -113,6 +114,7 @@ def _validate_color_field(v: str | None, info: ValidationInfo) -> str | None:
 class TenantSettingsBase(BaseModel):
     company_name: str | None = None
     logo_url: str | None = None
+    logo_url_dark: str | None = None
     favicon_url: str | None = None
     primary_color: str = "#6366f1"
     secondary_color: str = "#8b5cf6"
@@ -167,6 +169,7 @@ class TenantSettingsCreate(TenantSettingsBase):
 class TenantSettingsUpdate(BaseModel):
     company_name: str | None = None
     logo_url: str | None = None
+    logo_url_dark: str | None = None
     favicon_url: str | None = None
     primary_color: str | None = None
     secondary_color: str | None = None
@@ -277,6 +280,7 @@ class PublicTenantConfig(BaseModel):
     tenant_slug: str
     company_name: str | None
     logo_url: str | None
+    logo_url_dark: str | None
     favicon_url: str | None
     primary_color: str
     secondary_color: str

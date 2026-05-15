@@ -192,10 +192,14 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
   const { tenant } = useTenant();
   const [editMode, setEditMode] = useState(false);
   const [logoError, setLogoError] = useState(false);
+  const [darkLogoError, setDarkLogoError] = useState(false);
 
   useEffect(() => {
     setLogoError(false);
   }, [tenant?.logo_url]);
+  useEffect(() => {
+    setDarkLogoError(false);
+  }, [tenant?.logo_url_dark]);
 
   const [mainNav, setMainNav] = useState<NavItem[]>(() =>
     applyOrder(DEFAULT_MAIN_NAVIGATION, readStoredOrder(STORAGE_KEY_MAIN))
@@ -293,17 +297,37 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
                 collapsed ? 'h-10 w-10' : 'h-12'
               )}
             >
+              {/* When the tenant supplies a white-text dark variant we
+                  swap it in via Tailwind's class-based dark: variant.
+                  Halo filter dropped — the dark variant reads against
+                  the dark surface on its own. Error state is split per
+                  variant so a broken dark URL doesn't also hide the
+                  working light img in light mode. */}
               <img
                 src={tenant.logo_url}
                 alt={tenant.company_name || 'Logo'}
                 width={collapsed ? 32 : 180}
                 height={collapsed ? 32 : 40}
                 className={clsx(
-                  'object-contain [filter:drop-shadow(0_0_1.5px_rgba(255,255,255,0.65))_drop-shadow(0_0_4px_rgba(255,255,255,0.3))]',
-                  collapsed ? 'h-8 w-auto max-w-[32px]' : 'h-10 w-auto max-w-[176px]'
+                  'object-contain',
+                  collapsed ? 'h-8 w-auto max-w-[32px]' : 'h-10 w-auto max-w-[176px]',
+                  tenant.logo_url_dark && !darkLogoError && 'dark:hidden'
                 )}
                 onError={() => setLogoError(true)}
               />
+              {tenant.logo_url_dark && !darkLogoError && (
+                <img
+                  src={tenant.logo_url_dark}
+                  alt={tenant.company_name || 'Logo'}
+                  width={collapsed ? 32 : 180}
+                  height={collapsed ? 32 : 40}
+                  className={clsx(
+                    'hidden object-contain dark:block',
+                    collapsed ? 'h-8 w-auto max-w-[32px]' : 'h-10 w-auto max-w-[176px]'
+                  )}
+                  onError={() => setDarkLogoError(true)}
+                />
+              )}
             </div>
           ) : (
             <div

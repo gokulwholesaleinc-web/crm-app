@@ -21,11 +21,15 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
   const location = useLocation();
   const { tenant } = useTenant();
   const [mobileLogoError, setMobileLogoError] = useState(false);
+  const [mobileDarkLogoError, setMobileDarkLogoError] = useState(false);
   const mobileUser = useAuthStore((s) => s.user);
 
   useEffect(() => {
     setMobileLogoError(false);
   }, [tenant?.logo_url]);
+  useEffect(() => {
+    setMobileDarkLogoError(false);
+  }, [tenant?.logo_url_dark]);
 
   const isMobileAdmin = mobileUser?.is_superuser || mobileUser?.role === 'admin';
   const mobileSecondaryNav = isMobileAdmin
@@ -149,9 +153,22 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
                   alt={tenant.company_name || 'Logo'}
                   width={180}
                   height={40}
-                  className="h-10 w-auto max-w-[176px] object-contain [filter:drop-shadow(0_0_1.5px_rgba(255,255,255,0.65))_drop-shadow(0_0_4px_rgba(255,255,255,0.3))]"
+                  className={clsx(
+                    'h-10 w-auto max-w-[176px] object-contain',
+                    tenant.logo_url_dark && !mobileDarkLogoError && 'dark:hidden',
+                  )}
                   onError={() => setMobileLogoError(true)}
                 />
+                {tenant.logo_url_dark && !mobileDarkLogoError && (
+                  <img
+                    src={tenant.logo_url_dark}
+                    alt={tenant.company_name || 'Logo'}
+                    width={180}
+                    height={40}
+                    className="hidden h-10 w-auto max-w-[176px] object-contain dark:block"
+                    onError={() => setMobileDarkLogoError(true)}
+                  />
+                )}
               </div>
             ) : (
               <div

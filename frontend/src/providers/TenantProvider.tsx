@@ -32,6 +32,9 @@ export interface TenantConfig {
   tenant_slug: string;
   company_name: string | null;
   logo_url: string | null;
+  /** White-text variant rendered in dark mode. Falls back to ``logo_url``
+   * when null — see Sidebar/MobileSidebar/LoginPage. */
+  logo_url_dark: string | null;
   favicon_url: string | null;
   primary_color: string;
   secondary_color: string;
