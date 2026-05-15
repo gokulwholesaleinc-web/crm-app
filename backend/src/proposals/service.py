@@ -11,6 +11,8 @@ from html import escape
 from typing import Any
 
 import httpx
+from botocore.exceptions import ClientError
+from pypdf.errors import PdfReadError
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
@@ -465,8 +467,9 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
 
         Skipped silently when no master PDF is on file (signature image
         + audit log alone are ESIGN-Act § 7001-compliant). Stamping
-        failures are logged but do NOT unwind acceptance — the operator
-        can re-stamp later from the admin UI.
+        failures are caught and surfaced on ``proposal.signed_pdf_error``
+        instead of unwinding acceptance — the operator can re-stamp
+        later from the admin UI.
         """
         master_key = proposal.master_contract_pdf_path
         if not master_key or proposal.signature_image is None:
@@ -491,14 +494,78 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             timestamp = int(signed_at.timestamp())
             signed_key = f"proposals/{proposal.id}/signed-{timestamp}.pdf"
             await upload_file_bytes(stamped, signed_key, content_type="application/pdf")
+            prior_error = proposal.signed_pdf_error
             proposal.signed_pdf_path = signed_key
+            proposal.signed_pdf_error = None
             await self.db.flush()
-            await self.db.refresh(proposal)
-        except Exception:
+            # Don't refresh() here — a connection blip post-flush would
+            # raise SQLAlchemyError that get_db's narrow handler rolls
+            # back, losing the success write AND any prior error-clear.
+            # The row is already attached to the session; downstream
+            # readers see the updated columns without a server round-trip.
+            if prior_error:
+                logger.info(
+                    "Signed PDF re-stamp succeeded for proposal %s (cleared error: %r)",
+                    proposal.id, prior_error[:200],
+                )
+        except PdfReadError as exc:
+            logger.exception(
+                "Master PDF unreadable for proposal %s", proposal.id,
+            )
+            proposal.signed_pdf_error = (
+                f"Master PDF is corrupt or unreadable: {str(exc)[:900]}"
+            )
+            await self.db.flush()
+        except ClientError as exc:
+            logger.exception(
+                "R2 storage error stamping signed PDF for proposal %s",
+                proposal.id,
+            )
+            response = getattr(exc, "response", None)
+            err = response.get("Error", {}) if isinstance(response, dict) else {}
+            code = err.get("Code", "ClientError")
+            message = err.get("Message", str(exc))
+            proposal.signed_pdf_error = (
+                f"Object storage temporarily unavailable ({code}): {message}"[:1000]
+            )
+            await self.db.flush()
+        except Exception as exc:
             logger.exception(
                 "Failed to stamp/upload signed PDF for proposal %s",
                 proposal.id,
             )
+            proposal.signed_pdf_error = str(exc)[:1000]
+            await self.db.flush()
+
+    async def restamp_signed_pdf(self, proposal: Proposal) -> Proposal:
+        """Re-run the fail-soft stamp path; guards prevent post-dating
+        an unsigned proposal or stamping without a master PDF."""
+        if proposal.status not in ("accepted", "awaiting_payment", "paid"):
+            raise ValueError(
+                "Only signed proposals can be re-stamped "
+                f"(status='{proposal.status}')",
+            )
+        if not proposal.master_contract_pdf_path:
+            raise ValueError(
+                "Proposal has no master contract PDF to stamp",
+            )
+        if proposal.signature_image is None:
+            raise ValueError(
+                "Proposal has no captured signature image",
+            )
+        if proposal.signed_at is None:
+            raise ValueError(
+                "Proposal has no recorded signed_at timestamp",
+            )
+
+        await self._maybe_stamp_master_pdf(
+            proposal,
+            signer_ip=proposal.signer_ip,
+            signer_user_agent=proposal.signer_user_agent,
+            signed_at=proposal.signed_at,
+        )
+        await self.db.refresh(proposal)
+        return proposal
 
     async def _maybe_spawn_billing(self, proposal: Proposal) -> None:
         """Create the Stripe Invoice or Checkout Session for an accepted

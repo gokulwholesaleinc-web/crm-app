@@ -908,6 +908,28 @@ async def retry_proposal_billing(
     return ProposalResponse.model_validate(proposal)
 
 
+@router.post("/{proposal_id}/restamp", response_model=ProposalResponse)
+async def restamp_proposal_signed_pdf(
+    proposal_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """Retry the fail-soft accept-time signed-PDF stamp.
+
+    Returns 200 in both success AND fail-soft cases — the frontend keys
+    on ``signed_pdf_path`` (success) vs ``signed_pdf_error`` (still
+    failing). Raising on the swallowed-error case would propagate past
+    ``get_db``'s narrow exception handler and roll back the new error
+    capture, leaving the operator looking at a stale message.
+    """
+    service = ProposalService(db)
+    proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
+    check_ownership(proposal, current_user, EntityNames.PROPOSAL)
+    with value_error_as_400():
+        proposal = await service.restamp_signed_pdf(proposal)
+    return ProposalResponse.model_validate(proposal)
+
+
 # ``/{proposal_id}/refresh-from-quote`` endpoint removed 2026-05-14 —
 # quotes router unmounted; proposals are no longer hydrated from quotes.
 

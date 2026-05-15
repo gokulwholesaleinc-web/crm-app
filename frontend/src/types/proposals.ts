@@ -101,6 +101,8 @@ export interface Proposal extends ProposalBase {
   master_contract_pdf_path?: string | null;
   /** R2 key of the stamped + audit-appended signed PDF. */
   signed_pdf_path?: string | null;
+  /** Most-recent stamp/upload failure. Drives the re-stamp banner on /proposals/:id. */
+  signed_pdf_error?: string | null;
   /** Per-view audit log. Populated on every public-link GET. */
   views?: ProposalView[];
   created_at: string;

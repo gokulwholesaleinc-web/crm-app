@@ -166,6 +166,17 @@ export function useRetryProposalBilling() {
   });
 }
 
+export function useRestampProposalSignedPdf() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (proposalId: number) => proposalsApi.restampSignedPdf(proposalId),
+    onSuccess: (_data, proposalId) => {
+      queryClient.invalidateQueries({ queryKey: proposalKeys.detail(proposalId) });
+    },
+  });
+}
+
 // ``useRefreshProposalFromQuote`` removed 2026-05-14 — quotes router
 // unmounted; corresponding endpoint dropped from the backend.
 
