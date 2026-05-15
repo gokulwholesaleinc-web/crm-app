@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { ArrowUpTrayIcon, DocumentTextIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { PROPOSAL_MASTER_CONTRACT_MAX_BYTES } from '../../api/proposals';
 
 interface PendingMasterContractFieldProps {
   /** Current pending file (lifted state, owned by ProposalForm). */
@@ -9,8 +10,6 @@ interface PendingMasterContractFieldProps {
    *  create response returns the new proposal id. */
   onChange: (file: File | null) => void;
 }
-
-const MAX_BYTES = 25 * 1024 * 1024;
 
 /**
  * Create-flow master-contract picker.
@@ -39,7 +38,7 @@ export function PendingMasterContractField({
       setError('Master contract must be a PDF file.');
       return;
     }
-    if (file.size > MAX_BYTES) {
+    if (file.size > PROPOSAL_MASTER_CONTRACT_MAX_BYTES) {
       setError('Master contract exceeds the 25 MB limit.');
       return;
     }

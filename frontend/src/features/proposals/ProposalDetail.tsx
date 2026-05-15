@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, lazy, Suspense } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useSmartBack } from '../../hooks/useSmartBack';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -55,6 +55,7 @@ import {
   openProposalAttachmentPreview,
   downloadProposalMasterContract,
   uploadProposalMasterContract,
+  PROPOSAL_MASTER_CONTRACT_MAX_BYTES,
 } from '../../api/proposals';
 import { formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
@@ -70,8 +71,16 @@ import type {
 function ProposalDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const handleBack = useSmartBack('/proposals');
   const proposalId = id ? parseInt(id, 10) : undefined;
+  // ``masterUploadFailed`` from the two-step create flow on
+  // ``ProposalsPage`` — surfaced as a persistent banner inside
+  // ``MasterContractCard`` so the user can't miss the retry surface
+  // when the disappearing toast on navigation goes away.
+  const masterUploadFailedMessage =
+    (location.state as { masterUploadFailed?: string | null } | null)
+      ?.masterUploadFailed ?? null;
 
   const { data: proposal, isLoading, error, refetch } = useProposal(proposalId);
   usePageTitle(proposal ? `Proposal - ${proposal.title}` : 'Proposal');
@@ -704,6 +713,7 @@ function ProposalDetailPage() {
             proposalId={proposal.id}
             currentPath={proposal.master_contract_pdf_path ?? null}
             isLocked={Boolean(proposal.signed_at)}
+            initialError={masterUploadFailedMessage}
             onUploaded={() => {
               void refetch();
             }}
@@ -1049,10 +1059,14 @@ interface MasterContractCardProps {
   proposalId: number;
   currentPath: string | null;
   isLocked: boolean;
+  /** Persistent error surface for the post-create retry path. When the
+   *  two-step create flow fails on step 2, ProposalsPage navigates here
+   *  with ``location.state.masterUploadFailed`` set, and ProposalDetail
+   *  passes the resulting message down — keeps the failure visible
+   *  past the disappearing toast. */
+  initialError?: string | null;
   onUploaded: () => void;
 }
-
-const _MASTER_MAX_BYTES = 25 * 1024 * 1024;
 
 /**
  * Sidebar card for managing the master service agreement PDF.
@@ -1067,18 +1081,30 @@ function MasterContractCard({
   proposalId,
   currentPath,
   isLocked,
+  initialError = null,
   onUploaded,
 }: MasterContractCardProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  // ``isMountedRef`` keeps setState/toast calls from firing after the
+  // user navigates away mid-upload — without it a failed upload would
+  // silently swallow the error (no toast on the destination page) and
+  // a successful one would flash "Master contract uploaded" while the
+  // user is already on an unrelated screen.
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
   const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError);
 
   const handleFile = async (file: File) => {
     if (file.type && file.type !== 'application/pdf') {
       setError('Master contract must be a PDF file.');
       return;
     }
-    if (file.size > _MASTER_MAX_BYTES) {
+    if (file.size > PROPOSAL_MASTER_CONTRACT_MAX_BYTES) {
       setError('Master contract exceeds the 25 MB limit.');
       return;
     }
@@ -1086,16 +1112,20 @@ function MasterContractCard({
     setError(null);
     try {
       await uploadProposalMasterContract(proposalId, file);
+      if (!isMountedRef.current) return;
       showSuccess(
         currentPath ? 'Master contract replaced' : 'Master contract uploaded',
       );
       onUploaded();
     } catch (err) {
+      if (!isMountedRef.current) return;
       setError(
         extractApiErrorDetail(err) ?? 'Master contract upload failed.',
       );
     } finally {
-      setUploading(false);
+      if (isMountedRef.current) {
+        setUploading(false);
+      }
     }
   };
 

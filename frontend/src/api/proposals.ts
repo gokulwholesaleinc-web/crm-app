@@ -335,6 +335,14 @@ export const duplicateProposal = async (proposalId: number): Promise<Proposal> =
  * same-origin Blob — Cloudflare R2 returns no CORS headers for
  * cross-origin XHRs.
  */
+/**
+ * Hard cap on a master service-agreement PDF upload. Mirrors the
+ * backend's 25 MB limit so the client can fail-fast before the
+ * multipart POST instead of round-tripping to the 413. Update both
+ * sides together if ops ever bumps the cap.
+ */
+export const PROPOSAL_MASTER_CONTRACT_MAX_BYTES = 25 * 1024 * 1024;
+
 export const downloadProposalMasterContract = async (
   proposalId: number,
 ): Promise<Blob> => {

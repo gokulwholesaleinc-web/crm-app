@@ -15,6 +15,7 @@ import {
 import { formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { showSuccess, showError } from '../../utils/toast';
+import { extractApiErrorDetail } from '../../utils/errors';
 import type { Proposal, ProposalCreate } from '../../types';
 
 const statusOptions = [
@@ -118,17 +119,21 @@ function ProposalsPage() {
       // Upload the stashed master contract as a follow-on so the proposal
       // exists by the time the multipart POST resolves the id. A failure
       // here doesn't unwind the create — the user lands on the detail
-      // page and can retry the upload from the sidebar card.
+      // page where MasterContractCard reads ``masterUploadFailed`` from
+      // location state and surfaces a persistent retry banner. Plain
+      // ``showError`` would disappear in ~5 s while the user is still
+      // figuring out the new page.
       if (pendingMaster) {
         try {
           await uploadProposalMasterContract(created.id, pendingMaster);
-        } catch {
-          showError(
-            'Proposal created, but uploading the master contract failed. ' +
-              'Retry from the proposal detail page.',
-          );
+        } catch (err) {
+          const detail =
+            extractApiErrorDetail(err) ??
+            'Master contract upload failed after the proposal was created.';
           setShowForm(false);
-          navigate(`/proposals/${created.id}`);
+          navigate(`/proposals/${created.id}`, {
+            state: { masterUploadFailed: detail },
+          });
           return;
         }
       }
