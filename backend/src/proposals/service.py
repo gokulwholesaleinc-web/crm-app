@@ -48,6 +48,37 @@ logger = logging.getLogger(__name__)
 _TEMPLATE_VAR_PATTERN = re.compile(r"\{\{(\w+)\}\}")
 
 
+def _coords_for_stamper(coords: dict | None) -> dict | None:
+    """Translate the user-facing ``SignatureFieldCoords`` shape into
+    the dict ``pdf_stamper`` consumes.
+
+    The picker UI persists ``{page (1-indexed), x, y, w, h}`` so the
+    raw "Page N of M" label round-trips without an off-by-one trap.
+    The stamper has always worked in ``{page (0-indexed), x, y, width,
+    height}``; this is the single conversion point so neither layer
+    has to know about the other's convention.
+
+    A NULL/empty payload returns ``None`` so the stamper falls through
+    to ``_auto_box``. Missing keys also return ``None`` to preserve
+    the existing "garbage → auto-box" safety net (the Pydantic
+    validator already 422s before reaching here, but defensive code
+    keeps the stamper's contract intact for any future caller).
+    """
+    if not coords:
+        return None
+    try:
+        page = int(coords["page"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    return {
+        "page": max(0, page - 1),
+        "x": coords.get("x"),
+        "y": coords.get("y"),
+        "width": coords.get("w"),
+        "height": coords.get("h"),
+    }
+
+
 PROPOSAL_SORTABLE_FIELDS: dict[str, Any] = {
     "proposal_number": Proposal.proposal_number,
     "title": Proposal.title,
@@ -482,7 +513,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 StampInputs(
                     master_pdf=master_bytes,
                     signature_png=proposal.signature_image,
-                    coords=proposal.signature_field_coords,
+                    coords=_coords_for_stamper(proposal.signature_field_coords),
                     signer_name=proposal.signer_name or "",
                     signer_email=proposal.signer_email or "",
                     signer_ip=signer_ip,
