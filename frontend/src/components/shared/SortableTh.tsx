@@ -46,9 +46,16 @@ export function SortableTh({
       >
         {label}
         {helpText && (
-          <span aria-hidden="true" className="text-gray-400 text-[10px] font-normal">
-            ?
-          </span>
+          <>
+            <span aria-hidden="true" className="text-gray-400 text-[10px] font-normal">
+              ?
+            </span>
+            {/* Screen-reader exposure for the hint: title alone is
+                desktop-mouse-only, so mirror the helpText into an sr-only
+                span that keyboard + AT users get when the header button
+                takes focus. */}
+            <span className="sr-only"> ({helpText})</span>
+          </>
         )}
         <span aria-hidden="true" className="w-3 text-gray-400">
           {indicator}

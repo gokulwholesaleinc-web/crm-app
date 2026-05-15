@@ -38,10 +38,6 @@ interface BulkActionToolbarProps {
   // Optional bulk delete. Caller owns the confirm dialog so the copy
   // can stay entity-specific ("Delete 25 leads? This can't be undone.").
   onBulkDelete?: () => void;
-  // Caller-owned extra action node, rendered before the menus. Kept
-  // for callers that need a one-off affordance the generic toolbar
-  // doesn't model.
-  extraAction?: React.ReactNode;
 }
 
 export function BulkActionToolbar({
@@ -56,7 +52,6 @@ export function BulkActionToolbar({
   stageOptions = [],
   onBulkMoveStage,
   onBulkDelete,
-  extraAction,
 }: BulkActionToolbarProps) {
   if (selectedIds.length === 0) return null;
 
@@ -68,10 +63,6 @@ export function BulkActionToolbar({
     await onBulkAssign(userId);
   };
 
-  const handleStageChange = async (stageId: number | null) => {
-    if (onBulkMoveStage) await onBulkMoveStage(stageId);
-  };
-
   return (
     <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-white dark:bg-gray-800 shadow-lg border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-3 flex items-center gap-3 min-w-[320px]">
       <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
@@ -79,7 +70,6 @@ export function BulkActionToolbar({
       </span>
 
       <div className="flex items-center gap-2 ml-auto">
-        {extraAction}
         {/* Stage Move (Leads only) */}
         {stageOptions.length > 0 && onBulkMoveStage && (
           <Menu as="div" className="relative">
@@ -109,7 +99,8 @@ export function BulkActionToolbar({
                       <Menu.Item key={opt.id ?? 'off'}>
                         {({ active }) => (
                           <button
-                            onClick={() => handleStageChange(opt.id)}
+                            type="button"
+                            onClick={() => onBulkMoveStage(opt.id)}
                             className={`block w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 ${active ? 'bg-gray-100 dark:bg-gray-700' : ''}`}
                           >
                             {opt.label}

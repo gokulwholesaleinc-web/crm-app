@@ -7,7 +7,7 @@ import { SkeletonTable } from '../../components/ui/Skeleton';
 import { DuplicateWarningModal } from '../../components/shared/DuplicateWarningModal';
 import { SortableTh } from '../../components/shared/SortableTh';
 import { LeadForm, LeadFormData } from './components/LeadForm';
-import { BulkActionToolbar } from './components/BulkActionToolbar';
+import { BulkActionToolbar, type BulkStageOption } from './components/BulkActionToolbar';
 import { LeadEmailCampaignModal } from './components/LeadEmailCampaignModal';
 import { AddToCampaignModal } from './components/AddToCampaignModal';
 import {
@@ -32,6 +32,8 @@ import { formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { showSuccess, showError } from '../../utils/toast';
+import { extractApiErrorDetail } from '../../utils/errors';
+import { useAuthStore } from '../../store/authStore';
 import type { Lead, LeadCreate, LeadUpdate, ApiError, PipelineStage } from '../../types';
 import type { DuplicateMatch } from '../../api/dedup';
 import clsx from 'clsx';
@@ -46,27 +48,19 @@ const statusOptions = [
   { value: 'lost', label: 'Lost' },
 ];
 
-// Max points the backend awards per scoring factor — kept in sync with
-// backend/src/leads/scoring.py::LeadScorer. Used to render "12 / 20"
-// style hint text so the hover explains both the awarded *and*
-// maximum value for each component.
-const SCORE_FACTOR_MAX: Record<string, number> = {
-  profile_completeness: 20,
-  company_info: 15,
-  budget: 20,
-  industry: 15,
-  source_quality: 15,
-  engagement: 15,
-};
-
-const SCORE_FACTOR_LABEL: Record<string, string> = {
-  profile_completeness: 'Profile completeness',
-  company_info: 'Company info',
-  budget: 'Budget',
-  industry: 'Industry match',
-  source_quality: 'Source quality',
-  engagement: 'Engagement',
-};
+// Scoring factors awarded by the backend — kept in sync with
+// backend/src/leads/scoring.py::LeadScorer. Drives the hover hint that
+// shows each component as "12 / 20" so users see both the awarded *and*
+// maximum value. Declared as a tuple-array (not an object) so the
+// rendering order is stable regardless of JSON key order.
+const SCORE_FACTORS: ReadonlyArray<{ key: string; label: string; max: number }> = [
+  { key: 'profile_completeness', label: 'Profile completeness', max: 20 },
+  { key: 'company_info', label: 'Company info', max: 15 },
+  { key: 'budget', label: 'Budget', max: 20 },
+  { key: 'industry', label: 'Industry match', max: 15 },
+  { key: 'source_quality', label: 'Source quality', max: 15 },
+  { key: 'engagement', label: 'Engagement', max: 15 },
+];
 
 const SCORE_HEADER_HINT =
   'Lead score (0–100) is auto-calculated from profile completeness, company info, budget, industry match, and source quality. Hover a row score for the per-factor breakdown.';
@@ -79,9 +73,7 @@ function buildScoreBreakdown(rawFactors: string | null | undefined): string {
   } catch {
     return SCORE_HEADER_HINT;
   }
-  const lines = Object.keys(SCORE_FACTOR_MAX).map((key) => {
-    const label = SCORE_FACTOR_LABEL[key] ?? key;
-    const max = SCORE_FACTOR_MAX[key];
+  const lines = SCORE_FACTORS.map(({ key, label, max }) => {
     const raw = parsed[key];
     const value = typeof raw === 'number' ? raw : 0;
     return `${label}: ${value} / ${max}`;
@@ -166,6 +158,12 @@ function LeadsPage() {
   usePageTitle('Leads');
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+
+  // Bulk delete mirrors the backend's manager+ guard on
+  // /import-export/bulk/delete — gate the UI so sales reps don't see a
+  // red destructive button that would just 403 when they click it.
+  const role = useAuthStore((s) => s.user?.role);
+  const canBulkDelete = role === 'admin' || role === 'manager';
 
   const { savedPageSize, recordPageSize } = useListPageDefaults('leads');
 
@@ -284,14 +282,13 @@ function LeadsPage() {
   // Stage targets surfaced in the bulk "Change Stage" menu. Includes an
   // "Off pipeline" sentinel so admins can clear the stage on selected
   // leads (mirrors the per-row dropdown's empty option).
-  const bulkStageOptions = useMemo(() => {
-    const opts: Array<{ id: number | null; label: string }> = stageOptions.map((s) => ({
-      id: s.id,
-      label: s.name,
-    }));
-    opts.push({ id: null, label: 'Off pipeline' });
-    return opts;
-  }, [stageOptions]);
+  const bulkStageOptions = useMemo<BulkStageOption[]>(
+    () => [
+      ...stageOptions.map((s) => ({ id: s.id, label: s.name })),
+      { id: null, label: 'Off pipeline' },
+    ],
+    [stageOptions],
+  );
 
   const [bulkMoving, setBulkMoving] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
@@ -367,7 +364,7 @@ function LeadsPage() {
         const firstReason = results.find((r) => r.status === 'rejected') as
           | PromiseRejectedResult
           | undefined;
-        const sampleDetail = (firstReason?.reason as ApiError | undefined)?.detail;
+        const sampleDetail = extractApiErrorDetail(firstReason?.reason);
         const sampleText = sampleDetail ? ` First error: ${sampleDetail}` : '';
         console.error('bulk move-to-stage had failures', {
           stageId,
@@ -391,7 +388,12 @@ function LeadsPage() {
       bulkUpdate({ entity_type: 'leads', entity_ids: selectedIds, updates }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: leadKeys.all });
+      const count = selectedIds.length;
       setSelectedIds([]);
+      showSuccess(`Updated ${count} lead${count === 1 ? '' : 's'}`);
+    },
+    onError: (err) => {
+      showError(extractApiErrorDetail(err) || 'Failed to update leads');
     },
   });
 
@@ -400,7 +402,12 @@ function LeadsPage() {
       bulkAssign({ entity_type: 'leads', entity_ids: selectedIds, owner_id: ownerId }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: leadKeys.all });
+      const count = selectedIds.length;
       setSelectedIds([]);
+      showSuccess(`Reassigned ${count} lead${count === 1 ? '' : 's'}`);
+    },
+    onError: (err) => {
+      showError(extractApiErrorDetail(err) || 'Failed to reassign leads');
     },
   });
 
@@ -417,22 +424,28 @@ function LeadsPage() {
         );
       }
       if (result.error_count > 0) {
-        // Surface the first server-reported error so admins see *why*
-        // (e.g. permission denied on someone else's lead) rather than a
-        // bare count. Backend already redacts; safe to display.
+        // Surface the first server-reported reason so the user sees *why*
+        // (e.g., "Has 3 contacts — reassign first") rather than a bare
+        // count. Backend returns {id, error}; format both for clarity.
         const first = result.errors[0];
+        const firstText = first ? `: #${first.id} ${first.error}` : '';
         showError(
-          `${result.error_count} lead${result.error_count === 1 ? '' : 's'} failed to delete${first ? `: ${first}` : ''}`,
+          `${result.error_count} lead${result.error_count === 1 ? '' : 's'} failed to delete${firstText}`,
         );
         // Clear selection only when everything succeeded — otherwise
         // leave the survivors so the user can retry/inspect.
+      } else if (result.success_count === 0) {
+        // Defensive: server reported 0/0 (shouldn't happen because empty
+        // entity_ids routes through raise_bad_request → onError, but
+        // covers schema drift). Acknowledge so the user isn't left
+        // staring at a silent dialog close.
+        showError('No leads were deleted');
       } else {
         setSelectedIds([]);
       }
     },
     onError: (err) => {
-      const detail = (err as unknown as ApiError | null)?.detail;
-      showError(detail || 'Failed to delete leads');
+      showError(extractApiErrorDetail(err) || 'Failed to delete leads');
     },
   });
 
@@ -983,7 +996,7 @@ function LeadsPage() {
         onBulkUpdate={async (updates) => { await bulkUpdateMutation.mutateAsync(updates); }}
         onBulkAssign={async (ownerId) => { await bulkAssignMutation.mutateAsync(ownerId); }}
         onBulkMoveStage={handleBulkMoveToStage}
-        onBulkDelete={() => setBulkDeleteOpen(true)}
+        onBulkDelete={canBulkDelete ? () => setBulkDeleteOpen(true) : undefined}
         onClearSelection={() => setSelectedIds([])}
         isLoading={
           bulkUpdateMutation.isPending ||
