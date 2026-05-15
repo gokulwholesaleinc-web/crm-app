@@ -26,7 +26,7 @@ import {
   useListSortPersistence,
 } from '../../hooks/useListPageDefaults';
 import { useUsers } from '../../hooks/useAuth';
-import { bulkUpdate, bulkAssign } from '../../api/importExport';
+import { bulkUpdate, bulkAssign, bulkDelete } from '../../api/importExport';
 import { getStatusBadgeClasses, formatStatusLabel, getScoreColor } from '../../utils';
 import { formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
@@ -46,12 +46,66 @@ const statusOptions = [
   { value: 'lost', label: 'Lost' },
 ];
 
-function ScoreIndicator({ score }: { score: number }) {
+// Max points the backend awards per scoring factor — kept in sync with
+// backend/src/leads/scoring.py::LeadScorer. Used to render "12 / 20"
+// style hint text so the hover explains both the awarded *and*
+// maximum value for each component.
+const SCORE_FACTOR_MAX: Record<string, number> = {
+  profile_completeness: 20,
+  company_info: 15,
+  budget: 20,
+  industry: 15,
+  source_quality: 15,
+  engagement: 15,
+};
+
+const SCORE_FACTOR_LABEL: Record<string, string> = {
+  profile_completeness: 'Profile completeness',
+  company_info: 'Company info',
+  budget: 'Budget',
+  industry: 'Industry match',
+  source_quality: 'Source quality',
+  engagement: 'Engagement',
+};
+
+const SCORE_HEADER_HINT =
+  'Lead score (0–100) is auto-calculated from profile completeness, company info, budget, industry match, and source quality. Hover a row score for the per-factor breakdown.';
+
+function buildScoreBreakdown(rawFactors: string | null | undefined): string {
+  if (!rawFactors) return SCORE_HEADER_HINT;
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(rawFactors) as Record<string, unknown>;
+  } catch {
+    return SCORE_HEADER_HINT;
+  }
+  const lines = Object.keys(SCORE_FACTOR_MAX).map((key) => {
+    const label = SCORE_FACTOR_LABEL[key] ?? key;
+    const max = SCORE_FACTOR_MAX[key];
+    const raw = parsed[key];
+    const value = typeof raw === 'number' ? raw : 0;
+    return `${label}: ${value} / ${max}`;
+  });
+  return `Lead score breakdown\n${lines.join('\n')}`;
+}
+
+function ScoreIndicator({
+  score,
+  factors,
+}: {
+  score: number;
+  factors?: string | null;
+}) {
   const percentage = Math.min(100, Math.max(0, score));
   const color = getScoreColor(score);
+  const tooltip = buildScoreBreakdown(factors);
 
   return (
-    <div className="flex items-center space-x-2">
+    <div
+      className="flex items-center space-x-2"
+      title={tooltip}
+      aria-label={`Score ${score}. ${tooltip.replace(/\n/g, ' ')}`}
+    >
       <div className="w-16 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
         <div
           className={clsx('h-full rounded-full', {
@@ -227,14 +281,20 @@ function LeadsPage() {
     );
   }, [pipelineStagesData]);
 
-  // Discovery is the canonical "top of funnel" stage promoted leads
-  // land in. Resolved by name (case-insensitive) so a stage rename on
-  // the backend doesn't silently break the bulk action.
-  const discoveryStageId = useMemo(() => {
-    return stageOptions.find((s) => s.name.toLowerCase() === 'discovery')?.id ?? null;
+  // Stage targets surfaced in the bulk "Change Stage" menu. Includes an
+  // "Off pipeline" sentinel so admins can clear the stage on selected
+  // leads (mirrors the per-row dropdown's empty option).
+  const bulkStageOptions = useMemo(() => {
+    const opts: Array<{ id: number | null; label: string }> = stageOptions.map((s) => ({
+      id: s.id,
+      label: s.name,
+    }));
+    opts.push({ id: null, label: 'Off pipeline' });
+    return opts;
   }, [stageOptions]);
 
   const [bulkMoving, setBulkMoving] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
   // Per-row stage edit. Fires a PATCH and invalidates list + kanban so
   // both views stay in sync. On 4xx, invalidate the list query so the
@@ -262,17 +322,23 @@ function LeadsPage() {
     }
   };
 
-  const handleBulkMoveToDiscovery = async () => {
-    if (!discoveryStageId || selectedIds.length === 0) return;
+  const handleBulkMoveToStage = async (stageId: number | null) => {
+    if (selectedIds.length === 0) return;
     setBulkMoving(true);
     try {
       // Fire all moves in parallel — backend `/move` endpoint syncs
       // status, triggers Won auto-convert, and handles dedup itself.
       // Volume here is bounded by the page size (max 100) so parallel
-      // POSTs are safe; backend rate limiting would be the bottleneck.
+      // requests are safe; backend rate limiting would be the bottleneck.
+      // /move requires a non-null stage id, so "Off pipeline" (null)
+      // falls through to PATCH /leads/{id} with pipeline_stage_id: null
+      // — PATCH was unified in PR #326 to status-sync + Won-convert
+      // identically to /move.
       const results = await Promise.allSettled(
         selectedIds.map((id) =>
-          leadsApi.moveLeadStage(id, { new_stage_id: discoveryStageId }),
+          stageId == null
+            ? leadsApi.update(id, { pipeline_stage_id: null })
+            : leadsApi.moveLeadStage(id, { new_stage_id: stageId }),
         ),
       );
       const failedIds = selectedIds.filter(
@@ -281,9 +347,15 @@ function LeadsPage() {
       const successes = results.length - failedIds.length;
       queryClient.invalidateQueries({ queryKey: leadKeys.all });
       queryClient.invalidateQueries({ queryKey: leadPipelineKeys.all });
+      const targetLabel =
+        stageId == null
+          ? 'off the pipeline'
+          : `to ${
+              stageOptions.find((s) => s.id === stageId)?.name ?? 'the selected stage'
+            }`;
       if (successes > 0) {
         showSuccess(
-          `Moved ${successes} lead${successes === 1 ? '' : 's'} to Discovery`,
+          `Moved ${successes} lead${successes === 1 ? '' : 's'} ${targetLabel}`,
         );
       }
       if (failedIds.length > 0) {
@@ -297,7 +369,8 @@ function LeadsPage() {
           | undefined;
         const sampleDetail = (firstReason?.reason as ApiError | undefined)?.detail;
         const sampleText = sampleDetail ? ` First error: ${sampleDetail}` : '';
-        console.error('bulk move-to-discovery had failures', {
+        console.error('bulk move-to-stage had failures', {
+          stageId,
           failedIds,
           reasons: results.filter((r) => r.status === 'rejected'),
         });
@@ -328,6 +401,38 @@ function LeadsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: leadKeys.all });
       setSelectedIds([]);
+    },
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: () =>
+      bulkDelete({ entity_type: 'leads', entity_ids: selectedIds }),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: leadKeys.all });
+      queryClient.invalidateQueries({ queryKey: leadPipelineKeys.all });
+      setBulkDeleteOpen(false);
+      if (result.success_count > 0) {
+        showSuccess(
+          `Deleted ${result.success_count} lead${result.success_count === 1 ? '' : 's'}`,
+        );
+      }
+      if (result.error_count > 0) {
+        // Surface the first server-reported error so admins see *why*
+        // (e.g. permission denied on someone else's lead) rather than a
+        // bare count. Backend already redacts; safe to display.
+        const first = result.errors[0];
+        showError(
+          `${result.error_count} lead${result.error_count === 1 ? '' : 's'} failed to delete${first ? `: ${first}` : ''}`,
+        );
+        // Clear selection only when everything succeeded — otherwise
+        // leave the survivors so the user can retry/inspect.
+      } else {
+        setSelectedIds([]);
+      }
+    },
+    onError: (err) => {
+      const detail = (err as unknown as ApiError | null)?.detail;
+      showError(detail || 'Failed to delete leads');
     },
   });
 
@@ -689,7 +794,7 @@ function LeadsPage() {
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                      <ScoreIndicator score={lead.score} />
+                      <ScoreIndicator score={lead.score} factors={lead.score_factors} />
                       <span className="text-xs text-gray-500 dark:text-gray-400">
                         {lead.source?.name ? formatStatusLabel(lead.source.name) : '-'}
                       </span>
@@ -758,7 +863,7 @@ function LeadsPage() {
                     >
                       Stage
                     </th>
-                    <SortableTh field="score" label="Score" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
+                    <SortableTh field="score" label="Score" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} helpText={SCORE_HEADER_HINT} />
                     <th
                       scope="col"
                       className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
@@ -813,7 +918,7 @@ function LeadsPage() {
                         />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <ScoreIndicator score={lead.score} />
+                        <ScoreIndicator score={lead.score} factors={lead.score_factors} />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {lead.source?.name ? formatStatusLabel(lead.source.name) : '-'}
@@ -877,34 +982,18 @@ function LeadsPage() {
         entityType="lead(s)"
         onBulkUpdate={async (updates) => { await bulkUpdateMutation.mutateAsync(updates); }}
         onBulkAssign={async (ownerId) => { await bulkAssignMutation.mutateAsync(ownerId); }}
+        onBulkMoveStage={handleBulkMoveToStage}
+        onBulkDelete={() => setBulkDeleteOpen(true)}
         onClearSelection={() => setSelectedIds([])}
-        isLoading={bulkUpdateMutation.isPending || bulkAssignMutation.isPending || bulkMoving}
+        isLoading={
+          bulkUpdateMutation.isPending ||
+          bulkAssignMutation.isPending ||
+          bulkDeleteMutation.isPending ||
+          bulkMoving
+        }
         users={(usersData ?? []).map((u: { id: number; full_name: string }) => ({ id: u.id, full_name: u.full_name }))}
         statusOptions={statusOptions.filter((o) => o.value !== '')}
-        // "Move to Discovery" is the manual-promotion affordance per
-        // Lorenzo's call (May 14 CRM review): leads stay off-kanban
-        // until a human picks them up. Disabled when the stage hasn't
-        // resolved yet (rare — only on first paint or after admin
-        // renames the canonical stage).
-        extraAction={
-          <Button
-            size="sm"
-            variant="secondary"
-            leftIcon={<ViewColumnsIcon className="h-4 w-4" />}
-            onClick={handleBulkMoveToDiscovery}
-            disabled={
-              discoveryStageId == null || bulkMoving || bulkUpdateMutation.isPending
-            }
-            title={
-              discoveryStageId == null
-                ? "No active 'Discovery' stage configured"
-                : undefined
-            }
-            aria-label={`Move ${selectedIds.length} leads to Discovery stage`}
-          >
-            Move to Discovery
-          </Button>
-        }
+        stageOptions={bulkStageOptions}
       />
 
       {/* Form Modal */}
@@ -945,6 +1034,19 @@ function LeadsPage() {
         cancelLabel="Cancel"
         variant="danger"
         isLoading={deleteLeadMutation.isPending}
+      />
+
+      {/* Bulk Delete Confirmation */}
+      <ConfirmDialog
+        isOpen={bulkDeleteOpen}
+        onClose={() => setBulkDeleteOpen(false)}
+        onConfirm={() => { bulkDeleteMutation.mutate(); }}
+        title={`Delete ${selectedIds.length} lead${selectedIds.length === 1 ? '' : 's'}?`}
+        message={`This will permanently delete ${selectedIds.length} lead${selectedIds.length === 1 ? '' : 's'} and all of their notes, activities, and emails. This action cannot be undone.`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+        isLoading={bulkDeleteMutation.isPending}
       />
 
       {/* Email Campaign Modal */}

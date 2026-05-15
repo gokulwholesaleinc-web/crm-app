@@ -7,6 +7,10 @@ interface SortableThProps {
   sortDir: SortDirection | undefined;
   onToggle: (field: string) => void;
   align?: 'left' | 'right';
+  // Optional hint surfaced as a native title tooltip on the header
+  // button. Use for columns whose values aren't self-explanatory
+  // (e.g., computed scores, opaque enums).
+  helpText?: string;
 }
 
 const BASE_TH_CLASS =
@@ -23,6 +27,7 @@ export function SortableTh({
   sortDir,
   onToggle,
   align = 'left',
+  helpText,
 }: SortableThProps) {
   const isActive = sortBy === field;
   let ariaSort: 'ascending' | 'descending' | 'none' = 'none';
@@ -36,9 +41,15 @@ export function SortableTh({
       <button
         type="button"
         onClick={() => onToggle(field)}
+        title={helpText}
         className="inline-flex items-center gap-1 uppercase tracking-wider focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
       >
         {label}
+        {helpText && (
+          <span aria-hidden="true" className="text-gray-400 text-[10px] font-normal">
+            ?
+          </span>
+        )}
         <span aria-hidden="true" className="w-3 text-gray-400">
           {indicator}
         </span>
