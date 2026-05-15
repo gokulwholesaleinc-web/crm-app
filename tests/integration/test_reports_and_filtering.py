@@ -701,21 +701,6 @@ class TestAdvancedFilterOnListEndpoints:
         data = response.json()
         assert data["total"] >= 1
 
-    async def test_opportunities_list_with_filters(self, client, auth_headers, test_opportunity):
-        """Test GET /api/opportunities with filters param."""
-        filters = json.dumps({
-            "operator": "and",
-            "conditions": [{"field": "amount", "op": "gte", "value": 10000}],
-        })
-        response = await client.get(
-            "/api/opportunities",
-            headers=auth_headers,
-            params={"filters": filters},
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["total"] >= 1
-
     async def test_activities_list_with_filters(self, client, auth_headers, test_activity):
         """Test GET /api/activities with filters param."""
         filters = json.dumps({

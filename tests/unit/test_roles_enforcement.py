@@ -124,48 +124,8 @@ class TestCompaniesPermissionGate:
 # Opportunities gate
 # ---------------------------------------------------------------------------
 
-class TestOpportunitiesPermissionGate:
-    """Viewer denied; sales_rep allowed (sales_rep has opportunities CRUD)."""
-
-    @pytest.mark.asyncio
-    async def test_viewer_cannot_create_opportunity(
-        self,
-        client: AsyncClient,
-        viewer_auth_headers: dict,
-        seed_roles: list[Role],
-        test_pipeline_stage,
-    ) -> None:
-        """Viewer is denied POST /api/opportunities."""
-        response = await client.post(
-            "/api/opportunities",
-            headers=viewer_auth_headers,
-            json={
-                "name": "Should not exist",
-                "pipeline_stage_id": test_pipeline_stage.id,
-                "amount": 100.0,
-            },
-        )
-        assert response.status_code == 403
-
-    @pytest.mark.asyncio
-    async def test_sales_rep_can_create_opportunity(
-        self,
-        client: AsyncClient,
-        sales_rep_auth_headers: dict,
-        seed_roles: list[Role],
-        test_pipeline_stage,
-    ) -> None:
-        """Sales rep has opportunities:create — must not regress to admin-only."""
-        response = await client.post(
-            "/api/opportunities",
-            headers=sales_rep_auth_headers,
-            json={
-                "name": "Rep-created deal",
-                "pipeline_stage_id": test_pipeline_stage.id,
-                "amount": 5000.0,
-            },
-        )
-        assert response.status_code == 201
+# Opportunities permission gate retired with the /api/opportunities router
+# (collapsed to leads-only pipeline 2026-05-14, PR #328).
 
 
 # ---------------------------------------------------------------------------

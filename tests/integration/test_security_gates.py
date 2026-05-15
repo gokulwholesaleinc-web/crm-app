@@ -9,62 +9,12 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.auth.models import User
-from src.auth.security import create_access_token
-from src.opportunities.models import Opportunity, PipelineStage
-
 
 # =============================================================================
-# move_opportunity: non-owner sales_rep → 403
-# =============================================================================
-
-class TestMoveOpportunityOwnership:
-    """move_opportunity must reject callers who don't own the opportunity."""
-
-    async def test_non_owner_sales_rep_cannot_move_opportunity(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        test_opportunity: Opportunity,
-        test_pipeline_stage: PipelineStage,
-        _sales_rep_user: User,
-        seed_roles: list,
-    ):
-        """Sales rep who does not own an opportunity should receive 403 on move."""
-        # _sales_rep_user is a different user from test_user (who owns test_opportunity)
-        token = create_access_token(data={"sub": str(_sales_rep_user.id)})
-        headers = {"Authorization": f"Bearer {token}"}
-
-        response = await client.post(
-            f"/api/opportunities/{test_opportunity.id}/move",
-            headers=headers,
-            json={"new_stage_id": test_pipeline_stage.id},
-        )
-        assert response.status_code == 403
-
-    async def test_owner_can_move_opportunity(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        test_opportunity: Opportunity,
-        test_pipeline_stage: PipelineStage,
-        auth_headers: dict,
-    ):
-        """Owner should be able to move their own opportunity."""
-        response = await client.post(
-            f"/api/opportunities/{test_opportunity.id}/move",
-            headers=auth_headers,
-            json={"new_stage_id": test_pipeline_stage.id},
-        )
-        # 200 OK (same stage is a no-op, still succeeds)
-        assert response.status_code == 200
-
-
-# =============================================================================
-# Sequences feature removed in PR #309 — the ownership-gate suite that
-# lived here is gone with it. Sequence router is unmounted; the test
-# file's old cases asserted 403 from a 404 endpoint, which was
-# meaningless after the removal.
+# Opportunities router retired (PR #328, 2026-05-14) — ownership-gate
+# tests removed. Sequences feature removed in PR #309 — ditto. Both
+# asserted 403 from now-404 endpoints, which was meaningless after the
+# removals.
 # =============================================================================
 # File upload: oversized upload → 400 (ValueError from service layer)
 # =============================================================================

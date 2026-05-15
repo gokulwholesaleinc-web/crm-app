@@ -157,16 +157,16 @@ class TestAutoConversion:
         new_stage = lead_stages[0]
         won_stage = lead_stages[3]
 
-        # Create a lead that's already been converted (legacy
-        # converted_opportunity_id column kept for backward compat)
+        # converted_contact_id points at a non-existent row → preflight
+        # returns ("stale_contact_fk") to skip the alias-match insert
+        # that would collide with ix_contacts_unique_email.
         lead = Lead(
             first_name="Already",
             last_name="Converted",
             email="already.converted@example.com",
             status="qualified",
             pipeline_stage_id=new_stage.id,
-            converted_contact_id=999,  # already converted
-            converted_opportunity_id=888,
+            converted_contact_id=999,
             owner_id=test_user.id,
             created_by_id=test_user.id,
         )
@@ -182,8 +182,8 @@ class TestAutoConversion:
         assert response.status_code == 200
         data = response.json()
 
-        # Should not have conversion info
-        assert "conversion" not in data or data.get("conversion") is None
+        # Conversion did not fire; response surfaces the skip reason.
+        assert data.get("conversion", {}).get("converted") is False
 
 
 class TestUnifiedPipelineEndpoint:

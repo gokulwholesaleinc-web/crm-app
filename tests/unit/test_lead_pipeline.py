@@ -285,7 +285,7 @@ class TestLeadKanban:
         assert stages_map["Discovery"]["leads"][0]["owner_name"] == test_user.full_name
 
     @pytest.mark.asyncio
-    async def test_kanban_hides_converted_leads(
+    async def test_kanban_keeps_converted_leads_in_won_column(
         self,
         client: AsyncClient,
         db_session: AsyncSession,
@@ -293,11 +293,9 @@ class TestLeadKanban:
         test_user: User,
         lead_pipeline_stages: list[PipelineStage],
     ):
-        """Leads where the auto-convert produced an Opportunity disappear
-        from the lead kanban (the deal now lives on the opportunity board).
-        Orphan-converted rows (no opportunity_id) stay visible so the user
-        can finish them via the explicit Convert action.
-        """
+        """Auto-converted leads stay visible in the Won column post #328 —
+        the opportunity board they used to migrate to no longer exists, so
+        hiding them would erase the deal from every view."""
         new_stage = lead_pipeline_stages[0]
         won_stage = next(s for s in lead_pipeline_stages if s.is_won)
 
@@ -319,7 +317,6 @@ class TestLeadKanban:
             owner_id=test_user.id,
             created_by_id=test_user.id,
             converted_contact_id=1,
-            converted_opportunity_id=1,
         )
         orphan = Lead(
             first_name="Orphan",
@@ -330,7 +327,6 @@ class TestLeadKanban:
             owner_id=test_user.id,
             created_by_id=test_user.id,
             converted_contact_id=None,
-            converted_opportunity_id=None,
         )
         db_session.add_all([active, converted, orphan])
         await db_session.commit()
@@ -347,7 +343,7 @@ class TestLeadKanban:
         ]
         assert "Active Lead" in all_names
         assert "Orphan Lead" in all_names
-        assert "Converted Lead" not in all_names
+        assert "Converted Lead" in all_names
 
     @pytest.mark.asyncio
     async def test_kanban_empty_stages(
@@ -683,8 +679,12 @@ class TestMoveLeadStage:
         assert response.status_code == 200, response.text
         data = response.json()
         assert data["status"] == "converted"
-        # No conversion block: lead was already linked to a contact.
-        assert "conversion" not in data
+        # Conversion block surfaces the skip so the UI can toast — but
+        # `converted=False` and no new contact was spawned.
+        assert data["conversion"] == {
+            "converted": False,
+            "reason": "already_converted",
+        }
 
         await db_session.refresh(lead)
         # FK stays pointed at the original contact — no duplicate.
@@ -945,13 +945,16 @@ class TestPatchLeadStageChange:
         )
         assert response.status_code == 200, response.text
         data = response.json()
-        # Stage change applies; auto-convert silently skipped (decline).
+        # Stage change applies; auto-convert declines and surfaces the
+        # skip so the lead-detail UI can toast "stale contact link".
         assert data["pipeline_stage_id"] == won_stage.id
         assert data["status"] == "converted"
-        assert "conversion" not in data
+        assert data["conversion"] == {
+            "converted": False,
+            "reason": "stale_contact_fk",
+        }
 
         await db_session.refresh(lead)
-        assert lead.converted_opportunity_id is None
         # Stale FK left as-is — admin can investigate and either
         # un-delete the contact or clear the column manually.
         assert lead.converted_contact_id == gone.id

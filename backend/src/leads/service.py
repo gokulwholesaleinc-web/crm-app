@@ -14,7 +14,6 @@ from src.core.sorting import build_order_clauses
 from src.leads.models import Lead, LeadSource
 from src.leads.schemas import LeadCreate, LeadSourceCreate, LeadSourceUpdate, LeadUpdate
 from src.leads.scoring import calculate_lead_score
-from src.opportunities.models import PipelineStage
 
 logger = logging.getLogger(__name__)
 
