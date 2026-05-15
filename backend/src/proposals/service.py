@@ -498,7 +498,11 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             proposal.signed_pdf_path = signed_key
             proposal.signed_pdf_error = None
             await self.db.flush()
-            await self.db.refresh(proposal)
+            # Don't refresh() here — a connection blip post-flush would
+            # raise SQLAlchemyError that get_db's narrow handler rolls
+            # back, losing the success write AND any prior error-clear.
+            # The row is already attached to the session; downstream
+            # readers see the updated columns without a server round-trip.
             if prior_error:
                 logger.info(
                     "Signed PDF re-stamp succeeded for proposal %s (cleared error: %r)",
@@ -517,7 +521,8 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 "R2 storage error stamping signed PDF for proposal %s",
                 proposal.id,
             )
-            err = exc.response.get("Error", {}) if hasattr(exc, "response") else {}
+            response = getattr(exc, "response", None)
+            err = response.get("Error", {}) if isinstance(response, dict) else {}
             code = err.get("Code", "ClientError")
             message = err.get("Message", str(exc))
             proposal.signed_pdf_error = (

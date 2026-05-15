@@ -195,13 +195,15 @@ function ProposalDetailPage() {
       const updated = await restampSignedPdfMutation.mutateAsync(proposal.id);
       if (updated.signed_pdf_path) {
         showSuccess('Signed PDF re-generated');
-      } else {
-        showError(
-          updated.signed_pdf_error
-            ? `Re-stamp still failing: ${updated.signed_pdf_error}`
-            : 'Re-stamp did not produce a signed PDF',
-        );
+        return;
       }
+      // Empty-string error is still a recorded failure (str(exc) can
+      // produce ""), so `!= null` keeps the diagnostic visible.
+      if (updated.signed_pdf_error != null) {
+        showError(`Re-stamp still failing: ${updated.signed_pdf_error}`);
+        return;
+      }
+      showError('Re-stamp did not produce a signed PDF');
     } catch (err) {
       showError(extractApiErrorDetail(err) ?? 'Failed to re-stamp signed PDF');
     }
@@ -479,8 +481,10 @@ function ProposalDetailPage() {
       )}
 
       {/* Fail-soft stamp left no countersigned copy — surface so the
-          operator can retry. */}
-      {proposal.signed_pdf_error && !proposal.signed_pdf_path && (
+          operator can retry. Check `!= null` rather than truthiness so
+          an empty-string error (from str(exc) where exc has no repr)
+          still surfaces the banner instead of silently hiding. */}
+      {proposal.signed_pdf_error != null && !proposal.signed_pdf_path && (
         <div
           role="alert"
           aria-live="polite"
