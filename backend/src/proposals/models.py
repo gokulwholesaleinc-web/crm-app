@@ -38,6 +38,26 @@ class _SignatureCoords(TypeDecorator):
 from src.core.mixins.auditable import AuditableMixin
 from src.database import Base
 
+# Side-effect import: the quotes router was unmounted 2026-05-14 so no
+# other startup path pulls ``src.quotes.models`` into ``Base.metadata``.
+# Proposal.quote_id below still declares ``ForeignKey("quotes.id", …)``
+# for legacy provenance, and SQLAlchemy resolves that FK lazily when
+# building DELETE statements — without the Quote mapper registered, the
+# resolution raises NoReferencedTableError and DELETE /api/proposals/{id}
+# 500s. Importing here keeps the FK enforceable without re-mounting the
+# router or shipping a destructive alembic migration. ``noqa: F401``
+# because the import is purely for the registration side-effect; the
+# ``assert`` below makes the dependency load-bearing so an auto-cleaner
+# (ruff --fix F401, pyupgrade, etc.) that strips the comment-only import
+# trips an immediate ImportError at module load instead of waiting for
+# the next prod DELETE to discover the regression.
+from src.quotes import models as _quotes_models  # noqa: F401
+
+assert "quotes" in Base.metadata.tables, (
+    "src.quotes.models import was stripped; restore the side-effect "
+    "import above so Proposal.quote_id FK can resolve."
+)
+
 if TYPE_CHECKING:
     from src.auth.models import User
     from src.companies.models import Company
