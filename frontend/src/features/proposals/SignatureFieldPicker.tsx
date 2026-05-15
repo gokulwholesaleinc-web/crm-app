@@ -102,6 +102,13 @@ export function SignatureFieldPicker({
   const [docError, setDocError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // Held in a ref (not the dep array) so the doc-load effect doesn't
+  // re-fire when ``useProposal``'s 20 s polling produces a fresh
+  // ``currentCoords`` object on each refetch — a user mid-drag would
+  // otherwise watch their box reset every poll cycle.
+  const initialCoordsRef = useRef(currentCoords);
+  initialCoordsRef.current = currentCoords;
+
   // (Re)load the document each time the modal opens with a fresh URL.
   useEffect(() => {
     if (!isOpen) return;
@@ -120,8 +127,9 @@ export function SignatureFieldPicker({
         }
         docRef.current = doc;
         setPageCount(doc.numPages);
-        const initialIdx = currentCoords
-          ? clamp(currentCoords.page - 1, 0, doc.numPages - 1)
+        const seed = initialCoordsRef.current;
+        const initialIdx = seed
+          ? clamp(seed.page - 1, 0, doc.numPages - 1)
           : 0;
         setPageIdx(initialIdx);
         setIsLoadingDoc(false);
@@ -148,7 +156,7 @@ export function SignatureFieldPicker({
         renderTaskRef.current = null;
       }
     };
-  }, [isOpen, masterPdfUrl, currentCoords]);
+  }, [isOpen, masterPdfUrl]);
 
   // Render the active page to the canvas.
   useEffect(() => {
@@ -158,35 +166,48 @@ export function SignatureFieldPicker({
 
     let cancelled = false;
     void (async () => {
-      if (renderTaskRef.current) {
-        renderTaskRef.current.cancel();
-        renderTaskRef.current = null;
-      }
-      const page = await doc.getPage(pageIdx + 1);
-      if (cancelled) return;
-      const viewport = page.getViewport({ scale: RENDER_SCALE });
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      const task = page.render({ canvasContext: ctx, viewport });
-      renderTaskRef.current = task;
       try {
-        await task.promise;
-      } catch {
-        // pdf.js throws ``RenderingCancelledException`` when we
-        // cancel an in-flight render to draw a different page.
-        // That's expected — don't surface it.
-        return;
-      }
-      if (cancelled) return;
-      setCanvasSize({ w: viewport.width, h: viewport.height });
+        if (renderTaskRef.current) {
+          renderTaskRef.current.cancel();
+          renderTaskRef.current = null;
+        }
+        const page = await doc.getPage(pageIdx + 1);
+        if (cancelled) return;
+        const viewport = page.getViewport({ scale: RENDER_SCALE });
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        const task = page.render({ canvasContext: ctx, viewport });
+        renderTaskRef.current = task;
+        try {
+          await task.promise;
+        } catch (err) {
+          // pdf.js throws ``RenderingCancelledException`` when we
+          // cancel an in-flight render to draw a different page —
+          // that's expected. Any other error (corrupt PDF, OOM,
+          // worker crash) must surface, not silently leave a blank
+          // canvas + a Save button the user can never enable.
+          const name = (err as { name?: string } | undefined)?.name;
+          if (name === 'RenderingCancelledException') return;
+          throw err;
+        }
+        if (cancelled) return;
+        setCanvasSize({ w: viewport.width, h: viewport.height });
 
-      // Pre-fill the saved box only when we land on its page.
-      if (currentCoords && currentCoords.page - 1 === pageIdx) {
-        setBox(pdfCoordsToBox(currentCoords, viewport.height));
-      } else {
-        setBox(null);
+        // Pre-fill the saved box only when we land on its page.
+        if (currentCoords && currentCoords.page - 1 === pageIdx) {
+          setBox(pdfCoordsToBox(currentCoords, viewport.height));
+        } else {
+          setBox(null);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setDocError(
+          err instanceof Error
+            ? err.message
+            : 'Failed to render master contract page',
+        );
       }
     })();
 

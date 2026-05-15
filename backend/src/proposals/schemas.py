@@ -26,11 +26,14 @@ class SignatureFieldCoords(BaseModel):
     validation (e.g. a box drawn slightly past the page edge).
     """
 
+    # ``allow_inf_nan=False`` keeps inf/-inf/NaN from sneaking past the
+    # ``ge=0`` / ``gt=0`` short-circuits and persisting as garbage that
+    # only the stamper's clamp logic would catch.
     page: int = Field(ge=1)
-    x: float = Field(ge=0)
-    y: float = Field(ge=0)
-    w: float = Field(gt=0)
-    h: float = Field(gt=0)
+    x: float = Field(ge=0, allow_inf_nan=False)
+    y: float = Field(ge=0, allow_inf_nan=False)
+    w: float = Field(gt=0, allow_inf_nan=False)
+    h: float = Field(gt=0, allow_inf_nan=False)
 
 
 class ProposalBillingMixin(BaseModel):

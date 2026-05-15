@@ -69,6 +69,11 @@ def _coords_for_stamper(coords: dict | None) -> dict | None:
     try:
         page = int(coords["page"])
     except (KeyError, TypeError, ValueError):
+        # Schema validation 422s the API surface, but an internal caller
+        # bypassing it would otherwise hit a silent auto-box stamp.
+        logger.warning(
+            "Coercing malformed signature_field_coords to auto-box: %r", coords,
+        )
         return None
     return {
         "page": max(0, page - 1),

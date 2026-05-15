@@ -342,6 +342,32 @@ class TestSignatureFieldCoordsValidation:
         assert resp.status_code == 422, resp.text
 
 
+class TestSignatureFieldCoordsRejectsInfNaN:
+    """``Field(gt=0)`` short-circuits ``inf > 0`` to ``True`` and NaN
+    comparisons to ``False``; only the explicit ``allow_inf_nan=False``
+    guard keeps these from landing in the DB as garbage. Exercised at
+    the Pydantic layer directly so the test doesn't depend on whether
+    the JSON serializer happens to emit non-conforming literals."""
+
+    @pytest.mark.parametrize("bad", [float("inf"), float("-inf"), float("nan")])
+    def test_rejects_non_finite_w(self, bad: float):
+        from pydantic import ValidationError
+
+        from src.proposals.schemas import SignatureFieldCoords
+
+        with pytest.raises(ValidationError):
+            SignatureFieldCoords(page=1, x=10.0, y=10.0, w=bad, h=50.0)
+
+    @pytest.mark.parametrize("bad", [float("inf"), float("-inf"), float("nan")])
+    def test_rejects_non_finite_xy(self, bad: float):
+        from pydantic import ValidationError
+
+        from src.proposals.schemas import SignatureFieldCoords
+
+        with pytest.raises(ValidationError):
+            SignatureFieldCoords(page=1, x=bad, y=10.0, w=100.0, h=50.0)
+
+
 class TestStampUsesConfiguredBox:
     """End-to-end: picker-style coords flow through the service-layer
     converter into the real stamper and land at the requested origin
