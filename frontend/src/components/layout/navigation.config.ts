@@ -44,7 +44,7 @@ export const DEFAULT_MAIN_NAVIGATION: NavItem[] = [
   { id: 'payments', name: 'Payments', href: '/payments', icon: CreditCardIcon },
   { id: 'activities', name: 'Activities', href: '/activities', icon: CalendarIcon },
   { id: 'calendar', name: 'Calendar', href: '/calendar', icon: CalendarDaysIcon },
-  { id: 'campaigns', name: 'Campaigns', href: '/campaigns', icon: MegaphoneIcon },
+  { id: 'campaigns', name: 'Email Campaigns', href: '/campaigns', icon: MegaphoneIcon },
 ];
 
 export const DEFAULT_SECONDARY_NAVIGATION: NavItem[] = [

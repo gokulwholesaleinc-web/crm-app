@@ -328,7 +328,7 @@ export const SECTIONS: Section[] = [
           </h3>
           <ol className="space-y-2.5">
             <Step n={1}>
-              Go to <strong>Campaigns</strong> in the sidebar and click <em>New Campaign</em>.
+              Go to <strong>Email Campaigns</strong> in the sidebar and click <em>New Campaign</em>.
             </Step>
             <Step n={2}>
               Pick <em>Type = Email</em>, give it a name, and save.
@@ -748,7 +748,7 @@ export const SECTIONS: Section[] = [
   },
   {
     id: 'campaigns',
-    title: 'Campaigns',
+    title: 'Email Campaigns',
     icon: MegaphoneIcon,
     searchText:
       'campaigns email event webinar ads social mass send members template steps delay days metrics roi response rate conversion rate analytics volume stats',
