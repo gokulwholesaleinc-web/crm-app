@@ -16,10 +16,12 @@ from reportlab.pdfgen import canvas
 
 from src.proposals.pdf_stamper import StampInputs, stamp_master_with_signature
 
-# Same 1x1 transparent PNG used by the route tests.
+# Minimal 1x1 RGB PNG. The previous RGBA constant decoded under older
+# Pillow but raises "broken data stream" on the version pinned in CI,
+# breaking reportlab's drawImage path.
 _ONE_PIXEL_PNG = bytes.fromhex(
-    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
-    "0000000d49444154789c63000000000005000158a8c4d70000000049454e44ae426082"
+    "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de"
+    "0000000c49444154789c63f8cfc0000003010100c9fe92ef0000000049454e44ae426082"
 )
 
 
