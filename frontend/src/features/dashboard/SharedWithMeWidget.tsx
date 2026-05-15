@@ -37,7 +37,7 @@ function relativeTime(isoString: string): string {
 const ENTITY_LABELS: Record<string, string> = {
   leads: 'Leads',
   proposals: 'Proposals',
-  campaigns: 'Campaigns',
+  campaigns: 'Email Campaigns',
   contacts: 'Contacts',
   companies: 'Companies',
 };

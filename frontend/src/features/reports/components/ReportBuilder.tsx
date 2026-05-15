@@ -23,7 +23,7 @@ const ENTITY_TYPES = [
   { value: 'leads', label: 'Leads' },
   { value: 'payments', label: 'Payments' },
   { value: 'activities', label: 'Activities' },
-  { value: 'campaigns', label: 'Campaigns' },
+  { value: 'campaigns', label: 'Email Campaigns' },
 ];
 
 const METRICS = [
