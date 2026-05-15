@@ -55,6 +55,26 @@ describe('EntityLink', () => {
     expect(bubbled).toBe(true);
   });
 
+  // Regression guard: PR3 (#333) initially shipped LEGACY_CONTRACT_TYPE
+  // without onClick={legacyClickHandler}, repeating the silent-click-
+  // bubble bug PR2 trio (12d31f59) fixed for the other two kinds. The
+  // LegacyEntityLabel helper in PR #334 centralized the wiring; this
+  // parametrized test makes sure all three sentinels stay covered.
+  it.each([
+    ['opportunity', LEGACY_OPPORTUNITY_TYPE, /legacy opportunity/i],
+    ['quote', LEGACY_QUOTE_TYPE, /legacy quote/i],
+    ['contract', LEGACY_CONTRACT_TYPE, /legacy contract/i],
+  ])('stops click propagation on the legacy %s chip', (_label, sentinel, chipRe) => {
+    let bubbled = false;
+    renderWithProviders(
+      <div onClick={() => { bubbled = true; }}>
+        <EntityLink type={sentinel} id={1}>Click</EntityLink>
+      </div>,
+    );
+    fireEvent.click(screen.getByText(chipRe));
+    expect(bubbled).toBe(false);
+  });
+
   describe('legacy opportunity', () => {
     it('normalizes "opportunity" and "opportunities" to the legacy sentinel', () => {
       expect(normalizeEntityType('opportunity')).toBe(LEGACY_OPPORTUNITY_TYPE);

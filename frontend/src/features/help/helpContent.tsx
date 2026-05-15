@@ -364,7 +364,7 @@ export const SECTIONS: Section[] = [
     title: 'The Core Flow (Read This First)',
     icon: ArrowRightIcon,
     searchText:
-      'flow funnel lead contact company quote proposal payment conversion convert process journey',
+      'flow funnel lead contact company proposal payment conversion convert process journey',
     body: (
       <div className="space-y-4">
         <p className="text-sm text-gray-700 dark:text-gray-300">
@@ -403,8 +403,8 @@ export const SECTIONS: Section[] = [
           </Step>
           <Step n={6}>
             <strong>You collect Payment.</strong> The Payments tab tracks Stripe payment intents,
-            checkout sessions, invoices, and subscriptions. Payments link back to the quote,
-            proposal, and Stripe customer.
+            checkout sessions, invoices, and subscriptions. Payments link back to the
+            proposal and Stripe customer.
           </Step>
           <Step n={7}>
             <strong>Activities follow the record everywhere.</strong> Calls, emails, meetings, tasks,
@@ -600,8 +600,8 @@ export const SECTIONS: Section[] = [
     body: (
       <div className="space-y-3">
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          Proposals are long-form sales documents — think the pitch deck of a quote. They support
-          rich content sections and reusable templates.
+          Proposals are long-form sales documents. They support rich content sections
+          and reusable templates, with payment terms folded inline.
         </p>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Sections</h4>
         <ul className="space-y-1.5">
@@ -1029,7 +1029,7 @@ export const SECTIONS: Section[] = [
     title: 'Admin (admins only)',
     icon: ShieldCheckIcon,
     searchText:
-      'admin dashboard system stats users active total contacts companies leads quotes proposals payments user management team overview activity feed audit',
+      'admin dashboard system stats users active total contacts companies leads proposals payments user management team overview activity feed audit',
     body: (
       <div className="space-y-3">
         <p className="text-sm text-gray-700 dark:text-gray-300">

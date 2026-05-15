@@ -2,8 +2,9 @@ import { useState, KeyboardEvent } from 'react';
 import { Button } from '../ui/Button';
 import { useCreateActivity } from '../../hooks/useActivities';
 import { showError } from '../../utils/toast';
+import { extractApiErrorDetail } from '../../utils/errors';
 
-type EntityType = 'contact' | 'lead' | 'company' | 'proposal' | 'quote';
+type EntityType = 'contact' | 'lead' | 'company' | 'proposal';
 
 interface QuickAddNoteProps {
   entityType: EntityType;
@@ -29,8 +30,8 @@ export function QuickAddNote({ entityType, entityId, onCreated }: QuickAddNotePr
       });
       setBody('');
       onCreated?.();
-    } catch {
-      showError('Failed to add note');
+    } catch (err) {
+      showError(extractApiErrorDetail(err) ?? 'Failed to add note');
     }
   };
 

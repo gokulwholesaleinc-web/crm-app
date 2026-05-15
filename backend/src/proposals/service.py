@@ -1425,7 +1425,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         branding = await self.get_branding_for_proposal(proposal)
         subject, body = render_contract_signed_email(branding, {
             "audience": "signer",
-            "contract_title": proposal.title,
+            "document_title": proposal.title,
             "signer_name": proposal.signer_name,
         })
 

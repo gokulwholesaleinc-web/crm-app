@@ -28,6 +28,7 @@ import {
   encodeLeadDragId,
   parseLeadDragId,
 } from './utils/dragIds';
+import { extractApiErrorDetail } from '../../utils/errors';
 
 function PipelinePage() {
   usePageTitle('Pipeline');
@@ -254,9 +255,7 @@ function PipelinePage() {
       {error && (
         <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-4" role="alert">
           <p className="text-sm text-red-800 dark:text-red-300">
-            {error instanceof Error
-              ? error.message
-              : 'Failed to load pipeline.'}
+            {extractApiErrorDetail(error) ?? 'Failed to load pipeline.'}
           </p>
         </div>
       )}

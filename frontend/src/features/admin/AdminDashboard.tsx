@@ -13,6 +13,12 @@ import UserManagement from './UserManagement';
 import type { TeamMemberOverview } from '../../types';
 import type { Column } from '../../components/ui/Table';
 import {
+  normalizeEntityType,
+  LEGACY_OPPORTUNITY_TYPE,
+  LEGACY_QUOTE_TYPE,
+  LEGACY_CONTRACT_TYPE,
+} from '../../components/ui/EntityLink.utils';
+import {
   UsersIcon,
   UserGroupIcon,
   BuildingOfficeIcon,
@@ -44,6 +50,18 @@ const ACTION_BADGE_VARIANT: Record<string, BadgeVariant> = {
   update: 'blue',
   delete: 'red',
 };
+
+// Decorate raw `entity_type` strings from the activity feed so historical
+// rows for retired modules render readably. Pre-retirement rows still
+// carry `entity_type='opportunity' | 'quote' | 'contract'`; show them as
+// "Opportunity (legacy)" etc. rather than raw lowercase.
+function formatEntityTypeLabel(raw: string): string {
+  const normalized = normalizeEntityType(raw);
+  if (normalized === LEGACY_OPPORTUNITY_TYPE) return 'opportunity (legacy)';
+  if (normalized === LEGACY_QUOTE_TYPE) return 'quote (legacy)';
+  if (normalized === LEGACY_CONTRACT_TYPE) return 'contract (legacy)';
+  return normalized ?? raw;
+}
 
 const ROLE_BADGE_VARIANT: Record<string, BadgeVariant> = {
   admin: 'indigo',
@@ -236,7 +254,7 @@ export default function AdminDashboard() {
                       <span className="font-medium">{entry.user_name ?? 'System'}</span>
                       {' '}
                       {entry.action}d a{' '}
-                      <span className="font-medium">{entry.entity_type}</span>
+                      <span className="font-medium">{formatEntityTypeLabel(entry.entity_type)}</span>
                       {' '}
                       <span className="text-gray-500 dark:text-gray-400">#{entry.entity_id}</span>
                     </p>

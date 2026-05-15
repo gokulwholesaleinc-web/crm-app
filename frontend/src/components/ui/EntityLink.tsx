@@ -1,4 +1,4 @@
-import type { MouseEvent } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import clsx from 'clsx';
 import {
@@ -23,6 +23,52 @@ const variantStyles: Record<EntityLinkVariant, string> = {
   inherit: 'hover:underline',
 };
 
+// Legacy entity kinds share an identical "muted italic span with a chip"
+// rendering — only the default title and chip text differ. Keeping the
+// map module-local avoids a public API for retired modules and lets each
+// branch in EntityLink collapse to a one-liner.
+type LegacyKind = 'opportunity' | 'quote' | 'contract';
+
+const LEGACY_LABEL_BY_KIND: Record<LegacyKind, { defaultTitle: string; chip: string }> = {
+  opportunity: {
+    defaultTitle:
+      'Opportunity records were retired — original entity is preserved for audit history.',
+    chip: '(legacy opportunity)',
+  },
+  quote: {
+    defaultTitle:
+      'Quotes were replaced by Payment invoices — original entity is preserved for audit history.',
+    chip: '(legacy quote)',
+  },
+  contract: {
+    defaultTitle:
+      'Contracts were folded into Proposals — original entity is preserved for audit history.',
+    chip: '(legacy contract)',
+  },
+};
+
+interface LegacyEntityLabelProps {
+  kind: LegacyKind;
+  title?: string;
+  className?: string;
+  children: ReactNode;
+  onClick?: (e: MouseEvent) => void;
+}
+
+function LegacyEntityLabel({ kind, title, className, children, onClick }: LegacyEntityLabelProps) {
+  const { defaultTitle, chip } = LEGACY_LABEL_BY_KIND[kind];
+  return (
+    <span
+      className={clsx('text-gray-400 dark:text-gray-500 italic', className)}
+      title={title ?? defaultTitle}
+      onClick={onClick}
+    >
+      {children}{' '}
+      <span className="text-[10px] uppercase tracking-wide">{chip}</span>
+    </span>
+  );
+}
+
 export interface EntityLinkProps {
   type: NormalizedEntityType;
   id: number | string | null | undefined;
@@ -46,68 +92,23 @@ export function EntityLink({
   title,
   stopPropagation = true,
 }: EntityLinkProps) {
-  // Legacy opportunity rows have no destination route — Opportunities was
-  // removed in PR1 #328. Render an explanatory muted label instead of
-  // silently dropping the row or routing to a 404. We intentionally
-  // ignore `variant` here: the legacy treatment is always "muted, not a
-  // link" so callers don't accidentally style it as clickable.
-  // Click handler shared by both legacy spans. Without stopPropagation,
-  // a parent row's onClick (e.g. "open detail") would fire when the user
-  // taps the muted label — surprising UX for a chip that looks
-  // non-interactive.
+  // Legacy rows have no destination route — render an explanatory muted
+  // label instead of silently dropping the row or routing to a 404. We
+  // intentionally ignore `variant` here: the legacy treatment is always
+  // "muted, not a link" so callers don't accidentally style it as
+  // clickable. Without stopPropagation, a parent row's onClick (e.g.
+  // "open detail") would fire when the user taps the muted label —
+  // surprising UX for a chip that looks non-interactive.
   const legacyClickHandler = stopPropagation ? (e: MouseEvent) => e.stopPropagation() : undefined;
 
   if (type === LEGACY_OPPORTUNITY_TYPE) {
-    return (
-      <span
-        className={clsx(
-          'text-gray-400 dark:text-gray-500 italic',
-          className,
-        )}
-        title={title ?? 'Opportunity records were retired — original entity is preserved for audit history.'}
-        onClick={legacyClickHandler}
-      >
-        {children}{' '}
-        <span className="text-[10px] uppercase tracking-wide">(legacy opportunity)</span>
-      </span>
-    );
+    return <LegacyEntityLabel kind="opportunity" title={title} className={className} onClick={legacyClickHandler}>{children}</LegacyEntityLabel>;
   }
-
-  // Quotes retired 2026-05-14 — mirror the legacy-opportunity treatment
-  // so historical activity/audit rows render a muted non-clickable label
-  // instead of routing to a 404.
   if (type === LEGACY_QUOTE_TYPE) {
-    return (
-      <span
-        className={clsx(
-          'text-gray-400 dark:text-gray-500 italic',
-          className,
-        )}
-        title={title ?? 'Quotes were replaced by Payment invoices — original entity is preserved for audit history.'}
-        onClick={legacyClickHandler}
-      >
-        {children}{' '}
-        <span className="text-[10px] uppercase tracking-wide">(legacy quote)</span>
-      </span>
-    );
+    return <LegacyEntityLabel kind="quote" title={title} className={className} onClick={legacyClickHandler}>{children}</LegacyEntityLabel>;
   }
-
-  // Contracts retired 2026-05-14 — contract terms now fold into the
-  // Proposal T&C inline. Mirror the legacy-opportunity/quote treatment.
   if (type === LEGACY_CONTRACT_TYPE) {
-    return (
-      <span
-        className={clsx(
-          'text-gray-400 dark:text-gray-500 italic',
-          className,
-        )}
-        title={title ?? 'Contracts were folded into Proposals — original entity is preserved for audit history.'}
-        onClick={legacyClickHandler}
-      >
-        {children}{' '}
-        <span className="text-[10px] uppercase tracking-wide">(legacy contract)</span>
-      </span>
-    );
+    return <LegacyEntityLabel kind="contract" title={title} className={className} onClick={legacyClickHandler}>{children}</LegacyEntityLabel>;
   }
 
   if (id === null || id === undefined || id === '') {

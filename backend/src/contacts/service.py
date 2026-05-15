@@ -137,6 +137,7 @@ class ContactService(
         Quote-cascade retired 2026-05-14 — quotes router unmounted. Legacy
         Quote rows keep their original owner.
         """
+        # legacy Quote.owner_id rows are NOT repointed — retired module, see PR2 #330
         from src.opportunities.models import Opportunity
         from src.payments.models import Payment, StripeCustomer
         from src.proposals.models import Proposal

@@ -700,7 +700,7 @@ class ContractService(CRUDService[Contract, ContractCreate, ContractUpdate]):
 
         subject, body = render_contract_signed_email(branding, {
             "audience": "signer",
-            "contract_title": contract.title,
+            "document_title": contract.title,
             "signer_name": contract.signed_by_name,
             # Render the "PDF will follow" copy when the PDF render
             # failed; the unattached "PDF copy is attached" line
