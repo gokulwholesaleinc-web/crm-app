@@ -44,7 +44,9 @@ from src.campaigns.models import (  # noqa: F401
 from src.comments.models import Comment  # noqa: F401
 from src.companies.models import Company  # noqa: F401
 from src.contacts.models import Contact
-from src.contracts.models import Contract  # noqa: F401  # SQLite FK registration; contracts router unmounted 2026-05-14
+from src.contracts.models import (
+    Contract,  # noqa: F401  # SQLite FK registration; contracts router unmounted 2026-05-14
+)
 from src.core.models import EntityShare, EntityTag, Note, Tag  # noqa: F401
 from src.dashboard.models import (  # noqa: F401
     DashboardChart,
