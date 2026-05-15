@@ -323,21 +323,30 @@ function LeadsPage() {
     if (selectedIds.length === 0) return;
     setBulkMoving(true);
     try {
-      // Fire all moves in parallel — backend `/move` endpoint syncs
-      // status, triggers Won auto-convert, and handles dedup itself.
-      // Volume here is bounded by the page size (max 100) so parallel
-      // requests are safe; backend rate limiting would be the bottleneck.
+      // Fan out in chunks of ``BULK_MOVE_CONCURRENCY`` to avoid hammering
+      // the backend with 25+ concurrent /move requests — production saw
+      // 503s under load when the original fully-parallel version
+      // exhausted the Neon connection pool mid-bulk. Each /move runs a
+      // status sync + Won auto-convert, so the per-call DB cost is real.
       // /move requires a non-null stage id, so "Off pipeline" (null)
       // falls through to PATCH /leads/{id} with pipeline_stage_id: null
       // — PATCH was unified in PR #326 to status-sync + Won-convert
       // identically to /move.
-      const results = await Promise.allSettled(
-        selectedIds.map((id) =>
-          stageId == null
-            ? leadsApi.update(id, { pipeline_stage_id: null })
-            : leadsApi.moveLeadStage(id, { new_stage_id: stageId }),
-        ),
-      );
+      const BULK_MOVE_CONCURRENCY = 5;
+      const results: PromiseSettledResult<unknown>[] = new Array(selectedIds.length);
+      for (let i = 0; i < selectedIds.length; i += BULK_MOVE_CONCURRENCY) {
+        const slice = selectedIds.slice(i, i + BULK_MOVE_CONCURRENCY);
+        const sliceResults = await Promise.allSettled(
+          slice.map((id) =>
+            stageId == null
+              ? leadsApi.update(id, { pipeline_stage_id: null })
+              : leadsApi.moveLeadStage(id, { new_stage_id: stageId }),
+          ),
+        );
+        sliceResults.forEach((r, j) => {
+          results[i + j] = r;
+        });
+      }
       const failedIds = selectedIds.filter(
         (_id, i) => results[i]?.status === 'rejected',
       );
