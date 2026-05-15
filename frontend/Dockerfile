@@ -17,6 +17,16 @@ server {
     server_name localhost;
     root /usr/share/nginx/html;
     index index.html;
+    # The nginx:alpine base image ships /etc/nginx/mime.types but no
+    # mapping for .mjs, so ES-module worker scripts (pdf.js's
+    # pdf.worker.min.mjs) fall back to application/octet-stream and
+    # the browser refuses to load them as module scripts. ``types``
+    # at server scope REPLACES the inherited http-level map — must
+    # re-include the global file first, then add .mjs on top.
+    include /etc/nginx/mime.types;
+    types {
+        text/javascript mjs;
+    }
     gzip on;
     gzip_vary on;
     gzip_min_length 1024;
@@ -26,7 +36,7 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' http://localhost:* https://*;" always;
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+    location ~* \.(js|mjs|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
         expires 1y;
         add_header Cache-Control "public, immutable";
         access_log off;
