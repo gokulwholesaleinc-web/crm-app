@@ -282,6 +282,31 @@ class TestVisualDefaults:
         assert 'alt="f"' in html
         assert 'alt="YT"' in html
 
+    def test_social_icons_request_hidpi_source(self):
+        # Gmail's image proxy rasterizes SVGs at their intrinsic
+        # dimensions. Iconify defaults to 1em (≈16px), which scales
+        # blurry up to the CSS-enforced 28px on retina. The URL must
+        # carry ``height=56`` so the cached PNG is 2× the display
+        # size — crisp on both 1× and 2× displays.
+        html = _base_email_html(
+            _default_branding(
+                social_facebook_url="https://facebook.com/co",
+                social_website_url="https://co.example",
+            ),
+            "Test",
+            "<p>body</p>",
+        )
+        # ``&`` is HTML-escaped in attribute values, so the rendered
+        # URL is ``?color=%23ffffff&amp;height=56`` — the iconify CDN
+        # decodes that to ``?color=%23ffffff&height=56`` server-side.
+        assert "height=56" in html, (
+            "iconify URLs must request the 56px source so Gmail's "
+            "image proxy serves a high-DPI rasterized PNG"
+        )
+        # Both the simple-icons set and the mdi:web slot get the bump.
+        assert "simple-icons/facebook.svg?color=%23ffffff&amp;height=56" in html
+        assert "mdi/web.svg?color=%23ffffff&amp;height=56" in html
+
     def test_gold_accent_rule_below_header(self):
         # The 3px gold strip under the header is part of the visual
         # contract — its presence is what differentiates this wrapper
