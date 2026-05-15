@@ -206,12 +206,20 @@ export interface BulkDeleteRequest {
   entity_ids: number[];
 }
 
+export interface BulkDeleteErrorDetail {
+  id: number;
+  error: string;
+}
+
 export interface BulkDeleteResult {
   success: boolean;
   entity_type: string;
   success_count: number;
   error_count: number;
-  errors: string[];
+  // Backend returns one entry per failed id with the row-level reason
+  // (e.g., "Not found", "Has 3 contacts — reassign first"). Surface
+  // these verbatim; previous `string[]` typing rendered "[object Object]".
+  errors: BulkDeleteErrorDetail[];
 }
 
 export const bulkDelete = async (data: BulkDeleteRequest): Promise<BulkDeleteResult> => {
