@@ -130,42 +130,51 @@ _DEFAULT_BRANDING = {
 # ``in`` badge, YouTube play tile); the website slot uses
 # ``mdi:web`` for a stroke-matched globe. All rendered in white via
 # ``color=%23ffffff`` to sit against the dark footer.
+#
+# ``height=56`` is the source size we ask iconify for, not the
+# rendered size: Gmail's image proxy rasterizes SVGs to PNG at the
+# source's intrinsic dimensions, so the iconify default of 1em
+# (≈16 px) was being upscaled by the browser to 28 px and looking
+# blurry on retina displays. Forcing the SVG to natively render at
+# 56×56 means the cached PNG is 2× the display size — crisp at the
+# CSS-enforced 28×28 on both 1× and 2× screens.
 _ICONIFY_BASE = "https://api.iconify.design"
+_ICON_QS = "color=%23ffffff&height=56"
 _SOCIAL_PLATFORMS: tuple[tuple[str, str, str, str], ...] = (
     (
         "Facebook",
         "social_facebook_url",
-        f"{_ICONIFY_BASE}/simple-icons/facebook.svg?color=%23ffffff",
+        f"{_ICONIFY_BASE}/simple-icons/facebook.svg?{_ICON_QS}",
         "f",
     ),
     (
         "Instagram",
         "social_instagram_url",
-        f"{_ICONIFY_BASE}/simple-icons/instagram.svg?color=%23ffffff",
+        f"{_ICONIFY_BASE}/simple-icons/instagram.svg?{_ICON_QS}",
         "IG",
     ),
     (
         "TikTok",
         "social_tiktok_url",
-        f"{_ICONIFY_BASE}/simple-icons/tiktok.svg?color=%23ffffff",
+        f"{_ICONIFY_BASE}/simple-icons/tiktok.svg?{_ICON_QS}",
         "TT",
     ),
     (
         "LinkedIn",
         "social_linkedin_url",
-        f"{_ICONIFY_BASE}/simple-icons/linkedin.svg?color=%23ffffff",
+        f"{_ICONIFY_BASE}/simple-icons/linkedin.svg?{_ICON_QS}",
         "in",
     ),
     (
         "YouTube",
         "social_youtube_url",
-        f"{_ICONIFY_BASE}/simple-icons/youtube.svg?color=%23ffffff",
+        f"{_ICONIFY_BASE}/simple-icons/youtube.svg?{_ICON_QS}",
         "YT",
     ),
     (
         "Website",
         "social_website_url",
-        f"{_ICONIFY_BASE}/mdi/web.svg?color=%23ffffff",
+        f"{_ICONIFY_BASE}/mdi/web.svg?{_ICON_QS}",
         "W",
     ),
 )
