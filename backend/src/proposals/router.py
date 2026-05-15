@@ -800,6 +800,48 @@ async def upload_master_contract(
     return ProposalResponse.model_validate(proposal)
 
 
+@router.get("/{proposal_id}/master-contract")
+async def download_master_contract(
+    proposal_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
+):
+    """Stream the raw master service agreement PDF bytes back to staff.
+
+    Returned as ``application/pdf`` so the SignatureFieldPicker can hand
+    the blob straight to pdf.js — going through the backend keeps the
+    bearer-auth check, sidesteps R2 CORS (no headers on cross-origin
+    GETs to the bucket), and avoids a redirect-follow round-trip from
+    the browser.
+    """
+    from src.attachments.object_storage import download_object_bytes
+
+    service = ProposalService(db)
+    proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
+    check_record_access_or_shared(
+        proposal, current_user, data_scope.role_name,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_PROPOSALS),
+    )
+    if not proposal.master_contract_pdf_path:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail="No master contract on file",
+        )
+    try:
+        content = await download_object_bytes(proposal.master_contract_pdf_path)
+    except Exception as exc:
+        logger.exception(
+            "Failed to fetch master contract for proposal %s",
+            proposal_id,
+        )
+        raise HTTPException(
+            status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+            detail="File storage unavailable — try again later",
+        ) from exc
+    return Response(content=content, media_type="application/pdf")
+
+
 @router.get("/{proposal_id}", response_model=ProposalResponse)
 async def get_proposal(
     proposal_id: int,

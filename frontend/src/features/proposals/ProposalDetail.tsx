@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, lazy, Suspense } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useSmartBack } from '../../hooks/useSmartBack';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -30,9 +30,15 @@ import {
   useResendProposalPaymentLink,
   useRetryProposalBilling,
   useRestampProposalSignedPdf,
+  useUpdateProposalSignatureCoords,
 } from '../../hooks/useProposals';
 import { ProposalBillingCard } from './ProposalBillingCard';
 import { ProposalAuditCard } from './ProposalAuditCard';
+// Lazy-loaded because pdf.js (~300 KB gzipped) only needs to land in
+// the bundle when an admin actually opens the picker.
+const SignatureFieldPicker = lazy(() =>
+  import('./SignatureFieldPicker').then((m) => ({ default: m.SignatureFieldPicker })),
+);
 import { ProposalForm } from './ProposalForm';
 import { StatusTimeline } from '../../components/shared/StatusTimeline';
 import { SendChecklist } from '../../components/shared/SendChecklist';
@@ -47,12 +53,18 @@ import {
   uploadProposalAttachment,
   deleteProposalAttachment,
   openProposalAttachmentPreview,
+  downloadProposalMasterContract,
 } from '../../api/proposals';
 import { formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { showSuccess, showError } from '../../utils/toast';
 import { extractApiErrorDetail } from '../../utils/errors';
-import type { ProposalCreate, ProposalUpdate, ProposalAttachment } from '../../types';
+import type {
+  ProposalCreate,
+  ProposalUpdate,
+  ProposalAttachment,
+  SignatureFieldCoords,
+} from '../../types';
 
 function ProposalDetailPage() {
   const { id } = useParams();
@@ -682,6 +694,17 @@ function ProposalDetailPage() {
               for forensics and billing disputes. */}
           <ProposalAuditCard proposal={proposal} />
 
+          {/* Visual placement of the signer's signature box on the
+              master contract. Only relevant once a master is on file;
+              locked once the proposal is signed. */}
+          {proposal.master_contract_pdf_path && (
+            <SignaturePlacementCard
+              proposalId={proposal.id}
+              currentCoords={proposal.signature_field_coords ?? null}
+              isLocked={Boolean(proposal.signed_at)}
+            />
+          )}
+
           {/* Sharing */}
           <EntitySharing
             entityType="proposals"
@@ -1004,6 +1027,118 @@ function ProposalAttachmentsCard({ proposalId, isLocked }: ProposalAttachmentsCa
         variant="danger"
         isLoading={deleteMutation.isPending}
       />
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------
+// SignaturePlacementCard
+// -----------------------------------------------------------------
+
+interface SignaturePlacementCardProps {
+  proposalId: number;
+  currentCoords: SignatureFieldCoords | null;
+  isLocked: boolean;
+}
+
+/**
+ * Sidebar card that opens the visual signature-box picker.
+ *
+ * The master-contract PDF is fetched lazily — only when the admin
+ * opens the picker — so the detail page itself doesn't pull the PDF
+ * bytes on every load.
+ */
+function SignaturePlacementCard({
+  proposalId,
+  currentCoords,
+  isLocked,
+}: SignaturePlacementCardProps) {
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [loadingPdf, setLoadingPdf] = useState(false);
+  const updateCoordsMutation = useUpdateProposalSignatureCoords();
+
+  // Revoke the blob URL when the card unmounts or the URL changes,
+  // so we don't leak object URLs across re-opens.
+  useEffect(() => {
+    return () => {
+      if (pdfUrl) {
+        URL.revokeObjectURL(pdfUrl);
+      }
+    };
+  }, [pdfUrl]);
+
+  const handleOpen = async () => {
+    if (isLocked) return;
+    setLoadingPdf(true);
+    try {
+      const blob = await downloadProposalMasterContract(proposalId);
+      const url = URL.createObjectURL(blob);
+      setPdfUrl(url);
+      setIsPickerOpen(true);
+    } catch (err) {
+      showError(extractApiErrorDetail(err) ?? 'Failed to load master contract');
+    } finally {
+      setLoadingPdf(false);
+    }
+  };
+
+  const handleClose = () => {
+    setIsPickerOpen(false);
+    if (pdfUrl) {
+      URL.revokeObjectURL(pdfUrl);
+      setPdfUrl(null);
+    }
+  };
+
+  const handleSave = async (coords: SignatureFieldCoords) => {
+    try {
+      await updateCoordsMutation.mutateAsync({ proposalId, coords });
+      showSuccess('Signature box saved');
+    } catch (err) {
+      showError(extractApiErrorDetail(err) ?? 'Failed to save signature box');
+      throw err;
+    }
+  };
+
+  return (
+    <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-gray-100 dark:border-gray-700">
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-4">
+        Signature placement
+      </h2>
+      <p className="text-sm text-gray-700 dark:text-gray-300">
+        {currentCoords
+          ? `Box placed on page ${currentCoords.page}.`
+          : 'No box placed — signature will land in the auto-box (bottom of last page).'}
+      </p>
+      <div className="mt-3">
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={handleOpen}
+          disabled={isLocked}
+          isLoading={loadingPdf}
+        >
+          {currentCoords ? 'Edit placement' : 'Place signature'}
+        </Button>
+        {isLocked && (
+          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            Locked — proposal signed.
+          </p>
+        )}
+      </div>
+      {isPickerOpen && pdfUrl && (
+        <Suspense fallback={null}>
+          <SignatureFieldPicker
+            isOpen={isPickerOpen}
+            onClose={handleClose}
+            masterPdfUrl={pdfUrl}
+            currentCoords={currentCoords}
+            onSave={handleSave}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

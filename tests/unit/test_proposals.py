@@ -1239,3 +1239,67 @@ class TestClosedLostGuard:
         )
         assert response.status_code == 201
         assert response.json()["opportunity_id"] == test_opportunity.id
+
+
+class TestMasterContractDownload:
+    """GET /api/proposals/{id}/master-contract streams the master PDF.
+
+    The R2 round-trip is mocked — the route's job is to gate access
+    and surface the bytes with the right content type.
+    """
+
+    @pytest.mark.asyncio
+    async def test_returns_404_when_no_master_on_file(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        test_proposal: Proposal,
+    ):
+        response = await client.get(
+            f"/api/proposals/{test_proposal.id}/master-contract",
+            headers=auth_headers,
+        )
+        assert response.status_code == 404
+        assert "master contract" in response.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_returns_pdf_bytes_when_master_present(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_proposal: Proposal,
+        monkeypatch,
+    ):
+        test_proposal.master_contract_pdf_path = "proposals/123/master.pdf"
+        await db_session.commit()
+
+        pdf_bytes = b"%PDF-1.7\n%mock"
+
+        async def fake_download(key: str) -> bytes:
+            assert key == "proposals/123/master.pdf"
+            return pdf_bytes
+
+        monkeypatch.setattr(
+            "src.attachments.object_storage.download_object_bytes",
+            fake_download,
+        )
+
+        response = await client.get(
+            f"/api/proposals/{test_proposal.id}/master-contract",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/pdf"
+        assert response.content == pdf_bytes
+
+    @pytest.mark.asyncio
+    async def test_requires_auth(
+        self,
+        client: AsyncClient,
+        test_proposal: Proposal,
+    ):
+        response = await client.get(
+            f"/api/proposals/{test_proposal.id}/master-contract",
+        )
+        assert response.status_code == 401
