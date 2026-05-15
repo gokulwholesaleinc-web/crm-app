@@ -441,7 +441,7 @@ export function CampaignDetailPage() {
       <div className="text-center py-12">
         <p className="text-gray-500 dark:text-gray-400">Campaign not found</p>
         <Button variant="secondary" className="mt-4" onClick={() => navigate('/campaigns')}>
-          Back to Campaigns
+          Back to Email Campaigns
         </Button>
       </div>
     );

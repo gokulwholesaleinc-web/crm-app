@@ -69,7 +69,7 @@ export const SECTIONS: Section[] = [
         <p className="text-sm text-gray-700 dark:text-gray-300">
           The CRM is built around a simple funnel:{' '}
           <strong>Lead → Contact (and optionally Company) → Proposal → Payment</strong>.
-          Every other tab — Activities, Campaigns, Inbox — exists to help you move records
+          Every other tab — Activities, Email Campaigns, Inbox — exists to help you move records
           through that funnel and keep a full history of what happened along the way.
         </p>
 
@@ -100,7 +100,7 @@ export const SECTIONS: Section[] = [
             <Bullet>
               The left sidebar has two groups: a main group (Dashboard, Contacts, Companies,
               Leads, Proposals, Payments, Activities, Calendar,
-              Campaigns, Inbox) and a secondary group (Duplicates, Import/Export, Reports,
+              Email Campaigns, Inbox) and a secondary group (Duplicates, Import/Export, Reports,
               Settings, Help, Admin).
             </Bullet>
             <Bullet>
