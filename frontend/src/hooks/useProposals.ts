@@ -14,6 +14,7 @@ import type {
   ProposalTemplateCreate,
   ProposalTemplateUpdate,
   CreateFromTemplateRequest,
+  SignatureFieldCoords,
 } from '../types';
 
 // Query Keys
@@ -160,6 +161,32 @@ export function useRetryProposalBilling() {
   return useMutation({
     mutationFn: (proposalId: number) => proposalsApi.retryBilling(proposalId),
     onSuccess: (_data, proposalId) => {
+      queryClient.invalidateQueries({ queryKey: proposalKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: proposalKeys.detail(proposalId) });
+    },
+  });
+}
+
+/**
+ * PATCH a proposal's saved signature-box placement.
+ *
+ * Wraps ``proposalsApi.update`` so the call site reads as what it
+ * does — the visual picker is the only place this field is written
+ * from. Pass ``null`` to clear back to the auto-box default.
+ */
+export function useUpdateProposalSignatureCoords() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      proposalId,
+      coords,
+    }: {
+      proposalId: number;
+      coords: SignatureFieldCoords | null;
+    }) =>
+      proposalsApi.update(proposalId, { signature_field_coords: coords }),
+    onSuccess: (_data, { proposalId }) => {
       queryClient.invalidateQueries({ queryKey: proposalKeys.lists() });
       queryClient.invalidateQueries({ queryKey: proposalKeys.detail(proposalId) });
     },
