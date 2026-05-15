@@ -14,16 +14,17 @@ import {
 } from '@heroicons/react/24/outline';
 
 // ``quotes`` dropped from the union 2026-05-14 — quotes router unmounted.
-// Historical EntityShare rows targeting quotes remain in the DB but the
-// detail page no longer exists, so no surface mounts this component with
-// ``entityType="quotes"`` anymore.
+// ``contracts`` dropped from the union 2026-05-14 — contracts router
+// unmounted; contract terms now fold into the Proposal T&C inline.
+// Historical EntityShare rows targeting quotes / contracts remain in
+// the DB but their detail pages no longer exist, so no surface mounts
+// this component with ``entityType="quotes" / "contracts"`` anymore.
 export interface EntitySharingProps {
   entityType:
     | 'contacts'
     | 'companies'
     | 'leads'
     | 'proposals'
-    | 'contracts'
     | 'campaigns';
   entityId: number;
   ownerName?: string;

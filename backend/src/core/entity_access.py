@@ -25,7 +25,6 @@ _ENTITY_PLURALS = {
     "lead": "leads",
     "opportunity": "opportunities",
     "proposal": "proposals",
-    "contract": "contracts",
     "payment": "payments",
     "activity": "activities",
     "expense": "expenses",
@@ -82,9 +81,6 @@ async def _resolve_entity(db: AsyncSession, entity_type: str, entity_id: int):
     elif normalized == "proposal":
         from src.proposals.models import Proposal
         model = Proposal
-    elif normalized == "contract":
-        from src.contracts.models import Contract
-        model = Contract
     elif normalized == "payment":
         from src.payments.models import Payment
         model = Payment

@@ -3,6 +3,7 @@ import { renderWithProviders, screen, fireEvent } from '../../test-utils/renderW
 import { EntityLink } from './EntityLink';
 import {
   normalizeEntityType,
+  LEGACY_CONTRACT_TYPE,
   LEGACY_OPPORTUNITY_TYPE,
   LEGACY_QUOTE_TYPE,
 } from './EntityLink.utils';
@@ -89,6 +90,25 @@ describe('EntityLink', () => {
       expect(screen.queryByRole('link')).toBeNull();
       expect(screen.getByText('Old Quote')).toBeInTheDocument();
       expect(screen.getByText(/legacy quote/i)).toBeInTheDocument();
+    });
+  });
+
+  describe('legacy contract', () => {
+    it('normalizes "contract" and "contracts" to the legacy sentinel', () => {
+      expect(normalizeEntityType('contract')).toBe(LEGACY_CONTRACT_TYPE);
+      expect(normalizeEntityType('contracts')).toBe(LEGACY_CONTRACT_TYPE);
+      expect(normalizeEntityType('CONTRACTS')).toBe(LEGACY_CONTRACT_TYPE);
+    });
+
+    it('renders a non-clickable muted label for legacy contract rows', () => {
+      renderWithProviders(
+        <EntityLink type={LEGACY_CONTRACT_TYPE} id={7}>
+          Old Contract
+        </EntityLink>,
+      );
+      expect(screen.queryByRole('link')).toBeNull();
+      expect(screen.getByText('Old Contract')).toBeInTheDocument();
+      expect(screen.getByText(/legacy contract/i)).toBeInTheDocument();
     });
   });
 });

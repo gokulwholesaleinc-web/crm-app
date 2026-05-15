@@ -579,12 +579,22 @@ async def notify_on_contract_signed(
     signer_name: str | None,
     signed_at: str | None,
 ) -> Notification | None:
-    """Notify the contract owner when their contract is countersigned.
+    """**Retired 2026-05-14** — Contracts module unmounted.
 
-    Distinct from the always-on signer-side
-    :func:`ContractService._send_signed_copy` which mails the signer
-    their PDF — this is the matrix-gated owner-side notification.
+    Function preserved because the in-app bell wiring + branded email
+    renderer it references are still imported by adjacent code (proposals
+    reuses ``render_contract_signed_email`` for its signer copy). The
+    bell entry would 404 on click and the email body's CTA links to
+    ``/contracts/{id}`` which no longer routes — so we fail loud rather
+    than emit a broken notification.
     """
+    raise RuntimeError(
+        "notify_on_contract_signed was called after the Contracts module "
+        "retirement on 2026-05-14. The in-app bell entry would 404 and "
+        "the email CTA links to a deleted route. Fix the caller or "
+        "delete this function entirely."
+    )
+    # Unreachable; kept as a paper trail for what the function used to do.
     notif: Notification | None = None
     in_app_allowed, email_allowed = await gate_event(db, owner_id, "contract_signed")
     if in_app_allowed:

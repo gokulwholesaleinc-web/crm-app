@@ -6,7 +6,6 @@ import {
   BuildingOfficeIcon,
   FunnelIcon,
   DocumentDuplicateIcon,
-  ScaleIcon,
   CreditCardIcon,
   CalendarIcon,
   MegaphoneIcon,
@@ -100,7 +99,7 @@ export const SECTIONS: Section[] = [
           <ul className="space-y-1.5">
             <Bullet>
               The left sidebar has two groups: a main group (Dashboard, Contacts, Companies,
-              Leads, Proposals, Contracts, Payments, Activities, Calendar,
+              Leads, Proposals, Payments, Activities, Calendar,
               Campaigns, Inbox) and a secondary group (Duplicates, Import/Export, Reports,
               Settings, Help, Admin).
             </Bullet>
@@ -131,7 +130,7 @@ export const SECTIONS: Section[] = [
     title: 'Tutorials (Step-by-Step)',
     icon: AcademicCapIcon,
     searchText:
-      'tutorials walkthrough how to send docusign esign electronic signature contract create invoice charge customer view billings per customer email thread chain inbound reply campaign send mass email',
+      'tutorials walkthrough how to send docusign esign electronic signature create invoice charge customer view billings per customer email thread chain inbound reply campaign send mass email',
     body: (
       <div className="space-y-6">
         <p className="text-sm text-gray-700 dark:text-gray-300">
@@ -141,7 +140,7 @@ export const SECTIONS: Section[] = [
 
         <article id="tutorial-esign" className="scroll-mt-4 border-t border-gray-200 dark:border-gray-700 pt-4">
           <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-2">
-            1. Send a contract for e-signature
+            1. Send a proposal for e-signature
           </h3>
           <p className="text-sm text-gray-700 dark:text-gray-300 mb-3">
             <strong>The CRM has its own e-signature built in</strong> — you don&rsquo;t need a
@@ -468,12 +467,12 @@ export const SECTIONS: Section[] = [
     title: 'Contacts',
     icon: UserGroupIcon,
     searchText:
-      'contacts contact create edit detail tabs notes activities emails contracts quotes proposals documents attachments history sharing smart list filter search company link',
+      'contacts contact create edit detail tabs notes activities emails proposals documents attachments history sharing smart list filter search company link',
     body: (
       <div className="space-y-3">
         <p className="text-sm text-gray-700 dark:text-gray-300">
           A Contact is a person you do business with. Contacts can be linked to a Company, and most
-          other records (activities, proposals, contracts) hang off a contact.
+          other records (activities, proposals) hang off a contact.
         </p>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Creating &amp; editing</h4>
         <ul className="space-y-1.5">
@@ -493,7 +492,7 @@ export const SECTIONS: Section[] = [
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Detail page tabs</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">
           Open any contact and you&rsquo;ll see tabs for: <em>Details, Activities, Notes, Emails,
-          Contracts, Proposals, Payments, Documents, Attachments, History, Sharing</em>.
+          Proposals, Payments, Documents, Attachments, History, Sharing</em>.
           Each is a self-contained view of just the records that belong to this contact —
           including the <strong>Payments</strong> tab, which lists every Stripe charge and
           subscription tied to this customer.
@@ -506,11 +505,11 @@ export const SECTIONS: Section[] = [
     title: 'Companies',
     icon: BuildingOfficeIcon,
     searchText:
-      'companies company industry size status prospect customer churned segment custom fields tier sow account manager contracts quotes proposals expenses meta',
+      'companies company industry size status prospect customer churned segment custom fields tier sow account manager proposals expenses meta',
     body: (
       <div className="space-y-3">
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          Companies group contacts together and act as the parent for contracts, proposals,
+          Companies group contacts together and act as the parent for proposals
           and expenses tied to that account.
         </p>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">List view</h4>
@@ -531,7 +530,7 @@ export const SECTIONS: Section[] = [
         </ul>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Detail page tabs</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          <em>Overview, Contracts, Proposals, Activities, Notes, Attachments, History,
+          <em>Overview, Proposals, Activities, Notes, Attachments, History,
           Sharing, Meta (custom fields), Expenses.</em> The Overview tab lists all linked contacts
           as cards.
         </p>
@@ -646,55 +645,8 @@ export const SECTIONS: Section[] = [
       </div>
     ),
   },
-  {
-    id: 'contracts',
-    title: 'Contracts',
-    icon: ScaleIcon,
-    searchText:
-      'contracts contract e-signature esign sign draft sent signed active expired attachment public link expiry alert daily notification',
-    body: (
-      <div className="space-y-3">
-        <p className="text-sm text-gray-700 dark:text-gray-300">
-          Contracts are formal agreements you send to a contact for e-signature. They live at{' '}
-          <a href="/contracts" className="text-primary-600 hover:underline dark:text-primary-400">/contracts</a> and
-          attach to contacts and companies.
-        </p>
-        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Status flow</h4>
-        <p className="text-sm text-gray-700 dark:text-gray-300">
-          <Badge variant="gray">draft</Badge> →{' '}
-          <Badge variant="blue">sent</Badge> →{' '}
-          <Badge variant="green">signed</Badge> /{' '}
-          <Badge variant="gray">expired</Badge>
-        </p>
-        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Sending &amp; signing</h4>
-        <ul className="space-y-1.5">
-          <Bullet>
-            Click <em>Send for Signature</em> on a draft contract. A public signing link is
-            generated at <code>/contracts/public/&#123;token&#125;</code> and emailed to the contact.
-          </Bullet>
-          <Bullet>
-            The client opens the link, reviews the document, and clicks <em>Sign</em>. Their
-            name, email, IP, and timestamp are captured. A signed PDF is generated and stored.
-          </Bullet>
-          <Bullet>
-            Once signed, the contract auto-flips to <Badge variant="green">signed</Badge> and the
-            owner is notified in the header bell.
-          </Bullet>
-        </ul>
-        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Expiry alerts</h4>
-        <p className="text-sm text-gray-700 dark:text-gray-300">
-          If a contract has an end date, the system sends a daily expiring-soon
-          notification (in-app) starting 30 days before the end date. Admins also see
-          a count of contracts expiring within 30 days on the Reports page.
-        </p>
-        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Attachments</h4>
-        <p className="text-sm text-gray-700 dark:text-gray-300">
-          The contract detail page has an <em>Attachments</em> tab for supporting files (e.g., SOW,
-          exhibits). The signed PDF download appears on the detail page once signing is complete.
-        </p>
-      </div>
-    ),
-  },
+  // Contracts section removed 2026-05-14 — contracts router unmounted;
+  // contract terms now fold into the Proposal T&C inline.
   {
     id: 'payments',
     title: 'Payments',
@@ -850,7 +802,7 @@ export const SECTIONS: Section[] = [
         <p className="text-sm text-gray-700 dark:text-gray-300">
           The Inbox is a unified finder for every email the CRM has synced from Gmail. It is
           intentionally not a Gmail clone — its job is to surface the message you're looking for
-          and hand you off to the entity (contact, quote, proposal, contract) where the full
+          and hand you off to the entity (contact, proposal) where the full
           thread and the reply composer already live.
         </p>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">What you can do here</h4>
@@ -861,7 +813,7 @@ export const SECTIONS: Section[] = [
           </Bullet>
           <Bullet>
             <strong>Jump to the thread.</strong> Click any row to open the message on its
-            related contact, company, quote, proposal, or contract — the reply composer there
+            related contact, company, or proposal — the reply composer there
             threads correctly into Gmail via the original Message-ID.
           </Bullet>
           <Bullet>
@@ -876,7 +828,7 @@ export const SECTIONS: Section[] = [
           </Bullet>
         </ul>
         <Tip>
-          Proposals and Contracts have an <strong>Email Activity</strong> panel on the
+          Proposals have an <strong>Email Activity</strong> panel on the
           detail page that shows that record's emails specifically, including queue status
           (sent / retry / failed) so you can self-diagnose deliverability.
         </Tip>
@@ -988,7 +940,7 @@ export const SECTIONS: Section[] = [
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">1. From a template</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">
           The template gallery has pre-built reports for every entity (contacts, companies, leads,
-          payments, contracts, activities, campaigns). Click <em>Run</em> on any template to view
+          payments, activities, campaigns). Click <em>Run</em> on any template to view
           the result instantly.
         </p>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">2. With the builder</h4>
@@ -1128,10 +1080,9 @@ export const SECTIONS: Section[] = [
             <Bullet>
               Open any record detail page (
               <a href="/leads" className="text-primary-600 hover:underline dark:text-primary-400">Lead</a>,{' '}
-              Proposal, Quote,{' '}
-              <a href="/contacts" className="text-primary-600 hover:underline dark:text-primary-400">Contact</a>,{' '}
-              <a href="/companies" className="text-primary-600 hover:underline dark:text-primary-400">Company</a>, or{' '}
-              <a href="/contracts" className="text-primary-600 hover:underline dark:text-primary-400">Contract</a>
+              Proposal,{' '}
+              <a href="/contacts" className="text-primary-600 hover:underline dark:text-primary-400">Contact</a>, or{' '}
+              <a href="/companies" className="text-primary-600 hover:underline dark:text-primary-400">Company</a>
               ) and click the <strong>Sharing</strong> tab.
             </Bullet>
             <Bullet>
@@ -1177,7 +1128,7 @@ export const SECTIONS: Section[] = [
           <ul className="space-y-1.5">
             <Bullet>
               You get a notification when a teammate shares a record with you, when they assign
-              you to a record, and when a proposal or contract you own is signed.
+              you to a record, and when a proposal you own is signed.
             </Bullet>
             <Bullet>
               In-app notifications appear in the bell icon in the header. Email mirrors follow your

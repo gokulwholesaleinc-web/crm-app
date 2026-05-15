@@ -30,13 +30,14 @@ import { formatDate } from '../../utils/formatters';
 // ``quotes`` retired 2026-05-14 — quotes router unmounted. Historical
 // EntityShare rows targeting quotes still exist in the DB but are
 // no longer reachable from the admin browser filter.
+// ``contracts`` retired 2026-05-14 — contracts router unmounted;
+// contract terms folded into Proposals.
 const ENTITY_TYPE_OPTIONS = [
   { value: '', label: 'All types' },
   { value: 'contacts', label: 'Contacts' },
   { value: 'companies', label: 'Companies' },
   { value: 'leads', label: 'Leads' },
   { value: 'proposals', label: 'Proposals' },
-  { value: 'contracts', label: 'Contracts' },
 ];
 
 const PERMISSION_OPTIONS = [
@@ -60,7 +61,6 @@ function EntityDetailHref(entityType: string, entityId: number): string {
     companies: 'companies',
     leads: 'leads',
     proposals: 'proposals',
-    contracts: 'contracts',
   };
   const base = singular[entityType] ?? entityType;
   return `/${base}/${entityId}`;

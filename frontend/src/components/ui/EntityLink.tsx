@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import clsx from 'clsx';
 import {
   entityRoutes,
+  LEGACY_CONTRACT_TYPE,
   LEGACY_OPPORTUNITY_TYPE,
   LEGACY_QUOTE_TYPE,
   type NormalizedEntityType,
@@ -87,6 +88,24 @@ export function EntityLink({
       >
         {children}{' '}
         <span className="text-[10px] uppercase tracking-wide">(legacy quote)</span>
+      </span>
+    );
+  }
+
+  // Contracts retired 2026-05-14 — contract terms now fold into the
+  // Proposal T&C inline. Mirror the legacy-opportunity/quote treatment.
+  if (type === LEGACY_CONTRACT_TYPE) {
+    return (
+      <span
+        className={clsx(
+          'text-gray-400 dark:text-gray-500 italic',
+          className,
+        )}
+        title={title ?? 'Contracts were folded into Proposals — original entity is preserved for audit history.'}
+        onClick={legacyClickHandler}
+      >
+        {children}{' '}
+        <span className="text-[10px] uppercase tracking-wide">(legacy contract)</span>
       </span>
     );
   }

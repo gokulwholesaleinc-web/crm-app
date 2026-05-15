@@ -3,11 +3,10 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { MissingRelationDialog } from './MissingRelationDialog';
 
 describe('MissingRelationDialog', () => {
-  it('renders the entity-typed title and message when open', () => {
+  it('renders the proposal title and message when open', () => {
     render(
       <MissingRelationDialog
         isOpen
-        entityType="proposal"
         onConfirm={vi.fn()}
         onCancel={vi.fn()}
       />
@@ -24,7 +23,6 @@ describe('MissingRelationDialog', () => {
     render(
       <MissingRelationDialog
         isOpen={false}
-        entityType="quote"
         onConfirm={vi.fn()}
         onCancel={vi.fn()}
       />
@@ -37,7 +35,6 @@ describe('MissingRelationDialog', () => {
     render(
       <MissingRelationDialog
         isOpen
-        entityType="contract"
         onConfirm={onConfirm}
         onCancel={vi.fn()}
       />
@@ -51,30 +48,11 @@ describe('MissingRelationDialog', () => {
     render(
       <MissingRelationDialog
         isOpen
-        entityType="proposal"
         onConfirm={vi.fn()}
         onCancel={onCancel}
       />
     );
     fireEvent.click(screen.getByRole('button', { name: /back to form/i }));
     expect(onCancel).toHaveBeenCalledTimes(1);
-  });
-
-  it('uses the entityType in copy across all three variants', () => {
-    const types = ['proposal', 'contract', 'quote'] as const;
-    for (const t of types) {
-      const { unmount } = render(
-        <MissingRelationDialog
-          isOpen
-          entityType={t}
-          onConfirm={vi.fn()}
-          onCancel={vi.fn()}
-        />
-      );
-      expect(
-        screen.getByText(new RegExp(`Create ${t} without a contact or company\\?`, 'i'))
-      ).toBeInTheDocument();
-      unmount();
-    }
   });
 });

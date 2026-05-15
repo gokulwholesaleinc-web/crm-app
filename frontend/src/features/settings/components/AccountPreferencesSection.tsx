@@ -79,7 +79,6 @@ const LANDING_OPTIONS: ReadonlyArray<{ value: DefaultLanding; label: string }> =
   { value: '/leads', label: 'Leads' },
   { value: '/contacts', label: 'Contacts' },
   { value: '/proposals', label: 'Proposals' },
-  { value: '/contracts', label: 'Contracts' },
 ];
 
 function getSupportedTimeZones(): string[] {

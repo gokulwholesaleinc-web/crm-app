@@ -23,17 +23,16 @@ import { getStatusColor, formatStatusLabel } from '../../utils/statusColors';
 import { showSuccess, showError } from '../../utils/toast';
 import type { CompanyUpdate, ApiError } from '../../types';
 
-const ContractsList = lazy(() => import('../../components/shared/ContractsList'));
 const MetaTab = lazy(() => import('./components/MetaTab'));
 const ExpensesTab = lazy(() => import('./components/ExpensesTab'));
 const EntityPaymentsTab = lazy(() => import('../../components/shared/EntityPaymentsTab'));
 
-type TabType = 'overview' | 'contracts' | 'proposals' | 'payments' | 'activities' | 'notes' | 'attachments' | 'history' | 'sharing' | 'meta' | 'expenses';
+type TabType = 'overview' | 'proposals' | 'payments' | 'activities' | 'notes' | 'attachments' | 'history' | 'sharing' | 'meta' | 'expenses';
 
 const TABS: { id: TabType; name: string }[] = [
   { id: 'overview', name: 'Overview' },
-  { id: 'contracts', name: 'Contracts' },
   // Quotes tab removed 2026-05-14 — quotes router unmounted.
+  // Contracts tab removed 2026-05-14 — contracts router unmounted.
   { id: 'proposals', name: 'Proposals' },
   { id: 'payments', name: 'Payments' },
   { id: 'activities', name: 'Activities' },
@@ -227,11 +226,7 @@ export function CompanyDetailPage() {
         />
       )}
 
-      {activeTab === 'contracts' && companyId && (
-        <Suspense fallback={<SuspenseFallback />}>
-          <ContractsList entityType="company" entityId={companyId} />
-        </Suspense>
-      )}
+      {/* Contracts tab content removed 2026-05-14 — contracts router unmounted. */}
 
       {/* Quotes tab content removed 2026-05-14 — quotes router unmounted. */}
 

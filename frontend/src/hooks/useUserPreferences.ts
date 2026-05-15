@@ -9,19 +9,18 @@ export type EntityKindWithTabs = 'contact' | 'lead' | 'company';
 // ``quotes`` retired 2026-05-14 — quotes router unmounted. Existing
 // persisted ``listDefaults.quotes`` rows in localStorage become unread
 // no-ops because the union no longer includes the key.
+// ``contracts`` retired 2026-05-14 — same treatment as quotes.
 export type ListPageKey =
   | 'contacts'
   | 'leads'
   | 'proposals'
-  | 'payments'
-  | 'contracts';
+  | 'payments';
 
 const LIST_PAGE_KEYS: ReadonlySet<string> = new Set([
   'contacts',
   'leads',
   'proposals',
   'payments',
-  'contracts',
 ]);
 
 const ENTITY_KINDS_WITH_TABS: ReadonlySet<string> = new Set([

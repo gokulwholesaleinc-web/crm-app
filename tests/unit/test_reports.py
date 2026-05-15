@@ -218,7 +218,7 @@ class TestReportTemplatesAPI:
             "campaign_performance",
             "deals_won_lost",
             "payment_summary_by_month",
-            "contracts_by_status",
+            # `contracts_by_status` retired 2026-05-14 with the Contracts module.
             "revenue_by_source",
             "pipeline_value_by_owner",
         }

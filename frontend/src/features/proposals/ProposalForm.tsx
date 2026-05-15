@@ -312,7 +312,6 @@ export function ProposalForm({ onSubmit, onCancel, isLoading, initialData }: Pro
       </div>
       <MissingRelationDialog
         isOpen={missingRelation.isOpen}
-        entityType="proposal"
         onCancel={missingRelation.onCancel}
         onConfirm={missingRelation.onConfirm}
         isLoading={isLoading}

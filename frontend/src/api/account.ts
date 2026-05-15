@@ -37,8 +37,7 @@ export type DefaultLanding =
   | '/dashboard'
   | '/leads'
   | '/contacts'
-  | '/proposals'
-  | '/contracts';
+  | '/proposals';
 
 export interface AccountPreferences {
   timezone: string;
@@ -68,8 +67,10 @@ export const NOTIFICATION_EVENT_TYPES: readonly NotificationEventTypeMeta[] = [
   { key: 'lead_assigned', label: 'Lead assigned to me' },
   { key: 'payment_received', label: 'Payment received' },
   { key: 'proposal_signed', label: 'Proposal signed' },
-  { key: 'contract_signed', label: 'Contract signed' },
-  { key: 'contract_expiring', label: 'Contract expiring soon' },
+  // contract_signed / contract_expiring keys retired 2026-05-14 —
+  // contracts router unmounted and the backend gate no longer fires
+  // these events. Preferences rows with these keys are harmless dead
+  // matrix entries.
   { key: 'task_due', label: 'Task due' },
   { key: 'mention', label: 'Mentioned in a comment' },
   { key: 'email_reply_received', label: 'Email reply received' },

@@ -28,9 +28,15 @@ async def upload_file(
     category: str | None = Form(None),
 ):
     """Upload a file attachment for an entity."""
+    # ``contracts`` retired 2026-05-14 — dropped to prevent a stale
+    # browser tab from POSTing uploads that create orphan attachment
+    # rows pointing at a Contract whose detail page no longer exists.
+    # ``opportunities`` left intact pending a separate cleanup pass
+    # (PR1 frontend rip removed the detail page but historical rows
+    # may still need backend-only attachment reads).
     valid_entity_types = {
         "contacts", "companies", "leads", "opportunities",
-        "expenses", "proposals", "contracts", "payments",
+        "expenses", "proposals", "payments",
     }
     if entity_type not in valid_entity_types:
         raise_bad_request(f"Invalid entity_type. Must be one of: {', '.join(sorted(valid_entity_types))}")

@@ -25,7 +25,6 @@ import { StatusBadge } from '../../components/ui';
 import type { Proposal } from '../../types';
 import type { ThreadEmailItem } from '../../types/email';
 
-const ContractsList = lazy(() => import('../../components/shared/ContractsList'));
 const PaymentSummary = lazy(() => import('../../components/shared/PaymentSummary'));
 const DocumentsTab = lazy(() => import('../../components/shared/DocumentsTab'));
 const EntityPaymentsTab = lazy(() => import('../../components/shared/EntityPaymentsTab'));
@@ -36,15 +35,15 @@ const OnboardingLinkGenerator = lazy(() =>
   import('../payments/components/OnboardingLinkGenerator').then(m => ({ default: m.OnboardingLinkGenerator }))
 );
 
-type TabType = 'details' | 'activities' | 'notes' | 'emails' | 'contracts' | 'proposals' | 'payments' | 'documents' | 'attachments' | 'history' | 'sharing';
+type TabType = 'details' | 'activities' | 'notes' | 'emails' | 'proposals' | 'payments' | 'documents' | 'attachments' | 'history' | 'sharing';
 
 const TABS: { id: TabType; name: string }[] = [
   { id: 'details', name: 'Details' },
   { id: 'activities', name: 'Activities' },
   { id: 'notes', name: 'Notes' },
   { id: 'emails', name: 'Emails' },
-  { id: 'contracts', name: 'Contracts' },
   // Quotes tab removed 2026-05-14 — quotes router unmounted.
+  // Contracts tab removed 2026-05-14 — contracts router unmounted.
   { id: 'proposals', name: 'Proposals' },
   { id: 'payments', name: 'Payments' },
   { id: 'documents', name: 'Documents' },
@@ -469,11 +468,7 @@ function ContactDetailPage() {
         </div>
       )}
 
-      {activeTab === 'contracts' && contactId && (
-        <Suspense fallback={<SuspenseFallback />}>
-          <ContractsList entityType="contact" entityId={contactId} />
-        </Suspense>
-      )}
+      {/* Contracts tab content removed 2026-05-14 — contracts router unmounted. */}
 
       {/* Quotes tab content removed 2026-05-14 — quotes router unmounted. */}
 

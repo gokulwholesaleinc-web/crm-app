@@ -15,7 +15,6 @@ import {
   useExecuteReport,
   useDeleteSavedReport,
 } from '../../hooks/useReports';
-import { useContractStats } from '../../hooks/useContracts';
 import type { ReportDefinition, ReportResult, ReportTemplate, SavedReport } from '../../api/reports';
 import {
   PlusIcon,
@@ -25,82 +24,9 @@ import {
   ChartBarIcon,
   DocumentTextIcon,
 } from '@heroicons/react/24/outline';
-import { formatCurrency } from '../../utils/formatters';
 
-function ContractStatsSection() {
-  const { data: stats, isLoading, error } = useContractStats();
-
-  if (error) return null;
-
-  const statusBreakdown = stats
-    ? Object.entries(stats.status_breakdown)
-        .map(([label, value]) => ({
-          label: label.charAt(0).toUpperCase() + label.slice(1),
-          value,
-        }))
-        .filter((d) => d.value > 0)
-    : [];
-
-  return (
-    <section>
-      <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
-        <ChartBarIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
-        Contracts
-      </h2>
-      {isLoading ? (
-        <div className="flex items-center justify-center h-24">
-          <Spinner size="md" />
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-          {/* Total active contract value */}
-          <Card>
-            <CardBody className="p-4">
-              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Total Active Value
-              </p>
-              <p className="mt-2 text-2xl font-bold text-gray-900 dark:text-gray-100 tabular-nums">
-                {stats ? formatCurrency(stats.total_active_value, 'USD') : '—'}
-              </p>
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Active contracts</p>
-            </CardBody>
-          </Card>
-
-          {/* Expiring this month */}
-          <Card>
-            <CardBody className="p-4">
-              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Expiring This Month
-              </p>
-              <p className="mt-2 text-2xl font-bold text-gray-900 dark:text-gray-100 tabular-nums">
-                {stats ? stats.expiring_this_month : '—'}
-              </p>
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Active contracts ending in 30 days</p>
-            </CardBody>
-          </Card>
-
-          {/* Status breakdown — bar chart */}
-          <Card>
-            <CardBody className="p-4">
-              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
-                Status Breakdown
-              </p>
-              {statusBreakdown.length === 0 ? (
-                <p className="text-sm text-gray-500 dark:text-gray-400">No contracts yet.</p>
-              ) : (
-                <ReportChart
-                  chartType="bar"
-                  data={statusBreakdown}
-                  compact
-                />
-              )}
-            </CardBody>
-          </Card>
-        </div>
-      )}
-    </section>
-  );
-}
+// Contract stats widget removed 2026-05-14 — contracts router unmounted,
+// useContractStats hook removed along with frontend/src/hooks/useContracts.ts.
 
 type ViewMode = 'list' | 'builder' | 'viewing';
 
@@ -239,8 +165,7 @@ function ReportsPage() {
         </div>
       </div>
 
-      {/* Contract Stats Widgets */}
-      <ContractStatsSection />
+      {/* Contract stats widgets removed 2026-05-14 — contracts router unmounted. */}
 
       {/* My Reports Section */}
       <section>

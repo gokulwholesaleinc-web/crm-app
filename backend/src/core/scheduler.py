@@ -5,7 +5,6 @@ from collections.abc import Callable
 from typing import Any
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler  # pyright: ignore[reportMissingImports]
-from apscheduler.triggers.cron import CronTrigger  # pyright: ignore[reportMissingImports]
 from apscheduler.triggers.interval import IntervalTrigger  # pyright: ignore[reportMissingImports]
 
 import src.database as db_module
@@ -38,11 +37,6 @@ async def _process_email_retries():
 async def _process_due_campaign_steps():
     from src.campaigns.service import CampaignService
     await _run_scheduled_job("campaign_steps", CampaignService, "process_due_campaign_steps")
-
-
-async def _process_contract_lifecycle():
-    from src.contracts.scheduler import ContractLifecycleService
-    await _run_scheduled_job("contract_lifecycle", ContractLifecycleService, "process_due_contracts")
 
 
 async def _deliver_scheduled_reports():
@@ -112,14 +106,9 @@ def start_scheduler():
         coalesce=True,
         max_instances=1,
     )
-    scheduler.add_job(
-        _process_contract_lifecycle,
-        trigger=CronTrigger(hour=8, minute=0),
-        id="contract_lifecycle",
-        replace_existing=True,
-        coalesce=True,
-        max_instances=1,
-    )
+    # Contract lifecycle cron unregistered 2026-05-14 — contracts router
+    # unmounted. The service module is preserved as dead code under
+    # ``src/contracts/scheduler.py`` but no scheduler hook fires it.
     scheduler.start()
     logger.info(
         "Background scheduler started (tick every 90m, gmail sync every %ss)",

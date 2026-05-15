@@ -74,6 +74,24 @@ class ReportDeliveryService:
                 delivered += 1
                 logger.info("Delivered scheduled report '%s' to %d recipients", report.name, len(recipients))
 
+            except ValueError as e:
+                # A saved report pinned to a retired entity_type (e.g.
+                # ``contracts`` after the 2026-05-14 module removal)
+                # raises ``ValueError("Unknown entity type: ...")`` from
+                # reports/service.py. Without intervention, the cron
+                # would fire every tick and silently fail forever.
+                # Disarm the schedule so it stops retrying; the report
+                # row survives so admin can repoint or delete it.
+                msg = str(e)
+                if msg.startswith("Unknown entity type:"):
+                    logger.warning(
+                        "Disarming scheduled report '%s' (id=%s) — %s. "
+                        "Schedule cleared; report row preserved.",
+                        report.name, report.id, msg,
+                    )
+                    report.schedule = None
+                else:
+                    logger.error("Failed to deliver report '%s': %s", report.name, e)
             except Exception as e:
                 logger.error("Failed to deliver report '%s': %s", report.name, e)
 

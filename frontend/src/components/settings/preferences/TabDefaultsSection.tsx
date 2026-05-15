@@ -8,13 +8,13 @@ import type { PreferencesSectionProps } from './types';
 // Tab IDs are mirrored from each entity's detail page. They stay in sync
 // because invalid saved values are silently ignored by `useUrlTabState`
 // (the fallback wins), so a renamed tab degrades gracefully.
+// ``contracts`` tab option dropped 2026-05-14 — contracts router unmounted.
 const ENTITY_TABS: Record<EntityKindWithTabs, readonly string[]> = {
   contact: [
     'details',
     'activities',
     'notes',
     'emails',
-    'contracts',
     'proposals',
     'payments',
     'documents',
@@ -34,7 +34,6 @@ const ENTITY_TABS: Record<EntityKindWithTabs, readonly string[]> = {
   ],
   company: [
     'overview',
-    'contracts',
     'proposals',
     'payments',
     'activities',

@@ -25,7 +25,6 @@ from src.notifications.service import (
     notify_on_mention,
     notify_on_email_reply_received,
     notify_on_proposal_signed,
-    notify_on_contract_signed,
 )
 
 
@@ -308,39 +307,6 @@ class TestNotifyOnProposalSignedEmail:
 
 
 # ---------------------------------------------------------------------------
-# 6. notify_on_contract_signed
+# 6. notify_on_contract_signed retired 2026-05-14 with the Contracts module
+#    unmount. The helper now raises at call time to flag stray callers.
 # ---------------------------------------------------------------------------
-
-
-class TestNotifyOnContractSignedEmail:
-    async def test_email_queued(self, db_session: AsyncSession, test_user_opted_in: User):
-        """Opted-in prefs → EmailQueue row with contract-signed subject."""
-        test_user = test_user_opted_in
-        await notify_on_contract_signed(
-            db_session,
-            owner_id=test_user.id,
-            contract_id=42,
-            contract_title="MSA 2026",
-            signer_name="Jane Cooper",
-            signed_at="May 7 14:23 UTC",
-        )
-        rows = await _email_rows(db_session, test_user.id)
-        assert len(rows) == 1
-        assert rows[0].subject == "Contract signed — MSA 2026"
-        assert rows[0].to_email == test_user.email
-
-    async def test_email_skipped_when_disabled(
-        self, db_session: AsyncSession, test_user: User
-    ):
-        """event_matrix contract_signed email=False → no EmailQueue row."""
-        await _disable_email_event(db_session, test_user.id, "contract_signed")
-        await notify_on_contract_signed(
-            db_session,
-            owner_id=test_user.id,
-            contract_id=42,
-            contract_title="MSA 2026",
-            signer_name="Jane Cooper",
-            signed_at="May 7 14:23 UTC",
-        )
-        rows = await _email_rows(db_session, test_user.id)
-        assert rows == []

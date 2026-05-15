@@ -21,7 +21,6 @@ from src.auth.models import User
 from src.auth.security import create_access_token, get_password_hash
 from src.companies.models import Company
 from src.contacts.models import Contact
-from src.contracts.models import Contract
 from src.leads.models import Lead
 from src.notifications.models import Notification
 from src.opportunities.models import Opportunity, PipelineStage
@@ -112,12 +111,6 @@ async def _make_company(db: AsyncSession, owner: User, name: str = "Sample Co") 
     await db.commit()
     await db.refresh(company)
     return company
-
-
-DUMMY_SIGNATURE = (
-    "data:image/png;base64,"
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
-)
 
 
 async def _opt_in(db: AsyncSession, user: User, *event_keys: str) -> None:
@@ -396,106 +389,6 @@ class TestProposalSignedNotification:
 
 
 # ---------------------------------------------------------------------------
-# Contract signed notifications
+# Contract signed notifications retired 2026-05-14 with the Contracts module
+# unmount. /api/contracts/public/{token}/sign no longer exists.
 # ---------------------------------------------------------------------------
-
-
-class TestContractSignedNotification:
-    """Owner receives contract_signed notification when the public sign endpoint fires."""
-
-    @pytest.mark.asyncio
-    async def test_public_sign_fires_contract_signed_notification_to_owner(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        test_contact,
-    ):
-        """Signing a contract via public link notifies the owner with contract_signed."""
-        from datetime import UTC, datetime, timedelta
-
-        owner = await _make_user(db_session, "contract_owner@example.com", "Contract Owner")
-        await _opt_in(db_session, owner, "contract_signed")
-
-        contract = Contract(
-            title="TC Test Service Agreement",
-            scope="Provide consulting services.",
-            value=10000.0,
-            currency="USD",
-            status="sent",
-            sign_token=secrets.token_urlsafe(32),
-            sign_token_expires_at=datetime.now(UTC) + timedelta(days=7),
-            contact_id=test_contact.id,
-            owner_id=owner.id,
-            created_by_id=owner.id,
-        )
-        db_session.add(contract)
-        await db_session.commit()
-        await db_session.refresh(contract)
-
-        resp = await client.post(
-            f"/api/contracts/public/{contract.sign_token}/sign",
-            json={
-                "signer_name": "Bob Signer",
-                "signer_email": test_contact.email,
-                "signature_data_url": DUMMY_SIGNATURE,
-            },
-        )
-        assert resp.status_code == 200, resp.text
-
-        result = await db_session.execute(
-            select(Notification).where(
-                Notification.user_id == owner.id,
-                Notification.type == "contract_signed",
-            )
-        )
-        notif = result.scalar_one_or_none()
-        assert notif is not None
-        assert notif.title == "Contract signed"
-        assert "Bob Signer" in notif.message
-        assert notif.entity_type == "contracts"
-        assert notif.entity_id == contract.id
-
-    @pytest.mark.asyncio
-    async def test_public_sign_notification_not_created_for_signer(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        test_contact,
-    ):
-        """The signer must NOT get a contract_signed notification; only the owner does."""
-        from datetime import UTC, datetime, timedelta
-
-        owner = await _make_user(db_session, "contract_owner2@example.com", "Contract Owner 2")
-        await _opt_in(db_session, owner, "contract_signed")
-
-        contract = Contract(
-            title="Another TC Contract",
-            scope="More consulting.",
-            value=5000.0,
-            currency="USD",
-            status="sent",
-            sign_token=secrets.token_urlsafe(32),
-            sign_token_expires_at=datetime.now(UTC) + timedelta(days=7),
-            contact_id=test_contact.id,
-            owner_id=owner.id,
-            created_by_id=owner.id,
-        )
-        db_session.add(contract)
-        await db_session.commit()
-        await db_session.refresh(contract)
-
-        await client.post(
-            f"/api/contracts/public/{contract.sign_token}/sign",
-            json={
-                "signer_name": "Alice Signer",
-                "signer_email": test_contact.email,
-                "signature_data_url": DUMMY_SIGNATURE,
-            },
-        )
-
-        result = await db_session.execute(
-            select(Notification).where(Notification.type == "contract_signed")
-        )
-        notifs = result.scalars().all()
-        assert len(notifs) == 1
-        assert notifs[0].user_id == owner.id

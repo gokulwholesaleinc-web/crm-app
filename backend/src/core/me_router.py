@@ -44,16 +44,15 @@ def _build_dispatch() -> dict:
     from src.campaigns.models import Campaign
     from src.companies.models import Company
     from src.contacts.models import Contact
-    from src.contracts.models import Contract
     from src.leads.models import Lead
     from src.opportunities.models import Opportunity
     from src.proposals.models import Proposal
 
     # Quotes rollup retired 2026-05-14 — quotes router unmounted.
+    # Contracts rollup retired 2026-05-14 — contracts router unmounted.
     return {
         "leads": (Lead, lambda r: r.full_name or r.company_name or f"Lead #{r.id}", "owner_id"),
         "opportunities": (Opportunity, lambda r: r.name, "owner_id"),
-        "contracts": (Contract, lambda r: r.title, "owner_id"),
         "proposals": (Proposal, lambda r: r.title, "owner_id"),
         "campaigns": (Campaign, lambda r: r.name, "owner_id"),
         "contacts": (Contact, lambda r: r.full_name, "owner_id"),

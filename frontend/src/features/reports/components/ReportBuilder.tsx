@@ -16,12 +16,12 @@ interface ReportBuilderProps {
   initialDefinition?: Partial<ReportDefinition>;
 }
 
+// ``contracts`` retired 2026-05-14 — contracts router unmounted.
 const ENTITY_TYPES = [
   { value: 'contacts', label: 'Contacts' },
   { value: 'companies', label: 'Companies' },
   { value: 'leads', label: 'Leads' },
   { value: 'payments', label: 'Payments' },
-  { value: 'contracts', label: 'Contracts' },
   { value: 'activities', label: 'Activities' },
   { value: 'campaigns', label: 'Campaigns' },
 ];
@@ -41,7 +41,6 @@ const NUMERIC_FIELDS: Record<string, string[]> = {
   campaigns: ['budget_amount', 'actual_cost', 'expected_revenue', 'actual_revenue', 'num_sent', 'num_responses', 'num_converted'],
   companies: ['annual_revenue', 'employee_count'],
   payments: ['amount'],
-  contracts: ['value'],
 };
 
 const GROUP_BY_FIELDS: Record<string, string[]> = {
@@ -51,7 +50,6 @@ const GROUP_BY_FIELDS: Record<string, string[]> = {
   campaigns: ['campaign_type', 'status'],
   companies: ['industry', 'status', 'segment', 'owner_id'],
   payments: ['status', 'currency', 'payment_method', 'owner_id'],
-  contracts: ['status', 'currency', 'owner_id'],
 };
 
 const DATE_GROUPS = [

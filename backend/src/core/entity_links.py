@@ -26,7 +26,6 @@ ROUTABLE_ENTITY_PLURALS: dict[str, str] = {
     "leads": "/leads",
     "opportunities": "/opportunities",
     "proposals": "/proposals",
-    "contracts": "/contracts",
     "payments": "/payments",
     # `notify_on_activity_due_soon` writes entity_type="activities" so
     # the notification bell needs to route those to the activities page.
@@ -41,7 +40,6 @@ ENTITY_ALIASES: dict[str, str] = {
     "lead": "leads",
     "opportunity": "opportunities",
     "proposal": "proposals",
-    "contract": "contracts",
     "payment": "payments",
     "activity": "activities",
 }
@@ -54,17 +52,27 @@ ENTITY_ALIASES: dict[str, str] = {
 # LEGACY_OPPORTUNITY_TYPE sentinel established in PR1 (#328).
 LEGACY_QUOTE_TYPE: str = "quote-legacy"
 
+# Sentinel returned for historical activity/audit rows that still carry
+# ``entity_type='contracts'``. The Contracts feature was retired
+# 2026-05-14 — contract terms now fold into the Proposal T&C inline.
+# Backend preserves the column for historical data; this sentinel lets
+# the UI render a muted "(legacy contract)" label without a route.
+LEGACY_CONTRACT_TYPE: str = "contract-legacy"
+
 
 def canonical_plural(entity_type: str | None) -> str | None:
     """Resolve any entity_type variant (singular or plural) to the
     canonical plural used elsewhere. Returns None for unknown types.
 
-    ``quote``/``quotes`` resolves to :data:`LEGACY_QUOTE_TYPE` — the
-    frontend renders the sentinel as a muted, non-clickable label."""
+    ``quote``/``quotes`` resolves to :data:`LEGACY_QUOTE_TYPE` and
+    ``contract``/``contracts`` resolves to :data:`LEGACY_CONTRACT_TYPE` —
+    the frontend renders each sentinel as a muted, non-clickable label."""
     if not entity_type:
         return None
     if entity_type in ("quote", "quotes"):
         return LEGACY_QUOTE_TYPE
+    if entity_type in ("contract", "contracts"):
+        return LEGACY_CONTRACT_TYPE
     if entity_type in ROUTABLE_ENTITY_PLURALS:
         return entity_type
     return ENTITY_ALIASES.get(entity_type)
@@ -127,12 +135,6 @@ async def labels_for(
             select(Proposal.id, Proposal.title).where(Proposal.id.in_(ids))
         )
         return {(entity_type, row[0]): row[1] for row in rows.all()}
-    if entity_type == "contracts":
-        from src.contracts.models import Contract
-        rows = await db.execute(
-            select(Contract.id, Contract.title).where(Contract.id.in_(ids))
-        )
-        return {(entity_type, row[0]): row[1] for row in rows.all()}
     if entity_type == "activities":
         from src.activities.models import Activity
         rows = await db.execute(
@@ -180,6 +182,11 @@ async def fill_entity_labels(
         if plural == LEGACY_QUOTE_TYPE:
             # Retired entity — render a muted label with no link.
             item["entity_label"] = f"Quote #{eid} (legacy)"
+            item["entity_link"] = None
+            continue
+        if plural == LEGACY_CONTRACT_TYPE:
+            # Retired entity — render a muted label with no link.
+            item["entity_label"] = f"Contract #{eid} (legacy)"
             item["entity_link"] = None
             continue
         url_prefix = ROUTABLE_ENTITY_PLURALS[plural]

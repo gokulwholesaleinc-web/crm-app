@@ -120,7 +120,7 @@ function ClusterCard({ entityType, cluster, busy, onMerge }: ClusterCardProps) {
           Merge {losers.length} into winner
         </Button>
         <span className="text-[11px] text-gray-500 dark:text-gray-400">
-          Losers are soft-deleted; activities, quotes, proposals, and contracts repoint to the winner.
+          Losers are soft-deleted; activities, proposals, and other linked records repoint to the winner.
         </span>
       </div>
     </div>
@@ -380,7 +380,7 @@ export default function AdminDedupPage() {
         title={`Merge ${pendingMerge?.loserIds.length ?? 0} record${(pendingMerge?.loserIds.length ?? 0) !== 1 ? 's' : ''}?`}
         message={
           pendingMerge
-            ? `${pendingMerge.loserIds.length} ${entityType} record${pendingMerge.loserIds.length !== 1 ? 's' : ''} will be soft-deleted and every related activity, quote, proposal, and contract will repoint to the winner. The losers stay reachable as merged tombstones for audit history but won't appear in list views. This action is recorded in the audit log.`
+            ? `${pendingMerge.loserIds.length} ${entityType} record${pendingMerge.loserIds.length !== 1 ? 's' : ''} will be soft-deleted and every related activity, proposal, and linked record will repoint to the winner. The losers stay reachable as merged tombstones for audit history but won't appear in list views. This action is recorded in the audit log.`
             : ''
         }
         confirmLabel="Merge"
