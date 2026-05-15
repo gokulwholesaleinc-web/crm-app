@@ -54,6 +54,7 @@ import {
   deleteProposalAttachment,
   openProposalAttachmentPreview,
   downloadProposalMasterContract,
+  uploadProposalMasterContract,
 } from '../../api/proposals';
 import { formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
@@ -694,6 +695,20 @@ function ProposalDetailPage() {
               for forensics and billing disputes. */}
           <ProposalAuditCard proposal={proposal} />
 
+          {/* Master service agreement upload. Always visible so the
+              admin can attach the PDF after creating a proposal — the
+              card is the discoverable entry point. Locked (read-only)
+              once the proposal is signed so the signed audit bundle
+              stays immutable. */}
+          <MasterContractCard
+            proposalId={proposal.id}
+            currentPath={proposal.master_contract_pdf_path ?? null}
+            isLocked={Boolean(proposal.signed_at)}
+            onUploaded={() => {
+              void refetch();
+            }}
+          />
+
           {/* Visual placement of the signer's signature box on the
               master contract. Only relevant once a master is on file;
               locked once the proposal is signed. */}
@@ -778,11 +793,6 @@ function ProposalDetailPage() {
             terms_and_conditions: proposal.terms_and_conditions ?? null,
           }}
           proposalId={proposal.id}
-          masterContractPath={proposal.master_contract_pdf_path ?? null}
-          onMasterContractUploaded={() => {
-            // Refetch so the next edit-modal open reads the new path.
-            void refetch();
-          }}
           onSubmit={handleEditSubmit}
           onCancel={() => setShowEditModal(false)}
           isLoading={updateProposalMutation.isPending}
@@ -1027,6 +1037,124 @@ function ProposalAttachmentsCard({ proposalId, isLocked }: ProposalAttachmentsCa
         variant="danger"
         isLoading={deleteMutation.isPending}
       />
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------
+// MasterContractCard
+// -----------------------------------------------------------------
+
+interface MasterContractCardProps {
+  proposalId: number;
+  currentPath: string | null;
+  isLocked: boolean;
+  onUploaded: () => void;
+}
+
+const _MASTER_MAX_BYTES = 25 * 1024 * 1024;
+
+/**
+ * Sidebar card for managing the master service agreement PDF.
+ *
+ * Surfacing this on the detail page (rather than burying it inside the
+ * edit modal) makes it discoverable from the moment a proposal exists,
+ * and keeps the upload entry point available even after ``signed_at``
+ * lands and the Edit button hides. Locked once signed so the
+ * signed-bundle audit trail can't be mutated post-hoc.
+ */
+function MasterContractCard({
+  proposalId,
+  currentPath,
+  isLocked,
+  onUploaded,
+}: MasterContractCardProps) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleFile = async (file: File) => {
+    if (file.type && file.type !== 'application/pdf') {
+      setError('Master contract must be a PDF file.');
+      return;
+    }
+    if (file.size > _MASTER_MAX_BYTES) {
+      setError('Master contract exceeds the 25 MB limit.');
+      return;
+    }
+    setUploading(true);
+    setError(null);
+    try {
+      await uploadProposalMasterContract(proposalId, file);
+      showSuccess(
+        currentPath ? 'Master contract replaced' : 'Master contract uploaded',
+      );
+      onUploaded();
+    } catch (err) {
+      setError(
+        extractApiErrorDetail(err) ?? 'Master contract upload failed.',
+      );
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border border-gray-100 dark:border-gray-700">
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-4">
+        Master service agreement
+      </h2>
+      <p className="text-sm text-gray-700 dark:text-gray-300">
+        {currentPath
+          ? 'PDF on file. The signer’s drawn signature is stamped onto a copy at sign time.'
+          : 'No PDF on file. Upload one so the customer’s signature can be stamped onto your service agreement.'}
+      </p>
+      {currentPath && (
+        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 font-mono break-all">
+          {currentPath}
+        </p>
+      )}
+      <div className="mt-3">
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={() => inputRef.current?.click()}
+          disabled={isLocked || uploading}
+          isLoading={uploading}
+          leftIcon={<ArrowUpTrayIcon className="h-4 w-4" />}
+        >
+          {currentPath ? 'Replace PDF' : 'Upload PDF'}
+        </Button>
+        {isLocked && (
+          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            Locked &mdash; proposal signed.
+          </p>
+        )}
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="application/pdf,.pdf"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          // Reset so re-uploading the same filename still re-fires onChange.
+          e.target.value = '';
+          if (file) {
+            void handleFile(file);
+          }
+        }}
+      />
+      {error && (
+        <p
+          role="alert"
+          aria-live="polite"
+          className="mt-3 text-sm text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded px-3 py-2"
+        >
+          {error}
+        </p>
+      )}
     </div>
   );
 }

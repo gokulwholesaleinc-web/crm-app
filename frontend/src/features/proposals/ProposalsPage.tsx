@@ -7,6 +7,7 @@ import { ProposalForm } from './ProposalForm';
 import { TemplateGallery } from './TemplateGallery';
 import { SortableTh } from '../../components/shared/SortableTh';
 import { useProposals, useCreateProposal, useDeleteProposal, useDuplicateProposal } from '../../hooks/useProposals';
+import { uploadProposalMasterContract } from '../../api/proposals';
 import {
   useListPageSizeState,
   useListSortPersistence,
@@ -108,9 +109,29 @@ function ProposalsPage() {
     }
   };
 
-  const handleFormSubmit = async (data: ProposalCreate) => {
+  const handleFormSubmit = async (
+    data: ProposalCreate,
+    pendingMaster?: File | null,
+  ) => {
     try {
       const created = await createProposalMutation.mutateAsync(data);
+      // Upload the stashed master contract as a follow-on so the proposal
+      // exists by the time the multipart POST resolves the id. A failure
+      // here doesn't unwind the create — the user lands on the detail
+      // page and can retry the upload from the sidebar card.
+      if (pendingMaster) {
+        try {
+          await uploadProposalMasterContract(created.id, pendingMaster);
+        } catch {
+          showError(
+            'Proposal created, but uploading the master contract failed. ' +
+              'Retry from the proposal detail page.',
+          );
+          setShowForm(false);
+          navigate(`/proposals/${created.id}`);
+          return;
+        }
+      }
       setShowForm(false);
       showSuccess('Proposal created successfully');
       navigate(`/proposals/${created.id}`);
