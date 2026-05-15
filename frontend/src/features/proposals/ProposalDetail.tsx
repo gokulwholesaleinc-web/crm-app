@@ -59,7 +59,7 @@ function ProposalDetailPage() {
   const handleBack = useSmartBack('/proposals');
   const proposalId = id ? parseInt(id, 10) : undefined;
 
-  const { data: proposal, isLoading, error } = useProposal(proposalId);
+  const { data: proposal, isLoading, error, refetch } = useProposal(proposalId);
   usePageTitle(proposal ? `Proposal - ${proposal.title}` : 'Proposal');
 
   const updateProposalMutation = useUpdateProposal();
@@ -699,6 +699,13 @@ function ProposalDetailPage() {
             recurring_interval_count: proposal.recurring_interval_count,
             amount: proposal.amount,
             currency: proposal.currency,
+            terms_and_conditions: proposal.terms_and_conditions ?? null,
+          }}
+          proposalId={proposal.id}
+          masterContractPath={proposal.master_contract_pdf_path ?? null}
+          onMasterContractUploaded={() => {
+            // Refetch so the next edit-modal open reads the new path.
+            void refetch();
           }}
           onSubmit={handleEditSubmit}
           onCancel={() => setShowEditModal(false)}

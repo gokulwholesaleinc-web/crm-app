@@ -36,6 +36,8 @@ interface BrandingFormData {
   social_linkedin_url: string;
   social_youtube_url: string;
   social_website_url: string;
+  /** Default T&C body shown inside the proposal Sign-to-Confirm modal. */
+  default_terms_and_conditions: string;
 }
 
 // Field keys for the email-template section; the typed tuple drives
@@ -144,6 +146,7 @@ type TenantConfigLike = Partial<Record<ColorField, string | null | undefined>>
     logo_url?: string | null;
     favicon_url?: string | null;
     footer_text?: string | null;
+    default_terms_and_conditions?: string | null;
   };
 
 function tenantColor(tenant: TenantConfigLike | null | undefined, field: ColorField): string {
@@ -244,6 +247,7 @@ export function BrandingSection() {
     logo_url: '',
     favicon_url: '',
     footer_text: '',
+    default_terms_and_conditions: '',
     ...COLOR_DEFAULTS,
     ...(Object.fromEntries(EMAIL_FIELDS.map((f) => [f, ''])) as Record<EmailField, string>),
   }));
@@ -262,6 +266,7 @@ export function BrandingSection() {
       logo_url: tenant?.logo_url ?? '',
       favicon_url: tenant?.favicon_url ?? '',
       footer_text: tenant?.footer_text ?? '',
+      default_terms_and_conditions: tenant?.default_terms_and_conditions ?? '',
     };
   }, [tenant]);
 
@@ -488,6 +493,14 @@ export function BrandingSection() {
                 </p>
               </div>
             ))}
+            <div className="sm:col-span-2">
+              <label className="block text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">
+                Default Signing T&amp;Cs
+              </label>
+              <p className="mt-1 text-sm text-gray-900 dark:text-gray-100 whitespace-pre-line">
+                {tenant?.default_terms_and_conditions || 'Not set'}
+              </p>
+            </div>
           </div>
         ) : (
           <div className="space-y-4">
@@ -592,6 +605,28 @@ export function BrandingSection() {
                     setFormData((prev) => ({ ...prev, footer_text: e.target.value }))
                   }
                   placeholder="Footer text..."
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label htmlFor="branding-default-tc" className="form-label">
+                  Default Signing T&amp;Cs
+                </label>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                  Rendered inside every customer's proposal Sign-to-Confirm modal unless
+                  the proposal sets its own override.
+                </p>
+                <textarea
+                  id="branding-default-tc"
+                  className="form-input min-h-[120px]"
+                  name="default_terms_and_conditions"
+                  value={formData.default_terms_and_conditions}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      default_terms_and_conditions: e.target.value,
+                    }))
+                  }
+                  placeholder="By submitting your signature, you agree to..."
                 />
               </div>
             </div>

@@ -1,11 +1,13 @@
-"""Tests for proposal attachments + read-before-sign gate.
+"""Tests for proposal attachments (Sign-to-Confirm era).
 
 Covers:
 - POST /api/proposals/{id}/attachments
 - GET  /api/proposals/{id}/attachments
 - DELETE /api/proposals/{id}/attachments/{attachment_id}
 - GET  /api/proposals/public/{token}/attachments/{attachment_id}/download
-- accept_proposal_public guard refusing unviewed attachments
+- accept_proposal_public no longer gates on attachment views (2026-05-14
+  removed the read-before-sign gate; T&C card inside the signing modal
+  replaces it)
 - send_signed_copy_to_client embedding attachment filenames in the email body
 
 No mocks — uses the real ASGI client + SQLite test DB. R2 is unconfigured so
@@ -14,6 +16,7 @@ file uploads fall through to local-disk storage; tests cover both code paths.
 
 import io
 import secrets
+from base64 import b64encode
 from datetime import UTC, datetime
 
 import pytest
@@ -28,6 +31,13 @@ from src.email.models import EmailQueue
 from src.proposals.attachment_views import ProposalAttachmentView, _hash_token
 from src.proposals.models import Proposal
 
+# Smallest valid PNG (1x1 transparent) — the Sign-to-Confirm payload
+# requires a drawn-signature image.
+_ONE_PIXEL_PNG = bytes.fromhex(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4"
+    "890000000d49444154789c63000000000005000158a8c4d70000000049454e44ae426082"
+)
+_SIG = "data:image/png;base64," + b64encode(_ONE_PIXEL_PNG).decode("ascii")
 
 @pytest.fixture
 async def sent_proposal(
@@ -138,49 +148,32 @@ class TestStaffUpload:
         assert "pdf" in response.json()["detail"].lower()
 
 
-class TestReadBeforeSignGate:
-    """accept_proposal_public refuses signing while attachments are unviewed."""
+class TestSigningWithAttachments:
+    """The read-before-sign gate was removed 2026-05-14 (Lorenzo's
+    Sign-to-Confirm ask): the T&C card inside the signing modal now
+    replaces the forced PDF-open step. These tests assert that prior
+    behavior is gone and signing succeeds whether or not attachments
+    have been opened."""
 
     @pytest.mark.asyncio
-    async def test_accept_blocked_without_views(
+    async def test_unviewed_attachments_no_longer_block_accept(
         self,
         client: AsyncClient,
         auth_headers: dict,
         sent_proposal: Proposal,
         test_contact: Contact,
     ):
-        """Proposal with 1 attachment + zero views -> POST accept returns 400."""
+        """Proposal with an unread attachment must still accept."""
         await _upload_pdf_attachment(client, auth_headers, sent_proposal.id)
 
         response = await client.post(
             f"/api/proposals/public/{sent_proposal.public_token}/accept",
-            json={"signer_name": "Customer", "signer_email": test_contact.email},
-        )
-        assert response.status_code == 400, response.text
-        assert "view" in response.json()["detail"].lower()
-
-    @pytest.mark.asyncio
-    async def test_accept_allowed_after_all_viewed(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-        sent_proposal: Proposal,
-        test_contact: Contact,
-    ):
-        """Public download endpoint records the view; accept then succeeds."""
-        att = await _upload_pdf_attachment(client, auth_headers, sent_proposal.id)
-
-        download = await client.get(
-            f"/api/proposals/public/{sent_proposal.public_token}"
-            f"/attachments/{att['id']}/download",
-            follow_redirects=False,
-        )
-        assert download.status_code in (200, 307), download.text
-
-        response = await client.post(
-            f"/api/proposals/public/{sent_proposal.public_token}/accept",
-            json={"signer_name": "Customer", "signer_email": test_contact.email},
+            json={
+                "signer_name": "Customer",
+                "signer_email": test_contact.email,
+                "signature_image": _SIG,
+                "agreed_to_terms": True,
+            },
         )
         assert response.status_code == 200, response.text
         assert response.json()["status"] == "accepted"
@@ -339,7 +332,12 @@ class TestSignedCopyEmail:
 
         response = await client.post(
             f"/api/proposals/public/{sent_proposal.public_token}/accept",
-            json={"signer_name": "Customer", "signer_email": test_contact.email},
+            json={
+                "signer_name": "Customer",
+                "signer_email": test_contact.email,
+                "signature_image": _SIG,
+                "agreed_to_terms": True,
+            },
         )
         assert response.status_code == 200, response.text
 

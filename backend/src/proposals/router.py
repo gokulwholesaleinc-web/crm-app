@@ -1,5 +1,7 @@
 """Proposal API routes."""
 
+import base64
+import binascii
 import logging
 from typing import Annotated
 
@@ -58,6 +60,49 @@ from src.proposals.service import ProposalService, ProposalTemplateService
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/proposals", tags=["proposals"])
+
+# Hard cap on the raw signature_image payload (base64-encoded PNG)
+# accepted by /public/{token}/accept. A typical drawn signature lands
+# at ~5–30 KB; the cap keeps a hostile client from posting a multi-MB
+# payload that would force the row into TOAST storage and bloat the
+# audit page render.
+_MAX_SIGNATURE_BYTES = 200_000
+
+
+def _decode_signature_image(payload: str) -> bytes:
+    """Decode the base64 PNG submitted from the signing modal.
+
+    Accepts both bare base64 and ``data:image/png;base64,...`` URLs.
+    Raises ``HTTPException(400)`` on invalid payloads so the modal
+    can surface a clean error.
+    """
+    raw = payload.strip()
+    if raw.startswith("data:"):
+        comma = raw.find(",")
+        if comma == -1:
+            raise HTTPException(
+                status_code=HTTPStatus.BAD_REQUEST,
+                detail="signature_image must be a base64 PNG",
+            )
+        raw = raw[comma + 1 :]
+    try:
+        decoded = base64.b64decode(raw, validate=True)
+    except (ValueError, binascii.Error) as exc:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail="signature_image is not valid base64",
+        ) from exc
+    if len(decoded) > _MAX_SIGNATURE_BYTES:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail="signature_image exceeds 200 KB limit",
+        )
+    if not decoded.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail="signature_image must be a PNG",
+        )
+    return decoded
 
 
 @router.get("", response_model=ProposalListResponse)
@@ -462,9 +507,11 @@ async def download_public_proposal_attachment(
 ):
     """Public download of a proposal attachment.
 
-    Records the per-token view (used by the read-before-sign gate) and
-    redirects to a short-lived R2 presigned URL. Falls back to a direct
-    file response when object storage isn't configured (dev/test).
+    Records the per-token view for audit purposes and redirects to a
+    short-lived R2 presigned URL. Falls back to a direct file response
+    when object storage isn't configured (dev/test). The view rows no
+    longer gate signing — the Sign-to-Confirm modal's T&C card
+    replaced the forced PDF-open step on 2026-05-14.
     """
     import hmac as _hmac
 
@@ -555,8 +602,17 @@ async def get_public_proposal(
 
     response = ProposalPublicResponse.model_validate(proposal)
     response.branding = branding
+    response.terms_and_conditions = await service.get_effective_terms_and_conditions(
+        proposal,
+    )
+    response.designated_signer_email = (
+        proposal.designated_signer_email
+        or (proposal.contact.email if proposal.contact else None)
+    )
+    response.has_master_contract = bool(proposal.master_contract_pdf_path)
 
-    # Per-token attachment list — drives the read-before-sign gate UI.
+    # Per-token attachment list — surfaced for review only; opening
+    # everything is no longer a precondition to signing.
     att_service = AttachmentService(db)
     items, _total = await att_service.list_attachments("proposals", proposal.id)
     if items:
@@ -588,12 +644,16 @@ async def accept_proposal_public(
     request: Request,
     db: DBSession,
 ):
-    """Accept a proposal via public link with e-signature data (no auth required).
+    """Accept a proposal via the public Sign-to-Confirm modal.
 
-    Captures signer name/email/IP/user-agent and transitions the proposal to
-    ``accepted``. Rejects submissions whose signer_email does not match the
-    proposal's ``designated_signer_email`` (or, failing that, the linked
-    contact's email).
+    Captures the drawn signature image + ESIGN consent + signer
+    name/email/IP/user-agent and transitions the proposal to
+    ``accepted``. Rejects submissions whose signer_email does not
+    match the proposal's ``designated_signer_email`` (or, failing
+    that, the linked contact's email). When a master contract PDF is
+    on file, stamps the signature onto a copy and persists the
+    composite to R2. No Stripe spawn — billing is created manually
+    via the Payments module per the 2026-05-14 product decision.
     """
     import hmac as _hmac
 
@@ -604,11 +664,14 @@ async def accept_proposal_public(
 
     signer_ip = get_client_ip(request)
     signer_user_agent = request.headers.get("user-agent")
+    signature_bytes = _decode_signature_image(accept_data.signature_image)
     with value_error_as_400():
         proposal = await service.accept_proposal_public(
             proposal,
             signer_name=accept_data.signer_name,
             signer_email=accept_data.signer_email,
+            signature_image=signature_bytes,
+            agreed_to_terms=accept_data.agreed_to_terms,
             signer_ip=signer_ip,
             signer_user_agent=signer_user_agent,
         )
@@ -630,6 +693,14 @@ async def accept_proposal_public(
         privacy_policy_url=branding_data.get("privacy_policy_url"),
         terms_of_service_url=branding_data.get("terms_of_service_url"),
     )
+    response.terms_and_conditions = await service.get_effective_terms_and_conditions(
+        proposal,
+    )
+    response.designated_signer_email = (
+        proposal.designated_signer_email
+        or (proposal.contact.email if proposal.contact else None)
+    )
+    response.has_master_contract = bool(proposal.master_contract_pdf_path)
     return response
 
 
@@ -695,6 +766,38 @@ async def reject_proposal_public(
         terms_of_service_url=branding_data.get("terms_of_service_url"),
     )
     return response
+
+
+@router.post(
+    "/{proposal_id}/master-contract",
+    response_model=ProposalResponse,
+)
+async def upload_master_contract(
+    proposal_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
+    file: UploadFile = File(...),
+):
+    """Upload (or replace) the master service agreement PDF.
+
+    On signing, the customer's drawn signature is stamped onto a copy
+    of this PDF + an audit page is appended. The composite is stored
+    at ``proposals.signed_pdf_path``, emailed to the signer, and the
+    owner receives an in-app/email ``proposal_signed`` notification
+    (matrix-gated). The owner does NOT automatically receive the PDF
+    attachment.
+    """
+    service = ProposalService(db)
+    proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
+    check_ownership(proposal, current_user, EntityNames.PROPOSAL)
+    content = await file.read()
+    with value_error_as_400():
+        proposal = await service.upload_master_contract_pdf(
+            proposal,
+            content=content,
+            filename=file.filename or "master.pdf",
+        )
+    return ProposalResponse.model_validate(proposal)
 
 
 @router.get("/{proposal_id}", response_model=ProposalResponse)
@@ -867,26 +970,20 @@ async def accept_proposal(
 ):
     """Mark a proposal as accepted (internal/admin path).
 
-    Distinct from the public e-sign path at ``/public/{token}/accept``:
-    that flow captures a real customer signature plus IP/UA, runs the
-    read-before-sign attachment gate, and verifies signer_email. This
-    endpoint is the rep-side "the customer accepted offline" action —
-    no signature, no e-sign payload. To keep KPIs/billing/notifications
-    consistent with the public path, it still spawns the implied Stripe
-    artifact and fires the owner-side proposal_signed notification.
-    A signed-copy email is intentionally NOT sent because there is no
-    countersigned PDF to attach.
+    Distinct from the public Sign-to-Confirm path at
+    ``/public/{token}/accept`` — that flow captures a real customer
+    signature plus IP/UA and verifies signer_email. This endpoint is
+    the rep-side "the customer accepted offline" action — no
+    signature, no e-sign payload. Fires the owner-side
+    ``proposal_signed`` notification for parity but does not
+    auto-spawn Stripe (Lorenzo bills manually via the Payments module
+    per 2026-05-14).
     """
     service = ProposalService(db)
     proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
     check_ownership(proposal, current_user, EntityNames.PROPOSAL)
     with value_error_as_400():
         proposal = await service.mark_accepted(proposal)
-
-    # Spawn the Stripe artifact the proposal's payment_type implies.
-    # Mirrors the public-accept flow; failures are logged inside the
-    # helper and don't unwind the acceptance.
-    await service._maybe_spawn_billing(proposal)
 
     if proposal.owner_id and proposal.owner_id != current_user.id:
         from src.notifications.service import notify_on_proposal_signed

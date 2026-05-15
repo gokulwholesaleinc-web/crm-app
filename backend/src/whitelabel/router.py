@@ -89,6 +89,9 @@ def _build_public_tenant_config(tenant: Tenant) -> PublicTenantConfig:
         social_linkedin_url=settings.social_linkedin_url if settings else None,
         social_youtube_url=settings.social_youtube_url if settings else None,
         social_website_url=settings.social_website_url if settings else None,
+        default_terms_and_conditions=(
+            settings.default_terms_and_conditions if settings else None
+        ),
         default_language=settings.default_language if settings else DEFAULT_LANGUAGE,
         date_format=settings.date_format if settings else DEFAULT_DATE_FORMAT,
         custom_css=settings.custom_css if settings else None,

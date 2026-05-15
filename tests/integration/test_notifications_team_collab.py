@@ -10,6 +10,7 @@ All tests use the real SQLite in-memory DB (via conftest fixtures). No mocks.
 """
 
 import secrets
+from base64 import b64encode
 
 import pytest
 from httpx import AsyncClient
@@ -26,6 +27,13 @@ from src.notifications.models import Notification
 from src.opportunities.models import Opportunity, PipelineStage
 from src.proposals.models import Proposal
 
+# Smallest valid PNG (1x1 transparent) — the Sign-to-Confirm payload
+# requires a drawn-signature image.
+_ONE_PIXEL_PNG = bytes.fromhex(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4"
+    "890000000d49444154789c63000000000005000158a8c4d70000000049454e44ae426082"
+)
+_SIG = "data:image/png;base64," + b64encode(_ONE_PIXEL_PNG).decode("ascii")
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -330,6 +338,8 @@ class TestProposalSignedNotification:
             json={
                 "signer_name": "Jane Customer",
                 "signer_email": test_contact.email,
+                "signature_image": _SIG,
+                "agreed_to_terms": True,
             },
         )
         assert resp.status_code == 200, resp.text
@@ -376,6 +386,8 @@ class TestProposalSignedNotification:
             json={
                 "signer_name": "Customer X",
                 "signer_email": test_contact.email,
+                "signature_image": _SIG,
+                "agreed_to_terms": True,
             },
         )
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback, startTransition } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { CheckIcon, PencilSquareIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import { sanitizeHexColor, withAlpha } from '../../utils/colorValidation';
 import { useForceLightMode } from '../../hooks/useForceLightMode';
@@ -10,6 +10,7 @@ import { setPublicPageMeta } from './publicMeta';
 import { ProposalAttachmentsSection } from './ProposalAttachmentsSection';
 import type { ProposalAttachmentPublic } from '../../types';
 import { ScrollToSignIndicator } from '../../components/ui/ScrollToSignIndicator';
+import { SignToConfirmModal } from '../../components/SignToConfirmModal';
 
 // Bare axios instance for public (unauthenticated) proposal endpoints.
 // Deliberately does NOT attach the CRM Bearer token or X-Tenant-Slug
@@ -58,6 +59,11 @@ interface PublicProposal {
   contact: { id: number; full_name: string } | null;
   branding: ProposalBranding | null;
   attachments?: ProposalAttachmentPublic[];
+  // Sign-to-Confirm modal inputs — resolved server-side so the modal
+  // doesn't have to chain another fetch on open.
+  terms_and_conditions: string | null;
+  designated_signer_email: string | null;
+  has_master_contract: boolean;
 }
 
 const DEFAULT_BRANDING: ProposalBranding = {
@@ -90,8 +96,7 @@ function PublicProposalView() {
   const [actionPending, setActionPending] = useState(false);
   const [actionDone, setActionDone] = useState<'accepted' | 'rejected' | null>(null);
   const [logoError, setLogoError] = useState(false);
-  const [signerName, setSignerName] = useState('');
-  const [signerEmail, setSignerEmail] = useState('');
+  const [signModalOpen, setSignModalOpen] = useState(false);
   const [signError, setSignError] = useState<string | null>(null);
   const [confirmingPayment, setConfirmingPayment] = useState(false);
   const [paymentTimedOut, setPaymentTimedOut] = useState(false);
@@ -276,43 +281,51 @@ function PublicProposalView() {
     return raw.filter((s): s is { title: string; body: string } => s !== null);
   }, [proposal]);
 
-  const handleAccept = async () => {
-    if (!proposal) return;
-    const name = signerName.trim();
-    const email = signerEmail.trim();
-    if (!name || !email) {
-      setSignError('Please enter your full name and email address.');
-      return;
-    }
-    setActionPending(true);
-    setSignError(null);
-    try {
-      const response = await publicClient.post<PublicProposal>(
-        `/api/proposals/public/${token}/accept`,
-        { signer_name: name, signer_email: email },
-      );
-      // Replace the whole object — accept response carries the
-      // freshly-spawned payment_url + status.
-      setProposal(response.data);
-      setActionDone('accepted');
-    } catch (err) {
-      const detail =
-        (typeof err === 'object' && err !== null && 'response' in err
-          ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-          : null) || 'Unable to record acceptance. Please contact your account manager.';
-      setSignError(detail);
-    } finally {
-      setActionPending(false);
-    }
-  };
+  const submitSignature = useCallback(
+    async ({
+      signatureDataUrl,
+      email,
+      agreedToTerms,
+    }: {
+      signatureDataUrl: string;
+      email: string;
+      agreedToTerms: boolean;
+    }): Promise<string | null> => {
+      if (!proposal) return 'Proposal is no longer available.';
+      const recipient = proposal.contact?.full_name ?? email;
+      try {
+        const response = await publicClient.post<PublicProposal>(
+          `/api/proposals/public/${token}/accept`,
+          {
+            signer_name: recipient,
+            signer_email: email,
+            signature_image: signatureDataUrl,
+            agreed_to_terms: agreedToTerms,
+          },
+        );
+        setProposal(response.data);
+        setActionDone('accepted');
+        setSignModalOpen(false);
+        setSignError(null);
+        return null;
+      } catch (err) {
+        return (
+          (typeof err === 'object' && err !== null && 'response' in err
+            ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+            : null) || 'Unable to record acceptance. Please contact your account manager.'
+        );
+      }
+    },
+    [proposal, token],
+  );
 
   const handleReject = async () => {
     if (!proposal) return;
-    const email = signerEmail.trim();
+    const email = proposal.designated_signer_email?.trim() ?? '';
     if (!email) {
-      // Same signer-email gate as accept so a forwarded link can't be
-      // used by a third party to permanently reject.
-      setSignError('Please enter your email address to decline this proposal.');
+      setSignError(
+        'This proposal has no recipient on file. Please contact your account manager.',
+      );
       return;
     }
     setActionPending(true);
@@ -377,13 +390,13 @@ function PublicProposalView() {
     new Date(proposal.valid_until) < new Date();
 
   const attachments = proposal.attachments ?? [];
-  const allAttachmentsViewed =
-    attachments.length === 0 || attachments.every((a) => viewedIds.has(a.id));
 
   const handleAttachmentViewed = (id: number) => {
-    // startTransition so flipping the gate doesn't block the click
-    // handler, and so the larger Sign-form re-render is treated as
-    // non-urgent (the new tab opening is the urgent feedback).
+    // startTransition so the section re-render is treated as
+    // non-urgent (the new-tab open is the urgent feedback). The
+    // viewedIds set is no longer a sign gate; it just marks which
+    // attachments the customer has already opened so the UI can dim
+    // their "Open" affordance.
     startTransition(() => {
       setViewedIds((curr) => {
         if (curr.has(id)) return curr;
@@ -397,17 +410,9 @@ function PublicProposalView() {
   const canRespond =
     (proposal.status === 'sent' || proposal.status === 'viewed') &&
     !isExpired &&
-    !actionDone &&
-    allAttachmentsViewed;
+    !actionDone;
 
-  // Polite notice the customer sees while the gate is still closed —
-  // only meaningful in sent/viewed status (anything else hides the
-  // sign form anyway, so the message would be misleading).
-  const showAttachmentGateNotice =
-    !allAttachmentsViewed &&
-    !actionDone &&
-    (proposal.status === 'sent' || proposal.status === 'viewed') &&
-    !isExpired;
+  const recipientEmail = proposal.designated_signer_email ?? '';
 
   const validUntilDate = proposal.valid_until
     ? formatDate(proposal.valid_until, 'long')
@@ -693,72 +698,15 @@ function PublicProposalView() {
           </section>
         )}
 
-        {/* Sign gate notice — visible while attachments still need to be
-            opened. The Accept/Decline form below is fully suppressed
-            until the gate clears (canRespond folds in
-            allAttachmentsViewed). */}
-        {showAttachmentGateNotice && (
-          <section
-            className="mt-10 sm:mt-12 rounded border border-amber-200 bg-amber-50 px-5 py-4 print:hidden"
-            role="status"
-            aria-live="polite"
-          >
-            <p className="text-sm text-amber-900">
-              You must open and read all attached documents before you can sign this proposal.
-            </p>
-          </section>
-        )}
-
-        {/* Accept / Decline form — standard business form layout */}
+        {/* Accept / Decline — the typed-name form is replaced by the
+            Sign-to-Confirm modal (drawn signature + T&C consent). */}
         {canRespond && (
           <section className="mt-10 sm:mt-12 print:hidden" ref={signSectionRef}>
             <PlainSectionHeader title="Your Response" accent={primary} />
             <p className="prose-body mb-5">
-              Please review the proposal above and accept or decline. Your typed name and
-              email below constitute your legally binding electronic signature (full
-              disclosure at the bottom of this page).
+              When you're ready, draw your signature to accept this proposal. A signed PDF
+              copy will be emailed to {proposal.contact?.full_name ?? 'you'}.
             </p>
-
-            <div className="grid gap-4 sm:grid-cols-2 mb-4">
-              <div>
-                <label
-                  htmlFor="signer-name"
-                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-                >
-                  Full name
-                </label>
-                <input
-                  id="signer-name"
-                  type="text"
-                  autoComplete="name"
-                  value={signerName}
-                  onChange={(e) => setSignerName(e.target.value)}
-                  disabled={actionPending}
-                  className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 px-3 py-2 shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 disabled:opacity-50"
-                  style={{ outlineColor: primary }}
-                />
-              </div>
-              <div>
-                <label
-                  htmlFor="signer-email"
-                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-                >
-                  Email address
-                </label>
-                <input
-                  id="signer-email"
-                  type="email"
-                  autoComplete="email"
-                  inputMode="email"
-                  spellCheck={false}
-                  value={signerEmail}
-                  onChange={(e) => setSignerEmail(e.target.value)}
-                  disabled={actionPending}
-                  className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 px-3 py-2 shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 disabled:opacity-50"
-                  style={{ outlineColor: primary }}
-                />
-              </div>
-            </div>
 
             {signError && (
               <p
@@ -773,14 +721,17 @@ function PublicProposalView() {
             <div className="flex flex-col sm:flex-row gap-3">
               <button
                 type="button"
-                aria-label="Accept this proposal"
-                onClick={handleAccept}
+                aria-label="Open the signing dialog to accept this proposal"
+                onClick={() => {
+                  setSignError(null);
+                  setSignModalOpen(true);
+                }}
                 disabled={actionPending}
                 className="inline-flex items-center justify-center gap-2 rounded px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50 transition-opacity"
                 style={{ backgroundColor: accent, outlineColor: accent }}
               >
-                <CheckIcon className="h-4 w-4" aria-hidden="true" />
-                {actionPending ? 'Recording…' : 'Accept & Sign'}
+                <PencilSquareIcon className="h-4 w-4" aria-hidden="true" />
+                Sign to Accept
               </button>
               <button
                 type="button"
@@ -795,6 +746,15 @@ function PublicProposalView() {
             </div>
           </section>
         )}
+
+        <SignToConfirmModal
+          isOpen={signModalOpen && canRespond}
+          onClose={() => setSignModalOpen(false)}
+          recipientEmail={recipientEmail}
+          termsAndConditions={proposal.terms_and_conditions}
+          hasMasterContract={proposal.has_master_contract}
+          onSubmit={submitSignature}
+        />
 
         {/* Post-action confirmation */}
         {actionDone && (

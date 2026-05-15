@@ -33,6 +33,12 @@ weasyprint==66.0
 # AttributeError at write_pdf() time on 2026-04-24 when pip
 # resolved a newer pydyf against weasyprint 62.
 pydyf==0.11.0
+# pypdf opens the optional master service agreement uploaded by the
+# rep so the proposal accept endpoint can stamp the drawn signature
+# onto it. reportlab generates the signature overlay + audit-trail
+# page in PDF points. Pure-Python — no extra system packages.
+pypdf==6.10.2
+reportlab==4.2.5
 
 # Object Storage (Cloudflare R2)
 boto3==1.34.0

@@ -13,12 +13,31 @@ Validates:
 
 import pytest
 import secrets
+from base64 import b64encode
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.models import User
 from src.proposals.models import Proposal
 from src.contacts.models import Contact
+
+# Smallest valid PNG (1x1 transparent) used as the drawn signature in
+# every accept call below — the Sign-to-Confirm payload made
+# signature_image + agreed_to_terms required as of 2026-05-14.
+_ONE_PIXEL_PNG = bytes.fromhex(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+    "0000000d49444154789c63000000000005000158a8c4d70000000049454e44ae426082"
+)
+_SIG = "data:image/png;base64," + b64encode(_ONE_PIXEL_PNG).decode("ascii")
+
+
+def _sign(signer_name: str, signer_email: str, *, agreed: bool = True) -> dict:
+    return {
+        "signer_name": signer_name,
+        "signer_email": signer_email,
+        "signature_image": _SIG,
+        "agreed_to_terms": agreed,
+    }
 
 
 @pytest.fixture
@@ -70,7 +89,7 @@ class TestPublicProposalAccept:
         """signer_name + signer_email + signer_ip + signer_user_agent + signed_at all persisted."""
         response = await client.post(
             f"/api/proposals/public/{sent_proposal.public_token}/accept",
-            json={"signer_name": "Jane Customer", "signer_email": test_contact.email},
+            json=_sign("Jane Customer", test_contact.email),
             headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) SignTest/1.0"},
         )
         assert response.status_code == 200, response.text
@@ -94,7 +113,7 @@ class TestPublicProposalAccept:
         """Signer email that doesn't match the recipient must 400."""
         response = await client.post(
             f"/api/proposals/public/{sent_proposal.public_token}/accept",
-            json={"signer_name": "Imposter", "signer_email": "attacker@evil.com"},
+            json=_sign("Imposter", "attacker@evil.com"),
         )
         assert response.status_code == 400
         assert "does not match" in response.json()["detail"].lower()
@@ -114,14 +133,14 @@ class TestPublicProposalAccept:
         # Contact email is now the wrong signer
         response = await client.post(
             f"/api/proposals/public/{sent_proposal.public_token}/accept",
-            json={"signer_name": "Contact", "signer_email": test_contact.email},
+            json=_sign("Contact", test_contact.email),
         )
         assert response.status_code == 400
 
         # Designated email works (case-insensitive)
         response = await client.post(
             f"/api/proposals/public/{sent_proposal.public_token}/accept",
-            json={"signer_name": "CFO", "signer_email": "CFO@Client.Example"},
+            json=_sign("CFO", "CFO@Client.Example"),
         )
         assert response.status_code == 200, response.text
 
@@ -134,7 +153,7 @@ class TestPublicProposalAccept:
         """Only sent/viewed proposals can be accepted; draft must 400."""
         response = await client.post(
             f"/api/proposals/public/{draft_proposal.public_token}/accept",
-            json={"signer_name": "x", "signer_email": "x@x.com"},
+            json=_sign("x", "x@x.com"),
         )
         assert response.status_code == 400
 
@@ -142,7 +161,7 @@ class TestPublicProposalAccept:
     async def test_accept_unknown_token_returns_404(self, client: AsyncClient):
         response = await client.post(
             "/api/proposals/public/definitely-not-a-real-token-xx/accept",
-            json={"signer_name": "x", "signer_email": "x@x.com"},
+            json=_sign("x", "x@x.com"),
         )
         assert response.status_code == 404
 

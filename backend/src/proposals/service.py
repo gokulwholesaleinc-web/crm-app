@@ -1,5 +1,6 @@
 """Proposal service layer."""
 
+import asyncio
 import hashlib
 import logging
 import re
@@ -15,6 +16,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from src.attachments.models import Attachment
+from src.attachments.object_storage import (
+    download_object_bytes,
+    upload_file_bytes,
+)
 from src.attachments.service import AttachmentService
 from src.config import settings
 from src.core.base_service import BaseService, CRUDService, StatusTransitionMixin
@@ -32,8 +37,8 @@ from src.email.pdf_render import pdf_logo_allowed_hosts, render_html_to_pdf
 from src.email.service import EmailService, assert_gmail_connected
 from src.email.types import EmailAttachment
 from src.payments.service import PaymentService
-from src.proposals.attachment_views import get_unviewed_attachment_ids
 from src.proposals.models import Proposal, ProposalTemplate, ProposalView
+from src.proposals.pdf_stamper import StampInputs, stamp_master_with_signature
 from src.proposals.schemas import ProposalCreate, ProposalUpdate
 
 logger = logging.getLogger(__name__)
@@ -103,17 +108,27 @@ def _designated_email_for(proposal: Proposal) -> str:
     return ""
 
 
-def _assert_signer_matches(proposal: Proposal, signer_email: str | None) -> None:
+def _assert_signer_matches(proposal: Proposal, signer_email: str | None) -> str:
     """Guard: the supplied signer_email must match the proposal's designated
     recipient (case-insensitive). Shared by accept/reject so a forwarded
     public link can't be used by a third party to sign or reject.
+
+    Returns the normalized (stripped+lowercased) email so callers can
+    persist a consistent casing instead of the raw user-supplied value.
+    A misconfigured proposal (no recipient on file) intentionally
+    raises the same generic message as a mismatch — we don't want
+    the public endpoint leaking server-side state.
     """
     expected = _designated_email_for(proposal)
     given = (signer_email or "").strip().lower()
     if not expected:
-        raise ValueError("Proposal has no recipient email on file")
-    if not given or given != expected:
+        logger.warning(
+            "Proposal %s has no designated recipient — signer match cannot succeed",
+            proposal.id,
+        )
+    if not expected or not given or given != expected:
         raise ValueError("Signer email does not match the proposal recipient")
+    return given
 
 
 class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreate, ProposalUpdate]):
@@ -316,24 +331,27 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         proposal: Proposal,
         signer_name: str,
         signer_email: str,
+        signature_image: bytes,
+        agreed_to_terms: bool,
         signer_ip: str | None = None,
         signer_user_agent: str | None = None,
     ) -> Proposal:
-        """Accept a proposal via the public link with e-signature data.
+        """Accept a proposal via the public Sign-to-Confirm modal.
 
-        Signer-email check uses ``designated_signer_email`` when set, otherwise
-        falls back to the linked contact's email. Prevents a third party who
-        got hold of the public URL from signing as the customer with an
-        attacker-controlled email.
+        Persists the drawn signature, transitions the proposal to
+        ``accepted``, then — when a master service agreement PDF is on
+        file — stamps the signature onto a copy + appends an audit
+        page and uploads the composite to R2. Emails the signer a
+        countersigned copy.
 
-        After the e-signature is recorded, this tries to spawn the Stripe
-        artifact that the proposal's payment_type implies (Invoice for
-        one_time, Checkout Session for subscription). A Stripe failure
-        does NOT unwind the acceptance — the proposal stays accepted and
-        the CRM user can resend billing manually.
+        No Stripe spawn (Lorenzo's 2026-05-14 ask — billing is created
+        manually via the Payments module after acceptance). Signer
+        email must match the proposal's designated recipient and
+        ``agreed_to_terms`` must be True (ESIGN Act consent).
 
-        Raises ValueError if the proposal is not in sent/viewed state or
-        the signer_email doesn't match.
+        Raises ValueError if status isn't sent/viewed, the signer
+        email doesn't match, consent isn't given, or the proposal is
+        past its ``valid_until`` date.
         """
         if proposal.status not in ("sent", "viewed"):
             raise ValueError(f"Cannot accept proposal in '{proposal.status}' status")
@@ -348,29 +366,26 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 "and can no longer be accepted",
             )
 
-        _assert_signer_matches(proposal, signer_email)
-
-        # Read-before-sign gate: every attachment on the proposal must
-        # have been opened from this same public link at least once.
-        # The check uses sha256(public_token) so a forwarded copy of the
-        # link can't piggyback on someone else's "viewed" rows.
-        if proposal.public_token:
-            unviewed = await get_unviewed_attachment_ids(
-                self.db,
-                proposal_id=proposal.id,
-                token=proposal.public_token,
+        # Validate the submitted payload (consent + signature) BEFORE the
+        # signer-email authz check so a customer who forgot to tick the
+        # box doesn't see a confusing "email mismatch" error. The
+        # consent/signature checks are payload-shape only; they leak no
+        # information about the proposal recipient.
+        if not agreed_to_terms:
+            raise ValueError(
+                "You must agree to the terms and conditions to sign this proposal",
             )
-            if unviewed:
-                raise ValueError(
-                    "You must open and view all attached documents before signing. "
-                    f"{len(unviewed)} document(s) remain unread.",
-                )
+
+        if not signature_image:
+            raise ValueError("Signature image is required")
+
+        normalized_signer_email = _assert_signer_matches(proposal, signer_email)
 
         # Atomic status transition: conditional UPDATE guarded by the
         # same (sent|viewed) whitelist. If two accept requests arrive
         # concurrently, only one row update will match — the other
-        # returns rowcount=0 and we raise instead of spawning a second
-        # Stripe Invoice / Checkout Session.
+        # returns rowcount=0 and we raise instead of double-stamping
+        # the master PDF.
         now = datetime.now(UTC)
         stmt = (
             update(Proposal)
@@ -380,10 +395,11 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 status="accepted",
                 accepted_at=now,
                 signer_name=signer_name,
-                signer_email=signer_email,
+                signer_email=normalized_signer_email,
                 signer_ip=signer_ip,
                 signer_user_agent=signer_user_agent,
                 signed_at=now,
+                signature_image=signature_image,
             )
         )
         result = await self.db.execute(stmt)
@@ -394,12 +410,19 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         await self.db.flush()
         await self.db.refresh(proposal)
 
-        # Mail the signer a signed PDF copy for their records. Runs
-        # before billing spawn so the client has the countersigned doc
-        # in hand even if Stripe is down.
-        await self.send_signed_copy_to_client(proposal)
+        # Stamp + upload the master PDF if Lorenzo attached one. Failure
+        # is logged but does not unwind the acceptance — the signed-row
+        # + signature_image bytes alone are ESIGN-Act § 7001-compliant
+        # evidence and the operator can re-stamp later.
+        await self._maybe_stamp_master_pdf(
+            proposal,
+            signer_ip=signer_ip,
+            signer_user_agent=signer_user_agent,
+            signed_at=now,
+        )
 
-        await self._maybe_spawn_billing(proposal)
+        # Mail the signer a signed PDF copy for their records.
+        await self.send_signed_copy_to_client(proposal)
 
         # Owner-side proposal_signed notification — matrix-gated; signer
         # already received their always-on signed copy above. Import is
@@ -428,6 +451,54 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
 
         await self.db.refresh(proposal)
         return proposal
+
+    async def _maybe_stamp_master_pdf(
+        self,
+        proposal: Proposal,
+        signer_ip: str | None,
+        signer_user_agent: str | None,
+        signed_at: datetime,
+    ) -> None:
+        """Stamp the drawn signature onto the master PDF + append an
+        audit page, then upload the composite to R2 and persist the
+        key on ``proposal.signed_pdf_path``.
+
+        Skipped silently when no master PDF is on file (signature image
+        + audit log alone are ESIGN-Act § 7001-compliant). Stamping
+        failures are logged but do NOT unwind acceptance — the operator
+        can re-stamp later from the admin UI.
+        """
+        master_key = proposal.master_contract_pdf_path
+        if not master_key or proposal.signature_image is None:
+            return
+
+        try:
+            master_bytes = await download_object_bytes(master_key)
+            stamped = await asyncio.to_thread(
+                stamp_master_with_signature,
+                StampInputs(
+                    master_pdf=master_bytes,
+                    signature_png=proposal.signature_image,
+                    coords=proposal.signature_field_coords,
+                    signer_name=proposal.signer_name or "",
+                    signer_email=proposal.signer_email or "",
+                    signer_ip=signer_ip,
+                    signer_user_agent=signer_user_agent,
+                    signed_at=signed_at,
+                    proposal_number=proposal.proposal_number,
+                ),
+            )
+            timestamp = int(signed_at.timestamp())
+            signed_key = f"proposals/{proposal.id}/signed-{timestamp}.pdf"
+            await upload_file_bytes(stamped, signed_key, content_type="application/pdf")
+            proposal.signed_pdf_path = signed_key
+            await self.db.flush()
+            await self.db.refresh(proposal)
+        except Exception:
+            logger.exception(
+                "Failed to stamp/upload signed PDF for proposal %s",
+                proposal.id,
+            )
 
     async def _maybe_spawn_billing(self, proposal: Proposal) -> None:
         """Create the Stripe Invoice or Checkout Session for an accepted
@@ -1554,6 +1625,65 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                     missing.append(f"{att.original_filename} (ref {digest})")
 
         return attachments, missing
+
+    async def get_effective_terms_and_conditions(
+        self, proposal: Proposal,
+    ) -> str | None:
+        """Resolve the T&C body rendered in the Sign-to-Confirm modal.
+
+        Per-proposal override always wins; falls back to the tenant
+        default. Returns ``None`` when neither is set so the modal
+        can omit the T&C card entirely rather than render an empty
+        scroll box.
+        """
+        if proposal.terms_and_conditions:
+            return proposal.terms_and_conditions
+        if not proposal.owner_id:
+            return None
+        from src.whitelabel.models import Tenant, TenantSettings, TenantUser
+
+        # Prefer the user's primary tenant but fall back to ANY
+        # membership when no row carries is_primary=True. The strict
+        # is_primary filter silently served the generic defaults on
+        # PR #114 (see feedback_tenant_branding_is_primary) — same
+        # JOIN shape, same trap, applied here to the T&C body.
+        result = await self.db.execute(
+            select(TenantSettings.default_terms_and_conditions)
+            .join(Tenant, Tenant.id == TenantSettings.tenant_id)
+            .join(TenantUser, TenantUser.tenant_id == Tenant.id)
+            .where(TenantUser.user_id == proposal.owner_id)
+            .order_by(TenantUser.is_primary.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    async def upload_master_contract_pdf(
+        self, proposal: Proposal, content: bytes, filename: str,
+    ) -> Proposal:
+        """Persist the rep-uploaded master service agreement PDF.
+
+        Stored at ``proposals/{id}/master.pdf`` in R2. Replacing an
+        existing master simply overwrites the same key — the old
+        object is orphaned but the next signing run reads only the
+        path on the row, so there's no consistency issue.
+        """
+        if not content:
+            raise ValueError("master PDF is empty")
+        # Lightweight magic-byte sniff so a mis-uploaded .docx doesn't
+        # blow up later inside the pypdf parser with an opaque error.
+        if not content.startswith(b"%PDF-"):
+            raise ValueError("master contract must be a PDF file")
+        # 25 MB hard cap; matches the typical attachment ceiling on
+        # the platform's R2 bucket. Audit + stamping load this into
+        # memory so an unbounded upload could OOM the pod.
+        if len(content) > 25 * 1024 * 1024:
+            raise ValueError("master contract exceeds 25 MB limit")
+        key = f"proposals/{proposal.id}/master.pdf"
+        await upload_file_bytes(content, key, content_type="application/pdf")
+        proposal.master_contract_pdf_path = key
+        await self.db.flush()
+        await self.db.refresh(proposal)
+        return proposal
 
     async def get_branding_for_proposal(self, proposal: Proposal) -> dict:
         """Get tenant branding from the proposal owner's tenant."""

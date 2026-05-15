@@ -103,6 +103,11 @@ class TenantSettings(Base, TimestampMixin):
     social_youtube_url: Mapped[str | None] = mapped_column(String(500))
     social_website_url: Mapped[str | None] = mapped_column(String(500))
 
+    # Tenant-wide default T&C body rendered inside the proposal
+    # Sign-to-Confirm modal. NULL = no default; per-proposal
+    # ``proposals.terms_and_conditions`` always wins when set.
+    default_terms_and_conditions: Mapped[str | None] = mapped_column(Text)
+
     # Localization
     default_language: Mapped[str] = mapped_column(String(5), default="en")
     default_timezone: Mapped[str] = mapped_column(String(50), default="UTC")

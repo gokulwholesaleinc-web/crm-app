@@ -34,6 +34,9 @@ export interface ProposalBase extends ProposalBillingFields {
    * When unset, the linked contact's email is used. */
   designated_signer_email?: string | null;
   owner_id?: number | null;
+  /** Per-proposal override of the T&C body shown inside the
+   * Sign-to-Confirm modal. NULL falls back to the tenant default. */
+  terms_and_conditions?: string | null;
 }
 
 export interface ProposalCreate extends ProposalBase {}
@@ -53,6 +56,7 @@ export interface ProposalUpdate {
   valid_until?: string | null;
   designated_signer_email?: string | null;
   owner_id?: number | null;
+  terms_and_conditions?: string | null;
   payment_type?: PaymentType;
   recurring_interval?: RecurringInterval | null;
   recurring_interval_count?: number | null;
@@ -93,6 +97,10 @@ export interface Proposal extends ProposalBase {
   invoice_sent_at?: string | null;
   paid_at?: string | null;
   billing_error?: string | null;
+  /** R2 key of the optional master service agreement PDF. */
+  master_contract_pdf_path?: string | null;
+  /** R2 key of the stamped + audit-appended signed PDF. */
+  signed_pdf_path?: string | null;
   /** Per-view audit log. Populated on every public-link GET. */
   views?: ProposalView[];
   created_at: string;
