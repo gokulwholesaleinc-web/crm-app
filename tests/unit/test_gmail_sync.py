@@ -345,6 +345,86 @@ class TestSyncOutbound:
         ib_rows = (await db.execute(select(InboundEmail))).scalars().all()
         assert len(ib_rows) == 0
 
+    @pytest.mark.asyncio
+    async def test_outbound_persists_html_body_when_both_alternatives_present(
+        self, connection, db, test_user,
+    ):
+        """Outbound multipart/alternative sync prefers ``text/html`` over
+        ``text/plain`` when both are available.
+
+        Lorenzo's branded signature renders as ``<img>`` tags in the
+        HTML alternative and as ``[image: instagram] <https://…>``
+        placeholders in the plain-text alternative. The thread view
+        can only render images from the HTML alternative, so the
+        writer must store HTML — otherwise the sidebar shows the
+        ``[image: …]`` plain-text fallback as broken links.
+        """
+        state = GmailSyncState(
+            user_id=connection.user_id,
+            last_history_id="210",
+            failure_count=0,
+        )
+        db.add(state)
+        await db.commit()
+
+        html_body = (
+            "<p>Just checking in.</p>"
+            "<div><strong>Lorenzo Costa</strong><br>"
+            'Founder &amp; CEO | <em>Link Creative</em></div>'
+        )
+        plain_body = "Just checking in.\n\nLorenzo Costa\nFounder & CEO | Link Creative"
+
+        msg = {
+            "id": "sent_html_789",
+            "threadId": "t_html",
+            "payload": {
+                "mimeType": "multipart/alternative",
+                "headers": [
+                    {"name": "Subject", "value": "Following up"},
+                    {"name": "From", "value": connection.email},
+                    {"name": "To", "value": "prospect@corp.com"},
+                    {"name": "Message-ID", "value": "<sent_html_789@gmail.example.com>"},
+                    {"name": "Date", "value": "Mon, 14 Apr 2025 10:00:00 +0000"},
+                ],
+                "parts": [
+                    {"mimeType": "text/plain", "body": {"data": _b64(plain_body)}},
+                    {"mimeType": "text/html", "body": {"data": _b64(html_body)}},
+                ],
+            },
+        }
+        history = {
+            "history": [
+                {"id": "211", "messagesAdded": [{"message": {"id": "sent_html_789"}}]}
+            ]
+        }
+        routes = {
+            "users/me/history": history,
+            "users/me/messages/sent_html_789": msg,
+        }
+        http = _make_http_client(routes)
+
+        with patch("src.integrations.gmail.client.httpx.AsyncClient", return_value=http):
+            from src.integrations.gmail.client import GmailClient as _GC
+            orig_init = _GC.__init__
+
+            def patched_init(self, conn, db_, http=None):
+                orig_init(self, conn, db_, http=http)
+
+            with patch.object(_GC, "__init__", patched_init):
+                await GmailSyncWorker.sync_account(connection, db)
+
+        rows = (await db.execute(select(EmailQueue))).scalars().all()
+        assert len(rows) == 1
+        eq = rows[0]
+        # Body must carry the HTML version — the <strong>/<em>/<br>
+        # tags and the HTML-encoded ampersand are the load-bearing
+        # signal that the thread renderer has something to mount as
+        # sanitized HTML downstream.
+        assert "<strong>Lorenzo Costa</strong>" in eq.body
+        assert "Founder &amp; CEO" in eq.body
+        # And it must NOT have collapsed back to plain text.
+        assert "[image:" not in eq.body
+
 
 class TestSyncDedupe:
     @pytest.mark.asyncio

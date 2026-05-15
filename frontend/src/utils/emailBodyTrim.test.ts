@@ -146,6 +146,74 @@ describe('trimQuotedHtml', () => {
     expect(result.body).not.toContain('Sent from my iPhone');
   });
 
+  it('cuts at the corporate confidentiality footer (no explicit wrapper)', () => {
+    // Some clients don't wrap the signature in gmail_signature and the
+    // author skips the conventional sign-off ("Best,", "Thanks,"), so
+    // the only reliable end-of-body marker is the legal boilerplate.
+    const html =
+      '<div>Quick update on the campaign — proofs attached.</div>' +
+      '<div>This email and any files transmitted with it are confidential ' +
+      'and intended solely for the use of the individual or entity to ' +
+      'whom they are addressed.</div>';
+    const result = trimQuotedHtml(html);
+    expect(result.trimmed).toBe(true);
+    expect(result.cut).toBe('signature');
+    expect(result.body).toContain('proofs attached');
+    expect(result.body).not.toContain('confidential');
+  });
+
+  it('cuts at Gmail [image:] plain-text placeholders rendered inside HTML', () => {
+    // Defensive: some Gmail rendering paths leak the plain-text
+    // alternative into the HTML alternative when an inline image
+    // can't be referenced as cid:. The placeholder always sits at
+    // signature scope.
+    const html =
+      '<div>See attached pricing notes.</div>' +
+      '<div>Lorenzo Costa<br>Founder &amp; CEO | Link Creative</div>' +
+      '<div>[image: instagram] <a href="https://instagram.com/co">link</a></div>';
+    const result = trimQuotedHtml(html);
+    expect(result.trimmed).toBe(true);
+    expect(result.cut).toBe('signature');
+    expect(result.body).toContain('attached pricing notes');
+    expect(result.body).not.toContain('Lorenzo Costa');
+  });
+
+  it('matches multi-word + filename [image:] alts that Outlook-forwards emit', () => {
+    // Real Gmail output includes ``[image: image001.png]`` (Outlook
+    // forwards), ``[image: Link Creative Logo]`` (multi-word alts),
+    // and ``[image: image_1.png]`` (forward chains). A regex
+    // limited to ``[\w-]+`` misses all three.
+    const html =
+      '<div>Here is the proposal you asked about.</div>' +
+      '<div>[image: image001.png] <a href="https://co.example">co.example</a></div>';
+    const result = trimQuotedHtml(html);
+    expect(result.trimmed).toBe(true);
+    expect(result.cut).toBe('signature');
+    expect(result.body).toContain('Here is the proposal');
+    expect(result.body).not.toContain('image001.png');
+  });
+
+  it('walk-back swallows an address line that ends in a period (St.)', () => {
+    // Lorenzo's signature address ``350 W Ontario St.`` ends with a
+    // period — a naive "stop on sentence punctuation" check would
+    // halt the walk-back here and leave half the contact card
+    // visible. The walk-back requires len > 40 AND sentence-ending
+    // to count as "real prose," so short signature-card lines pass
+    // through.
+    const html =
+      '<div>Talk soon — proofs attached for your review.</div>' +
+      '<div>Lorenzo Costa</div>' +
+      '<div>Founder &amp; CEO | Link Creative</div>' +
+      '<div>350 W Ontario St.</div>' +
+      '<div>[image: instagram] <a href="https://co">co</a></div>';
+    const result = trimQuotedHtml(html);
+    expect(result.trimmed).toBe(true);
+    expect(result.cut).toBe('signature');
+    expect(result.body).toContain('proofs attached');
+    expect(result.body).not.toContain('Lorenzo Costa');
+    expect(result.body).not.toContain('350 W Ontario');
+  });
+
   it('does NOT trip on "best laid plans" mid-sentence', () => {
     const html = '<p>The best laid plans of mice and men go awry.</p>';
     const result = trimQuotedHtml(html);
@@ -255,6 +323,60 @@ describe('trimQuotedText', () => {
 
   it('handles empty input safely', () => {
     expect(trimQuotedText('')).toEqual({ body: '', trimmed: false, cut: 'none' });
+  });
+
+  it('cuts at Gmail plain-text [image:] placeholders (signature start)', () => {
+    // Lorenzo's signature gets emitted as plain text with inline-image
+    // alt-text placeholders when the rendered body falls back to text
+    // (Gmail send-as alias, image-blocked client). The placeholder line
+    // is the cut marker — body text never contains "[image: foo]".
+    const text =
+      'Hi Martin,\n\n' +
+      "I don't wanna overshoot or rush anything.\n\n" +
+      'Have a great weekend.\n\n' +
+      'Lorenzo Costa\n' +
+      'Founder & CEO | Link Creative\n' +
+      '350 W Ontario Street, Suite 5E, Chicago, IL, 60654\n' +
+      'Phone: (630) 999-7922\n' +
+      'Email: Lorenzo@linkcreativeco.com\n' +
+      '[image: instagram] <https://www.instagram.com/linkcreativeco/>\n' +
+      '[image: facebook] <https://www.facebook.com/...>\n';
+    const result = trimQuotedText(text);
+    expect(result.trimmed).toBe(true);
+    expect(result.cut).toBe('signature');
+    expect(result.body).toContain('Have a great weekend');
+    expect(result.body).not.toContain('[image: instagram]');
+    expect(result.body).not.toContain('linkcreativeco.com');
+  });
+
+  it('cuts at the corporate confidentiality footer', () => {
+    const text =
+      'Quick update on the campaign — proofs attached.\n\n' +
+      'Thanks,\n' +
+      'Daisy\n\n' +
+      'This email and any files transmitted with it are confidential ' +
+      'and intended solely for the use of the individual or entity to ' +
+      'whom they are addressed.\n';
+    const result = trimQuotedText(text);
+    expect(result.trimmed).toBe(true);
+    expect(result.cut).toBe('signature');
+    expect(result.body).toContain('proofs attached');
+    // The sign-off ("Thanks,") wins the race against the confidentiality
+    // boilerplate because it appears first — either way the footer must
+    // be off.
+    expect(result.body).not.toContain('confidential');
+  });
+
+  it('cuts at "This message contains confidential information" variant', () => {
+    const text =
+      'See the attached invoice.\n\n' +
+      'This message contains confidential information and is intended ' +
+      'only for the individual named.';
+    const result = trimQuotedText(text);
+    expect(result.trimmed).toBe(true);
+    expect(result.cut).toBe('signature');
+    expect(result.body).toContain('attached invoice');
+    expect(result.body).not.toContain('confidential');
   });
 });
 
