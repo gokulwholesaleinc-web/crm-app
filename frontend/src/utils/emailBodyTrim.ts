@@ -55,6 +55,23 @@ const SIGNOFF_REGEX =
   /^(?:best(?:\s+regards)?|kind\s+regards|warm\s+regards|regards|thanks(?:\s+again)?|thank\s+you|cheers|sincerely|talk\s+soon|sent\s+from\s+my\s+[a-z]+(?:\s+[a-z]+)?|get\s+outlook\s+for\s+[a-z]+)[,.!]?\s*$/i;
 
 /**
+ * Additional signature-block markers that trigger a cut even when the
+ * message doesn't carry an explicit Gmail/Outlook wrapper and the
+ * author skips the conventional sign-off.
+ *
+ * - ``[image: <alt>]`` is Gmail's plain-text alternative for an inline
+ *   image — it only appears in signatures or branded marketing
+ *   footers, never in body copy.
+ * - The corporate confidentiality boilerplate ("This email and any
+ *   files transmitted with it are confidential...", "This message
+ *   contains confidential information...") is essentially universal
+ *   in B2B mail and lives at the end of the body block under the
+ *   signature.
+ */
+const SIGNATURE_BLOCK_REGEX =
+  /^(?:\[image:\s+[\w-]+\]|this\s+(?:e-?mail|message|email)\s+(?:and\s+any\s+files\s+transmitted\s+with\s+it\s+)?(?:are|is|contains)\s+confidential)/i;
+
+/**
  * Cut a node and everything that follows it (within `<body>`) using the
  * Range API. The Range correctly preserves any wrapping ancestors that
  * contain legitimate content before the marker — Gmail wraps both the
@@ -166,11 +183,39 @@ export function trimQuotedHtml(html: string): TrimResult {
  * candidates are in the new message.
  */
 function findHeuristicSignatureNode(body: HTMLElement): Element | null {
+  const children = Array.from(body.children);
   let seenContent = false;
-  for (const child of Array.from(body.children)) {
+  for (let i = 0; i < children.length; i++) {
+    const child = children[i];
     const firstLine = firstNonEmptyLine(child.textContent ?? '');
     if (firstLine === '') continue;
-    if (seenContent && SIGNOFF_REGEX.test(firstLine)) return child;
+    if (
+      seenContent &&
+      (SIGNOFF_REGEX.test(firstLine) || SIGNATURE_BLOCK_REGEX.test(firstLine))
+    ) {
+      // Walk back through preceding short, non-sentence siblings so
+      // the contact-card block above the marker (name / title /
+      // address) is cut with the marker rather than left as 5+ lines
+      // of vertical signature debris. Stop at a sibling that looks
+      // like real prose (long, or ends with sentence punctuation).
+      let start = i;
+      while (start > 0) {
+        const prev = children[start - 1];
+        const prevText = (prev.textContent ?? '').trim();
+        if (!prevText) {
+          start--;
+          continue;
+        }
+        const endsWithSentence = /[.!?]['")\]]?\s*$/.test(prevText);
+        const isLong = prevText.length > 120;
+        if (endsWithSentence || isLong) break;
+        start--;
+      }
+      if (children.slice(0, start).some((c) => (c.textContent ?? '').trim() !== '')) {
+        return children[start];
+      }
+      return child;
+    }
     seenContent = true;
   }
   return null;
@@ -213,6 +258,40 @@ export function trimQuotedText(text: string): TrimResult {
       (lines[i - 1] ?? '').trim() === '' &&
       lines.slice(0, i).some((l) => l.trim() !== '')
     ) {
+      cutAt = i;
+      cut = 'signature';
+      break;
+    }
+
+    // Inline-image placeholder (Gmail plain-text alternative) or
+    // corporate confidentiality footer — both are high-signal
+    // signature-block markers. No blank-line precondition because
+    // these patterns never appear in legitimate body copy (unlike
+    // "Best,", which mid-paragraph users sometimes type). Same
+    // earlier-content guard so a one-line legal-disclaimer email
+    // isn't cut to empty.
+    //
+    // Once the marker hits, walk BACK through the contiguous
+    // non-empty block so the contact-card lines that sit above it
+    // (name / title / address / Phone: / Email:) are cut with the
+    // marker — otherwise we'd trim only the trailing icons and leave
+    // 5–10 lines of vertical contact-card noise behind.
+    if (
+      i > 0 &&
+      SIGNATURE_BLOCK_REGEX.test(line) &&
+      lines.slice(0, i).some((l) => l.trim() !== '')
+    ) {
+      let blockStart = i;
+      while (blockStart > 0 && (lines[blockStart - 1] ?? '').trim() !== '') {
+        blockStart--;
+      }
+      // Don't collapse the whole body — keep walking only if we're
+      // sure earlier content remains.
+      if (lines.slice(0, blockStart).some((l) => l.trim() !== '')) {
+        cutAt = blockStart;
+        cut = 'signature';
+        break;
+      }
       cutAt = i;
       cut = 'signature';
       break;

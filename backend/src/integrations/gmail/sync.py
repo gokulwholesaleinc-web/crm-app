@@ -388,7 +388,16 @@ async def _store_sent(
         cc=_join_recipients(msg.get("cc_list") or []) or msg.get("cc") or None,
         bcc=_join_recipients(msg.get("bcc_list") or []) or msg.get("bcc") or None,
         subject=msg["subject"] or "",
-        body=msg["body_text"] or msg["body_html"] or "",
+        # Prefer HTML when both are present so the thread view can
+        # render inline images, links, and signature blocks the same
+        # way they look in Gmail. The plain-text alternative is what
+        # Gmail emits for image-blocked / text-only readers — it
+        # carries ``[image: instagram] <https://...>`` placeholders
+        # instead of real ``<img>`` tags, which renders as broken
+        # links in our thread bubbles. CRM-composed outbound already
+        # stores HTML in ``body``, so flipping the preference makes
+        # all outbound rows consistent.
+        body=msg["body_html"] or msg["body_text"] or "",
         message_id=msg["message_id"],
         thread_id=msg["thread_id"],
         sent_via="gmail",
