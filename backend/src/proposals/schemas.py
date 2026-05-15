@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 PaymentType = Literal["one_time", "subscription"]
 RecurringInterval = Literal["month", "year"]
@@ -134,13 +134,13 @@ class ProposalAcceptRequest(BaseModel):
     have been ticked — both enforced by the service layer.
     """
     signer_name: str
-    signer_email: str
+    signer_email: EmailStr
     signature_image: str = Field(min_length=1, max_length=400_000)
     agreed_to_terms: bool
 
 
 class ProposalRejectRequest(BaseModel):
-    signer_email: str
+    signer_email: EmailStr
     reason: str | None = None
 
 

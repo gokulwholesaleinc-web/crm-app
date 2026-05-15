@@ -108,17 +108,27 @@ def _designated_email_for(proposal: Proposal) -> str:
     return ""
 
 
-def _assert_signer_matches(proposal: Proposal, signer_email: str | None) -> None:
+def _assert_signer_matches(proposal: Proposal, signer_email: str | None) -> str:
     """Guard: the supplied signer_email must match the proposal's designated
     recipient (case-insensitive). Shared by accept/reject so a forwarded
     public link can't be used by a third party to sign or reject.
+
+    Returns the normalized (stripped+lowercased) email so callers can
+    persist a consistent casing instead of the raw user-supplied value.
+    A misconfigured proposal (no recipient on file) intentionally
+    raises the same generic message as a mismatch — we don't want
+    the public endpoint leaking server-side state.
     """
     expected = _designated_email_for(proposal)
     given = (signer_email or "").strip().lower()
     if not expected:
-        raise ValueError("Proposal has no recipient email on file")
-    if not given or given != expected:
+        logger.warning(
+            "Proposal %s has no designated recipient — signer match cannot succeed",
+            proposal.id,
+        )
+    if not expected or not given or given != expected:
         raise ValueError("Signer email does not match the proposal recipient")
+    return given
 
 
 class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreate, ProposalUpdate]):
@@ -369,7 +379,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
         if not signature_image:
             raise ValueError("Signature image is required")
 
-        _assert_signer_matches(proposal, signer_email)
+        normalized_signer_email = _assert_signer_matches(proposal, signer_email)
 
         # Atomic status transition: conditional UPDATE guarded by the
         # same (sent|viewed) whitelist. If two accept requests arrive
@@ -385,7 +395,7 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 status="accepted",
                 accepted_at=now,
                 signer_name=signer_name,
-                signer_email=signer_email,
+                signer_email=normalized_signer_email,
                 signer_ip=signer_ip,
                 signer_user_agent=signer_user_agent,
                 signed_at=now,
