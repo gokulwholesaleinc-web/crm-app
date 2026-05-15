@@ -7,6 +7,19 @@ import type { PaginatedResponse } from './common';
 export type PaymentType = 'one_time' | 'subscription';
 export type RecurringInterval = 'month' | 'year';
 
+/** Saved placement of the signer's signature box on the master contract PDF.
+ *  Coordinates are PDF points with origin = bottom-left of the page;
+ *  ``page`` is 1-indexed. The backend converts to 0-indexed for the
+ *  stamper. NULL on the proposal falls back to the auto-box (bottom of
+ *  the last page) at sign time. */
+export interface SignatureFieldCoords {
+  page: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 export interface ProposalBillingFields {
   payment_type: PaymentType;
   /** Stripe-native unit. 'month' + count=3 = quarterly, count=6 = bi-yearly. */
@@ -37,6 +50,9 @@ export interface ProposalBase extends ProposalBillingFields {
   /** Per-proposal override of the T&C body shown inside the
    * Sign-to-Confirm modal. NULL falls back to the tenant default. */
   terms_and_conditions?: string | null;
+  /** Saved signature-box placement on the master contract. NULL =
+   * stamper falls back to the auto-box on the last page. */
+  signature_field_coords?: SignatureFieldCoords | null;
 }
 
 export interface ProposalCreate extends ProposalBase {}
@@ -62,6 +78,9 @@ export interface ProposalUpdate {
   recurring_interval_count?: number | null;
   amount?: string | number | null;
   currency?: string;
+  /** Visual signature-box placement on the master contract. Pass an
+   * object to set, ``null`` to clear back to the auto-box default. */
+  signature_field_coords?: SignatureFieldCoords | null;
 }
 
 export interface ProposalView {

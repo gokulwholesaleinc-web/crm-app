@@ -800,6 +800,79 @@ async def upload_master_contract(
     return ProposalResponse.model_validate(proposal)
 
 
+@router.get("/{proposal_id}/master-contract")
+@limiter.limit("30/minute")
+async def download_master_contract(
+    proposal_id: int,
+    request: Request,
+    current_user: CurrentUser,
+    db: DBSession,
+    data_scope: Annotated[DataScope, Depends(get_data_scope)],
+):
+    """Stream the raw master service agreement PDF bytes back to staff.
+
+    Returned as ``application/pdf`` so the SignatureFieldPicker can hand
+    the blob straight to pdf.js — going through the backend keeps the
+    bearer-auth check, sidesteps R2 CORS (no headers on cross-origin
+    GETs to the bucket), and avoids a redirect-follow round-trip from
+    the browser.
+
+    Failure mapping: a missing R2 object (NoSuchKey / 404) is a 404 so
+    the operator gets a clear "the bytes are gone, re-upload" signal
+    instead of a misleading "storage unavailable, try again later".
+    Other ClientError + unexpected exceptions stay as 503 — a hint to
+    check R2 config + retry once the platform is healthy.
+    """
+    from botocore.exceptions import ClientError
+
+    from src.attachments.object_storage import download_object_bytes
+
+    service = ProposalService(db)
+    proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
+    check_record_access_or_shared(
+        proposal, current_user, data_scope.role_name,
+        shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_PROPOSALS),
+    )
+    if not proposal.master_contract_pdf_path:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail="No master contract on file",
+        )
+    try:
+        content = await download_object_bytes(proposal.master_contract_pdf_path)
+    except ClientError as exc:
+        response = getattr(exc, "response", None) or {}
+        err = response.get("Error", {}) if isinstance(response, dict) else {}
+        code = err.get("Code", "")
+        if code in ("NoSuchKey", "404", "NotFound"):
+            logger.warning(
+                "Master contract object missing for proposal %s (key=%r): %s",
+                proposal_id, proposal.master_contract_pdf_path, code,
+            )
+            raise HTTPException(
+                status_code=HTTPStatus.NOT_FOUND,
+                detail="Master contract file missing from storage",
+            ) from exc
+        logger.exception(
+            "R2 ClientError fetching master contract for proposal %s (code=%s)",
+            proposal_id, code,
+        )
+        raise HTTPException(
+            status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+            detail="File storage temporarily unavailable — try again later",
+        ) from exc
+    except Exception as exc:
+        logger.exception(
+            "Unexpected error fetching master contract for proposal %s",
+            proposal_id,
+        )
+        raise HTTPException(
+            status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+            detail="File storage temporarily unavailable — try again later",
+        ) from exc
+    return Response(content=content, media_type="application/pdf")
+
+
 @router.get("/{proposal_id}", response_model=ProposalResponse)
 async def get_proposal(
     proposal_id: int,

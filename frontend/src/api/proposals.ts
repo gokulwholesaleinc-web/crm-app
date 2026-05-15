@@ -327,6 +327,24 @@ export const duplicateProposal = async (proposalId: number): Promise<Proposal> =
   return response.data;
 };
 
+/**
+ * Fetch the raw bytes of the master service-agreement PDF.
+ *
+ * Streams through the backend (rather than redirecting to an R2
+ * presigned URL) so the bearer-auth check runs and pdf.js gets a
+ * same-origin Blob — Cloudflare R2 returns no CORS headers for
+ * cross-origin XHRs.
+ */
+export const downloadProposalMasterContract = async (
+  proposalId: number,
+): Promise<Blob> => {
+  const response = await apiClient.get(
+    `${PROPOSALS_BASE}/${proposalId}/master-contract`,
+    { responseType: 'blob' },
+  );
+  return response.data;
+};
+
 // ``refreshProposalFromQuote`` removed 2026-05-14 — quotes router
 // unmounted; corresponding endpoint dropped from the backend.
 
@@ -355,5 +373,6 @@ export const proposalsApi = {
   deleteAttachment: deleteProposalAttachment,
   publicAttachmentDownloadUrl: publicProposalAttachmentDownloadUrl,
   duplicate: duplicateProposal,
+  downloadMasterContract: downloadProposalMasterContract,
 };
 

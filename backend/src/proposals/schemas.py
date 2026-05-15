@@ -10,6 +10,32 @@ PaymentType = Literal["one_time", "subscription"]
 RecurringInterval = Literal["month", "year"]
 
 
+class SignatureFieldCoords(BaseModel):
+    """Visual signature placement on a master service-agreement PDF.
+
+    Coordinates are PDF points (origin = bottom-left), matching the
+    reportlab/pypdf convention the stamper draws in. ``page`` is
+    1-indexed so the picker UI's "Page N of M" label round-trips
+    cleanly; the service layer converts to 0-indexed before handing
+    off to ``pdf_stamper``.
+
+    Garbage payloads 422 here so the operator gets a clear validation
+    error instead of a silent fallback to the auto-box at stamp time.
+    The stamper's clamp + auto-box guards still run as a second line
+    of defense for fractional/page-out-of-range edge cases that survive
+    validation (e.g. a box drawn slightly past the page edge).
+    """
+
+    # ``allow_inf_nan=False`` keeps inf/-inf/NaN from sneaking past the
+    # ``ge=0`` / ``gt=0`` short-circuits and persisting as garbage that
+    # only the stamper's clamp logic would catch.
+    page: int = Field(ge=1)
+    x: float = Field(ge=0, allow_inf_nan=False)
+    y: float = Field(ge=0, allow_inf_nan=False)
+    w: float = Field(gt=0, allow_inf_nan=False)
+    h: float = Field(gt=0, allow_inf_nan=False)
+
+
 class ProposalBillingMixin(BaseModel):
     """Structured pricing fields shared by ProposalBase/Update/Response.
 
@@ -93,6 +119,11 @@ class ProposalUpdate(BaseModel):
     recurring_interval_count: int | None = None
     amount: Decimal | None = None
     currency: str | None = None
+    # Visual signature placement. ``None`` (explicitly) clears the row
+    # back to auto-box. Validated against ``SignatureFieldCoords``;
+    # ``exclude_unset=True`` in the service layer means an absent field
+    # leaves the existing value alone.
+    signature_field_coords: SignatureFieldCoords | None = None
 
     @model_validator(mode="after")
     def _check_billing_consistency(self) -> "ProposalUpdate":
@@ -197,6 +228,10 @@ class ProposalResponse(ProposalBase):
     master_contract_pdf_path: str | None = None
     signed_pdf_path: str | None = None
     signed_pdf_error: str | None = None
+    # Visual signature placement on the master contract PDF, or NULL
+    # when the stamper should auto-detect (bottom-right of last page).
+    # Surfaced so the picker UI can re-open with the saved box drawn.
+    signature_field_coords: SignatureFieldCoords | None = None
     terms_and_conditions: str | None = None
     created_at: datetime
     updated_at: datetime

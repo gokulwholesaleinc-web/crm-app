@@ -1239,3 +1239,58 @@ class TestClosedLostGuard:
         )
         assert response.status_code == 201
         assert response.json()["opportunity_id"] == test_opportunity.id
+
+
+class TestMasterContractDownload:
+    """GET /api/proposals/{id}/master-contract streams the master PDF.
+
+    The route gates access and forwards R2 bytes with the PDF content
+    type. With R2 unconfigured in CI, the fetch path naturally fails
+    and the route converts the error into a 503 — same fail-soft
+    posture as ``test_signed_pdf_visibility``'s restamp coverage.
+    """
+
+    @pytest.mark.asyncio
+    async def test_returns_404_when_no_master_on_file(
+        self,
+        client: AsyncClient,
+        auth_headers: dict,
+        test_proposal: Proposal,
+    ):
+        response = await client.get(
+            f"/api/proposals/{test_proposal.id}/master-contract",
+            headers=auth_headers,
+        )
+        assert response.status_code == 404
+        assert "master contract" in response.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_returns_503_when_storage_unavailable(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        auth_headers: dict,
+        test_proposal: Proposal,
+    ):
+        """R2 is unconfigured in CI, so ``download_object_bytes`` raises
+        and the route surfaces 503 rather than leaking the exception."""
+        test_proposal.master_contract_pdf_path = "proposals/test/master.pdf"
+        await db_session.commit()
+
+        response = await client.get(
+            f"/api/proposals/{test_proposal.id}/master-contract",
+            headers=auth_headers,
+        )
+        assert response.status_code == 503
+        assert "storage" in response.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_requires_auth(
+        self,
+        client: AsyncClient,
+        test_proposal: Proposal,
+    ):
+        response = await client.get(
+            f"/api/proposals/{test_proposal.id}/master-contract",
+        )
+        assert response.status_code == 401
