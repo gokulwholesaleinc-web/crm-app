@@ -29,6 +29,9 @@ const CompanyDetailPage = lazy(() => import('../features/companies/CompanyDetail
 const LeadsPage = lazy(() => import('../features/leads/LeadsPage'));
 const LeadDetailPage = lazy(() => import('../features/leads/LeadDetailPage'));
 
+// Pipeline (lead kanban)
+const PipelinePage = lazy(() => import('../features/pipeline/PipelinePage'));
+
 // Quotes
 const QuotesPage = lazy(() => import('../features/quotes/QuotesPage'));
 const QuoteDetailPage = lazy(() => import('../features/quotes/QuoteDetail'));
@@ -167,6 +170,18 @@ function AppRoutes() {
           <PrivateRoute>
             <ErrorBoundary>
               <LeadDetailPage />
+            </ErrorBoundary>
+          </PrivateRoute>
+        }
+      />
+
+      {/* Pipeline (lead kanban) */}
+      <Route
+        path="/pipeline"
+        element={
+          <PrivateRoute>
+            <ErrorBoundary>
+              <PipelinePage />
             </ErrorBoundary>
           </PrivateRoute>
         }

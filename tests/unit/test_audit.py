@@ -326,33 +326,3 @@ class TestAuditIntegration:
         assert audit_response.status_code == 200
         data = audit_response.json()
         assert any(item["action"] == "update" for item in data["items"])
-
-    @pytest.mark.asyncio
-    async def test_opportunity_create_generates_audit(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-        test_pipeline_stage: PipelineStage,
-    ):
-        """Test that creating an opportunity generates an audit entry."""
-        response = await client.post(
-            "/api/opportunities",
-            headers=auth_headers,
-            json={
-                "name": "Audit Opportunity Test",
-                "pipeline_stage_id": test_pipeline_stage.id,
-                "amount": 50000,
-            },
-        )
-        assert response.status_code == 201
-        opp_id = response.json()["id"]
-
-        audit_response = await client.get(
-            f"/api/audit/opportunity/{opp_id}",
-            headers=auth_headers,
-        )
-        assert audit_response.status_code == 200
-        data = audit_response.json()
-        assert data["total"] >= 1
-        assert any(item["action"] == "create" for item in data["items"])

@@ -14,7 +14,6 @@ from src.core.sorting import build_order_clauses
 from src.leads.models import Lead, LeadSource
 from src.leads.schemas import LeadCreate, LeadSourceCreate, LeadSourceUpdate, LeadUpdate
 from src.leads.scoring import calculate_lead_score
-from src.opportunities.models import PipelineStage
 
 logger = logging.getLogger(__name__)
 
@@ -169,19 +168,12 @@ class LeadService(
             raise
         if decision is not None:
             await AssignmentService(self.db).log_decision(lead.id, decision)
-        if lead.pipeline_stage_id is None:
-            stage_id = await self._first_lead_stage_id()
-            if stage_id is not None:
-                lead.pipeline_stage_id = stage_id
-                await self.db.flush()
-            else:
-                logger.warning(
-                    "Lead %s created without a pipeline_stage_id — no "
-                    "active 'lead' PipelineStage seeded. Run "
-                    "POST /api/leads/backfill-pipeline-stages once seeds "
-                    "exist to backfill this row.",
-                    lead.id,
-                )
+        # New leads stay unstaged (off-kanban) until manually promoted
+        # to Discovery via the quick-edit on /leads. Lorenzo's 2026-05-14
+        # call: "I want to manually add to discovery when we're actually
+        # doing discovery for the lead." The pre-default auto-assign to
+        # the first lead stage put every lead on the kanban immediately
+        # and overwhelmed the board.
         return await self._recalculate_score(lead)
 
     async def _auto_assign(self, data: LeadCreate) -> AssignmentDecision | None:
@@ -225,16 +217,6 @@ class LeadService(
             )
         lead = await super().update(lead, data, user_id)
         return await self._recalculate_score(lead)
-
-    async def _first_lead_stage_id(self) -> int | None:
-        result = await self.db.execute(
-            select(PipelineStage.id)
-            .where(PipelineStage.pipeline_type == "lead")
-            .where(PipelineStage.is_active.is_(True))
-            .order_by(PipelineStage.order)
-            .limit(1)
-        )
-        return result.scalar_one_or_none()
 
     async def _recalculate_score(self, lead: Lead) -> Lead:
         source_name: str | None = None

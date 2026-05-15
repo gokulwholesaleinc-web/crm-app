@@ -217,17 +217,15 @@ class TestLeadsCreate:
         assert data["status"] == "new"  # Default
 
     @pytest.mark.asyncio
-    async def test_create_lead_auto_assigns_first_lead_stage(
+    async def test_create_lead_stays_off_kanban_until_promoted(
         self,
         client: AsyncClient,
         db_session: AsyncSession,
         auth_headers: dict,
     ):
-        """A new lead with no pipeline_stage_id falls onto the first active
-        lead-typed stage so it appears on the unified pipeline kanban
-        instead of being invisible."""
-        # Seed a couple of lead-typed stages; service should pick the
-        # lowest-`order` one.
+        """New leads start with pipeline_stage_id=NULL even when lead-typed
+        stages exist (Lorenzo 2026-05-14: "I want to manually add to
+        Discovery when we're actually doing discovery"). PR #328."""
         early = PipelineStage(
             name="Discovery", order=1, pipeline_type="lead", is_active=True
         )
@@ -236,7 +234,6 @@ class TestLeadsCreate:
         )
         db_session.add_all([early, later])
         await db_session.commit()
-        await db_session.refresh(early)
 
         response = await client.post(
             "/api/leads",
@@ -246,7 +243,7 @@ class TestLeadsCreate:
 
         assert response.status_code == 201
         data = response.json()
-        assert data["pipeline_stage_id"] == early.id
+        assert data["pipeline_stage_id"] is None
 
     @pytest.mark.asyncio
     async def test_create_lead_no_stages_seeded_leaves_pipeline_null(

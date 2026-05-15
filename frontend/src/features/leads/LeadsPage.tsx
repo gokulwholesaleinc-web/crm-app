@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { PlusIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, ViewColumnsIcon } from '@heroicons/react/24/outline';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button, Modal, ConfirmDialog, PaginationBar } from '../../components/ui';
 import { SkeletonTable } from '../../components/ui/Skeleton';
@@ -10,7 +10,16 @@ import { LeadForm, LeadFormData } from './components/LeadForm';
 import { BulkActionToolbar } from './components/BulkActionToolbar';
 import { LeadEmailCampaignModal } from './components/LeadEmailCampaignModal';
 import { AddToCampaignModal } from './components/AddToCampaignModal';
-import { useLeads, useCreateLead, useUpdateLead, useDeleteLead, leadKeys } from '../../hooks/useLeads';
+import {
+  useLeads,
+  useCreateLead,
+  useUpdateLead,
+  useDeleteLead,
+  useLeadPipelineStages,
+  leadKeys,
+  leadPipelineKeys,
+} from '../../hooks/useLeads';
+import { leadsApi } from '../../api/leads';
 import { useCheckDuplicates } from '../../hooks/useDedup';
 import {
   useListPageDefaults,
@@ -23,7 +32,7 @@ import { formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { showSuccess, showError } from '../../utils/toast';
-import type { Lead, LeadCreate, LeadUpdate, ApiError } from '../../types';
+import type { Lead, LeadCreate, LeadUpdate, ApiError, PipelineStage } from '../../types';
 import type { DuplicateMatch } from '../../api/dedup';
 import clsx from 'clsx';
 
@@ -167,7 +176,104 @@ function LeadsPage() {
   const deleteLeadMutation = useDeleteLead();
   const checkDuplicatesMutation = useCheckDuplicates();
   const { data: usersData } = useUsers(0, 100, { enabled: selectedIds.length > 0 });
+  const { data: pipelineStagesData } = useLeadPipelineStages();
   const queryClient = useQueryClient();
+
+  // Pipeline-stage map keyed by id for quick label lookup in the per-row
+  // dropdown. Built off the active-only list returned by the hook —
+  // Won/Lost are kept so legacy rows already in those stages render
+  // their current value rather than "(unstaged)".
+  const stageOptions = useMemo(() => {
+    return ((pipelineStagesData ?? []) as PipelineStage[]).filter(
+      (s) => s.is_active,
+    );
+  }, [pipelineStagesData]);
+
+  // Discovery is the canonical "top of funnel" stage promoted leads
+  // land in. Resolved by name (case-insensitive) so a stage rename on
+  // the backend doesn't silently break the bulk action.
+  const discoveryStageId = useMemo(() => {
+    return stageOptions.find((s) => s.name.toLowerCase() === 'discovery')?.id ?? null;
+  }, [stageOptions]);
+
+  const [bulkMoving, setBulkMoving] = useState(false);
+
+  // Per-row stage edit. Fires a PATCH and invalidates list + kanban so
+  // both views stay in sync. On 4xx, invalidate the list query so the
+  // controlled <select> snaps back to the server's value — otherwise
+  // the dropdown stays visually on the failed target and the toast is
+  // the only signal anything broke.
+  const handleRowStageChange = async (lead: Lead, newStageId: number | null) => {
+    if ((lead.pipeline_stage_id ?? null) === newStageId) return;
+    try {
+      await updateLeadMutation.mutateAsync({
+        id: lead.id,
+        data: { pipeline_stage_id: newStageId },
+      });
+      queryClient.invalidateQueries({ queryKey: leadPipelineKeys.all });
+      showSuccess(
+        newStageId == null
+          ? `${lead.full_name || 'Lead'} taken off the pipeline`
+          : `${lead.full_name || 'Lead'} moved`,
+      );
+    } catch (err) {
+      // Force the <select> back to the persisted value by refetching.
+      queryClient.invalidateQueries({ queryKey: leadKeys.lists() });
+      const detail = (err as ApiError | null)?.detail;
+      showError(detail || 'Failed to update stage');
+    }
+  };
+
+  const handleBulkMoveToDiscovery = async () => {
+    if (!discoveryStageId || selectedIds.length === 0) return;
+    setBulkMoving(true);
+    try {
+      // Fire all moves in parallel — backend `/move` endpoint syncs
+      // status, triggers Won auto-convert, and handles dedup itself.
+      // Volume here is bounded by the page size (max 100) so parallel
+      // POSTs are safe; backend rate limiting would be the bottleneck.
+      const results = await Promise.allSettled(
+        selectedIds.map((id) =>
+          leadsApi.moveLeadStage(id, { new_stage_id: discoveryStageId }),
+        ),
+      );
+      const failedIds = selectedIds.filter(
+        (_id, i) => results[i]?.status === 'rejected',
+      );
+      const successes = results.length - failedIds.length;
+      queryClient.invalidateQueries({ queryKey: leadKeys.all });
+      queryClient.invalidateQueries({ queryKey: leadPipelineKeys.all });
+      if (successes > 0) {
+        showSuccess(
+          `Moved ${successes} lead${successes === 1 ? '' : 's'} to Discovery`,
+        );
+      }
+      if (failedIds.length > 0) {
+        // Surface a sample reason from the first rejection so admins
+        // see WHY it broke (permission, 409 un-convert guard, etc.)
+        // instead of a bare count. Keep the failed leads selected so
+        // the user can retry just the broken ones without re-checking
+        // every row.
+        const firstReason = results.find((r) => r.status === 'rejected') as
+          | PromiseRejectedResult
+          | undefined;
+        const sampleDetail = (firstReason?.reason as ApiError | undefined)?.detail;
+        const sampleText = sampleDetail ? ` First error: ${sampleDetail}` : '';
+        console.error('bulk move-to-discovery had failures', {
+          failedIds,
+          reasons: results.filter((r) => r.status === 'rejected'),
+        });
+        showError(
+          `${failedIds.length} lead${failedIds.length === 1 ? '' : 's'} failed to move.${sampleText}`,
+        );
+        setSelectedIds(failedIds);
+      } else {
+        setSelectedIds([]);
+      }
+    } finally {
+      setBulkMoving(false);
+    }
+  };
 
   const bulkUpdateMutation = useMutation({
     mutationFn: (updates: Record<string, unknown>) =>
@@ -361,6 +467,15 @@ function LeadsPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <Link
+            to="/pipeline"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500"
+            aria-label="Open the pipeline kanban board"
+          >
+            <ViewColumnsIcon className="h-4 w-4" aria-hidden="true" />
+            <span className="hidden sm:inline">Pipeline</span>
+          </Link>
+
           {selectedIds.length > 0 && (
             <>
               <Button
@@ -543,6 +658,32 @@ function LeadsPage() {
                     </div>
                     <span className="text-xs text-gray-400 dark:text-gray-500">{formatDate(lead.created_at)}</span>
                   </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <label
+                      htmlFor={`mobile-stage-${lead.id}`}
+                      className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap"
+                    >
+                      Stage
+                    </label>
+                    <select
+                      id={`mobile-stage-${lead.id}`}
+                      value={lead.pipeline_stage_id ?? ''}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        handleRowStageChange(lead, v === '' ? null : Number(v));
+                      }}
+                      disabled={updateLeadMutation.isPending}
+                      className="flex-1 min-w-0 text-xs rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-2 py-1.5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary-500"
+                      aria-label={`Move ${lead.full_name || 'lead'} to stage`}
+                    >
+                      <option value="">(unstaged)</option>
+                      {stageOptions.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <div className="flex gap-4 pt-2 border-t border-gray-100 dark:border-gray-700">
                     <button
                       onClick={() => handleEdit(lead)}
@@ -584,6 +725,12 @@ function LeadsPage() {
                       Company
                     </th>
                     <SortableTh field="status" label="Status" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                    >
+                      Stage
+                    </th>
                     <SortableTh field="score" label="Score" sortBy={sortBy} sortDir={sortDir} onToggle={handleSortToggle} />
                     <th
                       scope="col"
@@ -625,6 +772,29 @@ function LeadsPage() {
                         <span className={getStatusBadgeClasses(lead.status, 'lead')}>
                           {formatStatusLabel(lead.status)}
                         </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <label htmlFor={`stage-${lead.id}`} className="sr-only">
+                          Pipeline stage for {lead.full_name || 'lead'}
+                        </label>
+                        <select
+                          id={`stage-${lead.id}`}
+                          value={lead.pipeline_stage_id ?? ''}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            handleRowStageChange(lead, v === '' ? null : Number(v));
+                          }}
+                          disabled={updateLeadMutation.isPending}
+                          className="text-xs rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-2 py-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary-500"
+                          aria-label={`Move ${lead.full_name || 'lead'} to stage`}
+                        >
+                          <option value="">(unstaged)</option>
+                          {stageOptions.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name}
+                            </option>
+                          ))}
+                        </select>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <ScoreIndicator score={lead.score} />
@@ -692,9 +862,28 @@ function LeadsPage() {
         onBulkUpdate={async (updates) => { await bulkUpdateMutation.mutateAsync(updates); }}
         onBulkAssign={async (ownerId) => { await bulkAssignMutation.mutateAsync(ownerId); }}
         onClearSelection={() => setSelectedIds([])}
-        isLoading={bulkUpdateMutation.isPending || bulkAssignMutation.isPending}
+        isLoading={bulkUpdateMutation.isPending || bulkAssignMutation.isPending || bulkMoving}
         users={(usersData ?? []).map((u: { id: number; full_name: string }) => ({ id: u.id, full_name: u.full_name }))}
         statusOptions={statusOptions.filter((o) => o.value !== '')}
+        // "Move to Discovery" is the manual-promotion affordance per
+        // Lorenzo's call (May 14 CRM review): leads stay off-kanban
+        // until a human picks them up. Disabled when the stage hasn't
+        // resolved yet (rare — only on first paint or after admin
+        // renames the canonical stage).
+        extraAction={
+          discoveryStageId != null ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              leftIcon={<ViewColumnsIcon className="h-4 w-4" />}
+              onClick={handleBulkMoveToDiscovery}
+              disabled={bulkMoving || bulkUpdateMutation.isPending}
+              aria-label={`Move ${selectedIds.length} leads to Discovery stage`}
+            >
+              Move to Discovery
+            </Button>
+          ) : null
+        }
       />
 
       {/* Form Modal */}

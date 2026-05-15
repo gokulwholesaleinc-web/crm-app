@@ -132,9 +132,9 @@ class TestMetaLeadConversion:
         # Webhooks are unauthenticated; attribution falls to the
         # system admin so audit trails point somewhere.
         assert lead.created_by_id == system_admin.id
-        # Pipeline backfill should land us on the active 'lead' stage
-        # so the kanban doesn't render this row in the "0" bucket.
-        assert lead.pipeline_stage_id == lead_pipeline_stage.id
+        # New leads stay off-kanban (pipeline_stage_id=NULL) post #328 —
+        # admin promotes them into Discovery manually via the quick-edit.
+        assert lead.pipeline_stage_id is None
 
     @pytest.mark.asyncio
     async def test_lead_source_is_meta_lead_ads(

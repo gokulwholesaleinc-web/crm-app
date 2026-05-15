@@ -96,32 +96,69 @@ async def _preflight_won_conversion(
     db,
     lead: Lead,
     stage: PipelineStage,
-) -> bool:
+) -> tuple[bool, str | None]:
     """Decide whether a Won-stage move should auto-convert to Contact.
 
-    Pure read — never mutates the lead. Returns ``True`` when the move
-    should spawn a Contact (and optionally a Company); ``False`` for
-    non-Won transitions or when the lead is already linked to a contact.
+    Pure read — never mutates the lead. Returns ``(should_convert, skip_reason)``:
+        - ``(True, None)``  — proceed with conversion
+        - ``(False, None)`` — non-Won transition; no conversion to do
+        - ``(False, "stale_contact_fk")`` — linked contact is missing /
+          soft-deleted; admin intervention needed before retrying
+        - ``(False, "already_converted")`` — lead is already linked to a
+          live contact; re-Won is a no-op (caller should still toast)
 
-    Stale-FK guard: if ``converted_contact_id`` points at a missing /
-    soft-deleted row, decline the auto-convert and leave the stage
-    change valid — admin needs to un-delete the contact or clear the
-    FK before a fresh conversion can run, otherwise the alias-match
-    path would attempt a duplicate insert against the unconditional
-    ``ix_contacts_unique_email`` index and 500.
+    The stale-FK guard prevents the alias-match path from attempting a
+    duplicate insert against the unconditional ``ix_contacts_unique_email``
+    index (would 500). The caller surfaces ``skip_reason`` to the
+    frontend so the user sees an explanatory toast instead of a silent
+    Won placement.
     """
-    if not stage.is_won or lead.converted_contact_id is not None:
-        if lead.converted_contact_id is not None:
-            linked = await db.get(Contact, lead.converted_contact_id)
-            if linked is None or linked.deleted_at is not None:
-                logger.warning(
-                    "lead %s has stale converted_contact_id=%s (missing or "
-                    "soft-deleted); skipping auto-convert on Won-stage move",
-                    lead.id, lead.converted_contact_id,
-                )
-        return False
+    if not stage.is_won:
+        return (False, None)
+    if lead.converted_contact_id is None:
+        return (True, None)
+    linked = await db.get(Contact, lead.converted_contact_id)
+    if linked is None or linked.deleted_at is not None:
+        logger.warning(
+            "lead %s has stale converted_contact_id=%s (missing or "
+            "soft-deleted); skipping auto-convert on Won-stage move",
+            lead.id, lead.converted_contact_id,
+        )
+        return (False, "stale_contact_fk")
+    return (False, "already_converted")
 
-    return True
+
+async def _guard_unconvert_transition(
+    db,
+    lead: Lead,
+    new_stage: PipelineStage,
+) -> None:
+    """409 when a converted lead would leave the Won stage.
+
+    Without this, a kanban drag from Won → Discovery would silently keep
+    ``status='converted'`` and ``converted_contact_id`` while sitting in
+    a non-terminal stage. The next Won re-drop then hits the stale-FK
+    branch of :func:`_preflight_won_conversion` and skips conversion —
+    the lead would corrupt-loop. Un-conversion is a deliberate admin
+    action; require it via the lead-detail endpoint, not a drag.
+    """
+    if lead.pipeline_stage_id is None or lead.pipeline_stage_id == new_stage.id:
+        return
+    if lead.converted_contact_id is None:
+        return
+    if new_stage.is_won:
+        return
+    old_stage = await db.get(PipelineStage, lead.pipeline_stage_id)
+    if old_stage is None or not old_stage.is_won:
+        return
+    raise HTTPException(
+        status_code=HTTPStatus.CONFLICT,
+        detail=(
+            "Lead is already converted — moving it off the Won stage "
+            "would strand the contact link. Un-convert from the lead "
+            "detail page before changing stages."
+        ),
+    )
 
 
 async def _apply_stage_change(
@@ -130,12 +167,15 @@ async def _apply_stage_change(
     stage: PipelineStage,
     current_user: User,
     should_convert: bool,
+    skip_reason: str | None = None,
 ) -> dict | None:
     """Apply stage-change side effects: status sync + auto-convert.
 
-    Caller must have already set ``lead.pipeline_stage_id = stage.id``
-    AND called :func:`_preflight_won_conversion` to decide whether the
-    Won move should spawn a Contact (``should_convert``).
+    Caller must have already set ``lead.pipeline_stage_id = stage.id``,
+    run :func:`_guard_unconvert_transition` for the corruption guard,
+    and called :func:`_preflight_won_conversion` to decide whether the
+    Won move should spawn a Contact (``should_convert``) and to capture
+    any ``skip_reason`` to surface in the response.
 
     Shared by POST /leads/{id}/move and PATCH /leads/{id} so picking
     "Won" from the lead-detail edit form behaves the same as dragging
@@ -154,13 +194,18 @@ async def _apply_stage_change(
     if not should_convert:
         await db.flush()
         await db.refresh(lead)
+        if skip_reason:
+            # Surface the skip so the kanban / lead-detail UI can toast
+            # "Lead marked Won but contact link is stale" instead of
+            # silently rendering the Won placement.
+            return {"converted": False, "reason": skip_reason}
         return None
 
     # If conversion raises, the unflushed status mutation rolls back
     # with the rest of the request transaction — no stranded
     # ``status='converted'`` row with a missing contact link.
     converter = LeadConverter(db)
-    contact, company = await converter.full_conversion(
+    contact, company = await converter.convert_to_contact(
         lead=lead,
         user_id=current_user.id,
         create_company=bool(lead.company_name),
@@ -374,14 +419,12 @@ async def get_lead_kanban(
     # User query instead of N (one per stage) or doing the .map() inside
     # each loop iteration.
     #
-    # Hide successfully-converted leads: once the auto-convert (Won move)
-    # has produced the Opportunity, the deal lives on as that Opportunity
-    # — duplicating it on the lead board is just noise. Orphan-converted
-    # rows (converted_opportunity_id IS NULL) stay visible so the user
-    # can finish them via the explicit Convert action.
+    # New leads start with pipeline_stage_id=NULL (off-kanban) per
+    # Lorenzo's 2026-05-14 call — they only appear once an admin moves
+    # them into Discovery via the quick-edit. Won-stage leads stay in
+    # the Won column for visibility even after Contact auto-conversion.
     leads_query = select(Lead).where(
         Lead.pipeline_stage_id.in_([s.id for s in stages]),
-        Lead.converted_opportunity_id.is_(None),
     )
     if resolved_owner_id:
         leads_query = leads_query.where(Lead.owner_id == resolved_owner_id)
@@ -519,9 +562,12 @@ async def move_lead(
     )
 
     stage = await _resolve_lead_stage(db, request.new_stage_id)
-    should_convert = await _preflight_won_conversion(db, lead, stage)
+    await _guard_unconvert_transition(db, lead, stage)
+    should_convert, skip_reason = await _preflight_won_conversion(db, lead, stage)
     lead.pipeline_stage_id = stage.id
-    conversion_info = await _apply_stage_change(db, lead, stage, current_user, should_convert)
+    conversion_info = await _apply_stage_change(
+        db, lead, stage, current_user, should_convert, skip_reason,
+    )
 
     lead_response = await _build_lead_response(service, lead)
     response_dict = lead_response.model_dump()
@@ -574,13 +620,15 @@ async def update_lead(
     # bad stage_id rejects cleanly instead of FK-failing mid-transaction.
     stage: PipelineStage | None = None
     should_convert = False
+    skip_reason: str | None = None
     if (
         "pipeline_stage_id" in update_fields
         and lead_data.pipeline_stage_id is not None
         and lead_data.pipeline_stage_id != old_stage_id
     ):
         stage = await _resolve_lead_stage(db, lead_data.pipeline_stage_id)
-        should_convert = await _preflight_won_conversion(db, lead, stage)
+        await _guard_unconvert_transition(db, lead, stage)
+        should_convert, skip_reason = await _preflight_won_conversion(db, lead, stage)
         # _apply_stage_change will mutate status (and may stamp
         # converted_contact_id) — record those columns in the audit diff
         # even though the client didn't submit them. Otherwise audit
@@ -604,7 +652,7 @@ async def update_lead(
     conversion_info = None
     if stage is not None:
         conversion_info = await _apply_stage_change(
-            db, updated_lead, stage, current_user, should_convert,
+            db, updated_lead, stage, current_user, should_convert, skip_reason,
         )
 
     new_data = snapshot_entity(updated_lead, update_fields)
@@ -709,7 +757,7 @@ async def full_conversion(
         raise_bad_request(ErrorMessages.already_converted(EntityNames.LEAD))
 
     converter = LeadConverter(db)
-    contact, company = await converter.full_conversion(
+    contact, company = await converter.convert_to_contact(
         lead=lead,
         user_id=current_user.id,
         create_company=request.create_company,

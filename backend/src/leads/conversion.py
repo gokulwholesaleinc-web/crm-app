@@ -212,22 +212,3 @@ class LeadConverter:
             count, lead_id, contact_id,
         )
         return count
-
-    async def full_conversion(
-        self,
-        lead: Lead,
-        user_id: int,
-        create_company: bool = True,
-    ) -> tuple[Contact, Company | None]:
-        """Won-stage conversion: Lead → Contact (+ Company).
-
-        Wraps ``convert_to_contact`` so the lead router's stage-change
-        helper has a stable name to call. The Opportunity creation step
-        was removed when Lorenzo collapsed the pipeline to leads-only on
-        2026-05-14.
-        """
-        return await self.convert_to_contact(
-            lead=lead,
-            user_id=user_id,
-            create_company=create_company,
-        )

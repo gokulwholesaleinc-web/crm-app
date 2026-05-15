@@ -8,6 +8,17 @@ export type EntityType =
   | 'campaign'
   | 'activity';
 
+// Sentinel returned for historical activity/audit rows that still carry
+// `entity_type='opportunities'`. The Opportunities feature was removed in
+// PR1 (#328) but the backend preserves the column for historical data,
+// so the value still appears in the wild. Callers detect this and
+// render a muted, non-clickable label instead of either (a) silently
+// rendering nothing or (b) crashing on a missing route.
+export const LEGACY_OPPORTUNITY_TYPE = 'opportunity-legacy' as const;
+export type LegacyOpportunityType = typeof LEGACY_OPPORTUNITY_TYPE;
+
+export type NormalizedEntityType = EntityType | LegacyOpportunityType;
+
 export const entityRoutes: Record<EntityType, string> = {
   contact: '/contacts',
   company: '/companies',
@@ -32,9 +43,14 @@ const pluralAliases: Record<string, EntityType> = {
   activities: 'activity',
 };
 
-export function normalizeEntityType(value: string | null | undefined): EntityType | null {
+export function normalizeEntityType(
+  value: string | null | undefined,
+): NormalizedEntityType | null {
   if (!value) return null;
   const lower = value.toLowerCase();
+  if (lower === 'opportunity' || lower === 'opportunities') {
+    return LEGACY_OPPORTUNITY_TYPE;
+  }
   if (lower in entityRoutes) return lower as EntityType;
   return pluralAliases[lower] ?? null;
 }

@@ -151,38 +151,6 @@ class TestLeadAssignmentNotification:
         assert len(notifications) == 0
 
 
-class TestOpportunityStageChangeNotification:
-    """Verify notifications are created when opportunity stages change."""
-
-    @pytest.mark.asyncio
-    async def test_changing_opportunity_stage_creates_notification(
-        self,
-        client: AsyncClient,
-        auth_headers: dict,
-        db_session: AsyncSession,
-        test_opportunity: Opportunity,
-        test_won_stage: PipelineStage,
-    ):
-        """Changing pipeline stage should create a stage_change notification."""
-        response = await client.patch(
-            f"/api/opportunities/{test_opportunity.id}",
-            headers=auth_headers,
-            json={"pipeline_stage_id": test_won_stage.id},
-        )
-        assert response.status_code == 200
-
-        result = await db_session.execute(
-            select(Notification).where(
-                Notification.type == "stage_change",
-                Notification.entity_type == "opportunities",
-                Notification.entity_id == test_opportunity.id,
-            )
-        )
-        notifications = list(result.scalars().all())
-        assert len(notifications) == 1
-        assert "Discovery" in notifications[0].message or "Won" in notifications[0].message
-
-
 class TestActivityDueNotification:
     """Verify notifications are created when activities with due dates are created."""
 

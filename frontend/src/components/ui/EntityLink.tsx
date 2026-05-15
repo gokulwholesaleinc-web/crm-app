@@ -1,6 +1,10 @@
 import { Link } from 'react-router-dom';
 import clsx from 'clsx';
-import { entityRoutes, type EntityType } from './EntityLink.utils';
+import {
+  entityRoutes,
+  LEGACY_OPPORTUNITY_TYPE,
+  type NormalizedEntityType,
+} from './EntityLink.utils';
 
 export type EntityLinkVariant = 'primary' | 'muted' | 'inherit';
 
@@ -17,7 +21,7 @@ const variantStyles: Record<EntityLinkVariant, string> = {
 };
 
 export interface EntityLinkProps {
-  type: EntityType;
+  type: NormalizedEntityType;
   id: number | string | null | undefined;
   children: React.ReactNode;
   variant?: EntityLinkVariant;
@@ -39,6 +43,26 @@ export function EntityLink({
   title,
   stopPropagation = true,
 }: EntityLinkProps) {
+  // Legacy opportunity rows have no destination route — Opportunities was
+  // removed in PR1 #328. Render an explanatory muted label instead of
+  // silently dropping the row or routing to a 404. We intentionally
+  // ignore `variant` here: the legacy treatment is always "muted, not a
+  // link" so callers don't accidentally style it as clickable.
+  if (type === LEGACY_OPPORTUNITY_TYPE) {
+    return (
+      <span
+        className={clsx(
+          'text-gray-400 dark:text-gray-500 italic',
+          className,
+        )}
+        title={title ?? 'Opportunity records were retired — original entity is preserved for audit history.'}
+      >
+        {children}{' '}
+        <span className="text-[10px] uppercase tracking-wide">(legacy opportunity)</span>
+      </span>
+    );
+  }
+
   if (id === null || id === undefined || id === '') {
     return <span className={className}>{children}</span>;
   }
