@@ -16,8 +16,15 @@ side-effects from sibling test files can't paper over a removed import.
 
 from __future__ import annotations
 
+import pathlib
 import subprocess
 import sys
+
+# ``backend/`` — the dir where ``src/`` is importable. Test runs from
+# either the repo root (devs) or ``backend/`` (CI); the subprocess
+# needs the latter regardless so ``import src.proposals.models``
+# resolves.
+_BACKEND_DIR = pathlib.Path(__file__).resolve().parents[3]
 
 
 def test_quote_table_registers_via_proposals_models_alone() -> None:
@@ -36,6 +43,8 @@ def test_quote_table_registers_via_proposals_models_alone() -> None:
         capture_output=True,
         text=True,
         timeout=30,
+        check=False,
+        cwd=_BACKEND_DIR,
     )
     assert result.returncode == 0, (
         f"subprocess failed: stdout={result.stdout!r} stderr={result.stderr!r}"
