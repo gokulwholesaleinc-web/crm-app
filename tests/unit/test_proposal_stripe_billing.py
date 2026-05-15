@@ -29,6 +29,14 @@ from src.proposals.models import Proposal
 from src.proposals.schemas import ProposalBillingMixin
 from src.proposals.service import ProposalService, _resolve_billing
 
+# Smallest possible valid PNG (1x1 transparent); used as the drawn
+# signature payload for service-level Sign-to-Confirm calls that
+# bypass the HTTP layer's base64 decode.
+_ONE_PIXEL_PNG = bytes.fromhex(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+    "0000000d49444154789c63000000000005000158a8c4d70000000049454e44ae426082"
+)
+
 
 # ---------------------------------------------------------------------------
 # Stripe stub — a tiny object graph that mirrors the bits of the SDK
@@ -243,34 +251,36 @@ async def billing_proposal(
     return proposal
 
 
-class TestAcceptSpawnsBilling:
+class TestAcceptNeverSpawnsBilling:
+    """Lorenzo's 2026-05-14 ask: signature ≠ payment. accept_proposal_public
+    must never auto-spawn Stripe regardless of amount/payment_type — the
+    operator manually retries billing via the admin UI after signing."""
+
     @pytest.mark.asyncio
-    async def test_one_time_accept_creates_invoice(
+    async def test_one_time_accept_does_not_create_invoice(
         self,
         db_session: AsyncSession,
         billing_proposal: Proposal,
         test_contact: Contact,
     ):
-        registry = _InvoiceRegistry()
-        stub = _make_stripe_stub(registry)
-
-        with patch("src.payments.service._get_stripe", return_value=stub):
+        with patch("src.payments.service._get_stripe") as mock_stripe:
             service = ProposalService(db_session)
             accepted = await service.accept_proposal_public(
                 billing_proposal,
                 signer_name="Jane Client",
                 signer_email=test_contact.email,
+                signature_image=_ONE_PIXEL_PNG,
+                agreed_to_terms=True,
             )
+            mock_stripe.assert_not_called()
 
-        assert accepted.status == "awaiting_payment"
-        assert accepted.stripe_invoice_id is not None
-        assert accepted.stripe_payment_url is not None
-        assert accepted.invoice_sent_at is not None
-        # The invoice item should carry 50000 cents ($500.00).
-        assert registry.items[0]["amount"] == 50000
+        assert accepted.status == "accepted"
+        assert accepted.stripe_invoice_id is None
+        assert accepted.stripe_payment_url is None
+        assert accepted.invoice_sent_at is None
 
     @pytest.mark.asyncio
-    async def test_subscription_accept_creates_checkout_session(
+    async def test_subscription_accept_does_not_create_checkout_session(
         self,
         db_session: AsyncSession,
         billing_proposal: Proposal,
@@ -278,31 +288,24 @@ class TestAcceptSpawnsBilling:
     ):
         billing_proposal.payment_type = "subscription"
         billing_proposal.recurring_interval = "month"
-        billing_proposal.recurring_interval_count = 3  # quarterly
+        billing_proposal.recurring_interval_count = 3
         await db_session.commit()
         await db_session.refresh(billing_proposal)
 
-        registry = _InvoiceRegistry()
-        stub = _make_stripe_stub(registry)
-
-        with patch("src.payments.service._get_stripe", return_value=stub), \
-             patch("src.proposals.service.settings") as mock_settings:
-            mock_settings.FRONTEND_BASE_URL = "https://crm.test"
+        with patch("src.payments.service._get_stripe") as mock_stripe:
             service = ProposalService(db_session)
             accepted = await service.accept_proposal_public(
                 billing_proposal,
                 signer_name="Jane Client",
                 signer_email=test_contact.email,
+                signature_image=_ONE_PIXEL_PNG,
+                agreed_to_terms=True,
             )
+            mock_stripe.assert_not_called()
 
-        assert accepted.status == "awaiting_payment"
-        assert accepted.stripe_checkout_session_id is not None
-        assert accepted.stripe_payment_url == "https://checkout.stripe.test/sess"
-        sessions = stub.checkout.Session.created
-        assert len(sessions) == 1
-        line_item = sessions[0]["line_items"][0]
-        assert line_item["price_data"]["recurring"] == {"interval": "month", "interval_count": 3}
-        assert line_item["price_data"]["unit_amount"] == 50000
+        assert accepted.status == "accepted"
+        assert accepted.stripe_checkout_session_id is None
+        assert accepted.stripe_payment_url is None
 
     @pytest.mark.asyncio
     async def test_accept_without_amount_stays_accepted(
@@ -311,19 +314,19 @@ class TestAcceptSpawnsBilling:
         billing_proposal: Proposal,
         test_contact: Contact,
     ):
-        """Proposal with no amount and no quote -> no Stripe call, status stays accepted."""
+        """Even with no amount on file, accept just records the signature."""
         billing_proposal.amount = None
         await db_session.commit()
         await db_session.refresh(billing_proposal)
 
-        # Even with Stripe configured, the billing helper should skip
-        # because _resolve_billing returns None.
         with patch("src.payments.service._get_stripe") as mock_stripe:
             service = ProposalService(db_session)
             accepted = await service.accept_proposal_public(
                 billing_proposal,
                 signer_name="Jane Client",
                 signer_email=test_contact.email,
+                signature_image=_ONE_PIXEL_PNG,
+                agreed_to_terms=True,
             )
             mock_stripe.assert_not_called()
 
@@ -852,7 +855,11 @@ class TestResendCheckoutSession:
 class TestIdempotencyKeysAreDeterministic:
     """A uuid-randomized idempotency key defeats Stripe's dedup. Same logical
     operation (same proposal_id) must produce the same key so a Stripe-side
-    retry returns the cached invoice instead of creating a duplicate."""
+    retry returns the cached invoice instead of creating a duplicate.
+
+    Auto-spawn-on-accept was removed 2026-05-14 — the entry point is now
+    ``retry_billing`` (admin-triggered after signing), which calls the
+    same ``_maybe_spawn_billing`` path that owns the key derivation."""
 
     @pytest.mark.asyncio
     async def test_proposal_invoice_idempotency_key_omits_uuid(
@@ -861,15 +868,16 @@ class TestIdempotencyKeysAreDeterministic:
         billing_proposal: Proposal,
         test_contact: Contact,
     ):
+        # retry_billing requires the proposal to be in accepted state.
+        billing_proposal.status = "accepted"
+        await db_session.commit()
+        await db_session.refresh(billing_proposal)
+
         registry = _InvoiceRegistry()
         stub = _make_stripe_stub(registry)
         with patch("src.payments.service._get_stripe", return_value=stub):
             service = ProposalService(db_session)
-            await service.accept_proposal_public(
-                billing_proposal,
-                signer_name="Jane Client",
-                signer_email=test_contact.email,
-            )
+            await service.retry_billing(billing_proposal)
 
         invoice_call = registry.created[0]
         assert invoice_call.get("idempotency_key") == f"proposal_{billing_proposal.id}_invoice_v1"
@@ -886,6 +894,7 @@ class TestIdempotencyKeysAreDeterministic:
         billing_proposal.payment_type = "subscription"
         billing_proposal.recurring_interval = "month"
         billing_proposal.recurring_interval_count = 1
+        billing_proposal.status = "accepted"
         await db_session.commit()
         await db_session.refresh(billing_proposal)
 
@@ -895,11 +904,7 @@ class TestIdempotencyKeysAreDeterministic:
              patch("src.proposals.service.settings") as mock_settings:
             mock_settings.FRONTEND_BASE_URL = "https://crm.test"
             service = ProposalService(db_session)
-            await service.accept_proposal_public(
-                billing_proposal,
-                signer_name="Jane Client",
-                signer_email=test_contact.email,
-            )
+            await service.retry_billing(billing_proposal)
 
         sessions = stub.checkout.Session.created
         assert sessions[0].get("idempotency_key") == f"proposal_sub_{billing_proposal.id}_v1"

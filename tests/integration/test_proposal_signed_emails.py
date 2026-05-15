@@ -40,6 +40,13 @@ from src.whitelabel.models import Tenant, TenantUser
 
 _DUMMY_PDF = b"%PDF-1.4 dummy"
 
+# Smallest possible valid PNG (1x1 transparent) — bypasses the HTTP
+# layer's base64 decode for service-level Sign-to-Confirm calls.
+_ONE_PIXEL_PNG = bytes.fromhex(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+    "0000000d49444154789c63000000000005000158a8c4d70000000049454e44ae426082"
+)
+
 
 async def _make_proposal(
     db: AsyncSession,
@@ -76,6 +83,8 @@ async def _accept(
             proposal,
             signer_name="Jane Signer",
             signer_email=signer_email,
+            signature_image=_ONE_PIXEL_PNG,
+            agreed_to_terms=True,
         )
 
 
