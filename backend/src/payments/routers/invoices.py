@@ -37,9 +37,8 @@ async def create_and_send_invoice(
 
     await _verify_stripe_customer_access(db, request_data.customer_id, current_user)
 
-    # Quote-linking + opportunity back-fill retired 2026-05-14 — quotes
-    # router unmounted. ``quote_id`` is still accepted on the request
-    # schema for legacy clients but no longer dereferences a Quote row.
+    # Quote-linking + opportunity back-fill retired 2026-05-14 with the
+    # quotes router unmount; ``quote_id`` is no longer accepted here.
 
     service = PaymentService(db)
     try:
@@ -50,7 +49,6 @@ async def create_and_send_invoice(
             user_id=current_user.id,
             currency=request_data.currency,
             due_days=request_data.due_days,
-            quote_id=request_data.quote_id,
             payment_method_types=request_data.payment_method_types,
         )
         return CreateAndSendInvoiceResponse(**result)

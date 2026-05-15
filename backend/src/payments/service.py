@@ -14,6 +14,7 @@ from src.config import settings
 from src.core.base_service import CRUDService
 from src.core.constants import DEFAULT_PAGE_SIZE
 from src.core.sorting import build_order_clauses
+from src.email.types import EmailAttachment
 from src.payments.exceptions import NoRecipientEmailError
 from src.payments.models import (
     Payment,
@@ -562,7 +563,6 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
             render_payment_invoice_email,
         )
         from src.email.service import EmailService
-        from src.email.types import EmailAttachment
 
         # ``Payment.quote`` eager-load dropped 2026-05-14 — relationship removed.
         result = await self.db.execute(
@@ -640,7 +640,7 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
 
     async def _collect_payment_attachments(
         self, payment_id: int,
-    ) -> tuple[list["EmailAttachment"], list[str]]:
+    ) -> tuple[list[EmailAttachment], list[str]]:
         """Fetch every staff-uploaded Attachment for ``payment_id`` from R2.
 
         Mirrors ``ProposalService._collect_proposal_attachments`` — fetches
@@ -657,7 +657,6 @@ class PaymentService(CRUDService[Payment, PaymentCreate, PaymentUpdate]):
 
         from src.attachments.models import Attachment
         from src.attachments.service import AttachmentService
-        from src.email.types import EmailAttachment
 
         result = await self.db.execute(
             select(Attachment)
