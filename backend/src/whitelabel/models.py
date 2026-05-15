@@ -62,6 +62,10 @@ class TenantSettings(Base, TimestampMixin):
     # Branding
     company_name: Mapped[str | None] = mapped_column(String(255))
     logo_url: Mapped[str | None] = mapped_column(String(500))
+    # Optional white-text variant rendered in dark mode. Falls back to
+    # ``logo_url`` when NULL — set this to a logo that reads against a
+    # dark surface (e.g. Link Creative's white-text wordmark).
+    logo_url_dark: Mapped[str | None] = mapped_column(String(500))
     favicon_url: Mapped[str | None] = mapped_column(String(500))
 
     # Theme colors

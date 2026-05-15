@@ -293,17 +293,35 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
                 collapsed ? 'h-10 w-10' : 'h-12'
               )}
             >
+              {/* When the tenant supplies a white-text dark variant we
+                  swap it in via Tailwind's class-based dark: variant.
+                  Halo filter dropped — the dark variant reads against
+                  the dark surface on its own. */}
               <img
                 src={tenant.logo_url}
                 alt={tenant.company_name || 'Logo'}
                 width={collapsed ? 32 : 180}
                 height={collapsed ? 32 : 40}
                 className={clsx(
-                  'object-contain [filter:drop-shadow(0_0_1.5px_rgba(255,255,255,0.65))_drop-shadow(0_0_4px_rgba(255,255,255,0.3))]',
-                  collapsed ? 'h-8 w-auto max-w-[32px]' : 'h-10 w-auto max-w-[176px]'
+                  'object-contain',
+                  collapsed ? 'h-8 w-auto max-w-[32px]' : 'h-10 w-auto max-w-[176px]',
+                  tenant.logo_url_dark && 'dark:hidden'
                 )}
                 onError={() => setLogoError(true)}
               />
+              {tenant.logo_url_dark && (
+                <img
+                  src={tenant.logo_url_dark}
+                  alt={tenant.company_name || 'Logo'}
+                  width={collapsed ? 32 : 180}
+                  height={collapsed ? 32 : 40}
+                  className={clsx(
+                    'hidden object-contain dark:block',
+                    collapsed ? 'h-8 w-auto max-w-[32px]' : 'h-10 w-auto max-w-[176px]'
+                  )}
+                  onError={() => setLogoError(true)}
+                />
+              )}
             </div>
           ) : (
             <div

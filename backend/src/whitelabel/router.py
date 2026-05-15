@@ -71,6 +71,7 @@ def _build_public_tenant_config(tenant: Tenant) -> PublicTenantConfig:
         tenant_slug=tenant.slug,
         company_name=settings.company_name if settings else tenant.name,
         logo_url=settings.logo_url if settings else None,
+        logo_url_dark=settings.logo_url_dark if settings else None,
         favicon_url=settings.favicon_url if settings else None,
         primary_color=settings.primary_color if settings else DEFAULT_PRIMARY_COLOR,
         secondary_color=settings.secondary_color if settings else DEFAULT_SECONDARY_COLOR,

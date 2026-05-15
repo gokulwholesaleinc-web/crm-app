@@ -149,9 +149,22 @@ export function MobileSidebar({ isOpen, onClose }: MobileSidebarProps) {
                   alt={tenant.company_name || 'Logo'}
                   width={180}
                   height={40}
-                  className="h-10 w-auto max-w-[176px] object-contain [filter:drop-shadow(0_0_1.5px_rgba(255,255,255,0.65))_drop-shadow(0_0_4px_rgba(255,255,255,0.3))]"
+                  className={clsx(
+                    'h-10 w-auto max-w-[176px] object-contain',
+                    tenant.logo_url_dark && 'dark:hidden',
+                  )}
                   onError={() => setMobileLogoError(true)}
                 />
+                {tenant.logo_url_dark && (
+                  <img
+                    src={tenant.logo_url_dark}
+                    alt={tenant.company_name || 'Logo'}
+                    width={180}
+                    height={40}
+                    className="hidden h-10 w-auto max-w-[176px] object-contain dark:block"
+                    onError={() => setMobileLogoError(true)}
+                  />
+                )}
               </div>
             ) : (
               <div
