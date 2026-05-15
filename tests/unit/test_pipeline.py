@@ -80,70 +80,10 @@ class TestSalesKPIsEndpoint:
         assert data["payments_collected_count"] == 0
         assert data["quote_to_payment_conversion_rate"] == 0.0
 
-    @pytest.mark.asyncio
-    async def test_sales_kpis_with_quotes(
-        self,
-        client: AsyncClient,
-        db_session: AsyncSession,
-        auth_headers: dict,
-        test_user: User,
-        test_opportunity: Opportunity,
-    ):
-        """Test sales KPIs reflect quote counts correctly."""
-        # Create a draft quote (should NOT count as sent)
-        draft_quote = Quote(
-            title="Draft Quote",
-            quote_number="Q-DRAFT-001",
-            status="draft",
-            subtotal=1000.0,
-            total=1000.0,
-            currency="USD",
-            opportunity_id=test_opportunity.id,
-            owner_id=test_user.id,
-            created_by_id=test_user.id,
-        )
-        db_session.add(draft_quote)
-
-        # Create a sent quote (should count)
-        sent_quote = Quote(
-            title="Sent Quote",
-            quote_number="Q-SENT-001",
-            status="sent",
-            subtotal=2000.0,
-            total=2000.0,
-            currency="USD",
-            opportunity_id=test_opportunity.id,
-            owner_id=test_user.id,
-            created_by_id=test_user.id,
-        )
-        db_session.add(sent_quote)
-
-        # Create an accepted quote
-        accepted_quote = Quote(
-            title="Accepted Quote",
-            quote_number="Q-ACC-001",
-            status="accepted",
-            subtotal=5000.0,
-            total=5000.0,
-            currency="USD",
-            opportunity_id=test_opportunity.id,
-            owner_id=test_user.id,
-            created_by_id=test_user.id,
-        )
-        db_session.add(accepted_quote)
-
-        await db_session.commit()
-
-        response = await client.get(
-            "/api/dashboard/sales-kpis", headers=auth_headers
-        )
-        assert response.status_code == 200
-        data = response.json()
-
-        # 2 quotes that are not draft (sent + accepted)
-        assert data["quotes_sent"] == 2
-        # 1 out of 3 total quotes is accepted = 33.3%
-        assert data["quote_to_payment_conversion_rate"] == 33.3
+    # Quote-counted KPIs retired 2026-05-14 — `quotes_sent` is hard-zeroed
+    # in the response (see SalesKPIResponse), so the historic
+    # `test_sales_kpis_with_quotes` case asserts a contract that no
+    # longer exists.
 
     @pytest.mark.asyncio
     async def test_sales_kpis_with_proposals(

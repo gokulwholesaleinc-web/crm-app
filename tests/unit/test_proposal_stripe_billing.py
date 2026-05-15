@@ -185,29 +185,9 @@ class TestResolveBilling:
         assert result["amount"] == Decimal("500")
         assert result["payment_type"] == "one_time"
 
-    def test_falls_back_to_quote_when_no_proposal_amount(self):
-        quote = SimpleNamespace(
-            total=Decimal("1000"),
-            currency="USD",
-            payment_type="subscription",
-            recurring_interval="month",
-            recurring_interval_count=3,
-        )
-        proposal = SimpleNamespace(
-            amount=None,
-            currency="USD",
-            payment_type="one_time",
-            recurring_interval=None,
-            recurring_interval_count=None,
-            quote=quote,
-            title="Proposal title",
-        )
-        result = _resolve_billing(proposal)  # type: ignore[arg-type]
-        assert result is not None
-        assert result["amount"] == Decimal("1000")
-        assert result["payment_type"] == "subscription"
-        assert result["interval"] == "month"
-        assert result["interval_count"] == 3
+    # Quote-fallback removed 2026-05-14 with the quotes router unmount —
+    # proposals must carry their own amount, so `test_falls_back_to_quote_*`
+    # is gone.
 
     def test_returns_none_when_no_amount_anywhere(self):
         proposal = SimpleNamespace(

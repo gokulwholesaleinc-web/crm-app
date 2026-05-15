@@ -128,7 +128,6 @@ class TestResolveEntity:
             ("company", "companies"),
             ("lead", "leads"),
             ("opportunity", "opportunities"),
-            ("quote", "quotes"),
             ("proposal", "proposals"),
             ("contract", "contracts"),
             ("payment", "payments"),

@@ -231,48 +231,7 @@ class TestActivityEventWiring:
         assert payload["data"]["activity_type"] == "call"
 
 
-class TestQuoteEventWiring:
-    """Verify events are emitted when quotes are sent/accepted."""
-
-    @pytest.mark.asyncio
-    async def test_quote_accepted_event(
-        self,
-        client: AsyncClient,
-        auth_headers: dict,
-        db_session: AsyncSession,
-        test_user: User,
-        test_contact: Contact,
-        test_company: Company,
-        event_collector: _EventCollector,
-    ):
-        """Should emit a quote.accepted event with correct payload when a quote is accepted."""
-        # Create a quote
-        quote = Quote(
-            quote_number="QE-001",
-            title="Event Test Quote",
-            status="sent",
-            contact_id=test_contact.id,
-            company_id=test_company.id,
-            subtotal=1000.0,
-            total=1000.0,
-            owner_id=test_user.id,
-            created_by_id=test_user.id,
-        )
-        db_session.add(quote)
-        await db_session.commit()
-        await db_session.refresh(quote)
-
-        response = await client.post(
-            f"/api/quotes/{quote.id}/accept",
-            headers=auth_headers,
-        )
-        assert response.status_code == 200
-
-        events = event_collector.find("quote.accepted")
-        assert len(events) == 1
-        payload = events[0]["payload"]
-        assert payload["entity_type"] == "quote"
-        assert payload["entity_id"] == quote.id
+# Quote event wiring retired 2026-05-14 with the quotes router unmount.
 
 
 class TestProposalEventWiring:
