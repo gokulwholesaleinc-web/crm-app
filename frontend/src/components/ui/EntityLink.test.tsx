@@ -1,7 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { renderWithProviders, screen, fireEvent } from '../../test-utils/renderWithProviders';
 import { EntityLink } from './EntityLink';
-import { normalizeEntityType, LEGACY_OPPORTUNITY_TYPE } from './EntityLink.utils';
+import {
+  normalizeEntityType,
+  LEGACY_OPPORTUNITY_TYPE,
+  LEGACY_QUOTE_TYPE,
+} from './EntityLink.utils';
 
 describe('EntityLink', () => {
   it('renders a link to the matching detail route', () => {
@@ -13,7 +17,6 @@ describe('EntityLink', () => {
   it.each([
     ['company', 7, '/companies/7'],
     ['lead', 3, '/leads/3'],
-    ['quote', 'abc', '/quotes/abc'],
     ['proposal', 5, '/proposals/5'],
     ['payment', 9, '/payments/9'],
     ['campaign', 4, '/campaigns/4'],
@@ -67,6 +70,25 @@ describe('EntityLink', () => {
       expect(screen.queryByRole('link')).toBeNull();
       expect(screen.getByText('Old Deal')).toBeInTheDocument();
       expect(screen.getByText(/legacy opportunity/i)).toBeInTheDocument();
+    });
+  });
+
+  describe('legacy quote', () => {
+    it('normalizes "quote" and "quotes" to the legacy sentinel', () => {
+      expect(normalizeEntityType('quote')).toBe(LEGACY_QUOTE_TYPE);
+      expect(normalizeEntityType('quotes')).toBe(LEGACY_QUOTE_TYPE);
+      expect(normalizeEntityType('QUOTES')).toBe(LEGACY_QUOTE_TYPE);
+    });
+
+    it('renders a non-clickable muted label for legacy quote rows', () => {
+      renderWithProviders(
+        <EntityLink type={LEGACY_QUOTE_TYPE} id={11}>
+          Old Quote
+        </EntityLink>,
+      );
+      expect(screen.queryByRole('link')).toBeNull();
+      expect(screen.getByText('Old Quote')).toBeInTheDocument();
+      expect(screen.getByText(/legacy quote/i)).toBeInTheDocument();
     });
   });
 });

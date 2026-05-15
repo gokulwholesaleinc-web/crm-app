@@ -320,15 +320,8 @@ export const duplicateProposal = async (proposalId: number): Promise<Proposal> =
   return response.data;
 };
 
-/**
- * Refresh a proposal's billing fields from its linked quote.
- */
-export const refreshProposalFromQuote = async (proposalId: number): Promise<Proposal> => {
-  const response = await apiClient.post<Proposal>(
-    `${PROPOSALS_BASE}/${proposalId}/refresh-from-quote`,
-  );
-  return response.data;
-};
+// ``refreshProposalFromQuote`` removed 2026-05-14 — quotes router
+// unmounted; corresponding endpoint dropped from the backend.
 
 export const proposalsApi = {
   list: listProposals,
@@ -353,7 +346,6 @@ export const proposalsApi = {
   uploadAttachment: uploadProposalAttachment,
   deleteAttachment: deleteProposalAttachment,
   publicAttachmentDownloadUrl: publicProposalAttachmentDownloadUrl,
-  refreshFromQuote: refreshProposalFromQuote,
   duplicate: duplicateProposal,
 };
 

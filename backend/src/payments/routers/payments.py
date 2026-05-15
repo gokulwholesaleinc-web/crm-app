@@ -19,7 +19,6 @@ from src.email.service import assert_gmail_connected
 from src.events.service import PAYMENT_RECEIVED, emit
 from src.payments._router_helpers import (
     _verify_opportunity_access,
-    _verify_quote_access,
     _verify_stripe_customer_access,
 )
 from src.payments.schemas import (
@@ -45,29 +44,14 @@ async def create_checkout(
     """Create a Stripe Checkout Session."""
     service = PaymentService(db)
 
-    await _verify_quote_access(db, request_data.quote_id, current_user)
+    # Quote-linking path retired 2026-05-14 — quotes router unmounted.
+    # ``quote_id`` is no longer threaded into the persisted Payment row
+    # to prevent client-side injection of arbitrary FK values now that
+    # the access check is gone.
     if request_data.customer_id is not None:
         await _verify_stripe_customer_access(db, request_data.customer_id, current_user)
 
-    # Determine amount + opportunity link from quote if quote_id is provided.
-    # The service already inherits quote.opportunity_id onto the Payment row,
-    # so we have to gate on the source quote's opportunity here too — without
-    # this guard, a Closed-Lost opportunity could still spawn a Stripe
-    # Checkout Session via the quote-driven path.
     amount = request_data.amount
-    quote_opportunity_id: int | None = None
-    if request_data.quote_id:
-        from src.quotes.models import Quote
-        result = await db.execute(select(Quote).where(Quote.id == request_data.quote_id))
-        quote = result.scalar_one_or_none()
-        if not quote:
-            raise HTTPException(
-                status_code=HTTPStatus.NOT_FOUND,
-                detail="Quote not found",
-            )
-        if not amount:
-            amount = quote.total
-        quote_opportunity_id = quote.opportunity_id
 
     if not amount or amount <= 0:
         raise HTTPException(
@@ -76,8 +60,6 @@ async def create_checkout(
         )
 
     try:
-        if quote_opportunity_id is not None:
-            await assert_opportunity_active(db, quote_opportunity_id, "payment")
         result = await service.create_checkout_session(
             amount=amount,
             currency=request_data.currency,
@@ -85,7 +67,6 @@ async def create_checkout(
             cancel_url=request_data.cancel_url,
             user_id=current_user.id,
             customer_id=request_data.customer_id,
-            quote_id=request_data.quote_id,
         )
         return CreateCheckoutResponse(**result)
     except ValueError as e:
@@ -108,7 +89,7 @@ async def create_payment_intent(
             detail="Amount must be greater than 0",
         )
 
-    await _verify_quote_access(db, request_data.quote_id, current_user)
+    # Quote-access check retired 2026-05-14 — quotes router unmounted.
     await _verify_opportunity_access(db, request_data.opportunity_id, current_user)
     if request_data.customer_id is not None:
         await _verify_stripe_customer_access(db, request_data.customer_id, current_user)
@@ -118,13 +99,13 @@ async def create_payment_intent(
     try:
         if request_data.opportunity_id is not None:
             await assert_opportunity_active(db, request_data.opportunity_id, "payment")
+        # Same Quote-injection prevention as create_checkout above.
         result = await service.create_payment_intent(
             amount=request_data.amount,
             currency=request_data.currency,
             user_id=current_user.id,
             customer_id=request_data.customer_id,
             opportunity_id=request_data.opportunity_id,
-            quote_id=request_data.quote_id,
         )
         return CreatePaymentIntentResponse(**result)
     except ValueError as e:
@@ -166,10 +147,8 @@ async def stripe_webhook(request: Request, db: DBSession):
     ):
         user_id = payment_ctx.get("owner_id")
 
-        # Fallback chain: payment.owner -> quote.owner -> opportunity.owner.
-        if user_id is None and payment_ctx.get("quote_id"):
-            from src.quotes.models import Quote
-            user_id = await _resolve_owner(db, Quote, payment_ctx["quote_id"])
+        # Fallback chain: payment.owner -> opportunity.owner. (Quote
+        # fallback retired 2026-05-14 — quotes router unmounted.)
         if user_id is None and payment_ctx.get("opportunity_id"):
             from src.opportunities.models import Opportunity
             user_id = await _resolve_owner(db, Opportunity, payment_ctx["opportunity_id"])

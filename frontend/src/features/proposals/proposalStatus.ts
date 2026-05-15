@@ -10,9 +10,10 @@ import type { ChecklistItem } from '../../components/shared/checklist';
 
 const STATUS_ORDER = ['draft', 'sent', 'viewed', 'accepted', 'awaiting_payment', 'paid'];
 
-// Once a proposal hits any of these states, edits/refresh-from-quote would
-// mutate something the customer has already committed to. The backend
-// refuses these on /refresh-from-quote — keep the frontend in sync.
+// Once a proposal hits any of these states, edits would mutate
+// something the customer has already committed to. Used to gate the
+// edit modal + status transitions. (The /refresh-from-quote endpoint
+// was retired with the quotes router on 2026-05-14.)
 const LOCKED_STATUSES = new Set(['signed', 'accepted', 'awaiting_payment', 'paid']);
 
 function rankStatus(status: string | undefined): number {
@@ -21,7 +22,8 @@ function rankStatus(status: string | undefined): number {
   return idx === -1 ? 0 : idx;
 }
 
-/** True when the proposal can no longer be safely refreshed from its quote. */
+/** True when the proposal has reached a customer-committed status and
+ *  should no longer be edited from the UI. */
 export function isProposalLocked(proposal: Proposal): boolean {
   return LOCKED_STATUSES.has(proposal.status ?? '');
 }

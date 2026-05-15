@@ -324,26 +324,18 @@ function DashboardPage() {
       </div>
 
       {/* Sales Pipeline KPIs */}
+      {/* Quotes Sent KPI tile retired 2026-05-14 — quotes router unmounted.
+          The sales-kpis endpoint still returns ``quotes_sent: 0`` for legacy
+          clients but the tile is dropped from the dashboard grid (now 3
+          columns wide instead of 4). */}
       {salesKpis === undefined ? (
-        <div className="grid grid-cols-1 gap-3 sm:gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          <SkeletonCard />
+        <div className="grid grid-cols-1 gap-3 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3">
           <SkeletonCard />
           <SkeletonCard />
           <SkeletonCard />
         </div>
       ) : salesKpis && (
-        <div className="grid grid-cols-1 gap-3 sm:gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          <NumberCard
-            title="Quotes Sent"
-            value={salesKpis.quotes_sent}
-            href="/quotes"
-            colorVariant="primary"
-            icon={
-              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            }
-          />
+        <div className="grid grid-cols-1 gap-3 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3">
           <NumberCard
             title="Proposals Sent"
             value={salesKpis.proposals_sent}
@@ -367,7 +359,7 @@ function DashboardPage() {
             }
           />
           <NumberCard
-            title="Quote Conversion"
+            title="Proposal Conversion"
             value={`${salesKpis.quote_to_payment_conversion_rate}%`}
             colorVariant="primary"
             icon={

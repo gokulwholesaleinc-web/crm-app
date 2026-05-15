@@ -24,7 +24,6 @@ _ENTITY_PLURALS = {
     "company": "companies",
     "lead": "leads",
     "opportunity": "opportunities",
-    "quote": "quotes",
     "proposal": "proposals",
     "contract": "contracts",
     "payment": "payments",
@@ -80,9 +79,6 @@ async def _resolve_entity(db: AsyncSession, entity_type: str, entity_id: int):
     elif normalized == "opportunity":
         from src.opportunities.models import Opportunity
         model = Opportunity
-    elif normalized == "quote":
-        from src.quotes.models import Quote
-        model = Quote
     elif normalized == "proposal":
         from src.proposals.models import Proposal
         model = Proposal

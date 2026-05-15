@@ -16,7 +16,6 @@ logger = logging.getLogger(__name__)
 # for events we never wanted to notify about.
 _RECIPIENT_REQUIRED_EVENTS = frozenset({
     "lead.created", "contact.created", "opportunity.stage_changed",
-    "quote.sent", "quote.rejected",
     "proposal.sent", "proposal.rejected",
     "payment.received",
 })
@@ -139,29 +138,13 @@ async def _build_notification(session, event_type: str, payload: dict[str, Any])
             entity_id=entity_id,
         )
 
-    # quote.{sent,rejected} / proposal.{sent,rejected}: always notify the
-    # owner of the underlying record. Looking the owner up here (instead of
-    # trusting payload.user_id, which is the actor for `.sent` and the owner
-    # for `.rejected`) keeps the routing intent explicit. `accepted` events
-    # are emitted but not subscribed here — out of audit scope.
-    if event_type in ("quote.sent", "quote.rejected"):
-        verb = event_type.split(".", 1)[1]
-        number = data.get("quote_number") or "—"
-        from src.quotes.models import Quote
-        recipient_id = await _lookup_owner(session, Quote, entity_id)
-        if not recipient_id:
-            return None
-        if not await _gate(session, event_type, recipient_id):
-            return None
-        return Notification(
-            user_id=recipient_id,
-            type=event_type.replace(".", "_"),
-            title=f"Quote {verb}",
-            message=f"Quote {number} was {verb}",
-            entity_type=entity_type,
-            entity_id=entity_id,
-        )
-
+    # proposal.{sent,rejected}: always notify the owner of the underlying
+    # record. Looking the owner up here (instead of trusting payload.user_id,
+    # which is the actor for `.sent` and the owner for `.rejected`) keeps the
+    # routing intent explicit. `accepted` events are emitted but not
+    # subscribed here — out of audit scope.
+    # Quote.{sent,rejected} enrichment retired 2026-05-14 — quotes router
+    # unmounted; events no longer fire.
     if event_type in ("proposal.sent", "proposal.rejected"):
         verb = event_type.split(".", 1)[1]
         number = data.get("proposal_number") or "—"

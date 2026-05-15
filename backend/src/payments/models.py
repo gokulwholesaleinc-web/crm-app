@@ -13,7 +13,6 @@ if TYPE_CHECKING:
     from src.companies.models import Company
     from src.contacts.models import Contact
     from src.opportunities.models import Opportunity
-    from src.quotes.models import Quote
 
 
 class StripeCustomer(Base, TimestampMixin):
@@ -127,6 +126,10 @@ class Payment(Base, AuditableMixin):
         ForeignKey("opportunities.id", ondelete="SET NULL"),
         index=True,
     )
+    # Legacy FK column — quotes router unmounted 2026-05-14. Column kept
+    # nullable so historical Payment rows linked to retired quotes still
+    # have queryable provenance. No new writes; the ORM relationship has
+    # been removed so SQLAlchemy will not try to autoload the Quote class.
     quote_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("quotes.id", ondelete="SET NULL"),
@@ -161,9 +164,7 @@ class Payment(Base, AuditableMixin):
     opportunity: Mapped[Optional["Opportunity"]] = relationship(
         "Opportunity", lazy="joined"
     )
-    quote: Mapped[Optional["Quote"]] = relationship(
-        "Quote", lazy="joined"
-    )
+    # ``quote`` ORM relationship removed 2026-05-14 — see ``quote_id`` above.
 
 
 class Subscription(Base, AuditableMixin):

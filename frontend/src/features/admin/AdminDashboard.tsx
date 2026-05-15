@@ -17,7 +17,6 @@ import {
   UserGroupIcon,
   BuildingOfficeIcon,
   FunnelIcon,
-  DocumentTextIcon,
   DocumentDuplicateIcon,
   CreditCardIcon,
   ClockIcon,
@@ -169,7 +168,8 @@ export default function AdminDashboard() {
         { label: 'Contacts', value: stats.total_contacts, icon: UserGroupIcon, color: 'bg-blue-500' },
         { label: 'Companies', value: stats.total_companies, icon: BuildingOfficeIcon, color: 'bg-purple-500' },
         { label: 'Leads', value: stats.total_leads, icon: FunnelIcon, color: 'bg-yellow-500' },
-        { label: 'Quotes', value: stats.total_quotes, icon: DocumentTextIcon, color: 'bg-cyan-500' },
+        // ``total_quotes`` stat retired 2026-05-14 — quotes router unmounted.
+        // Observability endpoint still returns the field as 0 for client-compat.
         { label: 'Proposals', value: stats.total_proposals, icon: DocumentDuplicateIcon, color: 'bg-pink-500' },
         { label: 'Payments', value: stats.total_payments, icon: CreditCardIcon, color: 'bg-orange-500' },
       ]

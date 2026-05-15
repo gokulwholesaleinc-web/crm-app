@@ -5,13 +5,12 @@ import { useQueries } from '@tanstack/react-query';
 import { listContacts } from '../../api/contacts';
 import { listCompanies } from '../../api/companies';
 import { listLeads } from '../../api/leads';
-import { listQuotes } from '../../api/quotes';
 import { listProposals } from '../../api/proposals';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 
 interface SearchResult {
   id: number;
-  entity: 'contact' | 'company' | 'lead' | 'quote' | 'proposal';
+  entity: 'contact' | 'company' | 'lead' | 'proposal';
   label: string;
   sublabel?: string;
   href: string;
@@ -73,16 +72,7 @@ const ENTITIES: EntityConfig[] = [
       };
     },
   },
-  {
-    entity: 'quote',
-    groupLabel: 'Quotes',
-    routePrefix: '/quotes',
-    fetch: (q) => listQuotes({ search: q, page_size: 5 }) as Promise<{ items: unknown[] }>,
-    toResult: (raw) => {
-      const q = raw as { id: number; title: string; quote_number?: string; company?: MaybeNamed };
-      return { id: q.id, label: q.title, sublabel: q.quote_number || q.company?.name };
-    },
-  },
+  // Quotes search category removed 2026-05-14 — quotes router unmounted.
   {
     entity: 'proposal',
     groupLabel: 'Proposals',

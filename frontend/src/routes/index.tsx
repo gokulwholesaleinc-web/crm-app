@@ -32,10 +32,8 @@ const LeadDetailPage = lazy(() => import('../features/leads/LeadDetailPage'));
 // Pipeline (lead kanban)
 const PipelinePage = lazy(() => import('../features/pipeline/PipelinePage'));
 
-// Quotes
-const QuotesPage = lazy(() => import('../features/quotes/QuotesPage'));
-const QuoteDetailPage = lazy(() => import('../features/quotes/QuoteDetail'));
-const PublicQuoteView = lazy(() => import('../features/quotes/PublicQuoteView'));
+// Quotes feature removed 2026-05-14 — replaced by one-off Payment invoices
+// with optional PDF attachments. Backend tables preserved for historical data.
 
 // Payments
 const PaymentsPage = lazy(() => import('../features/payments/PaymentsPage'));
@@ -94,7 +92,7 @@ function AppRoutes() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/auth/google/callback" element={<GoogleAuthCallbackPage />} />
       <Route path="/proposals/public/:token" element={<PublicProposalView />} />
-      <Route path="/quotes/public/:quoteNumber" element={<PublicQuoteView />} />
+      {/* /quotes/public/:quoteNumber route removed 2026-05-14 */}
       <Route path="/contracts/sign/:token" element={<PublicContractView />} />
 
       {/* Protected routes */}
@@ -187,27 +185,8 @@ function AppRoutes() {
         }
       />
 
-      {/* Quotes */}
-      <Route
-        path="/quotes"
-        element={
-          <PrivateRoute>
-            <ErrorBoundary>
-              <QuotesPage />
-            </ErrorBoundary>
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/quotes/:id"
-        element={
-          <PrivateRoute>
-            <ErrorBoundary>
-              <QuoteDetailPage />
-            </ErrorBoundary>
-          </PrivateRoute>
-        }
-      />
+      {/* Quotes routes removed 2026-05-14 — replaced by one-off Payment
+          invoices with optional PDF attachments. */}
 
       {/* Payments */}
       <Route

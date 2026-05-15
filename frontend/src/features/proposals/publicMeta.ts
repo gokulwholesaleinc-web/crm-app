@@ -1,7 +1,10 @@
-// Helpers for public-facing quote/proposal pages: per-document open-graph tags
-// (so Slack/iMessage unfurls show the quote/proposal title instead of the
+// Helpers for public-facing proposal pages: per-document open-graph tags
+// (so Slack/iMessage unfurls show the proposal title instead of the
 // generic app title) and a luminance-based text color picker so a tenant who
 // sets a pale primary_color doesn't get unreadable white-on-white text.
+//
+// Moved from features/quotes/ on 2026-05-14 when the quotes feature was
+// retired; PublicProposalView is now the only consumer.
 
 const LINK_REL = 'canonical';
 

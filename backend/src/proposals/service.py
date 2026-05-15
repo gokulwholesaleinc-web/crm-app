@@ -53,37 +53,21 @@ PROPOSAL_SORTABLE_FIELDS: dict[str, Any] = {
 def _resolve_billing(proposal: Proposal) -> dict | None:
     """Flatten a proposal's billable terms into a dict the PaymentService can act on.
 
-    Preference order:
-      1. Proposal's own structured pricing fields (amount + payment_type)
-      2. Linked Quote's total + payment_type + recurring_interval(_count)
-
     Returns ``None`` when no billable amount can be derived, which tells
     ``_maybe_spawn_billing`` to skip Stripe entirely and leave the
     proposal in plain ``accepted`` state.
-    """
-    # Pick the source that carries a positive amount, preferring the
-    # proposal's own fields over the linked quote's. The proposal and
-    # quote share the same relevant attribute names (amount/total,
-    # currency, payment_type, recurring_interval[_count]) so downstream
-    # attribute lookups don't branch.
-    source = None
-    raw_amount = proposal.amount
-    if raw_amount is not None and Decimal(str(raw_amount)) > 0:
-        source = proposal
-    elif proposal.quote is not None:
-        q_total = getattr(proposal.quote, "total", None)
-        if q_total is not None and Decimal(str(q_total)) > 0:
-            source = proposal.quote
-            raw_amount = q_total
 
-    if source is None or raw_amount is None:
+    Quote-fallback removed 2026-05-14 — quotes router unmounted.
+    Proposals must now carry their own ``amount`` + ``payment_type``.
+    """
+    if proposal.amount is None or Decimal(str(proposal.amount)) <= 0:
         return None
 
-    amount = Decimal(str(raw_amount))
-    currency = getattr(source, "currency", "USD") or "USD"
-    payment_type = getattr(source, "payment_type", "one_time") or "one_time"
-    interval = getattr(source, "recurring_interval", None)
-    interval_count = getattr(source, "recurring_interval_count", None)
+    amount = Decimal(str(proposal.amount))
+    currency = proposal.currency or "USD"
+    payment_type = proposal.payment_type or "one_time"
+    interval = proposal.recurring_interval
+    interval_count = proposal.recurring_interval_count
 
     if payment_type == "subscription":
         if not interval:
@@ -140,11 +124,12 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
     update_exclude_fields = set()
 
     def _get_eager_load_options(self):
+        # ``Proposal.quote`` eager-load dropped 2026-05-14 — relationship
+        # removed with the quotes router unmount; column persists.
         return [
             selectinload(Proposal.opportunity),
             selectinload(Proposal.contact),
             selectinload(Proposal.company),
-            selectinload(Proposal.quote),
             selectinload(Proposal.views),
             selectinload(Proposal.created_by_user),
             selectinload(Proposal.owner),
@@ -206,7 +191,6 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
                 selectinload(Proposal.opportunity),
                 selectinload(Proposal.contact),
                 selectinload(Proposal.company),
-                selectinload(Proposal.quote),
                 selectinload(Proposal.created_by_user),
                 selectinload(Proposal.owner),
             )

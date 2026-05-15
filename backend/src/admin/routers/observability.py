@@ -21,7 +21,6 @@ from src.leads.models import Lead
 from src.opportunities.models import Opportunity, PipelineStage
 from src.payments.models import Payment
 from src.proposals.models import Proposal
-from src.quotes.models import Quote
 
 router = APIRouter()
 
@@ -46,7 +45,6 @@ async def get_system_stats(
     total_companies = (await db.execute(select(func.count(Company.id)))).scalar() or 0
     total_leads = (await db.execute(select(func.count(Lead.id)))).scalar() or 0
     total_opps = (await db.execute(select(func.count(Opportunity.id)))).scalar() or 0
-    total_quotes = (await db.execute(select(func.count(Quote.id)))).scalar() or 0
     total_proposals = (await db.execute(select(func.count(Proposal.id)))).scalar() or 0
     total_payments = (await db.execute(select(func.count(Payment.id)))).scalar() or 0
     active_users = (await db.execute(
@@ -62,7 +60,9 @@ async def get_system_stats(
         total_companies=total_companies,
         total_leads=total_leads,
         total_opportunities=total_opps,
-        total_quotes=total_quotes,
+        # ``total_quotes`` retired 2026-05-14 — quotes router unmounted.
+        # Field kept on the response schema for client-compat; always 0.
+        total_quotes=0,
         total_proposals=total_proposals,
         total_payments=total_payments,
         active_users_7d=active_users,

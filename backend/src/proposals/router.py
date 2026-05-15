@@ -17,7 +17,7 @@ from src.audit.utils import (
     snapshot_entity,
 )
 from src.core.client_ip import get_client_ip
-from src.core.constants import ENTITY_TYPE_PROPOSALS, ENTITY_TYPE_QUOTES, EntityNames, HTTPStatus
+from src.core.constants import ENTITY_TYPE_PROPOSALS, EntityNames, HTTPStatus
 from src.core.data_scope import DataScope, check_record_access_or_shared, get_data_scope
 from src.core.http_errors import value_error_as_400
 from src.core.rate_limit import limiter
@@ -37,7 +37,6 @@ from src.proposals.attachment_views import (
     _hash_token,
     record_attachment_view,
 )
-from src.proposals.refresh import refresh_proposal_from_quote
 from src.proposals.schemas import (
     CreateFromTemplateRequest,
     ProposalAcceptRequest,
@@ -806,76 +805,8 @@ async def retry_proposal_billing(
     return ProposalResponse.model_validate(proposal)
 
 
-@router.post("/{proposal_id}/refresh-from-quote", response_model=ProposalResponse)
-async def refresh_proposal_from_quote_endpoint(
-    proposal_id: int,
-    request: Request,
-    current_user: CurrentUser,
-    db: DBSession,
-    data_scope: Annotated[DataScope, Depends(get_data_scope)],
-):
-    """Sync proposal billing fields (amount, currency, payment_type, recurring) from its linked quote.
-
-    Refuses if the proposal is locked (signed/accepted/awaiting_payment/paid)
-    or has no quote link. Requires the caller to have edit access to the
-    proposal AND read access to the linked quote — without the quote check,
-    a sales rep who knows another rep's quote id could PATCH `quote_id`
-    then call this endpoint to pull the peer's pricing onto their own
-    proposal.
-    """
-    service = ProposalService(db)
-    proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
-    check_ownership(proposal, current_user, EntityNames.PROPOSAL)
-
-    # Verify the caller can read the linked quote before pulling its
-    # values onto the proposal. refresh_proposal_from_quote itself
-    # fetches the quote again for the actual mutation; that's a small
-    # extra round-trip in exchange for keeping the access check next
-    # to the auth code.
-    if proposal.quote_id:
-        from src.quotes.models import Quote as _QuoteModel
-        quote_row = (
-            await db.execute(
-                select(_QuoteModel).where(_QuoteModel.id == proposal.quote_id)
-            )
-        ).scalar_one_or_none()
-        if quote_row is not None:
-            check_record_access_or_shared(
-                quote_row,
-                current_user,
-                data_scope.role_name,
-                shared_entity_ids=data_scope.get_shared_ids(ENTITY_TYPE_QUOTES),
-            )
-
-    old_data = {
-        "amount": proposal.amount,
-        "currency": proposal.currency,
-        "payment_type": proposal.payment_type,
-        "recurring_interval": proposal.recurring_interval,
-        "recurring_interval_count": proposal.recurring_interval_count,
-    }
-
-    try:
-        updated = await refresh_proposal_from_quote(db, proposal)
-    except LookupError as exc:
-        raise HTTPException(status_code=409, detail=str(exc))
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-
-    new_data = {
-        "amount": updated.amount,
-        "currency": updated.currency,
-        "payment_type": updated.payment_type,
-        "recurring_interval": updated.recurring_interval,
-        "recurring_interval_count": updated.recurring_interval_count,
-    }
-    ip_address = get_client_ip(request)
-    await audit_entity_update(
-        db, "proposal", updated.id, current_user.id, old_data, new_data, ip_address
-    )
-    await db.commit()
-    await db.refresh(updated)
-    return ProposalResponse.model_validate(updated)
+# ``/{proposal_id}/refresh-from-quote`` endpoint removed 2026-05-14 —
+# quotes router unmounted; proposals are no longer hydrated from quotes.
 
 
 @router.post("/{proposal_id}/resend-payment-link")

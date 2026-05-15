@@ -16,7 +16,6 @@ from src.companies.models import Company
 from src.opportunities.models import Opportunity, PipelineStage
 from src.payments.models import Payment, StripeCustomer
 from src.proposals.models import Proposal
-from src.quotes.models import Quote
 
 
 class TestContactsList:
@@ -761,20 +760,7 @@ class TestContactOwnerCascade:
         )
         db_session.add(proposal)
 
-        quote = Quote(
-            quote_number="QT-CASCADE-1",
-            title="Cascade quote",
-            status="draft",
-            currency="USD",
-            subtotal=0,
-            tax_rate=0,
-            tax_amount=0,
-            total=0,
-            contact_id=test_contact.id,
-            owner_id=test_user.id,
-            created_by_id=test_user.id,
-        )
-        db_session.add(quote)
+        # Quote-cascade removed 2026-05-14 — quotes router unmounted.
 
         # Payment is linked via StripeCustomer.contact_id, not directly.
         stripe_customer = StripeCustomer(
@@ -799,8 +785,8 @@ class TestContactOwnerCascade:
         db_session.add(payment)
         await db_session.commit()
 
-        # An opportunity / proposal / quote / payment owned by SOMEONE ELSE
-        # on the same contact must NOT cascade — guard against an over-broad
+        # An opportunity / proposal / payment owned by SOMEONE ELSE on the
+        # same contact must NOT cascade — guard against an over-broad
         # UPDATE that yanks records away from a different rep.
         third_party = User(
             email="cascade_third_party@test.com",
@@ -836,7 +822,7 @@ class TestContactOwnerCascade:
         assert response.json()["owner_id"] == new_owner.id
 
         # Linked records owned by the old owner should now be on the new owner.
-        for row in (opp, proposal, quote, payment):
+        for row in (opp, proposal, payment):
             await db_session.refresh(row)
             assert row.owner_id == new_owner.id, f"{type(row).__name__} did not cascade"
 

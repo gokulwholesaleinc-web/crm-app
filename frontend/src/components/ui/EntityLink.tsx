@@ -1,8 +1,10 @@
+import type { MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import clsx from 'clsx';
 import {
   entityRoutes,
   LEGACY_OPPORTUNITY_TYPE,
+  LEGACY_QUOTE_TYPE,
   type NormalizedEntityType,
 } from './EntityLink.utils';
 
@@ -48,6 +50,12 @@ export function EntityLink({
   // silently dropping the row or routing to a 404. We intentionally
   // ignore `variant` here: the legacy treatment is always "muted, not a
   // link" so callers don't accidentally style it as clickable.
+  // Click handler shared by both legacy spans. Without stopPropagation,
+  // a parent row's onClick (e.g. "open detail") would fire when the user
+  // taps the muted label — surprising UX for a chip that looks
+  // non-interactive.
+  const legacyClickHandler = stopPropagation ? (e: MouseEvent) => e.stopPropagation() : undefined;
+
   if (type === LEGACY_OPPORTUNITY_TYPE) {
     return (
       <span
@@ -56,9 +64,29 @@ export function EntityLink({
           className,
         )}
         title={title ?? 'Opportunity records were retired — original entity is preserved for audit history.'}
+        onClick={legacyClickHandler}
       >
         {children}{' '}
         <span className="text-[10px] uppercase tracking-wide">(legacy opportunity)</span>
+      </span>
+    );
+  }
+
+  // Quotes retired 2026-05-14 — mirror the legacy-opportunity treatment
+  // so historical activity/audit rows render a muted non-clickable label
+  // instead of routing to a 404.
+  if (type === LEGACY_QUOTE_TYPE) {
+    return (
+      <span
+        className={clsx(
+          'text-gray-400 dark:text-gray-500 italic',
+          className,
+        )}
+        title={title ?? 'Quotes were replaced by Payment invoices — original entity is preserved for audit history.'}
+        onClick={legacyClickHandler}
+      >
+        {children}{' '}
+        <span className="text-[10px] uppercase tracking-wide">(legacy quote)</span>
       </span>
     );
   }

@@ -4,7 +4,6 @@ import {
   UserGroupIcon,
   BuildingOfficeIcon,
   FunnelIcon,
-  DocumentTextIcon,
   DocumentDuplicateIcon,
   ScaleIcon,
   CreditCardIcon,
@@ -38,7 +37,8 @@ export const DEFAULT_MAIN_NAVIGATION: NavItem[] = [
   { id: 'leads', name: 'Leads', href: '/leads', icon: FunnelIcon },
   { id: 'pipeline', name: 'Pipeline', href: '/pipeline', icon: ViewColumnsIcon },
   { id: 'inbox', name: 'Inbox', href: '/inbox', icon: InboxIcon },
-  { id: 'quotes', name: 'Quotes', href: '/quotes', icon: DocumentTextIcon },
+  // Quotes nav entry removed 2026-05-14 — quotes replaced by one-off
+  // Payment invoices with optional PDF attachments.
   { id: 'proposals', name: 'Proposals', href: '/proposals', icon: DocumentDuplicateIcon },
   { id: 'contracts', name: 'Contracts', href: '/contracts', icon: ScaleIcon },
   { id: 'payments', name: 'Payments', href: '/payments', icon: CreditCardIcon },

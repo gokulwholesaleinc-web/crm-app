@@ -1,6 +1,6 @@
 """Integration tests for the proposal duplicate endpoint.
 
-Uses a real in-memory SQLite DB (same pattern as test_refresh_from_quote.py).
+Uses a real in-memory SQLite DB.
 No mocks — assertions hit the actual database.
 """
 

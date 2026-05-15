@@ -131,24 +131,20 @@ class ContactService(
         old_owner_id: int,
         new_owner_id: int | None,
     ) -> None:
-        """Re-assign linked Proposal/Quote/Opportunity/Payment rows whose
+        """Re-assign linked Proposal/Opportunity/Payment rows whose
         owner matches ``old_owner_id``. Runs inside the caller's transaction.
+
+        Quote-cascade retired 2026-05-14 — quotes router unmounted. Legacy
+        Quote rows keep their original owner.
         """
         from src.opportunities.models import Opportunity
         from src.payments.models import Payment, StripeCustomer
         from src.proposals.models import Proposal
-        from src.quotes.models import Quote
 
         proposal_result = await self.db.execute(
             update(Proposal)
             .where(Proposal.contact_id == contact_id)
             .where(Proposal.owner_id == old_owner_id)
-            .values(owner_id=new_owner_id)
-        )
-        quote_result = await self.db.execute(
-            update(Quote)
-            .where(Quote.contact_id == contact_id)
-            .where(Quote.owner_id == old_owner_id)
             .values(owner_id=new_owner_id)
         )
         opportunity_result = await self.db.execute(
@@ -172,11 +168,10 @@ class ContactService(
         await self.db.flush()
 
         logger.info(
-            "Cascaded owner change for contact %d: %d proposals, %d quotes, "
+            "Cascaded owner change for contact %d: %d proposals, "
             "%d opportunities, %d payments",
             contact_id,
             proposal_result.rowcount or 0,
-            quote_result.rowcount or 0,
             opportunity_result.rowcount or 0,
             payment_result.rowcount or 0,
         )

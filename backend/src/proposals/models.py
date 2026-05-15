@@ -14,7 +14,6 @@ if TYPE_CHECKING:
     from src.companies.models import Company
     from src.contacts.models import Contact
     from src.opportunities.models import Opportunity
-    from src.quotes.models import Quote
 
 
 class Proposal(Base, AuditableMixin):
@@ -50,6 +49,9 @@ class Proposal(Base, AuditableMixin):
         ForeignKey("companies.id", ondelete="SET NULL"),
         index=True,
     )
+    # Legacy FK column — quotes router unmounted 2026-05-14. Column kept
+    # nullable so historical Proposal rows duplicated from quotes still
+    # have queryable provenance. No new writes; ORM relationship dropped.
     quote_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("quotes.id", ondelete="SET NULL"),
@@ -155,10 +157,7 @@ class Proposal(Base, AuditableMixin):
         "Company",
         lazy="joined",
     )
-    quote: Mapped[Optional["Quote"]] = relationship(
-        "Quote",
-        lazy="joined",
-    )
+    # ``quote`` ORM relationship removed 2026-05-14 — see ``quote_id`` above.
     views: Mapped[list["ProposalView"]] = relationship(
         "ProposalView",
         back_populates="proposal",

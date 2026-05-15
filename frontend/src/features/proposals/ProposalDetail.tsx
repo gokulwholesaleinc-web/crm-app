@@ -37,11 +37,9 @@ import { StatusTimeline } from '../../components/shared/StatusTimeline';
 import { SendChecklist } from '../../components/shared/SendChecklist';
 import { isChecklistReady } from '../../components/shared/checklist';
 import { InlineSectionEditor } from '../../components/shared/InlineSectionEditor';
-import { RefreshFromQuoteButton } from '../../components/shared/RefreshFromQuoteButton';
 import {
   buildProposalTimelineSteps,
   buildProposalSendChecklist,
-  isProposalLocked,
 } from './proposalStatus';
 import {
   listProposalAttachments,
@@ -663,30 +661,8 @@ function ProposalDetailPage() {
                   </dd>
                 </div>
               )}
-              {proposal.quote && (
-                <div>
-                  <dt className="text-xs text-gray-500 dark:text-gray-400">Quote</dt>
-                  <dd className="text-sm font-medium">
-                    <Link to={`/quotes/${proposal.quote.id}`} className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300">
-                      {proposal.quote.title} ({proposal.quote.quote_number})
-                    </Link>
-                  </dd>
-                  {/* Refresh-from-quote sync — only meaningful when a
-                      quote is linked and the proposal isn't locked. If
-                      the customer changed the quote's line items after
-                      the proposal was spawned, the structured amount on
-                      this proposal can drift. The button is no-op when
-                      it would overwrite an accepted/paid commitment. */}
-                  <dd className="mt-2">
-                    <RefreshFromQuoteButton
-                      proposalId={proposal.id}
-                      hasQuoteLink
-                      isLocked={isProposalLocked(proposal)}
-                    />
-                  </dd>
-                </div>
-              )}
-              {!proposal.contact && !proposal.company && !proposal.quote && (
+              {/* Quote relation removed 2026-05-14 — quotes router unmounted. */}
+              {!proposal.contact && !proposal.company && (
                 <p className="text-sm text-gray-500 dark:text-gray-400">No related entities</p>
               )}
             </dl>
@@ -718,7 +694,6 @@ function ProposalDetailPage() {
             valid_until: proposal.valid_until ?? null,
             contact_id: proposal.contact?.id ?? null,
             company_id: proposal.company?.id ?? null,
-            quote_id: proposal.quote?.id ?? null,
             payment_type: proposal.payment_type,
             recurring_interval: proposal.recurring_interval,
             recurring_interval_count: proposal.recurring_interval_count,

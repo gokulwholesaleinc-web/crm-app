@@ -59,17 +59,9 @@ async def _verify_company_access(db, company_id: int | None, current_user) -> No
         raise_forbidden("You do not have permission to reference this company")
 
 
-async def _verify_quote_access(db, quote_id: int | None, current_user) -> None:
-    """Raise 403 if the caller cannot access the referenced quote."""
-    if quote_id is None or _is_privileged(current_user):
-        return
-    from src.quotes.models import Quote
-    result = await db.execute(select(Quote).where(Quote.id == quote_id))
-    quote = result.scalar_one_or_none()
-    if quote is None:
-        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Quote not found")
-    if quote.owner_id != current_user.id:
-        raise_forbidden("You do not have permission to reference this quote")
+# ``_verify_quote_access`` removed 2026-05-14 — quotes router unmounted.
+# Any caller that still passes a ``quote_id`` on payment-create requests
+# is silently ignored; the column persists for legacy lookups only.
 
 
 async def _verify_opportunity_access(db, opportunity_id: int | None, current_user) -> None:

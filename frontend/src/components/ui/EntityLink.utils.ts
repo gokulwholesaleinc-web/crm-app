@@ -2,7 +2,6 @@ export type EntityType =
   | 'contact'
   | 'company'
   | 'lead'
-  | 'quote'
   | 'proposal'
   | 'payment'
   | 'campaign'
@@ -17,13 +16,23 @@ export type EntityType =
 export const LEGACY_OPPORTUNITY_TYPE = 'opportunity-legacy' as const;
 export type LegacyOpportunityType = typeof LEGACY_OPPORTUNITY_TYPE;
 
-export type NormalizedEntityType = EntityType | LegacyOpportunityType;
+// Sentinel returned for historical activity/audit rows that still carry
+// `entity_type='quotes'`. The Quotes feature was retired 2026-05-14 in
+// favor of one-off Payment invoices with optional PDF attachments. The
+// backend preserves the column for historical data; this sentinel lets
+// the UI render a muted "(legacy quote)" label without a route.
+export const LEGACY_QUOTE_TYPE = 'quote-legacy' as const;
+export type LegacyQuoteType = typeof LEGACY_QUOTE_TYPE;
+
+export type NormalizedEntityType =
+  | EntityType
+  | LegacyOpportunityType
+  | LegacyQuoteType;
 
 export const entityRoutes: Record<EntityType, string> = {
   contact: '/contacts',
   company: '/companies',
   lead: '/leads',
-  quote: '/quotes',
   proposal: '/proposals',
   payment: '/payments',
   campaign: '/campaigns',
@@ -36,7 +45,6 @@ const pluralAliases: Record<string, EntityType> = {
   contacts: 'contact',
   companies: 'company',
   leads: 'lead',
-  quotes: 'quote',
   proposals: 'proposal',
   payments: 'payment',
   campaigns: 'campaign',
@@ -50,6 +58,9 @@ export function normalizeEntityType(
   const lower = value.toLowerCase();
   if (lower === 'opportunity' || lower === 'opportunities') {
     return LEGACY_OPPORTUNITY_TYPE;
+  }
+  if (lower === 'quote' || lower === 'quotes') {
+    return LEGACY_QUOTE_TYPE;
   }
   if (lower in entityRoutes) return lower as EntityType;
   return pluralAliases[lower] ?? null;

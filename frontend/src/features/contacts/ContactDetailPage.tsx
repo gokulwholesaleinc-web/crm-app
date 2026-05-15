@@ -18,12 +18,11 @@ import { useContact, useDeleteContact, useUpdateContact } from '../../hooks/useC
 import { useAuthStore } from '../../store/authStore';
 import { useContactAliases, useAddAlias, useDeleteAlias } from '../../hooks/useContactAliases';
 import { showSuccess, showError } from '../../utils/toast';
-import { useQuotes } from '../../hooks/useQuotes';
 import { useProposals } from '../../hooks/useProposals';
 import { useSubscriptions } from '../../hooks/usePayments';
-import { formatDate, formatPhoneNumber, formatCurrency } from '../../utils/formatters';
+import { formatDate, formatPhoneNumber } from '../../utils/formatters';
 import { StatusBadge } from '../../components/ui';
-import type { Quote, Proposal } from '../../types';
+import type { Proposal } from '../../types';
 import type { ThreadEmailItem } from '../../types/email';
 
 const ContractsList = lazy(() => import('../../components/shared/ContractsList'));
@@ -37,7 +36,7 @@ const OnboardingLinkGenerator = lazy(() =>
   import('../payments/components/OnboardingLinkGenerator').then(m => ({ default: m.OnboardingLinkGenerator }))
 );
 
-type TabType = 'details' | 'activities' | 'notes' | 'emails' | 'contracts' | 'quotes' | 'proposals' | 'payments' | 'documents' | 'attachments' | 'history' | 'sharing';
+type TabType = 'details' | 'activities' | 'notes' | 'emails' | 'contracts' | 'proposals' | 'payments' | 'documents' | 'attachments' | 'history' | 'sharing';
 
 const TABS: { id: TabType; name: string }[] = [
   { id: 'details', name: 'Details' },
@@ -45,7 +44,7 @@ const TABS: { id: TabType; name: string }[] = [
   { id: 'notes', name: 'Notes' },
   { id: 'emails', name: 'Emails' },
   { id: 'contracts', name: 'Contracts' },
-  { id: 'quotes', name: 'Quotes' },
+  // Quotes tab removed 2026-05-14 — quotes router unmounted.
   { id: 'proposals', name: 'Proposals' },
   { id: 'payments', name: 'Payments' },
   { id: 'documents', name: 'Documents' },
@@ -92,9 +91,6 @@ function ContactDetailPage() {
   const addAliasMutation = useAddAlias(contactId ?? 0);
   const deleteAliasMutation = useDeleteAlias(contactId ?? 0);
 
-  const { data: quotesData } = useQuotes(
-    activeTab === 'quotes' && contactId ? { contact_id: contactId } : undefined
-  );
   const { data: proposalsData } = useProposals(
     activeTab === 'proposals' && contactId ? { contact_id: contactId } : undefined
   );
@@ -114,7 +110,6 @@ function ContactDetailPage() {
       : undefined
   );
   const currentUser = useAuthStore((s) => s.user);
-  const quotes = quotesData?.items ?? [];
   const proposals = proposalsData?.items ?? [];
   const hasActiveSubscription = (subscriptionsData?.total ?? 0) > 0;
 
@@ -480,54 +475,7 @@ function ContactDetailPage() {
         </Suspense>
       )}
 
-      {activeTab === 'quotes' && contactId && (
-        <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden border border-transparent dark:border-gray-700">
-          {quotes.length === 0 ? (
-            <div className="text-center py-12 px-4">
-              <p className="text-sm text-gray-500 dark:text-gray-400">No quotes for this contact.</p>
-              <Link
-                to={`/quotes/new?contact_id=${contactId}`}
-                className="mt-2 inline-block text-sm text-primary-600 hover:text-primary-900 dark:hover:text-primary-300"
-              >
-                Create a Quote
-              </Link>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                <thead className="bg-gray-50 dark:bg-gray-900">
-                  <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Quote</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Total</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                  {quotes.map((quote: Quote) => (
-                    <tr key={quote.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <Link to={`/quotes/${quote.id}`} className="text-primary-600 hover:text-primary-900 dark:hover:text-primary-300">
-                          {quote.title} ({quote.quote_number})
-                        </Link>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <StatusBadge status={quote.status} size="sm" showDot={false} />
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900 dark:text-gray-100" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                        {formatCurrency(quote.total)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                        {formatDate(quote.created_at)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
+      {/* Quotes tab content removed 2026-05-14 — quotes router unmounted. */}
 
       {activeTab === 'proposals' && contactId && (
         <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden border border-transparent dark:border-gray-700">
