@@ -7,6 +7,7 @@ import { ProposalForm } from './ProposalForm';
 import { TemplateGallery } from './TemplateGallery';
 import { SortableTh } from '../../components/shared/SortableTh';
 import { useProposals, useCreateProposal, useDeleteProposal, useDuplicateProposal } from '../../hooks/useProposals';
+import { uploadProposalMasterContract } from '../../api/proposals';
 import {
   useListPageSizeState,
   useListSortPersistence,
@@ -14,6 +15,7 @@ import {
 import { formatDate } from '../../utils/formatters';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { showSuccess, showError } from '../../utils/toast';
+import { extractApiErrorDetail } from '../../utils/errors';
 import type { Proposal, ProposalCreate } from '../../types';
 
 const statusOptions = [
@@ -108,9 +110,33 @@ function ProposalsPage() {
     }
   };
 
-  const handleFormSubmit = async (data: ProposalCreate) => {
+  const handleFormSubmit = async (
+    data: ProposalCreate,
+    pendingMaster?: File | null,
+  ) => {
     try {
       const created = await createProposalMutation.mutateAsync(data);
+      // Upload the stashed master contract as a follow-on so the proposal
+      // exists by the time the multipart POST resolves the id. A failure
+      // here doesn't unwind the create — the user lands on the detail
+      // page where MasterContractCard reads ``masterUploadFailed`` from
+      // location state and surfaces a persistent retry banner. Plain
+      // ``showError`` would disappear in ~5 s while the user is still
+      // figuring out the new page.
+      if (pendingMaster) {
+        try {
+          await uploadProposalMasterContract(created.id, pendingMaster);
+        } catch (err) {
+          const detail =
+            extractApiErrorDetail(err) ??
+            'Master contract upload failed after the proposal was created.';
+          setShowForm(false);
+          navigate(`/proposals/${created.id}`, {
+            state: { masterUploadFailed: detail },
+          });
+          return;
+        }
+      }
       setShowForm(false);
       showSuccess('Proposal created successfully');
       navigate(`/proposals/${created.id}`);

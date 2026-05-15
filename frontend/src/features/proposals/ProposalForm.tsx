@@ -8,22 +8,22 @@ import { useContacts } from '../../hooks/useContacts';
 import { useCompanies } from '../../hooks/useCompanies';
 import { useFormSubmitShortcut } from '../../hooks/useSubmitShortcut';
 import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
-import { MasterContractUploader } from './MasterContractUploader';
+import { PendingMasterContractField } from './PendingMasterContractField';
 import type { ProposalCreate } from '../../types';
 
 interface ProposalFormProps {
-  onSubmit: (data: ProposalCreate) => void;
+  /** Called with the form data plus an optional pending master contract
+   *  ``File`` (create flow only). The parent runs the
+   *  ``POST /api/proposals/{id}/master-contract`` two-step after the
+   *  create response returns the new proposal id. */
+  onSubmit: (data: ProposalCreate, pendingMaster?: File | null) => void;
   onCancel: () => void;
   isLoading?: boolean;
   initialData?: Partial<ProposalCreate>;
-  /** When set, the form renders the master contract upload widget
-   *  (only meaningful in edit mode — upload needs a server-side id). */
+  /** Form mode discriminator. Edit mode no longer carries the
+   *  master-contract widget — that surface lives on the detail page
+   *  sidebar so it's discoverable without opening the modal. */
   proposalId?: number;
-  /** Existing master-contract R2 key, surfaced so the uploader can
-   *  show "replace" instead of "upload". */
-  masterContractPath?: string | null;
-  /** Fires after a master upload lands so the parent can refetch. */
-  onMasterContractUploaded?: () => void;
 }
 
 export function ProposalForm({
@@ -32,9 +32,9 @@ export function ProposalForm({
   isLoading,
   initialData,
   proposalId,
-  masterContractPath,
-  onMasterContractUploaded,
 }: ProposalFormProps) {
+  const isCreating = proposalId == null;
+  const [pendingMaster, setPendingMaster] = useState<File | null>(null);
   const [searchParams] = useSearchParams();
   // Pre-fill any of the Related Records from URL query params so
   // navigating "Create Proposal" from a contact / company detail page
@@ -108,7 +108,13 @@ export function ProposalForm({
     [companies]
   );
 
-  const missingRelation = useMissingRelationConfirm<ProposalCreate>(onSubmit);
+  // The missing-relation confirm-dialog re-fires submit with the same
+  // ``ProposalCreate`` payload; ``pendingMaster`` is a sibling on
+  // ProposalForm state, so capture the current value here so a deferred
+  // confirm still carries the user's chosen master.
+  const missingRelation = useMissingRelationConfirm<ProposalCreate>(
+    (data) => onSubmit(data, isCreating ? pendingMaster : null),
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -142,7 +148,7 @@ export function ProposalForm({
       return;
     }
 
-    onSubmit(data);
+    onSubmit(data, isCreating ? pendingMaster : null);
   };
 
   const handleBillingChange = (next: BillingTermsValue) => {
@@ -316,11 +322,10 @@ export function ProposalForm({
           />
         </div>
 
-        {proposalId != null && (
-          <MasterContractUploader
-            proposalId={proposalId}
-            currentPath={masterContractPath ?? null}
-            onUploaded={onMasterContractUploaded}
+        {isCreating && (
+          <PendingMasterContractField
+            value={pendingMaster}
+            onChange={setPendingMaster}
           />
         )}
       </div>

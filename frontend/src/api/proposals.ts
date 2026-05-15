@@ -335,12 +335,43 @@ export const duplicateProposal = async (proposalId: number): Promise<Proposal> =
  * same-origin Blob — Cloudflare R2 returns no CORS headers for
  * cross-origin XHRs.
  */
+/**
+ * Hard cap on a master service-agreement PDF upload. Mirrors the
+ * backend's 25 MB limit so the client can fail-fast before the
+ * multipart POST instead of round-tripping to the 413. Update both
+ * sides together if ops ever bumps the cap.
+ */
+export const PROPOSAL_MASTER_CONTRACT_MAX_BYTES = 25 * 1024 * 1024;
+
 export const downloadProposalMasterContract = async (
   proposalId: number,
 ): Promise<Blob> => {
   const response = await apiClient.get(
     `${PROPOSALS_BASE}/${proposalId}/master-contract`,
     { responseType: 'blob' },
+  );
+  return response.data;
+};
+
+/**
+ * Upload (or replace) a master service agreement PDF on a proposal.
+ *
+ * Used by the create flow to land a stashed file after
+ * ``createProposalMutation`` resolves with the new id, and by the
+ * detail-page sidebar to replace the master after the fact. PDF-only
+ * and 25 MB cap enforced server-side; client-side checks live in the
+ * picker components.
+ */
+export const uploadProposalMasterContract = async (
+  proposalId: number,
+  file: File,
+): Promise<Proposal> => {
+  const form = new FormData();
+  form.append('file', file);
+  const response = await apiClient.post<Proposal>(
+    `${PROPOSALS_BASE}/${proposalId}/master-contract`,
+    form,
+    { headers: { 'Content-Type': 'multipart/form-data' } },
   );
   return response.data;
 };
@@ -374,5 +405,6 @@ export const proposalsApi = {
   publicAttachmentDownloadUrl: publicProposalAttachmentDownloadUrl,
   duplicate: duplicateProposal,
   downloadMasterContract: downloadProposalMasterContract,
+  uploadMasterContract: uploadProposalMasterContract,
 };
 
