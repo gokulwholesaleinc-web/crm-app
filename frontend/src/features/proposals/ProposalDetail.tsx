@@ -1097,7 +1097,38 @@ function MasterContractCard({
     };
   }, []);
   const [uploading, setUploading] = useState(false);
+  const [viewing, setViewing] = useState(false);
   const [error, setError] = useState<string | null>(initialError);
+
+  // Revoking the view-blob immediately after window.open() races the new
+  // tab's load; defer + clear on unmount so we don't leak the URL but
+  // also don't yank it out from under the freshly opened PDF viewer.
+  const revokeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (revokeTimerRef.current) clearTimeout(revokeTimerRef.current);
+  }, []);
+
+  const handleView = async () => {
+    if (!currentPath) return;
+    setViewing(true);
+    setError(null);
+    try {
+      const blob = await downloadProposalMasterContract(proposalId);
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      if (revokeTimerRef.current) clearTimeout(revokeTimerRef.current);
+      revokeTimerRef.current = setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (err) {
+      if (!isMountedRef.current) return;
+      setError(
+        extractApiErrorDetail(err) ?? 'Failed to load master contract.',
+      );
+    } finally {
+      if (isMountedRef.current) {
+        setViewing(false);
+      }
+    }
+  };
 
   const handleFile = async (file: File) => {
     if (file.type && file.type !== 'application/pdf') {
@@ -1144,7 +1175,20 @@ function MasterContractCard({
           {currentPath}
         </p>
       )}
-      <div className="mt-3">
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {currentPath && (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={handleView}
+            disabled={viewing}
+            isLoading={viewing}
+            leftIcon={<EyeIcon className="h-4 w-4" />}
+          >
+            View PDF
+          </Button>
+        )}
         <Button
           type="button"
           variant="secondary"
@@ -1157,7 +1201,7 @@ function MasterContractCard({
           {currentPath ? 'Replace PDF' : 'Upload PDF'}
         </Button>
         {isLocked && (
-          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+          <p className="mt-2 w-full text-xs text-gray-500 dark:text-gray-400">
             Locked &mdash; proposal signed.
           </p>
         )}

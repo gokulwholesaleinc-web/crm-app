@@ -193,6 +193,7 @@ function findHeuristicSignatureNode(body: HTMLElement): Element | null {
   let seenContent = false;
   for (let i = 0; i < children.length; i++) {
     const child = children[i];
+    if (!child) continue;
     const firstLine = firstNonEmptyLine(child.textContent ?? '');
     if (firstLine === '') continue;
     if (
@@ -210,7 +211,7 @@ function findHeuristicSignatureNode(body: HTMLElement): Element | null {
       let start = i;
       while (start > 0) {
         const prev = children[start - 1];
-        const prevText = (prev.textContent ?? '').trim();
+        const prevText = (prev?.textContent ?? '').trim();
         if (!prevText) {
           start--;
           continue;
@@ -219,7 +220,7 @@ function findHeuristicSignatureNode(body: HTMLElement): Element | null {
         start--;
       }
       if (children.slice(0, start).some((c) => (c.textContent ?? '').trim() !== '')) {
-        return children[start];
+        return children[start] ?? child;
       }
       return child;
     }
