@@ -220,7 +220,7 @@ function findHeuristicSignatureNode(body: HTMLElement): Element | null {
         start--;
       }
       if (children.slice(0, start).some((c) => (c.textContent ?? '').trim() !== '')) {
-        return children[start] ?? child;
+        return children[start]!;
       }
       return child;
     }

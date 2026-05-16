@@ -1100,9 +1100,8 @@ function MasterContractCard({
   const [viewing, setViewing] = useState(false);
   const [error, setError] = useState<string | null>(initialError);
 
-  // Revoking the view-blob immediately after window.open() races the new
-  // tab's load; defer + clear on unmount so we don't leak the URL but
-  // also don't yank it out from under the freshly opened PDF viewer.
+  // Revoke the view-blob after the new tab has had time to load it;
+  // immediate revoke races the open and the viewer shows nothing.
   const revokeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
     if (revokeTimerRef.current) clearTimeout(revokeTimerRef.current);
@@ -1115,7 +1114,17 @@ function MasterContractCard({
     try {
       const blob = await downloadProposalMasterContract(proposalId);
       const url = URL.createObjectURL(blob);
-      window.open(url, '_blank', 'noopener,noreferrer');
+      // window.open returns null when a popup blocker fires — strict
+      // blockers treat the post-fetch open as a stale user-gesture.
+      const popup = window.open(url, '_blank', 'noopener,noreferrer');
+      if (!popup) {
+        URL.revokeObjectURL(url);
+        if (!isMountedRef.current) return;
+        setError(
+          'Popup blocked — allow popups for this site to view the master contract.',
+        );
+        return;
+      }
       if (revokeTimerRef.current) clearTimeout(revokeTimerRef.current);
       revokeTimerRef.current = setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (err) {
@@ -1200,12 +1209,12 @@ function MasterContractCard({
         >
           {currentPath ? 'Replace PDF' : 'Upload PDF'}
         </Button>
-        {isLocked && (
-          <p className="mt-2 w-full text-xs text-gray-500 dark:text-gray-400">
-            Locked &mdash; proposal signed.
-          </p>
-        )}
       </div>
+      {isLocked && (
+        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+          Locked &mdash; proposal signed.
+        </p>
+      )}
       <input
         ref={inputRef}
         type="file"
