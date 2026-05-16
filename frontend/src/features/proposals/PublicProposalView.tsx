@@ -112,6 +112,7 @@ function PublicProposalView() {
   const signSectionElRef = useRef<HTMLElement | null>(null);
   const signObserverRef = useRef<IntersectionObserver | null>(null);
   const esignConsentRef = useRef<HTMLDetailsElement | null>(null);
+  const esignAutoOpenedRef = useRef(false);
   const [showScrollIndicator, setShowScrollIndicator] = useState(false);
 
   // Callback ref so the IntersectionObserver attaches the moment the element
@@ -202,14 +203,19 @@ function PublicProposalView() {
   // The signing modal links to #esign-consent in a new tab; the footer
   // disclosure lives inside a collapsed <details>, so on landing we
   // open it and scroll it into view so the signer doesn't have to hunt.
+  //
+  // Run-once guard so a poll-driven `proposal` refetch (Stripe paid=1
+  // confirming state) doesn't yank a details the signer just collapsed.
   useEffect(() => {
+    if (esignAutoOpenedRef.current) return;
     if (typeof window === 'undefined') return;
     if (window.location.hash !== '#esign-consent') return;
     const el = esignConsentRef.current;
     if (!el) return;
+    esignAutoOpenedRef.current = true;
     el.open = true;
     el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [proposal]);
+  }, [proposal?.proposal_number]);
 
   // Stripe Checkout success_url returns the customer here with `?paid=1`.
   // The webhook usually flips status → 'paid' within a few seconds, but
