@@ -111,6 +111,7 @@ function PublicProposalView() {
   const paySectionRef = useRef<HTMLElement | null>(null);
   const signSectionElRef = useRef<HTMLElement | null>(null);
   const signObserverRef = useRef<IntersectionObserver | null>(null);
+  const esignConsentRef = useRef<HTMLDetailsElement | null>(null);
   const [showScrollIndicator, setShowScrollIndicator] = useState(false);
 
   // Callback ref so the IntersectionObserver attaches the moment the element
@@ -197,6 +198,18 @@ function PublicProposalView() {
       paySectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   }, [actionDone, proposal?.stripe_payment_url]);
+
+  // The signing modal links to #esign-consent in a new tab; the footer
+  // disclosure lives inside a collapsed <details>, so on landing we
+  // open it and scroll it into view so the signer doesn't have to hunt.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (window.location.hash !== '#esign-consent') return;
+    const el = esignConsentRef.current;
+    if (!el) return;
+    el.open = true;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [proposal]);
 
   // Stripe Checkout success_url returns the customer here with `?paid=1`.
   // The webhook usually flips status → 'paid' within a few seconds, but
@@ -798,7 +811,11 @@ function PublicProposalView() {
         style={{ backgroundColor: branding.surface_color_light, paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         <div className="mx-auto max-w-3xl px-6 sm:px-10 py-8 space-y-5">
-          <details className="group text-sm">
+          <details
+            ref={esignConsentRef}
+            id="esign-consent"
+            className="group text-sm scroll-mt-6"
+          >
             <summary className="cursor-pointer text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 list-none flex items-center gap-2 select-none">
               <span aria-hidden="true" className="inline-block transition-transform group-open:rotate-90">
                 ▸

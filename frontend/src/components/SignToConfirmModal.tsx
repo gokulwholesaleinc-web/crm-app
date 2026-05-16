@@ -242,7 +242,22 @@ export function SignToConfirmModal({
                   </p>
                 )}
 
-                <div className="mt-5 flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2">
+                <p className="mt-5 text-[11px] leading-relaxed text-white/40">
+                  By submitting, you consent to use an electronic signature under
+                  the US ESIGN Act and applicable state UETA statutes.{' '}
+                  <a
+                    href="#esign-consent"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline decoration-white/30 underline-offset-2 hover:decoration-white/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/50 rounded-sm"
+                    style={{ color: ACCENT_GOLD }}
+                  >
+                    View full e-sign consent
+                  </a>
+                  .
+                </p>
+
+                <div className="mt-3 flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2">
                   <button
                     type="button"
                     onClick={onClose}
