@@ -67,6 +67,14 @@ export function SignToConfirmModal({
     [],
   );
 
+  // Build the consent-anchor URL explicitly so it always carries the
+  // proposal's token (the modal lives on `/proposals/public/:token`)
+  // and survives any future modal reuse outside that route.
+  const consentHref = useMemo(() => {
+    if (typeof window === 'undefined') return '#esign-consent';
+    return `${window.location.pathname}${window.location.search}#esign-consent`;
+  }, []);
+
   const canSubmit = hasSignature && agreedToTerms && !submitting;
 
   const handleSubmit = useCallback(async () => {
@@ -242,7 +250,22 @@ export function SignToConfirmModal({
                   </p>
                 )}
 
-                <div className="mt-5 flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2">
+                <p className="mt-5 text-xs leading-relaxed text-white/70">
+                  By submitting, you consent to use an electronic signature under
+                  the US ESIGN Act and applicable state UETA statutes.{' '}
+                  <a
+                    href={consentHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline decoration-white/40 underline-offset-2 hover:decoration-white/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/50 rounded-sm"
+                    style={{ color: ACCENT_GOLD }}
+                  >
+                    View full e-sign consent
+                  </a>
+                  .
+                </p>
+
+                <div className="mt-3 flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2">
                   <button
                     type="button"
                     onClick={onClose}
