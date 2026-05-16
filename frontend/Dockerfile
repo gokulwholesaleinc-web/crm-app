@@ -14,8 +14,7 @@ COPY --from=build /app/dist /usr/share/nginx/html
 # (the historical reason these were inlined as heredocs — see commit b3c74db6).
 # The build stage already has the full frontend/ tree, so this is free.
 COPY --from=build /app/nginx.conf /etc/nginx/conf.d/default.conf.template
-COPY --from=build /app/docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
+COPY --from=build --chmod=0755 /app/docker-entrypoint.sh /docker-entrypoint.sh
 
 ENV BACKEND_HOST=backend
 ENV BACKEND_PORT=8000
