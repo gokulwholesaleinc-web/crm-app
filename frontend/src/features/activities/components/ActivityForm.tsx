@@ -23,6 +23,7 @@ interface ActivityFormProps {
   pushToCalendar?: boolean;
   onPushToCalendarChange?: (checked: boolean) => void;
   calendarConnected?: boolean;
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 interface FormValues {
@@ -78,6 +79,7 @@ export function ActivityForm({
   pushToCalendar,
   onPushToCalendarChange,
   calendarConnected,
+  onDirtyChange,
 }: ActivityFormProps) {
   const isEditing = !!activity;
   const PUSH_ELIGIBLE_TYPES = ['call', 'meeting', 'task'];
@@ -110,6 +112,10 @@ export function ActivityForm({
   const activityType = watch('activity_type');
 
   useUnsavedChangesWarning(isDirty);
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
 
   // Today in the user's LOCAL timezone as YYYY-MM-DD / YYYY-MM-DDTHH:mm —
   // used as `min` on forward-looking date fields when CREATING a new activity.

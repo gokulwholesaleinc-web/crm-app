@@ -19,6 +19,7 @@ from sqlalchemy.orm import selectinload
 
 from src.attachments.models import Attachment
 from src.attachments.object_storage import (
+    delete_object,
     download_object_bytes,
     upload_file_bytes,
 )
@@ -394,8 +395,13 @@ class ProposalService(StatusTransitionMixin, CRUDService[Proposal, ProposalCreat
             raise ValueError(
                 "Cannot modify signing documents on a signed proposal — clone it instead",
             )
+        object_keys = [
+            key for key in (document.pdf_path, document.signed_pdf_path) if key
+        ]
         await self.db.delete(document)
         await self.db.flush()
+        for key in object_keys:
+            await delete_object(key)
 
     async def validate_signing_documents_ready(self, proposal: Proposal) -> None:
         """Block send/sign when an uploaded signing PDF has no box."""

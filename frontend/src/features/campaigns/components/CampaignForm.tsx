@@ -21,6 +21,7 @@ interface CampaignFormProps {
   onSubmit: (data: CampaignCreate | CampaignUpdate) => Promise<void>;
   onCancel: () => void;
   isLoading?: boolean;
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 interface FormValues {
@@ -94,6 +95,7 @@ export function CampaignForm({
   onSubmit,
   onCancel,
   isLoading,
+  onDirtyChange,
 }: CampaignFormProps) {
   const isEditing = !!campaign;
 
@@ -150,6 +152,10 @@ export function CampaignForm({
   });
 
   useUnsavedChangesWarning(isDirty);
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
 
   const selectedType = watch('campaign_type');
 

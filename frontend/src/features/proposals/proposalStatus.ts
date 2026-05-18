@@ -168,6 +168,7 @@ export function buildProposalSendChecklist(
     const missingPlacement = signingDocuments.filter(
       (doc) => !doc.signature_field_coords,
     );
+    const firstMissingPlacement = missingPlacement[0];
     items.push({
       key: 'signing_documents',
       label:
@@ -180,9 +181,9 @@ export function buildProposalSendChecklist(
             } need placement`,
       state: missingPlacement.length === 0,
       hint:
-        missingPlacement.length === 0
+        !firstMissingPlacement
           ? undefined
-          : `Place a signing area on ${missingPlacement[0].original_filename} before sending.`,
+          : `Place a signing area on ${firstMissingPlacement.original_filename} before sending.`,
       action:
         missingPlacement.length === 0 || !options.onManageSigningDocuments
           ? undefined

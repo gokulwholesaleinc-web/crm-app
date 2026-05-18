@@ -225,7 +225,17 @@ function LeadsPage() {
     setSearchParams((prev) => { if (n === 25) prev.delete('per_page'); else prev.set('per_page', String(n)); prev.delete('page'); return prev; }, { replace: true });
   };
 
+  const clearFilters = () => {
+    setSearchParams((prev) => {
+      prev.delete('search');
+      prev.delete('status');
+      prev.delete('page');
+      return prev;
+    }, { replace: true });
+  };
+
   const [showForm, setShowForm] = useState(false);
+  const [formDirty, setFormDirty] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; lead: Lead | null }>(INITIAL_DELETE_CONFIRM);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
@@ -461,6 +471,7 @@ function LeadsPage() {
   const leads = leadsData?.items ?? [];
   const totalPages = leadsData?.pages ?? 1;
   const total = leadsData?.total ?? 0;
+  const hasActiveFilters = Boolean(searchQuery || statusFilter);
 
   const handleDeleteClick = (lead: Lead) => {
     setDeleteConfirm({ isOpen: true, lead });
@@ -482,6 +493,7 @@ function LeadsPage() {
   };
 
   const handleEdit = (lead: Lead) => {
+    setFormDirty(false);
     setEditingLead(lead);
     setShowForm(true);
   };
@@ -509,6 +521,7 @@ function LeadsPage() {
     setShowForm(false);
     setEditingLead(null);
     setPendingFormData(null);
+    setFormDirty(false);
   };
 
   const handleFormSubmit = async (data: LeadFormData) => {
@@ -545,6 +558,7 @@ function LeadsPage() {
         showSuccess('Lead updated successfully');
         setShowForm(false);
         setEditingLead(null);
+        setFormDirty(false);
       } else {
         // Check for duplicates before creating
         const result = await checkDuplicatesMutation.mutateAsync({
@@ -585,9 +599,17 @@ function LeadsPage() {
     navigate(`/leads/${id}`);
   };
 
-  const handleFormCancel = () => {
+  const closeForm = () => {
     setShowForm(false);
     setEditingLead(null);
+    setFormDirty(false);
+  };
+
+  const handleFormCancel = () => {
+    if (formDirty && !window.confirm('Discard unsaved changes?')) {
+      return;
+    }
+    closeForm();
   };
 
   const toggleSelectAll = () => {
@@ -661,7 +683,10 @@ function LeadsPage() {
 
           <Button
             leftIcon={<PlusIcon className="h-5 w-5" />}
-            onClick={() => setShowForm(true)}
+            onClick={() => {
+              setFormDirty(false);
+              setShowForm(true);
+            }}
             className="w-full sm:w-auto"
           >
             Add Lead
@@ -773,10 +798,18 @@ function LeadsPage() {
             </svg>
             <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">No leads</h3>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              Get started by creating a new lead.
+              {hasActiveFilters
+                ? 'No leads match the current search or filters.'
+                : 'Get started by creating a new lead.'}
             </p>
             <div className="mt-6">
-              <Button onClick={() => setShowForm(true)} className="w-full sm:w-auto">Add Lead</Button>
+              {hasActiveFilters ? (
+                <Button variant="secondary" onClick={clearFilters} className="w-full sm:w-auto">
+                  Clear filters
+                </Button>
+              ) : (
+                <Button onClick={() => { setFormDirty(false); setShowForm(true); }} className="w-full sm:w-auto">Add Lead</Button>
+              )}
             </div>
           </div>
         ) : (
@@ -1021,10 +1054,11 @@ function LeadsPage() {
       {/* Form Modal */}
       <Modal
         isOpen={showForm}
-        onClose={handleFormCancel}
+        onClose={closeForm}
         title={editingLead ? 'Edit Lead' : 'Add Lead'}
         size="lg"
         fullScreenOnMobile
+        confirmClose={formDirty}
       >
         <LeadForm
           // Force a fresh form instance whenever the modal flips between
@@ -1042,6 +1076,7 @@ function LeadsPage() {
           submitLabel={editingLead ? 'Update Lead' : 'Create Lead'}
           score={editingLead?.score ?? null}
           requireContactFirst={!editingLead}
+          onDirtyChange={setFormDirty}
         />
       </Modal>
 

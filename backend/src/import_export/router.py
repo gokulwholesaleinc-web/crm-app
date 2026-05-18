@@ -50,12 +50,18 @@ async def _read_csv_upload(file: UploadFile) -> str:
     if not file.filename or not file.filename.endswith(".csv"):
         raise_bad_request("File must be a CSV")
 
+    if file.size is not None and file.size > MAX_CSV_FILE_SIZE:
+        raise_bad_request("File size exceeds 10MB limit")
+
     content = await file.read()
 
     if len(content) > MAX_CSV_FILE_SIZE:
         raise_bad_request("File size exceeds 10MB limit")
 
-    return content.decode("utf-8")
+    try:
+        return content.decode("utf-8")
+    except UnicodeDecodeError:
+        raise_bad_request("CSV file must be UTF-8 encoded")
 
 router = APIRouter(prefix="/api/import-export", tags=["import-export"])
 
@@ -195,7 +201,10 @@ async def import_companies(
 
     parsed_decisions = None
     if contact_decisions:
-        parsed_decisions = json.loads(contact_decisions)
+        try:
+            parsed_decisions = json.loads(contact_decisions)
+        except json.JSONDecodeError:
+            raise_bad_request("contact_decisions must be valid JSON")
 
     handler = CSVHandler(db)
     result = await handler.import_companies(

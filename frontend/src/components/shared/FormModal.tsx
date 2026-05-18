@@ -40,6 +40,7 @@ export function FormModal<T extends FieldValues>({
   const prevIsOpenRef = useRef(false);
 
   const form = useForm<T>({ defaultValues });
+  const { isDirty } = form.formState;
 
   useEffect(() => {
     const wasOpen = prevIsOpenRef.current;
@@ -79,8 +80,20 @@ export function FormModal<T extends FieldValues>({
     }
   };
 
+  const requestClose = () => {
+    if (isDirty && !window.confirm('Discard unsaved changes?')) {
+      return;
+    }
+    onClose();
+  };
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={title} size={size}>
+    <Modal
+      isOpen={isOpen}
+      onClose={requestClose}
+      title={title}
+      size={size}
+    >
       <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-4">
         {isError && (
           <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-3">
@@ -96,7 +109,7 @@ export function FormModal<T extends FieldValues>({
         {children(form)}
 
         <ModalFooter>
-          <Button type="button" variant="secondary" onClick={onClose} disabled={isPending}>
+          <Button type="button" variant="secondary" onClick={requestClose} disabled={isPending}>
             Cancel
           </Button>
           <Button type="submit" isLoading={isPending} disabled={success}>

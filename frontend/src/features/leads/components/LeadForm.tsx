@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { Button } from '../../../components/ui';
 import { FormInput, FormSelect, FormTextarea } from '../../../components/forms';
@@ -33,6 +33,7 @@ export interface LeadFormProps {
   // least one contact field has a value. Edit mode passes false so users
   // can keep working on partial historical rows.
   requireContactFirst?: boolean;
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 // `converted` is intentionally absent — the only legitimate way to land
@@ -54,6 +55,7 @@ export function LeadForm({
   submitLabel = 'Save Lead',
   score = null,
   requireContactFirst = false,
+  onDirtyChange,
 }: LeadFormProps) {
   const {
     register,
@@ -82,7 +84,12 @@ export function LeadForm({
   const sidecarChanged =
     sourceId !== (initialData?.source_id ?? null) ||
     pipelineStageId !== (initialData?.pipeline_stage_id ?? null);
-  useUnsavedChangesWarning(isDirty || sidecarChanged);
+  const hasUnsavedChanges = isDirty || sidecarChanged;
+  useUnsavedChangesWarning(hasUnsavedChanges);
+
+  useEffect(() => {
+    onDirtyChange?.(hasUnsavedChanges);
+  }, [hasUnsavedChanges, onDirtyChange]);
 
   const { data: leadSourcesData } = useLeadSources();
   const { data: pipelineStagesData } = useLeadPipelineStages();

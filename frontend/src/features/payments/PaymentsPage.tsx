@@ -82,6 +82,14 @@ function PaymentsPage() {
     setSearchParams((prev) => { if (q) prev.set('search', q); else prev.delete('search'); return prev; }, { replace: true });
   const setStatusFilter = (s: string) =>
     setSearchParams((prev) => { if (s) prev.set('status', s); else prev.delete('status'); return prev; }, { replace: true });
+  const clearFilters = () => {
+    setSearchParams((prev) => {
+      prev.delete('search');
+      prev.delete('status');
+      return prev;
+    }, { replace: true });
+    setCurrentPage(1);
+  };
   const [currentPage, setCurrentPage] = useState(1);
   const [subPage, setSubPage] = useState(1);
   const { sortBy, sortDir, toggle: toggleSort } = useListSortPersistence('payments');
@@ -131,6 +139,7 @@ function PaymentsPage() {
   };
 
   const displayError = activeTab === 'All Payments' ? error : subsError;
+  const hasActivePaymentFilters = Boolean(searchQuery || statusFilter);
 
   return (
     <div className="space-y-6">
@@ -249,8 +258,17 @@ function PaymentsPage() {
               </svg>
               <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">No payments</h3>
               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                No payments have been recorded yet.
+                {hasActivePaymentFilters
+                  ? 'No payments match the current search or filters.'
+                  : 'No payments have been recorded yet.'}
               </p>
+              {hasActivePaymentFilters && (
+                <div className="mt-6">
+                  <Button variant="secondary" onClick={clearFilters}>
+                    Clear filters
+                  </Button>
+                </div>
+              )}
             </div>
           ) : (
             <>

@@ -253,6 +253,7 @@ export function CompaniesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [showFilters, setShowFilters] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [formDirty, setFormDirty] = useState(false);
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
   const debouncedSearch = useDebouncedValue(searchQuery, 300);
@@ -286,7 +287,7 @@ export function CompaniesPage() {
   );
 
   // Fetch companies
-  const { data: companiesData, isLoading } = useCompanies(filters);
+  const { data: companiesData, isLoading, error, refetch } = useCompanies(filters);
 
   // Mutations
   const createCompany = useCreateCompany();
@@ -305,6 +306,11 @@ export function CompaniesPage() {
       newParams.set('page', '1');
     }
     setSearchParams(newParams);
+  };
+
+  const clearFilters = () => {
+    setSearchQuery('');
+    setSearchParams(new URLSearchParams());
   };
 
   const handleDeleteClick = (company: Company) => {
@@ -328,6 +334,7 @@ export function CompaniesPage() {
   };
 
   const handleEdit = (company: Company) => {
+    setFormDirty(false);
     setEditingCompany(company);
     setShowForm(true);
   };
@@ -385,12 +392,21 @@ export function CompaniesPage() {
     navigate(`/companies/${id}`);
   };
 
-  const handleFormCancel = () => {
+  const closeForm = () => {
     setShowForm(false);
     setEditingCompany(null);
+    setFormDirty(false);
+  };
+
+  const handleFormCancel = () => {
+    if (formDirty && !window.confirm('Discard unsaved changes?')) {
+      return;
+    }
+    closeForm();
   };
 
   const companies = companiesData?.items || [];
+  const hasActiveFilters = Boolean(filters.search || filters.status || filters.industry);
 
   return (
     <div className="space-y-6">
@@ -404,7 +420,10 @@ export function CompaniesPage() {
         </div>
         <Button
           leftIcon={<PlusIcon className="h-5 w-5" />}
-          onClick={() => setShowForm(true)}
+          onClick={() => {
+            setFormDirty(false);
+            setShowForm(true);
+          }}
           className="w-full sm:w-auto"
         >
           Add Company
@@ -466,18 +485,36 @@ export function CompaniesPage() {
         <div className="flex items-center justify-center py-12">
           <Spinner size="lg" />
         </div>
+      ) : error ? (
+        <div className="rounded-md border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-900/20">
+          <h3 className="text-sm font-medium text-red-800 dark:text-red-300">Could not load companies</h3>
+          <p className="mt-1 text-sm text-red-700 dark:text-red-300">
+            {error instanceof Error ? error.message : 'Try again in a moment.'}
+          </p>
+          <Button variant="secondary" size="sm" onClick={() => void refetch()} className="mt-3">
+            Retry
+          </Button>
+        </div>
       ) : companies.length === 0 ? (
         <div className="text-center py-12 px-4">
           <BuildingOffice2Icon className="mx-auto h-12 w-12 text-gray-400" aria-hidden="true" />
           <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">No companies</h3>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Get started by adding a new company.
+            {hasActiveFilters
+              ? 'No companies match the current search or filters.'
+              : 'Get started by adding a new company.'}
           </p>
           <div className="mt-6">
-            <Button onClick={() => setShowForm(true)} className="w-full sm:w-auto">
-              <PlusIcon className="h-5 w-5 mr-2" />
-              Add Company
-            </Button>
+            {hasActiveFilters ? (
+              <Button variant="secondary" onClick={clearFilters} className="w-full sm:w-auto">
+                Clear filters
+              </Button>
+            ) : (
+              <Button onClick={() => { setFormDirty(false); setShowForm(true); }} className="w-full sm:w-auto">
+                <PlusIcon className="h-5 w-5 mr-2" />
+                Add Company
+              </Button>
+            )}
           </div>
         </div>
       ) : (
@@ -528,15 +565,17 @@ export function CompaniesPage() {
       {/* Form Modal */}
       <Modal
         isOpen={showForm}
-        onClose={handleFormCancel}
+        onClose={closeForm}
         title={editingCompany ? 'Edit Company' : 'Add Company'}
         size="lg"
+        confirmClose={formDirty}
       >
         <CompanyForm
           company={editingCompany || undefined}
           onSubmit={handleFormSubmit}
           onCancel={handleFormCancel}
           isLoading={createCompany.isPending || updateCompany.isPending || checkDuplicatesMutation.isPending}
+          onDirtyChange={setFormDirty}
         />
       </Modal>
 

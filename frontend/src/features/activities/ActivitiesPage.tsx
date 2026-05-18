@@ -97,6 +97,7 @@ export function ActivitiesPage() {
   };
   const [showFilters, setShowFilters] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [formDirty, setFormDirty] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; activity: Activity | null }>(INITIAL_DELETE_CONFIRM);
   const [pushAfterCreate, setPushAfterCreate] = useState(false);
@@ -122,11 +123,21 @@ export function ActivitiesPage() {
   );
 
   // Fetch activities - only fetch the active view's data
-  const { data: activitiesData, isLoading: isLoadingList } = useActivities(
+  const {
+    data: activitiesData,
+    isLoading: isLoadingList,
+    error: listError,
+    refetch: refetchActivities,
+  } = useActivities(
     filters,
     { enabled: viewMode !== 'timeline' }
   );
-  const { data: timelineData, isLoading: isLoadingTimeline } = useUserTimeline(
+  const {
+    data: timelineData,
+    isLoading: isLoadingTimeline,
+    error: timelineError,
+    refetch: refetchTimeline,
+  } = useUserTimeline(
     filters.activity_type,
     { enabled: viewMode === 'timeline' }
   );
@@ -149,6 +160,17 @@ export function ActivitiesPage() {
       newParams.set('page', '1');
     }
     setSearchParams(newParams);
+  };
+
+  const clearFilters = () => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('activity_type');
+      next.delete('priority');
+      next.delete('status');
+      next.delete('page');
+      return next;
+    });
   };
 
   const handleComplete = async (id: number) => {
@@ -178,6 +200,7 @@ export function ActivitiesPage() {
   };
 
   const handleEdit = (activity: Activity) => {
+    setFormDirty(false);
     setEditingActivity(activity);
     setShowForm(true);
   };
@@ -188,10 +211,12 @@ export function ActivitiesPage() {
         await updateActivity.mutateAsync({ id: editingActivity.id, data: data as ActivityUpdate });
         setShowForm(false);
         setEditingActivity(null);
+        setFormDirty(false);
       } else {
         const newActivity = await createActivity.mutateAsync(data as ActivityCreate);
         setShowForm(false);
         setEditingActivity(null);
+        setFormDirty(false);
         if (pushAfterCreate && connected) {
           try {
             await pushActivityToCalendar(newActivity.id);
@@ -210,15 +235,26 @@ export function ActivitiesPage() {
     }
   };
 
-  const handleFormCancel = () => {
+  const closeForm = () => {
     setShowForm(false);
     setEditingActivity(null);
     setPushAfterCreate(false);
+    setFormDirty(false);
+  };
+
+  const handleFormCancel = () => {
+    if (formDirty && !window.confirm('Discard unsaved changes?')) {
+      return;
+    }
+    closeForm();
   };
 
   const isLoading = viewMode === 'list' ? isLoadingList : viewMode === 'timeline' ? isLoadingTimeline : false;
+  const queryError = viewMode === 'list' ? listError : viewMode === 'timeline' ? timelineError : null;
+  const retryQuery = viewMode === 'timeline' ? refetchTimeline : refetchActivities;
   const activities = activitiesData?.items || [];
   const timelineItems = timelineData?.items || [];
+  const hasActiveFilters = Boolean(filters.activity_type || filters.priority || filters.is_completed !== undefined);
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -232,7 +268,10 @@ export function ActivitiesPage() {
         </div>
         <Button
           leftIcon={<PlusIcon className="h-4 w-4 sm:h-5 sm:w-5" />}
-          onClick={() => setShowForm(true)}
+          onClick={() => {
+            setFormDirty(false);
+            setShowForm(true);
+          }}
           className="w-full sm:w-auto"
         >
           New Activity
@@ -358,6 +397,16 @@ export function ActivitiesPage() {
         <div className="flex items-center justify-center py-8 sm:py-12">
           <Spinner size="lg" />
         </div>
+      ) : queryError ? (
+        <div className="rounded-md border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-900/20">
+          <h3 className="text-sm font-medium text-red-800 dark:text-red-300">Could not load activities</h3>
+          <p className="mt-1 text-sm text-red-700 dark:text-red-300">
+            {queryError instanceof Error ? queryError.message : 'Try again in a moment.'}
+          </p>
+          <Button variant="secondary" size="sm" onClick={() => void retryQuery()} className="mt-3">
+            Retry
+          </Button>
+        </div>
       ) : viewMode === 'list' ? (
         <div className="space-y-3 sm:space-y-4">
           {activities.length === 0 ? (
@@ -365,13 +414,21 @@ export function ActivitiesPage() {
               <DocumentTextIcon className="mx-auto h-10 w-10 sm:h-12 sm:w-12 text-gray-400" aria-hidden="true" />
               <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">No activities</h3>
               <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-                Get started by creating a new activity.
+                {hasActiveFilters
+                  ? 'No activities match the current filters.'
+                  : 'Get started by creating a new activity.'}
               </p>
               <div className="mt-4 sm:mt-6">
-                <Button onClick={() => setShowForm(true)} className="w-full sm:w-auto">
-                  <PlusIcon className="h-4 w-4 sm:h-5 sm:w-5 mr-2" aria-hidden="true" />
-                  New Activity
-                </Button>
+                {hasActiveFilters ? (
+                  <Button variant="secondary" onClick={clearFilters} className="w-full sm:w-auto">
+                    Clear filters
+                  </Button>
+                ) : (
+                  <Button onClick={() => { setFormDirty(false); setShowForm(true); }} className="w-full sm:w-auto">
+                    <PlusIcon className="h-4 w-4 sm:h-5 sm:w-5 mr-2" aria-hidden="true" />
+                    New Activity
+                  </Button>
+                )}
               </div>
             </div>
           ) : (
@@ -538,7 +595,7 @@ export function ActivitiesPage() {
         <ActivityTimeline
           items={timelineItems}
           onComplete={handleComplete}
-          emptyMessage="Create your first activity to see it here"
+          emptyMessage={hasActiveFilters ? "No activities match the current filters" : "Create your first activity to see it here"}
         />
       ) : (
         <CalendarView />
@@ -547,10 +604,11 @@ export function ActivitiesPage() {
       {/* Form Modal - fullscreen on mobile */}
       <Modal
         isOpen={showForm}
-        onClose={handleFormCancel}
+        onClose={closeForm}
         title={editingActivity ? 'Edit Activity' : 'New Activity'}
         size="lg"
         fullScreenOnMobile
+        confirmClose={formDirty}
       >
         <ActivityForm
           activity={editingActivity || undefined}
@@ -558,8 +616,12 @@ export function ActivitiesPage() {
           onCancel={handleFormCancel}
           isLoading={createActivity.isPending || updateActivity.isPending}
           pushToCalendar={pushAfterCreate}
-          onPushToCalendarChange={setPushAfterCreate}
+          onPushToCalendarChange={(checked) => {
+            setPushAfterCreate(checked);
+            setFormDirty(true);
+          }}
           calendarConnected={connected}
+          onDirtyChange={setFormDirty}
         />
       </Modal>
 

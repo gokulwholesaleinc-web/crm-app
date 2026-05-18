@@ -33,6 +33,10 @@ interface EntityConfig {
 
 interface MaybeNamed { name?: string }
 
+function stripProtocol(value: string): string {
+  return value.replace(/^https?:\/\//, '').replace(/\/$/, '');
+}
+
 const ENTITIES: EntityConfig[] = [
   {
     entity: 'contact',
@@ -54,8 +58,12 @@ const ENTITIES: EntityConfig[] = [
     routePrefix: '/companies',
     fetch: (q) => listCompanies({ search: q, page_size: 5 }) as Promise<{ items: unknown[] }>,
     toResult: (raw) => {
-      const c = raw as { id: number; name: string; domain?: string; industry?: string };
-      return { id: c.id, label: c.name, sublabel: c.domain || c.industry };
+      const c = raw as { id: number; name?: string; website?: string; domain?: string; industry?: string };
+      return {
+        id: c.id,
+        label: c.name || c.website || c.domain || `Company #${c.id}`,
+        sublabel: c.website ? stripProtocol(c.website) : c.domain || c.industry,
+      };
     },
   },
   {
@@ -64,10 +72,19 @@ const ENTITIES: EntityConfig[] = [
     routePrefix: '/leads',
     fetch: (q) => listLeads({ search: q, page_size: 5 }) as Promise<{ items: unknown[] }>,
     toResult: (raw) => {
-      const l = raw as { id: number; name?: string; company_name?: string; email?: string };
+      const l = raw as {
+        id: number;
+        full_name?: string;
+        first_name?: string;
+        last_name?: string;
+        name?: string;
+        company_name?: string;
+        email?: string;
+      };
+      const fallbackName = [l.first_name, l.last_name].filter(Boolean).join(' ').trim();
       return {
         id: l.id,
-        label: l.name || l.company_name || `Lead #${l.id}`,
+        label: l.full_name || fallbackName || l.name || l.email || l.company_name || `Lead #${l.id}`,
         sublabel: l.email || l.company_name,
       };
     },

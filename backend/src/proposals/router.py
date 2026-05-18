@@ -68,6 +68,26 @@ router = APIRouter(prefix="/api/proposals", tags=["proposals"])
 # payload that would force the row into TOAST storage and bloat the
 # audit page render.
 _MAX_SIGNATURE_BYTES = 200_000
+_MAX_SIGNING_PDF_BYTES = 25 * 1024 * 1024
+
+
+def _require_declared_pdf_size(
+    file: UploadFile,
+    *,
+    missing_detail: str,
+    oversized_detail: str,
+) -> None:
+    """Reject uploads whose declared size is missing or over the PDF cap."""
+    if file.size is None:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail=missing_detail,
+        )
+    if file.size > _MAX_SIGNING_PDF_BYTES:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail=oversized_detail,
+        )
 
 
 def _decode_signature_image(payload: str) -> bytes:
@@ -827,6 +847,11 @@ async def upload_signing_document(
     proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
     check_ownership(proposal, current_user, EntityNames.PROPOSAL)
     _ensure_unsigned(proposal)
+    _require_declared_pdf_size(
+        file,
+        missing_detail="signing document upload size is required",
+        oversized_detail="signing document exceeds 25 MB limit",
+    )
     content = await file.read()
     with value_error_as_400():
         document = await service.upload_signing_document_pdf(
@@ -1018,6 +1043,11 @@ async def upload_master_contract(
     service = ProposalService(db)
     proposal = await get_entity_or_404(service, proposal_id, EntityNames.PROPOSAL)
     check_ownership(proposal, current_user, EntityNames.PROPOSAL)
+    _require_declared_pdf_size(
+        file,
+        missing_detail="master contract upload size is required",
+        oversized_detail="master contract exceeds 25 MB limit",
+    )
     content = await file.read()
     with value_error_as_400():
         proposal = await service.upload_master_contract_pdf(

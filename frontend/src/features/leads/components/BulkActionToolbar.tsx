@@ -64,12 +64,12 @@ export function BulkActionToolbar({
   };
 
   return (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-white dark:bg-gray-800 shadow-lg border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-3 flex items-center gap-3 min-w-[320px]">
-      <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
+    <div className="fixed bottom-3 left-3 right-3 sm:bottom-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-50 bg-white dark:bg-gray-800 shadow-lg border border-gray-200 dark:border-gray-700 rounded-lg px-3 sm:px-4 py-3 flex flex-col gap-2 sm:min-w-[320px] sm:max-w-[calc(100vw-2rem)] sm:flex-row sm:items-center sm:gap-3">
+      <span className="text-sm font-medium text-gray-700 dark:text-gray-200 whitespace-nowrap">
         {selectedIds.length} {entityType} selected
       </span>
 
-      <div className="flex items-center gap-2 ml-auto">
+      <div className="flex min-w-0 flex-wrap items-center gap-2 sm:ml-auto sm:flex-nowrap">
         {/* Stage Move (Leads only) */}
         {stageOptions.length > 0 && onBulkMoveStage && (
           <Menu as="div" className="relative">
@@ -81,6 +81,7 @@ export function BulkActionToolbar({
                     variant="secondary"
                     leftIcon={<ViewColumnsIcon className="h-4 w-4" />}
                     disabled={isLoading}
+                    className="flex-1 sm:flex-none"
                   >
                     Change Stage
                   </Button>
@@ -125,6 +126,7 @@ export function BulkActionToolbar({
                     variant="secondary"
                     leftIcon={<ArrowPathIcon className="h-4 w-4" />}
                     disabled={isLoading}
+                    className="flex-1 sm:flex-none"
                   >
                     Update Status
                   </Button>
@@ -169,6 +171,7 @@ export function BulkActionToolbar({
                     variant="secondary"
                     leftIcon={<UserGroupIcon className="h-4 w-4" />}
                     disabled={isLoading}
+                    className="flex-1 sm:flex-none"
                   >
                     Assign
                   </Button>
@@ -210,7 +213,7 @@ export function BulkActionToolbar({
             leftIcon={<TrashIcon className="h-4 w-4" />}
             onClick={onBulkDelete}
             disabled={isLoading}
-            className="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30"
+            className="flex-1 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30 sm:flex-none"
           >
             Delete
           </Button>
@@ -222,7 +225,7 @@ export function BulkActionToolbar({
           variant="ghost"
           onClick={onClearSelection}
           aria-label="Clear selection"
-          className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+          className="ml-auto text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 sm:ml-0"
         >
           <XMarkIcon className="h-4 w-4" aria-hidden="true" />
         </Button>
