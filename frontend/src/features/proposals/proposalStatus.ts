@@ -8,13 +8,12 @@ import type { Proposal } from '../../types';
 import type { TimelineStep } from '../../components/shared/StatusTimeline';
 import type { ChecklistItem } from '../../components/shared/checklist';
 
-const STATUS_ORDER = ['draft', 'sent', 'viewed', 'accepted', 'awaiting_payment', 'paid'];
+const STATUS_ORDER = ['draft', 'sent', 'viewed', 'accepted'];
 
 // Once a proposal hits any of these states, edits would mutate
 // something the customer has already committed to. Used to gate the
-// edit modal + status transitions. (The /refresh-from-quote endpoint
-// was retired with the quotes router on 2026-05-14.)
-const LOCKED_STATUSES = new Set(['signed', 'accepted', 'awaiting_payment', 'paid']);
+// edit modal + status transitions.
+const LOCKED_STATUSES = new Set(['signed', 'accepted']);
 
 function rankStatus(status: string | undefined): number {
   if (!status) return 0;
@@ -28,15 +27,11 @@ export function isProposalLocked(proposal: Proposal): boolean {
   return LOCKED_STATUSES.has(proposal.status ?? '');
 }
 
-function hasBillingAmount(proposal: Proposal): boolean {
-  return Boolean(proposal.amount && Number(proposal.amount) > 0);
-}
-
 /**
- * Build the Draft → Sent → Viewed → Signed → Paid timeline. Step state
- * derives from the actual timestamps on the proposal (sent_at, viewed_at,
- * signed_at, paid_at) — falling back to status ranking when a timestamp
- * isn't available. Rejected proposals collapse to a Draft → Sent → Rejected
+ * Build the Draft → Sent → Viewed → Signed timeline. Step state derives
+ * from the actual timestamps on the proposal (sent_at, viewed_at,
+ * signed_at) — falling back to status ranking when a timestamp isn't
+ * available. Rejected proposals collapse to a Draft → Sent → Rejected
  * three-step view so the timeline still reads.
  */
 export function buildProposalTimelineSteps(proposal: Proposal): TimelineStep[] {
@@ -67,12 +62,6 @@ export function buildProposalTimelineSteps(proposal: Proposal): TimelineStep[] {
     return 'upcoming';
   };
 
-  // Paid is only meaningful for proposals that actually carry a billing
-  // amount — a one-time $0 proposal still goes Draft → Sent → Viewed →
-  // Signed and stops there. Mark Paid as skipped in that case so the
-  // timeline doesn't look unfinished forever.
-  const hasBilling = hasBillingAmount(proposal);
-
   return [
     { key: 'draft', label: 'Draft', at: proposal.created_at, state: stepState(0) },
     {
@@ -95,12 +84,6 @@ export function buildProposalTimelineSteps(proposal: Proposal): TimelineStep[] {
       tooltip: proposal.signer_name
         ? `Signed by ${proposal.signer_name}`
         : undefined,
-    },
-    {
-      key: 'paid',
-      label: 'Paid',
-      at: proposal.paid_at ?? null,
-      state: hasBilling ? stepState(5) : 'skipped',
     },
   ];
 }
@@ -145,20 +128,6 @@ export function buildProposalSendChecklist(
     state: hasEntity,
     hint: hasEntity ? undefined : 'Attach a contact or company so we can route the signed copy.',
     action: hasEntity ? undefined : { label: 'Edit', onClick: options.onEditContact },
-  });
-
-  // Billing is optional — a free strategy doc proposal doesn't need it.
-  // Marked optional so it surfaces as a hint without blocking send.
-  const hasBilling = hasBillingAmount(proposal);
-  items.push({
-    key: 'billing',
-    label: hasBilling
-      ? `Billing configured (${proposal.payment_type === 'subscription' ? 'subscription' : 'one-time'})`
-      : 'Billing (optional)',
-    state: hasBilling ? true : 'optional',
-    hint: hasBilling
-      ? undefined
-      : 'No invoice will spawn on accept. Add a billing amount if you want Stripe to handle payment.',
   });
 
   // Expired valid_until is a warning, not a hard block — the backend
