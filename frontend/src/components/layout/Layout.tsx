@@ -59,8 +59,13 @@ export function Layout({
           onClose={() => setMobileMenuOpen(false)}
         />
 
-        {/* Main Content Area - takes full width on mobile */}
-        <div className="flex flex-col flex-1 min-w-0 overflow-hidden w-full">
+        {/* Main Content Area - takes full width on mobile.
+            ``min-h-0`` is critical: without it, the inner flex children
+            (Header + <main>) refuse to shrink below their natural content
+            height, so a page with tall content makes the column overflow
+            its 100vh allotment and the user can scroll past the working
+            area into empty page-bg space below the table. */}
+        <div className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden w-full">
           <Header
             user={user}
             onMenuClick={() => setMobileMenuOpen(true)}
