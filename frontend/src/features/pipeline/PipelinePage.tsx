@@ -182,9 +182,12 @@ function PipelinePage() {
   const isDragging = activeLead !== null;
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-4 sm:space-y-6" data-guide="pipeline-page">
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div
+        className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+        data-guide="pipeline-header"
+      >
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">
             Pipeline
@@ -205,7 +208,10 @@ function PipelinePage() {
       </div>
 
       {/* Toolbar */}
-      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-3 sm:p-4 border border-transparent dark:border-gray-700">
+      <div
+        className="bg-white dark:bg-gray-800 shadow rounded-lg p-3 sm:p-4 border border-transparent dark:border-gray-700"
+        data-guide="pipeline-toolbar"
+      >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
           <div className="flex-1 min-w-0">
             <label htmlFor="pipeline-search" className="sr-only">
@@ -282,6 +288,7 @@ function PipelinePage() {
         >
           <div
             className="flex flex-col md:flex-row gap-3 md:gap-4 md:overflow-x-auto pb-2"
+            data-guide="pipeline-board"
             // Prevent overscroll-y on horizontal kanban scroll from
             // bouncing the page on touch devices.
             style={{ overscrollBehavior: 'contain' }}

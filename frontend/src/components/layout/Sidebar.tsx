@@ -57,6 +57,7 @@ function StaticNavItem({
   return (
     <NavLink
       to={item.href}
+      data-guide={`nav-${item.id}`}
       className={clsx(
         'group flex items-center rounded-lg transition-colors duration-200',
         collapsed ? 'px-3 py-3 justify-center' : 'px-3 py-2',
@@ -351,7 +352,11 @@ export function Sidebar({ collapsed = false, className }: SidebarProps) {
       </div>
 
       {/* Main Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto" aria-label="Main navigation">
+      <nav
+        className="flex-1 px-3 py-4 space-y-1 overflow-y-auto"
+        aria-label="Main navigation"
+        data-guide="sidebar-nav"
+      >
         {editMode ? (
           <>
             <DndContext

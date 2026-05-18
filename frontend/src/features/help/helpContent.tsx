@@ -8,6 +8,7 @@ import {
   DocumentDuplicateIcon,
   CreditCardIcon,
   CalendarIcon,
+  CalendarDaysIcon,
   MegaphoneIcon,
   EnvelopeIcon,
   DocumentMagnifyingGlassIcon,
@@ -18,6 +19,8 @@ import {
   AcademicCapIcon,
   ArrowRightIcon,
   ShareIcon,
+  UserPlusIcon,
+  ViewColumnsIcon,
 } from '@heroicons/react/24/outline';
 
 export interface Section {
@@ -63,7 +66,7 @@ export const SECTIONS: Section[] = [
     title: 'Getting Started',
     icon: AcademicCapIcon,
     searchText:
-      'getting started login sign in register account password remember me sidebar navigation customize order dark mode theme search global header profile',
+      'getting started login sign in google approval account sidebar navigation customize order dark mode theme search global header profile',
     body: (
       <div className="space-y-4">
         <p className="text-sm text-gray-700 dark:text-gray-300">
@@ -79,15 +82,16 @@ export const SECTIONS: Section[] = [
           </h4>
           <ul className="space-y-1.5">
             <Bullet>
-              Log in with your email and password on the <code>/login</code> page.
+              Log in from <code>/login</code> with Google Sign-In. Link Creative CRM no longer
+              exposes a password registration form.
             </Bullet>
             <Bullet>
-              New users register from <code>/register</code> with first name, last name, email, and
-              password. After registering you are redirected to login.
+              First-time Google sign-ins wait for admin approval. Admins approve or reject users
+              from <strong>Admin → User Approvals</strong> and choose the user&apos;s role.
             </Bullet>
             <Bullet>
-              On successful login you land on the Dashboard. Your profile, theme toggle, and sign-out
-              live in the top-right user menu.
+              On successful login you land on the Dashboard. Your profile, preferences, theme toggle,
+              guide menu, notifications, and sign-out live in the header.
             </Bullet>
           </ul>
         </div>
@@ -99,9 +103,9 @@ export const SECTIONS: Section[] = [
           <ul className="space-y-1.5">
             <Bullet>
               The left sidebar has two groups: a main group (Dashboard, Contacts, Companies,
-              Leads, Proposals, Payments, Activities, Calendar,
-              Email Campaigns, Inbox) and a secondary group (Duplicates, Import/Export, Reports,
-              Settings, Help, Admin).
+              Leads, Pipeline, Inbox, Proposals, Payments, Activities, Calendar,
+              Email Campaigns) and a secondary group (Import/Export, Reports,
+              Settings, Help, Admin, User Approvals, Sharing, Duplicate Cleanup).
             </Bullet>
             <Bullet>
               Click <strong>Customize Menu</strong> at the bottom of the sidebar to drag items into
@@ -109,11 +113,12 @@ export const SECTIONS: Section[] = [
               to restore the original layout.
             </Bullet>
             <Bullet>
-              The header has a global search that looks across Contacts, Leads, Companies,
-              Proposals, and Payments. You can also toggle dark mode from the header.
+              The header has a global search that looks across Contacts, Companies,
+              Leads, and Proposals. You can also toggle dark mode and start a guide from the header.
             </Bullet>
             <Bullet>
-              The <strong>Admin</strong> tab is only visible to users with the admin role.
+              Admin, User Approvals, Sharing, and Duplicate Cleanup are admin-only in the sidebar.
+              Sharing and Duplicate Cleanup pages also enforce role checks in-page.
             </Bullet>
           </ul>
         </div>
@@ -145,8 +150,8 @@ export const SECTIONS: Section[] = [
           <p className="text-sm text-gray-700 dark:text-gray-300 mb-3">
             <strong>The CRM has its own e-signature built in</strong> — you don&rsquo;t need a
             separate DocuSign / HelloSign / Adobe Sign account. Proposals include
-            a public-link signing flow that captures the signer&rsquo;s name, email,
-            IP, and timestamp.
+            a public-link signing flow with drawn signature capture, ESIGN consent,
+            signer-email verification, PDF signature placement, and a signed-copy email.
           </p>
           <ol className="space-y-2.5">
             <Step n={1}>
@@ -154,28 +159,28 @@ export const SECTIONS: Section[] = [
               <em> Create Proposal</em>.
             </Step>
             <Step n={2}>
-              Fill in the sections, pick the contact and company, then save.
-              The status starts as <Badge variant="gray">draft</Badge>.
+              Fill in the sections, pick the contact and company, add reference pricing if useful,
+              and optionally upload one or more signable PDFs. Reference pricing never auto-charges.
             </Step>
             <Step n={3}>
-              Click <em>Send</em> — status flips to <Badge variant="blue">sent</Badge> and a
-              public share link is generated.
+              Open the proposal detail page and place a signing area on every uploaded signing PDF.
+              The send button stays disabled until required signing areas are ready.
             </Step>
             <Step n={4}>
-              Copy the public link from the detail page (or use the &ldquo;Email link&rdquo;
-              shortcut) and send it to the client. The URL looks like
-              {' '}<code>/proposals/public/&#123;token&#125;</code>.
+              Click <em>Send</em>. The CRM sends the public link to the designated signer email
+              and records status <Badge variant="blue">sent</Badge>. The URL looks like{' '}
+              <code>/proposals/public/&#123;token&#125;</code>.
             </Step>
             <Step n={5}>
-              The client opens the link, reviews, types their full name + email, and
-              clicks <em>Accept</em>. Status flips to{' '}
-              <Badge variant="green">accepted</Badge>; their name, email, IP, and
-              timestamp are stored on the record as the e-signature.
+              The client opens the link, reviews the proposal and signing PDFs, opens
+              <em> Sign to Accept</em>, draws their signature, confirms the locked signer email,
+              checks the ESIGN/T&amp;C consent box, and submits.
             </Step>
             <Step n={6}>
-              For <strong>Proposals</strong> with a price, accepting auto-spawns a
-              Stripe invoice (one-time) or Checkout session (subscription) — see
-              tutorial 2.
+              Status flips to <Badge variant="green">accepted</Badge>. The CRM stores signer name,
+              email, IP, browser user-agent, timestamp, and signature image, stamps signature/date
+              onto each signing PDF, and emails the signer a signed copy. Billing is created
+              manually from <strong>Payments</strong> after signing.
             </Step>
           </ol>
           <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
@@ -188,8 +193,8 @@ export const SECTIONS: Section[] = [
             2. Create and send an invoice
           </h3>
           <p className="text-sm text-gray-700 dark:text-gray-300 mb-3">
-            Two ways to do this. The fast way is the <em>Send Invoice</em> button. The
-            no-touch way is to let an accepted Proposal spawn the invoice automatically.
+            Billing is manual after proposal signing. Use the <em>Send Invoice</em> button when
+            you are ready to bill the customer.
           </p>
           <ol className="space-y-2.5">
             <Step n={1}>
@@ -199,9 +204,9 @@ export const SECTIONS: Section[] = [
               Click <em>Send Invoice</em> at the top right. A modal opens.
             </Step>
             <Step n={3}>
-              Pick the customer from the dropdown. Don&rsquo;t see them? Open the contact
-              first and click <em>Sync to Stripe</em> (or use the &ldquo;Sync customer&rdquo;
-              quick action) — that creates the StripeCustomer record this dropdown reads.
+              Pick the customer from the dropdown. If you opened billing from a specific contact,
+              the modal can sync that contact to Stripe; the global Payments page expects an
+              existing Stripe customer.
             </Step>
             <Step n={4}>
               Fill in the amount, description, and how many days until the invoice is due.
@@ -216,9 +221,8 @@ export const SECTIONS: Section[] = [
             </Step>
           </ol>
           <Tip>
-            For repeat work, use <strong>Proposals</strong> instead. When the client accepts
-            a proposal with a price, the CRM auto-creates the matching Stripe invoice or
-            checkout session — no manual step.
+            Proposal acceptance does not create a Stripe invoice or checkout session. That keeps
+            signature capture and billing intentionally separate.
           </Tip>
           <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
             Direct link: <code>/help#tutorial-create-invoice</code>
@@ -235,13 +239,9 @@ export const SECTIONS: Section[] = [
               one-shot Stripe invoice the customer pays via card or ACH.
             </Step>
             <Step n={2}>
-              <strong>Recurring (subscription) — Proposal route (auto-spawn):</strong>{' '}
-              build a <em>Proposal</em> with a pricing block whose payment type is{' '}
-              <em>Subscription</em> + interval (monthly / quarterly / yearly), send it,
-              and when the client accepts via the public link the CRM auto-creates a
-              Stripe Checkout session in subscription mode and emails them the link.
-              They enter their card on Stripe&rsquo;s hosted page and the subscription
-              begins.
+              <strong>Recurring (subscription):</strong> after the client signs, create the
+              subscription manually in the Payments workflow. Proposal pricing blocks are
+              reference-only and do not create Stripe Checkout automatically.
             </Step>
             <Step n={3}>
               Recurring charges show up on the Payments page under the{' '}
@@ -397,14 +397,14 @@ export const SECTIONS: Section[] = [
           </Step>
           <Step n={5}>
             <strong>The client accepts or rejects.</strong> The public proposal page
-            captures the decision and an e-signature (name, email, IP, signed-at) — the
-            built-in DocuSign-equivalent. Status flips to <em>accepted</em> or
-            <em> rejected</em>.
+            captures the decision, drawn signature, ESIGN consent, signer email, IP,
+            user-agent, and signed timestamp. Status flips to <em>accepted</em> or
+            <em> rejected</em>, and signed PDFs are stamped and emailed to the signer.
           </Step>
           <Step n={6}>
-            <strong>You collect Payment.</strong> The Payments tab tracks Stripe payment intents,
-            checkout sessions, invoices, and subscriptions. Payments link back to the
-            proposal and Stripe customer.
+            <strong>You collect Payment manually.</strong> The Payments tab creates and tracks
+            Stripe payment intents, checkout sessions, invoices, and subscriptions. Proposal
+            signing does not create billing.
           </Step>
           <Step n={7}>
             <strong>Activities follow the record everywhere.</strong> Calls, emails, meetings, tasks,
@@ -530,7 +530,7 @@ export const SECTIONS: Section[] = [
         </ul>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Detail page tabs</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          <em>Overview, Proposals, Activities, Notes, Attachments, History,
+          <em>Overview, Proposals, Payments, Activities, Notes, Attachments, History,
           Sharing, Meta (custom fields), Expenses.</em> The Overview tab lists all linked contacts
           as cards.
         </p>
@@ -542,22 +542,23 @@ export const SECTIONS: Section[] = [
     title: 'Leads',
     icon: FunnelIcon,
     searchText:
-      'leads lead score status new contacted qualified unqualified converted lost source kanban list view bulk actions assign campaign convert contact company budget',
+      'leads lead score status new contacted qualified unqualified converted lost source pipeline list view bulk actions assign campaign convert contact company budget',
     body: (
       <div className="space-y-3">
         <p className="text-sm text-gray-700 dark:text-gray-300">
           Leads are unqualified prospects you haven't yet converted. They live in their own table
           (separate from Contacts) and have extra fields specific to qualification.
         </p>
-        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">List &amp; kanban views</h4>
+        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">List view</h4>
         <ul className="space-y-1.5">
           <Bullet>
-            Toggle between <strong>list</strong> and <strong>kanban</strong> view at the top. The
-            kanban groups leads by their pipeline stage.
+            The Leads page is the operational list for search, status filtering, bulk actions,
+            assignment, campaign enrollment, inline stage updates, and conversion.
           </Bullet>
           <Bullet>
-            Filter by status (new, contacted, qualified, unqualified, converted, lost), source,
-            owner, minimum score, or tags. Search by name, email, or company.
+            Search by name, email, or company and filter by status (new, contacted, qualified,
+            unqualified, converted, lost). Use the <strong>Pipeline</strong> button for the
+            stage-based board.
           </Bullet>
           <Bullet>
             <strong>Score bar</strong> shows lead temperature: green (≥80), yellow (≥60), orange
@@ -589,6 +590,38 @@ export const SECTIONS: Section[] = [
       </div>
     ),
   },
+  {
+    id: 'pipeline',
+    title: 'Pipeline',
+    icon: ViewColumnsIcon,
+    searchText:
+      'pipeline kanban leads stages drag drop owner filter manager admin board promoted leads probability won lost',
+    body: (
+      <div className="space-y-3">
+        <p className="text-sm text-gray-700 dark:text-gray-300">
+          Pipeline is the kanban board for leads that have been promoted into a pipeline stage.
+          It is separate from the Leads list so stage movement stays fast and visual.
+        </p>
+        <ul className="space-y-1.5">
+          <Bullet>
+            Drag a lead card between columns to update its stage. New leads stay off-board until
+            you set a stage from the Leads page or another lead workflow.
+          </Bullet>
+          <Bullet>
+            Search filters visible cards by name, email, or company without losing drag-and-drop.
+          </Bullet>
+          <Bullet>
+            Managers and admins can scope the board by owner; sales reps see the records allowed
+            by their data access.
+          </Bullet>
+          <Bullet>
+            Pipeline stage names, colors, probabilities, and won/lost flags are managed in
+            <strong> Settings → Pipeline Stages</strong>.
+          </Bullet>
+        </ul>
+      </div>
+    ),
+  },
   // Quotes help section removed 2026-05-14 — quotes router unmounted;
   // replaced by one-off Payment invoices with optional PDF attachments.
   {
@@ -601,7 +634,8 @@ export const SECTIONS: Section[] = [
       <div className="space-y-3">
         <p className="text-sm text-gray-700 dark:text-gray-300">
           Proposals are long-form sales documents. They support rich content sections
-          and reusable templates, with payment terms folded inline.
+          and reusable templates. Pricing is shown for customer reference; billing is created
+          manually from Payments after signing.
         </p>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Sections</h4>
         <ul className="space-y-1.5">
@@ -628,9 +662,14 @@ export const SECTIONS: Section[] = [
             number). Send the link to the client; they don&rsquo;t need an account.
           </Bullet>
           <Bullet>
-            The public page lets the client type their name + email and accept (or
-            reject with a reason) — a built-in DocuSign-equivalent flow. Name,
-            email, IP, and timestamp are captured on the proposal record.
+            The public page lets the designated signer review the proposal, draw a signature,
+            confirm their locked signer email, consent to ESIGN/T&amp;C terms, and accept
+            (or reject with a reason). Name, email, IP, user-agent, timestamp, and the
+            signature image are captured on the proposal record.
+          </Bullet>
+          <Bullet>
+            Uploaded signing PDFs require staff to place a signing area before send. On acceptance,
+            the CRM stamps signature and date onto the placed areas and emails the signer a signed copy.
           </Bullet>
           <Bullet>
             Each view is logged with timestamp and IP, so you can see view count and last-viewed
@@ -638,8 +677,7 @@ export const SECTIONS: Section[] = [
           </Bullet>
           <Bullet>
             Status flow: <em>draft → sent → viewed → accepted / rejected</em>. Accepting a
-            proposal with a price auto-spawns a Stripe invoice or checkout — see{' '}
-            <em>Tutorials</em> #2 and #3.
+            proposal does not create Stripe invoices or checkout sessions.
           </Bullet>
         </ul>
       </div>
@@ -685,9 +723,10 @@ export const SECTIONS: Section[] = [
         </ul>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Sending an invoice</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          Use the <em>Send Invoice</em> button to create a Stripe invoice for a customer. It opens
-          a modal where you pick the customer, amount, and items, then sends the Stripe-hosted
-          invoice link to the contact&rsquo;s email. Step-by-step in <em>Tutorials</em> #2.
+          Use the <em>Send Invoice</em> button to create a Stripe invoice for a customer after
+          you are ready to bill. It opens a modal where you pick the customer, amount, description,
+          and due date, then sends the Stripe-hosted invoice link to the customer. Step-by-step in
+          <em> Tutorials</em> #2.
         </p>
         <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Per-customer view</h4>
         <p className="text-sm text-gray-700 dark:text-gray-300">
@@ -743,6 +782,33 @@ export const SECTIONS: Section[] = [
           Activities also appear inside the Activities tab of every Contact, Company, and Lead
           detail page — so you don&apos;t have to come back here to see them in context.
         </Tip>
+      </div>
+    ),
+  },
+  {
+    id: 'calendar',
+    title: 'Calendar',
+    icon: CalendarDaysIcon,
+    searchText:
+      'calendar google calendar sync activities meetings tasks scheduled events connect integrations',
+    body: (
+      <div className="space-y-3">
+        <p className="text-sm text-gray-700 dark:text-gray-300">
+          Calendar shows scheduled CRM activities alongside synced Google Calendar events.
+        </p>
+        <ul className="space-y-1.5">
+          <Bullet>
+            If Google Calendar is connected, use <strong>Sync from Google</strong> to refresh events.
+          </Bullet>
+          <Bullet>
+            If it is not connected, the page links to <strong>Settings → Integrations</strong> so
+            you can complete OAuth setup.
+          </Bullet>
+          <Bullet>
+            Activities created in the CRM can also be pushed to Google Calendar from activity
+            workflows when the integration is connected.
+          </Bullet>
+        </ul>
       </div>
     ),
   },
@@ -836,37 +902,37 @@ export const SECTIONS: Section[] = [
     ),
   },
   {
-    id: 'duplicates',
-    title: 'Duplicates',
+    id: 'admin-duplicate-cleanup',
+    title: 'Admin Duplicate Cleanup',
     icon: DocumentMagnifyingGlassIcon,
     searchText:
       'duplicates dedup detection scan merge primary record contacts companies leads email phone name match similarity',
     body: (
       <div className="space-y-3">
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          The Duplicates page finds and merges accidentally-double records. Important to run after
-          big imports.
+          <strong>Admin → Duplicate Cleanup</strong> finds and merges records that already slipped
+          into the CRM. The old <code>/duplicates</code> bookmark redirects here.
         </p>
         <ol className="space-y-3">
           <Step n={1}>
-            Pick the entity type to scan: contacts, companies, or leads (up to 100 records per
-            scan).
+            Pick the entity type to scan: contacts, companies, or leads, then choose the match key
+            available for that entity (email, phone, or normalized name).
           </Step>
           <Step n={2}>
-            The scanner groups records that match by email, phone, or name similarity. Each match
-            comes with a reason ("Email match", "Phone match", etc.).
+            The scanner groups duplicate clusters and shows how many redundant records would be
+            removed.
           </Step>
           <Step n={3}>
-            For each duplicate group, choose the <em>primary</em> record — the one that will be
-            kept. Confirm the merge.
+            For each cluster, choose the winner — usually the most complete or most recently active
+            record — and confirm the merge.
           </Step>
           <Step n={4}>
-            All activities, notes, tags, and other related records from the secondary are moved
-            onto the primary. The secondary is then deleted.
+            Activities, proposals, and linked records repoint to the winner. Losing records become
+            merged tombstones for audit history and stop appearing in list views.
           </Step>
           <Step n={5}>
-            The page auto-rescans after a merge so you can sweep through the whole list in one
-            sitting.
+            Merge failures are shown inline so you can refresh stale clusters without guessing what
+            happened.
           </Step>
         </ol>
         <Tip>
@@ -967,7 +1033,7 @@ export const SECTIONS: Section[] = [
     title: 'Settings',
     icon: Cog6ToothIcon,
     searchText:
-      'settings profile branding white label colors logo footer ai preferences pipeline stages lead sources integrations google calendar meta facebook instagram email warmup webhooks roles permissions assignment rules account status',
+      'settings profile branding white label colors logo footer preferences notifications timezone locale currency density navigation signature pipeline stages lead sources integrations google calendar meta facebook instagram email warmup webhooks roles permissions assignment rules account status',
     body: (
       <div className="space-y-3">
         <p className="text-sm text-gray-700 dark:text-gray-300">
@@ -1016,10 +1082,18 @@ export const SECTIONS: Section[] = [
             <strong>Account Status:</strong> read-only — shows whether your account is active, your
             role, and your last login.
           </Bullet>
+          <Bullet>
+            <strong>Notifications:</strong> manage in-app/email channels, event-level preferences,
+            digest behavior, and quiet hours.
+          </Bullet>
+          <Bullet>
+            <strong>Preferences:</strong> set timezone, locale, date/time format, currency, theme,
+            default landing page, density, default record tabs, sidebar visibility, and signature.
+          </Bullet>
         </ul>
         <Tip>
-          The Notifications, Security (2FA), and Preferences (language/timezone) sections are still
-          marked "coming soon" in the current build.
+          Account sign-in is Google-based, so password and 2FA controls are not exposed in this
+          build.
         </Tip>
       </div>
     ),
@@ -1056,6 +1130,62 @@ export const SECTIONS: Section[] = [
           A 30-day chronological log of every action across the system: who did it, what they did
           (create/update/delete), which entity, when. Color-coded so you can spot anything unusual.
         </p>
+      </div>
+    ),
+  },
+  {
+    id: 'user-approvals',
+    title: 'User Approvals',
+    icon: UserPlusIcon,
+    searchText:
+      'user approvals google sign in pending users approve reject unblock rejected emails assign role admin',
+    body: (
+      <div className="space-y-3">
+        <p className="text-sm text-gray-700 dark:text-gray-300">
+          New Google sign-ins do not become active users until an admin approves them.
+          Use <strong>Admin → User Approvals</strong> to review pending requests.
+        </p>
+        <ul className="space-y-1.5">
+          <Bullet>
+            Pending requests show email, name, requested date, role selector, and approve/reject
+            actions.
+          </Bullet>
+          <Bullet>
+            Approving as <strong>admin</strong> has an extra confirmation because it grants full
+            tenant access.
+          </Bullet>
+          <Bullet>
+            Rejecting a user can optionally store a reason and adds the email to the rejected list.
+            Unblock an email from the same page if the decision changes.
+          </Bullet>
+        </ul>
+      </div>
+    ),
+  },
+  {
+    id: 'admin-sharing',
+    title: 'Admin Sharing',
+    icon: ShareIcon,
+    searchText:
+      'admin sharing shares audit record access revoke shared with shared by permission manager admin filters',
+    body: (
+      <div className="space-y-3">
+        <p className="text-sm text-gray-700 dark:text-gray-300">
+          <strong>Admin → Sharing</strong> is the tenant-wide audit surface for record-level shares.
+          Use it when you need to inspect or revoke access without opening every record.
+        </p>
+        <ul className="space-y-1.5">
+          <Bullet>
+            Filter by entity type, recipient, sharer, or permission level.
+          </Bullet>
+          <Bullet>
+            Each row links back to the shared record and shows who shared it, who received it, and
+            when access was granted.
+          </Bullet>
+          <Bullet>
+            Admins and managers can revoke stale shares directly from the table.
+          </Bullet>
+        </ul>
       </div>
     ),
   },

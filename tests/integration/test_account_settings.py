@@ -140,6 +140,12 @@ class TestPreferencesRoutes:
         assert body["locale"] == "en-US"
         assert body["theme"] == "system"
         assert body["default_landing"] == "/dashboard"
+        assert body["guide_progress"] == {
+            "completed_guide_ids": [],
+            "first_run_dismissed_at": None,
+            "disabled_at": None,
+            "last_reset_at": None,
+        }
 
     async def test_put_accepts_known_timezone(
         self, client: AsyncClient, test_user: User
@@ -171,6 +177,50 @@ class TestPreferencesRoutes:
         resp = await client.put(
             "/api/account/preferences",
             json={"theme": "neon"},
+            headers=_headers(test_user),
+        )
+        assert resp.status_code == 422
+
+    async def test_put_persists_guide_progress_per_account(
+        self, client: AsyncClient, test_user: User
+    ):
+        """Guide completion/dismissal state is account-backed, not browser-local only."""
+        resp = await client.put(
+            "/api/account/preferences",
+            json={
+                "guide_progress": {
+                    "completed_guide_ids": ["pipeline-tour", "dashboard-tour", "pipeline-tour"],
+                    "first_run_dismissed_at": "2026-05-18T20:00:00.000Z",
+                    "disabled_at": "2026-05-18T20:05:00.000Z",
+                }
+            },
+            headers=_headers(test_user),
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["guide_progress"] == {
+            "completed_guide_ids": ["dashboard-tour", "pipeline-tour"],
+            "first_run_dismissed_at": "2026-05-18T20:00:00.000Z",
+            "disabled_at": "2026-05-18T20:05:00.000Z",
+            "last_reset_at": None,
+        }
+
+        roundtrip = await client.get(
+            "/api/account/preferences", headers=_headers(test_user)
+        )
+        assert roundtrip.status_code == 200
+        assert roundtrip.json()["guide_progress"]["completed_guide_ids"] == [
+            "dashboard-tour",
+            "pipeline-tour",
+        ]
+
+    async def test_put_rejects_oversized_guide_progress(
+        self, client: AsyncClient, test_user: User
+    ):
+        """Reject unexpectedly huge guide ids before they can bloat the prefs row."""
+        resp = await client.put(
+            "/api/account/preferences",
+            json={"guide_progress": {"completed_guide_ids": ["x" * 121]}},
             headers=_headers(test_user),
         )
         assert resp.status_code == 422

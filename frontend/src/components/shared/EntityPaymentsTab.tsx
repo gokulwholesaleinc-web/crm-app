@@ -103,7 +103,7 @@ export function EntityPaymentsTab({ entityType, entityId }: Props) {
           <Link to="/payments" className="text-primary-600 hover:underline">
             Payments
           </Link>
-          {' '}or accept a Proposal to spawn billing automatically.
+          {' '}after a proposal is signed; proposal acceptance does not create billing.
         </p>
       )}
     </div>

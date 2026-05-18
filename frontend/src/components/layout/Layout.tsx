@@ -77,6 +77,7 @@ export function Layout({
           {/* Page Content - responsive padding */}
           <main
             id="main-content"
+            data-guide="main-content"
             className={clsx(
               'flex-1 overflow-y-auto focus-visible:outline-none',
               className

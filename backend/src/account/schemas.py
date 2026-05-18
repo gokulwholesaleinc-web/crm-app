@@ -64,6 +64,22 @@ class NotificationPrefsUpdate(BaseModel):
         return v
 
 
+class GuideProgressPrefs(BaseModel):
+    completed_guide_ids: list[str] = Field(default_factory=list, max_length=128)
+    first_run_dismissed_at: str | None = None
+    disabled_at: str | None = None
+    last_reset_at: str | None = None
+
+    @field_validator("completed_guide_ids")
+    @classmethod
+    def _dedupe_completed_ids(cls, v: list[str]) -> list[str]:
+        cleaned = {guide_id.strip() for guide_id in v if guide_id.strip()}
+        for guide_id in cleaned:
+            if len(guide_id) > 120:
+                raise ValueError("guide id is too long")
+        return sorted(cleaned)
+
+
 class AccountPreferencesResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -75,6 +91,7 @@ class AccountPreferencesResponse(BaseModel):
     currency_display: str
     theme: str
     default_landing: str
+    guide_progress: GuideProgressPrefs = Field(default_factory=GuideProgressPrefs)
     updated_at: datetime
 
 
@@ -87,6 +104,7 @@ class AccountPreferencesUpdate(BaseModel):
     currency_display: CurrencyDisplay | None = None
     theme: Theme | None = None
     default_landing: DefaultLanding | None = None
+    guide_progress: GuideProgressPrefs | None = None
 
     @field_validator("timezone")
     @classmethod

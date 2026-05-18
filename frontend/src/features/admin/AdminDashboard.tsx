@@ -194,8 +194,8 @@ export default function AdminDashboard() {
     : [];
 
   return (
-    <div className="space-y-6">
-      <div>
+    <div className="space-y-6" data-guide="admin-page">
+      <div data-guide="admin-header">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Admin Dashboard</h1>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
           System-wide overview and user management
@@ -203,28 +203,32 @@ export default function AdminDashboard() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" data-guide="admin-stats">
         {statCards.map((card) => (
           <StatCard key={card.label} {...card} />
         ))}
       </div>
 
       {/* User Management */}
-      <UserManagement />
+      <div data-guide="admin-users">
+        <UserManagement />
+      </div>
 
       {/* Team Overview */}
-      <Card>
-        <CardHeader title="Team Overview" description="Per-user pipeline breakdown" />
-        <CardBody>
-          <Table
-            columns={teamColumns}
-            data={team ?? []}
-            keyExtractor={(row) => row.user_id}
-            isLoading={teamLoading}
-            emptyMessage="No active team members"
-          />
-        </CardBody>
-      </Card>
+      <div data-guide="admin-team">
+        <Card>
+          <CardHeader title="Team Overview" description="Per-user pipeline breakdown" />
+          <CardBody>
+            <Table
+              columns={teamColumns}
+              data={team ?? []}
+              keyExtractor={(row) => row.user_id}
+              isLoading={teamLoading}
+              emptyMessage="No active team members"
+            />
+          </CardBody>
+        </Card>
+      </div>
 
       {/* Activity Feed */}
       <Card>

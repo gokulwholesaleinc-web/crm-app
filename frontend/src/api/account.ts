@@ -36,8 +36,16 @@ export type Theme = 'system' | 'light' | 'dark';
 export type DefaultLanding =
   | '/dashboard'
   | '/leads'
+  | '/pipeline'
   | '/contacts'
   | '/proposals';
+
+export interface AccountGuideProgress {
+  completed_guide_ids?: string[];
+  first_run_dismissed_at?: string | null;
+  disabled_at?: string | null;
+  last_reset_at?: string | null;
+}
 
 export interface AccountPreferences {
   timezone: string;
@@ -48,6 +56,7 @@ export interface AccountPreferences {
   currency_display: CurrencyDisplay;
   theme: Theme;
   default_landing: DefaultLanding;
+  guide_progress: AccountGuideProgress;
 }
 
 export type AccountPreferencesUpdate = Partial<AccountPreferences>;

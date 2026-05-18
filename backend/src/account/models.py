@@ -25,7 +25,7 @@ from sqlalchemy.types import TypeDecorator
 from src.database import Base
 
 
-class _EventMatrix(TypeDecorator):
+class _JsonDict(TypeDecorator):
     """JSONB on Postgres, JSON on SQLite (test DB)."""
 
     impl = JSON
@@ -68,7 +68,7 @@ class UserNotificationPrefs(Base):
     # the Python-side default keeps fresh inserts working in tests where
     # the column type degrades to JSON on SQLite.
     event_matrix: Mapped[dict] = mapped_column(
-        _EventMatrix, nullable=False, default=dict
+        _JsonDict, nullable=False, default=dict
     )
 
     created_at: Mapped[datetime] = mapped_column(
@@ -116,6 +116,9 @@ class UserPreferences(Base):
     )
     default_landing: Mapped[str] = mapped_column(
         String(64), nullable=False, server_default=text("'/dashboard'")
+    )
+    guide_progress: Mapped[dict] = mapped_column(
+        _JsonDict, nullable=False, default=dict
     )
 
     created_at: Mapped[datetime] = mapped_column(

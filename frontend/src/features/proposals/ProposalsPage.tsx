@@ -188,9 +188,12 @@ function ProposalsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-guide="proposals-page">
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div
+        className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+        data-guide="proposals-header"
+      >
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Proposals</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
@@ -209,7 +212,7 @@ function ProposalsPage() {
       </div>
 
       {/* Tab Bar */}
-      <div className="border-b border-gray-200 dark:border-gray-700">
+      <div className="border-b border-gray-200 dark:border-gray-700" data-guide="proposals-tabs">
         <nav className="-mb-px flex gap-6" aria-label="Tabs">
           <button
             type="button"
@@ -319,7 +322,10 @@ function ProposalsPage() {
       )}
 
       {/* Proposals Table */}
-      <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden border border-transparent dark:border-gray-700">
+      <div
+        className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden border border-transparent dark:border-gray-700"
+        data-guide="proposals-table"
+      >
         {isLoading ? (
           <SkeletonTable rows={5} cols={6} />
         ) : proposals.length === 0 ? (
